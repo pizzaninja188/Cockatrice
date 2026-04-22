@@ -902,6 +902,7 @@ void Server_Game::startRuledSidecarSession()
     ruled::v1::IpcResponse resp;
     if (!rulesRelay->sessionStart(static_cast<quint64>(gameId), ruledSeed, ids, resp)) {
         qWarning() << "startRuledSidecarSession: tricerules connection failed";
+        rulesRelay.reset();
         return;
     }
     if (currentReplay) {
