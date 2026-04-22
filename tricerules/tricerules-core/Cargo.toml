@@ -1,0 +1,15 @@
+[package]
+name = "tricerules-core"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tricerules-proto = { path = "../tricerules-proto" }
+tricerules-cards = { path = "../tricerules-cards" }
+thiserror.workspace = true
+prost.workspace = true
+rand = { version = "0.8", features = ["std_rng"] }
+
+[dev-dependencies]
+proptest.workspace = true

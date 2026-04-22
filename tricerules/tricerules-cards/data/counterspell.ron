@@ -1,0 +1,8 @@
+(
+  id: "counterspell",
+  name: "Counterspell",
+  mana_cost: "UU",
+  types: ["Instant"],
+  is_instant: true,
+  spell_effect: "counterspell",
+)

@@ -22,6 +22,7 @@
 #include "../server.h"
 #include "../server_database_interface.h"
 #include "../server_protocolhandler.h"
+#include "../server_response_containers.h"
 #include "../server_room.h"
 #include "libcockatrice/protocol/pb/command_move_card.pb.h"
 #include "server_abstract_player.h"
@@ -32,6 +33,7 @@
 #include "server_spectator.h"
 
 #include <QDebug>
+#include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QTimer>
 #include <google/protobuf/descriptor.h>
@@ -48,9 +50,11 @@
 #include <libcockatrice/protocol/pb/event_leave.pb.h>
 #include <libcockatrice/protocol/pb/event_player_properties_changed.pb.h>
 #include <libcockatrice/protocol/pb/event_replay_added.pb.h>
+#include <libcockatrice/protocol/pb/event_ruled_payload.pb.h>
 #include <libcockatrice/protocol/pb/event_set_active_phase.pb.h>
 #include <libcockatrice/protocol/pb/event_set_active_player.pb.h>
 #include <libcockatrice/protocol/pb/game_replay.pb.h>
+#include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <libcockatrice/utility/zone_names.h>
 
 Server_Game::Server_Game(const ServerInfo_User &_creatorInfo,
@@ -67,6 +71,7 @@ Server_Game::Server_Game(const ServerInfo_User &_creatorInfo,
                          bool _spectatorsSeeEverything,
                          int _startingLifeTotal,
                          bool _shareDecklistsOnLoad,
+                         bool _ruledGame,
                          Server_Room *_room)
     : QObject(), room(_room), nextPlayerId(0), hostId(0), creatorInfo(new ServerInfo_User(_creatorInfo)),
       gameStarted(false), gameClosed(false), gameId(_gameId), password(_password), maxPlayers(_maxPlayers),
@@ -76,7 +81,7 @@ Server_Game::Server_Game(const ServerInfo_User &_creatorInfo,
       spectatorsSeeEverything(_spectatorsSeeEverything), startingLifeTotal(_startingLifeTotal),
       shareDecklistsOnLoad(_shareDecklistsOnLoad), inactivityCounter(0), startTimeOfThisGame(0), secondsElapsed(0),
       firstGameStarted(false), turnOrderReversed(false), startTime(QDateTime::currentDateTime()), pingClock(nullptr),
-      gameMutex()
+      gameMutex(), ruledGame(_ruledGame), ruledSeed(0)
 {
     currentReplay = new GameReplay;
     currentReplay->set_replay_id(room->getServer()->getDatabaseInterface()->getNextReplayId());
@@ -99,6 +104,10 @@ Server_Game::~Server_Game()
     gameMutex.lock();
 
     gameClosed = true;
+    if (rulesRelay) {
+        rulesRelay->sessionEnd();
+        rulesRelay.reset();
+    }
     sendGameEventContainer(prepareGameEvent(Event_GameClosed(), -1));
     for (auto *participant : participants.values()) {
         participant->prepareDestroy();
@@ -382,6 +391,10 @@ void Server_Game::doStartGameIfReady(bool forceStartGame)
     gameInfo.set_game_id(gameId);
     gameInfo.set_started(true);
     emit gameInfoChanged(gameInfo);
+
+    if (ruledGame) {
+        startRuledSidecarSession();
+    }
 }
 
 void Server_Game::startGameIfReady(bool forceStartGame)
@@ -825,7 +838,76 @@ void Server_Game::getInfo(ServerInfo_Game &result) const
         result.set_share_decklists_on_load(shareDecklistsOnLoad);
         result.set_spectators_count(getSpectatorCount());
         result.set_start_time(startTime.toSecsSinceEpoch());
+        result.set_ruled_game(ruledGame);
     }
+}
+
+Response::ResponseCode Server_Game::processRuledPayload(int playerId, const Command_RuledPayload &cmd,
+                                                        GameEventStorage & /*ges*/)
+{
+    if (!ruledGame || !rulesRelay) {
+        return Response::RespInvalidCommand;
+    }
+    ruled::v1::IpcResponse resp;
+    QByteArray payload = QByteArray::fromStdString(cmd.payload());
+    if (!rulesRelay->playerCommand(playerId, payload, resp)) {
+        return Response::RespInternalError;
+    }
+    if (!resp.ok()) {
+        return Response::RespContextError;
+    }
+    // Append to deterministic replay log (concatenated RuledCommand bytes)
+    if (currentReplay) {
+        currentReplay->mutable_ruled_command_log()->append(payload.constData(), static_cast<size_t>(payload.size()));
+    }
+    broadcastRuledResponse(resp);
+    return Response::RespOk;
+}
+
+void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
+{
+    if (!resp.has_batch()) {
+        return;
+    }
+    const ruled::v1::RuledEventBatch &batch = resp.batch();
+    for (auto *participant : participants) {
+        GameEventStorage ges;
+        ruled::v1::RuledEventBatch filtered;
+        filtered.CopyFrom(batch);
+        filtered.clear_legal_by_player();
+        const auto it = batch.legal_by_player().find(participant->getPlayerId());
+        if (it != batch.legal_by_player().end()) {
+            (*filtered.mutable_legal_by_player())[participant->getPlayerId()] = it->second;
+        }
+        Event_RuledPayload ev;
+        std::string bytes;
+        filtered.SerializeToString(&bytes);
+        ev.set_payload(bytes);
+        ges.enqueueGameEvent(ev, -1, GameEventStorageItem::SendToPrivate, participant->getPlayerId());
+        ges.sendToGame(this);
+    }
+}
+
+void Server_Game::startRuledSidecarSession()
+{
+    if (!ruledGame) {
+        return;
+    }
+    rulesRelay = std::make_unique<RulesRelay>(this);
+    ruledSeed = QRandomGenerator::global()->generate64();
+    QList<int> ids;
+    for (auto *p : getPlayers().values()) {
+        ids.append(p->getPlayerId());
+    }
+    ruled::v1::IpcResponse resp;
+    if (!rulesRelay->sessionStart(static_cast<quint64>(gameId), ruledSeed, ids, resp)) {
+        qWarning() << "startRuledSidecarSession: tricerules connection failed";
+        return;
+    }
+    if (currentReplay) {
+        currentReplay->set_ruled_seed(ruledSeed);
+    }
+    broadcastRuledResponse(resp);
 }
 
 void Server_Game::returnCardsFromPlayer(GameEventStorage &ges, Server_AbstractPlayer *player)

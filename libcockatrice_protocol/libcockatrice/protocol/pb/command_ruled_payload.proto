@@ -1,0 +1,10 @@
+syntax = "proto2";
+import "game_commands.proto";
+
+// Wraps a serialized ruled.v1.RuledCommand (proto3 bytes)
+message Command_RuledPayload {
+  extend GameCommand {
+    optional Command_RuledPayload ext = 1100;
+  }
+  optional bytes payload = 1;
+}

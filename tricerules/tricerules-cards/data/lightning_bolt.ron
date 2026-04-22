@@ -1,0 +1,8 @@
+(
+  id: "lightning_bolt",
+  name: "Lightning Bolt",
+  mana_cost: "R",
+  types: ["Instant"],
+  is_instant: true,
+  spell_effect: "bolt",
+)

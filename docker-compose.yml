@@ -12,6 +12,17 @@ services:
     volumes:
       - $PWD/servatrice/servatrice.sql:/docker-entrypoint-initdb.d/servatrice.sql
 
+  # Optional: `docker compose --profile tricerules up tricerules` (Rust sidecar on port 17381)
+  tricerules:
+    profiles: ["tricerules"]
+    image: rust:1-bookworm
+    working_dir: /workspace/tricerules
+    volumes:
+      - .:/workspace
+    command: bash -lc "cargo run --release -p tricerules-server"
+    ports:
+      - "17381:17381"
+
   servatrice:
     build:
       context: .

@@ -1,0 +1,8 @@
+(
+  id: "divination",
+  name: "Divination",
+  mana_cost: "2U",
+  types: ["Sorcery"],
+  is_sorcery: true,
+  spell_effect: "divination",
+)

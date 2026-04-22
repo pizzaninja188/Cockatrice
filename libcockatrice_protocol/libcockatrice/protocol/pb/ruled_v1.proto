@@ -1,0 +1,122 @@
+syntax = "proto3";
+
+package ruled.v1;
+
+// Intent from a client; carried inside GameCommand Command_RuledPayload.payload
+message RuledCommand {
+  oneof cmd {
+    PassPriority pass_priority = 1;
+    CastSpell cast_spell = 2;
+    PlayLand play_land = 3;
+    MulliganDecision mulligan = 4;
+    Concede concede = 5;
+  }
+}
+
+message PassPriority {}
+
+message CastSpell {
+  uint32 hand_card_index = 1;
+  repeated TargetRef targets = 2;
+}
+
+message TargetRef {
+  uint32 object_id = 1;
+}
+
+message PlayLand {
+  uint32 hand_card_index = 1;
+}
+
+message MulliganDecision {
+  bool keep = 1;
+}
+
+message Concede {}
+
+// Engine output batch; carried inside GameEvent Event_RuledPayload.payload
+message RuledEventBatch {
+  repeated RuledEvent events = 1;
+  map<int32, LegalActions> legal_by_player = 2;
+}
+
+message LegalActions {
+  repeated string labels = 1;
+}
+
+message RuledEvent {
+  oneof ev {
+    PhaseChanged phase_changed = 1;
+    PriorityChanged priority_changed = 2;
+    StackPushed stack_pushed = 3;
+    StackResolved stack_resolved = 4;
+    SbasApplied sbas_applied = 5;
+    GameSnapshot snapshot = 6;
+    ReplayState replay_state = 7;
+    LogMessage log = 8;
+  }
+}
+
+message PhaseChanged {
+  string phase = 1;
+  int32 active_player_id = 2;
+}
+
+message PriorityChanged {
+  int32 player_id = 1;
+}
+
+message StackPushed {
+  uint32 object_id = 1;
+  string description = 2;
+}
+
+message StackResolved {
+  uint32 object_id = 1;
+}
+
+message SbasApplied {
+  string description = 1;
+}
+
+message GameSnapshot {
+  string summary = 1;
+}
+
+message ReplayState {
+  uint64 seed = 1;
+  uint64 command_index = 2;
+}
+
+message LogMessage {
+  string text = 1;
+}
+
+// --- Sidecar TCP framing (length-prefixed IpcEnvelope) ---
+
+message IpcEnvelope {
+  oneof msg {
+    SessionStart session_start = 1;
+    PlayerCommand player_command = 2;
+    SessionEnd session_end = 3;
+  }
+}
+
+message SessionStart {
+  uint64 game_id = 1;
+  uint64 seed = 2;
+  repeated int32 player_ids = 3;
+}
+
+message PlayerCommand {
+  int32 player_id = 1;
+  bytes ruled_command = 2;
+}
+
+message SessionEnd {}
+
+message IpcResponse {
+  bool ok = 1;
+  string error = 2;
+  optional RuledEventBatch batch = 3;
+}

@@ -207,6 +207,8 @@ void TabGame::connectMessageLogToGameEventHandler()
     connect(game->getGameEventHandler(), &GameEventHandler::logConcede, messageLog, &MessageLogWidget::logConcede);
     connect(game->getGameEventHandler(), &GameEventHandler::logUnconcede, messageLog, &MessageLogWidget::logUnconcede);
 
+    connect(game->getGameEventHandler(), &GameEventHandler::logRuledEngine, messageLog,
+            &MessageLogWidget::logRuledEngine);
     connect(game->getGameEventHandler(), &GameEventHandler::logGameClosed, messageLog,
             &MessageLogWidget::logGameClosed);
 }

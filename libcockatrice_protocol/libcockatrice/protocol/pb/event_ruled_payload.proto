@@ -1,0 +1,10 @@
+syntax = "proto2";
+import "game_event.proto";
+
+// Wraps a serialized ruled.v1.RuledEventBatch (proto3 bytes)
+message Event_RuledPayload {
+  extend GameEvent {
+    optional Event_RuledPayload ext = 2100;
+  }
+  optional bytes payload = 1;
+}

@@ -847,3 +847,8 @@ MessageLogWidget::MessageLogWidget(TabSupervisor *_tabSupervisor, AbstractGame *
     : ChatView(_tabSupervisor, _game, true, parent), currentContext(MessageContext_None)
 {
 }
+
+void MessageLogWidget::logRuledEngine(QString message)
+{
+    appendHtmlServerMessage(QStringLiteral("<b>Ruled engine</b><br/>") + sanitizeHtml(message));
+}

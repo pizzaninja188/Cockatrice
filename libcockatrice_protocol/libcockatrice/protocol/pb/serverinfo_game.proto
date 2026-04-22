@@ -62,4 +62,7 @@ message ServerInfo_Game {
 
     // whether the game is closed. Closed games are finished and can't be interacted with
     optional bool closed = 52;
+
+    // MTGO-style rules engine (Servatrice + tricerules sidecar)
+    optional bool ruled_game = 60 [default = false];
 }

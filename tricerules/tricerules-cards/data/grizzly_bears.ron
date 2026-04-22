@@ -1,0 +1,9 @@
+(
+  id: "grizzly_bears",
+  name: "Grizzly Bears",
+  mana_cost: "1G",
+  types: ["Creature", "Bear"],
+  is_creature: true,
+  power: 2,
+  toughness: 2,
+)

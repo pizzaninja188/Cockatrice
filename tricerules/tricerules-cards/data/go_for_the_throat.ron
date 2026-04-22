@@ -1,0 +1,8 @@
+(
+  id: "go_for_the_throat",
+  name: "Go for the Throat",
+  mana_cost: "1B",
+  types: ["Instant"],
+  is_instant: true,
+  spell_effect: "doom_blade",
+)

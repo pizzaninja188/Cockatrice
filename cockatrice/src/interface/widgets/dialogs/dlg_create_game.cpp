@@ -102,6 +102,7 @@ void DlgCreateGame::sharedCtor()
     startingLifeTotalLabel->setBuddy(startingLifeTotalEdit);
 
     shareDecklistsOnLoadCheckBox = new QCheckBox(tr("Open decklists in lobby"));
+    ruledGameCheckBox = new QCheckBox(tr("Ruled game (MTGO-style engine — requires tricerules-server)"));
 
     createGameAsJudgeCheckBox = new QCheckBox(tr("Create game as judge"));
 
@@ -109,8 +110,9 @@ void DlgCreateGame::sharedCtor()
     gameSetupOptionsLayout->addWidget(startingLifeTotalLabel, 0, 0);
     gameSetupOptionsLayout->addWidget(startingLifeTotalEdit, 0, 1);
     gameSetupOptionsLayout->addWidget(shareDecklistsOnLoadCheckBox, 1, 0);
+    gameSetupOptionsLayout->addWidget(ruledGameCheckBox, 2, 0, 1, 2);
     if (room && room->getUserInfo()->user_level() & ServerInfo_User::IsJudge) {
-        gameSetupOptionsLayout->addWidget(createGameAsJudgeCheckBox, 2, 0);
+        gameSetupOptionsLayout->addWidget(createGameAsJudgeCheckBox, 3, 0);
     } else {
         createGameAsJudgeCheckBox->setChecked(false);
         createGameAsJudgeCheckBox->setHidden(true);
@@ -249,6 +251,7 @@ void DlgCreateGame::actReset()
 
     startingLifeTotalEdit->setValue(20);
     shareDecklistsOnLoadCheckBox->setChecked(false);
+    ruledGameCheckBox->setChecked(false);
     createGameAsJudgeCheckBox->setChecked(false);
 
     QMapIterator<int, QRadioButton *> gameTypeCheckBoxIterator(gameTypeCheckBoxes);
@@ -279,6 +282,7 @@ void DlgCreateGame::actOK()
     cmd.set_join_as_spectator(createGameAsSpectatorCheckBox->isChecked());
     cmd.set_starting_life_total(startingLifeTotalEdit->value());
     cmd.set_share_decklists_on_load(shareDecklistsOnLoadCheckBox->isChecked());
+    cmd.set_ruled_game(ruledGameCheckBox->isChecked());
 
     auto _gameTypes = QString();
     QMapIterator<int, QRadioButton *> gameTypeCheckBoxIterator(gameTypeCheckBoxes);

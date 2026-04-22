@@ -103,6 +103,7 @@ public slots:
     void appendHtmlServerMessage(const QString &html,
                                  bool optionalIsBold = false,
                                  QString optionalFontColor = QString()) override;
+    void logRuledEngine(QString message);
 };
 
 #endif

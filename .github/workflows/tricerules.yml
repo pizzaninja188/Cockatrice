@@ -1,0 +1,29 @@
+name: tricerules (Rust)
+
+on:
+  push:
+    paths:
+      - 'tricerules/**'
+      - 'libcockatrice_protocol/libcockatrice/protocol/pb/ruled_v1.proto'
+  pull_request:
+    paths:
+      - 'tricerules/**'
+      - 'libcockatrice_protocol/libcockatrice/protocol/pb/ruled_v1.proto'
+
+jobs:
+  tricerules:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tricerules
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+      - name: cargo clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: cargo test
+        run: cargo test

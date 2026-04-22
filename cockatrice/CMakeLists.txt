@@ -448,6 +448,32 @@ else()
   )
 endif()
 
+if(WIN32)
+  # Keep local target directories runnable by auto-deploying Qt runtime DLLs/plugins.
+  set(_cockatrice_qt_bin_hints "")
+  if(DEFINED QTDIR)
+    list(APPEND _cockatrice_qt_bin_hints "${QTDIR}/bin")
+  elseif(DEFINED ENV{QTDIR})
+    list(APPEND _cockatrice_qt_bin_hints "$ENV{QTDIR}/bin")
+  endif()
+  find_program(COCKATRICE_WINDEPLOYQT_EXECUTABLE NAMES windeployqt HINTS ${_cockatrice_qt_bin_hints})
+  if(COCKATRICE_WINDEPLOYQT_EXECUTABLE)
+    add_custom_command(
+      TARGET cockatrice
+      POST_BUILD
+      COMMAND "${COCKATRICE_WINDEPLOYQT_EXECUTABLE}"
+              --$<IF:$<CONFIG:Debug>,debug,release>
+              --no-translations
+              --force
+              "$<TARGET_FILE:cockatrice>"
+      COMMENT "Deploying Qt runtime for cockatrice target"
+      VERBATIM
+    )
+  else()
+    message(WARNING "windeployqt not found; cockatrice.exe may fail at runtime until Qt DLLs are manually deployed.")
+  endif()
+endif()
+
 if(UNIX)
   if(APPLE)
     set(MACOSX_BUNDLE_INFO_STRING "${PROJECT_NAME}")

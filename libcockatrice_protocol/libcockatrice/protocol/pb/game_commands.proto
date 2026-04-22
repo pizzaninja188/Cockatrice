@@ -38,6 +38,8 @@ message GameCommand {
         UNCONCEDE = 1032;
         JUDGE = 1033;
         REVERSE_TURN = 1034;
+        // MTGO-style rules engine: serialized ruled.v1.RuledCommand in Command_RuledPayload
+        RULED_PAYLOAD = 1100;
     }
     extensions 100 to max;
 }

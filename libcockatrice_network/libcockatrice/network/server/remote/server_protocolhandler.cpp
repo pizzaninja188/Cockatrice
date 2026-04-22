@@ -230,7 +230,8 @@ Response::ResponseCode Server_ProtocolHandler::processGameCommandContainer(const
         // mulling lots of hands in a row
         << GameCommand::MULLIGAN
         // allows a user to sideboard without receiving flooding message
-        << GameCommand::MOVE_CARD;
+        << GameCommand::MOVE_CARD
+        << GameCommand::RULED_PAYLOAD;
 
     if (authState == NotLoggedIn)
         return Response::RespLoginNeeded;
@@ -841,7 +842,8 @@ Server_ProtocolHandler::cmdCreateGame(const Command_CreateGame &cmd, Server_Room
     auto *game = new Server_Game(copyUserInfo(false), gameId, description, QString::fromStdString(cmd.password()),
                                  cmd.max_players(), gameTypes, cmd.only_buddies(), onlyRegisteredUsers,
                                  cmd.spectators_allowed(), cmd.spectators_need_password(), cmd.spectators_can_talk(),
-                                 cmd.spectators_see_everything(), startingLifeTotal, shareDecklistsOnLoad, room);
+                                 cmd.spectators_see_everything(), startingLifeTotal, shareDecklistsOnLoad,
+                                 cmd.ruled_game(), room);
 
     game->addPlayer(this, rc, asSpectator, asJudge, false);
     room->addGame(game);

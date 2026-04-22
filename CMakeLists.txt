@@ -24,6 +24,7 @@ option(WITH_ORACLE "build oracle" ON)
 option(TEST "build tests" OFF)
 # Use vcpkg regardless of OS
 option(USE_VCPKG "Use vcpkg regardless of OS" OFF)
+option(WITH_RULES_ENGINE "Build tricerules Rust sidecar (cargo)" OFF)
 
 # Default to "Release" build type
 # User-provided value for CMAKE_BUILD_TYPE must be checked before the PROJECT() call
@@ -369,4 +370,23 @@ endif()
 if(Qt6_FOUND AND Qt6_VERSION_MINOR GREATER_EQUAL 3)
   # Qt6.3+ requires project finalization to support translations
   qt6_finalize_project()
+endif()
+
+if(WITH_RULES_ENGINE)
+  find_program(CARGO_EXECUTABLE cargo)
+  if(CARGO_EXECUTABLE)
+    if(WIN32)
+      set(TRICERULES_BIN "${CMAKE_SOURCE_DIR}/tricerules/target/release/tricerules-server.exe")
+    else()
+      set(TRICERULES_BIN "${CMAKE_SOURCE_DIR}/tricerules/target/release/tricerules-server")
+    endif()
+    add_custom_target(
+      tricerules ALL
+      COMMAND ${CARGO_EXECUTABLE} build --release --manifest-path "${CMAKE_SOURCE_DIR}/tricerules/Cargo.toml"
+      COMMENT "Building tricerules-server (Rust)"
+      BYPRODUCTS ${TRICERULES_BIN}
+    )
+  else()
+    message(WARNING "WITH_RULES_ENGINE is ON but cargo was not found; skipping tricerules build")
+  endif()
 endif()

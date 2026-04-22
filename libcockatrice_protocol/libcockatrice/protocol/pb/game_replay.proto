@@ -7,4 +7,7 @@ message GameReplay {
     optional ServerInfo_Game game_info = 2;
     repeated GameEventContainer event_list = 3;
     optional uint32 duration_seconds = 4;
+    // Ruled game: deterministic replay (seed + concatenated ruled command blobs)
+    optional uint64 ruled_seed = 5;
+    optional bytes ruled_command_log = 6;
 }

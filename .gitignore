@@ -15,3 +15,16 @@ compile_commands.json
 .gdb_history
 cockatrice/resources/config/qtlogging.ini
 docs/
+
+# Local vcpkg clone (see CMakeLists.txt toolchain); not part of source tree
+vcpkg/
+
+# Rust workspace build output
+tricerules/target/
+
+# Local runtime/test artifacts
+server.log
+servatrice-local.ini
+6.6.3/
+Tools/
+aqtinstall.log

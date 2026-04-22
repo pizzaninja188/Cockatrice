@@ -40,6 +40,7 @@ set(PROTO_FILES
     command_replay_modify_match.proto
     command_replay_submit_code.proto
     command_reveal_cards.proto
+    command_ruled_payload.proto
     command_reverse_turn.proto
     command_roll_die.proto
     command_set_active_phase.proto
@@ -94,6 +95,7 @@ set(PROTO_FILES
     event_replay_added.proto
     event_reveal_cards.proto
     event_reverse_turn.proto
+    event_ruled_payload.proto
     event_roll_die.proto
     event_room_say.proto
     event_server_complete_list.proto
@@ -141,6 +143,7 @@ set(PROTO_FILES
     response_warn_history.proto
     response_warn_list.proto
     room_commands.proto
+    ruled_v1.proto
     room_event.proto
     server_message.proto
     serverinfo_arrow.proto

@@ -130,6 +130,7 @@ signals:
     void logActivePhaseChanged(int activePhase);
     void logConcede(int playerId);
     void logUnconcede(int playerId);
+    void logRuledEngine(QString message);
 };
 
 #endif // COCKATRICE_GAME_EVENT_HANDLER_H

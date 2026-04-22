@@ -21,9 +21,12 @@
 #include <libcockatrice/protocol/pb/event_game_state_changed.pb.h>
 #include <libcockatrice/protocol/pb/event_join.pb.h>
 #include <libcockatrice/protocol/pb/event_kicked.pb.h>
+#include <libcockatrice/protocol/pb/game_event.pb.h>
 #include <libcockatrice/protocol/pb/event_leave.pb.h>
 #include <libcockatrice/protocol/pb/event_player_properties_changed.pb.h>
 #include <libcockatrice/protocol/pb/event_reverse_turn.pb.h>
+#include <libcockatrice/protocol/pb/event_ruled_payload.pb.h>
+#include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <libcockatrice/protocol/pb/event_set_active_phase.pb.h>
 #include <libcockatrice/protocol/pb/event_set_active_player.pb.h>
 #include <libcockatrice/protocol/pb/game_event_container.pb.h>
@@ -153,6 +156,32 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                 case GameEvent::REVERSE_TURN:
                     eventReverseTurn(event.GetExtension(Event_ReverseTurn::ext), playerId, context);
                     break;
+                case GameEvent::RULED_PAYLOAD: {
+                    const Event_RuledPayload &ruled = event.GetExtension(Event_RuledPayload::ext);
+                    ruled::v1::RuledEventBatch batch;
+                    if (batch.ParseFromString(ruled.payload())) {
+                        QString lines;
+                        for (const auto &e : batch.events()) {
+                            if (e.has_log()) {
+                                lines += QString::fromStdString(e.log().text()) + QLatin1Char('\n');
+                            }
+                            if (e.has_phase_changed()) {
+                                lines += QStringLiteral("Phase: %1\n")
+                                             .arg(QString::fromStdString(e.phase_changed().phase()));
+                            }
+                        }
+                        const auto lit =
+                            batch.legal_by_player().find(game->getPlayerManager()->getLocalPlayerId());
+                        if (lit != batch.legal_by_player().end()) {
+                            lines += tr("Legal actions:\n");
+                            for (const auto &l : lit->second.labels()) {
+                                lines += QStringLiteral(" — %1\n").arg(QString::fromStdString(l));
+                            }
+                        }
+                        emit logRuledEngine(lines);
+                    }
+                    break;
+                }
 
                 default: {
                     Player *player = game->getPlayerManager()->getPlayers().value(playerId, 0);

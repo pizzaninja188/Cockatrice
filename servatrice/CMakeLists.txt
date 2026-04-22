@@ -110,6 +110,32 @@ else()
   )
 endif()
 
+if(WIN32)
+  # Keep local target directories runnable by auto-deploying Qt runtime DLLs/plugins.
+  set(_servatrice_qt_bin_hints "")
+  if(DEFINED QTDIR)
+    list(APPEND _servatrice_qt_bin_hints "${QTDIR}/bin")
+  elseif(DEFINED ENV{QTDIR})
+    list(APPEND _servatrice_qt_bin_hints "$ENV{QTDIR}/bin")
+  endif()
+  find_program(SERVATRICE_WINDEPLOYQT_EXECUTABLE NAMES windeployqt HINTS ${_servatrice_qt_bin_hints})
+  if(SERVATRICE_WINDEPLOYQT_EXECUTABLE)
+    add_custom_command(
+      TARGET servatrice
+      POST_BUILD
+      COMMAND "${SERVATRICE_WINDEPLOYQT_EXECUTABLE}"
+              --$<IF:$<CONFIG:Debug>,debug,release>
+              --no-translations
+              --force
+              "$<TARGET_FILE:servatrice>"
+      COMMENT "Deploying Qt runtime for servatrice target"
+      VERBATIM
+    )
+  else()
+    message(WARNING "windeployqt not found; servatrice.exe may fail at runtime until Qt DLLs are manually deployed.")
+  endif()
+endif()
+
 # install rules
 if(UNIX)
   if(APPLE)

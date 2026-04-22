@@ -30,7 +30,13 @@
 #include <QStringList>
 #include <libcockatrice/protocol/pb/event_leave.pb.h>
 #include <libcockatrice/protocol/pb/response.pb.h>
+#include <libcockatrice/protocol/pb/command_ruled_payload.pb.h>
+#include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_game.pb.h>
+
+#include "rules_relay.h"
+
+#include <memory>
 
 class QTimer;
 class GameEventContainer;
@@ -76,6 +82,9 @@ private:
     QTimer *pingClock;
     QList<GameReplay *> replayList;
     GameReplay *currentReplay;
+    bool ruledGame;
+    quint64 ruledSeed;
+    std::unique_ptr<RulesRelay> rulesRelay;
 
     void createGameStateChangedEvent(Event_GameStateChanged *event,
                                      Server_AbstractParticipant *recipient,
@@ -105,6 +114,7 @@ public:
                 bool _spectatorsSeeEverything,
                 int _startingLifeTotal,
                 bool _shareDecklistsOnLoad,
+                bool _ruledGame,
                 Server_Room *parent);
     ~Server_Game() override;
     Server_Room *getRoom() const
@@ -172,6 +182,10 @@ public:
     {
         return shareDecklistsOnLoad;
     }
+    bool getRuledGame() const
+    {
+        return ruledGame;
+    }
     Response::ResponseCode
     checkJoin(ServerInfo_User *user, const QString &_password, bool spectator, bool overrideRestrictions, bool asJudge);
     bool containsUser(const QString &userName) const;
@@ -212,6 +226,10 @@ public:
     GameEventContainer *
     prepareGameEvent(const ::google::protobuf::Message &gameEvent, int playerId, GameEventContext *context = 0);
     GameEventContext prepareGameEventContext(const ::google::protobuf::Message &gameEventContext);
+
+    Response::ResponseCode processRuledPayload(int playerId, const Command_RuledPayload &cmd, GameEventStorage &ges);
+    void broadcastRuledResponse(const ruled::v1::IpcResponse &resp);
+    void startRuledSidecarSession();
 
     void sendGameStateToPlayers();
     void sendGameEventContainer(GameEventContainer *cont,

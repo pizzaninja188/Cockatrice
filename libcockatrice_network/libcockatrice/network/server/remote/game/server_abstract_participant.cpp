@@ -30,6 +30,7 @@
 #include <libcockatrice/protocol/pb/command_mulligan.pb.h>
 #include <libcockatrice/protocol/pb/command_next_turn.pb.h>
 #include <libcockatrice/protocol/pb/command_ready_start.pb.h>
+#include <libcockatrice/protocol/pb/command_ruled_payload.pb.h>
 #include <libcockatrice/protocol/pb/command_reveal_cards.pb.h>
 #include <libcockatrice/protocol/pb/command_reverse_turn.pb.h>
 #include <libcockatrice/protocol/pb/command_roll_die.pb.h>
@@ -422,7 +423,36 @@ Response::ResponseCode Server_AbstractParticipant::cmdReverseTurn(const Command_
 Response::ResponseCode
 Server_AbstractParticipant::processGameCommand(const GameCommand &command, ResponseContainer &rc, GameEventStorage &ges)
 {
-    switch ((GameCommand::GameCommandType)getPbExtension(command)) {
+    const int ext = getPbExtension(command);
+    if (game->getRuledGame()) {
+        const bool pregame = !game->getGameStarted();
+        switch (ext) {
+            case GameCommand::GAME_SAY:
+            case GameCommand::LEAVE_GAME:
+            case GameCommand::CONCEDE:
+            case GameCommand::UNCONCEDE:
+            case GameCommand::JUDGE:
+            case GameCommand::KICK_FROM_GAME:
+                break;
+            case GameCommand::DECK_SELECT:
+            case GameCommand::READY_START:
+            case GameCommand::SET_SIDEBOARD_PLAN:
+            case GameCommand::SET_SIDEBOARD_LOCK:
+                if (!pregame) {
+                    return Response::RespInvalidCommand;
+                }
+                break;
+            case GameCommand::RULED_PAYLOAD:
+                if (pregame) {
+                    return Response::RespInvalidCommand;
+                }
+                break;
+            default:
+                return Response::RespInvalidCommand;
+        }
+    }
+
+    switch ((GameCommand::GameCommandType)ext) {
         case GameCommand::KICK_FROM_GAME:
             return cmdKickFromGame(command.GetExtension(Command_KickFromGame::ext), rc, ges);
             break;
@@ -524,6 +554,9 @@ Server_AbstractParticipant::processGameCommand(const GameCommand &command, Respo
             break;
         case GameCommand::REVERSE_TURN:
             return cmdReverseTurn(command.GetExtension(Command_ReverseTurn::ext), rc, ges);
+            break;
+        case GameCommand::RULED_PAYLOAD:
+            return game->processRuledPayload(playerId, command.GetExtension(Command_RuledPayload::ext), ges);
             break;
         default:
             return Response::RespInvalidCommand;
