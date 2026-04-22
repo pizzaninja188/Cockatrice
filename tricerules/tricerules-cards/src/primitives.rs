@@ -13,7 +13,10 @@ pub enum SpellEffectKind {
 pub fn spell_effect_from_key(key: &str) -> SpellEffectKind {
     match key {
         "bolt" => SpellEffectKind::DealDamage { amount: 3 },
-        "growth" => SpellEffectKind::PumpTarget { power: 3, toughness: 3 },
+        "growth" => SpellEffectKind::PumpTarget {
+            power: 3,
+            toughness: 3,
+        },
         "divination" => SpellEffectKind::Draw { count: 2 },
         "doom_blade" => SpellEffectKind::DestroyTarget,
         "counterspell" => SpellEffectKind::CounterTargetSpell,

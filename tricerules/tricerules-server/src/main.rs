@@ -28,7 +28,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 }
 
-async fn handle_connection(mut sock: TcpStream) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn handle_connection(
+    mut sock: TcpStream,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut engine: Option<GameEngine> = None;
     loop {
         let env = read_proto::<IpcEnvelope>(&mut sock).await?;
@@ -72,7 +74,9 @@ async fn handle_connection(mut sock: TcpStream) -> Result<(), Box<dyn std::error
     Ok(())
 }
 
-async fn read_proto<M: Message + Default>(sock: &mut TcpStream) -> Result<M, Box<dyn std::error::Error + Send + Sync>> {
+async fn read_proto<M: Message + Default>(
+    sock: &mut TcpStream,
+) -> Result<M, Box<dyn std::error::Error + Send + Sync>> {
     let mut lenbuf = [0u8; 4];
     sock.read_exact(&mut lenbuf).await?;
     let len = u32::from_be_bytes(lenbuf) as usize;
@@ -81,7 +85,10 @@ async fn read_proto<M: Message + Default>(sock: &mut TcpStream) -> Result<M, Box
     Ok(M::decode(&buf[..])?)
 }
 
-async fn write_proto<M: Message>(sock: &mut TcpStream, msg: &M) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn write_proto<M: Message>(
+    sock: &mut TcpStream,
+    msg: &M,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let buf = msg.encode_to_vec();
     let len = (buf.len() as u32).to_be_bytes();
     sock.write_all(&len).await?;

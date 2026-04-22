@@ -10,9 +10,8 @@ use thiserror::Error;
 static RON_OPTS: Lazy<Options> =
     Lazy::new(|| Options::default().with_default_extension(Extensions::IMPLICIT_SOME));
 
-static GLOBAL: Lazy<RwLock<CardRegistry>> = Lazy::new(|| {
-    RwLock::new(CardRegistry::from_embedded().expect("embedded card data"))
-});
+static GLOBAL: Lazy<RwLock<CardRegistry>> =
+    Lazy::new(|| RwLock::new(CardRegistry::from_embedded().expect("embedded card data")));
 
 #[derive(Debug, Error)]
 pub enum RegistryError {

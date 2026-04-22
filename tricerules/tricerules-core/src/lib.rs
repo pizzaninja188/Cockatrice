@@ -4,4 +4,4 @@ pub mod engine;
 pub mod state;
 
 pub use engine::{EngineError, GameEngine};
-pub use state::{GamePhase, GameObject, ObjectId, PlayerId, Zone};
+pub use state::{GameObject, GamePhase, ObjectId, PlayerId, Zone};

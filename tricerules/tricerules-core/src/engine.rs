@@ -11,10 +11,10 @@ use std::collections::HashMap;
 use thiserror::Error;
 use tricerules_cards::primitives::{spell_effect_from_key, SpellEffectKind};
 use tricerules_cards::CardRegistry;
+use tricerules_proto::ruled::v1 as rv1;
 use tricerules_proto::ruled::v1::{
     IpcResponse, LegalActions, RuledCommand, RuledEvent, RuledEventBatch,
 };
-use tricerules_proto::ruled::v1 as rv1;
 
 #[derive(Debug, Error)]
 pub enum EngineError {
@@ -32,8 +32,13 @@ pub struct GameEngine {
 }
 
 impl GameEngine {
-    pub fn new(seed: u64, player_ids: &[PlayerId], starting_life: i32) -> Result<Self, EngineError> {
-        let registry = CardRegistry::from_embedded().map_err(|_| EngineError::Illegal("bad registry"))?;
+    pub fn new(
+        seed: u64,
+        player_ids: &[PlayerId],
+        starting_life: i32,
+    ) -> Result<Self, EngineError> {
+        let registry =
+            CardRegistry::from_embedded().map_err(|_| EngineError::Illegal("bad registry"))?;
         let mut objects = HashMap::new();
         let mut next_object_id: ObjectId = 1;
         let mut players = Vec::new();
@@ -63,7 +68,10 @@ impl GameEngine {
                 );
                 p.library.push_back(oid);
             }
-            let mut rng = StdRng::seed_from_u64(seed.wrapping_add(i as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+            let mut rng = StdRng::seed_from_u64(
+                seed.wrapping_add(i as u64)
+                    .wrapping_mul(0x9E37_79B9_7F4A_7C15),
+            );
             let mut lib: Vec<ObjectId> = p.library.iter().copied().collect();
             lib.shuffle(&mut rng);
             p.library = lib.into_iter().collect();
@@ -100,7 +108,9 @@ impl GameEngine {
         use rv1::ruled_command::Cmd;
         match cmd.cmd.as_ref() {
             Some(Cmd::PassPriority(_)) => self.pass_priority(player),
-            Some(Cmd::CastSpell(cs)) => self.cast_spell(player, cs.hand_card_index as usize, &cs.targets),
+            Some(Cmd::CastSpell(cs)) => {
+                self.cast_spell(player, cs.hand_card_index as usize, &cs.targets)
+            }
             Some(Cmd::PlayLand(pl)) => self.play_land(player, pl.hand_card_index as usize),
             Some(Cmd::Mulligan(_)) => Ok(empty_batch_with_legal(self)),
             Some(Cmd::Concede(_)) => Ok(self.concede_batch(player)),
@@ -110,7 +120,9 @@ impl GameEngine {
 
     fn concede_batch(&self, player: PlayerId) -> RuledEventBatch {
         let mut batch = RuledEventBatch::default();
-        batch.events.push(ev_log(format!("Player {player} conceded")));
+        batch
+            .events
+            .push(ev_log(format!("Player {player} conceded")));
         let mut b = batch;
         fill_legal(&mut b, self);
         b
@@ -122,9 +134,9 @@ impl GameEngine {
         }
         let n = self.state.players.len() as u32;
         let mut events = vec![rv1::RuledEvent {
-            ev: Some(rv1::ruled_event::Ev::PriorityChanged(rv1::PriorityChanged {
-                player_id: player,
-            })),
+            ev: Some(rv1::ruled_event::Ev::PriorityChanged(
+                rv1::PriorityChanged { player_id: player },
+            )),
         }];
 
         self.state.passes_since_stack_change += 1;
@@ -149,8 +161,15 @@ impl GameEngine {
         Ok(batch)
     }
 
-    fn resolve_top_of_stack(&mut self, events: &mut Vec<rv1::RuledEvent>) -> Result<(), EngineError> {
-        let top = self.state.stack.pop().ok_or(EngineError::Illegal("empty stack"))?;
+    fn resolve_top_of_stack(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let top = self
+            .state
+            .stack
+            .pop()
+            .ok_or(EngineError::Illegal("empty stack"))?;
         let controller = top.controller;
         let card_id = top.card_id.clone();
         let targets = top.targets.clone();
@@ -224,10 +243,11 @@ impl GameEngine {
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("not your priority"));
         }
-        let idx = self.state.player_idx(player).ok_or(EngineError::UnknownPlayer(player))?;
-        let oid = *self
+        let idx = self
             .state
-            .players[idx]
+            .player_idx(player)
+            .ok_or(EngineError::UnknownPlayer(player))?;
+        let oid = *self.state.players[idx]
             .hand
             .get(hand_idx)
             .ok_or(EngineError::Illegal("bad hand index"))?;
@@ -270,14 +290,19 @@ impl GameEngine {
         Ok(batch)
     }
 
-    fn play_land(&mut self, player: PlayerId, hand_idx: usize) -> Result<RuledEventBatch, EngineError> {
+    fn play_land(
+        &mut self,
+        player: PlayerId,
+        hand_idx: usize,
+    ) -> Result<RuledEventBatch, EngineError> {
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("not your priority"));
         }
-        let idx = self.state.player_idx(player).ok_or(EngineError::UnknownPlayer(player))?;
-        let oid = *self
+        let idx = self
             .state
-            .players[idx]
+            .player_idx(player)
+            .ok_or(EngineError::UnknownPlayer(player))?;
+        let oid = *self.state.players[idx]
             .hand
             .get(hand_idx)
             .ok_or(EngineError::Illegal("bad hand index"))?;
@@ -374,9 +399,7 @@ fn empty_batch_with_legal(eng: &GameEngine) -> RuledEventBatch {
 fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
     for p in &eng.state.players {
         let labels = legal_labels(eng, p.id);
-        batch
-            .legal_by_player
-            .insert(p.id, LegalActions { labels });
+        batch.legal_by_player.insert(p.id, LegalActions { labels });
     }
 }
 
@@ -417,8 +440,14 @@ fn ev_log(text: String) -> RuledEvent {
     }
 }
 
-fn draw_card(p: &mut PlayerState, objects: &mut HashMap<ObjectId, GameObject>) -> Result<(), EngineError> {
-    let oid = p.library.pop_front().ok_or(EngineError::Illegal("library empty"))?;
+fn draw_card(
+    p: &mut PlayerState,
+    objects: &mut HashMap<ObjectId, GameObject>,
+) -> Result<(), EngineError> {
+    let oid = p
+        .library
+        .pop_front()
+        .ok_or(EngineError::Illegal("library empty"))?;
     p.hand.push(oid);
     if let Some(o) = objects.get_mut(&oid) {
         o.zone = Zone::Hand;
@@ -455,7 +484,11 @@ fn destroy_permanent(state: &mut GameState, oid: ObjectId) -> Result<(), EngineE
     move_object_to_zone(state, oid, Zone::Graveyard)
 }
 
-fn pay_mana_simple(state: &mut GameState, player_idx: usize, cost: &str) -> Result<(), EngineError> {
+fn pay_mana_simple(
+    state: &mut GameState,
+    player_idx: usize,
+    cost: &str,
+) -> Result<(), EngineError> {
     let mut need_r = 0u32;
     let mut need_g = 0u32;
     let mut need_u = 0u32;
@@ -510,4 +543,3 @@ fn pay_mana_simple(state: &mut GameState, player_idx: usize, cost: &str) -> Resu
     }
     Ok(())
 }
-
