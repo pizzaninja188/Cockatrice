@@ -206,6 +206,7 @@ DlgCreateGame::DlgCreateGame(const ServerInfo_Game &gameInfo, const QMap<int, QS
     createGameAsSpectatorCheckBox->setEnabled(false);
     startingLifeTotalEdit->setEnabled(false);
     shareDecklistsOnLoadCheckBox->setEnabled(false);
+    ruledGameCheckBox->setEnabled(false);
 
     descriptionEdit->setText(QString::fromStdString(gameInfo.description()));
     maxPlayersEdit->setValue(gameInfo.max_players());
@@ -215,6 +216,7 @@ DlgCreateGame::DlgCreateGame(const ServerInfo_Game &gameInfo, const QMap<int, QS
     spectatorsNeedPasswordCheckBox->setChecked(gameInfo.spectators_need_password());
     spectatorsCanTalkCheckBox->setChecked(gameInfo.spectators_can_chat());
     spectatorsSeeEverythingCheckBox->setChecked(gameInfo.spectators_omniscient());
+    ruledGameCheckBox->setChecked(gameInfo.ruled_game());
 
     QSet<int> types;
     for (int i = 0; i < gameInfo.game_types_size(); ++i)
