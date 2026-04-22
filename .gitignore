@@ -1,5 +1,6 @@
 tags
 build*
+!**/build.rs
 *.qm
 .directory
 mysql.cnf

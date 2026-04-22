@@ -376,15 +376,15 @@ impl GameEngine {
 
 fn default_deck_list(player_index: usize) -> Vec<String> {
     if player_index == 0 {
-        let mut d: Vec<String> = std::iter::repeat("mountain".into()).take(20).collect();
-        d.extend(std::iter::repeat("lightning_bolt".into()).take(20));
-        d.extend(std::iter::repeat("grizzly_bears".into()).take(20));
+        let mut d: Vec<String> = std::iter::repeat_n("mountain".into(), 20).collect();
+        d.extend(std::iter::repeat_n("lightning_bolt".into(), 20));
+        d.extend(std::iter::repeat_n("grizzly_bears".into(), 20));
         d.truncate(60);
         d
     } else {
-        let mut d: Vec<String> = std::iter::repeat("forest".into()).take(20).collect();
-        d.extend(std::iter::repeat("giant_growth".into()).take(20));
-        d.extend(std::iter::repeat("counterspell".into()).take(20));
+        let mut d: Vec<String> = std::iter::repeat_n("forest".into(), 20).collect();
+        d.extend(std::iter::repeat_n("giant_growth".into(), 20));
+        d.extend(std::iter::repeat_n("counterspell".into(), 20));
         d.truncate(60);
         d
     }
