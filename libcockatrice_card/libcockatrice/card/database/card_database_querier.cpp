@@ -117,6 +117,38 @@ ExactCard CardDatabaseQuerier::guessCard(const CardRef &cardRef) const
     return ExactCard(card, printing);
 }
 
+namespace {
+bool isBasicLandNameFallback(const QString &name)
+{
+    if (name.isEmpty()) {
+        return false;
+    }
+    static const QStringList basics = {QStringLiteral("Plains"), QStringLiteral("Island"), QStringLiteral("Swamp"),
+                                       QStringLiteral("Mountain"), QStringLiteral("Forest"),
+                                       QStringLiteral("Wastes")};
+    if (basics.contains(name, Qt::CaseInsensitive)) {
+        return true;
+    }
+    static const QString snow = QStringLiteral("Snow-Covered ");
+    if (name.startsWith(snow, Qt::CaseInsensitive)) {
+        return basics.contains(name.mid(snow.size()), Qt::CaseInsensitive);
+    }
+    return false;
+}
+} // namespace
+
+bool CardDatabaseQuerier::cardRefIsLandForBulkUntap(const CardRef &cardRef, bool faceDown) const
+{
+    if (faceDown || cardRef.name.isEmpty()) {
+        return false;
+    }
+    const ExactCard ec = guessCard(cardRef);
+    if (ec) {
+        return ec.getInfo().getCardType().contains(QStringLiteral("Land"), Qt::CaseInsensitive);
+    }
+    return isBasicLandNameFallback(cardRef.name);
+}
+
 ExactCard CardDatabaseQuerier::getRandomCard() const
 {
     if (db->cards.isEmpty())

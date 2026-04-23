@@ -447,6 +447,13 @@ Server_AbstractParticipant::processGameCommand(const GameCommand &command, Respo
                     return Response::RespInvalidCommand;
                 }
                 break;
+            // Visual tap state is still freeform; everything else (draw, move, counters, etc.) must go through
+            // RULED_PAYLOAD / engine policy so the server does not become a freeform sandbox in ruled mode.
+            case GameCommand::SET_CARD_ATTR:
+                if (pregame) {
+                    return Response::RespInvalidCommand;
+                }
+                break;
             default:
                 return Response::RespInvalidCommand;
         }

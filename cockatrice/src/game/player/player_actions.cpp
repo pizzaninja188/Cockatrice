@@ -1226,7 +1226,10 @@ void PlayerActions::setCardAttrHelper(const GameEventContext &context,
     switch (attribute) {
         case AttrTapped: {
             bool tapped = avalue == "1";
-            if (!(!tapped && card->getDoesntUntap() && allCards)) {
+            const bool isLand =
+                CardDatabaseManager::query()->cardRefIsLandForBulkUntap(card->getCardRef(), card->getFaceDown());
+            const bool shouldPreventUntap = !tapped && card->getDoesntUntap() && allCards && !isLand;
+            if (!shouldPreventUntap) {
                 if (!allCards) {
                     emit logSetTapped(player, card, tapped);
                 }

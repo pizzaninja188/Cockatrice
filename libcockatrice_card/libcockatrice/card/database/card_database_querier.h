@@ -101,6 +101,15 @@ public:
     [[nodiscard]] ExactCard guessCard(const CardRef &cardRef) const;
 
     /**
+     * @brief Whether this face-up card reference should be treated as a land for bulk-untap rules.
+     *
+     * Used by the game server and client when applying zone-wide untap while a card has
+     * "does not untap" set: lands still untap. Uses the card database when loaded, with a
+     * small name fallback for basic lands when the database is empty (e.g. headless server).
+     */
+    [[nodiscard]] bool cardRefIsLandForBulkUntap(const CardRef &cardRef, bool faceDown) const;
+
+    /**
      * @brief Returns a random card from the database using the preferred printing.
      *
      * @return A random ExactCard, or empty if the database is empty.

@@ -1,0 +1,29 @@
+---
+alwaysApply: true
+---
+
+# Cockatrice fork: rules engine context
+This repo extends upstream Cockatrice with a **server-authoritative MTG-style rules engine**. Servatrice stays **auth, lobby, rooms, chat, replays**; match rules state during “ruled” games is owned by a **Rust sidecar** (`tricerules`), with the C++ server **relaying** protobuf frames between clients and the engine.
+**Full product/architecture spec (milestones, non-goals, protocol sketch):**  
+`c:\Users\pizza\.cursor\plans\mtgo-style_rules_engine_217e6828.plan.md`
+## Layout (where to look)
+- **`tricerules/`** — Rust workspace: `tricerules-core` (pure rules), `tricerules-cards` (primitives + Ron data + escape-hatch Rust cards), `tricerules-proto` (prost from shared `.proto`), `tricerules-server` (sidecar: session per match, length-prefixed protobuf framing).
+- **`libcockatrice_protocol/libcockatrice/protocol/pb/`** — shared protobufs; new intent commands / rules events live here and must stay consistent for C++ and Rust codegen.
+- **`libcockatrice_network/libcockatrice/network/server/remote/game/`** — `server_game.cpp` / `server_game.h` integrate ruled mode; **`rules_relay.{h,cpp}`** implements **`RulesRelay`** (Qt TCP client to localhost sidecar — verify host/port/env in code).
+- **`cockatrice/`** — desktop client; ruled-game UI and “create ruled game” options land here over time.
+- **Build:** CMake option **`WITH_RULES_ENGINE`** wires `cargo build` for the sidecar; CI should run `cargo test`, `clippy -D warnings`, `fmt --check` when touching Rust.
+## Design constraints agents should respect
+1. **Two game modes:** legacy **freeform** (unchanged casual play) vs **ruled** (engine-backed). Do not break freeform when changing relay/proto/client.
+2. **Single writer of ruled state:** the engine session actor owns `GameState`; Servatrice forwards commands and **filters** per-player views where hidden info applies (see plan).
+3. **Determinism:** randomness via seeded RNG; replays are **`(seed, command log) → state`** (see plan milestones M4+).
+4. **Card model:** hybrid — Ron **`tricerules-cards/data/`**, primitives **`tricerules-cards/primitives/`**, **`custom/`** Rust `CardEffect` when data is insufficient; validate card data at startup.
+## Milestones (short)
+- **M1:** Scaffold — workspace, proto crate, sidecar session, relay shell, CMake/CI.  
+- **M2:** `vanilla_core` rules + small card pool + scenario tests.  
+- **M3:** End-to-end desktop + protocol for real play.  
+- **M4+:** Replay/reconnect/spectators; expand primitives and card pool.
+**First-milestone non-goals** (do not scope-creep without explicit ask): full keyword coverage, Bo3/sideboard, webclient in-game ruled UI, fancy anti-cheat beyond server authority + seed — see plan.
+## When editing
+- Prefer **small, reviewable diffs**; keep legacy paths intact unless the task is explicitly to migrate them.
+- Any change to `.proto` definitions requires **both** C++ and Rust consumers to stay buildable (regenerate/bindings as the project already does).
+- Match existing naming and file placement (this fork may drift slightly from the plan doc — **trust the tree** over the plan when they conflict).

@@ -22,6 +22,7 @@
 #include "server_cardzone.h"
 #include "server_player.h"
 
+#include <libcockatrice/card/database/card_database_manager.h>
 #include <QVariant>
 #include <libcockatrice/protocol/pb/event_set_card_attr.pb.h>
 #include <libcockatrice/protocol/pb/event_set_card_counter.pb.h>
@@ -62,8 +63,11 @@ void Server_Card::resetState(bool keepAnnotations)
 
 QString Server_Card::setAttribute(CardAttribute attribute, const QString &avalue, bool allCards)
 {
-    if (attribute == AttrTapped && avalue != "1" && allCards && doesntUntap)
-        return QVariant(tapped).toString();
+    if (attribute == AttrTapped && avalue != QStringLiteral("1") && allCards && doesntUntap) {
+        if (!CardDatabaseManager::query()->cardRefIsLandForBulkUntap(cardRef, facedown)) {
+            return QVariant(tapped).toString();
+        }
+    }
 
     return setAttribute(attribute, avalue);
 }

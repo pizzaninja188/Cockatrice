@@ -586,11 +586,11 @@ void TabGame::actNextPhaseAction()
 
     if (phase == 0) {
         emit turnAdvanced();
+        // Only the untap step runs the toolbar "untap all" side effect; do not fire draw/other phase actions here.
+        phasesToolbar->triggerPhaseAction(0);
     } else {
         emit phaseChanged(phase);
     }
-
-    phasesToolbar->triggerPhaseAction(phase);
 }
 
 void TabGame::actRemoveLocalArrows()

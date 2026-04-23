@@ -276,11 +276,13 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             if (e.has_phase_changed()) {
                                 const auto &pc = e.phase_changed();
                                 lines += QStringLiteral("Phase: %1\n").arg(QString::fromStdString(pc.phase()));
+                                if (game->getGameState()->getActivePlayer() != pc.active_player_id()) {
+                                    game->getGameState()->setActivePlayer(pc.active_player_id());
+                                }
                                 const int mappedPhase = mapRuledPhaseSlugToToolbarPhase(QString::fromStdString(pc.phase()));
                                 if (mappedPhase >= 0) {
                                     game->getGameState()->setCurrentPhase(mappedPhase);
                                 }
-                                game->getGameState()->setActivePlayer(pc.active_player_id());
                             }
                         }
                         const auto lit =
