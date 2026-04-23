@@ -5,7 +5,6 @@
 #include "../board/arrow_item.h"
 #include "../board/card_drag_item.h"
 #include "../board/card_item.h"
-#include "../game/abstract_game.h"
 #include "../player/player.h"
 #include "../player/player_actions.h"
 #include "../board/abstract_counter.h"
@@ -306,8 +305,7 @@ void TableZone::toggleTapped()
             if (tapAll && !wasTapped) {
                 const QString manaCounterName = inferLandManaCounterName(temp);
                 const int manaCounterId = findCounterIdByName(getLogic()->getPlayer(), manaCounterName);
-                if (manaCounterId >= 0 &&
-                    !getLogic()->getPlayer()->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+                if (manaCounterId >= 0) {
                     auto *counterCmd = new Command_IncCounter;
                     counterCmd->set_counter_id(manaCounterId);
                     counterCmd->set_delta(1);

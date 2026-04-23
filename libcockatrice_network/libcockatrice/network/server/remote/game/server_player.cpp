@@ -12,7 +12,20 @@
 
 #include <QDebug>
 #include <QRegularExpression>
+#include <QtGlobal>
 #include <algorithm>
+
+namespace {
+// Single-letter names used for mana pool on the Cockatrice client (see TableZone::inferLandManaCounterName).
+bool isRuledModeManaPoolCounterName(const QString &name)
+{
+    const QString n = name.trimmed().toLower();
+    if (n.length() != 1) {
+        return false;
+    }
+    return QStringLiteral("wubrgxc").contains(n.at(0), Qt::CaseInsensitive);
+}
+} // namespace
 #include <libcockatrice/deck_list/deck_list.h>
 #include <libcockatrice/deck_list/tree/deck_list_card_node.h>
 #include <libcockatrice/protocol/pb/command_attach_card.pb.h>
@@ -525,6 +538,15 @@ Server_Player::cmdIncCounter(const Command_IncCounter &cmd, ResponseContainer & 
         return Response::RespNameNotFound;
     }
 
+    if (game->getRuledGame()) {
+        if (!isRuledModeManaPoolCounterName(c->getName())) {
+            return Response::RespInvalidCommand;
+        }
+        if (qAbs(cmd.delta()) > 32) {
+            return Response::RespInvalidCommand;
+        }
+    }
+
     c->setCount(c->getCount() + cmd.delta());
 
     Event_SetCounter event;
@@ -574,6 +596,15 @@ Server_Player::cmdSetCounter(const Command_SetCounter &cmd, ResponseContainer & 
     Server_Counter *c = counters.value(cmd.counter_id(), 0);
     if (!c) {
         return Response::RespNameNotFound;
+    }
+
+    if (game->getRuledGame()) {
+        if (!isRuledModeManaPoolCounterName(c->getName())) {
+            return Response::RespInvalidCommand;
+        }
+        if (cmd.value() < 0 || cmd.value() > 2000) {
+            return Response::RespInvalidCommand;
+        }
     }
 
     c->setCount(cmd.value());

@@ -2,6 +2,7 @@
 
 #include "../../client/settings/cache_settings.h"
 #include "../../interface/widgets/tabs/tab_game.h"
+#include "../abstract_game.h"
 #include "../player/player.h"
 #include "../player/player_actions.h"
 #include "translate_counter_name.h"
@@ -15,6 +16,33 @@
 #include <libcockatrice/protocol/pb/command_inc_counter.pb.h>
 #include <libcockatrice/protocol/pb/command_set_counter.pb.h>
 #include <libcockatrice/utility/expression.h>
+
+namespace {
+bool isManaPoolSymbolName(const QString &n)
+{
+    const QString t = n.trimmed().toLower();
+    if (t.length() != 1) {
+        return false;
+    }
+    return QStringLiteral("wubrgxc").contains(t.at(0), Qt::CaseInsensitive);
+}
+
+// Server cannot see whether Command_IncCounter came from a land tap (TableZone) or a counter click, so
+// in ruled mode we only allow these pools to change through tap automation / tricerules as applicable.
+bool manualManaEditsDisallowedInRuledGame(Player *p, const QString &counterName)
+{
+    if (!p || !p->getGame()) {
+        return false;
+    }
+    if (p->getPlayerInfo()->getJudge()) {
+        return false;
+    }
+    if (!p->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+        return false;
+    }
+    return isManaPoolSymbolName(counterName);
+}
+} // namespace
 
 AbstractCounter::AbstractCounter(Player *_player,
                                  int _id,
@@ -135,6 +163,12 @@ void AbstractCounter::setValue(int _value)
 void AbstractCounter::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
     if (isUnderMouse() && player->getPlayerInfo()->getLocalOrJudge()) {
+        if (manualManaEditsDisallowedInRuledGame(player, name) &&
+            (event->button() == Qt::MiddleButton || (QApplication::keyboardModifiers() & Qt::ShiftModifier) ||
+             event->button() == Qt::LeftButton || event->button() == Qt::RightButton)) {
+            event->accept();
+            return;
+        }
         if (event->button() == Qt::MiddleButton || (QApplication::keyboardModifiers() & Qt::ShiftModifier)) {
             if (menu)
                 menu->exec(event->screenPos());
@@ -170,6 +204,9 @@ void AbstractCounter::hoverLeaveEvent(QGraphicsSceneHoverEvent * /*event*/)
 
 void AbstractCounter::incrementCounter()
 {
+    if (manualManaEditsDisallowedInRuledGame(player, name)) {
+        return;
+    }
     const int delta = static_cast<QAction *>(sender())->data().toInt();
     Command_IncCounter cmd;
     cmd.set_counter_id(id);
@@ -179,6 +216,9 @@ void AbstractCounter::incrementCounter()
 
 void AbstractCounter::setCounter()
 {
+    if (manualManaEditsDisallowedInRuledGame(player, name)) {
+        return;
+    }
     dialogSemaphore = true;
     AbstractCounterDialog dialog(name, QString::number(value), player->getGame()->getTab());
     const int ok = dialog.exec();

@@ -447,9 +447,12 @@ Server_AbstractParticipant::processGameCommand(const GameCommand &command, Respo
                     return Response::RespInvalidCommand;
                 }
                 break;
-            // Visual tap state is still freeform; everything else (draw, move, counters, etc.) must go through
-            // RULED_PAYLOAD / engine policy so the server does not become a freeform sandbox in ruled mode.
+            // Visual tap state is still freeform; other actions must go through RULED_PAYLOAD / engine policy.
+            // Mana pool (symbol counters: w/u/b/r/g/x/c) is still freeform and broadcast; validated in
+            // Server_Player::cmdIncCounter / cmdSetCounter for ruled games.
             case GameCommand::SET_CARD_ATTR:
+            case GameCommand::INC_COUNTER:
+            case GameCommand::SET_COUNTER:
                 if (pregame) {
                     return Response::RespInvalidCommand;
                 }
