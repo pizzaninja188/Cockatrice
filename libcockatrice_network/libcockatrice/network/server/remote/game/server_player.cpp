@@ -144,7 +144,95 @@ void Server_Player::setupZones()
         }
     }
 
-    deckZone->shuffle();
+    if (!getGame()->getRuledGame()) {
+        deckZone->shuffle();
+    }
+}
+
+void Server_Player::applyRuledEngineZoneView(const ruled::v1::RuledPerPlayerView &v)
+{
+    if (v.player_id() != playerId) {
+        return;
+    }
+    Server_CardZone *deckZone = zones.value(ZoneNames::DECK);
+    Server_CardZone *handZone = zones.value(ZoneNames::HAND);
+    if (!deckZone || !handZone) {
+        return;
+    }
+    const auto trId = [](Server_Card *c) {
+        QString t = c->getName().toLower();
+        t.replace(' ', '_');
+        return t;
+    };
+    QList<Server_Card *> pool;
+    for (Server_Card *c : deckZone->getCards()) {
+        pool.append(c);
+    }
+    const QString libCsv = QString::fromStdString(v.lib_ids_csv());
+    QStringList libWants;
+    if (!libCsv.isEmpty()) {
+        for (const QString &part : libCsv.split(QLatin1Char(','))) {
+            if (!part.isEmpty()) {
+                libWants.append(part);
+            }
+        }
+    }
+    if (v.hand_size() + libWants.size() != pool.size()) {
+        qWarning() << "applyRuledEngineZoneView: count mismatch hand" << v.hand_size() << "lib" << libWants.size()
+                   << "pool" << pool.size() << "lib_csv_len" << libCsv.size();
+        return;
+    }
+    QList<Server_Card *> handList;
+    for (int i = 0; i < v.hand_size(); ++i) {
+        const QString want = QString::fromStdString(v.hand(i));
+        int found = -1;
+        for (int j = 0; j < pool.size(); ++j) {
+            if (trId(pool[j]) == want) {
+                found = j;
+                break;
+            }
+        }
+        if (found < 0) {
+            qWarning() << "applyRuledEngineZoneView: missing" << want << "player" << playerId;
+            return;
+        }
+        handList.append(pool.takeAt(found));
+    }
+    QList<Server_Card *> libList;
+    for (const QString &want : libWants) {
+        int found = -1;
+        for (int j = 0; j < pool.size(); ++j) {
+            if (trId(pool[j]) == want) {
+                found = j;
+                break;
+            }
+        }
+        if (found < 0) {
+            qWarning() << "applyRuledEngineZoneView: missing lib" << want;
+            return;
+        }
+        libList.append(pool.takeAt(found));
+    }
+    if (!pool.isEmpty()) {
+        return;
+    }
+    for (Server_Card *c : handList) {
+        deckZone->removeCard(c);
+        handZone->insertCard(c, -1, 0);
+    }
+    for (Server_Card *c : libList) {
+        deckZone->removeCard(c);
+    }
+    for (Server_Card *c : libList) {
+        deckZone->insertCard(c, -1, 0);
+    }
+}
+
+void Server_Player::shuffleMainDeckForRuledFallback()
+{
+    if (Server_CardZone *deckZone = zones.value(ZoneNames::DECK)) {
+        deckZone->shuffle();
+    }
 }
 
 void Server_Player::clearZones()

@@ -2,6 +2,7 @@
 #define PLAYER_H
 
 #include "server_abstract_player.h"
+#include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 
 class Server_Player : public Server_AbstractPlayer
 {
@@ -26,6 +27,8 @@ public:
 
     void setupZones() override;
     void clearZones() override;
+    void applyRuledEngineZoneView(const ruled::v1::RuledPerPlayerView &v);
+    void shuffleMainDeckForRuledFallback();
 
     Response::ResponseCode drawCards(GameEventStorage &ges, int number);
     void onCardBeingMoved(GameEventStorage &ges,

@@ -71,6 +71,7 @@ message RuledEvent {
     GameSnapshot snapshot = 6;
     ReplayState replay_state = 7;
     LogMessage log = 8;
+    ZoneViewSync zone_view = 9;
   }
 }
 
@@ -94,6 +95,22 @@ message StackResolved {
 
 message SbasApplied {
   string description = 1;
+}
+
+// Authoritative hand + library from the rules engine, for server to sync physical zones
+// (tricRules ids: lowercase_underscore, matching deck conversion).
+// Library: comma-separated, top of library (next draw) first. TricRules ids never contain commas.
+// Field 3 is reserved: older tricerules emitted repeated string there; same tag as singular string
+// on the C++ side merged 53 submessages into one wrong value. Use 4+ only for the CSV.
+message RuledPerPlayerView {
+  int32 player_id = 1;
+  repeated string hand = 2;
+  reserved 3;
+  string lib_ids_csv = 4;
+}
+
+message ZoneViewSync {
+  repeated RuledPerPlayerView per_player = 1;
 }
 
 message GameSnapshot {

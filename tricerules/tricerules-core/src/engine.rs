@@ -1,4 +1,4 @@
-//! Core rules processing (vanilla core ΓÇö simplified combat & mana).
+﻿//! Core rules processing (vanilla core ΓÇö simplified combat & mana).
 
 use crate::state::{
     CombatState, GameObject, GameState, ObjectId, PlayerId, PlayerState, StackItem, TurnStep, Zone,
@@ -784,6 +784,7 @@ impl GameEngine {
 
     pub fn initial_response_batch(&self) -> RuledEventBatch {
         let mut batch = RuledEventBatch::default();
+        batch.events.push(self.ev_zone_view_sync());
         batch
             .events
             .push(ev_phase_labeled(self, "Main1 (turn 1, pre-combat)"));
@@ -820,6 +821,44 @@ impl GameEngine {
                 error: format!("decode: {e}"),
                 batch: None,
             },
+        }
+    }
+
+    /// Deck + hand for Cockatrice server to line up with tricerules state.
+    fn ev_zone_view_sync(&self) -> RuledEvent {
+        let per_player: Vec<rv1::RuledPerPlayerView> = self
+            .state
+            .players
+            .iter()
+            .map(|p| rv1::RuledPerPlayerView {
+                player_id: p.id,
+                hand: p
+                    .hand
+                    .iter()
+                    .map(|&oid| {
+                        self.state
+                            .objects
+                            .get(&oid)
+                            .map(|o| o.card_id.clone())
+                            .unwrap_or_default()
+                    })
+                    .collect(),
+                lib_ids_csv: p
+                    .library
+                    .iter()
+                    .map(|&oid| {
+                        self.state
+                            .objects
+                            .get(&oid)
+                            .map(|o| o.card_id.clone())
+                            .unwrap_or_default()
+                    })
+                    .collect::<Vec<_>>()
+                    .join(","),
+            })
+            .collect();
+        RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ZoneView(rv1::ZoneViewSync { per_player })),
         }
     }
 

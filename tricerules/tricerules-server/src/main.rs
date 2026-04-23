@@ -103,6 +103,12 @@ async fn write_proto<M: Message>(
     msg: &M,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let buf = msg.encode_to_vec();
+    if buf.len() > 2000 {
+        eprintln!(
+            "tricerules: IpcResponse {} bytes (SessionStart; ensure servatrice and this sidecar are rebuilt from the same tree)",
+            buf.len()
+        );
+    }
     let len = (buf.len() as u32).to_be_bytes();
     sock.write_all(&len).await?;
     sock.write_all(&buf).await?;

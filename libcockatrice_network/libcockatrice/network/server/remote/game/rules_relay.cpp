@@ -72,14 +72,31 @@ bool RulesRelay::writeFrame(const google::protobuf::Message &msg)
 
 bool RulesRelay::readFrame(QByteArray &out)
 {
-    if (!socket->waitForReadyRead(5000)) {
+    // QIODevice::read may return fewer than requested; always loop until the length prefix
+    // and the payload are complete. A partial length read produced truncated frames and
+    // short garbage lib_ids_csv.
+    char lenLeRaw[4];
+    {
+        int got = 0;
+        while (got < 4) {
+            if (!socket->waitForReadyRead(5000)) {
+                return false;
+            }
+            const qint64 n = socket->read(lenLeRaw + got, 4 - got);
+            if (n <= 0) {
+                return false;
+            }
+            got += static_cast<int>(n);
+        }
+    }
+    const quint32 len = (static_cast<quint32>(static_cast<unsigned char>(lenLeRaw[0])) << 24) |
+                        (static_cast<quint32>(static_cast<unsigned char>(lenLeRaw[1])) << 16) |
+                        (static_cast<quint32>(static_cast<unsigned char>(lenLeRaw[2])) << 8) |
+                        static_cast<quint32>(static_cast<unsigned char>(lenLeRaw[3]));
+    // Sane cap (full zone sync for two 60-card decks is a few KB).
+    if (len == 0 || len > 16U * 1024U * 1024U) {
         return false;
     }
-    quint32 lenBE = 0;
-    if (socket->read(reinterpret_cast<char *>(&lenBE), sizeof(lenBE)) != sizeof(lenBE)) {
-        return false;
-    }
-    const quint32 len = qFromBigEndian(lenBE);
     out.resize(static_cast<int>(len));
     qint64 got = 0;
     while (got < static_cast<qint64>(len)) {

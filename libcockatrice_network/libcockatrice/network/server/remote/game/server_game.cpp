@@ -39,6 +39,7 @@
 #include <QTimer>
 #include <google/protobuf/descriptor.h>
 #include <libcockatrice/deck_list/deck_list.h>
+#include <libcockatrice/deck_list/tree/deck_list_card_node.h>
 #include <libcockatrice/protocol/pb/context_connection_state_changed.pb.h>
 #include <libcockatrice/protocol/pb/context_ping_changed.pb.h>
 #include <libcockatrice/protocol/pb/event_delete_arrow.pb.h>
@@ -57,6 +58,25 @@
 #include <libcockatrice/protocol/pb/game_replay.pb.h>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <libcockatrice/utility/zone_names.h>
+
+namespace {
+void stripRuledZoneViewForBroadcast(ruled::v1::IpcResponse *resp)
+{
+    if (!resp || !resp->has_batch()) {
+        return;
+    }
+    const ruled::v1::RuledEventBatch *batch = &resp->batch();
+    ruled::v1::RuledEventBatch out;
+    out.mutable_legal_by_player()->insert(batch->legal_by_player().begin(), batch->legal_by_player().end());
+    for (int i = 0; i < batch->events_size(); ++i) {
+        if (batch->events(i).has_zone_view()) {
+            continue;
+        }
+        *out.add_events() = batch->events(i);
+    }
+    resp->mutable_batch()->CopyFrom(out);
+}
+} // namespace
 
 Server_Game::Server_Game(const ServerInfo_User &_creatorInfo,
                          int _gameId,
@@ -380,6 +400,9 @@ void Server_Game::doStartGameIfReady(bool forceStartGame)
     } else
         firstGameStarted = true;
 
+    if (ruledGame) {
+        startRuledSidecarSession();
+    }
     sendGameStateToPlayers();
 
     activePlayer = -1;
@@ -392,10 +415,6 @@ void Server_Game::doStartGameIfReady(bool forceStartGame)
     gameInfo.set_game_id(gameId);
     gameInfo.set_started(true);
     emit gameInfoChanged(gameInfo);
-
-    if (ruledGame) {
-        startRuledSidecarSession();
-    }
 }
 
 void Server_Game::startGameIfReady(bool forceStartGame)
@@ -870,7 +889,15 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
     if (!resp.has_batch()) {
         return;
     }
-    const ruled::v1::RuledEventBatch &batch = resp.batch();
+    ruled::v1::IpcResponse toSend;
+    toSend.set_ok(resp.ok());
+    toSend.set_error(resp.error());
+    toSend.mutable_batch()->CopyFrom(resp.batch());
+    stripRuledZoneViewForBroadcast(&toSend);
+    if (!toSend.has_batch()) {
+        return;
+    }
+    const ruled::v1::RuledEventBatch &batch = toSend.batch();
     for (auto *participant : participants) {
         GameEventStorage ges;
         ruled::v1::RuledEventBatch filtered;
@@ -906,10 +933,15 @@ void Server_Game::startRuledSidecarSession()
         QStringList tricerulesIds;
         if (const DeckList *dl = pl->getDeckList()) {
             const QSet<QString> mainOnly = QSet<QString>() << QStringLiteral("main");
-            for (const QString &cardName : dl->getCardList(mainOnly)) {
-                QString t = cardName.toLower();
+            for (const DecklistCardNode *node : dl->getCardNodes(mainOnly)) {
+                if (!node) {
+                    continue;
+                }
+                QString t = node->getName().toLower();
                 t.replace(' ', '_');
-                tricerulesIds.append(t);
+                for (int k = 0; k < node->getNumber(); ++k) {
+                    tricerulesIds.append(t);
+                }
             }
         }
         deckByPlayer.append(qMakePair(pl->getPlayerId(), tricerulesIds));
@@ -925,8 +957,80 @@ void Server_Game::startRuledSidecarSession()
     if (!rulesRelay->sessionStart(
             static_cast<quint64>(gameId), ruledSeed, ids, deckPtr, resp)) {
         qWarning() << "startRuledSidecarSession: tricerules connection failed";
+        for (Server_AbstractPlayer *p : getPlayers().values()) {
+            static_cast<Server_Player *>(p)->shuffleMainDeckForRuledFallback();
+        }
         rulesRelay.reset();
         return;
+    }
+    if (!resp.ok()) {
+        qWarning() << "startRuledSidecarSession: tricerules:" << QString::fromStdString(resp.error());
+        for (Server_AbstractPlayer *p : getPlayers().values()) {
+            static_cast<Server_Player *>(p)->shuffleMainDeckForRuledFallback();
+        }
+        rulesRelay.reset();
+        return;
+    }
+    if (resp.has_batch()) {
+        for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
+            const auto &e = resp.batch().events(ei);
+            if (e.has_zone_view()) {
+                const auto &z = e.zone_view();
+                for (int pi = 0; pi < z.per_player_size(); ++pi) {
+                    const auto &p = z.per_player(pi);
+                    int mainN = 0;
+                    for (const QPair<int, QStringList> &row : deckByPlayer) {
+                        if (row.first == p.player_id()) {
+                            mainN = static_cast<int>(row.second.size());
+                            break;
+                        }
+                    }
+                    if (mainN == 0) {
+                        if (Server_AbstractPlayer *ppl = getPlayer(p.player_id())) {
+                            const Server_CardZone *dz = ppl->getZones().value(ZoneNames::DECK);
+                            if (dz) {
+                                mainN = static_cast<int>(dz->getCards().size());
+                            }
+                        }
+                    }
+                    if (mainN == 0) {
+                        mainN = 60;
+                    }
+                    const int needLib = mainN - p.hand_size();
+                    int csvCount = 0;
+                    {
+                        const std::string &cs = p.lib_ids_csv();
+                        if (cs.empty()) {
+                            csvCount = 0;
+                        } else {
+                            csvCount = 1;
+                            for (char c : cs) {
+                                if (c == ',') {
+                                    ++csvCount;
+                                }
+                            }
+                        }
+                    }
+                    if (csvCount != needLib) {
+                        qWarning() << "Ruled zone sync: player" << p.player_id() << "expected" << needLib
+                                   << "library card ids, lib_ids_csv has" << csvCount
+                                   << "parts, len" << p.lib_ids_csv().size() << "— is tricerules-server up to date? "
+                                      "(RulesRelay read was fixed; rebuild + restart the Rust side from this repo.)";
+                        for (Server_AbstractPlayer *pl : getPlayers().values()) {
+                            static_cast<Server_Player *>(pl)->shuffleMainDeckForRuledFallback();
+                        }
+                        rulesRelay.reset();
+                        return;
+                    }
+                }
+                for (const auto &p : e.zone_view().per_player()) {
+                    if (Server_AbstractPlayer *ab = getPlayer(p.player_id())) {
+                        static_cast<Server_Player *>(ab)->applyRuledEngineZoneView(p);
+                    }
+                }
+                break;
+            }
+        }
     }
     if (currentReplay) {
         currentReplay->set_ruled_seed(ruledSeed);
