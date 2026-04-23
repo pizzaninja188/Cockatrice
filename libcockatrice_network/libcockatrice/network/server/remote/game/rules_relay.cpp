@@ -95,7 +95,8 @@ bool RulesRelay::readFrame(QByteArray &out)
     return true;
 }
 
-bool RulesRelay::sessionStart(quint64 gameId, quint64 seed, const QList<int> &playerIds, ruled::v1::IpcResponse &out)
+bool RulesRelay::sessionStart(quint64 gameId, quint64 seed, const QList<int> &playerIds,
+                              const QList<QPair<int, QStringList>> *playerDecks, ruled::v1::IpcResponse &out)
 {
     if (!connectIfNeeded()) {
         return false;
@@ -106,6 +107,15 @@ bool RulesRelay::sessionStart(quint64 gameId, quint64 seed, const QList<int> &pl
     ss->set_seed(seed);
     for (int pid : playerIds) {
         ss->add_player_ids(pid);
+    }
+    if (playerDecks) {
+        for (const QPair<int, QStringList> &row : *playerDecks) {
+            ruled::v1::PlayerDeck *pd = ss->add_player_decks();
+            pd->set_player_id(row.first);
+            for (const QString &cid : row.second) {
+                pd->add_mainboard_card_id(cid.toStdString());
+            }
+        }
     }
     if (!writeFrame(env)) {
         return false;

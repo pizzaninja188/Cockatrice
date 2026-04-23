@@ -6,6 +6,8 @@
 #include <QByteArray>
 #include <QList>
 #include <QObject>
+#include <QPair>
+#include <QStringList>
 #include <QtGlobal>
 
 class QTcpSocket;
@@ -23,7 +25,9 @@ public:
     bool connectIfNeeded();
     void disconnectRelay();
 
-    bool sessionStart(quint64 gameId, quint64 seed, const QList<int> &playerIds, ruled::v1::IpcResponse &out);
+    /// @param playerDecks optional: one entry per player id with tricerules mainboard card ids; nullptr = use engine default
+    bool sessionStart(quint64 gameId, quint64 seed, const QList<int> &playerIds,
+                      const QList<QPair<int, QStringList>> *playerDecks, ruled::v1::IpcResponse &out);
     bool playerCommand(int playerId, const QByteArray &ruledCommandBytes, ruled::v1::IpcResponse &out);
     bool sessionEnd();
 

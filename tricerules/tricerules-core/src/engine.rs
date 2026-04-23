@@ -1,7 +1,7 @@
-//! Core rules processing (vanilla core — simplified combat & mana).
+//! Core rules processing (vanilla core ΓÇö simplified combat & mana).
 
 use crate::state::{
-    GameObject, GamePhase, GameState, ObjectId, PlayerId, PlayerState, StackItem, Zone,
+    CombatState, GameObject, GameState, ObjectId, PlayerId, PlayerState, StackItem, TurnStep, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -24,6 +24,8 @@ pub enum EngineError {
     Illegal(&'static str),
     #[error("missing card data {0}")]
     MissingCard(String),
+    #[error("player {0} won")]
+    GameOver(PlayerId),
 }
 
 pub struct GameEngine {
@@ -32,11 +34,16 @@ pub struct GameEngine {
 }
 
 impl GameEngine {
+    /// Optional `decks` per player (tricerules id strings); if missing/empty, uses the default M2 test deck.
     pub fn new(
         seed: u64,
         player_ids: &[PlayerId],
         starting_life: i32,
+        decks: Option<Vec<Vec<String>>>,
     ) -> Result<Self, EngineError> {
+        if player_ids.len() != 2 {
+            return Err(EngineError::Illegal("M2: exactly 2 players"));
+        }
         let registry =
             CardRegistry::from_embedded().map_err(|_| EngineError::Illegal("bad registry"))?;
         let mut objects = HashMap::new();
@@ -45,7 +52,10 @@ impl GameEngine {
 
         for (i, &pid) in player_ids.iter().enumerate() {
             let mut p = PlayerState::new(pid, starting_life);
-            let deck_list = default_deck_list(i);
+            let deck_list: Vec<String> = match &decks {
+                Some(d) if i < d.len() && !d[i].is_empty() => d[i].clone(),
+                _ => default_deck_list(i),
+            };
             for card_id in deck_list {
                 let def = registry
                     .get(&card_id)
@@ -64,6 +74,8 @@ impl GameEngine {
                         power: def.power,
                         toughness: def.toughness,
                         damage: 0,
+                        plus_one_plus_one: 0,
+                        minus_one_minus_one: 0,
                     },
                 );
                 p.library.push_back(oid);
@@ -88,15 +100,27 @@ impl GameEngine {
             stack: Vec::new(),
             priority_idx: 0,
             active_player_idx: 0,
-            phase: GamePhase::Main1,
+            turn_step: TurnStep::Main1,
             turn: 1,
             next_object_id,
             command_index: 0,
             passes_since_stack_change: 0,
+            land_dropped_this_turn: false,
+            combat: None,
+            winner: None,
         };
         let mut eng = GameEngine { state, registry };
-        eng.apply_sbas();
+        let mut e = vec![];
+        let _ = eng.apply_sbas(&mut e);
         Ok(eng)
+    }
+
+    pub fn new_with_default_decks(
+        seed: u64,
+        player_ids: &[PlayerId],
+        starting_life: i32,
+    ) -> Result<Self, EngineError> {
+        Self::new(seed, player_ids, starting_life, None)
     }
 
     pub fn apply_command(
@@ -104,28 +128,254 @@ impl GameEngine {
         player: PlayerId,
         cmd: &RuledCommand,
     ) -> Result<RuledEventBatch, EngineError> {
+        if self.state.winner.is_some() {
+            return Err(EngineError::Illegal("game over"));
+        }
         self.state.command_index += 1;
         use rv1::ruled_command::Cmd;
-        match cmd.cmd.as_ref() {
-            Some(Cmd::PassPriority(_)) => self.pass_priority(player),
+        let res = match cmd.cmd.as_ref() {
+            None => return Err(EngineError::Illegal("empty command")),
+            Some(Cmd::Mulligan(_)) => return Ok(empty_batch_with_legal(self)),
+            Some(Cmd::Concede(_)) => return self.concede_batch(player),
+            Some(Cmd::DeclareAttackers(a)) => {
+                if self.state.turn_step != TurnStep::DeclareAttackers
+                    || self.state.active_player_id() != player
+                {
+                    return Err(EngineError::Illegal("declare attackers not legal"));
+                }
+                self.set_attackers(&a.creature_ids, player)
+            }
+            Some(Cmd::DeclareBlockers(b)) => {
+                if self.state.turn_step != TurnStep::DeclareBlockers
+                    || Some(player) != self.state.defending_player_id_1v1()
+                {
+                    return Err(EngineError::Illegal("declare blockers not legal"));
+                }
+                self.set_blockers(&b.block_pairs)
+            }
+            Some(Cmd::PassPriority(_)) => {
+                if self.state.turn_step == TurnStep::DeclareAttackers
+                    && self.state.active_player_id() == player
+                {
+                    self.set_attackers(&[], player)
+                } else if self.state.turn_step == TurnStep::DeclareBlockers
+                    && Some(player) == self.state.defending_player_id_1v1()
+                {
+                    self.set_blockers(&[])
+                } else {
+                    self.pass_priority(player)
+                }
+            }
             Some(Cmd::CastSpell(cs)) => {
                 self.cast_spell(player, cs.hand_card_index as usize, &cs.targets)
             }
             Some(Cmd::PlayLand(pl)) => self.play_land(player, pl.hand_card_index as usize),
-            Some(Cmd::Mulligan(_)) => Ok(empty_batch_with_legal(self)),
-            Some(Cmd::Concede(_)) => Ok(self.concede_batch(player)),
-            None => Err(EngineError::Illegal("empty command")),
+        };
+        let mut b = res?;
+        self.sweep_life();
+        let mut d = vec![];
+        self.apply_sbas(&mut d)?;
+        b.events.extend(d);
+        fill_legal(&mut b, self);
+        Ok(b)
+    }
+
+    fn sweep_life(&mut self) {
+        for p in &mut self.state.players {
+            if p.life <= 0 {
+                p.has_lost = true;
+            }
+        }
+        let still_in: Vec<PlayerId> = self
+            .state
+            .players
+            .iter()
+            .filter(|p| p.life > 0 && !p.has_lost)
+            .map(|p| p.id)
+            .collect();
+        if still_in.len() == 1 {
+            self.state.winner = Some(still_in[0]);
         }
     }
 
-    fn concede_batch(&self, player: PlayerId) -> RuledEventBatch {
-        let mut batch = RuledEventBatch::default();
-        batch
-            .events
-            .push(ev_log(format!("Player {player} conceded")));
-        let mut b = batch;
+    fn set_attackers(
+        &mut self,
+        ids: &[u32],
+        _player: PlayerId,
+    ) -> Result<RuledEventBatch, EngineError> {
+        if self.state.priority_player_id() != _player {
+            return Err(EngineError::Illegal("not your priority"));
+        }
+        let ap = self.state.active_player_id();
+        if ids.is_empty() {
+            self.state.combat = None;
+            self.state.turn_step = TurnStep::Main2;
+            if let Some(i) = self.state.player_idx(ap) {
+                self.state.priority_idx = i;
+            }
+            self.state.passes_since_stack_change = 0;
+            let mut b2 = RuledEventBatch::default();
+            b2.events
+                .push(ev_phase_labeled(self, "No attackers — skipped to main2"));
+            fill_legal(&mut b2, self);
+            return Ok(b2);
+        }
+        let mut list = Vec::new();
+        for &oid in ids {
+            let o = self
+                .state
+                .objects
+                .get(&oid)
+                .ok_or(EngineError::Illegal("attacker id"))?;
+            if o.owner != ap || o.zone != Zone::Battlefield {
+                return Err(EngineError::Illegal("illegal attacker"));
+            }
+            if !o.is_creature(&self.registry) {
+                return Err(EngineError::Illegal("not creature"));
+            }
+            if o.summoning_sick {
+                return Err(EngineError::Illegal("summoning sick"));
+            }
+            if o.tapped {
+                return Err(EngineError::Illegal("tapped"));
+            }
+            list.push(oid);
+        }
+        for &oid in &list {
+            if let Some(c) = self.state.objects.get_mut(&oid) {
+                c.tapped = true;
+            }
+        }
+        self.state.combat = Some(CombatState {
+            attacking: list,
+            blocker: HashMap::new(),
+        });
+        self.state.turn_step = TurnStep::DeclareBlockers;
+        if let Some(d) = self.state.defending_player_id_1v1() {
+            if let Some(di) = self.state.player_idx(d) {
+                self.state.priority_idx = di;
+            }
+        }
+        self.state.passes_since_stack_change = 0;
+        let mut b = RuledEventBatch::default();
+        b.events
+            .push(ev_log("Attackers committed — blockers?".to_string()));
+        b.events.push(ev_phase_labeled(
+            self,
+            "Declare blockers (defense has priority)",
+        ));
+        Ok(b)
+    }
+
+    fn set_blockers(&mut self, pairs: &[rv1::BlockPair]) -> Result<RuledEventBatch, EngineError> {
+        for p in pairs {
+            if let Some(c) = self.state.combat.as_mut() {
+                if c.blocker.contains_key(&p.attacker_id) {
+                    return Err(EngineError::Illegal("two blockers/attacker"));
+                }
+                if !c.attacking.contains(&p.attacker_id) {
+                    return Err(EngineError::Illegal("bad attacker"));
+                }
+            }
+            let bobj = self
+                .state
+                .objects
+                .get(&p.blocker_id)
+                .ok_or(EngineError::Illegal("blocker?"))?;
+            if bobj.zone != Zone::Battlefield {
+                return Err(EngineError::Illegal("blocker zone"));
+            }
+            let d = self.state.defending_player_id_1v1().unwrap();
+            if bobj.owner != d {
+                return Err(EngineError::Illegal("not your blocker"));
+            }
+        }
+        if let Some(c) = self.state.combat.as_mut() {
+            for p in pairs {
+                c.blocker.insert(p.attacker_id, p.blocker_id);
+            }
+        }
+        let c = self
+            .state
+            .combat
+            .clone()
+            .ok_or(EngineError::Illegal("combat?"))?;
+        self.resolve_combat_damage(&c)?;
+        self.state.combat = None;
+        self.state.turn_step = TurnStep::EndCombat;
+        if let Some(i) = self.state.player_idx(self.state.active_player_id()) {
+            self.state.priority_idx = i;
+        }
+        self.state.passes_since_stack_change = 0;
+        self.apply_legend_sbas()?;
+        let mut b = RuledEventBatch::default();
+        b.events.push(ev_log(
+            "Combat damage: blocked creatures trade; unblocked hits defending player".to_string(),
+        ));
+        b.events.push(ev_phase_labeled(
+            self,
+            "End combat (priority, further priority before main2)",
+        ));
         fill_legal(&mut b, self);
-        b
+        Ok(b)
+    }
+
+    fn resolve_combat_damage(&mut self, c: &CombatState) -> Result<(), EngineError> {
+        let dfd = self.state.defending_player_id_1v1().unwrap();
+        for &att in &c.attacking {
+            if self.state.objects.get(&att).map(|a| a.zone) != Some(Zone::Battlefield) {
+                continue;
+            }
+            if let Some(&blk) = c.blocker.get(&att) {
+                let apw = self
+                    .state
+                    .objects
+                    .get(&att)
+                    .and_then(|o| o.power)
+                    .unwrap_or(0);
+                let bpw = self
+                    .state
+                    .objects
+                    .get(&blk)
+                    .and_then(|o| o.power)
+                    .unwrap_or(0);
+                if let Some(af) = self.state.objects.get_mut(&att) {
+                    af.damage += bpw;
+                }
+                if let Some(bf) = self.state.objects.get_mut(&blk) {
+                    bf.damage += apw;
+                }
+            } else {
+                let p = self
+                    .state
+                    .objects
+                    .get(&att)
+                    .and_then(|o| o.power)
+                    .unwrap_or(0) as i32;
+                if let Some(di) = self.state.player_idx(dfd) {
+                    self.state.players[di].life -= p;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn concede_batch(&mut self, player: PlayerId) -> Result<RuledEventBatch, EngineError> {
+        for p in &mut self.state.players {
+            if p.id == player {
+                p.has_lost = true;
+            }
+        }
+        for p in &self.state.players {
+            if p.id != player {
+                self.state.winner = Some(p.id);
+                break;
+            }
+        }
+        let mut batch = RuledEventBatch::default();
+        batch.events.push(ev_log(format!("P{player} conceded")));
+        fill_legal(&mut batch, self);
+        Ok(batch)
     }
 
     fn pass_priority(&mut self, player: PlayerId) -> Result<RuledEventBatch, EngineError> {
@@ -133,32 +383,168 @@ impl GameEngine {
             return Err(EngineError::Illegal("not your priority"));
         }
         let n = self.state.players.len() as u32;
-        let mut events = vec![rv1::RuledEvent {
-            ev: Some(rv1::ruled_event::Ev::PriorityChanged(
-                rv1::PriorityChanged { player_id: player },
-            )),
-        }];
-
+        if !self.state.stack.is_empty() {
+            return self.pass_priority_on_stack(player, n);
+        }
+        // empty stack
         self.state.passes_since_stack_change += 1;
         self.state.priority_idx = (self.state.priority_idx + 1) % self.state.players.len();
-
-        if !self.state.stack.is_empty() && self.state.passes_since_stack_change >= n {
-            self.resolve_top_of_stack(&mut events)?;
-            self.state.passes_since_stack_change = 0;
-        } else if self.state.stack.is_empty() && self.state.passes_since_stack_change >= n {
-            // End of step — simplified: give priority back to active player
-            self.state.passes_since_stack_change = 0;
-            self.state.priority_idx = self.state.active_player_idx;
-            events.push(ev_phase("Step end (simplified)"));
+        let ev = vec![rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::PriorityChanged(
+                rv1::PriorityChanged {
+                    player_id: self.state.priority_player_id(),
+                },
+            )),
+        }];
+        if self.state.passes_since_stack_change < n {
+            let mut batch = RuledEventBatch {
+                events: ev,
+                legal_by_player: Default::default(),
+            };
+            self.apply_sbas(&mut batch.events)?;
+            fill_legal(&mut batch, self);
+            return Ok(batch);
         }
+        self.state.passes_since_stack_change = 0;
+        let mut ev2 = vec![];
+        self.adv_on_empty_stack(&mut ev2)
+    }
 
-        self.apply_sbas();
-        let mut batch = RuledEventBatch {
-            events,
-            legal_by_player: Default::default(),
-        };
-        fill_legal(&mut batch, self);
-        Ok(batch)
+    fn pass_priority_on_stack(
+        &mut self,
+        player: PlayerId,
+        n: u32,
+    ) -> Result<RuledEventBatch, EngineError> {
+        self.state.passes_since_stack_change += 1;
+        self.state.priority_idx =
+            (self.state.player_idx(player).unwrap() + 1) % self.state.players.len();
+        let mut ev = vec![rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::PriorityChanged(
+                rv1::PriorityChanged {
+                    player_id: self.state.priority_player_id(),
+                },
+            )),
+        }];
+        if self.state.passes_since_stack_change < n {
+            self.apply_sbas(&mut ev)?;
+            return Ok(finish_with_events(self, ev));
+        }
+        self.state.passes_since_stack_change = 0;
+        if let Some(i) = self.state.player_idx(self.state.active_player_id()) {
+            self.state.priority_idx = i;
+        }
+        self.resolve_top_of_stack(&mut ev)?;
+        self.apply_sbas(&mut ev)?;
+        Ok(finish_with_events(self, ev))
+    }
+
+    fn adv_on_empty_stack(
+        &mut self,
+        ev: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        use TurnStep::*;
+        let step = self.state.turn_step;
+        let ap = self.state.active_player_id();
+        match step {
+            Main1 => {
+                self.state.turn_step = BeginCombat;
+                if let Some(i) = self.state.player_idx(ap) {
+                    self.state.priority_idx = i;
+                }
+                ev.push(ev_phase_labeled(self, "Begin combat (priority)"));
+            }
+            BeginCombat => {
+                self.state.turn_step = DeclareAttackers;
+                if let Some(i) = self.state.player_idx(ap) {
+                    self.state.priority_idx = i;
+                }
+                self.state.combat = Some(CombatState {
+                    attacking: vec![],
+                    blocker: HashMap::new(),
+                });
+                ev.push(ev_phase_labeled(
+                    self,
+                    "Combat — declare attackers (active)",
+                ));
+            }
+            EndCombat => {
+                self.state.turn_step = Main2;
+                if let Some(i) = self.state.player_idx(ap) {
+                    self.state.priority_idx = i;
+                }
+                ev.push(ev_phase_labeled(self, "Main2 (priority)"));
+            }
+            Main2 => {
+                if let Some(i) = self.state.player_idx(ap) {
+                    self.state.priority_idx = i;
+                }
+                return self.new_turn();
+            }
+            _ => {
+                if let Some(i) = self.state.player_idx(ap) {
+                    self.state.priority_idx = i;
+                }
+                self.state.passes_since_stack_change = 0;
+                ev.push(ev_phase_labeled(
+                    self,
+                    "Open priority (M2: unexpected step, reset)",
+                ));
+            }
+        }
+        self.apply_sbas(ev)?;
+        Ok(finish_with_events(self, std::mem::take(ev)))
+    }
+
+    fn new_turn(&mut self) -> Result<RuledEventBatch, EngineError> {
+        self.state.land_dropped_this_turn = false;
+        self.state.active_player_idx = (self.state.active_player_idx + 1) % 2;
+        if self.state.active_player_idx == 0 {
+            self.state.turn = self.state.turn.saturating_add(1);
+        }
+        let ap = self.state.active_player_id();
+        for o in self.state.objects.values_mut() {
+            if o.owner == ap {
+                o.tapped = false;
+            }
+        }
+        if let Some(idx) = self.state.player_idx(ap) {
+            for &oid in &self.state.players[idx].battlefield.clone() {
+                if let Some(c) = self.state.objects.get_mut(&oid) {
+                    c.summoning_sick = false;
+                }
+            }
+        }
+        if let Some(idx) = self.state.player_idx(ap) {
+            if self.state.players[idx].library.is_empty() {
+                for p in &mut self.state.players {
+                    p.has_lost = p.id == ap;
+                }
+                for p in &self.state.players {
+                    if p.id != ap {
+                        self.state.winner = Some(p.id);
+                    }
+                }
+                return Ok(finish_with_events(
+                    self,
+                    vec![ev_log("Game over: empty library on draw".into())],
+                ));
+            }
+            draw_card(&mut self.state.players[idx], &mut self.state.objects)?;
+        }
+        self.state.turn_step = TurnStep::Main1;
+        self.state.combat = None;
+        if let Some(i) = self.state.player_idx(ap) {
+            self.state.priority_idx = i;
+        }
+        self.state.passes_since_stack_change = 0;
+        self.apply_legend_sbas()?;
+        let mut ev = vec![];
+        self.apply_sbas(&mut ev)?;
+        ev.push(ev_phase_labeled(
+            self,
+            &format!("Turn {} — new active P{}, main phase", self.state.turn, ap),
+        ));
+        Ok(finish_with_events(self, ev))
     }
 
     fn resolve_top_of_stack(
@@ -259,6 +645,24 @@ impl GameEngine {
         if def.is_land {
             return Err(EngineError::Illegal("use play land"));
         }
+        let can_sorc = matches!(self.state.turn_step, TurnStep::Main1 | TurnStep::Main2);
+        let can_inst = can_sorc
+            || matches!(
+                self.state.turn_step,
+                TurnStep::BeginCombat
+                    | TurnStep::DeclareAttackers
+                    | TurnStep::DeclareBlockers
+                    | TurnStep::EndCombat
+            );
+        if def.is_sorcery && !can_sorc {
+            return Err(EngineError::Illegal("sorceries only in main"));
+        }
+        if def.is_instant && !can_inst {
+            return Err(EngineError::Illegal("instant timing"));
+        }
+        if !def.is_sorcery && !def.is_instant && !can_sorc {
+            return Err(EngineError::Illegal("spell only in main"));
+        }
         pay_mana_simple(&mut self.state, idx, &def.mana_cost)?;
 
         self.state.players[idx].hand.retain(|&x| x != oid);
@@ -298,6 +702,12 @@ impl GameEngine {
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("not your priority"));
         }
+        if self.state.land_dropped_this_turn {
+            return Err(EngineError::Illegal("one land per turn"));
+        }
+        if !matches!(self.state.turn_step, TurnStep::Main1 | TurnStep::Main2) {
+            return Err(EngineError::Illegal("play land in main only"));
+        }
         let idx = self
             .state
             .player_idx(player)
@@ -311,6 +721,7 @@ impl GameEngine {
         if !def.is_land {
             return Err(EngineError::Illegal("not a land"));
         }
+        self.state.land_dropped_this_turn = true;
         self.state.players[idx].hand.retain(|&x| x != oid);
         self.state.players[idx].battlefield.push(oid);
         if let Some(o) = self.state.objects.get_mut(&oid) {
@@ -323,12 +734,12 @@ impl GameEngine {
         Ok(batch)
     }
 
-    fn apply_sbas(&mut self) {
+    fn apply_sbas(&mut self, out: &mut [rv1::RuledEvent]) -> Result<(), EngineError> {
         let mut to_destroy = Vec::new();
         for (&id, o) in &self.state.objects {
             if o.zone == Zone::Battlefield {
                 if let Some(t) = o.toughness {
-                    if o.damage >= t {
+                    if t == 0 || o.damage >= t {
                         to_destroy.push(id);
                     }
                 }
@@ -337,13 +748,47 @@ impl GameEngine {
         for id in to_destroy {
             let _ = destroy_permanent(&mut self.state, id);
         }
+        if !out.is_empty() {
+            // leave room for SBA log if we actually destroyed
+        }
+        Ok(())
+    }
+
+    fn apply_legend_sbas(&mut self) -> Result<(), EngineError> {
+        let mut by_name: HashMap<String, Vec<ObjectId>> = HashMap::new();
+        for (&id, o) in &self.state.objects {
+            if o.zone != Zone::Battlefield {
+                continue;
+            }
+            if !self
+                .registry
+                .get(&o.card_id)
+                .map(|c| c.is_legendary)
+                .unwrap_or(false)
+            {
+                continue;
+            }
+            let n = self.registry.get(&o.card_id).unwrap().name.clone();
+            by_name.entry(n).or_default().push(id);
+        }
+        for ids in by_name.values() {
+            if ids.len() < 2 {
+                continue;
+            }
+            for &g in ids.iter().skip(1) {
+                let _ = destroy_permanent(&mut self.state, g);
+            }
+        }
+        Ok(())
     }
 
     pub fn initial_response_batch(&self) -> RuledEventBatch {
         let mut batch = RuledEventBatch::default();
-        batch.events.push(ev_phase("Main1"));
+        batch
+            .events
+            .push(ev_phase_labeled(self, "Main1 (turn 1, pre-combat)"));
         batch.events.push(ev_log(format!(
-            "Game start — active P{}, priority P{}",
+            "Start — active P{}, priority P{}",
             self.state.active_player_id(),
             self.state.priority_player_id()
         )));
@@ -359,6 +804,11 @@ impl GameEngine {
                     error: String::new(),
                     batch: Some(batch),
                 },
+                Err(EngineError::GameOver(w)) => IpcResponse {
+                    ok: true,
+                    error: String::new(),
+                    batch: Some(self.game_over_batch_winner(w)),
+                },
                 Err(e) => IpcResponse {
                     ok: false,
                     error: e.to_string(),
@@ -371,6 +821,16 @@ impl GameEngine {
                 batch: None,
             },
         }
+    }
+
+    fn game_over_batch_winner(&self, w: PlayerId) -> RuledEventBatch {
+        let mut b = RuledEventBatch::default();
+        b.events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::Log(rv1::LogMessage {
+                text: format!("Game over. Winner: {w}"),
+            })),
+        });
+        b
     }
 }
 
@@ -412,26 +872,38 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
         Some(i) => i,
         None => return v,
     };
+    let in_main = matches!(eng.state.turn_step, TurnStep::Main1 | TurnStep::Main2);
     for (i, &oid) in eng.state.players[idx].hand.iter().enumerate() {
         let cid = &eng.state.objects.get(&oid).unwrap().card_id;
-        let name = eng
-            .registry
-            .get(cid)
-            .map(|c| c.name.as_str())
-            .unwrap_or("?");
-        v.push(format!("Cast {name} (hand idx {i})"));
-        v.push(format!("Play land {name} (hand idx {i})"));
+        if let Some(def) = eng.registry.get(cid) {
+            let name = def.name.as_str();
+            v.push(format!("Cast {name} (hand idx {i})"));
+            if def.is_land && in_main && !eng.state.land_dropped_this_turn {
+                v.push(format!("Play land {name} (hand idx {i})"));
+            }
+        } else {
+            v.push(format!("Play unknown card (hand idx {i})"));
+        }
     }
     v
 }
 
-fn ev_phase(name: &str) -> RuledEvent {
+fn ev_phase_labeled(eng: &GameEngine, name: &str) -> RuledEvent {
     RuledEvent {
         ev: Some(rv1::ruled_event::Ev::PhaseChanged(rv1::PhaseChanged {
-            phase: name.into(),
-            active_player_id: 0,
+            phase: name.to_string(),
+            active_player_id: eng.state.active_player_id(),
         })),
     }
+}
+
+fn finish_with_events(eng: &GameEngine, events: Vec<RuledEvent>) -> RuledEventBatch {
+    let mut b = RuledEventBatch {
+        events,
+        legal_by_player: Default::default(),
+    };
+    fill_legal(&mut b, eng);
+    b
 }
 
 fn ev_log(text: String) -> RuledEvent {

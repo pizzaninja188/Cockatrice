@@ -25,4 +25,7 @@ pub struct CardDefinition {
     /// Effect key for data-driven spells (see primitives)
     #[serde(default)]
     pub spell_effect: Option<String>,
+    /// Legendary supertype (for SBA: legend rule)
+    #[serde(default)]
+    pub is_legendary: bool,
 }

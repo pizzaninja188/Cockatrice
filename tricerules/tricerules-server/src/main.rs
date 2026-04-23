@@ -37,7 +37,20 @@ async fn handle_connection(
         let resp = match env.msg {
             Some(Msg::SessionStart(s)) => {
                 let pids: Vec<PlayerId> = s.player_ids;
-                match GameEngine::new(s.seed, &pids, 20) {
+                let decks: Option<Vec<Vec<String>>> = if s.player_decks.is_empty() {
+                    None
+                } else {
+                    let mut out: Vec<Vec<String>> = (0..pids.len()).map(|_| vec![]).collect();
+                    for pd in s.player_decks {
+                        if let Some(i) = pids.iter().position(|&x| x == pd.player_id) {
+                            if i < out.len() {
+                                out[i] = pd.mainboard_card_id;
+                            }
+                        }
+                    }
+                    Some(out)
+                };
+                match GameEngine::new(s.seed, &pids, 20, decks) {
                     Ok(e) => {
                         let batch = e.initial_response_batch();
                         engine = Some(e);

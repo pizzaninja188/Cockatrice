@@ -10,6 +10,8 @@ message RuledCommand {
     PlayLand play_land = 3;
     MulliganDecision mulligan = 4;
     Concede concede = 5;
+    DeclareAttackers declare_attackers = 6;
+    DeclareBlockers declare_blockers = 7;
   }
 }
 
@@ -33,6 +35,21 @@ message MulliganDecision {
 }
 
 message Concede {}
+
+// Active player names creatures on their battlefield to attack. Empty = no attack.
+message DeclareAttackers {
+  repeated uint32 creature_ids = 1;
+}
+
+message BlockPair {
+  uint32 attacker_id = 1;
+  uint32 blocker_id = 2;
+}
+
+// Defending player assigns at most one blocker per attacking creature (M2).
+message DeclareBlockers {
+  repeated BlockPair block_pairs = 1;
+}
 
 // Engine output batch; carried inside GameEvent Event_RuledPayload.payload
 message RuledEventBatch {
@@ -102,10 +119,17 @@ message IpcEnvelope {
   }
 }
 
+// Card ids for tricerules (lowercase_underscore, e.g. "lightning_bolt") — empty = engine default test deck
+message PlayerDeck {
+  int32 player_id = 1;
+  repeated string mainboard_card_id = 2;
+}
+
 message SessionStart {
   uint64 game_id = 1;
   uint64 seed = 2;
   repeated int32 player_ids = 3;
+  repeated PlayerDeck player_decks = 4;
 }
 
 message PlayerCommand {

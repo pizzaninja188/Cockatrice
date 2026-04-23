@@ -8,6 +8,9 @@ fn main() -> Result<()> {
     let proto_root = manifest_dir.join("../../libcockatrice_protocol/libcockatrice/protocol/pb");
     let ruled_v1 = proto_root.join("ruled_v1.proto");
 
+    // Proto lives outside this crate; ensure edits invalidate cached prost output (e.g. release/ vs debug/ drift).
+    println!("cargo:rerun-if-changed={}", ruled_v1.display());
+
     let mut config = prost_build::Config::new();
     config.btree_map(["."]);
     config.compile_protos(&[ruled_v1], &[proto_root])?;

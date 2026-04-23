@@ -44,4 +44,12 @@ mod tests {
             prop_assert!(matches!(spell_effect_from_key(&s), SpellEffectKind::None));
         }
     }
+
+    #[test]
+    fn damage_amount_matches_bolt() {
+        assert!(matches!(
+            spell_effect_from_key("bolt"),
+            SpellEffectKind::DealDamage { amount: 3 }
+        ));
+    }
 }

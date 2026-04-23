@@ -35,6 +35,7 @@
 #include <QDebug>
 #include <QRandomGenerator>
 #include <QRegularExpression>
+#include <QSet>
 #include <QTimer>
 #include <google/protobuf/descriptor.h>
 #include <libcockatrice/deck_list/deck_list.h>
@@ -900,7 +901,29 @@ void Server_Game::startRuledSidecarSession()
         ids.append(p->getPlayerId());
     }
     ruled::v1::IpcResponse resp;
-    if (!rulesRelay->sessionStart(static_cast<quint64>(gameId), ruledSeed, ids, resp)) {
+    QList<QPair<int, QStringList>> deckByPlayer;
+    for (Server_AbstractPlayer *pl : getPlayers().values()) {
+        QStringList tricerulesIds;
+        if (const DeckList *dl = pl->getDeckList()) {
+            const QSet<QString> mainOnly = QSet<QString>() << QStringLiteral("main");
+            for (const QString &cardName : dl->getCardList(mainOnly)) {
+                QString t = cardName.toLower();
+                t.replace(' ', '_');
+                tricerulesIds.append(t);
+            }
+        }
+        deckByPlayer.append(qMakePair(pl->getPlayerId(), tricerulesIds));
+    }
+    bool anyMainboard = false;
+    for (const QPair<int, QStringList> &row : deckByPlayer) {
+        if (!row.second.isEmpty()) {
+            anyMainboard = true;
+            break;
+        }
+    }
+    const QList<QPair<int, QStringList>> *deckPtr = anyMainboard ? &deckByPlayer : nullptr;
+    if (!rulesRelay->sessionStart(
+            static_cast<quint64>(gameId), ruledSeed, ids, deckPtr, resp)) {
         qWarning() << "startRuledSidecarSession: tricerules connection failed";
         rulesRelay.reset();
         return;
