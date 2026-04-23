@@ -166,6 +166,7 @@ impl GameEngine {
                     self.pass_priority(player)
                 }
             }
+            Some(Cmd::PrimitiveYieldStructured(_)) => self.primitive_yield_structured(player),
             Some(Cmd::CastSpell(cs)) => {
                 self.cast_spell(player, cs.hand_card_index as usize, &cs.targets)
             }
@@ -216,8 +217,8 @@ impl GameEngine {
             }
             self.state.passes_since_stack_change = 0;
             let mut b2 = RuledEventBatch::default();
-            b2.events
-                .push(ev_phase_labeled(self, "No attackers — skipped to main2"));
+            b2.events.push(ev_log("No attackers — skipped to main2".to_string()));
+            b2.events.push(ev_phase_labeled(self, "main2"));
             fill_legal(&mut b2, self);
             return Ok(b2);
         }
@@ -261,10 +262,8 @@ impl GameEngine {
         let mut b = RuledEventBatch::default();
         b.events
             .push(ev_log("Attackers committed — blockers?".to_string()));
-        b.events.push(ev_phase_labeled(
-            self,
-            "Declare blockers (defense has priority)",
-        ));
+        b.events.push(ev_log("Declare blockers (defense has priority)".to_string()));
+        b.events.push(ev_phase_labeled(self, "declare_blockers"));
         Ok(b)
     }
 
@@ -313,10 +312,10 @@ impl GameEngine {
         b.events.push(ev_log(
             "Combat damage: blocked creatures trade; unblocked hits defending player".to_string(),
         ));
-        b.events.push(ev_phase_labeled(
-            self,
-            "End combat (priority, further priority before main2)",
+        b.events.push(ev_log(
+            "End combat (priority, further priority before main2)".to_string(),
         ));
+        b.events.push(ev_phase_labeled(self, "end_combat"));
         fill_legal(&mut b, self);
         Ok(b)
     }
@@ -359,6 +358,37 @@ impl GameEngine {
             }
         }
         Ok(())
+    }
+
+    /// Single-step structural advance on an empty stack (Cockatrice "pass turn" in ruled mode).
+    /// Active advances main / combat structure; defender may skip blockers during declare blockers.
+    fn primitive_yield_structured(&mut self, player: PlayerId) -> Result<RuledEventBatch, EngineError> {
+        if !self.state.stack.is_empty() {
+            return Err(EngineError::Illegal("stack not empty"));
+        }
+        use TurnStep::*;
+        match self.state.turn_step {
+            DeclareAttackers => {
+                if player != self.state.active_player_id() {
+                    return Err(EngineError::Illegal("not active player"));
+                }
+                self.set_attackers(&[], player)
+            }
+            DeclareBlockers => {
+                if Some(player) != self.state.defending_player_id_1v1() {
+                    return Err(EngineError::Illegal("not defending player"));
+                }
+                self.set_blockers(&[])
+            }
+            Main1 | BeginCombat | EndCombat | Main2 => {
+                if player != self.state.active_player_id() {
+                    return Err(EngineError::Illegal("not active player"));
+                }
+                let mut ev = vec![];
+                self.adv_on_empty_stack(&mut ev)
+            }
+            _ => Err(EngineError::Illegal("primitive advance not supported in this step")),
+        }
     }
 
     fn concede_batch(&mut self, player: PlayerId) -> Result<RuledEventBatch, EngineError> {
@@ -452,7 +482,7 @@ impl GameEngine {
                 if let Some(i) = self.state.player_idx(ap) {
                     self.state.priority_idx = i;
                 }
-                ev.push(ev_phase_labeled(self, "Begin combat (priority)"));
+                ev.push(ev_phase_labeled(self, "begin_combat"));
             }
             BeginCombat => {
                 self.state.turn_step = DeclareAttackers;
@@ -463,17 +493,14 @@ impl GameEngine {
                     attacking: vec![],
                     blocker: HashMap::new(),
                 });
-                ev.push(ev_phase_labeled(
-                    self,
-                    "Combat — declare attackers (active)",
-                ));
+                ev.push(ev_phase_labeled(self, "declare_attackers"));
             }
             EndCombat => {
                 self.state.turn_step = Main2;
                 if let Some(i) = self.state.player_idx(ap) {
                     self.state.priority_idx = i;
                 }
-                ev.push(ev_phase_labeled(self, "Main2 (priority)"));
+                ev.push(ev_phase_labeled(self, "main2"));
             }
             Main2 => {
                 if let Some(i) = self.state.player_idx(ap) {
@@ -486,10 +513,8 @@ impl GameEngine {
                     self.state.priority_idx = i;
                 }
                 self.state.passes_since_stack_change = 0;
-                ev.push(ev_phase_labeled(
-                    self,
-                    "Open priority (M2: unexpected step, reset)",
-                ));
+                ev.push(ev_log("Open priority (M2: unexpected step, reset)".to_string()));
+                ev.push(ev_phase_labeled(self, "main1"));
             }
         }
         self.apply_sbas(ev)?;
@@ -541,10 +566,11 @@ impl GameEngine {
         self.apply_legend_sbas()?;
         let mut ev = vec![];
         self.apply_sbas(&mut ev)?;
-        ev.push(ev_phase_labeled(
-            self,
-            &format!("Turn {} — new active P{}, main phase", self.state.turn, ap),
-        ));
+        ev.push(ev_log(format!(
+            "Turn {} — new active P{}, main phase",
+            self.state.turn, ap
+        )));
+        ev.push(ev_phase_labeled(self, "main1"));
         Ok(finish_with_events(self, ev))
     }
 
@@ -788,7 +814,7 @@ impl GameEngine {
         batch.events.push(self.ev_zone_view_sync());
         batch
             .events
-            .push(ev_phase_labeled(self, "Main1 (turn 1, pre-combat)"));
+            .push(ev_phase_labeled(self, "main1"));
         batch.events.push(ev_log(format!(
             "Start — active P{}, priority P{}",
             self.state.active_player_id(),

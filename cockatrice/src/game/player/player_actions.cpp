@@ -120,7 +120,6 @@ void PlayerActions::playCard(CardItem *card, bool faceDown)
     if (!exactCard) {
         return;
     }
-
     const CardInfo &info = exactCard.getInfo();
 
     if (!faceDown && tryPlayRuledLand(card)) {
@@ -1699,7 +1698,6 @@ void PlayerActions::playSelectedCards(const bool faceDown)
         auto *card = static_cast<CardItem *>(item);
         selectedCards.append(card);
     }
-
     // CardIds will get shuffled downwards when cards leave the deck.
     // We need to iterate through the cards in reverse order so cardIds don't get changed out from under us as we play
     // out the cards one-by-one.

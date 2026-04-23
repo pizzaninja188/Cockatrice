@@ -12,10 +12,15 @@ message RuledCommand {
     Concede concede = 5;
     DeclareAttackers declare_attackers = 6;
     DeclareBlockers declare_blockers = 7;
+    // Cockatrice "pass turn" in ruled mode: one empty-stack structural advance
+    // (active player outside declare blockers; defender during declare blockers).
+    PrimitiveYieldStructured primitive_yield_structured = 8;
   }
 }
 
 message PassPriority {}
+
+message PrimitiveYieldStructured {}
 
 message CastSpell {
   uint32 hand_card_index = 1;

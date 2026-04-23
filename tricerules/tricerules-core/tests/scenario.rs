@@ -1,7 +1,7 @@
 //! Scripted command sequences (M2).
 
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
-use tricerules_proto::ruled::v1::{PassPriority, RuledCommand};
+use tricerules_proto::ruled::v1::{PassPriority, PrimitiveYieldStructured, RuledCommand};
 
 use tricerules_core::GameEngine;
 
@@ -9,6 +9,20 @@ fn pass() -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::PassPriority(PassPriority {})),
     }
+}
+
+fn primitive_yield() -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::PrimitiveYieldStructured(PrimitiveYieldStructured {})),
+    }
+}
+
+#[test]
+fn primitive_yield_active_skips_double_pass_main1() {
+    let mut e = GameEngine::new(99, &[0, 1], 20, None).expect("new");
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main1);
+    e.apply_command(0, &primitive_yield()).expect("active primitive");
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::BeginCombat);
 }
 
 #[test]

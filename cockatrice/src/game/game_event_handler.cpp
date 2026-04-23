@@ -11,6 +11,7 @@
 #include <libcockatrice/protocol/pb/command_game_say.pb.h>
 #include <libcockatrice/protocol/pb/command_leave_game.pb.h>
 #include <libcockatrice/protocol/pb/command_next_turn.pb.h>
+#include <libcockatrice/protocol/pb/command_ruled_payload.pb.h>
 #include <libcockatrice/protocol/pb/command_reverse_turn.pb.h>
 #include <libcockatrice/protocol/pb/command_set_active_phase.pb.h>
 #include <libcockatrice/protocol/pb/context_connection_state_changed.pb.h>
@@ -40,6 +41,44 @@ struct ParsedRuledLandActions
     QSet<int> handIndices;
     QMultiHash<QString, int> handIndicesByCardName;
 };
+
+int mapRuledPhaseSlugToToolbarPhase(const QString &slug)
+{
+    if (slug == QLatin1String("untap")) {
+        return 0;
+    }
+    if (slug == QLatin1String("upkeep")) {
+        return 1;
+    }
+    if (slug == QLatin1String("draw")) {
+        return 2;
+    }
+    if (slug == QLatin1String("main1")) {
+        return 3;
+    }
+    if (slug == QLatin1String("begin_combat")) {
+        return 4;
+    }
+    if (slug == QLatin1String("declare_attackers")) {
+        return 5;
+    }
+    if (slug == QLatin1String("declare_blockers")) {
+        return 6;
+    }
+    if (slug == QLatin1String("combat_damage")) {
+        return 7;
+    }
+    if (slug == QLatin1String("end_combat")) {
+        return 8;
+    }
+    if (slug == QLatin1String("main2")) {
+        return 9;
+    }
+    if (slug == QLatin1String("end_step") || slug == QLatin1String("cleanup")) {
+        return 10;
+    }
+    return -1;
+}
 
 ParsedRuledLandActions parseRuledLandActions(const ruled::v1::LegalActions &actions)
 {
@@ -74,11 +113,10 @@ bool GameEventHandler::isRuledLandPlayLegalForHandIndex(int handIndex) const
 
 int GameEventHandler::getRuledLandPlayHandIndexForCard(const QString &cardName, int preferredHandIndex) const
 {
-    if (legalRuledLandPlayHandIndices.contains(preferredHandIndex)) {
+    const QList<int> matching = getRuledLandPlayHandIndicesForCardName(cardName);
+    if (matching.contains(preferredHandIndex)) {
         return preferredHandIndex;
     }
-
-    const QList<int> matching = getRuledLandPlayHandIndicesForCardName(cardName);
     if (matching.isEmpty()) {
         return -1;
     }
@@ -107,6 +145,21 @@ void GameEventHandler::sendGameCommand(const google::protobuf::Message &command,
     AbstractClient *client = game->getClientForPlayer(playerId);
     if (!client)
         return;
+
+    if (game->getGameMetaInfo()->proto().ruled_game() && dynamic_cast<const Command_NextTurn *>(&command)) {
+        ruled::v1::RuledCommand ruledCommand;
+        ruledCommand.mutable_primitive_yield_structured();
+        std::string payload;
+        if (!ruledCommand.SerializeToString(&payload)) {
+            return;
+        }
+        Command_RuledPayload cmd;
+        cmd.set_payload(payload);
+        PendingCommand *pend = prepareGameCommand(cmd);
+        connect(pend, &PendingCommand::finished, this, &GameEventHandler::commandFinished);
+        client->sendCommand(pend);
+        return;
+    }
 
     PendingCommand *pend = prepareGameCommand(command);
     connect(pend, &PendingCommand::finished, this, &GameEventHandler::commandFinished);
@@ -221,8 +274,13 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 lines += QString::fromStdString(e.log().text()) + QLatin1Char('\n');
                             }
                             if (e.has_phase_changed()) {
-                                lines += QStringLiteral("Phase: %1\n")
-                                             .arg(QString::fromStdString(e.phase_changed().phase()));
+                                const auto &pc = e.phase_changed();
+                                lines += QStringLiteral("Phase: %1\n").arg(QString::fromStdString(pc.phase()));
+                                const int mappedPhase = mapRuledPhaseSlugToToolbarPhase(QString::fromStdString(pc.phase()));
+                                if (mappedPhase >= 0) {
+                                    game->getGameState()->setCurrentPhase(mappedPhase);
+                                }
+                                game->getGameState()->setActivePlayer(pc.active_player_id());
                             }
                         }
                         const auto lit =
