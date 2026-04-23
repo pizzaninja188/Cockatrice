@@ -137,6 +137,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                                  AbstractClient *client,
                                                  EventProcessingOptions options)
 {
+    Q_UNUSED(client);
     const GameEventContext &context = cont.context();
     emit containerProcessingStarted(context);
 
@@ -169,10 +170,6 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                     break;
             }
         } else {
-            if ((game->getGameState()->getClients().size() > 1) && (playerId != -1))
-                if (game->getGameState()->getClients().at(playerId) != client)
-                    continue;
-
             switch (eventType) {
                 case GameEvent::GAME_STATE_CHANGED:
                     eventGameStateChanged(event.GetExtension(Event_GameStateChanged::ext), playerId, context);

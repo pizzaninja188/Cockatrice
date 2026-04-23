@@ -433,6 +433,17 @@ static bool isRuledLandSingleClickLegal(const CardItem *card)
     return game->getGameEventHandler()->getRuledLandPlayHandIndexForCard(card->getName(), handIndex) >= 0;
 }
 
+static bool isTableLandSingleClickLegal(const CardItem *card)
+{
+    if (!card || !card->getZone() || card->getFaceDown()) {
+        return false;
+    }
+    if (card->getZone()->getName() != ZoneNames::TABLE) {
+        return false;
+    }
+    return card->getCardInfo().getCardType().contains("Land", Qt::CaseInsensitive);
+}
+
 /**
  * This method is called when a "click to play" is done on the card.
  * This is either triggered by a single click or double click, depending on the settings.
@@ -464,7 +475,8 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
             }
         }
     } else if ((event->modifiers() != Qt::AltModifier) && (event->button() == Qt::LeftButton) &&
-               (!SettingsCache::instance().getDoubleClickToPlay() || isRuledLandSingleClickLegal(this))) {
+               (!SettingsCache::instance().getDoubleClickToPlay() || isRuledLandSingleClickLegal(this) ||
+                isTableLandSingleClickLegal(this))) {
         handleClickedToPlay(event->modifiers().testFlag(Qt::ShiftModifier));
     }
 

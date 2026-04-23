@@ -7,12 +7,18 @@
 #include "../board/card_item.h"
 #include "../player/player.h"
 #include "../player/player_actions.h"
+#include "../board/abstract_counter.h"
 #include "../z_values.h"
 #include "logic/table_zone_logic.h"
 
 #include <QGraphicsScene>
 #include <QPainter>
+#include <QChar>
+#include <QRegularExpression>
+#include <QRegularExpressionMatch>
+#include <QString>
 #include <libcockatrice/card/card_info.h>
+#include <libcockatrice/protocol/pb/command_inc_counter.pb.h>
 #include <libcockatrice/protocol/pb/command_move_card.pb.h>
 #include <libcockatrice/protocol/pb/command_set_card_attr.pb.h>
 #include <libcockatrice/utility/zone_names.h>
@@ -21,6 +27,79 @@ const QColor TableZone::BACKGROUND_COLOR = QColor(100, 100, 100);
 const QColor TableZone::FADE_MASK = QColor(0, 0, 0, 80);
 const QColor TableZone::GRADIENT_COLOR = QColor(255, 255, 255, 150);
 const QColor TableZone::GRADIENT_COLORLESS = QColor(255, 255, 255, 0);
+
+static QString manaCounterNameFromSymbol(const QChar symbol)
+{
+    switch (symbol.toUpper().toLatin1()) {
+        case 'W':
+            return "w";
+        case 'U':
+            return "u";
+        case 'B':
+            return "b";
+        case 'R':
+            return "r";
+        case 'G':
+            return "g";
+        case 'C':
+            return "x";
+        case 'X':
+            return "x";
+        default:
+            return {};
+    }
+}
+
+static QString inferLandManaCounterName(const CardItem *card)
+{
+    if (!card || card->getFaceDown()) {
+        return {};
+    }
+    const QString cardType = card->getCardInfo().getCardType();
+    if (!cardType.contains("Land", Qt::CaseInsensitive)) {
+        return {};
+    }
+
+    // Prefer explicit mana symbols from tap abilities like "{T}: Add {G}.".
+    static const QRegularExpression tapManaSymbolRegex(
+        R"(\{T\}[^\n]*?\badd\b[^\n]*?\{([WUBRGCX])\})", QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpressionMatch match = tapManaSymbolRegex.match(card->getCardInfo().getText());
+    if (match.hasMatch()) {
+        return manaCounterNameFromSymbol(match.captured(1).at(0));
+    }
+
+    // Fall back to basic land subtypes when rules text does not expose a simple symbol.
+    if (cardType.contains("Plains", Qt::CaseInsensitive)) {
+        return "w";
+    }
+    if (cardType.contains("Island", Qt::CaseInsensitive)) {
+        return "u";
+    }
+    if (cardType.contains("Swamp", Qt::CaseInsensitive)) {
+        return "b";
+    }
+    if (cardType.contains("Mountain", Qt::CaseInsensitive)) {
+        return "r";
+    }
+    if (cardType.contains("Forest", Qt::CaseInsensitive)) {
+        return "g";
+    }
+    return {};
+}
+
+static int findCounterIdByName(Player *player, const QString &counterName)
+{
+    if (!player || counterName.isEmpty()) {
+        return -1;
+    }
+    const auto counters = player->getCounters();
+    for (auto it = counters.constBegin(); it != counters.constEnd(); ++it) {
+        if (it.value() != nullptr && it.value()->getName().compare(counterName, Qt::CaseInsensitive) == 0) {
+            return it.key();
+        }
+    }
+    return -1;
+}
 
 TableZone::TableZone(TableZoneLogic *_logic, QGraphicsItem *parent) : SelectZone(_logic, parent), active(false)
 {
@@ -206,20 +285,43 @@ void TableZone::toggleTapped()
     bool tapAll = std::any_of(selectedItems.begin(), selectedItems.end(), [](const QGraphicsItem *item) {
         return !qgraphicsitem_cast<const CardItem *>(item)->getTapped();
     });
+    if (!tapAll) {
+        return;
+    }
+
     QList<const ::google::protobuf::Message *> cmdList;
     for (const auto &selectedItem : selectedItems) {
         CardItem *temp = qgraphicsitem_cast<CardItem *>(selectedItem);
-        if (temp->getTapped() != tapAll) {
+        const bool wasTapped = temp->getTapped();
+        if (wasTapped != tapAll) {
             Command_SetCardAttr *cmd = new Command_SetCardAttr;
             cmd->set_zone(getLogic()->getName().toStdString());
             cmd->set_card_id(temp->getId());
             cmd->set_attribute(AttrTapped);
             cmd->set_attr_value(tapAll ? "1" : "0");
             cmdList.append(cmd);
+            temp->setTapped(tapAll, true);
+
+            if (tapAll && !wasTapped) {
+                const QString manaCounterName = inferLandManaCounterName(temp);
+                const int manaCounterId = findCounterIdByName(getLogic()->getPlayer(), manaCounterName);
+                if (manaCounterId >= 0) {
+                    auto *counterCmd = new Command_IncCounter;
+                    counterCmd->set_counter_id(manaCounterId);
+                    counterCmd->set_delta(1);
+                    cmdList.append(counterCmd);
+
+                    if (auto *counter = getLogic()->getPlayer()->getCounters().value(manaCounterId, nullptr)) {
+                        counter->setValue(counter->getValue() + 1);
+                    }
+                }
+            }
         }
     }
-    getLogic()->getPlayer()->getPlayerActions()->sendGameCommand(
-        getLogic()->getPlayer()->getPlayerActions()->prepareGameCommand(cmdList));
+    if (!cmdList.isEmpty()) {
+        getLogic()->getPlayer()->getPlayerActions()->sendGameCommand(
+            getLogic()->getPlayer()->getPlayerActions()->prepareGameCommand(cmdList));
+    }
 }
 
 void TableZone::resizeToContents()
