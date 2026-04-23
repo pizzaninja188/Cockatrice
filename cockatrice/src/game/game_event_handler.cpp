@@ -32,6 +32,7 @@
 #include <libcockatrice/protocol/pb/game_event_container.pb.h>
 #include <libcockatrice/protocol/pending_command.h>
 #include <QRegularExpression>
+#include <algorithm>
 
 namespace {
 struct ParsedRuledLandActions
@@ -77,12 +78,18 @@ int GameEventHandler::getRuledLandPlayHandIndexForCard(const QString &cardName, 
         return preferredHandIndex;
     }
 
-    const QList<int> matching = legalRuledLandPlayIndicesByCardName.values(cardName);
+    const QList<int> matching = getRuledLandPlayHandIndicesForCardName(cardName);
     if (matching.isEmpty()) {
         return -1;
     }
-
     return matching.first();
+}
+
+QList<int> GameEventHandler::getRuledLandPlayHandIndicesForCardName(const QString &cardName) const
+{
+    QList<int> matching = legalRuledLandPlayIndicesByCardName.values(cardName);
+    std::sort(matching.begin(), matching.end());
+    return matching;
 }
 
 void GameEventHandler::sendGameCommand(PendingCommand *pend, int playerId)

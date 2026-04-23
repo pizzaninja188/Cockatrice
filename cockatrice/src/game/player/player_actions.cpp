@@ -62,8 +62,30 @@ bool PlayerActions::tryPlayRuledLand(CardItem *card)
     if (handIndex < 0) {
         return false;
     }
-    const int ruledHandIndex = player->getGame()->getGameEventHandler()->getRuledLandPlayHandIndexForCard(
-        card->getName(), handIndex);
+    int sameNameOrdinal = -1;
+    int seenSameName = 0;
+    for (const auto *zoneCard : card->getZone()->getCards()) {
+        if (!zoneCard) {
+            continue;
+        }
+        if (zoneCard->getName() == card->getName()) {
+            if (zoneCard == card) {
+                sameNameOrdinal = seenSameName;
+                break;
+            }
+            ++seenSameName;
+        }
+    }
+
+    int ruledHandIndex =
+        player->getGame()->getGameEventHandler()->getRuledLandPlayHandIndexForCard(card->getName(), handIndex);
+    if (ruledHandIndex != handIndex) {
+        const QList<int> matchingIndices =
+            player->getGame()->getGameEventHandler()->getRuledLandPlayHandIndicesForCardName(card->getName());
+        if (sameNameOrdinal >= 0 && sameNameOrdinal < matchingIndices.size()) {
+            ruledHandIndex = matchingIndices.at(sameNameOrdinal);
+        }
+    }
     if (ruledHandIndex < 0) {
         return false;
     }

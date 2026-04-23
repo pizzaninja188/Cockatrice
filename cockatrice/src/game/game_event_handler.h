@@ -57,6 +57,7 @@ public:
     explicit GameEventHandler(AbstractGame *_game);
     [[nodiscard]] bool isRuledLandPlayLegalForHandIndex(int handIndex) const;
     [[nodiscard]] int getRuledLandPlayHandIndexForCard(const QString &cardName, int preferredHandIndex) const;
+    [[nodiscard]] QList<int> getRuledLandPlayHandIndicesForCardName(const QString &cardName) const;
 
     void handleNextTurn();
     void handleReverseTurn();

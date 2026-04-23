@@ -917,9 +917,12 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
         let cid = &eng.state.objects.get(&oid).unwrap().card_id;
         if let Some(def) = eng.registry.get(cid) {
             let name = def.name.as_str();
-            v.push(format!("Cast {name} (hand idx {i})"));
-            if def.is_land && in_main && !eng.state.land_dropped_this_turn {
-                v.push(format!("Play land {name} (hand idx {i})"));
+            if def.is_land {
+                if in_main && !eng.state.land_dropped_this_turn {
+                    v.push(format!("Play land {name} (hand idx {i})"));
+                }
+            } else {
+                v.push(format!("Cast {name} (hand idx {i})"));
             }
         } else {
             v.push(format!("Play unknown card (hand idx {i})"));
