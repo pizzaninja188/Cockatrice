@@ -876,6 +876,45 @@ Response::ResponseCode Server_Game::processRuledPayload(int playerId, const Comm
     if (!resp.ok()) {
         return Response::RespContextError;
     }
+    ruled::v1::RuledCommand ruledCmd;
+    if (ruledCmd.ParseFromString(cmd.payload()) && ruledCmd.has_play_land()) {
+        if (Server_AbstractPlayer *activePlayer = getPlayer(playerId)) {
+            Server_CardZone *handZone = activePlayer->getZones().value(ZoneNames::HAND);
+            Server_CardZone *tableZone = activePlayer->getZones().value(ZoneNames::TABLE);
+            const int handIndex = static_cast<int>(ruledCmd.play_land().hand_card_index());
+            if (handZone && tableZone && handIndex >= 0 && handIndex < handZone->getCards().size()) {
+                Server_Card *card = handZone->getCards().at(handIndex);
+                CardToMove cardToMove;
+                cardToMove.set_card_id(card->getId());
+                GameEventStorage moveGes;
+                // Cockatrice table uses 3 rows; lands belong on the bottom row (grid y = 2).
+                static constexpr int RULED_LAND_GRID_Y = 2;
+                if (activePlayer->moveCard(moveGes, handZone, QList<const CardToMove *>() << &cardToMove, tableZone,
+                                           -1, RULED_LAND_GRID_Y, true) == Response::RespOk) {
+                    moveGes.sendToGame(this);
+                }
+            }
+        }
+    }
+
+    bool zoneViewApplied = false;
+    if (resp.has_batch()) {
+        for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
+            const auto &e = resp.batch().events(ei);
+            if (!e.has_zone_view()) {
+                continue;
+            }
+            for (const auto &p : e.zone_view().per_player()) {
+                if (Server_AbstractPlayer *ab = getPlayer(p.player_id())) {
+                    static_cast<Server_Player *>(ab)->applyRuledEngineZoneView(p);
+                    zoneViewApplied = true;
+                }
+            }
+        }
+    }
+    if (zoneViewApplied) {
+        sendGameStateToPlayers();
+    }
     // Append to deterministic replay log (concatenated RuledCommand bytes)
     if (currentReplay) {
         currentReplay->mutable_ruled_command_log()->append(payload.constData(), static_cast<size_t>(payload.size()));

@@ -176,6 +176,7 @@ impl GameEngine {
         let mut d = vec![];
         self.apply_sbas(&mut d)?;
         b.events.extend(d);
+        b.events.push(self.ev_zone_view_sync());
         fill_legal(&mut b, self);
         Ok(b)
     }

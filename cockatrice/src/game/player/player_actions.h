@@ -168,6 +168,7 @@ public slots:
 
 private:
     Player *player;
+    bool tryPlayRuledLand(CardItem *card);
 
     int defaultNumberTopCards = 1;
     int defaultNumberTopCardsToPlaceBelow = 1;

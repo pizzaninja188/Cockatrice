@@ -23,11 +23,13 @@
 #include <libcockatrice/protocol/pb/command_mulligan.pb.h>
 #include <libcockatrice/protocol/pb/command_reveal_cards.pb.h>
 #include <libcockatrice/protocol/pb/command_roll_die.pb.h>
+#include <libcockatrice/protocol/pb/command_ruled_payload.pb.h>
 #include <libcockatrice/protocol/pb/command_set_card_attr.pb.h>
 #include <libcockatrice/protocol/pb/command_set_card_counter.pb.h>
 #include <libcockatrice/protocol/pb/command_shuffle.pb.h>
 #include <libcockatrice/protocol/pb/command_undo_draw.pb.h>
 #include <libcockatrice/protocol/pb/context_move_card.pb.h>
+#include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <libcockatrice/utility/expression.h>
 #include <libcockatrice/utility/trice_limits.h>
 #include <libcockatrice/utility/zone_names.h>
@@ -42,6 +44,41 @@ PlayerActions::PlayerActions(Player *_player)
     moveTopCardTimer->setInterval(MOVE_TOP_CARD_UNTIL_INTERVAL);
     moveTopCardTimer->setSingleShot(true);
     connect(moveTopCardTimer, &QTimer::timeout, [this]() { actMoveTopCardToPlay(); });
+}
+
+bool PlayerActions::tryPlayRuledLand(CardItem *card)
+{
+    if (!card || !player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+        return false;
+    }
+    if (card->getZone()->getName() != ZoneNames::HAND) {
+        return false;
+    }
+    if (!card->getCardInfo().getCardType().contains("Land", Qt::CaseInsensitive)) {
+        return false;
+    }
+
+    const int handIndex = card->getZone()->getCards().indexOf(card);
+    if (handIndex < 0) {
+        return false;
+    }
+    const int ruledHandIndex = player->getGame()->getGameEventHandler()->getRuledLandPlayHandIndexForCard(
+        card->getName(), handIndex);
+    if (ruledHandIndex < 0) {
+        return false;
+    }
+
+    ruled::v1::RuledCommand ruledCommand;
+    ruledCommand.mutable_play_land()->set_hand_card_index(ruledHandIndex);
+    std::string payload;
+    if (!ruledCommand.SerializeToString(&payload)) {
+        return false;
+    }
+
+    Command_RuledPayload cmd;
+    cmd.set_payload(payload);
+    sendGameCommand(cmd);
+    return true;
 }
 
 void PlayerActions::playCard(CardItem *card, bool faceDown)
@@ -63,6 +100,10 @@ void PlayerActions::playCard(CardItem *card, bool faceDown)
     }
 
     const CardInfo &info = exactCard.getInfo();
+
+    if (!faceDown && tryPlayRuledLand(card)) {
+        return;
+    }
 
     int tableRow = info.getUiAttributes().tableRow;
     bool playToStack = SettingsCache::instance().getPlayToStack();

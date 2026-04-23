@@ -2,6 +2,7 @@
 
 #include "../../client/settings/cache_settings.h"
 #include "../../interface/widgets/tabs/tab_game.h"
+#include "../abstract_game.h"
 #include "../game_scene.h"
 #include "../phase.h"
 #include "../player/player.h"
@@ -408,6 +409,30 @@ static bool isUnwritableRevealZone(CardZoneLogic *zone)
     return false;
 }
 
+static bool isRuledLandSingleClickLegal(const CardItem *card)
+{
+    if (!card || !card->getOwner() || !card->getZone()) {
+        return false;
+    }
+    if (card->getZone()->getName() != ZoneNames::HAND) {
+        return false;
+    }
+    if (!card->getCardInfo().getCardType().contains("Land", Qt::CaseInsensitive)) {
+        return false;
+    }
+
+    auto *game = card->getOwner()->getGame();
+    if (!game || !game->getGameMetaInfo()->proto().ruled_game()) {
+        return false;
+    }
+
+    const int handIndex = card->getZone()->getCards().indexOf(const_cast<CardItem *>(card));
+    if (handIndex < 0) {
+        return false;
+    }
+    return game->getGameEventHandler()->getRuledLandPlayHandIndexForCard(card->getName(), handIndex) >= 0;
+}
+
 /**
  * This method is called when a "click to play" is done on the card.
  * This is either triggered by a single click or double click, depending on the settings.
@@ -439,7 +464,7 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
             }
         }
     } else if ((event->modifiers() != Qt::AltModifier) && (event->button() == Qt::LeftButton) &&
-               (!SettingsCache::instance().getDoubleClickToPlay())) {
+               (!SettingsCache::instance().getDoubleClickToPlay() || isRuledLandSingleClickLegal(this))) {
         handleClickedToPlay(event->modifiers().testFlag(Qt::ShiftModifier));
     }
 

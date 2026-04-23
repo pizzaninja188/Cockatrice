@@ -11,6 +11,8 @@
 
 #include <QLoggingCategory>
 #include <QObject>
+#include <QMultiHash>
+#include <QSet>
 #include <libcockatrice/protocol/pb/event_leave.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_player.pb.h>
 
@@ -48,9 +50,13 @@ class GameEventHandler : public QObject
 
 private:
     AbstractGame *game;
+    QSet<int> legalRuledLandPlayHandIndices;
+    QMultiHash<QString, int> legalRuledLandPlayIndicesByCardName;
 
 public:
     explicit GameEventHandler(AbstractGame *_game);
+    [[nodiscard]] bool isRuledLandPlayLegalForHandIndex(int handIndex) const;
+    [[nodiscard]] int getRuledLandPlayHandIndexForCard(const QString &cardName, int preferredHandIndex) const;
 
     void handleNextTurn();
     void handleReverseTurn();
