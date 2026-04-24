@@ -30,6 +30,7 @@
 #include "server_card.h"
 #include "server_cardzone.h"
 #include "server_counter.h"
+#include "ruled_utils.h"
 #include "server_player.h"
 #include "server_spectator.h"
 
@@ -65,15 +66,6 @@
 #include <libcockatrice/utility/zone_names.h>
 
 namespace {
-bool isRuledModeManaPoolCounterName(const QString &name)
-{
-    const QString n = name.trimmed().toLower();
-    if (n.length() != 1) {
-        return false;
-    }
-    return QStringLiteral("wubrgxc").contains(n.at(0), Qt::CaseInsensitive);
-}
-
 /** Oracle split: full type line vs main type (Instant/Sorcery often live in maintype only). */
 static QString ruledOracleTypeBlobForServerCard(const Server_Card *card)
 {
@@ -137,42 +129,18 @@ static bool ruledResolvedStackSpellGoesToBattlefield(const Server_Card *card, co
     return true;
 }
 
-int ruledPhaseLabelToCockatricePhase(const std::string &phase)
+int countCsvEntries(const std::string &csv)
 {
-    if (phase == "untap") {
+    if (csv.empty()) {
         return 0;
     }
-    if (phase == "upkeep") {
-        return 1;
+    int count = 1;
+    for (char c : csv) {
+        if (c == ',') {
+            ++count;
+        }
     }
-    if (phase == "draw") {
-        return 2;
-    }
-    if (phase == "main1") {
-        return 3;
-    }
-    if (phase == "begin_combat") {
-        return 4;
-    }
-    if (phase == "declare_attackers") {
-        return 5;
-    }
-    if (phase == "declare_blockers") {
-        return 6;
-    }
-    if (phase == "combat_damage") {
-        return 7;
-    }
-    if (phase == "end_combat") {
-        return 8;
-    }
-    if (phase == "main2") {
-        return 9;
-    }
-    if (phase == "end_step" || phase == "cleanup") {
-        return 10;
-    }
-    return -1;
+    return count;
 }
 
 void stripRuledZoneViewForBroadcast(ruled::v1::IpcResponse *resp)
@@ -217,6 +185,23 @@ void clearRuledManaPoolsOnServer(Server_Game *game)
     if (changed) {
         ges.sendToGame(game);
     }
+}
+
+int expectedMainboardSizeForStartupSync(Server_Game *game,
+                                        int playerId,
+                                        const QList<QPair<int, QStringList>> &deckByPlayer)
+{
+    for (const QPair<int, QStringList> &row : deckByPlayer) {
+        if (row.first == playerId) {
+            return static_cast<int>(row.second.size());
+        }
+    }
+    if (Server_AbstractPlayer *player = game->getPlayer(playerId)) {
+        if (const Server_CardZone *deckZone = player->getZones().value(ZoneNames::DECK)) {
+            return static_cast<int>(deckZone->getCards().size());
+        }
+    }
+    return 60;
 }
 
 } // namespace
@@ -1072,120 +1057,12 @@ Response::ResponseCode Server_Game::processRuledPayload(int playerId, const Comm
         }
     }
 
-    bool zoneViewApplied = false;
-    bool handOrLibraryChanged = false;
-    bool tapStateEventsQueued = false;
-    GameEventStorage tapSyncGes;
-    bool phaseChanged = false;
-    if (resp.has_batch()) {
-        bool batchContainsUntap = false;
-        for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
-            const auto &e = resp.batch().events(ei);
-            if (e.has_phase_changed()) {
-                if (e.phase_changed().phase() == "untap") {
-                    batchContainsUntap = true;
-                }
-                const int newActive = e.phase_changed().active_player_id();
-                if (newActive >= 0 && getActivePlayer() != newActive) {
-                    setActivePlayer(newActive);
-                }
-                const int mappedPhase = ruledPhaseLabelToCockatricePhase(e.phase_changed().phase());
-                if (mappedPhase >= 0 && getActivePhase() != mappedPhase) {
-                    setActivePhase(mappedPhase);
-                }
-                phaseChanged = true;
-            }
-            if (e.has_priority_changed()) {
-                const int newPriority = e.priority_changed().player_id();
-                if (newPriority >= 0 && newPriority != ruledPriorityPlayer) {
-                    ruledPriorityPlayer = newPriority;
-                    if (Server_AbstractPlayer *prioPlayer = getPlayer(newPriority)) {
-                        Event_GameSay priorityEvent;
-                        const QString playerName = QString::fromStdString(prioPlayer->getUserInfo()->name());
-                        priorityEvent.set_message(QStringLiteral("%1 gains priority.").arg(playerName).toStdString());
-                        sendGameEventContainer(prepareGameEvent(priorityEvent, -1));
-                    }
-                }
-            }
-            if (!e.has_zone_view()) {
-                if (e.has_stack_pushed()) {
-                    ruledEngineStackPushDescriptionsByObjectId.insert(
-                        static_cast<quint32>(e.stack_pushed().object_id()),
-                        QString::fromStdString(e.stack_pushed().description()));
-                }
-                if (e.has_stack_resolved()) {
-                    const auto &sr = e.stack_resolved();
-                    const quint32 resolvedOid = static_cast<quint32>(sr.object_id());
-                    const QString engineStackDescription =
-                        ruledEngineStackPushDescriptionsByObjectId.value(resolvedOid);
-                    for (Server_AbstractPlayer *ab : getPlayers().values()) {
-                        if (!ab) {
-                            continue;
-                        }
-                        Server_CardZone *stackZone = ab->getZones().value(ZoneNames::STACK);
-                        if (!stackZone || stackZone->getCards().isEmpty()) {
-                            continue;
-                        }
-
-                        // Resolve the top-most Cockatrice stack object when the engine pops a stack item.
-                        Server_Card *card = stackZone->getCards().last();
-                        if (!card) {
-                            continue;
-                        }
-
-                        bool goesToBattlefield = false;
-                        const ruled::v1::StackResolveDestination dest = sr.destination();
-                        if (dest == ruled::v1::STACK_RESOLVE_DESTINATION_BATTLEFIELD) {
-                            goesToBattlefield = true;
-                        } else if (dest == ruled::v1::STACK_RESOLVE_DESTINATION_GRAVEYARD) {
-                            goesToBattlefield = false;
-                        } else {
-                            goesToBattlefield =
-                                ruledResolvedStackSpellGoesToBattlefield(card, engineStackDescription);
-                        }
-                        Server_CardZone *targetZone =
-                            ab->getZones().value(goesToBattlefield ? ZoneNames::TABLE : ZoneNames::GRAVE);
-                        if (!targetZone) {
-                            continue;
-                        }
-
-                        CardToMove cardToMove;
-                        cardToMove.set_card_id(card->getId());
-                        GameEventStorage moveGes;
-                        const int targetY = goesToBattlefield ? 1 : 0;
-                        if (ab->moveCard(moveGes, stackZone, QList<const CardToMove *>() << &cardToMove, targetZone, -1,
-                                         targetY, true) == Response::RespOk) {
-                            moveGes.sendToGame(this);
-                        }
-                        break;
-                    }
-                    ruledEngineStackPushDescriptionsByObjectId.remove(resolvedOid);
-                }
-                continue;
-            }
-            for (const auto &p : e.zone_view().per_player()) {
-                if (Server_AbstractPlayer *ab = getPlayer(p.player_id())) {
-                    GameEventStorage *tapGesPtr = nullptr;
-                    if (batchContainsUntap) {
-                        tapGesPtr = &tapSyncGes;
-                    }
-                    const Server_Player::RuledZoneSyncResult sync =
-                        static_cast<Server_Player *>(ab)->applyRuledEngineZoneView(p, tapGesPtr);
-                    handOrLibraryChanged = handOrLibraryChanged || sync.handOrLibraryChanged;
-                    tapStateEventsQueued = tapStateEventsQueued || sync.tapStateChanged;
-                    zoneViewApplied = true;
-                }
-            }
-        }
-    }
-    if (phaseChanged) {
+    const RuledBatchApplyResult batchResult = applyRuledBatch(resp);
+    if (batchResult.phaseChanged) {
         // In ruled mode, floating mana empties whenever the step/phase changes.
         clearRuledManaPoolsOnServer(this);
     }
-    if (tapStateEventsQueued) {
-        tapSyncGes.sendToGame(this);
-    }
-    if (zoneViewApplied && handOrLibraryChanged) {
+    if (batchResult.zoneViewApplied && batchResult.handOrLibraryChanged) {
         sendGameStateToPlayers();
     }
     // Append to deterministic replay log (concatenated RuledCommand bytes)
@@ -1194,6 +1071,116 @@ Response::ResponseCode Server_Game::processRuledPayload(int playerId, const Comm
     }
     broadcastRuledResponse(resp);
     return Response::RespOk;
+}
+
+void Server_Game::applyRuledStackResolvedEvent(const ruled::v1::StackResolved &stackResolved)
+{
+    const quint32 resolvedOid = static_cast<quint32>(stackResolved.object_id());
+    const QString engineStackDescription = ruledEngineStackPushDescriptionsByObjectId.value(resolvedOid);
+    for (Server_AbstractPlayer *ab : getPlayers().values()) {
+        if (!ab) {
+            continue;
+        }
+        Server_CardZone *stackZone = ab->getZones().value(ZoneNames::STACK);
+        if (!stackZone || stackZone->getCards().isEmpty()) {
+            continue;
+        }
+
+        // Resolve the top-most Cockatrice stack object when the engine pops a stack item.
+        Server_Card *card = stackZone->getCards().last();
+        if (!card) {
+            continue;
+        }
+
+        bool goesToBattlefield = false;
+        const ruled::v1::StackResolveDestination dest = stackResolved.destination();
+        if (dest == ruled::v1::STACK_RESOLVE_DESTINATION_BATTLEFIELD) {
+            goesToBattlefield = true;
+        } else if (dest == ruled::v1::STACK_RESOLVE_DESTINATION_GRAVEYARD) {
+            goesToBattlefield = false;
+        } else {
+            goesToBattlefield = ruledResolvedStackSpellGoesToBattlefield(card, engineStackDescription);
+        }
+        Server_CardZone *targetZone = ab->getZones().value(goesToBattlefield ? ZoneNames::TABLE : ZoneNames::GRAVE);
+        if (!targetZone) {
+            continue;
+        }
+
+        CardToMove cardToMove;
+        cardToMove.set_card_id(card->getId());
+        GameEventStorage moveGes;
+        const int targetY = goesToBattlefield ? 1 : 0;
+        if (ab->moveCard(moveGes, stackZone, QList<const CardToMove *>() << &cardToMove, targetZone, -1, targetY,
+                         true) == Response::RespOk) {
+            moveGes.sendToGame(this);
+        }
+        break;
+    }
+    ruledEngineStackPushDescriptionsByObjectId.remove(resolvedOid);
+}
+
+Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1::IpcResponse &resp)
+{
+    RuledBatchApplyResult result;
+    if (!resp.has_batch()) {
+        return result;
+    }
+
+    GameEventStorage tapSyncGes;
+    bool batchContainsUntap = false;
+    for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
+        const auto &e = resp.batch().events(ei);
+        if (e.has_phase_changed()) {
+            if (e.phase_changed().phase() == "untap") {
+                batchContainsUntap = true;
+            }
+            const int newActive = e.phase_changed().active_player_id();
+            if (newActive >= 0 && getActivePlayer() != newActive) {
+                setActivePlayer(newActive);
+            }
+            const int mappedPhase = ruledPhaseLabelToCockatricePhase(e.phase_changed().phase());
+            if (mappedPhase >= 0 && getActivePhase() != mappedPhase) {
+                setActivePhase(mappedPhase);
+            }
+            result.phaseChanged = true;
+        }
+        if (e.has_priority_changed()) {
+            const int newPriority = e.priority_changed().player_id();
+            if (newPriority >= 0 && newPriority != ruledPriorityPlayer) {
+                ruledPriorityPlayer = newPriority;
+                if (Server_AbstractPlayer *prioPlayer = getPlayer(newPriority)) {
+                    Event_GameSay priorityEvent;
+                    const QString playerName = QString::fromStdString(prioPlayer->getUserInfo()->name());
+                    priorityEvent.set_message(QStringLiteral("%1 gains priority.").arg(playerName).toStdString());
+                    sendGameEventContainer(prepareGameEvent(priorityEvent, -1));
+                }
+            }
+        }
+        if (!e.has_zone_view()) {
+            if (e.has_stack_pushed()) {
+                ruledEngineStackPushDescriptionsByObjectId.insert(static_cast<quint32>(e.stack_pushed().object_id()),
+                                                                  QString::fromStdString(e.stack_pushed().description()));
+            }
+            if (e.has_stack_resolved()) {
+                applyRuledStackResolvedEvent(e.stack_resolved());
+            }
+            continue;
+        }
+        for (const auto &p : e.zone_view().per_player()) {
+            if (Server_AbstractPlayer *ab = getPlayer(p.player_id())) {
+                GameEventStorage *tapGesPtr = batchContainsUntap ? &tapSyncGes : nullptr;
+                const Server_Player::RuledZoneSyncResult sync =
+                    static_cast<Server_Player *>(ab)->applyRuledEngineZoneView(p, tapGesPtr);
+                result.handOrLibraryChanged = result.handOrLibraryChanged || sync.handOrLibraryChanged;
+                result.tapStateEventsQueued = result.tapStateEventsQueued || sync.tapStateChanged;
+                result.zoneViewApplied = true;
+            }
+        }
+    }
+    if (result.tapStateEventsQueued) {
+        tapSyncGes.sendToGame(this);
+    }
+    return result;
 }
 
 void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
@@ -1283,91 +1270,72 @@ void Server_Game::startRuledSidecarSession()
         rulesRelay.reset();
         return;
     }
-    if (resp.has_batch()) {
-        int startupActivePlayer = -1;
-        int startupMappedPhase = -1;
-        int startupPriorityPlayer = -1;
-        bool startupZoneViewApplied = false;
-        for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
-            const auto &e = resp.batch().events(ei);
-            if (e.has_phase_changed()) {
-                startupActivePlayer = e.phase_changed().active_player_id();
-                startupMappedPhase = ruledPhaseLabelToCockatricePhase(e.phase_changed().phase());
-            }
-            if (e.has_priority_changed()) {
-                startupPriorityPlayer = e.priority_changed().player_id();
-            }
-            if (e.has_zone_view() && !startupZoneViewApplied) {
-                const auto &z = e.zone_view();
-                for (int pi = 0; pi < z.per_player_size(); ++pi) {
-                    const auto &p = z.per_player(pi);
-                    int mainN = 0;
-                    for (const QPair<int, QStringList> &row : deckByPlayer) {
-                        if (row.first == p.player_id()) {
-                            mainN = static_cast<int>(row.second.size());
-                            break;
-                        }
-                    }
-                    if (mainN == 0) {
-                        if (Server_AbstractPlayer *ppl = getPlayer(p.player_id())) {
-                            const Server_CardZone *dz = ppl->getZones().value(ZoneNames::DECK);
-                            if (dz) {
-                                mainN = static_cast<int>(dz->getCards().size());
-                            }
-                        }
-                    }
-                    if (mainN == 0) {
-                        mainN = 60;
-                    }
-                    const int needLib = mainN - p.hand_size();
-                    int csvCount = 0;
-                    {
-                        const std::string &cs = p.lib_ids_csv();
-                        if (cs.empty()) {
-                            csvCount = 0;
-                        } else {
-                            csvCount = 1;
-                            for (char c : cs) {
-                                if (c == ',') {
-                                    ++csvCount;
-                                }
-                            }
-                        }
-                    }
-                    if (csvCount != needLib) {
-                        qWarning() << "Ruled zone sync: player" << p.player_id() << "expected" << needLib
-                                   << "library card ids, lib_ids_csv has" << csvCount
-                                   << "parts, len" << p.lib_ids_csv().size() << "— is tricerules-server up to date? "
-                                      "(RulesRelay read was fixed; rebuild + restart the Rust side from this repo.)";
-                        for (Server_AbstractPlayer *pl : getPlayers().values()) {
-                            static_cast<Server_Player *>(pl)->shuffleMainDeckForRuledFallback();
-                        }
-                        rulesRelay.reset();
-                        return;
-                    }
-                }
-                for (const auto &p : e.zone_view().per_player()) {
-                    if (Server_AbstractPlayer *ab = getPlayer(p.player_id())) {
-                        static_cast<Server_Player *>(ab)->applyRuledEngineZoneView(p);
-                    }
-                }
-                startupZoneViewApplied = true;
-            }
-        }
-        if (startupActivePlayer >= 0 && getActivePlayer() != startupActivePlayer) {
-            setActivePlayer(startupActivePlayer);
-        }
-        if (startupMappedPhase >= 0 && getActivePhase() != startupMappedPhase) {
-            setActivePhase(startupMappedPhase);
-        }
-        if (startupPriorityPlayer >= 0) {
-            ruledPriorityPlayer = startupPriorityPlayer;
-        }
+    applyRuledStartupBatch(resp, deckByPlayer);
+    if (!rulesRelay) {
+        return;
     }
     if (currentReplay) {
         currentReplay->set_ruled_seed(ruledSeed);
     }
     broadcastRuledResponse(resp);
+}
+
+void Server_Game::applyRuledStartupBatch(const ruled::v1::IpcResponse &resp,
+                                         const QList<QPair<int, QStringList>> &deckByPlayer)
+{
+    if (!resp.has_batch()) {
+        return;
+    }
+
+    int startupActivePlayer = -1;
+    int startupMappedPhase = -1;
+    int startupPriorityPlayer = -1;
+    bool startupZoneViewApplied = false;
+    for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
+        const auto &e = resp.batch().events(ei);
+        if (e.has_phase_changed()) {
+            startupActivePlayer = e.phase_changed().active_player_id();
+            startupMappedPhase = ruledPhaseLabelToCockatricePhase(e.phase_changed().phase());
+        }
+        if (e.has_priority_changed()) {
+            startupPriorityPlayer = e.priority_changed().player_id();
+        }
+        if (e.has_zone_view() && !startupZoneViewApplied) {
+            const auto &z = e.zone_view();
+            for (int pi = 0; pi < z.per_player_size(); ++pi) {
+                const auto &p = z.per_player(pi);
+                const int mainN = expectedMainboardSizeForStartupSync(this, p.player_id(), deckByPlayer);
+                const int needLib = mainN - p.hand_size();
+                const int csvCount = countCsvEntries(p.lib_ids_csv());
+                if (csvCount != needLib) {
+                    qWarning() << "Ruled zone sync: player" << p.player_id() << "expected" << needLib
+                               << "library card ids, lib_ids_csv has" << csvCount
+                               << "parts, len" << p.lib_ids_csv().size() << "— is tricerules-server up to date? "
+                                  "(RulesRelay read was fixed; rebuild + restart the Rust side from this repo.)";
+                    for (Server_AbstractPlayer *pl : getPlayers().values()) {
+                        static_cast<Server_Player *>(pl)->shuffleMainDeckForRuledFallback();
+                    }
+                    rulesRelay.reset();
+                    return;
+                }
+            }
+            for (const auto &p : e.zone_view().per_player()) {
+                if (Server_AbstractPlayer *ab = getPlayer(p.player_id())) {
+                    static_cast<Server_Player *>(ab)->applyRuledEngineZoneView(p);
+                }
+            }
+            startupZoneViewApplied = true;
+        }
+    }
+    if (startupActivePlayer >= 0 && getActivePlayer() != startupActivePlayer) {
+        setActivePlayer(startupActivePlayer);
+    }
+    if (startupMappedPhase >= 0 && getActivePhase() != startupMappedPhase) {
+        setActivePhase(startupMappedPhase);
+    }
+    if (startupPriorityPlayer >= 0) {
+        ruledPriorityPlayer = startupPriorityPlayer;
+    }
 }
 
 void Server_Game::returnCardsFromPlayer(GameEventStorage &ges, Server_AbstractPlayer *player)

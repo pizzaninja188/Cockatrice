@@ -89,12 +89,23 @@ private:
     std::unique_ptr<RulesRelay> rulesRelay;
     /// StackPushed.object_id -> engine card name; push and resolve may arrive in different ruled IPC batches.
     QHash<quint32, QString> ruledEngineStackPushDescriptionsByObjectId;
+    struct RuledBatchApplyResult
+    {
+        bool zoneViewApplied = false;
+        bool handOrLibraryChanged = false;
+        bool tapStateEventsQueued = false;
+        bool phaseChanged = false;
+    };
 
     void createGameStateChangedEvent(Event_GameStateChanged *event,
                                      Server_AbstractParticipant *recipient,
                                      bool omniscient,
                                      bool withUserInfo);
     void storeGameInformation();
+    void applyRuledStartupBatch(const ruled::v1::IpcResponse &resp,
+                                const QList<QPair<int, QStringList>> &deckByPlayer);
+    RuledBatchApplyResult applyRuledBatch(const ruled::v1::IpcResponse &resp);
+    void applyRuledStackResolvedEvent(const ruled::v1::StackResolved &stackResolved);
 signals:
     void sigStartGameIfReady(bool override);
     void gameInfoChanged(ServerInfo_Game gameInfo);

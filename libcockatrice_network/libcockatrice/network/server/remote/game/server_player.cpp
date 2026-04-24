@@ -9,24 +9,13 @@
 #include "server_counter.h"
 #include "server_game.h"
 #include "server_move_card_struct.h"
+#include "ruled_utils.h"
 
 #include <QDebug>
 #include <QRegularExpression>
 #include <QtGlobal>
 #include <algorithm>
 
-namespace {
-// Single-letter names used for mana pool on the Cockatrice client (see TableZone::inferLandManaCounterName).
-bool isRuledModeManaPoolCounterName(const QString &name)
-{
-    const QString n = name.trimmed().toLower();
-    if (n.length() != 1) {
-        return false;
-    }
-    return QStringLiteral("wubrgxc").contains(n.at(0), Qt::CaseInsensitive);
-}
-
-} // namespace
 #include <libcockatrice/deck_list/deck_list.h>
 #include <libcockatrice/deck_list/tree/deck_list_card_node.h>
 #include <libcockatrice/protocol/pb/command_attach_card.pb.h>

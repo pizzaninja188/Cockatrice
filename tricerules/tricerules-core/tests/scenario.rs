@@ -3,7 +3,8 @@
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
 use tricerules_proto::ruled::v1::ruled_event::Ev;
 use tricerules_proto::ruled::v1::{
-    CastSpell, DeclareAttackers, PassPriority, PlayLand, PrimitiveYieldStructured, RuledCommand, TargetRef,
+    BlockPair, CastSpell, DeclareAttackers, DeclareBlockers, PassPriority, PlayLand,
+    PrimitiveYieldStructured, RuledCommand, TargetRef,
 };
 
 use tricerules_core::GameEngine;
@@ -40,6 +41,12 @@ fn cast_spell(hand_card_index: usize, targets: Vec<TargetRef>) -> RuledCommand {
 fn declare_attackers(creature_ids: Vec<u32>) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::DeclareAttackers(DeclareAttackers { creature_ids })),
+    }
+}
+
+fn declare_blockers(block_pairs: Vec<BlockPair>) -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::DeclareBlockers(DeclareBlockers { block_pairs })),
     }
 }
 
@@ -107,7 +114,8 @@ fn pass_both_players(e: &mut GameEngine) {
         e.state.players[0].id
     };
     e.apply_command(first, &pass()).expect("first player pass");
-    e.apply_command(second, &pass()).expect("second player pass");
+    e.apply_command(second, &pass())
+        .expect("second player pass");
 }
 
 fn advance_to_main1_from_game_start(e: &mut GameEngine) {
@@ -121,7 +129,8 @@ fn advance_to_main1_from_game_start(e: &mut GameEngine) {
 fn primitive_yield_active_skips_double_pass_main1() {
     let mut e = GameEngine::new(99, &[0, 1], 20, None).expect("new");
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
-    e.apply_command(0, &primitive_yield()).expect("active primitive");
+    e.apply_command(0, &primitive_yield())
+        .expect("active primitive");
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Draw);
 }
 
@@ -153,7 +162,8 @@ fn mana_pools_empty_on_step_change() {
     e.state.players[0].mana_pool.red = 2;
     e.state.players[1].mana_pool.green = 1;
 
-    e.apply_command(0, &primitive_yield()).expect("active primitive");
+    e.apply_command(0, &primitive_yield())
+        .expect("active primitive");
 
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Draw);
     assert_eq!(e.state.players[0].mana_pool.red, 0);
@@ -178,10 +188,7 @@ fn new_with_custom_deck_length() {
 
 #[test]
 fn play_land_moves_card_from_hand_to_battlefield() {
-    let decks = Some(vec![
-        vec!["mountain".into(); 7],
-        vec!["forest".into(); 7],
-    ]);
+    let decks = Some(vec![vec!["mountain".into(); 7], vec!["forest".into(); 7]]);
     let mut e = GameEngine::new(7, &[0, 1], 20, decks).expect("new");
     advance_to_main1_from_game_start(&mut e);
     let hand_before = e.state.players[0].hand.len();
@@ -192,7 +199,10 @@ fn play_land_moves_card_from_hand_to_battlefield() {
     assert_eq!(e.state.players[0].hand.len(), hand_before - 1);
     assert_eq!(e.state.players[0].battlefield.len(), battlefield_before + 1);
     let mountain = battlefield_object_for_card(&e, 0, "mountain");
-    assert_eq!(e.state.objects.get(&mountain).expect("mountain").card_id, "mountain");
+    assert_eq!(
+        e.state.objects.get(&mountain).expect("mountain").card_id,
+        "mountain"
+    );
 }
 
 #[test]
@@ -221,7 +231,8 @@ fn cast_lightning_bolt_resolves_to_graveyard_after_double_pass() {
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(mountain_idx)).expect("play mountain");
+    e.apply_command(0, &play_land(mountain_idx))
+        .expect("play mountain");
 
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     let pushed = e
@@ -273,7 +284,8 @@ fn casting_spell_emits_priority_handoff_to_opponent() {
     let mut e = GameEngine::new(13, &[0, 1], 20, decks).expect("new");
     advance_to_main1_from_game_start(&mut e);
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(mountain_idx)).expect("play mountain");
+    e.apply_command(0, &play_land(mountain_idx))
+        .expect("play mountain");
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     let pushed = e
         .apply_command(0, &cast_spell(bolt_idx, vec![]))
@@ -309,7 +321,8 @@ fn stack_resolution_emits_priority_to_active_player() {
     let mut e = GameEngine::new(13, &[0, 1], 20, decks).expect("new");
     advance_to_main1_from_game_start(&mut e);
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(mountain_idx)).expect("play mountain");
+    e.apply_command(0, &play_land(mountain_idx))
+        .expect("play mountain");
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(0, &cast_spell(bolt_idx, vec![]))
         .expect("cast bolt");
@@ -361,13 +374,19 @@ fn declare_attackers_handoff_emits_defender_priority() {
         .expect("main1 to begin combat");
     e.apply_command(0, &pass()).expect("ap pass begin combat");
     e.apply_command(1, &pass()).expect("nap pass begin combat");
-    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::DeclareAttackers);
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareAttackers
+    );
 
     let bears_oid = battlefield_object_for_card(&e, 0, "grizzly_bears");
     let b = e
         .apply_command(0, &declare_attackers(vec![bears_oid]))
         .expect("declare attackers");
-    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::DeclareBlockers);
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareBlockers
+    );
     assert!(
         priority_changes_in(&b).contains(&1),
         "defending player should get priority in declare blockers"
@@ -382,7 +401,10 @@ fn no_attackers_skip_to_end_combat_emits_active_priority() {
         .expect("main1 to begin combat");
     e.apply_command(0, &pass()).expect("ap pass begin combat");
     e.apply_command(1, &pass()).expect("nap pass begin combat");
-    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::DeclareAttackers);
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareAttackers
+    );
 
     let b = e
         .apply_command(0, &declare_attackers(vec![]))
@@ -662,7 +684,8 @@ fn untap_and_draw_happen_in_new_turn_sequence() {
 
     let hand_before_turn = e.state.players[0].hand.len();
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(mountain_idx)).expect("play mountain");
+    e.apply_command(0, &play_land(mountain_idx))
+        .expect("play mountain");
 
     let mountain_oid = battlefield_object_for_card(&e, 0, "mountain");
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
@@ -672,7 +695,11 @@ fn untap_and_draw_happen_in_new_turn_sequence() {
     e.apply_command(0, &pass()).expect("active pass to resolve");
 
     assert!(
-        e.state.objects.get(&mountain_oid).expect("mountain object").tapped,
+        e.state
+            .objects
+            .get(&mountain_oid)
+            .expect("mountain object")
+            .tapped,
         "mountain is tapped after paying for bolt"
     );
 
@@ -693,12 +720,151 @@ fn untap_and_draw_happen_in_new_turn_sequence() {
     assert_eq!(e.state.active_player_id(), 0);
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main1);
     assert!(
-        !e.state.objects.get(&mountain_oid).expect("mountain object").tapped,
+        !e.state
+            .objects
+            .get(&mountain_oid)
+            .expect("mountain object")
+            .tapped,
         "mountain untaps during the active player's untap phase"
     );
     assert_eq!(
         e.state.players[0].hand.len(),
         hand_before_turn - 1,
         "player drew one card during draw phase after spending two cards"
+    );
+}
+
+#[test]
+fn duplicate_attacker_ids_are_rejected() {
+    let decks = Some(vec![
+        vec![
+            "forest".into(),
+            "forest".into(),
+            "grizzly_bears".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+        vec![
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(101, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    for card in ["forest", "grizzly_bears"] {
+        let idx = hand_index_for_card(&e, 0, card);
+        let oid = e.state.players[0].hand.remove(idx);
+        e.state.players[0].battlefield.push(oid);
+        if let Some(obj) = e.state.objects.get_mut(&oid) {
+            obj.zone = tricerules_core::Zone::Battlefield;
+            obj.summoning_sick = false;
+            obj.tapped = false;
+        }
+    }
+    e.apply_command(0, &primitive_yield())
+        .expect("main1 to begin combat");
+    e.apply_command(0, &pass()).expect("ap pass begin combat");
+    e.apply_command(1, &pass()).expect("nap pass begin combat");
+    let bears_oid = battlefield_object_for_card(&e, 0, "grizzly_bears");
+
+    let err = e
+        .apply_command(0, &declare_attackers(vec![bears_oid, bears_oid]))
+        .expect_err("duplicate attackers should fail");
+    assert_eq!(err.to_string(), "illegal command: duplicate attacker");
+}
+
+#[test]
+fn same_blocker_cannot_block_two_attackers() {
+    let decks = Some(vec![
+        vec![
+            "forest".into(),
+            "forest".into(),
+            "grizzly_bears".into(),
+            "grizzly_bears".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+        vec![
+            "forest".into(),
+            "grizzly_bears".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(202, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    for card in ["forest", "forest", "grizzly_bears", "grizzly_bears"] {
+        let idx = hand_index_for_card(&e, 0, card);
+        let oid = e.state.players[0].hand.remove(idx);
+        e.state.players[0].battlefield.push(oid);
+        if let Some(obj) = e.state.objects.get_mut(&oid) {
+            obj.zone = tricerules_core::Zone::Battlefield;
+            obj.summoning_sick = false;
+            obj.tapped = false;
+        }
+    }
+    for card in ["forest", "grizzly_bears"] {
+        let idx = hand_index_for_card(&e, 1, card);
+        let oid = e.state.players[1].hand.remove(idx);
+        e.state.players[1].battlefield.push(oid);
+        if let Some(obj) = e.state.objects.get_mut(&oid) {
+            obj.zone = tricerules_core::Zone::Battlefield;
+            obj.summoning_sick = false;
+            obj.tapped = false;
+        }
+    }
+    e.apply_command(0, &primitive_yield())
+        .expect("main1 to begin combat");
+    e.apply_command(0, &pass()).expect("ap pass begin combat");
+    e.apply_command(1, &pass()).expect("nap pass begin combat");
+
+    let attacker_a = battlefield_object_for_card(&e, 0, "grizzly_bears");
+    let attacker_b = e.state.players[0]
+        .battlefield
+        .iter()
+        .copied()
+        .find(|oid| {
+            *oid != attacker_a
+                && e.state
+                    .objects
+                    .get(oid)
+                    .map(|o| o.card_id == "grizzly_bears")
+                    .unwrap_or(false)
+        })
+        .expect("second attacker");
+    e.apply_command(0, &declare_attackers(vec![attacker_a, attacker_b]))
+        .expect("declare two attackers");
+    let blocker = battlefield_object_for_card(&e, 1, "grizzly_bears");
+
+    let err = e
+        .apply_command(
+            1,
+            &declare_blockers(vec![
+                BlockPair {
+                    attacker_id: attacker_a,
+                    blocker_id: blocker,
+                },
+                BlockPair {
+                    attacker_id: attacker_b,
+                    blocker_id: blocker,
+                },
+            ]),
+        )
+        .expect_err("same blocker twice should fail");
+    assert_eq!(
+        err.to_string(),
+        "illegal command: blocker assigned more than once"
     );
 }

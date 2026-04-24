@@ -1,0 +1,24 @@
+---
+description: Guard rails for tricerules engine and tests
+globs: tricerules/**/*.rs
+alwaysApply: false
+---
+
+# Tricerules Engine Change Safety
+
+When changing `tricerules-core` engine behavior:
+
+- Preserve server-authoritative behavior; do not rely on client-side legality checks.
+- Return `EngineError::Illegal(...)` for malformed commands instead of panicking.
+- Reject ambiguous combat declarations (duplicate attackers, duplicate blocker assignments, invalid owners/zones).
+- Keep priority and step transitions explicit after each command path.
+
+Testing expectations for rules changes:
+
+- Add or update scenario tests in `tricerules-core/tests/scenario.rs` for each behavior change.
+- Cover both happy path and at least one illegal-command path.
+- Assert key state transitions (`turn_step`, priority handoff, and relevant zone movement).
+
+If protocol or command shapes change:
+
+- Ensure `ruled_v1.proto` and Rust/C++ consumers remain aligned.

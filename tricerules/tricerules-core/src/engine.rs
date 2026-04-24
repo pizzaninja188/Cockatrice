@@ -1,4 +1,4 @@
-﻿//! Core rules processing (vanilla core ΓÇö simplified combat & mana).
+//! Core rules processing (vanilla core ΓÇö simplified combat & mana).
 
 use crate::state::{
     CombatState, GameObject, GameState, ObjectId, PlayerId, PlayerState, StackItem, TurnStep, Zone,
@@ -7,7 +7,7 @@ use prost::Message;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 use tricerules_cards::primitives::{spell_effect_from_key, SpellEffectKind};
 use tricerules_cards::CardRegistry;
@@ -232,7 +232,11 @@ impl GameEngine {
             return Ok(b2);
         }
         let mut list = Vec::new();
+        let mut seen_attackers = HashSet::new();
         for &oid in ids {
+            if !seen_attackers.insert(oid) {
+                return Err(EngineError::Illegal("duplicate attacker"));
+            }
             let o = self
                 .state
                 .objects
@@ -272,21 +276,32 @@ impl GameEngine {
         let mut b = RuledEventBatch::default();
         b.events
             .push(ev_log("Attackers committed — blockers?".to_string()));
-        b.events.push(ev_log("Declare blockers (defense has priority)".to_string()));
+        b.events.push(ev_log(
+            "Declare blockers (defense has priority)".to_string(),
+        ));
         b.events.push(ev_phase_labeled(self, "declare_blockers"));
         b.events.push(ev_priority_changed(self));
         Ok(b)
     }
 
     fn set_blockers(&mut self, pairs: &[rv1::BlockPair]) -> Result<RuledEventBatch, EngineError> {
+        let defending_player = self
+            .state
+            .defending_player_id_1v1()
+            .ok_or(EngineError::Illegal("defender missing"))?;
+        let mut seen_attackers = HashSet::new();
+        let mut seen_blockers = HashSet::new();
         for p in pairs {
             if let Some(c) = self.state.combat.as_mut() {
-                if c.blocker.contains_key(&p.attacker_id) {
-                    return Err(EngineError::Illegal("two blockers/attacker"));
+                if c.blocker.contains_key(&p.attacker_id) || !seen_attackers.insert(p.attacker_id) {
+                    return Err(EngineError::Illegal("duplicate attacker block assignment"));
                 }
                 if !c.attacking.contains(&p.attacker_id) {
                     return Err(EngineError::Illegal("bad attacker"));
                 }
+            }
+            if !seen_blockers.insert(p.blocker_id) {
+                return Err(EngineError::Illegal("blocker assigned more than once"));
             }
             let bobj = self
                 .state
@@ -296,9 +311,14 @@ impl GameEngine {
             if bobj.zone != Zone::Battlefield {
                 return Err(EngineError::Illegal("blocker zone"));
             }
-            let d = self.state.defending_player_id_1v1().unwrap();
-            if bobj.owner != d {
+            if bobj.owner != defending_player {
                 return Err(EngineError::Illegal("not your blocker"));
+            }
+            if !bobj.is_creature(&self.registry) {
+                return Err(EngineError::Illegal("blocker not creature"));
+            }
+            if bobj.tapped {
+                return Err(EngineError::Illegal("blocker tapped"));
             }
         }
         if let Some(c) = self.state.combat.as_mut() {
@@ -375,7 +395,10 @@ impl GameEngine {
 
     /// Single-step structural advance on an empty stack (Cockatrice "pass turn" in ruled mode).
     /// Active advances main / combat structure; defender may skip blockers during declare blockers.
-    fn primitive_yield_structured(&mut self, player: PlayerId) -> Result<RuledEventBatch, EngineError> {
+    fn primitive_yield_structured(
+        &mut self,
+        player: PlayerId,
+    ) -> Result<RuledEventBatch, EngineError> {
         if !self.state.stack.is_empty() {
             return Err(EngineError::Illegal("stack not empty"));
         }
@@ -401,7 +424,9 @@ impl GameEngine {
                 let mut ev = vec![];
                 self.adv_on_empty_stack(&mut ev)
             }
-            _ => Err(EngineError::Illegal("primitive advance not supported in this step")),
+            _ => Err(EngineError::Illegal(
+                "primitive advance not supported in this step",
+            )),
         }
     }
 
@@ -607,7 +632,9 @@ impl GameEngine {
                     self.state.priority_idx = i;
                 }
                 self.state.passes_since_stack_change = 0;
-                ev.push(ev_log("Open priority (M2: unexpected step, reset)".to_string()));
+                ev.push(ev_log(
+                    "Open priority (M2: unexpected step, reset)".to_string(),
+                ));
                 ev.push(ev_phase_labeled(self, "main1"));
                 ev.push(ev_priority_changed(self));
             }
@@ -1011,7 +1038,9 @@ impl GameEngine {
             })
             .collect();
         RuledEvent {
-            ev: Some(rv1::ruled_event::Ev::ZoneView(rv1::ZoneViewSync { per_player })),
+            ev: Some(rv1::ruled_event::Ev::ZoneView(rv1::ZoneViewSync {
+                per_player,
+            })),
         }
     }
 
@@ -1094,9 +1123,11 @@ fn ev_phase_labeled(eng: &GameEngine, name: &str) -> RuledEvent {
 
 fn ev_priority_changed(eng: &GameEngine) -> RuledEvent {
     RuledEvent {
-        ev: Some(rv1::ruled_event::Ev::PriorityChanged(rv1::PriorityChanged {
-            player_id: eng.state.priority_player_id(),
-        })),
+        ev: Some(rv1::ruled_event::Ev::PriorityChanged(
+            rv1::PriorityChanged {
+                player_id: eng.state.priority_player_id(),
+            },
+        )),
     }
 }
 
