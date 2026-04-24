@@ -79,9 +79,13 @@ fn end_active_turn(e: &mut GameEngine, player: i32) {
     e.apply_command(player, &primitive_yield())
         .expect("begin combat to declare attackers");
     e.apply_command(player, &primitive_yield())
-        .expect("skip attackers to main2");
+        .expect("skip attackers to end combat");
     e.apply_command(player, &primitive_yield())
-        .expect("main2 to next turn");
+        .expect("end combat to main2");
+    e.apply_command(player, &primitive_yield())
+        .expect("main2 to end step");
+    e.apply_command(player, &primitive_yield())
+        .expect("end step to next turn upkeep");
 }
 
 fn priority_changes_in(batch: &tricerules_proto::ruled::v1::RuledEventBatch) -> Vec<i32> {
@@ -95,22 +99,41 @@ fn priority_changes_in(batch: &tricerules_proto::ruled::v1::RuledEventBatch) -> 
         .collect()
 }
 
+fn pass_both_players(e: &mut GameEngine) {
+    let first = e.state.priority_player_id();
+    let second = if first == e.state.players[0].id {
+        e.state.players[1].id
+    } else {
+        e.state.players[0].id
+    };
+    e.apply_command(first, &pass()).expect("first player pass");
+    e.apply_command(second, &pass()).expect("second player pass");
+}
+
+fn advance_to_main1_from_game_start(e: &mut GameEngine) {
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Untap);
+    pass_both_players(e); // untap -> upkeep
+    pass_both_players(e); // upkeep -> draw
+    pass_both_players(e); // draw -> main1
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main1);
+}
+
 #[test]
 fn primitive_yield_active_skips_double_pass_main1() {
     let mut e = GameEngine::new(99, &[0, 1], 20, None).expect("new");
-    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main1);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Untap);
     e.apply_command(0, &primitive_yield()).expect("active primitive");
-    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::BeginCombat);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
 }
 
 #[test]
 fn two_player_passes_empty_stack_advances_toward_combat() {
     let mut e = GameEngine::new(99, &[0, 1], 20, None).expect("new");
-    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main1);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Untap);
     e.apply_command(0, &pass()).expect("p0");
     e.apply_command(1, &pass()).expect("p1");
-    // After two passes, should leave main1 to begin combat
-    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::BeginCombat);
+    // After two passes, should leave untap to upkeep.
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
 }
 
 #[test]
@@ -118,7 +141,7 @@ fn empty_stack_double_pass_emits_ap_priority_in_new_phase() {
     let mut e = GameEngine::new(99, &[0, 1], 20, None).expect("new");
     e.apply_command(0, &pass()).expect("p0 pass");
     let b = e.apply_command(1, &pass()).expect("p1 pass");
-    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::BeginCombat);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
     assert!(
         priority_changes_in(&b).contains(&0),
         "after phase advance, active player should explicitly regain priority"
@@ -133,7 +156,7 @@ fn mana_pools_empty_on_step_change() {
 
     e.apply_command(0, &primitive_yield()).expect("active primitive");
 
-    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::BeginCombat);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
     assert_eq!(e.state.players[0].mana_pool.red, 0);
     assert_eq!(e.state.players[0].mana_pool.green, 0);
     assert_eq!(e.state.players[0].mana_pool.blue, 0);
@@ -161,6 +184,7 @@ fn play_land_moves_card_from_hand_to_battlefield() {
         vec!["forest".into(); 7],
     ]);
     let mut e = GameEngine::new(7, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
     let hand_before = e.state.players[0].hand.len();
     let battlefield_before = e.state.players[0].battlefield.len();
 
@@ -195,6 +219,7 @@ fn cast_lightning_bolt_resolves_to_graveyard_after_double_pass() {
         ],
     ]);
     let mut e = GameEngine::new(13, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
 
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
     e.apply_command(0, &play_land(mountain_idx)).expect("play mountain");
@@ -247,6 +272,7 @@ fn casting_spell_emits_priority_handoff_to_opponent() {
         ],
     ]);
     let mut e = GameEngine::new(13, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
     e.apply_command(0, &play_land(mountain_idx)).expect("play mountain");
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
@@ -282,6 +308,7 @@ fn stack_resolution_emits_priority_to_active_player() {
         ],
     ]);
     let mut e = GameEngine::new(13, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
     e.apply_command(0, &play_land(mountain_idx)).expect("play mountain");
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
@@ -318,6 +345,7 @@ fn declare_attackers_handoff_emits_defender_priority() {
         ],
     ]);
     let mut e = GameEngine::new(66, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
     // Put one creature and two forests on battlefield to mimic later turn.
     for card in ["forest", "forest", "grizzly_bears"] {
         let idx = hand_index_for_card(&e, 0, card);
@@ -348,8 +376,9 @@ fn declare_attackers_handoff_emits_defender_priority() {
 }
 
 #[test]
-fn no_attackers_skip_to_main2_emits_active_priority() {
+fn no_attackers_skip_to_end_combat_emits_active_priority() {
     let mut e = GameEngine::new(67, &[0, 1], 20, None).expect("new");
+    advance_to_main1_from_game_start(&mut e);
     e.apply_command(0, &primitive_yield())
         .expect("main1 to begin combat");
     e.apply_command(0, &pass()).expect("ap pass begin combat");
@@ -359,10 +388,112 @@ fn no_attackers_skip_to_main2_emits_active_priority() {
     let b = e
         .apply_command(0, &declare_attackers(vec![]))
         .expect("no attackers");
-    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main2);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::EndCombat);
     assert!(
         priority_changes_in(&b).contains(&0),
-        "active player should keep/regain priority in main2 after no attackers"
+        "active player should keep/regain priority in end combat after no attackers"
+    );
+
+    // End combat still has a full priority pass cycle before postcombat main.
+    let to_nap = e.apply_command(0, &pass()).expect("ap pass end combat");
+    assert!(
+        priority_changes_in(&to_nap).contains(&1),
+        "non-active player should receive priority in end combat"
+    );
+    e.apply_command(1, &pass()).expect("nap pass end combat");
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main2);
+}
+
+#[test]
+fn blockers_to_combat_damage_emits_priority_stop() {
+    let decks = Some(vec![
+        vec![
+            "forest".into(),
+            "forest".into(),
+            "grizzly_bears".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+        vec![
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(68, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    for card in ["forest", "grizzly_bears"] {
+        let idx = hand_index_for_card(&e, 0, card);
+        let oid = e.state.players[0].hand.remove(idx);
+        e.state.players[0].battlefield.push(oid);
+        if let Some(obj) = e.state.objects.get_mut(&oid) {
+            obj.zone = tricerules_core::Zone::Battlefield;
+            obj.summoning_sick = false;
+        }
+    }
+    e.apply_command(0, &primitive_yield())
+        .expect("main1 to begin combat");
+    e.apply_command(0, &pass()).expect("ap pass begin combat");
+    e.apply_command(1, &pass()).expect("nap pass begin combat");
+    let bears_oid = battlefield_object_for_card(&e, 0, "grizzly_bears");
+    e.apply_command(0, &declare_attackers(vec![bears_oid]))
+        .expect("declare attackers");
+    let b = e.apply_command(1, &pass()).expect("defender no blocks");
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::CombatDamage);
+    assert!(
+        priority_changes_in(&b).contains(&0),
+        "combat damage should open a priority window for active player"
+    );
+}
+
+#[test]
+fn main2_double_pass_advances_to_end_step_stop() {
+    let mut e = GameEngine::new(69, &[0, 1], 20, None).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    e.apply_command(0, &primitive_yield())
+        .expect("main1 to begin combat");
+    e.apply_command(0, &primitive_yield())
+        .expect("begin combat to declare attackers");
+    e.apply_command(0, &primitive_yield())
+        .expect("skip attackers to end combat");
+    e.apply_command(0, &primitive_yield())
+        .expect("end combat to main2");
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main2);
+    e.apply_command(0, &pass()).expect("ap pass main2");
+    let b = e.apply_command(1, &pass()).expect("nap pass main2");
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::EndStep);
+    assert!(
+        priority_changes_in(&b).contains(&0),
+        "end step should open a priority window for active player"
+    );
+}
+
+#[test]
+fn new_turn_stops_at_upkeep_then_draw_then_main1() {
+    let mut e = GameEngine::new(70, &[0, 1], 20, None).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    end_active_turn(&mut e, 0);
+    assert_eq!(e.state.active_player_id(), 1);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
+    e.apply_command(1, &pass()).expect("ap pass upkeep");
+    let to_draw = e.apply_command(0, &pass()).expect("nap pass upkeep");
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Draw);
+    assert!(
+        priority_changes_in(&to_draw).contains(&1),
+        "draw step should open priority for the active player"
+    );
+    e.apply_command(1, &pass()).expect("ap pass draw");
+    let to_main = e.apply_command(0, &pass()).expect("nap pass draw");
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main1);
+    assert!(
+        priority_changes_in(&to_main).contains(&1),
+        "main1 should open priority for the active player"
     );
 }
 
@@ -389,6 +520,7 @@ fn cast_grizzly_bears_resolves_to_battlefield_and_taps_two_forests() {
         ],
     ]);
     let mut e = GameEngine::new(22, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
 
     // Simulate one untapped Forest that was played on a previous turn.
     let seeded_forest_idx = hand_index_for_card(&e, 0, "forest");
@@ -459,6 +591,7 @@ fn untap_and_draw_happen_in_new_turn_sequence() {
         ],
     ]);
     let mut e = GameEngine::new(88, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
 
     let hand_before_turn = e.state.players[0].hand.len();
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
@@ -476,8 +609,19 @@ fn untap_and_draw_happen_in_new_turn_sequence() {
         "mountain is tapped after paying for bolt"
     );
 
-    end_active_turn(&mut e, 0);
-    end_active_turn(&mut e, 1);
+    end_active_turn(&mut e, 0); // now active player 1, upkeep
+    pass_both_players(&mut e); // upkeep -> draw
+    pass_both_players(&mut e); // draw -> main1
+    e.apply_command(1, &primitive_yield())
+        .expect("p1 main1 to begin combat");
+    pass_both_players(&mut e); // begin combat -> declare attackers
+    e.apply_command(1, &declare_attackers(vec![]))
+        .expect("p1 no attackers to end combat");
+    pass_both_players(&mut e); // end combat -> main2
+    pass_both_players(&mut e); // main2 -> end step
+    pass_both_players(&mut e); // end step -> p0 upkeep
+    pass_both_players(&mut e); // upkeep -> draw
+    pass_both_players(&mut e); // draw -> main1
 
     assert_eq!(e.state.active_player_id(), 0);
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main1);

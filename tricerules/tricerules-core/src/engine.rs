@@ -106,7 +106,7 @@ impl GameEngine {
             stack: Vec::new(),
             priority_idx: 0,
             active_player_idx: 0,
-            turn_step: TurnStep::Main1,
+            turn_step: TurnStep::Untap,
             turn: 1,
             next_object_id,
             command_index: 0,
@@ -218,14 +218,15 @@ impl GameEngine {
         if ids.is_empty() {
             self.clear_all_mana_pools();
             self.state.combat = None;
-            self.state.turn_step = TurnStep::Main2;
+            self.state.turn_step = TurnStep::EndCombat;
             if let Some(i) = self.state.player_idx(ap) {
                 self.state.priority_idx = i;
             }
             self.state.passes_since_stack_change = 0;
             let mut b2 = RuledEventBatch::default();
-            b2.events.push(ev_log("No attackers — skipped to main2".to_string()));
-            b2.events.push(ev_phase_labeled(self, "main2"));
+            b2.events
+                .push(ev_log("No attackers — skipped to end combat".to_string()));
+            b2.events.push(ev_phase_labeled(self, "end_combat"));
             b2.events.push(ev_priority_changed(self));
             fill_legal(&mut b2, self);
             return Ok(b2);
@@ -313,7 +314,7 @@ impl GameEngine {
         self.resolve_combat_damage(&c)?;
         self.state.combat = None;
         self.clear_all_mana_pools();
-        self.state.turn_step = TurnStep::EndCombat;
+        self.state.turn_step = TurnStep::CombatDamage;
         if let Some(i) = self.state.player_idx(self.state.active_player_id()) {
             self.state.priority_idx = i;
         }
@@ -324,9 +325,9 @@ impl GameEngine {
             "Combat damage: blocked creatures trade; unblocked hits defending player".to_string(),
         ));
         b.events.push(ev_log(
-            "End combat (priority, further priority before main2)".to_string(),
+            "Combat damage dealt (priority in combat damage step)".to_string(),
         ));
-        b.events.push(ev_phase_labeled(self, "end_combat"));
+        b.events.push(ev_phase_labeled(self, "combat_damage"));
         b.events.push(ev_priority_changed(self));
         fill_legal(&mut b, self);
         Ok(b)
@@ -392,7 +393,8 @@ impl GameEngine {
                 }
                 self.set_blockers(&[])
             }
-            Main1 | BeginCombat | EndCombat | Main2 => {
+            Untap | Upkeep | Draw | Main1 | BeginCombat | CombatDamage | EndCombat | Main2
+            | EndStep => {
                 if player != self.state.active_player_id() {
                     return Err(EngineError::Illegal("not active player"));
                 }
@@ -490,6 +492,58 @@ impl GameEngine {
         let step = self.state.turn_step;
         let ap = self.state.active_player_id();
         match step {
+            Untap => {
+                self.clear_all_mana_pools();
+                self.state.turn_step = Upkeep;
+                self.state.combat = None;
+                if let Some(i) = self.state.player_idx(ap) {
+                    self.state.priority_idx = i;
+                }
+                self.state.passes_since_stack_change = 0;
+                ev.push(ev_phase_labeled(self, "upkeep"));
+                ev.push(ev_priority_changed(self));
+            }
+            Upkeep => {
+                self.clear_all_mana_pools();
+                self.state.turn_step = Draw;
+                if let Some(i) = self.state.player_idx(ap) {
+                    self.state.priority_idx = i;
+                }
+                ev.push(ev_phase_labeled(self, "draw"));
+                let skip_opening_draw = self.state.turn == 1 && self.state.active_player_idx == 0;
+                if skip_opening_draw {
+                    ev.push(ev_log(
+                        "Opening turn: active player skips draw step card draw".into(),
+                    ));
+                } else if let Some(idx) = self.state.player_idx(ap) {
+                    if self.state.players[idx].library.is_empty() {
+                        for p in &mut self.state.players {
+                            p.has_lost = p.id == ap;
+                        }
+                        for p in &self.state.players {
+                            if p.id != ap {
+                                self.state.winner = Some(p.id);
+                            }
+                        }
+                        ev.push(ev_log("Game over: empty library on draw".into()));
+                        return Ok(finish_with_events(self, std::mem::take(ev)));
+                    }
+                    draw_card(&mut self.state.players[idx], &mut self.state.objects)?;
+                }
+                self.state.passes_since_stack_change = 0;
+                ev.push(ev_priority_changed(self));
+            }
+            Draw => {
+                self.clear_all_mana_pools();
+                self.state.turn_step = Main1;
+                self.state.combat = None;
+                if let Some(i) = self.state.player_idx(ap) {
+                    self.state.priority_idx = i;
+                }
+                self.state.passes_since_stack_change = 0;
+                ev.push(ev_phase_labeled(self, "main1"));
+                ev.push(ev_priority_changed(self));
+            }
             Main1 => {
                 self.clear_all_mana_pools();
                 self.state.turn_step = BeginCombat;
@@ -512,6 +566,16 @@ impl GameEngine {
                 ev.push(ev_phase_labeled(self, "declare_attackers"));
                 ev.push(ev_priority_changed(self));
             }
+            CombatDamage => {
+                self.clear_all_mana_pools();
+                self.state.turn_step = EndCombat;
+                if let Some(i) = self.state.player_idx(ap) {
+                    self.state.priority_idx = i;
+                }
+                self.state.passes_since_stack_change = 0;
+                ev.push(ev_phase_labeled(self, "end_combat"));
+                ev.push(ev_priority_changed(self));
+            }
             EndCombat => {
                 self.clear_all_mana_pools();
                 self.state.turn_step = Main2;
@@ -522,6 +586,16 @@ impl GameEngine {
                 ev.push(ev_priority_changed(self));
             }
             Main2 => {
+                self.clear_all_mana_pools();
+                if let Some(i) = self.state.player_idx(ap) {
+                    self.state.priority_idx = i;
+                }
+                self.state.turn_step = EndStep;
+                self.state.passes_since_stack_change = 0;
+                ev.push(ev_phase_labeled(self, "end_step"));
+                ev.push(ev_priority_changed(self));
+            }
+            EndStep => {
                 if let Some(i) = self.state.player_idx(ap) {
                     self.state.priority_idx = i;
                 }
@@ -567,25 +641,6 @@ impl GameEngine {
         }
         self.state.turn_step = TurnStep::Upkeep;
         ev.push(ev_phase_labeled(self, "upkeep"));
-
-        self.state.turn_step = TurnStep::Draw;
-        ev.push(ev_phase_labeled(self, "draw"));
-        if let Some(idx) = self.state.player_idx(ap) {
-            if self.state.players[idx].library.is_empty() {
-                for p in &mut self.state.players {
-                    p.has_lost = p.id == ap;
-                }
-                for p in &self.state.players {
-                    if p.id != ap {
-                        self.state.winner = Some(p.id);
-                    }
-                }
-                ev.push(ev_log("Game over: empty library on draw".into()));
-                return Ok(finish_with_events(self, ev));
-            }
-            draw_card(&mut self.state.players[idx], &mut self.state.objects)?;
-        }
-        self.state.turn_step = TurnStep::Main1;
         self.state.combat = None;
         if let Some(i) = self.state.player_idx(ap) {
             self.state.priority_idx = i;
@@ -594,10 +649,9 @@ impl GameEngine {
         self.apply_legend_sbas()?;
         self.apply_sbas(&mut ev)?;
         ev.push(ev_log(format!(
-            "Turn {} — new active P{}, main phase",
+            "Turn {} — new active P{}, upkeep",
             self.state.turn, ap
         )));
-        ev.push(ev_phase_labeled(self, "main1"));
         ev.push(ev_priority_changed(self));
         Ok(finish_with_events(self, ev))
     }
@@ -722,10 +776,14 @@ impl GameEngine {
         let can_inst = can_sorc
             || matches!(
                 self.state.turn_step,
-                TurnStep::BeginCombat
+                TurnStep::Upkeep
+                    | TurnStep::Draw
+                    | TurnStep::BeginCombat
                     | TurnStep::DeclareAttackers
                     | TurnStep::DeclareBlockers
+                    | TurnStep::CombatDamage
                     | TurnStep::EndCombat
+                    | TurnStep::EndStep
             );
         if def.is_sorcery && !can_sorc {
             return Err(EngineError::Illegal("sorceries only in main"));
@@ -859,14 +917,12 @@ impl GameEngine {
     pub fn initial_response_batch(&self) -> RuledEventBatch {
         let mut batch = RuledEventBatch::default();
         batch.events.push(self.ev_zone_view_sync());
-        batch
-            .events
-            .push(ev_phase_labeled(self, "main1"));
+        batch.events.push(ev_phase_labeled(self, "untap"));
         batch.events.push(ev_priority_changed(self));
         batch.events.push(ev_log(format!(
-            "Start — active P{}, priority P{}",
+            "Start — active P{}, priority P{}, step untap",
             self.state.active_player_id(),
-            self.state.priority_player_id()
+            self.state.priority_player_id(),
         )));
         fill_legal(&mut batch, self);
         batch
