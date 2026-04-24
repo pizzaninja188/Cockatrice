@@ -111,8 +111,7 @@ fn pass_both_players(e: &mut GameEngine) {
 }
 
 fn advance_to_main1_from_game_start(e: &mut GameEngine) {
-    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Untap);
-    pass_both_players(e); // untap -> upkeep
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
     pass_both_players(e); // upkeep -> draw
     pass_both_players(e); // draw -> main1
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main1);
@@ -121,19 +120,19 @@ fn advance_to_main1_from_game_start(e: &mut GameEngine) {
 #[test]
 fn primitive_yield_active_skips_double_pass_main1() {
     let mut e = GameEngine::new(99, &[0, 1], 20, None).expect("new");
-    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Untap);
-    e.apply_command(0, &primitive_yield()).expect("active primitive");
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
+    e.apply_command(0, &primitive_yield()).expect("active primitive");
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Draw);
 }
 
 #[test]
 fn two_player_passes_empty_stack_advances_toward_combat() {
     let mut e = GameEngine::new(99, &[0, 1], 20, None).expect("new");
-    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Untap);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
     e.apply_command(0, &pass()).expect("p0");
     e.apply_command(1, &pass()).expect("p1");
-    // After two passes, should leave untap to upkeep.
-    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
+    // After two passes, should leave upkeep to draw.
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Draw);
 }
 
 #[test]
@@ -141,7 +140,7 @@ fn empty_stack_double_pass_emits_ap_priority_in_new_phase() {
     let mut e = GameEngine::new(99, &[0, 1], 20, None).expect("new");
     e.apply_command(0, &pass()).expect("p0 pass");
     let b = e.apply_command(1, &pass()).expect("p1 pass");
-    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Draw);
     assert!(
         priority_changes_in(&b).contains(&0),
         "after phase advance, active player should explicitly regain priority"
@@ -156,7 +155,7 @@ fn mana_pools_empty_on_step_change() {
 
     e.apply_command(0, &primitive_yield()).expect("active primitive");
 
-    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Draw);
     assert_eq!(e.state.players[0].mana_pool.red, 0);
     assert_eq!(e.state.players[0].mana_pool.green, 0);
     assert_eq!(e.state.players[0].mana_pool.blue, 0);

@@ -440,8 +440,8 @@ void Server_Game::createGameStateChangedEvent(Event_GameStateChanged *event,
     event->set_seconds_elapsed(secondsElapsed);
     if (gameStarted) {
         event->set_game_started(true);
-        event->set_active_player_id(0);
-        event->set_active_phase(0);
+        event->set_active_player_id(activePlayer >= 0 ? activePlayer : 0);
+        event->set_active_phase(activePhase >= 0 ? activePhase : 0);
     } else
         event->set_game_started(false);
 
@@ -550,8 +550,10 @@ void Server_Game::doStartGameIfReady(bool forceStartGame)
     }
     sendGameStateToPlayers();
 
-    activePlayer = -1;
-    nextTurn();
+    if (!ruledGame) {
+        activePlayer = -1;
+        nextTurn();
+    }
 
     locker.unlock();
 
@@ -847,7 +849,9 @@ void Server_Game::setActivePlayer(int _activePlayer)
         }
     }
 
-    setActivePhase(0);
+    if (!ruledGame) {
+        setActivePhase(0);
+    }
     ruledPriorityPlayer = activePlayer;
 }
 
@@ -1280,9 +1284,20 @@ void Server_Game::startRuledSidecarSession()
         return;
     }
     if (resp.has_batch()) {
+        int startupActivePlayer = -1;
+        int startupMappedPhase = -1;
+        int startupPriorityPlayer = -1;
+        bool startupZoneViewApplied = false;
         for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
             const auto &e = resp.batch().events(ei);
-            if (e.has_zone_view()) {
+            if (e.has_phase_changed()) {
+                startupActivePlayer = e.phase_changed().active_player_id();
+                startupMappedPhase = ruledPhaseLabelToCockatricePhase(e.phase_changed().phase());
+            }
+            if (e.has_priority_changed()) {
+                startupPriorityPlayer = e.priority_changed().player_id();
+            }
+            if (e.has_zone_view() && !startupZoneViewApplied) {
                 const auto &z = e.zone_view();
                 for (int pi = 0; pi < z.per_player_size(); ++pi) {
                     const auto &p = z.per_player(pi);
@@ -1336,8 +1351,17 @@ void Server_Game::startRuledSidecarSession()
                         static_cast<Server_Player *>(ab)->applyRuledEngineZoneView(p);
                     }
                 }
-                break;
+                startupZoneViewApplied = true;
             }
+        }
+        if (startupActivePlayer >= 0 && getActivePlayer() != startupActivePlayer) {
+            setActivePlayer(startupActivePlayer);
+        }
+        if (startupMappedPhase >= 0 && getActivePhase() != startupMappedPhase) {
+            setActivePhase(startupMappedPhase);
+        }
+        if (startupPriorityPlayer >= 0) {
+            ruledPriorityPlayer = startupPriorityPlayer;
         }
     }
     if (currentReplay) {

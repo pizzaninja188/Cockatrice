@@ -106,7 +106,7 @@ impl GameEngine {
             stack: Vec::new(),
             priority_idx: 0,
             active_player_idx: 0,
-            turn_step: TurnStep::Untap,
+            turn_step: TurnStep::Upkeep,
             turn: 1,
             next_object_id,
             command_index: 0,
@@ -917,10 +917,10 @@ impl GameEngine {
     pub fn initial_response_batch(&self) -> RuledEventBatch {
         let mut batch = RuledEventBatch::default();
         batch.events.push(self.ev_zone_view_sync());
-        batch.events.push(ev_phase_labeled(self, "untap"));
+        batch.events.push(ev_phase_labeled(self, "upkeep"));
         batch.events.push(ev_priority_changed(self));
         batch.events.push(ev_log(format!(
-            "Start — active P{}, priority P{}, step untap",
+            "Start — active P{}, priority P{}, step upkeep",
             self.state.active_player_id(),
             self.state.priority_player_id(),
         )));
