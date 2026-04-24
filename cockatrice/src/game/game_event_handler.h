@@ -52,12 +52,18 @@ private:
     AbstractGame *game;
     QSet<int> legalRuledLandPlayHandIndices;
     QMultiHash<QString, int> legalRuledLandPlayIndicesByCardName;
+    QSet<int> legalRuledSpellCastHandIndices;
+    QMultiHash<QString, int> legalRuledSpellCastIndicesByCardName;
 
 public:
     explicit GameEventHandler(AbstractGame *_game);
     [[nodiscard]] bool isRuledLandPlayLegalForHandIndex(int handIndex) const;
     [[nodiscard]] int getRuledLandPlayHandIndexForCard(const QString &cardName, int preferredHandIndex) const;
     [[nodiscard]] QList<int> getRuledLandPlayHandIndicesForCardName(const QString &cardName) const;
+    [[nodiscard]] bool isRuledSpellCastLegalForHandIndex(int handIndex) const;
+    [[nodiscard]] int getRuledSpellCastHandIndexForCard(const QString &cardName, int preferredHandIndex) const;
+    [[nodiscard]] QList<int> getRuledSpellCastHandIndicesForCardName(const QString &cardName) const;
+    void emitLocalRuledLog(const QString &message);
 
     void handleNextTurn();
     void handleReverseTurn();

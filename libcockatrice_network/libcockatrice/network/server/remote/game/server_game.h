@@ -23,6 +23,7 @@
 #include "../server_response_containers.h"
 
 #include <QDateTime>
+#include <QHash>
 #include <QMap>
 #include <QMutex>
 #include <QObject>
@@ -85,6 +86,8 @@ private:
     bool ruledGame;
     quint64 ruledSeed;
     std::unique_ptr<RulesRelay> rulesRelay;
+    /// StackPushed.object_id -> engine card name; push and resolve may arrive in different ruled IPC batches.
+    QHash<quint32, QString> ruledEngineStackPushDescriptionsByObjectId;
 
     void createGameStateChangedEvent(Event_GameStateChanged *event,
                                      Server_AbstractParticipant *recipient,

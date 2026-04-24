@@ -14,6 +14,7 @@
 
 #include <QMenu>
 #include <QObject>
+#include <QMap>
 #include <libcockatrice/card/relation/card_relation_type.h>
 #include <libcockatrice/filters/filter_string.h>
 #include <libcockatrice/protocol/pb/card_attributes.pb.h>
@@ -64,6 +65,7 @@ public:
 
     void moveOneCardUntil(CardItem *card);
     void stopMoveTopCardsUntil();
+    bool tryPayRuledSpellWithCounter(const QString &counterName);
 
     [[nodiscard]] bool isMovingCardsUntil() const
     {
@@ -167,8 +169,21 @@ public slots:
     void cardMenuAction();
 
 private:
+    struct PendingRuledSpellCast
+    {
+        int handIndex = -1;
+        QString cardName;
+        QMap<QChar, int> remainingCost;
+        bool valid = false;
+    };
+
     Player *player;
     bool tryPlayRuledLand(CardItem *card);
+    bool tryStartRuledSpellCast(CardItem *card);
+    static QMap<QChar, int> parseSimpleManaCost(const QString &manaCost);
+    static QString formatSimpleManaCost(const QMap<QChar, int> &cost);
+    void clearPendingRuledSpellCast();
+    bool completePendingRuledSpellCast();
 
     int defaultNumberTopCards = 1;
     int defaultNumberTopCardsToPlaceBelow = 1;
@@ -183,6 +198,7 @@ private:
     FilterString movingCardsUntilFilter;
     int movingCardsUntilCounter = 0;
     MoveTopCardsUntilOptions movingCardsUntilOptions;
+    PendingRuledSpellCast pendingRuledSpellCast;
 
     void moveTopCardsTo(const QString &targetZone, const QString &zoneDisplayName, bool faceDown);
     void moveBottomCardsTo(const QString &targetZone, const QString &zoneDisplayName, bool faceDown);

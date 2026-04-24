@@ -32,11 +32,18 @@
 #include <libcockatrice/protocol/pb/event_set_active_player.pb.h>
 #include <libcockatrice/protocol/pb/game_event_container.pb.h>
 #include <libcockatrice/protocol/pending_command.h>
+#include <libcockatrice/utility/zone_names.h>
 #include <QRegularExpression>
 #include <algorithm>
 
 namespace {
 struct ParsedRuledLandActions
+{
+    QSet<int> handIndices;
+    QMultiHash<QString, int> handIndicesByCardName;
+};
+
+struct ParsedRuledCastActions
 {
     QSet<int> handIndices;
     QMultiHash<QString, int> handIndicesByCardName;
@@ -100,6 +107,27 @@ ParsedRuledLandActions parseRuledLandActions(const ruled::v1::LegalActions &acti
     }
     return parsed;
 }
+
+ParsedRuledCastActions parseRuledCastActions(const ruled::v1::LegalActions &actions)
+{
+    static const QRegularExpression labelRegex(QStringLiteral(R"(^Cast (.*) \(hand idx (\d+)\)$)"));
+    ParsedRuledCastActions parsed;
+
+    for (const auto &label : actions.labels()) {
+        const QRegularExpressionMatch match = labelRegex.match(QString::fromStdString(label));
+        if (!match.hasMatch()) {
+            continue;
+        }
+
+        bool ok = false;
+        const int handIndex = match.captured(2).toInt(&ok);
+        if (ok) {
+            parsed.handIndices.insert(handIndex);
+            parsed.handIndicesByCardName.insert(match.captured(1), handIndex);
+        }
+    }
+    return parsed;
+}
 } // namespace
 
 GameEventHandler::GameEventHandler(AbstractGame *_game) : QObject(_game), game(_game)
@@ -130,6 +158,35 @@ QList<int> GameEventHandler::getRuledLandPlayHandIndicesForCardName(const QStrin
     return matching;
 }
 
+bool GameEventHandler::isRuledSpellCastLegalForHandIndex(int handIndex) const
+{
+    return legalRuledSpellCastHandIndices.contains(handIndex);
+}
+
+int GameEventHandler::getRuledSpellCastHandIndexForCard(const QString &cardName, int preferredHandIndex) const
+{
+    const QList<int> matching = getRuledSpellCastHandIndicesForCardName(cardName);
+    if (matching.contains(preferredHandIndex)) {
+        return preferredHandIndex;
+    }
+    if (matching.isEmpty()) {
+        return -1;
+    }
+    return matching.first();
+}
+
+QList<int> GameEventHandler::getRuledSpellCastHandIndicesForCardName(const QString &cardName) const
+{
+    QList<int> matching = legalRuledSpellCastIndicesByCardName.values(cardName);
+    std::sort(matching.begin(), matching.end());
+    return matching;
+}
+
+void GameEventHandler::emitLocalRuledLog(const QString &message)
+{
+    emit logRuledEngine(message);
+}
+
 void GameEventHandler::sendGameCommand(PendingCommand *pend, int playerId)
 {
     AbstractClient *client = game->getClientForPlayer(playerId);
@@ -148,7 +205,24 @@ void GameEventHandler::sendGameCommand(const google::protobuf::Message &command,
 
     if (game->getGameMetaInfo()->proto().ruled_game() && dynamic_cast<const Command_NextTurn *>(&command)) {
         ruled::v1::RuledCommand ruledCommand;
-        ruledCommand.mutable_primitive_yield_structured();
+        bool anyStackObjects = false;
+        const auto &players = game->getPlayerManager()->getPlayers();
+        for (auto it = players.constBegin(); it != players.constEnd(); ++it) {
+            Player *p = it.value();
+            if (!p) {
+                continue;
+            }
+            const CardZoneLogic *stackZone = p->getZone(ZoneNames::STACK);
+            if (stackZone && !stackZone->getCards().isEmpty()) {
+                anyStackObjects = true;
+                break;
+            }
+        }
+        if (anyStackObjects) {
+            ruledCommand.mutable_pass_priority();
+        } else {
+            ruledCommand.mutable_primitive_yield_structured();
+        }
         std::string payload;
         if (!ruledCommand.SerializeToString(&payload)) {
             return;
@@ -267,6 +341,8 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                     ruled::v1::RuledEventBatch batch;
                     legalRuledLandPlayHandIndices.clear();
                     legalRuledLandPlayIndicesByCardName.clear();
+                    legalRuledSpellCastHandIndices.clear();
+                    legalRuledSpellCastIndicesByCardName.clear();
                     if (batch.ParseFromString(ruled.payload())) {
                         QString lines;
                         for (const auto &e : batch.events()) {
@@ -291,6 +367,9 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             const ParsedRuledLandActions parsed = parseRuledLandActions(lit->second);
                             legalRuledLandPlayHandIndices = parsed.handIndices;
                             legalRuledLandPlayIndicesByCardName = parsed.handIndicesByCardName;
+                            const ParsedRuledCastActions parsedCast = parseRuledCastActions(lit->second);
+                            legalRuledSpellCastHandIndices = parsedCast.handIndices;
+                            legalRuledSpellCastIndicesByCardName = parsedCast.handIndicesByCardName;
                             lines += tr("Legal actions:\n");
                             for (const auto &l : lit->second.labels()) {
                                 lines += QStringLiteral(" — %1\n").arg(QString::fromStdString(l));
@@ -298,6 +377,8 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                         } else {
                             legalRuledLandPlayHandIndices.clear();
                             legalRuledLandPlayIndicesByCardName.clear();
+                            legalRuledSpellCastHandIndices.clear();
+                            legalRuledSpellCastIndicesByCardName.clear();
                         }
                         emit logRuledEngine(lines);
                     }

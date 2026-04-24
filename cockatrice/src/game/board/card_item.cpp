@@ -433,6 +433,30 @@ static bool isRuledLandSingleClickLegal(const CardItem *card)
     return game->getGameEventHandler()->getRuledLandPlayHandIndexForCard(card->getName(), handIndex) >= 0;
 }
 
+static bool isRuledSpellSingleClickLegal(const CardItem *card)
+{
+    if (!card || !card->getOwner() || !card->getZone()) {
+        return false;
+    }
+    if (card->getZone()->getName() != ZoneNames::HAND) {
+        return false;
+    }
+    if (card->getCardInfo().getCardType().contains("Land", Qt::CaseInsensitive)) {
+        return false;
+    }
+
+    auto *game = card->getOwner()->getGame();
+    if (!game || !game->getGameMetaInfo()->proto().ruled_game()) {
+        return false;
+    }
+
+    const int handIndex = card->getZone()->getCards().indexOf(const_cast<CardItem *>(card));
+    if (handIndex < 0) {
+        return false;
+    }
+    return game->getGameEventHandler()->getRuledSpellCastHandIndexForCard(card->getName(), handIndex) >= 0;
+}
+
 static bool isTableLandSingleClickLegal(const CardItem *card)
 {
     if (!card || !card->getZone() || card->getFaceDown()) {
@@ -476,6 +500,7 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
         }
     } else if ((event->modifiers() != Qt::AltModifier) && (event->button() == Qt::LeftButton) &&
                (!SettingsCache::instance().getDoubleClickToPlay() || isRuledLandSingleClickLegal(this) ||
+                isRuledSpellSingleClickLegal(this) ||
                 isTableLandSingleClickLegal(this))) {
         handleClickedToPlay(event->modifiers().testFlag(Qt::ShiftModifier));
     }

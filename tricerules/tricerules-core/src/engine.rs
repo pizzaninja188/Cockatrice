@@ -601,13 +601,31 @@ impl GameEngine {
         let card_id = top.card_id.clone();
         let targets = top.targets.clone();
 
+        let resolves_to_battlefield = self
+            .registry
+            .get(&card_id)
+            .map(|d| !d.is_instant && !d.is_sorcery)
+            .unwrap_or(false);
+        let destination = if resolves_to_battlefield {
+            rv1::StackResolveDestination::Battlefield as i32
+        } else {
+            rv1::StackResolveDestination::Graveyard as i32
+        };
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
                 object_id: top.id,
+                destination,
             })),
         });
-
-        move_object_to_zone(&mut self.state, top.id, Zone::Graveyard)?;
+        move_object_to_zone(
+            &mut self.state,
+            top.id,
+            if resolves_to_battlefield {
+                Zone::Battlefield
+            } else {
+                Zone::Graveyard
+            },
+        )?;
 
         let effect = self
             .registry

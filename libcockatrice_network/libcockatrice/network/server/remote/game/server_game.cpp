@@ -39,6 +39,8 @@
 #include <QSet>
 #include <QTimer>
 #include <google/protobuf/descriptor.h>
+#include <libcockatrice/card/database/card_database_manager.h>
+#include <libcockatrice/utility/card_ref.h>
 #include <libcockatrice/deck_list/deck_list.h>
 #include <libcockatrice/deck_list/tree/deck_list_card_node.h>
 #include <libcockatrice/protocol/pb/context_connection_state_changed.pb.h>
@@ -69,6 +71,69 @@ bool isRuledModeManaPoolCounterName(const QString &name)
         return false;
     }
     return QStringLiteral("wubrgxc").contains(n.at(0), Qt::CaseInsensitive);
+}
+
+/** Oracle split: full type line vs main type (Instant/Sorcery often live in maintype only). */
+static QString ruledOracleTypeBlobForServerCard(const Server_Card *card)
+{
+    if (!card) {
+        return {};
+    }
+    const CardDatabaseQuerier *q = CardDatabaseManager::query();
+    const ExactCard exact = q->guessCard(card->getCardRef());
+    if (exact) {
+        const CardInfo &info = exact.getInfo();
+        return (info.getCardType() + QLatin1Char(' ') + info.getMainCardType()).trimmed();
+    }
+    const CardInfoPtr info = q->getCardInfo(card->getName());
+    if (info) {
+        return (info->getCardType() + QLatin1Char(' ') + info->getMainCardType()).trimmed();
+    }
+    return {};
+}
+
+/** StackPushed.description is the rules engine card name (often same as Oracle; may be snake_case id). */
+static QString ruledOracleTypeBlobFromEngineStackDescription(const CardDatabaseQuerier *q, const QString &desc)
+{
+    const QString trimmed = desc.trimmed();
+    if (trimmed.isEmpty()) {
+        return {};
+    }
+    auto blobForInfo = [](const CardInfoPtr &info) -> QString {
+        if (!info) {
+            return {};
+        }
+        return (info->getCardType() + QLatin1Char(' ') + info->getMainCardType()).trimmed();
+    };
+
+    if (const CardInfoPtr direct = q->getCardInfo(trimmed)) {
+        return blobForInfo(direct);
+    }
+    if (trimmed.contains(QLatin1Char('_'))) {
+        QString human = trimmed;
+        human.replace(QLatin1Char('_'), QLatin1Char(' '));
+        if (const CardInfoPtr byHuman = q->getCardInfo(human)) {
+            return blobForInfo(byHuman);
+        }
+        const ExactCard guessed = q->guessCard(CardRef{human, QString()});
+        if (guessed) {
+            return blobForInfo(guessed.getCardPtr());
+        }
+    }
+    return {};
+}
+
+static bool ruledResolvedStackSpellGoesToBattlefield(const Server_Card *card, const QString &engineStackDescription)
+{
+    const CardDatabaseQuerier *q = CardDatabaseManager::query();
+    const QString blobPhysical = ruledOracleTypeBlobForServerCard(card);
+    const QString blobEngine = ruledOracleTypeBlobFromEngineStackDescription(q, engineStackDescription);
+    const QString merged = (blobPhysical + QLatin1Char(' ') + blobEngine).trimmed();
+    if (merged.contains(QLatin1String("Instant"), Qt::CaseInsensitive) ||
+        merged.contains(QLatin1String("Sorcery"), Qt::CaseInsensitive)) {
+        return false;
+    }
+    return true;
 }
 
 int ruledPhaseLabelToCockatricePhase(const std::string &phase)
@@ -447,6 +512,8 @@ void Server_Game::doStartGameIfReady(bool forceStartGame)
     for (Server_AbstractPlayer *player : players.values()) {
         player->setupZones();
     }
+
+    ruledEngineStackPushDescriptionsByObjectId.clear();
 
     gameStarted = true;
     for (auto *player : players.values()) {
@@ -953,21 +1020,36 @@ Response::ResponseCode Server_Game::processRuledPayload(int playerId, const Comm
         return Response::RespContextError;
     }
     ruled::v1::RuledCommand ruledCmd;
-    if (ruledCmd.ParseFromString(cmd.payload()) && ruledCmd.has_play_land()) {
-        if (Server_AbstractPlayer *activePlayer = getPlayer(playerId)) {
-            Server_CardZone *handZone = activePlayer->getZones().value(ZoneNames::HAND);
-            Server_CardZone *tableZone = activePlayer->getZones().value(ZoneNames::TABLE);
-            const int handIndex = static_cast<int>(ruledCmd.play_land().hand_card_index());
-            if (handZone && tableZone && handIndex >= 0 && handIndex < handZone->getCards().size()) {
-                Server_Card *card = handZone->getCards().at(handIndex);
-                CardToMove cardToMove;
-                cardToMove.set_card_id(card->getId());
-                GameEventStorage moveGes;
-                // Cockatrice table uses 3 rows; lands belong on the bottom row (grid y = 2).
-                static constexpr int RULED_LAND_GRID_Y = 2;
-                if (activePlayer->moveCard(moveGes, handZone, QList<const CardToMove *>() << &cardToMove, tableZone,
-                                           -1, RULED_LAND_GRID_Y, true) == Response::RespOk) {
-                    moveGes.sendToGame(this);
+    if (ruledCmd.ParseFromString(cmd.payload())) {
+        if (Server_AbstractPlayer *cmdPlayer = getPlayer(playerId)) {
+            Server_CardZone *handZone = cmdPlayer->getZones().value(ZoneNames::HAND);
+            if (ruledCmd.has_play_land()) {
+                Server_CardZone *tableZone = cmdPlayer->getZones().value(ZoneNames::TABLE);
+                const int handIndex = static_cast<int>(ruledCmd.play_land().hand_card_index());
+                if (handZone && tableZone && handIndex >= 0 && handIndex < handZone->getCards().size()) {
+                    Server_Card *card = handZone->getCards().at(handIndex);
+                    CardToMove cardToMove;
+                    cardToMove.set_card_id(card->getId());
+                    GameEventStorage moveGes;
+                    // Cockatrice table uses 3 rows; lands belong on the bottom row (grid y = 2).
+                    static constexpr int RULED_LAND_GRID_Y = 2;
+                    if (cmdPlayer->moveCard(moveGes, handZone, QList<const CardToMove *>() << &cardToMove, tableZone,
+                                              -1, RULED_LAND_GRID_Y, true) == Response::RespOk) {
+                        moveGes.sendToGame(this);
+                    }
+                }
+            } else if (ruledCmd.has_cast_spell()) {
+                Server_CardZone *stackZone = cmdPlayer->getZones().value(ZoneNames::STACK);
+                const int handIndex = static_cast<int>(ruledCmd.cast_spell().hand_card_index());
+                if (handZone && stackZone && handIndex >= 0 && handIndex < handZone->getCards().size()) {
+                    Server_Card *card = handZone->getCards().at(handIndex);
+                    CardToMove cardToMove;
+                    cardToMove.set_card_id(card->getId());
+                    GameEventStorage moveGes;
+                    if (cmdPlayer->moveCard(moveGes, handZone, QList<const CardToMove *>() << &cardToMove, stackZone,
+                                            -1, 0, true) == Response::RespOk) {
+                        moveGes.sendToGame(this);
+                    }
                 }
             }
         }
@@ -990,6 +1072,59 @@ Response::ResponseCode Server_Game::processRuledPayload(int playerId, const Comm
                 phaseChanged = true;
             }
             if (!e.has_zone_view()) {
+                if (e.has_stack_pushed()) {
+                    ruledEngineStackPushDescriptionsByObjectId.insert(
+                        static_cast<quint32>(e.stack_pushed().object_id()),
+                        QString::fromStdString(e.stack_pushed().description()));
+                }
+                if (e.has_stack_resolved()) {
+                    const auto &sr = e.stack_resolved();
+                    const quint32 resolvedOid = static_cast<quint32>(sr.object_id());
+                    const QString engineStackDescription =
+                        ruledEngineStackPushDescriptionsByObjectId.value(resolvedOid);
+                    for (Server_AbstractPlayer *ab : getPlayers().values()) {
+                        if (!ab) {
+                            continue;
+                        }
+                        Server_CardZone *stackZone = ab->getZones().value(ZoneNames::STACK);
+                        if (!stackZone || stackZone->getCards().isEmpty()) {
+                            continue;
+                        }
+
+                        // Resolve the top-most Cockatrice stack object when the engine pops a stack item.
+                        Server_Card *card = stackZone->getCards().last();
+                        if (!card) {
+                            continue;
+                        }
+
+                        bool goesToBattlefield = false;
+                        const ruled::v1::StackResolveDestination dest = sr.destination();
+                        if (dest == ruled::v1::STACK_RESOLVE_DESTINATION_BATTLEFIELD) {
+                            goesToBattlefield = true;
+                        } else if (dest == ruled::v1::STACK_RESOLVE_DESTINATION_GRAVEYARD) {
+                            goesToBattlefield = false;
+                        } else {
+                            goesToBattlefield =
+                                ruledResolvedStackSpellGoesToBattlefield(card, engineStackDescription);
+                        }
+                        Server_CardZone *targetZone =
+                            ab->getZones().value(goesToBattlefield ? ZoneNames::TABLE : ZoneNames::GRAVE);
+                        if (!targetZone) {
+                            continue;
+                        }
+
+                        CardToMove cardToMove;
+                        cardToMove.set_card_id(card->getId());
+                        GameEventStorage moveGes;
+                        const int targetY = goesToBattlefield ? 1 : 0;
+                        if (ab->moveCard(moveGes, stackZone, QList<const CardToMove *>() << &cardToMove, targetZone, -1,
+                                         targetY, true) == Response::RespOk) {
+                            moveGes.sendToGame(this);
+                        }
+                        break;
+                    }
+                    ruledEngineStackPushDescriptionsByObjectId.remove(resolvedOid);
+                }
                 continue;
             }
             for (const auto &p : e.zone_view().per_player()) {

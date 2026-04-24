@@ -77,11 +77,14 @@ include_directories(../cockatrice/src)
 # ------------------------
 # Optional libraries
 # ------------------------
-# ZLIB
-find_package(ZLIB)
+# ZLIB: prefer CONFIG (vcpkg) — module FindZLIB may cache non-existent zlib.lib while the port ships z.lib/zd.lib
+find_package(ZLIB CONFIG QUIET)
+if(NOT ZLIB_FOUND)
+  find_package(ZLIB QUIET)
+endif()
+set(ORACLE_WITH_ZLIB FALSE)
 if(ZLIB_FOUND)
-  include_directories(${ZLIB_INCLUDE_DIRS})
-  add_definitions("-DHAS_ZLIB")
+  set(ORACLE_WITH_ZLIB TRUE)
   list(APPEND oracle_SOURCES src/zip/unzip.cpp src/zip/zipglobal.cpp)
 else()
   message(STATUS "Oracle: zlib not found; ZIP support disabled")
@@ -89,9 +92,9 @@ endif()
 
 # LZMA
 find_package(LibLZMA)
+set(ORACLE_WITH_LIBLZMA FALSE)
 if(LIBLZMA_FOUND)
-  include_directories(${LIBLZMA_INCLUDE_DIRS})
-  add_definitions("-DHAS_LZMA")
+  set(ORACLE_WITH_LIBLZMA TRUE)
   list(APPEND oracle_SOURCES src/lzma/decompress.cpp)
 else()
   message(STATUS "Oracle: LibLZMA not found; xz support disabled")
@@ -148,12 +151,24 @@ target_link_libraries(
   PUBLIC ${ORACLE_QT_MODULES}
 )
 
-if(ZLIB_FOUND)
-  target_link_libraries(oracle PUBLIC ${ZLIB_LIBRARIES})
+if(ORACLE_WITH_ZLIB)
+  target_compile_definitions(oracle PRIVATE HAS_ZLIB)
+  if(TARGET ZLIB::ZLIB)
+    target_link_libraries(oracle PRIVATE ZLIB::ZLIB)
+  else()
+    target_include_directories(oracle PRIVATE ${ZLIB_INCLUDE_DIRS})
+    target_link_libraries(oracle PRIVATE ${ZLIB_LIBRARIES})
+  endif()
 endif()
 
-if(LIBLZMA_FOUND)
-  target_link_libraries(oracle PUBLIC ${LIBLZMA_LIBRARIES})
+if(ORACLE_WITH_LIBLZMA)
+  target_compile_definitions(oracle PRIVATE HAS_LZMA)
+  if(TARGET LibLZMA::LibLZMA)
+    target_link_libraries(oracle PRIVATE LibLZMA::LibLZMA)
+  else()
+    target_include_directories(oracle PRIVATE ${LIBLZMA_INCLUDE_DIRS})
+    target_link_libraries(oracle PRIVATE ${LIBLZMA_LIBRARIES})
+  endif()
 endif()
 
 # ------------------------

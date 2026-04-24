@@ -46,6 +46,132 @@ PlayerActions::PlayerActions(Player *_player)
     connect(moveTopCardTimer, &QTimer::timeout, [this]() { actMoveTopCardToPlay(); });
 }
 
+QMap<QChar, int> PlayerActions::parseSimpleManaCost(const QString &manaCost)
+{
+    QMap<QChar, int> parsed;
+    auto addSymbol = [&parsed](QChar c) {
+        const QChar sym = c.toUpper();
+        if (QStringLiteral("WUBRGCX").contains(sym)) {
+            parsed[sym] += 1;
+        }
+    };
+
+    bool inBraces = false;
+    QString token;
+    for (QChar c : manaCost) {
+        if (c == '{') {
+            inBraces = true;
+            token.clear();
+            continue;
+        }
+        if (c == '}') {
+            inBraces = false;
+            if (token.size() == 1) {
+                addSymbol(token.at(0));
+            } else {
+                bool ok = false;
+                const int generic = token.toInt(&ok);
+                if (ok && generic > 0) {
+                    parsed['X'] += generic;
+                }
+            }
+            token.clear();
+            continue;
+        }
+        if (inBraces) {
+            token.append(c);
+            continue;
+        }
+        if (c.isDigit()) {
+            parsed['X'] += c.digitValue();
+            continue;
+        }
+        addSymbol(c);
+    }
+    return parsed;
+}
+
+QString PlayerActions::formatSimpleManaCost(const QMap<QChar, int> &cost)
+{
+    QStringList parts;
+    const int generic = cost.value('X', 0);
+    if (generic > 0) {
+        parts << QString::number(generic);
+    }
+    for (QChar c : QStringLiteral("WUBRGC")) {
+        const int count = cost.value(c, 0);
+        for (int i = 0; i < count; ++i) {
+            parts << QString(c);
+        }
+    }
+    return parts.join(' ');
+}
+
+void PlayerActions::clearPendingRuledSpellCast()
+{
+    pendingRuledSpellCast = PendingRuledSpellCast{};
+}
+
+bool PlayerActions::completePendingRuledSpellCast()
+{
+    if (!pendingRuledSpellCast.valid || pendingRuledSpellCast.handIndex < 0) {
+        clearPendingRuledSpellCast();
+        return false;
+    }
+
+    ruled::v1::RuledCommand ruledCommand;
+    ruledCommand.mutable_cast_spell()->set_hand_card_index(pendingRuledSpellCast.handIndex);
+    std::string payload;
+    if (!ruledCommand.SerializeToString(&payload)) {
+        clearPendingRuledSpellCast();
+        return false;
+    }
+
+    Command_RuledPayload cmd;
+    cmd.set_payload(payload);
+    sendGameCommand(cmd);
+
+    player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+        tr("Casting %1.").arg(pendingRuledSpellCast.cardName));
+    clearPendingRuledSpellCast();
+    return true;
+}
+
+bool PlayerActions::tryPayRuledSpellWithCounter(const QString &counterName)
+{
+    if (!pendingRuledSpellCast.valid) {
+        return false;
+    }
+    const QString n = counterName.trimmed().toUpper();
+    if (n.size() != 1 || !QStringLiteral("WUBRGC").contains(n.at(0))) {
+        return false;
+    }
+    const QChar sym = n.at(0);
+
+    if (pendingRuledSpellCast.remainingCost.value(sym, 0) > 0) {
+        pendingRuledSpellCast.remainingCost[sym] -= 1;
+    } else if (pendingRuledSpellCast.remainingCost.value('X', 0) > 0) {
+        pendingRuledSpellCast.remainingCost['X'] -= 1;
+    } else {
+        return false;
+    }
+
+    int totalRemaining = 0;
+    for (auto it = pendingRuledSpellCast.remainingCost.constBegin(); it != pendingRuledSpellCast.remainingCost.constEnd();
+         ++it) {
+        totalRemaining += it.value();
+    }
+
+    if (totalRemaining == 0) {
+        return completePendingRuledSpellCast();
+    }
+
+    player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+        tr("Pay mana for %1: %2 remaining (click mana counters).")
+            .arg(pendingRuledSpellCast.cardName, formatSimpleManaCost(pendingRuledSpellCast.remainingCost)));
+    return true;
+}
+
 bool PlayerActions::tryPlayRuledLand(CardItem *card)
 {
     if (!card || !player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
@@ -103,6 +229,49 @@ bool PlayerActions::tryPlayRuledLand(CardItem *card)
     return true;
 }
 
+bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
+{
+    if (!card || !player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+        return false;
+    }
+    if (card->getZone()->getName() != ZoneNames::HAND) {
+        return false;
+    }
+    if (card->getCardInfo().getCardType().contains("Land", Qt::CaseInsensitive)) {
+        return false;
+    }
+
+    const int handIndex = card->getZone()->getCards().indexOf(card);
+    if (handIndex < 0) {
+        return false;
+    }
+    const int ruledHandIndex =
+        player->getGame()->getGameEventHandler()->getRuledSpellCastHandIndexForCard(card->getName(), handIndex);
+    if (ruledHandIndex < 0) {
+        return false;
+    }
+
+    clearPendingRuledSpellCast();
+    pendingRuledSpellCast.valid = true;
+    pendingRuledSpellCast.handIndex = ruledHandIndex;
+    pendingRuledSpellCast.cardName = card->getName();
+    pendingRuledSpellCast.remainingCost = parseSimpleManaCost(card->getCardInfo().getManaCost());
+
+    int totalRequired = 0;
+    for (auto it = pendingRuledSpellCast.remainingCost.constBegin(); it != pendingRuledSpellCast.remainingCost.constEnd();
+         ++it) {
+        totalRequired += it.value();
+    }
+    if (totalRequired == 0) {
+        return completePendingRuledSpellCast();
+    }
+
+    player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+        tr("Cast %1 selected. Pay mana by clicking counters: %2.")
+            .arg(card->getName(), formatSimpleManaCost(pendingRuledSpellCast.remainingCost)));
+    return true;
+}
+
 void PlayerActions::playCard(CardItem *card, bool faceDown)
 {
     if (card == nullptr) {
@@ -123,6 +292,9 @@ void PlayerActions::playCard(CardItem *card, bool faceDown)
     const CardInfo &info = exactCard.getInfo();
 
     if (!faceDown && tryPlayRuledLand(card)) {
+        return;
+    }
+    if (!faceDown && tryStartRuledSpellCast(card)) {
         return;
     }
 

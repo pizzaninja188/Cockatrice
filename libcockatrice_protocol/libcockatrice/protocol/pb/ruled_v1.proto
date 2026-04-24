@@ -94,8 +94,16 @@ message StackPushed {
   string description = 2;
 }
 
+// Where the resolved spell object ends up (Servatrice maps this to TABLE vs GRAVE).
+enum StackResolveDestination {
+  STACK_RESOLVE_DESTINATION_UNSPECIFIED = 0; // legacy: server may infer from Oracle text
+  STACK_RESOLVE_DESTINATION_GRAVEYARD = 1;
+  STACK_RESOLVE_DESTINATION_BATTLEFIELD = 2;
+}
+
 message StackResolved {
   uint32 object_id = 1;
+  StackResolveDestination destination = 2;
 }
 
 message SbasApplied {
