@@ -542,6 +542,9 @@ impl GameEngine {
             self.state.turn = self.state.turn.saturating_add(1);
         }
         let ap = self.state.active_player_id();
+        self.state.turn_step = TurnStep::Untap;
+        let mut ev = vec![ev_phase_labeled(self, "untap")];
+
         for o in self.state.objects.values_mut() {
             if o.owner == ap {
                 o.tapped = false;
@@ -554,6 +557,11 @@ impl GameEngine {
                 }
             }
         }
+        self.state.turn_step = TurnStep::Upkeep;
+        ev.push(ev_phase_labeled(self, "upkeep"));
+
+        self.state.turn_step = TurnStep::Draw;
+        ev.push(ev_phase_labeled(self, "draw"));
         if let Some(idx) = self.state.player_idx(ap) {
             if self.state.players[idx].library.is_empty() {
                 for p in &mut self.state.players {
@@ -564,10 +572,8 @@ impl GameEngine {
                         self.state.winner = Some(p.id);
                     }
                 }
-                return Ok(finish_with_events(
-                    self,
-                    vec![ev_log("Game over: empty library on draw".into())],
-                ));
+                ev.push(ev_log("Game over: empty library on draw".into()));
+                return Ok(finish_with_events(self, ev));
             }
             draw_card(&mut self.state.players[idx], &mut self.state.objects)?;
         }
@@ -578,7 +584,6 @@ impl GameEngine {
         }
         self.state.passes_since_stack_change = 0;
         self.apply_legend_sbas()?;
-        let mut ev = vec![];
         self.apply_sbas(&mut ev)?;
         ev.push(ev_log(format!(
             "Turn {} — new active P{}, main phase",
@@ -914,6 +919,28 @@ impl GameEngine {
                     })
                     .collect::<Vec<_>>()
                     .join(","),
+                battlefield: p
+                    .battlefield
+                    .iter()
+                    .map(|&oid| {
+                        self.state
+                            .objects
+                            .get(&oid)
+                            .map(|o| o.card_id.clone())
+                            .unwrap_or_default()
+                    })
+                    .collect(),
+                battlefield_tapped: p
+                    .battlefield
+                    .iter()
+                    .map(|&oid| {
+                        self.state
+                            .objects
+                            .get(&oid)
+                            .map(|o| o.tapped)
+                            .unwrap_or(false)
+                    })
+                    .collect(),
             })
             .collect();
         RuledEvent {

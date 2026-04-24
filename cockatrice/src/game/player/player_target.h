@@ -30,6 +30,7 @@ class PlayerTarget : public ArrowTarget
 private:
     QPixmap fullPixmap;
     PlayerCounter *playerCounter;
+    bool priorityHighlighted = false;
 public slots:
     void counterDeleted();
 
@@ -47,6 +48,7 @@ public:
     ~PlayerTarget() override;
     QRectF boundingRect() const override;
     void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget) override;
+    void setPriorityHighlighted(bool highlighted);
 
     AbstractCounter *addCounter(int _counterId, const QString &_name, int _value);
 };

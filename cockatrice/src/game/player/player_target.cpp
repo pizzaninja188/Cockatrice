@@ -144,8 +144,29 @@ void PlayerTarget::paint(QPainter *painter, const QStyleOptionGraphicsItem * /*o
     painter->setPen(pen);
     painter->drawRect(boundingRect().adjusted(border / 2, border / 2, -border / 2, -border / 2));
 
+    if (priorityHighlighted) {
+        const qreal outerWidth = 4.0;
+        const qreal inset = border + 1.0;
+        QRectF highlightRect = avatarBoundingRect.adjusted(inset, inset, -inset, -inset);
+        QPen priorityPen(QColor(255, 204, 64));
+        priorityPen.setWidthF(outerWidth);
+        priorityPen.setJoinStyle(Qt::RoundJoin);
+        painter->setPen(priorityPen);
+        painter->setBrush(Qt::NoBrush);
+        painter->drawRoundedRect(highlightRect, 4.0, 4.0);
+    }
+
     if (getBeingPointedAt())
         painter->fillRect(boundingRect(), QBrush(QColor(255, 0, 0, 100)));
+}
+
+void PlayerTarget::setPriorityHighlighted(bool highlighted)
+{
+    if (priorityHighlighted == highlighted) {
+        return;
+    }
+    priorityHighlighted = highlighted;
+    update();
 }
 
 AbstractCounter *PlayerTarget::addCounter(int _counterId, const QString &_name, int _value)

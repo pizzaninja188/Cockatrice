@@ -49,6 +49,7 @@
 #include <libcockatrice/protocol/pb/event_game_closed.pb.h>
 #include <libcockatrice/protocol/pb/event_game_host_changed.pb.h>
 #include <libcockatrice/protocol/pb/event_game_joined.pb.h>
+#include <libcockatrice/protocol/pb/event_game_say.pb.h>
 #include <libcockatrice/protocol/pb/event_game_state_changed.pb.h>
 #include <libcockatrice/protocol/pb/event_join.pb.h>
 #include <libcockatrice/protocol/pb/event_kicked.pb.h>
@@ -217,6 +218,7 @@ void clearRuledManaPoolsOnServer(Server_Game *game)
         ges.sendToGame(game);
     }
 }
+
 } // namespace
 
 Server_Game::Server_Game(const ServerInfo_User &_creatorInfo,
@@ -829,11 +831,21 @@ void Server_Game::setActivePlayer(int _activePlayer)
 
     removeArrows(0, true);
 
+    const int previousActivePlayer = activePlayer;
     activePlayer = _activePlayer;
 
     Event_SetActivePlayer event;
     event.set_active_player_id(activePlayer);
     sendGameEventContainer(prepareGameEvent(event, -1));
+
+    if (activePlayer >= 0 && activePlayer != previousActivePlayer) {
+        if (Server_AbstractPlayer *newActivePlayer = getPlayer(activePlayer)) {
+            Event_GameSay priorityEvent;
+            const QString playerName = QString::fromStdString(newActivePlayer->getUserInfo()->name());
+            priorityEvent.set_message(QStringLiteral("%1 gains priority.").arg(playerName).toStdString());
+            sendGameEventContainer(prepareGameEvent(priorityEvent, -1));
+        }
+    }
 
     setActivePhase(0);
 }
@@ -1056,11 +1068,18 @@ Response::ResponseCode Server_Game::processRuledPayload(int playerId, const Comm
     }
 
     bool zoneViewApplied = false;
+    bool handOrLibraryChanged = false;
+    bool tapStateEventsQueued = false;
+    GameEventStorage tapSyncGes;
     bool phaseChanged = false;
     if (resp.has_batch()) {
+        bool batchContainsUntap = false;
         for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
             const auto &e = resp.batch().events(ei);
             if (e.has_phase_changed()) {
+                if (e.phase_changed().phase() == "untap") {
+                    batchContainsUntap = true;
+                }
                 const int newActive = e.phase_changed().active_player_id();
                 if (newActive >= 0 && getActivePlayer() != newActive) {
                     setActivePlayer(newActive);
@@ -1129,7 +1148,14 @@ Response::ResponseCode Server_Game::processRuledPayload(int playerId, const Comm
             }
             for (const auto &p : e.zone_view().per_player()) {
                 if (Server_AbstractPlayer *ab = getPlayer(p.player_id())) {
-                    static_cast<Server_Player *>(ab)->applyRuledEngineZoneView(p);
+                    GameEventStorage *tapGesPtr = nullptr;
+                    if (batchContainsUntap) {
+                        tapGesPtr = &tapSyncGes;
+                    }
+                    const Server_Player::RuledZoneSyncResult sync =
+                        static_cast<Server_Player *>(ab)->applyRuledEngineZoneView(p, tapGesPtr);
+                    handOrLibraryChanged = handOrLibraryChanged || sync.handOrLibraryChanged;
+                    tapStateEventsQueued = tapStateEventsQueued || sync.tapStateChanged;
                     zoneViewApplied = true;
                 }
             }
@@ -1139,7 +1165,10 @@ Response::ResponseCode Server_Game::processRuledPayload(int playerId, const Comm
         // In ruled mode, floating mana empties whenever the step/phase changes.
         clearRuledManaPoolsOnServer(this);
     }
-    if (zoneViewApplied) {
+    if (tapStateEventsQueued) {
+        tapSyncGes.sendToGame(this);
+    }
+    if (zoneViewApplied && handOrLibraryChanged) {
         sendGameStateToPlayers();
     }
     // Append to deterministic replay log (concatenated RuledCommand bytes)

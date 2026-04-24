@@ -12,6 +12,12 @@ private:
     QList<int> lastDrawList;
 
 public:
+    struct RuledZoneSyncResult
+    {
+        bool handOrLibraryChanged = false;
+        bool tapStateChanged = false;
+    };
+
     Server_Player(Server_Game *_game,
                   int _playerId,
                   const ServerInfo_User &_userInfo,
@@ -27,7 +33,8 @@ public:
 
     void setupZones() override;
     void clearZones() override;
-    void applyRuledEngineZoneView(const ruled::v1::RuledPerPlayerView &v);
+    RuledZoneSyncResult applyRuledEngineZoneView(const ruled::v1::RuledPerPlayerView &v,
+                                                 GameEventStorage *tapGes = nullptr);
     void shuffleMainDeckForRuledFallback();
 
     Response::ResponseCode drawCards(GameEventStorage &ges, int number);

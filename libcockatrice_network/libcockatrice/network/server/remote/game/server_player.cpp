@@ -49,6 +49,7 @@ bool isRuledModeManaPoolCounterName(const QString &name)
 #include <libcockatrice/protocol/pb/event_create_counter.pb.h>
 #include <libcockatrice/protocol/pb/event_del_counter.pb.h>
 #include <libcockatrice/protocol/pb/event_draw_cards.pb.h>
+#include <libcockatrice/protocol/pb/event_set_card_attr.pb.h>
 #include <libcockatrice/protocol/pb/event_player_properties_changed.pb.h>
 #include <libcockatrice/protocol/pb/event_set_counter.pb.h>
 #include <libcockatrice/protocol/pb/event_shuffle.pb.h>
@@ -162,15 +163,18 @@ void Server_Player::setupZones()
     }
 }
 
-void Server_Player::applyRuledEngineZoneView(const ruled::v1::RuledPerPlayerView &v)
+Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const ruled::v1::RuledPerPlayerView &v,
+                                                                            GameEventStorage *tapGes)
 {
+    RuledZoneSyncResult result;
     if (v.player_id() != playerId) {
-        return;
+        return result;
     }
     Server_CardZone *deckZone = zones.value(ZoneNames::DECK);
     Server_CardZone *handZone = zones.value(ZoneNames::HAND);
-    if (!deckZone || !handZone) {
-        return;
+    Server_CardZone *tableZone = zones.value(ZoneNames::TABLE);
+    if (!deckZone || !handZone || !tableZone) {
+        return result;
     }
     const auto trId = [](Server_Card *c) {
         QString t = c->getName().toLower();
@@ -179,6 +183,9 @@ void Server_Player::applyRuledEngineZoneView(const ruled::v1::RuledPerPlayerView
     };
     QList<Server_Card *> pool;
     for (Server_Card *c : deckZone->getCards()) {
+        pool.append(c);
+    }
+    for (Server_Card *c : handZone->getCards()) {
         pool.append(c);
     }
     const QString libCsv = QString::fromStdString(v.lib_ids_csv());
@@ -193,7 +200,7 @@ void Server_Player::applyRuledEngineZoneView(const ruled::v1::RuledPerPlayerView
     if (v.hand_size() + libWants.size() != pool.size()) {
         qWarning() << "applyRuledEngineZoneView: count mismatch hand" << v.hand_size() << "lib" << libWants.size()
                    << "pool" << pool.size() << "lib_csv_len" << libCsv.size();
-        return;
+        return result;
     }
     QList<Server_Card *> handList;
     for (int i = 0; i < v.hand_size(); ++i) {
@@ -207,7 +214,7 @@ void Server_Player::applyRuledEngineZoneView(const ruled::v1::RuledPerPlayerView
         }
         if (found < 0) {
             qWarning() << "applyRuledEngineZoneView: missing" << want << "player" << playerId;
-            return;
+            return result;
         }
         handList.append(pool.takeAt(found));
     }
@@ -222,23 +229,97 @@ void Server_Player::applyRuledEngineZoneView(const ruled::v1::RuledPerPlayerView
         }
         if (found < 0) {
             qWarning() << "applyRuledEngineZoneView: missing lib" << want;
-            return;
+            return result;
         }
         libList.append(pool.takeAt(found));
     }
     if (!pool.isEmpty()) {
-        return;
+        return result;
     }
-    for (Server_Card *c : handList) {
-        deckZone->removeCard(c);
-        handZone->insertCard(c, -1, 0);
+
+    const QList<Server_Card *> currentHand = handZone->getCards();
+    const QList<Server_Card *> currentDeck = deckZone->getCards();
+    bool handMatches = (currentHand.size() == handList.size());
+    if (handMatches) {
+        for (int i = 0; i < currentHand.size(); ++i) {
+            if (currentHand[i] != handList[i]) {
+                handMatches = false;
+                break;
+            }
+        }
     }
-    for (Server_Card *c : libList) {
-        deckZone->removeCard(c);
+    bool deckMatches = (currentDeck.size() == libList.size());
+    if (deckMatches) {
+        for (int i = 0; i < currentDeck.size(); ++i) {
+            if (currentDeck[i] != libList[i]) {
+                deckMatches = false;
+                break;
+            }
+        }
     }
-    for (Server_Card *c : libList) {
-        deckZone->insertCard(c, -1, 0);
+
+    if (!handMatches || !deckMatches) {
+        for (Server_Card *c : currentDeck) {
+            deckZone->removeCard(c);
+        }
+        for (Server_Card *c : currentHand) {
+            handZone->removeCard(c);
+        }
+
+        for (Server_Card *c : handList) {
+            handZone->insertCard(c, -1, 0);
+        }
+        for (Server_Card *c : libList) {
+            deckZone->insertCard(c, -1, 0);
+        }
+        result.handOrLibraryChanged = true;
     }
+
+    // Battlefield tap-state sync is currently applied only when caller requests it
+    // (e.g. untap phase), to avoid phase-to-phase visual regressions.
+    if (tapGes && v.battlefield_size() == v.battlefield_tapped_size() &&
+        v.battlefield_size() == tableZone->getCards().size()) {
+        QList<Server_Card *> tablePool = tableZone->getCards();
+        QList<Server_Card *> ordered;
+        ordered.reserve(v.battlefield_size());
+
+        for (int i = 0; i < v.battlefield_size(); ++i) {
+            const QString want = QString::fromStdString(v.battlefield(i));
+            int found = -1;
+            for (int j = 0; j < tablePool.size(); ++j) {
+                if (trId(tablePool[j]) == want) {
+                    found = j;
+                    break;
+                }
+            }
+            if (found < 0) {
+                ordered.clear();
+                break;
+            }
+            ordered.append(tablePool.takeAt(found));
+        }
+
+        if (ordered.size() == v.battlefield_size()) {
+            for (int i = 0; i < ordered.size(); ++i) {
+                Server_Card *card = ordered[i];
+                const bool desiredTapped = v.battlefield_tapped(i);
+                if (!card || card->getTapped() == desiredTapped) {
+                    continue;
+                }
+                card->setTapped(desiredTapped);
+                result.tapStateChanged = true;
+                if (tapGes) {
+                    Event_SetCardAttr tapEv;
+                    tapEv.set_zone_name(std::string(ZoneNames::TABLE));
+                    tapEv.set_card_id(card->getId());
+                    tapEv.set_attribute(AttrTapped);
+                    tapEv.set_attr_value(desiredTapped ? "1" : "0");
+                    tapGes->enqueueGameEvent(tapEv, playerId);
+                }
+            }
+        }
+    }
+    return result;
 }
 
 void Server_Player::shuffleMainDeckForRuledFallback()

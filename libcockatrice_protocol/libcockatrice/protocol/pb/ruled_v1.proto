@@ -120,6 +120,10 @@ message RuledPerPlayerView {
   repeated string hand = 2;
   reserved 3;
   string lib_ids_csv = 4;
+  // Battlefield card ids in controller order (tricerules ids, lowercase_underscore).
+  repeated string battlefield = 5;
+  // Parallel array to `battlefield`, true if that permanent is tapped.
+  repeated bool battlefield_tapped = 6;
 }
 
 message ZoneViewSync {
