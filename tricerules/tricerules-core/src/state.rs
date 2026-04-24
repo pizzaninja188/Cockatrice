@@ -85,6 +85,7 @@ pub struct PlayerState {
     pub hand: Vec<ObjectId>,
     pub battlefield: Vec<ObjectId>,
     pub graveyard: Vec<ObjectId>,
+    pub mana_pool: ManaPool,
 }
 
 impl PlayerState {
@@ -97,7 +98,22 @@ impl PlayerState {
             hand: Vec::new(),
             battlefield: Vec::new(),
             graveyard: Vec::new(),
+            mana_pool: ManaPool::default(),
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ManaPool {
+    pub red: u32,
+    pub green: u32,
+    pub blue: u32,
+    pub colorless: u32,
+}
+
+impl ManaPool {
+    pub fn clear(&mut self) {
+        *self = Self::default();
     }
 }
 

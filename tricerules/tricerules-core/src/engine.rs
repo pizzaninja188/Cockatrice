@@ -34,6 +34,12 @@ pub struct GameEngine {
 }
 
 impl GameEngine {
+    fn clear_all_mana_pools(&mut self) {
+        for p in &mut self.state.players {
+            p.mana_pool.clear();
+        }
+    }
+
     /// Optional `decks` per player (tricerules id strings); if missing/empty, uses the default M2 test deck.
     pub fn new(
         seed: u64,
@@ -210,6 +216,7 @@ impl GameEngine {
         }
         let ap = self.state.active_player_id();
         if ids.is_empty() {
+            self.clear_all_mana_pools();
             self.state.combat = None;
             self.state.turn_step = TurnStep::Main2;
             if let Some(i) = self.state.player_idx(ap) {
@@ -252,6 +259,7 @@ impl GameEngine {
             attacking: list,
             blocker: HashMap::new(),
         });
+        self.clear_all_mana_pools();
         self.state.turn_step = TurnStep::DeclareBlockers;
         if let Some(d) = self.state.defending_player_id_1v1() {
             if let Some(di) = self.state.player_idx(d) {
@@ -302,6 +310,7 @@ impl GameEngine {
             .ok_or(EngineError::Illegal("combat?"))?;
         self.resolve_combat_damage(&c)?;
         self.state.combat = None;
+        self.clear_all_mana_pools();
         self.state.turn_step = TurnStep::EndCombat;
         if let Some(i) = self.state.player_idx(self.state.active_player_id()) {
             self.state.priority_idx = i;
@@ -478,6 +487,7 @@ impl GameEngine {
         let ap = self.state.active_player_id();
         match step {
             Main1 => {
+                self.clear_all_mana_pools();
                 self.state.turn_step = BeginCombat;
                 if let Some(i) = self.state.player_idx(ap) {
                     self.state.priority_idx = i;
@@ -485,6 +495,7 @@ impl GameEngine {
                 ev.push(ev_phase_labeled(self, "begin_combat"));
             }
             BeginCombat => {
+                self.clear_all_mana_pools();
                 self.state.turn_step = DeclareAttackers;
                 if let Some(i) = self.state.player_idx(ap) {
                     self.state.priority_idx = i;
@@ -496,6 +507,7 @@ impl GameEngine {
                 ev.push(ev_phase_labeled(self, "declare_attackers"));
             }
             EndCombat => {
+                self.clear_all_mana_pools();
                 self.state.turn_step = Main2;
                 if let Some(i) = self.state.player_idx(ap) {
                     self.state.priority_idx = i;
@@ -509,6 +521,7 @@ impl GameEngine {
                 return self.new_turn();
             }
             _ => {
+                self.clear_all_mana_pools();
                 if let Some(i) = self.state.player_idx(ap) {
                     self.state.priority_idx = i;
                 }
@@ -522,6 +535,7 @@ impl GameEngine {
     }
 
     fn new_turn(&mut self) -> Result<RuledEventBatch, EngineError> {
+        self.clear_all_mana_pools();
         self.state.land_dropped_this_turn = false;
         self.state.active_player_idx = (self.state.active_player_idx + 1) % 2;
         if self.state.active_player_idx == 0 {

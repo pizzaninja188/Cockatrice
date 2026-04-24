@@ -36,6 +36,25 @@ fn two_player_passes_empty_stack_advances_toward_combat() {
 }
 
 #[test]
+fn mana_pools_empty_on_step_change() {
+    let mut e = GameEngine::new(99, &[0, 1], 20, None).expect("new");
+    e.state.players[0].mana_pool.red = 2;
+    e.state.players[1].mana_pool.green = 1;
+
+    e.apply_command(0, &primitive_yield()).expect("active primitive");
+
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::BeginCombat);
+    assert_eq!(e.state.players[0].mana_pool.red, 0);
+    assert_eq!(e.state.players[0].mana_pool.green, 0);
+    assert_eq!(e.state.players[0].mana_pool.blue, 0);
+    assert_eq!(e.state.players[0].mana_pool.colorless, 0);
+    assert_eq!(e.state.players[1].mana_pool.red, 0);
+    assert_eq!(e.state.players[1].mana_pool.green, 0);
+    assert_eq!(e.state.players[1].mana_pool.blue, 0);
+    assert_eq!(e.state.players[1].mana_pool.colorless, 0);
+}
+
+#[test]
 fn new_with_custom_deck_length() {
     let decks = Some(vec![vec!["mountain".into(); 30], vec!["forest".into(); 30]]);
     let e = GameEngine::new(1, &[0, 1], 20, decks).expect("new");

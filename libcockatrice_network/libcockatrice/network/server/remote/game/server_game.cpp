@@ -29,6 +29,7 @@
 #include "server_arrow.h"
 #include "server_card.h"
 #include "server_cardzone.h"
+#include "server_counter.h"
 #include "server_player.h"
 #include "server_spectator.h"
 
@@ -50,6 +51,7 @@
 #include <libcockatrice/protocol/pb/event_join.pb.h>
 #include <libcockatrice/protocol/pb/event_kicked.pb.h>
 #include <libcockatrice/protocol/pb/event_leave.pb.h>
+#include <libcockatrice/protocol/pb/event_set_counter.pb.h>
 #include <libcockatrice/protocol/pb/event_player_properties_changed.pb.h>
 #include <libcockatrice/protocol/pb/event_replay_added.pb.h>
 #include <libcockatrice/protocol/pb/event_ruled_payload.pb.h>
@@ -60,6 +62,53 @@
 #include <libcockatrice/utility/zone_names.h>
 
 namespace {
+bool isRuledModeManaPoolCounterName(const QString &name)
+{
+    const QString n = name.trimmed().toLower();
+    if (n.length() != 1) {
+        return false;
+    }
+    return QStringLiteral("wubrgxc").contains(n.at(0), Qt::CaseInsensitive);
+}
+
+int ruledPhaseLabelToCockatricePhase(const std::string &phase)
+{
+    if (phase == "untap") {
+        return 0;
+    }
+    if (phase == "upkeep") {
+        return 1;
+    }
+    if (phase == "draw") {
+        return 2;
+    }
+    if (phase == "main1") {
+        return 3;
+    }
+    if (phase == "begin_combat") {
+        return 4;
+    }
+    if (phase == "declare_attackers") {
+        return 5;
+    }
+    if (phase == "declare_blockers") {
+        return 6;
+    }
+    if (phase == "combat_damage") {
+        return 7;
+    }
+    if (phase == "end_combat") {
+        return 8;
+    }
+    if (phase == "main2") {
+        return 9;
+    }
+    if (phase == "end_step" || phase == "cleanup") {
+        return 10;
+    }
+    return -1;
+}
+
 void stripRuledZoneViewForBroadcast(ruled::v1::IpcResponse *resp)
 {
     if (!resp || !resp->has_batch()) {
@@ -75,6 +124,33 @@ void stripRuledZoneViewForBroadcast(ruled::v1::IpcResponse *resp)
         *out.add_events() = batch->events(i);
     }
     resp->mutable_batch()->CopyFrom(out);
+}
+
+void clearRuledManaPoolsOnServer(Server_Game *game)
+{
+    if (!game) {
+        return;
+    }
+
+    GameEventStorage ges;
+    bool changed = false;
+    for (Server_AbstractPlayer *ab : game->getPlayers().values()) {
+        auto *pl = static_cast<Server_Player *>(ab);
+        for (Server_Counter *counter : pl->getCounters()) {
+            if (!counter || !isRuledModeManaPoolCounterName(counter->getName()) || counter->getCount() == 0) {
+                continue;
+            }
+            counter->setCount(0);
+            Event_SetCounter ev;
+            ev.set_counter_id(counter->getId());
+            ev.set_value(0);
+            ges.enqueueGameEvent(ev, pl->getPlayerId());
+            changed = true;
+        }
+    }
+    if (changed) {
+        ges.sendToGame(game);
+    }
 }
 } // namespace
 
@@ -898,9 +974,21 @@ Response::ResponseCode Server_Game::processRuledPayload(int playerId, const Comm
     }
 
     bool zoneViewApplied = false;
+    bool phaseChanged = false;
     if (resp.has_batch()) {
         for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
             const auto &e = resp.batch().events(ei);
+            if (e.has_phase_changed()) {
+                const int newActive = e.phase_changed().active_player_id();
+                if (newActive >= 0 && getActivePlayer() != newActive) {
+                    setActivePlayer(newActive);
+                }
+                const int mappedPhase = ruledPhaseLabelToCockatricePhase(e.phase_changed().phase());
+                if (mappedPhase >= 0 && getActivePhase() != mappedPhase) {
+                    setActivePhase(mappedPhase);
+                }
+                phaseChanged = true;
+            }
             if (!e.has_zone_view()) {
                 continue;
             }
@@ -911,6 +999,10 @@ Response::ResponseCode Server_Game::processRuledPayload(int playerId, const Comm
                 }
             }
         }
+    }
+    if (phaseChanged) {
+        // In ruled mode, floating mana empties whenever the step/phase changes.
+        clearRuledManaPoolsOnServer(this);
     }
     if (zoneViewApplied) {
         sendGameStateToPlayers();
