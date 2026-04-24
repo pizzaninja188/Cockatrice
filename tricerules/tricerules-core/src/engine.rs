@@ -226,6 +226,7 @@ impl GameEngine {
             let mut b2 = RuledEventBatch::default();
             b2.events.push(ev_log("No attackers — skipped to main2".to_string()));
             b2.events.push(ev_phase_labeled(self, "main2"));
+            b2.events.push(ev_priority_changed(self));
             fill_legal(&mut b2, self);
             return Ok(b2);
         }
@@ -272,6 +273,7 @@ impl GameEngine {
             .push(ev_log("Attackers committed — blockers?".to_string()));
         b.events.push(ev_log("Declare blockers (defense has priority)".to_string()));
         b.events.push(ev_phase_labeled(self, "declare_blockers"));
+        b.events.push(ev_priority_changed(self));
         Ok(b)
     }
 
@@ -325,6 +327,7 @@ impl GameEngine {
             "End combat (priority, further priority before main2)".to_string(),
         ));
         b.events.push(ev_phase_labeled(self, "end_combat"));
+        b.events.push(ev_priority_changed(self));
         fill_legal(&mut b, self);
         Ok(b)
     }
@@ -474,6 +477,7 @@ impl GameEngine {
             self.state.priority_idx = i;
         }
         self.resolve_top_of_stack(&mut ev)?;
+        ev.push(ev_priority_changed(self));
         self.apply_sbas(&mut ev)?;
         Ok(finish_with_events(self, ev))
     }
@@ -493,6 +497,7 @@ impl GameEngine {
                     self.state.priority_idx = i;
                 }
                 ev.push(ev_phase_labeled(self, "begin_combat"));
+                ev.push(ev_priority_changed(self));
             }
             BeginCombat => {
                 self.clear_all_mana_pools();
@@ -505,6 +510,7 @@ impl GameEngine {
                     blocker: HashMap::new(),
                 });
                 ev.push(ev_phase_labeled(self, "declare_attackers"));
+                ev.push(ev_priority_changed(self));
             }
             EndCombat => {
                 self.clear_all_mana_pools();
@@ -513,6 +519,7 @@ impl GameEngine {
                     self.state.priority_idx = i;
                 }
                 ev.push(ev_phase_labeled(self, "main2"));
+                ev.push(ev_priority_changed(self));
             }
             Main2 => {
                 if let Some(i) = self.state.player_idx(ap) {
@@ -528,6 +535,7 @@ impl GameEngine {
                 self.state.passes_since_stack_change = 0;
                 ev.push(ev_log("Open priority (M2: unexpected step, reset)".to_string()));
                 ev.push(ev_phase_labeled(self, "main1"));
+                ev.push(ev_priority_changed(self));
             }
         }
         self.apply_sbas(ev)?;
@@ -590,6 +598,7 @@ impl GameEngine {
             self.state.turn, ap
         )));
         ev.push(ev_phase_labeled(self, "main1"));
+        ev.push(ev_priority_changed(self));
         Ok(finish_with_events(self, ev))
     }
 
@@ -754,6 +763,7 @@ impl GameEngine {
                 description: def_name,
             })),
         });
+        batch.events.push(ev_priority_changed(self));
         fill_legal(&mut batch, self);
         Ok(batch)
     }
@@ -852,6 +862,7 @@ impl GameEngine {
         batch
             .events
             .push(ev_phase_labeled(self, "main1"));
+        batch.events.push(ev_priority_changed(self));
         batch.events.push(ev_log(format!(
             "Start — active P{}, priority P{}",
             self.state.active_player_id(),
@@ -1021,6 +1032,14 @@ fn ev_phase_labeled(eng: &GameEngine, name: &str) -> RuledEvent {
         ev: Some(rv1::ruled_event::Ev::PhaseChanged(rv1::PhaseChanged {
             phase: name.to_string(),
             active_player_id: eng.state.active_player_id(),
+        })),
+    }
+}
+
+fn ev_priority_changed(eng: &GameEngine) -> RuledEvent {
+    RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::PriorityChanged(rv1::PriorityChanged {
+            player_id: eng.state.priority_player_id(),
         })),
     }
 }

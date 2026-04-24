@@ -3,7 +3,7 @@
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
 use tricerules_proto::ruled::v1::ruled_event::Ev;
 use tricerules_proto::ruled::v1::{
-    CastSpell, PassPriority, PlayLand, PrimitiveYieldStructured, RuledCommand, TargetRef,
+    CastSpell, DeclareAttackers, PassPriority, PlayLand, PrimitiveYieldStructured, RuledCommand, TargetRef,
 };
 
 use tricerules_core::GameEngine;
@@ -34,6 +34,12 @@ fn cast_spell(hand_card_index: usize, targets: Vec<TargetRef>) -> RuledCommand {
             hand_card_index: hand_card_index as u32,
             targets,
         })),
+    }
+}
+
+fn declare_attackers(creature_ids: Vec<u32>) -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::DeclareAttackers(DeclareAttackers { creature_ids })),
     }
 }
 
@@ -78,6 +84,17 @@ fn end_active_turn(e: &mut GameEngine, player: i32) {
         .expect("main2 to next turn");
 }
 
+fn priority_changes_in(batch: &tricerules_proto::ruled::v1::RuledEventBatch) -> Vec<i32> {
+    batch
+        .events
+        .iter()
+        .filter_map(|ev| match &ev.ev {
+            Some(Ev::PriorityChanged(pc)) => Some(pc.player_id),
+            _ => None,
+        })
+        .collect()
+}
+
 #[test]
 fn primitive_yield_active_skips_double_pass_main1() {
     let mut e = GameEngine::new(99, &[0, 1], 20, None).expect("new");
@@ -94,6 +111,18 @@ fn two_player_passes_empty_stack_advances_toward_combat() {
     e.apply_command(1, &pass()).expect("p1");
     // After two passes, should leave main1 to begin combat
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::BeginCombat);
+}
+
+#[test]
+fn empty_stack_double_pass_emits_ap_priority_in_new_phase() {
+    let mut e = GameEngine::new(99, &[0, 1], 20, None).expect("new");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    let b = e.apply_command(1, &pass()).expect("p1 pass");
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::BeginCombat);
+    assert!(
+        priority_changes_in(&b).contains(&0),
+        "after phase advance, active player should explicitly regain priority"
+    );
 }
 
 #[test]
@@ -193,6 +222,148 @@ fn cast_lightning_bolt_resolves_to_graveyard_after_double_pass() {
                         == tricerules_proto::ruled::v1::StackResolveDestination::Graveyard as i32
         )
     }));
+}
+
+#[test]
+fn casting_spell_emits_priority_handoff_to_opponent() {
+    let decks = Some(vec![
+        vec![
+            "mountain".into(),
+            "lightning_bolt".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec![
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(13, &[0, 1], 20, decks).expect("new");
+    let mountain_idx = hand_index_for_card(&e, 0, "mountain");
+    e.apply_command(0, &play_land(mountain_idx)).expect("play mountain");
+    let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
+    let pushed = e
+        .apply_command(0, &cast_spell(bolt_idx, vec![]))
+        .expect("cast bolt");
+    assert!(
+        priority_changes_in(&pushed).contains(&1),
+        "caster should hand priority to opponent after casting"
+    );
+}
+
+#[test]
+fn stack_resolution_emits_priority_to_active_player() {
+    let decks = Some(vec![
+        vec![
+            "mountain".into(),
+            "lightning_bolt".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec![
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(13, &[0, 1], 20, decks).expect("new");
+    let mountain_idx = hand_index_for_card(&e, 0, "mountain");
+    e.apply_command(0, &play_land(mountain_idx)).expect("play mountain");
+    let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(0, &cast_spell(bolt_idx, vec![]))
+        .expect("cast bolt");
+    e.apply_command(1, &pass()).expect("opponent pass");
+    let resolved = e.apply_command(0, &pass()).expect("active pass");
+    assert!(
+        priority_changes_in(&resolved).contains(&0),
+        "active player should regain priority after stack resolves"
+    );
+}
+
+#[test]
+fn declare_attackers_handoff_emits_defender_priority() {
+    let decks = Some(vec![
+        vec![
+            "forest".into(),
+            "forest".into(),
+            "grizzly_bears".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+        vec![
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(66, &[0, 1], 20, decks).expect("new");
+    // Put one creature and two forests on battlefield to mimic later turn.
+    for card in ["forest", "forest", "grizzly_bears"] {
+        let idx = hand_index_for_card(&e, 0, card);
+        let oid = e.state.players[0].hand.remove(idx);
+        e.state.players[0].battlefield.push(oid);
+        if let Some(obj) = e.state.objects.get_mut(&oid) {
+            obj.zone = tricerules_core::Zone::Battlefield;
+            obj.summoning_sick = false;
+            obj.tapped = false;
+        }
+    }
+
+    e.apply_command(0, &primitive_yield())
+        .expect("main1 to begin combat");
+    e.apply_command(0, &pass()).expect("ap pass begin combat");
+    e.apply_command(1, &pass()).expect("nap pass begin combat");
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::DeclareAttackers);
+
+    let bears_oid = battlefield_object_for_card(&e, 0, "grizzly_bears");
+    let b = e
+        .apply_command(0, &declare_attackers(vec![bears_oid]))
+        .expect("declare attackers");
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::DeclareBlockers);
+    assert!(
+        priority_changes_in(&b).contains(&1),
+        "defending player should get priority in declare blockers"
+    );
+}
+
+#[test]
+fn no_attackers_skip_to_main2_emits_active_priority() {
+    let mut e = GameEngine::new(67, &[0, 1], 20, None).expect("new");
+    e.apply_command(0, &primitive_yield())
+        .expect("main1 to begin combat");
+    e.apply_command(0, &pass()).expect("ap pass begin combat");
+    e.apply_command(1, &pass()).expect("nap pass begin combat");
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::DeclareAttackers);
+
+    let b = e
+        .apply_command(0, &declare_attackers(vec![]))
+        .expect("no attackers");
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main2);
+    assert!(
+        priority_changes_in(&b).contains(&0),
+        "active player should keep/regain priority in main2 after no attackers"
+    );
 }
 
 #[test]

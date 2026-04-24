@@ -74,11 +74,23 @@ public:
     {
         activePlayer = activePlayerId;
         emit activePlayerChanged(activePlayer);
+        setPriorityPlayer(activePlayer);
     }
 
     int getActivePlayer() const
     {
         return activePlayer;
+    }
+
+    void setPriorityPlayer(int priorityPlayerId)
+    {
+        priorityPlayer = priorityPlayerId;
+        emit priorityPlayerChanged(priorityPlayer);
+    }
+
+    int getPriorityPlayer() const
+    {
+        return priorityPlayer;
     }
 
     void setGameClosed(bool closed)
@@ -116,6 +128,7 @@ signals:
     void gameStopped();
     void activePhaseChanged(int activePhase);
     void activePlayerChanged(int playerId);
+    void priorityPlayerChanged(int playerId);
 
 public slots:
     void incrementGameTime();
@@ -131,6 +144,7 @@ private:
     bool resuming;
     int currentPhase;
     int activePlayer;
+    int priorityPlayer;
     bool gameClosed;
 };
 

@@ -137,6 +137,7 @@ void TabGame::connectToGameState()
     connect(game->getGameState(), &GameState::gameStopped, this, &TabGame::stopGame);
     connect(game->getGameState(), &GameState::activePhaseChanged, this, &TabGame::setActivePhase);
     connect(game->getGameState(), &GameState::activePlayerChanged, this, &TabGame::setActivePlayer);
+    connect(game->getGameState(), &GameState::priorityPlayerChanged, this, &TabGame::setPriorityPlayer);
 }
 
 void TabGame::connectToPlayerManager()
@@ -853,28 +854,35 @@ void TabGame::closeGame()
 Player *TabGame::setActivePlayer(int id)
 {
     Player *player = game->getPlayerManager()->getPlayer(id);
-    if (!player)
-        return nullptr;
+    QMapIterator<int, Player *> i(game->getPlayerManager()->getPlayers());
+    while (i.hasNext()) {
+        i.next();
+        i.value()->setActive(i.value() == player);
+    }
+    game->getGameState()->setCurrentPhase(-1);
+    emitUserEvent();
+    setPriorityPlayer(id);
+    return player;
+}
 
+Player *TabGame::setPriorityPlayer(int id)
+{
+    Player *priorityPlayer = game->getPlayerManager()->getPlayer(id);
     playerListWidget->setActivePlayer(id);
     QMapIterator<int, Player *> i(game->getPlayerManager()->getPlayers());
     while (i.hasNext()) {
         i.next();
-        if (i.value() == player) {
-            i.value()->setActive(true);
-            if (game->getGameState()->getClients().size() > 1) {
+        const bool isPriorityPlayer = (i.value() == priorityPlayer);
+        i.value()->getGraphicsItem()->setPriorityHighlighted(isPriorityPlayer);
+        if (game->getGameState()->getClients().size() > 1) {
+            if (isPriorityPlayer) {
                 i.value()->getPlayerMenu()->setShortcutsActive();
-            }
-        } else {
-            i.value()->setActive(false);
-            if (game->getGameState()->getClients().size() > 1) {
+            } else {
                 i.value()->getPlayerMenu()->setShortcutsInactive();
             }
         }
     }
-    game->getGameState()->setCurrentPhase(-1);
-    emitUserEvent();
-    return player;
+    return priorityPlayer;
 }
 
 void TabGame::setActivePhase(int phase)

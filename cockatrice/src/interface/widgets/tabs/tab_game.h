@@ -114,6 +114,7 @@ private:
     bool leaveGame();
 
     Player *setActivePlayer(int id);
+    Player *setPriorityPlayer(int id);
     void setActivePhase(int phase);
     void createMenuItems();
     void createReplayMenuItems();

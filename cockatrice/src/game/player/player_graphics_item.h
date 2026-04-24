@@ -102,6 +102,7 @@ public:
 
 public slots:
     void onPlayerActiveChanged(bool _active);
+    void setPriorityHighlighted(bool highlighted);
     void retranslateUi();
 
 signals:

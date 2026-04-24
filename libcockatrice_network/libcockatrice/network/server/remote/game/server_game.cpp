@@ -245,7 +245,7 @@ Server_Game::Server_Game(const ServerInfo_User &_creatorInfo,
       spectatorsSeeEverything(_spectatorsSeeEverything), startingLifeTotal(_startingLifeTotal),
       shareDecklistsOnLoad(_shareDecklistsOnLoad), inactivityCounter(0), startTimeOfThisGame(0), secondsElapsed(0),
       firstGameStarted(false), turnOrderReversed(false), startTime(QDateTime::currentDateTime()), pingClock(nullptr),
-      gameMutex(), ruledGame(_ruledGame), ruledSeed(0)
+      gameMutex(), ruledGame(_ruledGame), ruledSeed(0), ruledPriorityPlayer(-1)
 {
     currentReplay = new GameReplay;
     currentReplay->set_replay_id(room->getServer()->getDatabaseInterface()->getNextReplayId());
@@ -848,6 +848,7 @@ void Server_Game::setActivePlayer(int _activePlayer)
     }
 
     setActivePhase(0);
+    ruledPriorityPlayer = activePlayer;
 }
 
 void Server_Game::setActivePhase(int newPhase)
@@ -1089,6 +1090,18 @@ Response::ResponseCode Server_Game::processRuledPayload(int playerId, const Comm
                     setActivePhase(mappedPhase);
                 }
                 phaseChanged = true;
+            }
+            if (e.has_priority_changed()) {
+                const int newPriority = e.priority_changed().player_id();
+                if (newPriority >= 0 && newPriority != ruledPriorityPlayer) {
+                    ruledPriorityPlayer = newPriority;
+                    if (Server_AbstractPlayer *prioPlayer = getPlayer(newPriority)) {
+                        Event_GameSay priorityEvent;
+                        const QString playerName = QString::fromStdString(prioPlayer->getUserInfo()->name());
+                        priorityEvent.set_message(QStringLiteral("%1 gains priority.").arg(playerName).toStdString());
+                        sendGameEventContainer(prepareGameEvent(priorityEvent, -1));
+                    }
+                }
             }
             if (!e.has_zone_view()) {
                 if (e.has_stack_pushed()) {

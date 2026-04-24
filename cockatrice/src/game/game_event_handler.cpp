@@ -32,7 +32,6 @@
 #include <libcockatrice/protocol/pb/event_set_active_player.pb.h>
 #include <libcockatrice/protocol/pb/game_event_container.pb.h>
 #include <libcockatrice/protocol/pending_command.h>
-#include <libcockatrice/utility/zone_names.h>
 #include <QRegularExpression>
 #include <algorithm>
 
@@ -205,24 +204,9 @@ void GameEventHandler::sendGameCommand(const google::protobuf::Message &command,
 
     if (game->getGameMetaInfo()->proto().ruled_game() && dynamic_cast<const Command_NextTurn *>(&command)) {
         ruled::v1::RuledCommand ruledCommand;
-        bool anyStackObjects = false;
-        const auto &players = game->getPlayerManager()->getPlayers();
-        for (auto it = players.constBegin(); it != players.constEnd(); ++it) {
-            Player *p = it.value();
-            if (!p) {
-                continue;
-            }
-            const CardZoneLogic *stackZone = p->getZone(ZoneNames::STACK);
-            if (stackZone && !stackZone->getCards().isEmpty()) {
-                anyStackObjects = true;
-                break;
-            }
-        }
-        if (anyStackObjects) {
-            ruledCommand.mutable_pass_priority();
-        } else {
-            ruledCommand.mutable_primitive_yield_structured();
-        }
+        // "Pass Turn" is currently the ruled-mode pass-priority button.
+        // Always issue pass_priority so AP/NAP cadence is respected on empty stack too.
+        ruledCommand.mutable_pass_priority();
         std::string payload;
         if (!ruledCommand.SerializeToString(&payload)) {
             return;
@@ -359,6 +343,11 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 if (mappedPhase >= 0) {
                                     game->getGameState()->setCurrentPhase(mappedPhase);
                                 }
+                            }
+                            if (e.has_priority_changed()) {
+                                game->getGameState()->setPriorityPlayer(e.priority_changed().player_id());
+                                lines +=
+                                    QStringLiteral("Priority: P%1\n").arg(e.priority_changed().player_id());
                             }
                         }
                         const auto lit =

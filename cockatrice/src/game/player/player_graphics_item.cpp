@@ -51,7 +51,11 @@ void PlayerGraphicsItem::retranslateUi()
 void PlayerGraphicsItem::onPlayerActiveChanged(bool _active)
 {
     tableZoneGraphicsItem->setActive(_active);
-    playerTarget->setPriorityHighlighted(_active);
+}
+
+void PlayerGraphicsItem::setPriorityHighlighted(bool highlighted)
+{
+    playerTarget->setPriorityHighlighted(highlighted);
 }
 
 void PlayerGraphicsItem::initializeZones()

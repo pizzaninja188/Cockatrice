@@ -85,6 +85,7 @@ private:
     GameReplay *currentReplay;
     bool ruledGame;
     quint64 ruledSeed;
+    int ruledPriorityPlayer;
     std::unique_ptr<RulesRelay> rulesRelay;
     /// StackPushed.object_id -> engine card name; push and resolve may arrive in different ruled IPC batches.
     QHash<quint32, QString> ruledEngineStackPushDescriptionsByObjectId;
