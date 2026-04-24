@@ -25,6 +25,7 @@ bool isRuledModeManaPoolCounterName(const QString &name)
     }
     return QStringLiteral("wubrgxc").contains(n.at(0), Qt::CaseInsensitive);
 }
+
 } // namespace
 #include <libcockatrice/deck_list/deck_list.h>
 #include <libcockatrice/deck_list/tree/deck_list_card_node.h>
@@ -620,6 +621,9 @@ Server_Player::cmdIncCounter(const Command_IncCounter &cmd, ResponseContainer & 
     }
 
     if (game->getRuledGame()) {
+        if (playerId != game->getRuledPriorityPlayer()) {
+            return Response::RespInvalidCommand;
+        }
         if (!isRuledModeManaPoolCounterName(c->getName())) {
             return Response::RespInvalidCommand;
         }
@@ -680,6 +684,9 @@ Server_Player::cmdSetCounter(const Command_SetCounter &cmd, ResponseContainer & 
     }
 
     if (game->getRuledGame()) {
+        if (playerId != game->getRuledPriorityPlayer()) {
+            return Response::RespInvalidCommand;
+        }
         if (!isRuledModeManaPoolCounterName(c->getName())) {
             return Response::RespInvalidCommand;
         }

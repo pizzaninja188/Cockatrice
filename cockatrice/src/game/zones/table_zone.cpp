@@ -2,6 +2,7 @@
 
 #include "../../client/settings/cache_settings.h"
 #include "../../interface/theme_manager.h"
+#include "../abstract_game.h"
 #include "../board/arrow_item.h"
 #include "../board/card_drag_item.h"
 #include "../board/card_item.h"
@@ -290,6 +291,12 @@ void TableZone::toggleTapped()
     }
 
     QList<const ::google::protobuf::Message *> cmdList;
+    const bool ruledGame = getLogic()->getPlayer()->getGame()->getGameMetaInfo()->proto().ruled_game();
+    const int localPlayerId = getLogic()->getPlayer()->getGame()->getPlayerManager()->getLocalPlayerId();
+    const int priorityPlayer = getLogic()->getPlayer()->getGame()->getGameState()->getPriorityPlayer();
+    if (ruledGame && localPlayerId != priorityPlayer) {
+        return;
+    }
     for (const auto &selectedItem : selectedItems) {
         CardItem *temp = qgraphicsitem_cast<CardItem *>(selectedItem);
         const bool wasTapped = temp->getTapped();

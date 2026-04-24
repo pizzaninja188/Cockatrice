@@ -565,6 +565,74 @@ fn cast_grizzly_bears_resolves_to_battlefield_and_taps_two_forests() {
 }
 
 #[test]
+fn non_active_player_cannot_tap_lands_for_mana() {
+    let decks = Some(vec![
+        vec![
+            "mountain".into(),
+            "lightning_bolt".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec![
+            "forest".into(),
+            "counterspell".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(144, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let mountain_idx = hand_index_for_card(&e, 0, "mountain");
+    e.apply_command(0, &play_land(mountain_idx))
+        .expect("p0 play mountain");
+
+    let forest_idx = hand_index_for_card(&e, 1, "forest");
+    let forest_oid = e.state.players[1].hand.remove(forest_idx);
+    e.state.players[1].battlefield.push(forest_oid);
+    e.state
+        .objects
+        .get_mut(&forest_oid)
+        .expect("seeded forest")
+        .zone = tricerules_core::Zone::Battlefield;
+
+    let p1_forest_oid = battlefield_object_for_card(&e, 1, "forest");
+    assert!(
+        !e.state
+            .objects
+            .get(&p1_forest_oid)
+            .expect("p1 forest")
+            .tapped
+    );
+
+    let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(0, &cast_spell(bolt_idx, vec![]))
+        .expect("p0 cast bolt");
+
+    let counter_idx = hand_index_for_card(&e, 1, "counterspell");
+    let err = e
+        .apply_command(1, &cast_spell(counter_idx, vec![]))
+        .expect_err("non-active player should not be able to tap for mana");
+    assert_eq!(
+        err.to_string(),
+        "illegal command: only active player can activate mana abilities"
+    );
+    assert!(
+        !e.state
+            .objects
+            .get(&p1_forest_oid)
+            .expect("p1 forest")
+            .tapped
+    );
+}
+
+#[test]
 fn untap_and_draw_happen_in_new_turn_sequence() {
     let decks = Some(vec![
         vec![

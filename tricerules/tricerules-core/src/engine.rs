@@ -1164,6 +1164,11 @@ fn pay_mana_simple(
     player_idx: usize,
     cost: &str,
 ) -> Result<(), EngineError> {
+    if player_idx != state.active_player_idx {
+        return Err(EngineError::Illegal(
+            "only active player can activate mana abilities",
+        ));
+    }
     let mut need_r = 0u32;
     let mut need_g = 0u32;
     let mut need_u = 0u32;

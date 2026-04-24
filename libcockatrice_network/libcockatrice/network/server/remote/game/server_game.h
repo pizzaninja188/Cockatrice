@@ -212,6 +212,10 @@ public:
     {
         return activePhase;
     }
+    int getRuledPriorityPlayer() const
+    {
+        return ruledPriorityPlayer;
+    }
     void setActivePlayer(int newPlayer);
     void setActivePhase(int newPhase);
     void removeArrows(int newPhase, bool force = false);
