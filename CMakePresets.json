@@ -1,0 +1,143 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 23, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "windows-vcpkg",
+      "hidden": true,
+      "description": "Bundled vcpkg toolchain; same as top-level CMakeLists (WIN32) / USE_VCPKG=1 (other hosts).",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" },
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "windows-msvc",
+      "hidden": true,
+      "inherits": ["windows-vcpkg"],
+      "generator": "Visual Studio 17 2022",
+      "architecture": { "value": "x64", "strategy": "set" }
+    },
+    {
+      "name": "windows-msvc-release",
+      "displayName": "Windows: MSVC 2022 x64 (Release + Debug)",
+      "description": "Matches desktop Windows CI. Project defaults: client + oracle, no servatrice/tests. Set QTDIR to a Qt 6 kit (e.g. .../msvc2022_64) before configuring.",
+      "inherits": ["windows-msvc"],
+      "binaryDir": "${sourceDir}/build/windows-msvc"
+    },
+    {
+      "name": "windows-msvc-ci",
+      "displayName": "Windows: like CI (Servatrice + tests)",
+      "description": "Same as windows-msvc-release, plus WITH_SERVER=1 and TEST=1, matching .ci/compile.sh --server --test on Windows.",
+      "inherits": ["windows-msvc"],
+      "binaryDir": "${sourceDir}/build/windows-msvc-ci",
+      "cacheVariables": {
+        "WITH_SERVER": "ON",
+        "TEST": "ON"
+      }
+    },
+    {
+      "name": "windows-msvc-ruled",
+      "displayName": "Windows: MSVC + tricerules sidecar (WITH_RULES_ENGINE)",
+      "description": "Enables the Rust tricerules build; requires cargo on PATH.",
+      "inherits": ["windows-msvc"],
+      "binaryDir": "${sourceDir}/build/windows-msvc-ruled",
+      "cacheVariables": {
+        "WITH_RULES_ENGINE": "ON"
+      }
+    },
+    {
+      "name": "unix-ninja",
+      "hidden": true,
+      "description": "Ninja (Linux / macOS desktop CI) with explicit Release/Debug cache.",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "unix-ninja-release",
+      "displayName": "Ninja, Release (README-style defaults)",
+      "description": "Typical 'mkdir build; cmake -DCMAKE_BUILD_TYPE=Release' flow; uses system packages (no USE_VCPKG) unless you set it.",
+      "inherits": ["unix-ninja"],
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "unix-ninja-debug",
+      "displayName": "Ninja, Debug",
+      "inherits": ["unix-ninja"],
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "unix-ninja-vcpkg-release",
+      "displayName": "Ninja, Release, vcpkg",
+      "description": "Useful when USE_VCPKG=1 (e.g. macOS CI) with a separate build directory.",
+      "inherits": ["unix-ninja"],
+      "binaryDir": "${sourceDir}/build/unix-ninja-vcpkg-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "USE_VCPKG": "ON",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-msvc-release",
+      "displayName": "Build Release",
+      "description": "MSBuild/VS multi-config: Release.",
+      "configurePreset": "windows-msvc-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-msvc-debug",
+      "displayName": "Build Debug",
+      "configurePreset": "windows-msvc-release",
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-msvc-ci-release",
+      "displayName": "CI: Build Release",
+      "configurePreset": "windows-msvc-ci",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-msvc-ruled-release",
+      "displayName": "Ruled: Build Release",
+      "configurePreset": "windows-msvc-ruled",
+      "configuration": "Release"
+    },
+    {
+      "name": "unix-ninja-release",
+      "displayName": "Ninja (Release) build",
+      "configurePreset": "unix-ninja-release"
+    },
+    {
+      "name": "unix-ninja-debug",
+      "displayName": "Ninja (Debug) build",
+      "configurePreset": "unix-ninja-debug"
+    },
+    {
+      "name": "unix-ninja-vcpkg-release",
+      "displayName": "Ninja vcpkg (Release) build",
+      "configurePreset": "unix-ninja-vcpkg-release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "windows-msvc-ci",
+      "displayName": "CTest (CI configure preset, Release)",
+      "description": "Requires windows-msvc-ci to be configured (WITH_SERVER, TEST=1). Uses Release config (matches CI matrix).",
+      "configurePreset": "windows-msvc-ci",
+      "configuration": "Release",
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" }
+    }
+  ]
+}
