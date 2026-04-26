@@ -163,12 +163,9 @@ void AbstractCounter::setValue(int _value)
 void AbstractCounter::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
     if (isUnderMouse() && player->getPlayerInfo()->getLocalOrJudge()) {
-        if (player && player->getPlayerActions() && event->button() == Qt::LeftButton && value > 0 &&
-            player->getPlayerActions()->tryPayRuledSpellWithCounter(name)) {
-            Command_IncCounter cmd;
-            cmd.set_counter_id(id);
-            cmd.set_delta(-1);
-            player->getPlayerActions()->sendGameCommand(cmd);
+        const bool canPayRuled = player && player->getPlayerActions() && event->button() == Qt::LeftButton && value > 0 &&
+                                 player->getPlayerActions()->tryPayRuledSpellWithCounter(name);
+        if (canPayRuled) {
             event->accept();
             return;
         }

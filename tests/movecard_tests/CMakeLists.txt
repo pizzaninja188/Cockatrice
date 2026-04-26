@@ -1,4 +1,4 @@
-add_executable(reverse_card_move_test reverse_card_move_test.cpp)
+add_executable(reverse_card_move_test ${VERSION_STRING_CPP} reverse_card_move_test.cpp)
 
 if(NOT GTEST_FOUND)
   add_dependencies(reverse_card_move_test gtest)

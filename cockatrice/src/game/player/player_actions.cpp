@@ -2,6 +2,7 @@
 
 #include "../../interface/widgets/tabs/tab_game.h"
 #include "../../interface/widgets/utility/get_text_with_max.h"
+#include "../board/abstract_counter.h"
 #include "../board/card_item.h"
 #include "../client/settings/card_counter_settings.h"
 #include "../dialogs/dlg_move_top_cards_until.h"
@@ -19,6 +20,7 @@
 #include <libcockatrice/protocol/pb/command_draw_cards.pb.h>
 #include <libcockatrice/protocol/pb/command_flip_card.pb.h>
 #include <libcockatrice/protocol/pb/command_game_say.pb.h>
+#include <libcockatrice/protocol/pb/command_inc_counter.pb.h>
 #include <libcockatrice/protocol/pb/command_move_card.pb.h>
 #include <libcockatrice/protocol/pb/command_mulligan.pb.h>
 #include <libcockatrice/protocol/pb/command_reveal_cards.pb.h>
@@ -147,6 +149,16 @@ bool PlayerActions::tryPayRuledSpellWithCounter(const QString &counterName)
         return false;
     }
     const QChar sym = n.at(0);
+    int counterId = -1;
+    for (auto it = player->getCounters().constBegin(); it != player->getCounters().constEnd(); ++it) {
+        if (it.value() && it.value()->getName().trimmed().compare(counterName.trimmed(), Qt::CaseInsensitive) == 0) {
+            counterId = it.key();
+            break;
+        }
+    }
+    if (counterId < 0) {
+        return false;
+    }
 
     if (pendingRuledSpellCast.remainingCost.value(sym, 0) > 0) {
         pendingRuledSpellCast.remainingCost[sym] -= 1;
@@ -162,6 +174,10 @@ bool PlayerActions::tryPayRuledSpellWithCounter(const QString &counterName)
         totalRemaining += it.value();
     }
 
+    Command_IncCounter cmd;
+    cmd.set_counter_id(counterId);
+    cmd.set_delta(-1);
+    sendGameCommand(cmd);
     if (totalRemaining == 0) {
         return completePendingRuledSpellCast();
     }

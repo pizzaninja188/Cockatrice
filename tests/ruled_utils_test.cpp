@@ -1,6 +1,6 @@
 #include "gtest/gtest.h"
 
-#include <libcockatrice/network/server/remote/game/ruled_utils.h>
+#include "game/ruled_utils.h"
 
 TEST(RuledUtilsTest, MapsKnownPhaseLabels)
 {

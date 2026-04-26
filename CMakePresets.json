@@ -48,6 +48,18 @@
       }
     },
     {
+      "name": "windows-msvc-all",
+      "displayName": "Windows: MSVC full build (client + server + tests + rules engine)",
+      "description": "Builds all major components by enabling WITH_SERVER, TEST, and WITH_RULES_ENGINE. Requires cargo on PATH and QTDIR set to a Qt 6 MSVC kit.",
+      "inherits": ["windows-msvc"],
+      "binaryDir": "${sourceDir}/build/windows-msvc-all",
+      "cacheVariables": {
+        "WITH_SERVER": "ON",
+        "TEST": "ON",
+        "WITH_RULES_ENGINE": "ON"
+      }
+    },
+    {
       "name": "unix-ninja",
       "hidden": true,
       "description": "Ninja (Linux / macOS desktop CI) with explicit Release/Debug cache.",
@@ -111,6 +123,13 @@
       "name": "windows-msvc-ruled-release",
       "displayName": "Ruled: Build Release",
       "configurePreset": "windows-msvc-ruled",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-msvc-all-release",
+      "displayName": "All: Build Release",
+      "description": "Builds full Windows solution (client, servatrice, tests, and tricerules sidecar) in Release.",
+      "configurePreset": "windows-msvc-all",
       "configuration": "Release"
     },
     {

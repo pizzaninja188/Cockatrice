@@ -1,5 +1,5 @@
 $ErrorActionPreference = "Stop"
-$p = Join-Path $PSScriptRoot "..\build\cockatrice\Release\cockatrice.exe" | Resolve-Path
+$p = Join-Path $PSScriptRoot "..\build\windows-msvc-all\cockatrice\Release\cockatrice.exe" | Resolve-Path
 if (-not (Test-Path -LiteralPath $p)) {
     throw "Cockatrice not found: $p"
 }
