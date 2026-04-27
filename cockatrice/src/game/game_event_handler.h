@@ -83,6 +83,9 @@ private:
     QSet<quint32> currentAttackerOids;
     // Defender's local pending block pairs: blockerOid -> attackerOid.
     QHash<quint32, quint32> pendingBlocks;
+    // Defender's locally confirmed block pairs to keep combat arrows visible
+    // after submit until combat ends (or permanents leave battlefield).
+    QHash<quint32, quint32> committedBlocks;
     // Defender's currently "armed" blocker waiting to be paired.
     quint32 stagedBlockerOid = 0;
     // Local UI guard flags: once we submit declarations for the current declare step,
@@ -124,9 +127,17 @@ public:
     {
         return pendingAttackerOids.contains(engineOid);
     }
+    [[nodiscard]] const QSet<quint32> &getPendingAttackerOids() const
+    {
+        return pendingAttackerOids;
+    }
     [[nodiscard]] bool isCurrentAttacker(quint32 engineOid) const
     {
         return currentAttackerOids.contains(engineOid);
+    }
+    [[nodiscard]] const QSet<quint32> &getCurrentAttackerOids() const
+    {
+        return currentAttackerOids;
     }
     [[nodiscard]] bool hasStagedBlocker() const
     {
@@ -143,6 +154,10 @@ public:
     [[nodiscard]] const QHash<quint32, quint32> &getPendingBlocks() const
     {
         return pendingBlocks;
+    }
+    [[nodiscard]] const QHash<quint32, quint32> &getCommittedBlocks() const
+    {
+        return committedBlocks;
     }
     [[nodiscard]] bool localPlayerIsRuledActive() const;
     [[nodiscard]] bool localPlayerIsRuledDefender() const;

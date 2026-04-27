@@ -28,6 +28,7 @@
 #include <QCompleter>
 #include <QDebug>
 #include <QDockWidget>
+#include <QGraphicsSceneMouseEvent>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMenu>
@@ -43,6 +44,59 @@
 #include <libcockatrice/protocol/pb/serverinfo_player.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_user.pb.h>
 #include <libcockatrice/utility/trice_limits.h>
+
+namespace {
+class RuledCombatArrowItem : public ArrowItem
+{
+public:
+    RuledCombatArrowItem(Player *player, ArrowTarget *startItem, ArrowTarget *targetItem, const QColor &color)
+        : ArrowItem(player, -1, startItem, targetItem, color)
+    {
+    }
+
+protected:
+    void mousePressEvent(QGraphicsSceneMouseEvent *event) override
+    {
+        event->ignore();
+    }
+};
+
+CardItem *findCardByServerId(AbstractGame *game, int cardId)
+{
+    if (!game || cardId < 0) {
+        return nullptr;
+    }
+
+    const QMap<int, Player *> &players = game->getPlayerManager()->getPlayers();
+    for (Player *player : players) {
+        if (!player) {
+            continue;
+        }
+        CardItem *card = player->getTableZone()->getCard(cardId);
+        if (card) {
+            return card;
+        }
+    }
+    return nullptr;
+}
+
+ArrowTarget *findDefendingPlayerTarget(AbstractGame *game, int activePlayerId)
+{
+    if (!game) {
+        return nullptr;
+    }
+
+    const QMap<int, Player *> &players = game->getPlayerManager()->getPlayers();
+    for (auto it = players.constBegin(); it != players.constEnd(); ++it) {
+        Player *player = it.value();
+        if (!player || player->getPlayerInfo()->getId() == activePlayerId || player->getConceded()) {
+            continue;
+        }
+        return player->getGraphicsItem()->getPlayerTarget();
+    }
+    return nullptr;
+}
+} // namespace
 
 TabGame::TabGame(TabSupervisor *_tabSupervisor, GameReplay *_replay)
     : Tab(_tabSupervisor), sayLabel(nullptr), sayEdit(nullptr), gamePromptWidget(nullptr)
@@ -166,6 +220,10 @@ void TabGame::connectToGameEventHandler()
             &TabGame::processRemotePlayerDeckSelect);
     connect(game->getGameEventHandler(), &GameEventHandler::remotePlayersDecksSelected, this,
             &TabGame::processMultipleRemotePlayerDeckSelect);
+    connect(game->getGameEventHandler(), &GameEventHandler::ruledCombatStateChanged, this,
+            &TabGame::refreshRuledCombatArrows);
+    connect(game->getGameEventHandler(), &GameEventHandler::ruledBattlefieldMapUpdated, this,
+            &TabGame::refreshRuledCombatArrows);
     if (gamePromptWidget) {
         connect(game->getGameEventHandler(), &GameEventHandler::logRuledEngine, gamePromptWidget,
                 &GamePromptWidget::setPromptFromRuledLog);
@@ -302,11 +360,92 @@ void TabGame::emitUserEvent()
 
 TabGame::~TabGame()
 {
+    clearRuledCombatArrows();
     if (replayManager) {
         delete replayManager->replay;
     }
     for (auto &player : game->getPlayerManager()->getPlayers()) {
         player->clear();
+    }
+}
+
+void TabGame::clearRuledCombatArrows()
+{
+    const QList<QPointer<ArrowItem>> arrows = ruledCombatArrows;
+    ruledCombatArrows.clear();
+    for (const QPointer<ArrowItem> &arrow : arrows) {
+        if (arrow) {
+            arrow->delArrow();
+        }
+    }
+}
+
+void TabGame::refreshRuledCombatArrows()
+{
+    clearRuledCombatArrows();
+
+    if (!game || !game->getGameMetaInfo()->proto().ruled_game()) {
+        return;
+    }
+
+    GameEventHandler *handler = game->getGameEventHandler();
+    if (!handler) {
+        return;
+    }
+
+    const auto phase = handler->getRuledCombatPhase();
+    if (phase == GameEventHandler::RuledCombatPhase::None) {
+        return;
+    }
+
+    const int localPlayerId = game->getPlayerManager()->getLocalPlayerId();
+    Player *arrowOwner = game->getPlayerManager()->getPlayers().value(localPlayerId, nullptr);
+    if (!arrowOwner) {
+        return;
+    }
+
+    QHash<quint32, quint32> blocksToDraw = handler->getCommittedBlocks();
+    const QHash<quint32, quint32> &pendingBlocks = handler->getPendingBlocks();
+    for (auto it = pendingBlocks.constBegin(); it != pendingBlocks.constEnd(); ++it) {
+        blocksToDraw.insert(it.key(), it.value());
+    }
+
+    for (auto it = blocksToDraw.constBegin(); it != blocksToDraw.constEnd(); ++it) {
+        const int blockerCardId = handler->cardIdForEngineOid(it.key());
+        const int attackerCardId = handler->cardIdForEngineOid(it.value());
+        CardItem *blockerCard = findCardByServerId(game, blockerCardId);
+        CardItem *attackerCard = findCardByServerId(game, attackerCardId);
+        if (!blockerCard || !attackerCard) {
+            continue;
+        }
+
+        auto *arrow = new RuledCombatArrowItem(arrowOwner, blockerCard, attackerCard, QColor(Qt::blue));
+        ruledCombatArrows.append(arrow);
+        scene->addItem(arrow);
+    }
+
+    QSet<quint32> attackersToDraw = handler->getCurrentAttackerOids();
+    const QSet<quint32> &pendingAttackers = handler->getPendingAttackerOids();
+    for (const quint32 oid : pendingAttackers) {
+        attackersToDraw.insert(oid);
+    }
+
+    ArrowTarget *defendingPlayerTarget = findDefendingPlayerTarget(game, handler->getRuledActivePlayerId());
+    if (!defendingPlayerTarget) {
+        return;
+    }
+
+    for (const quint32 attackerOid : attackersToDraw) {
+        const int attackerCardId = handler->cardIdForEngineOid(attackerOid);
+        CardItem *attackerCard = findCardByServerId(game, attackerCardId);
+        if (!attackerCard) {
+            continue;
+        }
+
+        auto *arrow =
+            new RuledCombatArrowItem(arrowOwner, attackerCard, defendingPlayerTarget, QColor(Qt::red));
+        ruledCombatArrows.append(arrow);
+        scene->addItem(arrow);
     }
 }
 
@@ -872,6 +1011,7 @@ void TabGame::startGame(bool _resuming)
 
 void TabGame::stopGame()
 {
+    clearRuledCombatArrows();
     QMapIterator<int, TabbedDeckViewContainer *> i(deckViewContainers);
     while (i.hasNext()) {
         i.next();

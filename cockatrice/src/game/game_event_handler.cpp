@@ -59,6 +59,9 @@ GameEventHandler::RuledCombatPhase mapRuledPhaseSlugToCombatPhase(const QString 
     if (slug == QLatin1String("combat_damage")) {
         return GameEventHandler::RuledCombatPhase::CombatDamage;
     }
+    if (slug == QLatin1String("end_combat")) {
+        return GameEventHandler::RuledCombatPhase::CombatDamage;
+    }
     return GameEventHandler::RuledCombatPhase::None;
 }
 
@@ -279,10 +282,11 @@ void GameEventHandler::pairStagedBlockerToAttacker(quint32 attackerOid)
 
 void GameEventHandler::clearPendingBlocks()
 {
-    if (pendingBlocks.isEmpty() && stagedBlockerOid == 0) {
+    if (pendingBlocks.isEmpty() && stagedBlockerOid == 0 && committedBlocks.isEmpty()) {
         return;
     }
     pendingBlocks.clear();
+    committedBlocks.clear();
     stagedBlockerOid = 0;
     emit ruledCombatStateChanged();
 }
@@ -455,6 +459,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                     // Phase transitions reset any local pending selections.
                                     pendingAttackerOids.clear();
                                     pendingBlocks.clear();
+                                    committedBlocks.clear();
                                     stagedBlockerOid = 0;
                                     if (combatPhase == RuledCombatPhase::DeclareAttackers) {
                                         attackersSubmittedThisStep = false;
@@ -479,12 +484,28 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 cardIdToEngineOid.clear();
                                 engineOidToCardId.clear();
                                 engineOidOwner.clear();
+                                QSet<quint32> validOids;
                                 for (const auto &entry : e.battlefield_object_map().entries()) {
+                                    validOids.insert(entry.engine_object_id());
                                     engineOidOwner.insert(entry.engine_object_id(), entry.player_id());
                                     if (entry.server_card_id() >= 0) {
                                         cardIdToEngineOid.insert(entry.server_card_id(), entry.engine_object_id());
                                         engineOidToCardId.insert(entry.engine_object_id(), entry.server_card_id());
                                     }
+                                }
+                                auto pruneByKnownOid = [&validOids](QHash<quint32, quint32> &pairs) {
+                                    for (auto it = pairs.begin(); it != pairs.end();) {
+                                        if (!validOids.contains(it.key()) || !validOids.contains(it.value())) {
+                                            it = pairs.erase(it);
+                                        } else {
+                                            ++it;
+                                        }
+                                    }
+                                };
+                                pruneByKnownOid(pendingBlocks);
+                                pruneByKnownOid(committedBlocks);
+                                if (stagedBlockerOid != 0 && !validOids.contains(stagedBlockerOid)) {
+                                    stagedBlockerOid = 0;
                                 }
                                 battlefieldMapDirty = true;
                                 combatStateDirty = true;
@@ -621,6 +642,7 @@ void GameEventHandler::handleConfirmRuledBlockers()
     }
     sendRuledCommandFromHandler(this, game, ruledCommand);
     blockersSubmittedThisStep = true;
+    committedBlocks = pendingBlocks;
     pendingBlocks.clear();
     stagedBlockerOid = 0;
     emit ruledCombatStateChanged();
@@ -636,6 +658,7 @@ void GameEventHandler::handleSkipRuledBlockers()
     sendRuledCommandFromHandler(this, game, ruledCommand);
     blockersSubmittedThisStep = true;
     pendingBlocks.clear();
+    committedBlocks.clear();
     stagedBlockerOid = 0;
     emit ruledCombatStateChanged();
 }

@@ -19,6 +19,7 @@
 #include <QCompleter>
 #include <QLoggingCategory>
 #include <QMap>
+#include <QPointer>
 
 class ServerInfo_PlayerProperties;
 class TabbedDeckViewContainer;
@@ -45,6 +46,7 @@ class ReplayTimelineWidget;
 class CardZone;
 class AbstractCardItem;
 class CardItem;
+class ArrowItem;
 class QVBoxLayout;
 class QHBoxLayout;
 class GameReplay;
@@ -79,6 +81,7 @@ private:
     QWidget *gamePlayAreaWidget, *deckViewContainerWidget;
     QDockWidget *cardInfoDock, *messageLayoutDock, *playerListDock, *replayDock;
     GamePromptWidget *gamePromptWidget;
+    QList<QPointer<ArrowItem>> ruledCombatArrows;
     QAction *playersSeparator;
     QMenu *gameMenu, *viewMenu;
     TearOffMenu *phasesMenu;
@@ -128,6 +131,8 @@ private:
     void createPlayAreaWidget(bool bReplay = false);
     void createDeckViewContainerWidget(bool bReplay = false);
     void createReplayDock(GameReplay *replay);
+    void clearRuledCombatArrows();
+    void refreshRuledCombatArrows();
 signals:
     void gameClosing(TabGame *tab);
     void containerProcessingStarted(const GameEventContext &context);
