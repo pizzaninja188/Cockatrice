@@ -2,6 +2,7 @@
 #define PLAYER_H
 
 #include "server_abstract_player.h"
+#include <QHash>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 
 class Server_Player : public Server_AbstractPlayer
@@ -10,13 +11,27 @@ class Server_Player : public Server_AbstractPlayer
 private:
     QMap<int, Server_Counter *> counters;
     QList<int> lastDrawList;
+    // Latest mapping between engine ObjectIds (parallel to RuledPerPlayerView::battlefield)
+    // and the corresponding Server_Card on this player's TABLE zone. Updated each
+    // applyRuledEngineZoneView; consumed by Server_Game::applyRuledBatch when translating
+    // engine-side combat events into client-visible Cockatrice events.
+    QHash<quint32, int> engineOidToServerCardId;
+    QHash<int, quint32> serverCardIdToEngineOid;
 
 public:
     struct RuledZoneSyncResult
     {
         bool handOrLibraryChanged = false;
         bool tapStateChanged = false;
+        // engine_oid -> Server_Card.id, captured this sync. Empty when sync failed.
+        QHash<quint32, int> engineOidToServerCardId;
     };
+
+    QHash<quint32, int> getEngineOidToServerCardId() const
+    {
+        return engineOidToServerCardId;
+    }
+    Server_Card *findCardByEngineOid(quint32 engineOid) const;
 
     Server_Player(Server_Game *_game,
                   int _playerId,

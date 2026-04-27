@@ -9,6 +9,7 @@
 
 #include "player/event_processing_options.h"
 
+#include <QHash>
 #include <QLoggingCategory>
 #include <QObject>
 #include <QMultiHash>
@@ -48,12 +49,46 @@ class GameEventHandler : public QObject
 {
     Q_OBJECT
 
+public:
+    enum class RuledCombatPhase
+    {
+        None,
+        DeclareAttackers,
+        DeclareBlockers,
+        CombatDamage
+    };
+
 private:
     AbstractGame *game;
     QSet<int> legalRuledLandPlayHandIndices;
     QMultiHash<QString, int> legalRuledLandPlayIndicesByCardName;
     QSet<int> legalRuledSpellCastHandIndices;
     QMultiHash<QString, int> legalRuledSpellCastIndicesByCardName;
+
+    // Server_Card.id (the wire id we see on CardItem) <-> engine ObjectId,
+    // refreshed from BattlefieldObjectMap events injected by the server.
+    QHash<int, quint32> cardIdToEngineOid;
+    QHash<quint32, int> engineOidToCardId;
+    // Engine ObjectId -> owning player id, derived from BattlefieldObjectMap entries.
+    QHash<quint32, int> engineOidOwner;
+
+    // Latest combat phase derived from PhaseChanged events.
+    RuledCombatPhase currentRuledCombatPhase = RuledCombatPhase::None;
+    // Active player as last reported by PhaseChanged (used to compute attacker/defender role).
+    int currentRuledActivePlayerId = -1;
+
+    // Active player's local pending attacker selection (engine ObjectIds).
+    QSet<quint32> pendingAttackerOids;
+    // Engine-confirmed attackers from AttackersDeclared (defender uses these to choose blocks).
+    QSet<quint32> currentAttackerOids;
+    // Defender's local pending block pairs: blockerOid -> attackerOid.
+    QHash<quint32, quint32> pendingBlocks;
+    // Defender's currently "armed" blocker waiting to be paired.
+    quint32 stagedBlockerOid = 0;
+    // Local UI guard flags: once we submit declarations for the current declare step,
+    // keep declaration controls hidden until the next combat step resets them.
+    bool attackersSubmittedThisStep = false;
+    bool blockersSubmittedThisStep = false;
 
 public:
     explicit GameEventHandler(AbstractGame *_game);
@@ -65,8 +100,66 @@ public:
     [[nodiscard]] QList<int> getRuledSpellCastHandIndicesForCardName(const QString &cardName) const;
     void emitLocalRuledLog(const QString &message);
 
+    [[nodiscard]] RuledCombatPhase getRuledCombatPhase() const
+    {
+        return currentRuledCombatPhase;
+    }
+    [[nodiscard]] int getRuledActivePlayerId() const
+    {
+        return currentRuledActivePlayerId;
+    }
+    [[nodiscard]] quint32 engineOidForCardId(int cardId) const
+    {
+        return cardIdToEngineOid.value(cardId, 0);
+    }
+    [[nodiscard]] int cardIdForEngineOid(quint32 engineOid) const
+    {
+        return engineOidToCardId.value(engineOid, -1);
+    }
+    [[nodiscard]] int playerIdForEngineOid(quint32 engineOid) const
+    {
+        return engineOidOwner.value(engineOid, -1);
+    }
+    [[nodiscard]] bool isPendingAttacker(quint32 engineOid) const
+    {
+        return pendingAttackerOids.contains(engineOid);
+    }
+    [[nodiscard]] bool isCurrentAttacker(quint32 engineOid) const
+    {
+        return currentAttackerOids.contains(engineOid);
+    }
+    [[nodiscard]] bool hasStagedBlocker() const
+    {
+        return stagedBlockerOid != 0;
+    }
+    [[nodiscard]] quint32 stagedBlocker() const
+    {
+        return stagedBlockerOid;
+    }
+    [[nodiscard]] quint32 pendingBlockTargetForBlocker(quint32 blockerOid) const
+    {
+        return pendingBlocks.value(blockerOid, 0);
+    }
+    [[nodiscard]] const QHash<quint32, quint32> &getPendingBlocks() const
+    {
+        return pendingBlocks;
+    }
+    [[nodiscard]] bool localPlayerIsRuledActive() const;
+    [[nodiscard]] bool localPlayerIsRuledDefender() const;
+
+    void togglePendingAttacker(quint32 engineOid);
+    void clearPendingAttackers();
+    void selectStagedBlocker(quint32 blockerOid);
+    void clearStagedBlocker();
+    void pairStagedBlockerToAttacker(quint32 attackerOid);
+    void clearPendingBlocks();
+
     void handleNextTurn();
     void handleReverseTurn();
+    void handleConfirmRuledAttackers();
+    void handleSkipRuledAttackers();
+    void handleConfirmRuledBlockers();
+    void handleSkipRuledBlockers();
 
     void handleActiveLocalPlayerConceded();
     void handleActiveLocalPlayerUnconceded();
@@ -144,6 +237,8 @@ signals:
     void logConcede(int playerId);
     void logUnconcede(int playerId);
     void logRuledEngine(QString message);
+    void ruledCombatStateChanged();
+    void ruledBattlefieldMapUpdated();
 };
 
 #endif // COCKATRICE_GAME_EVENT_HANDLER_H

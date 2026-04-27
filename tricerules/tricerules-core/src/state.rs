@@ -131,6 +131,10 @@ pub struct CombatState {
     pub attacking: Vec<ObjectId>,
     /// Each attacker at most one blocker
     pub blocker: HashMap<ObjectId, ObjectId>,
+    /// True once active player has finalized attackers for this combat.
+    pub attackers_declared: bool,
+    /// True after the defending player has finalized blockers for this combat.
+    pub blockers_declared: bool,
 }
 
 #[derive(Debug)]

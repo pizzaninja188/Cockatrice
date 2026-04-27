@@ -265,10 +265,11 @@ Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const
         result.handOrLibraryChanged = true;
     }
 
-    // Battlefield tap-state sync is currently applied only when caller requests it
-    // (e.g. untap phase), to avoid phase-to-phase visual regressions.
-    if (tapGes && v.battlefield_size() == v.battlefield_tapped_size() &&
-        v.battlefield_size() == tableZone->getCards().size()) {
+    // Build an engine_oid -> Server_Card id map and (when permitted) sync tap state.
+    // The map is rebuilt whenever the engine reports a battlefield, even if the caller
+    // doesn't ask for tap propagation, so combat translation in Server_Game can rely on it.
+    if (v.battlefield_size() == tableZone->getCards().size() &&
+        v.battlefield_size() == v.battlefield_object_id_size()) {
         QList<Server_Card *> tablePool = tableZone->getCards();
         QList<Server_Card *> ordered;
         ordered.reserve(v.battlefield_size());
@@ -290,26 +291,48 @@ Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const
         }
 
         if (ordered.size() == v.battlefield_size()) {
+            engineOidToServerCardId.clear();
+            serverCardIdToEngineOid.clear();
             for (int i = 0; i < ordered.size(); ++i) {
                 Server_Card *card = ordered[i];
-                const bool desiredTapped = v.battlefield_tapped(i);
-                if (!card || card->getTapped() == desiredTapped) {
+                if (!card) {
                     continue;
                 }
-                card->setTapped(desiredTapped);
-                result.tapStateChanged = true;
-                if (tapGes) {
-                    Event_SetCardAttr tapEv;
-                    tapEv.set_zone_name(std::string(ZoneNames::TABLE));
-                    tapEv.set_card_id(card->getId());
-                    tapEv.set_attribute(AttrTapped);
-                    tapEv.set_attr_value(desiredTapped ? "1" : "0");
-                    tapGes->enqueueGameEvent(tapEv, playerId);
+                const quint32 oid = static_cast<quint32>(v.battlefield_object_id(i));
+                engineOidToServerCardId.insert(oid, card->getId());
+                serverCardIdToEngineOid.insert(card->getId(), oid);
+
+                if (tapGes && i < v.battlefield_tapped_size()) {
+                    const bool desiredTapped = v.battlefield_tapped(i);
+                    if (card->getTapped() != desiredTapped) {
+                        card->setTapped(desiredTapped);
+                        result.tapStateChanged = true;
+                        Event_SetCardAttr tapEv;
+                        tapEv.set_zone_name(std::string(ZoneNames::TABLE));
+                        tapEv.set_card_id(card->getId());
+                        tapEv.set_attribute(AttrTapped);
+                        tapEv.set_attr_value(desiredTapped ? "1" : "0");
+                        tapGes->enqueueGameEvent(tapEv, playerId);
+                    }
                 }
             }
+            result.engineOidToServerCardId = engineOidToServerCardId;
         }
     }
     return result;
+}
+
+Server_Card *Server_Player::findCardByEngineOid(quint32 engineOid) const
+{
+    const auto it = engineOidToServerCardId.constFind(engineOid);
+    if (it == engineOidToServerCardId.constEnd()) {
+        return nullptr;
+    }
+    Server_CardZone *tableZone = zones.value(ZoneNames::TABLE);
+    if (!tableZone) {
+        return nullptr;
+    }
+    return tableZone->getCard(*it, nullptr, false);
 }
 
 void Server_Player::shuffleMainDeckForRuledFallback()

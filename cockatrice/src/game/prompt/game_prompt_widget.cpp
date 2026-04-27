@@ -1,6 +1,7 @@
 #include "game_prompt_widget.h"
 
 #include <QFrame>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -52,6 +53,32 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     connect(passPriorityButton, &QPushButton::clicked, this, &GamePromptWidget::passPriorityRequested);
     layout->addWidget(passPriorityButton);
 
+    auto *combatRow = new QHBoxLayout;
+    combatRow->setContentsMargins(0, 0, 0, 0);
+    combatRow->setSpacing(4);
+
+    confirmAttackersButton = new QPushButton(this);
+    confirmAttackersButton->setObjectName("confirmAttackersButton");
+    connect(confirmAttackersButton, &QPushButton::clicked, this, &GamePromptWidget::confirmAttackersRequested);
+    combatRow->addWidget(confirmAttackersButton);
+
+    skipAttackersButton = new QPushButton(this);
+    skipAttackersButton->setObjectName("skipAttackersButton");
+    connect(skipAttackersButton, &QPushButton::clicked, this, &GamePromptWidget::skipAttackersRequested);
+    combatRow->addWidget(skipAttackersButton);
+
+    confirmBlockersButton = new QPushButton(this);
+    confirmBlockersButton->setObjectName("confirmBlockersButton");
+    connect(confirmBlockersButton, &QPushButton::clicked, this, &GamePromptWidget::confirmBlockersRequested);
+    combatRow->addWidget(confirmBlockersButton);
+
+    skipBlockersButton = new QPushButton(this);
+    skipBlockersButton->setObjectName("skipBlockersButton");
+    connect(skipBlockersButton, &QPushButton::clicked, this, &GamePromptWidget::skipBlockersRequested);
+    combatRow->addWidget(skipBlockersButton);
+
+    layout->addLayout(combatRow);
+
     futureActionsLabel = new QLabel(this);
     futureActionsLabel->setObjectName("futureActionsLabel");
     layout->addWidget(futureActionsLabel);
@@ -63,6 +90,7 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     layout->addWidget(futureActionsFrame);
 
     fallbackPromptText = tr("Waiting for ruled action prompt...");
+    updateCombatButtonsVisibility();
     retranslateUi();
 }
 
@@ -74,6 +102,10 @@ void GamePromptWidget::retranslateUi()
         promptLabel->setText(fallbackPromptText);
     }
     passPriorityButton->setText(tr("Pass Priority"));
+    confirmAttackersButton->setText(tr("Confirm Attackers"));
+    skipAttackersButton->setText(tr("No Attackers"));
+    confirmBlockersButton->setText(tr("Confirm Blockers"));
+    skipBlockersButton->setText(tr("No Blockers"));
     futureActionsLabel->setText(tr("Future actions"));
     futureActionsFrame->setToolTip(tr("Reserved space for upcoming action buttons (undo land tap, undo mana, etc.)."));
 }
@@ -100,4 +132,26 @@ void GamePromptWidget::setPromptFromRuledLog(const QString &ruledLog)
 void GamePromptWidget::setPassPriorityEnabled(bool enabled)
 {
     passPriorityButton->setEnabled(enabled);
+}
+
+void GamePromptWidget::setCombatMode(CombatMode mode, bool localPlayerHasButtons)
+{
+    if (mode == currentCombatMode && localPlayerHasButtons == localPlayerHasCombatButtons) {
+        return;
+    }
+    currentCombatMode = mode;
+    localPlayerHasCombatButtons = localPlayerHasButtons;
+    updateCombatButtonsVisibility();
+}
+
+void GamePromptWidget::updateCombatButtonsVisibility()
+{
+    const bool showAttackers =
+        currentCombatMode == CombatMode::DeclareAttackers && localPlayerHasCombatButtons;
+    const bool showBlockers =
+        currentCombatMode == CombatMode::DeclareBlockers && localPlayerHasCombatButtons;
+    confirmAttackersButton->setVisible(showAttackers);
+    skipAttackersButton->setVisible(showAttackers);
+    confirmBlockersButton->setVisible(showBlockers);
+    skipBlockersButton->setVisible(showBlockers);
 }

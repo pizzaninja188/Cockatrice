@@ -53,6 +53,10 @@ class Event_GameStateChanged;
 class Server_Game : public QObject
 {
     Q_OBJECT
+    // Test-only friend: lets the ruled-batch unit test reach the otherwise-private
+    // participant map and applyRuledBatch entry point without going through the
+    // network/userInterface plumbing required by addPlayer().
+    friend class RuledBatchTest;
 private:
     Server_Room *room;
     int nextPlayerId;

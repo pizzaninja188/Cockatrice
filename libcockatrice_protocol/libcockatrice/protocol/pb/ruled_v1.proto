@@ -77,6 +77,10 @@ message RuledEvent {
     ReplayState replay_state = 7;
     LogMessage log = 8;
     ZoneViewSync zone_view = 9;
+    PermanentMoved permanent_moved = 10;
+    LifeChanged life_changed = 11;
+    BattlefieldObjectMap battlefield_object_map = 12;
+    AttackersDeclared attackers_declared = 13;
   }
 }
 
@@ -124,6 +128,10 @@ message RuledPerPlayerView {
   repeated string battlefield = 5;
   // Parallel array to `battlefield`, true if that permanent is tapped.
   repeated bool battlefield_tapped = 6;
+  // Parallel array to `battlefield`: engine-owned ObjectId for each permanent.
+  // Stable for the lifetime of the permanent on the battlefield. Used to map
+  // server-side Server_Card instances to engine objects for combat intents.
+  repeated uint32 battlefield_object_id = 7;
 }
 
 message ZoneViewSync {
@@ -141,6 +149,53 @@ message ReplayState {
 
 message LogMessage {
   string text = 1;
+}
+
+// A permanent left the battlefield (currently only graveyard via SBAs / destroy effects).
+// Servers translate this into a Cockatrice moveCard from TABLE to the destination zone.
+message PermanentMoved {
+  uint32 object_id = 1;
+  int32 owner_player_id = 2;
+  enum Destination {
+    DESTINATION_UNSPECIFIED = 0;
+    DESTINATION_GRAVEYARD = 1;
+    DESTINATION_HAND = 2;
+    DESTINATION_LIBRARY = 3;
+    DESTINATION_EXILE = 4;
+  }
+  Destination destination = 3;
+}
+
+// A player's life total changed. delta is signed (negative = loss).
+message LifeChanged {
+  int32 player_id = 1;
+  int32 new_total = 2;
+  int32 delta = 3;
+}
+
+// Server-built mapping (not engine-emitted) so clients can map a CardItem (whose
+// id is the Server_Card id on the wire) to the corresponding engine ObjectId.
+// Sent alongside ruled batches whenever battlefield membership changes.
+message BattlefieldObjectMap {
+  message Entry {
+    int32 player_id = 1;
+    uint32 engine_object_id = 2;
+    // tricerules card id (lowercase_underscore)
+    string card_id = 3;
+    // 0-based position within the controller's battlefield
+    uint32 ordinal = 4;
+    // Server_Card.id for the same permanent on the Cockatrice side; -1 if unknown.
+    int32 server_card_id = 5;
+  }
+  repeated Entry entries = 1;
+}
+
+// Engine-emitted after a successful set_attackers; lists the attacking creatures
+// so defenders' clients can highlight attackers (also drives Event_SetCardAttr
+// (AttrAttacking) translation server-side).
+message AttackersDeclared {
+  int32 attacking_player_id = 1;
+  repeated uint32 attacker_object_ids = 2;
 }
 
 // --- Sidecar TCP framing (length-prefixed IpcEnvelope) ---

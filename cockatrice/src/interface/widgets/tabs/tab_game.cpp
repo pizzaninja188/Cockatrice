@@ -180,6 +180,33 @@ void TabGame::connectToGameEventHandler()
                 gamePromptWidget->setPromptText(tr("Active player: %1").arg(player->getPlayerInfo()->getName()));
             }
         });
+        connect(game->getGameEventHandler(), &GameEventHandler::ruledCombatStateChanged, gamePromptWidget,
+                [this]() {
+                    auto *handler = game->getGameEventHandler();
+                    if (!handler) {
+                        return;
+                    }
+                    const auto phase = handler->getRuledCombatPhase();
+                    using Phase = GameEventHandler::RuledCombatPhase;
+                    GamePromptWidget::CombatMode mode = GamePromptWidget::CombatMode::None;
+                    bool localHasButtons = false;
+                    if (phase == Phase::DeclareAttackers) {
+                        mode = GamePromptWidget::CombatMode::DeclareAttackers;
+                        localHasButtons = handler->localPlayerIsRuledActive();
+                    } else if (phase == Phase::DeclareBlockers) {
+                        mode = GamePromptWidget::CombatMode::DeclareBlockers;
+                        localHasButtons = handler->localPlayerIsRuledDefender();
+                    }
+                    gamePromptWidget->setCombatMode(mode, localHasButtons);
+                });
+        connect(gamePromptWidget, &GamePromptWidget::confirmAttackersRequested, game->getGameEventHandler(),
+                &GameEventHandler::handleConfirmRuledAttackers);
+        connect(gamePromptWidget, &GamePromptWidget::skipAttackersRequested, game->getGameEventHandler(),
+                &GameEventHandler::handleSkipRuledAttackers);
+        connect(gamePromptWidget, &GamePromptWidget::confirmBlockersRequested, game->getGameEventHandler(),
+                &GameEventHandler::handleConfirmRuledBlockers);
+        connect(gamePromptWidget, &GamePromptWidget::skipBlockersRequested, game->getGameEventHandler(),
+                &GameEventHandler::handleSkipRuledBlockers);
     }
 }
 

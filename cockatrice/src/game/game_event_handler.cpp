@@ -48,6 +48,20 @@ struct ParsedRuledCastActions
     QMultiHash<QString, int> handIndicesByCardName;
 };
 
+GameEventHandler::RuledCombatPhase mapRuledPhaseSlugToCombatPhase(const QString &slug)
+{
+    if (slug == QLatin1String("declare_attackers")) {
+        return GameEventHandler::RuledCombatPhase::DeclareAttackers;
+    }
+    if (slug == QLatin1String("declare_blockers")) {
+        return GameEventHandler::RuledCombatPhase::DeclareBlockers;
+    }
+    if (slug == QLatin1String("combat_damage")) {
+        return GameEventHandler::RuledCombatPhase::CombatDamage;
+    }
+    return GameEventHandler::RuledCombatPhase::None;
+}
+
 int mapRuledPhaseSlugToToolbarPhase(const QString &slug)
 {
     if (slug == QLatin1String("untap")) {
@@ -184,6 +198,93 @@ QList<int> GameEventHandler::getRuledSpellCastHandIndicesForCardName(const QStri
 void GameEventHandler::emitLocalRuledLog(const QString &message)
 {
     emit logRuledEngine(message);
+}
+
+bool GameEventHandler::localPlayerIsRuledActive() const
+{
+    const int localId = game->getPlayerManager()->getLocalPlayerId();
+    if (localId < 0 || currentRuledActivePlayerId < 0) {
+        return false;
+    }
+    if (currentRuledCombatPhase == RuledCombatPhase::DeclareAttackers) {
+        return localId == currentRuledActivePlayerId && !attackersSubmittedThisStep;
+    }
+    return localId == currentRuledActivePlayerId;
+}
+
+bool GameEventHandler::localPlayerIsRuledDefender() const
+{
+    const int localId = game->getPlayerManager()->getLocalPlayerId();
+    if (localId < 0 || currentRuledActivePlayerId < 0) {
+        return false;
+    }
+    if (currentRuledCombatPhase == RuledCombatPhase::DeclareBlockers) {
+        return localId != currentRuledActivePlayerId && !blockersSubmittedThisStep;
+    }
+    return localId != currentRuledActivePlayerId;
+}
+
+void GameEventHandler::togglePendingAttacker(quint32 engineOid)
+{
+    if (engineOid == 0) {
+        return;
+    }
+    if (pendingAttackerOids.contains(engineOid)) {
+        pendingAttackerOids.remove(engineOid);
+    } else {
+        pendingAttackerOids.insert(engineOid);
+    }
+    emit ruledCombatStateChanged();
+}
+
+void GameEventHandler::clearPendingAttackers()
+{
+    if (pendingAttackerOids.isEmpty()) {
+        return;
+    }
+    pendingAttackerOids.clear();
+    emit ruledCombatStateChanged();
+}
+
+void GameEventHandler::selectStagedBlocker(quint32 blockerOid)
+{
+    if (stagedBlockerOid == blockerOid) {
+        return;
+    }
+    stagedBlockerOid = blockerOid;
+    emit ruledCombatStateChanged();
+}
+
+void GameEventHandler::clearStagedBlocker()
+{
+    if (stagedBlockerOid == 0) {
+        return;
+    }
+    stagedBlockerOid = 0;
+    emit ruledCombatStateChanged();
+}
+
+void GameEventHandler::pairStagedBlockerToAttacker(quint32 attackerOid)
+{
+    if (stagedBlockerOid == 0 || attackerOid == 0) {
+        return;
+    }
+    if (!currentAttackerOids.contains(attackerOid)) {
+        return;
+    }
+    pendingBlocks.insert(stagedBlockerOid, attackerOid);
+    stagedBlockerOid = 0;
+    emit ruledCombatStateChanged();
+}
+
+void GameEventHandler::clearPendingBlocks()
+{
+    if (pendingBlocks.isEmpty() && stagedBlockerOid == 0) {
+        return;
+    }
+    pendingBlocks.clear();
+    stagedBlockerOid = 0;
+    emit ruledCombatStateChanged();
 }
 
 void GameEventHandler::sendGameCommand(PendingCommand *pend, int playerId)
@@ -329,6 +430,8 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                     legalRuledSpellCastIndicesByCardName.clear();
                     if (batch.ParseFromString(ruled.payload())) {
                         QString lines;
+                        bool combatStateDirty = false;
+                        bool battlefieldMapDirty = false;
                         for (const auto &e : batch.events()) {
                             if (e.has_log()) {
                                 lines += QString::fromStdString(e.log().text()) + QLatin1Char('\n');
@@ -343,11 +446,65 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 if (mappedPhase >= 0) {
                                     game->getGameState()->setCurrentPhase(mappedPhase);
                                 }
+                                const RuledCombatPhase combatPhase =
+                                    mapRuledPhaseSlugToCombatPhase(QString::fromStdString(pc.phase()));
+                                if (combatPhase != currentRuledCombatPhase ||
+                                    currentRuledActivePlayerId != pc.active_player_id()) {
+                                    currentRuledCombatPhase = combatPhase;
+                                    currentRuledActivePlayerId = pc.active_player_id();
+                                    // Phase transitions reset any local pending selections.
+                                    pendingAttackerOids.clear();
+                                    pendingBlocks.clear();
+                                    stagedBlockerOid = 0;
+                                    if (combatPhase == RuledCombatPhase::DeclareAttackers) {
+                                        attackersSubmittedThisStep = false;
+                                    } else if (combatPhase == RuledCombatPhase::DeclareBlockers) {
+                                        blockersSubmittedThisStep = false;
+                                    } else if (combatPhase == RuledCombatPhase::None) {
+                                        attackersSubmittedThisStep = false;
+                                        blockersSubmittedThisStep = false;
+                                    }
+                                    if (combatPhase == RuledCombatPhase::None) {
+                                        currentAttackerOids.clear();
+                                    }
+                                    combatStateDirty = true;
+                                }
                             }
                             if (e.has_priority_changed()) {
                                 game->getGameState()->setPriorityPlayer(e.priority_changed().player_id());
                                 lines +=
                                     QStringLiteral("Priority: P%1\n").arg(e.priority_changed().player_id());
+                            }
+                            if (e.has_battlefield_object_map()) {
+                                cardIdToEngineOid.clear();
+                                engineOidToCardId.clear();
+                                engineOidOwner.clear();
+                                for (const auto &entry : e.battlefield_object_map().entries()) {
+                                    engineOidOwner.insert(entry.engine_object_id(), entry.player_id());
+                                    if (entry.server_card_id() >= 0) {
+                                        cardIdToEngineOid.insert(entry.server_card_id(), entry.engine_object_id());
+                                        engineOidToCardId.insert(entry.engine_object_id(), entry.server_card_id());
+                                    }
+                                }
+                                battlefieldMapDirty = true;
+                                combatStateDirty = true;
+                            }
+                            if (e.has_attackers_declared()) {
+                                currentAttackerOids.clear();
+                                for (const auto oid : e.attackers_declared().attacker_object_ids()) {
+                                    currentAttackerOids.insert(oid);
+                                }
+                                // Active player's pending picks are now committed; clear them.
+                                pendingAttackerOids.clear();
+                                attackersSubmittedThisStep = true;
+                                combatStateDirty = true;
+                            }
+                            if (e.has_life_changed()) {
+                                const auto &lc = e.life_changed();
+                                lines += QStringLiteral("Life: P%1 -> %2 (delta %3)\n")
+                                             .arg(lc.player_id())
+                                             .arg(lc.new_total())
+                                             .arg(lc.delta());
                             }
                         }
                         const auto lit =
@@ -370,6 +527,12 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             legalRuledSpellCastIndicesByCardName.clear();
                         }
                         emit logRuledEngine(lines);
+                        if (battlefieldMapDirty) {
+                            emit ruledBattlefieldMapUpdated();
+                        }
+                        if (combatStateDirty) {
+                            emit ruledCombatStateChanged();
+                        }
                     }
                     break;
                 }
@@ -392,6 +555,89 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
 void GameEventHandler::handleNextTurn()
 {
     sendGameCommand(Command_NextTurn());
+}
+
+namespace {
+void sendRuledCommandFromHandler(GameEventHandler *handler,
+                                 AbstractGame *game,
+                                 const ruled::v1::RuledCommand &ruledCommand)
+{
+    AbstractClient *client = game->getClientForPlayer(-1);
+    if (!client) {
+        return;
+    }
+    std::string payload;
+    if (!ruledCommand.SerializeToString(&payload)) {
+        return;
+    }
+    Command_RuledPayload cmd;
+    cmd.set_payload(payload);
+    PendingCommand *pend = handler->prepareGameCommand(cmd);
+    QObject::connect(pend, &PendingCommand::finished, handler, &GameEventHandler::commandFinished);
+    client->sendCommand(pend);
+}
+} // namespace
+
+void GameEventHandler::handleConfirmRuledAttackers()
+{
+    if (!game->getGameMetaInfo()->proto().ruled_game()) {
+        return;
+    }
+    ruled::v1::RuledCommand ruledCommand;
+    auto *declare = ruledCommand.mutable_declare_attackers();
+    for (const quint32 oid : pendingAttackerOids) {
+        declare->add_creature_ids(oid);
+    }
+    sendRuledCommandFromHandler(this, game, ruledCommand);
+    attackersSubmittedThisStep = true;
+    pendingAttackerOids.clear();
+    emit ruledCombatStateChanged();
+}
+
+void GameEventHandler::handleSkipRuledAttackers()
+{
+    if (!game->getGameMetaInfo()->proto().ruled_game()) {
+        return;
+    }
+    ruled::v1::RuledCommand ruledCommand;
+    ruledCommand.mutable_declare_attackers();
+    sendRuledCommandFromHandler(this, game, ruledCommand);
+    attackersSubmittedThisStep = true;
+    pendingAttackerOids.clear();
+    emit ruledCombatStateChanged();
+}
+
+void GameEventHandler::handleConfirmRuledBlockers()
+{
+    if (!game->getGameMetaInfo()->proto().ruled_game()) {
+        return;
+    }
+    ruled::v1::RuledCommand ruledCommand;
+    auto *declare = ruledCommand.mutable_declare_blockers();
+    for (auto it = pendingBlocks.constBegin(); it != pendingBlocks.constEnd(); ++it) {
+        auto *pair = declare->add_block_pairs();
+        pair->set_blocker_id(it.key());
+        pair->set_attacker_id(it.value());
+    }
+    sendRuledCommandFromHandler(this, game, ruledCommand);
+    blockersSubmittedThisStep = true;
+    pendingBlocks.clear();
+    stagedBlockerOid = 0;
+    emit ruledCombatStateChanged();
+}
+
+void GameEventHandler::handleSkipRuledBlockers()
+{
+    if (!game->getGameMetaInfo()->proto().ruled_game()) {
+        return;
+    }
+    ruled::v1::RuledCommand ruledCommand;
+    ruledCommand.mutable_declare_blockers();
+    sendRuledCommandFromHandler(this, game, ruledCommand);
+    blockersSubmittedThisStep = true;
+    pendingBlocks.clear();
+    stagedBlockerOid = 0;
+    emit ruledCombatStateChanged();
 }
 
 void GameEventHandler::handleReverseTurn()

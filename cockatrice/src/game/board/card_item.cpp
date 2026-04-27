@@ -3,6 +3,7 @@
 #include "../../client/settings/cache_settings.h"
 #include "../../interface/widgets/tabs/tab_game.h"
 #include "../abstract_game.h"
+#include "../game_event_handler.h"
 #include "../game_scene.h"
 #include "../phase.h"
 #include "../player/player.h"
@@ -18,6 +19,7 @@
 #include <QGraphicsSceneMouseEvent>
 #include <QMenu>
 #include <QPainter>
+#include <QPen>
 #include <libcockatrice/card/card_info.h>
 #include <libcockatrice/protocol/pb/serverinfo_card.pb.h>
 
@@ -31,6 +33,13 @@ CardItem::CardItem(Player *_owner, QGraphicsItem *parent, const CardRef &cardRef
         if (counters.contains(counterId))
             update();
     });
+
+    if (auto *game = owner ? owner->getGame() : nullptr) {
+        if (auto *handler = game->getGameEventHandler()) {
+            connect(handler, &GameEventHandler::ruledCombatStateChanged, this, [this]() { update(); });
+            connect(handler, &GameEventHandler::ruledBattlefieldMapUpdated, this, [this]() { update(); });
+        }
+    }
 }
 
 void CardItem::prepareDelete()
@@ -140,6 +149,38 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
         painter->drawPath(shape());
 
         painter->restore();
+    }
+
+    if (auto *game = owner ? owner->getGame() : nullptr) {
+        if (game->getGameMetaInfo()->proto().ruled_game()) {
+            if (auto *handler = game->getGameEventHandler()) {
+                const quint32 oid = handler->engineOidForCardId(id);
+                if (oid != 0) {
+                    QColor outlineColor;
+                    if (handler->isPendingAttacker(oid)) {
+                        outlineColor = QColor(255, 215, 0); // gold for pending attackers
+                    } else if (handler->stagedBlocker() == oid) {
+                        outlineColor = QColor(0, 255, 128); // green for staged blocker
+                    } else if (handler->pendingBlockTargetForBlocker(oid) != 0) {
+                        outlineColor = QColor(80, 160, 255); // blue for paired blocker
+                    } else if (handler->isCurrentAttacker(oid) && !attacking) {
+                        // Engine has confirmed this attacker but the AttrAttacking event
+                        // may not have arrived yet — draw a faint marker.
+                        outlineColor = QColor(255, 80, 80, 200); // red-ish
+                    }
+                    if (outlineColor.isValid()) {
+                        painter->save();
+                        painter->setRenderHint(QPainter::Antialiasing, true);
+                        QPen pen;
+                        pen.setColor(outlineColor);
+                        pen.setWidth(3);
+                        painter->setPen(pen);
+                        painter->drawPath(shape());
+                        painter->restore();
+                    }
+                }
+            }
+        }
     }
 
     painter->restore();
@@ -468,6 +509,85 @@ static bool isTableLandSingleClickLegal(const CardItem *card)
     return card->getCardInfo().getCardType().contains("Land", Qt::CaseInsensitive);
 }
 
+namespace {
+GameEventHandler *ruledHandlerForCard(const CardItem *card)
+{
+    if (!card || !card->getOwner() || !card->getOwner()->getGame()) {
+        return nullptr;
+    }
+    auto *game = card->getOwner()->getGame();
+    if (!game->getGameMetaInfo()->proto().ruled_game()) {
+        return nullptr;
+    }
+    return game->getGameEventHandler();
+}
+
+bool isCombatEligibleCreature(const CardItem *card)
+{
+    if (!card || !card->getZone()) {
+        return false;
+    }
+    if (card->getZone()->getName() != ZoneNames::TABLE) {
+        return false;
+    }
+    if (card->getFaceDown()) {
+        return false;
+    }
+    return card->getCardInfo().getCardType().contains("Creature", Qt::CaseInsensitive);
+}
+
+// Try to handle a left-click as a ruled-mode combat input.
+// Returns true if the click was consumed by combat handling.
+bool handleRuledCombatClick(CardItem *card)
+{
+    GameEventHandler *handler = ruledHandlerForCard(card);
+    if (!handler) {
+        return false;
+    }
+    if (!isCombatEligibleCreature(card)) {
+        return false;
+    }
+    const quint32 oid = handler->engineOidForCardId(card->getId());
+    if (oid == 0) {
+        return false;
+    }
+    const auto phase = handler->getRuledCombatPhase();
+    using Phase = GameEventHandler::RuledCombatPhase;
+    Player *owner = card->getOwner();
+    const bool ownCreature = owner && owner->getPlayerInfo()->getLocal();
+
+    if (phase == Phase::DeclareAttackers && handler->localPlayerIsRuledActive() && ownCreature) {
+        if (card->getTapped()) {
+            return false;
+        }
+        handler->togglePendingAttacker(oid);
+        return true;
+    }
+
+    if (phase == Phase::DeclareBlockers && handler->localPlayerIsRuledDefender()) {
+        if (ownCreature) {
+            if (card->getTapped()) {
+                return false;
+            }
+            // Toggle: clicking the staged blocker again clears the staging.
+            if (handler->stagedBlocker() == oid) {
+                handler->clearStagedBlocker();
+            } else {
+                handler->selectStagedBlocker(oid);
+            }
+            return true;
+        }
+        // Clicked an enemy creature — pair with the staged blocker if it's an attacker.
+        if (handler->hasStagedBlocker() && handler->isCurrentAttacker(oid)) {
+            handler->pairStagedBlockerToAttacker(oid);
+            return true;
+        }
+    }
+
+    return false;
+}
+} // namespace
+
 /**
  * This method is called when a "click to play" is done on the card.
  * This is either triggered by a single click or double click, depending on the settings.
@@ -498,11 +618,20 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
                 return;
             }
         }
-    } else if ((event->modifiers() != Qt::AltModifier) && (event->button() == Qt::LeftButton) &&
-               (!SettingsCache::instance().getDoubleClickToPlay() || isRuledLandSingleClickLegal(this) ||
-                isRuledSpellSingleClickLegal(this) ||
-                isTableLandSingleClickLegal(this))) {
-        handleClickedToPlay(event->modifiers().testFlag(Qt::ShiftModifier));
+    } else if ((event->modifiers() != Qt::AltModifier) && (event->button() == Qt::LeftButton)) {
+        // Ruled-mode combat clicks take priority over normal play handling on the table.
+        if (handleRuledCombatClick(this)) {
+            update();
+            if (owner != nullptr) {
+                setCursor(Qt::OpenHandCursor);
+            }
+            AbstractCardItem::mouseReleaseEvent(event);
+            return;
+        }
+        if (!SettingsCache::instance().getDoubleClickToPlay() || isRuledLandSingleClickLegal(this) ||
+            isRuledSpellSingleClickLegal(this) || isTableLandSingleClickLegal(this)) {
+            handleClickedToPlay(event->modifiers().testFlag(Qt::ShiftModifier));
+        }
     }
 
     if (owner != nullptr) { // cards without owner will be deleted

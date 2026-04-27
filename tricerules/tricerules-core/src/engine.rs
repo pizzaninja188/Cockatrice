@@ -162,10 +162,22 @@ impl GameEngine {
             Some(Cmd::PassPriority(_)) => {
                 if self.state.turn_step == TurnStep::DeclareAttackers
                     && self.state.active_player_id() == player
+                    && self
+                        .state
+                        .combat
+                        .as_ref()
+                        .map(|c| !c.attackers_declared)
+                        .unwrap_or(false)
                 {
                     self.set_attackers(&[], player)
                 } else if self.state.turn_step == TurnStep::DeclareBlockers
                     && Some(player) == self.state.defending_player_id_1v1()
+                    && self
+                        .state
+                        .combat
+                        .as_ref()
+                        .map(|c| !c.blockers_declared)
+                        .unwrap_or(false)
                 {
                     self.set_blockers(&[])
                 } else {
@@ -261,26 +273,43 @@ impl GameEngine {
                 c.tapped = true;
             }
         }
-        self.state.combat = Some(CombatState {
-            attacking: list,
-            blocker: HashMap::new(),
-        });
+        let attackers_for_event = list.clone();
+        if let Some(c) = self.state.combat.as_mut() {
+            c.attacking = list;
+            c.blocker.clear();
+            c.attackers_declared = true;
+            c.blockers_declared = false;
+        } else {
+            self.state.combat = Some(CombatState {
+                attacking: list,
+                blocker: HashMap::new(),
+                attackers_declared: true,
+                blockers_declared: false,
+            });
+        }
         self.clear_all_mana_pools();
-        self.state.turn_step = TurnStep::DeclareBlockers;
-        if let Some(d) = self.state.defending_player_id_1v1() {
-            if let Some(di) = self.state.player_idx(d) {
-                self.state.priority_idx = di;
-            }
+        // MTG timing: after attackers are declared, the game remains in declare-attackers
+        // and the active player receives priority before moving to declare blockers.
+        self.state.turn_step = TurnStep::DeclareAttackers;
+        if let Some(ai) = self.state.player_idx(ap) {
+            self.state.priority_idx = ai;
         }
         self.state.passes_since_stack_change = 0;
         let mut b = RuledEventBatch::default();
+        b.events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::AttackersDeclared(
+                rv1::AttackersDeclared {
+                    attacking_player_id: ap,
+                    attacker_object_ids: attackers_for_event,
+                },
+            )),
+        });
         b.events
-            .push(ev_log("Attackers committed — blockers?".to_string()));
-        b.events.push(ev_log(
-            "Declare blockers (defense has priority)".to_string(),
-        ));
-        b.events.push(ev_phase_labeled(self, "declare_blockers"));
+            .push(ev_log("Attackers committed — priority in declare attackers".to_string()));
         b.events.push(ev_priority_changed(self));
+        b.events.push(ev_log(
+            "Pass priority to proceed to declare blockers".to_string(),
+        ));
         Ok(b)
     }
 
@@ -325,36 +354,33 @@ impl GameEngine {
             for p in pairs {
                 c.blocker.insert(p.attacker_id, p.blocker_id);
             }
+            c.blockers_declared = true;
         }
-        let c = self
-            .state
-            .combat
-            .clone()
-            .ok_or(EngineError::Illegal("combat?"))?;
-        self.resolve_combat_damage(&c)?;
-        self.state.combat = None;
+        let mut b = RuledEventBatch::default();
         self.clear_all_mana_pools();
-        self.state.turn_step = TurnStep::CombatDamage;
+        // MTG timing: blockers are declared in declare-blockers, then players get priority
+        // before the game advances into combat-damage where damage is actually dealt.
+        self.state.turn_step = TurnStep::DeclareBlockers;
         if let Some(i) = self.state.player_idx(self.state.active_player_id()) {
             self.state.priority_idx = i;
         }
         self.state.passes_since_stack_change = 0;
-        self.apply_legend_sbas()?;
-        let mut b = RuledEventBatch::default();
         b.events.push(ev_log(
-            "Combat damage: blocked creatures trade; unblocked hits defending player".to_string(),
+            "Blockers declared — active player receives priority before combat damage"
+                .to_string(),
         ));
-        b.events.push(ev_log(
-            "Combat damage dealt (priority in combat damage step)".to_string(),
-        ));
-        b.events.push(ev_phase_labeled(self, "combat_damage"));
         b.events.push(ev_priority_changed(self));
         fill_legal(&mut b, self);
         Ok(b)
     }
 
-    fn resolve_combat_damage(&mut self, c: &CombatState) -> Result<(), EngineError> {
+    fn resolve_combat_damage(
+        &mut self,
+        c: &CombatState,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
         let dfd = self.state.defending_player_id_1v1().unwrap();
+        let mut total_life_lost: i32 = 0;
         for &att in &c.attacking {
             if self.state.objects.get(&att).map(|a| a.zone) != Some(Zone::Battlefield) {
                 continue;
@@ -387,7 +413,20 @@ impl GameEngine {
                     .unwrap_or(0) as i32;
                 if let Some(di) = self.state.player_idx(dfd) {
                     self.state.players[di].life -= p;
+                    total_life_lost += p;
                 }
+            }
+        }
+        if total_life_lost > 0 {
+            if let Some(di) = self.state.player_idx(dfd) {
+                let new_total = self.state.players[di].life;
+                events.push(rv1::RuledEvent {
+                    ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                        player_id: dfd,
+                        new_total,
+                        delta: -total_life_lost,
+                    })),
+                });
             }
         }
         Ok(())
@@ -587,8 +626,52 @@ impl GameEngine {
                 self.state.combat = Some(CombatState {
                     attacking: vec![],
                     blocker: HashMap::new(),
+                    attackers_declared: false,
+                    blockers_declared: false,
                 });
                 ev.push(ev_phase_labeled(self, "declare_attackers"));
+                ev.push(ev_priority_changed(self));
+            }
+            DeclareAttackers => {
+                self.clear_all_mana_pools();
+                self.state.turn_step = DeclareBlockers;
+                if let Some(d) = self.state.defending_player_id_1v1() {
+                    if let Some(di) = self.state.player_idx(d) {
+                        self.state.priority_idx = di;
+                    }
+                }
+                self.state.passes_since_stack_change = 0;
+                ev.push(ev_log(
+                    "Declare blockers (defense has priority)".to_string(),
+                ));
+                ev.push(ev_phase_labeled(self, "declare_blockers"));
+                ev.push(ev_priority_changed(self));
+            }
+            DeclareBlockers => {
+                // Advancing out of declare-blockers is where combat damage is dealt.
+                let c = self
+                    .state
+                    .combat
+                    .clone()
+                    .ok_or(EngineError::Illegal("combat?"))?;
+                self.resolve_combat_damage(&c, ev)?;
+                self.state.combat = None;
+                self.clear_all_mana_pools();
+                self.state.turn_step = CombatDamage;
+                if let Some(i) = self.state.player_idx(ap) {
+                    self.state.priority_idx = i;
+                }
+                self.state.passes_since_stack_change = 0;
+                let legend_events = self.apply_legend_sbas()?;
+                ev.extend(legend_events);
+                ev.push(ev_log(
+                    "Combat damage: blocked creatures trade; unblocked hits defending player"
+                        .to_string(),
+                ));
+                ev.push(ev_log(
+                    "Combat damage dealt (priority in combat damage step)".to_string(),
+                ));
+                ev.push(ev_phase_labeled(self, "combat_damage"));
                 ev.push(ev_priority_changed(self));
             }
             CombatDamage => {
@@ -673,7 +756,8 @@ impl GameEngine {
             self.state.priority_idx = i;
         }
         self.state.passes_since_stack_change = 0;
-        self.apply_legend_sbas()?;
+        let legend_events = self.apply_legend_sbas()?;
+        ev.extend(legend_events);
         self.apply_sbas(&mut ev)?;
         ev.push(ev_log(format!(
             "Turn {} — new active P{}, upkeep",
@@ -893,7 +977,7 @@ impl GameEngine {
         Ok(batch)
     }
 
-    fn apply_sbas(&mut self, out: &mut [rv1::RuledEvent]) -> Result<(), EngineError> {
+    fn apply_sbas(&mut self, out: &mut Vec<rv1::RuledEvent>) -> Result<(), EngineError> {
         let mut to_destroy = Vec::new();
         for (&id, o) in &self.state.objects {
             if o.zone == Zone::Battlefield {
@@ -905,16 +989,25 @@ impl GameEngine {
             }
         }
         for id in to_destroy {
-            let _ = destroy_permanent(&mut self.state, id);
-        }
-        if !out.is_empty() {
-            // leave room for SBA log if we actually destroyed
+            let owner = self.state.objects.get(&id).map(|o| o.owner);
+            if destroy_permanent(&mut self.state, id).is_ok() {
+                if let Some(owner_id) = owner {
+                    out.push(rv1::RuledEvent {
+                        ev: Some(rv1::ruled_event::Ev::PermanentMoved(rv1::PermanentMoved {
+                            object_id: id,
+                            owner_player_id: owner_id,
+                            destination: rv1::permanent_moved::Destination::Graveyard as i32,
+                        })),
+                    });
+                }
+            }
         }
         Ok(())
     }
 
-    fn apply_legend_sbas(&mut self) -> Result<(), EngineError> {
+    fn apply_legend_sbas(&mut self) -> Result<Vec<rv1::RuledEvent>, EngineError> {
         let mut by_name: HashMap<String, Vec<ObjectId>> = HashMap::new();
+        let mut out = Vec::new();
         for (&id, o) in &self.state.objects {
             if o.zone != Zone::Battlefield {
                 continue;
@@ -935,10 +1028,21 @@ impl GameEngine {
                 continue;
             }
             for &g in ids.iter().skip(1) {
-                let _ = destroy_permanent(&mut self.state, g);
+                let owner = self.state.objects.get(&g).map(|o| o.owner);
+                if destroy_permanent(&mut self.state, g).is_ok() {
+                    if let Some(owner_id) = owner {
+                        out.push(rv1::RuledEvent {
+                            ev: Some(rv1::ruled_event::Ev::PermanentMoved(rv1::PermanentMoved {
+                                object_id: g,
+                                owner_player_id: owner_id,
+                                destination: rv1::permanent_moved::Destination::Graveyard as i32,
+                            })),
+                        });
+                    }
+                }
             }
         }
-        Ok(())
+        Ok(out)
     }
 
     pub fn initial_response_batch(&self) -> RuledEventBatch {
@@ -1035,6 +1139,7 @@ impl GameEngine {
                             .unwrap_or(false)
                     })
                     .collect(),
+                battlefield_object_id: p.battlefield.iter().map(|&oid| oid).collect(),
             })
             .collect();
         RuledEvent {

@@ -55,6 +55,7 @@
 #include <libcockatrice/protocol/pb/event_join.pb.h>
 #include <libcockatrice/protocol/pb/event_kicked.pb.h>
 #include <libcockatrice/protocol/pb/event_leave.pb.h>
+#include <libcockatrice/protocol/pb/event_set_card_attr.pb.h>
 #include <libcockatrice/protocol/pb/event_set_counter.pb.h>
 #include <libcockatrice/protocol/pb/event_player_properties_changed.pb.h>
 #include <libcockatrice/protocol/pb/event_replay_added.pb.h>
@@ -1127,13 +1128,25 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
     }
 
     GameEventStorage tapSyncGes;
-    bool batchContainsUntap = false;
+    // Capture the pre-batch engine_oid -> Server_Card map per player. The engine has
+    // already removed dead permanents from its battlefield, so the upcoming zone-view
+    // sync will rebuild the map without them. We need the *prior* mapping to translate
+    // PermanentMoved events into moveCard(...) calls below.
+    QHash<int, QHash<quint32, int>> preBatchOidMaps;
+    for (Server_AbstractPlayer *ab : getPlayers().values()) {
+        if (!ab) {
+            continue;
+        }
+        preBatchOidMaps.insert(ab->getPlayerId(),
+                               static_cast<Server_Player *>(ab)->getEngineOidToServerCardId());
+    }
+
+    // First pass: phase / priority / zone view + tap sync, plus stack resolution.
+    // Tap state propagates from the engine on every batch — declare attackers, mana
+    // payment, and untap all use this path (no longer gated on an explicit untap event).
     for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
         const auto &e = resp.batch().events(ei);
         if (e.has_phase_changed()) {
-            if (e.phase_changed().phase() == "untap") {
-                batchContainsUntap = true;
-            }
             const int newActive = e.phase_changed().active_player_id();
             if (newActive >= 0 && getActivePlayer() != newActive) {
                 setActivePlayer(newActive);
@@ -1168,9 +1181,8 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
         }
         for (const auto &p : e.zone_view().per_player()) {
             if (Server_AbstractPlayer *ab = getPlayer(p.player_id())) {
-                GameEventStorage *tapGesPtr = batchContainsUntap ? &tapSyncGes : nullptr;
                 const Server_Player::RuledZoneSyncResult sync =
-                    static_cast<Server_Player *>(ab)->applyRuledEngineZoneView(p, tapGesPtr);
+                    static_cast<Server_Player *>(ab)->applyRuledEngineZoneView(p, &tapSyncGes);
                 result.handOrLibraryChanged = result.handOrLibraryChanged || sync.handOrLibraryChanged;
                 result.tapStateEventsQueued = result.tapStateEventsQueued || sync.tapStateChanged;
                 result.zoneViewApplied = true;
@@ -1179,6 +1191,125 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
     }
     if (result.tapStateEventsQueued) {
         tapSyncGes.sendToGame(this);
+    }
+
+    // Second pass: combat-related events that depend on the freshly-built engine OID
+    // map (PermanentMoved, LifeChanged, AttackersDeclared) and that synthesize standard
+    // Cockatrice events for clients.
+    GameEventStorage combatGes;
+    bool combatGesHasEvents = false;
+    for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
+        const auto &e = resp.batch().events(ei);
+        if (e.has_permanent_moved()) {
+            const auto &pm = e.permanent_moved();
+            const int ownerId = pm.owner_player_id();
+            const quint32 oid = static_cast<quint32>(pm.object_id());
+            Server_AbstractPlayer *owner = getPlayer(ownerId);
+            if (!owner) {
+                continue;
+            }
+            Server_CardZone *tableZone = owner->getZones().value(ZoneNames::TABLE);
+            if (!tableZone) {
+                continue;
+            }
+            // Look the dead permanent up in the pre-batch map: the engine already
+            // removed it from its current battlefield, so the freshly-rebuilt map
+            // doesn't contain it.
+            const auto preIt = preBatchOidMaps.constFind(ownerId);
+            if (preIt == preBatchOidMaps.constEnd()) {
+                continue;
+            }
+            const auto cardIdIt = preIt->constFind(oid);
+            if (cardIdIt == preIt->constEnd()) {
+                continue;
+            }
+            Server_Card *card = tableZone->getCard(*cardIdIt, nullptr, false);
+            if (!card) {
+                continue;
+            }
+            const char *destZone = ZoneNames::GRAVE;
+            switch (pm.destination()) {
+                case ruled::v1::PermanentMoved::DESTINATION_HAND:
+                    destZone = ZoneNames::HAND;
+                    break;
+                case ruled::v1::PermanentMoved::DESTINATION_LIBRARY:
+                    destZone = ZoneNames::DECK;
+                    break;
+                case ruled::v1::PermanentMoved::DESTINATION_EXILE:
+                    destZone = ZoneNames::EXILE;
+                    break;
+                case ruled::v1::PermanentMoved::DESTINATION_GRAVEYARD:
+                default:
+                    destZone = ZoneNames::GRAVE;
+                    break;
+            }
+            Server_CardZone *targetZone = owner->getZones().value(destZone);
+            if (!targetZone) {
+                continue;
+            }
+            CardToMove cardToMove;
+            cardToMove.set_card_id(card->getId());
+            if (owner->moveCard(combatGes, tableZone, QList<const CardToMove *>() << &cardToMove, targetZone, -1,
+                                0, true) == Response::RespOk) {
+                combatGesHasEvents = true;
+            }
+        }
+        if (e.has_life_changed()) {
+            const auto &lc = e.life_changed();
+            Server_AbstractPlayer *target = getPlayer(lc.player_id());
+            if (!target) {
+                continue;
+            }
+            auto *targetPlayer = static_cast<Server_Player *>(target);
+            // Life is stored on the per-player counter id 0 ("life"). Update both server
+            // state and broadcast a SetCounter event so clients render the change.
+            const auto &allCounters = targetPlayer->getCounters();
+            Server_Counter *lifeCounter = allCounters.value(0, nullptr);
+            if (!lifeCounter || lifeCounter->getName() != QStringLiteral("life")) {
+                // Fall back: search by name. Counter ids are stable in practice but be defensive.
+                for (Server_Counter *c : allCounters) {
+                    if (c && c->getName() == QStringLiteral("life")) {
+                        lifeCounter = c;
+                        break;
+                    }
+                }
+            }
+            if (!lifeCounter) {
+                continue;
+            }
+            lifeCounter->setCount(lc.new_total());
+            Event_SetCounter ev;
+            ev.set_counter_id(lifeCounter->getId());
+            ev.set_value(lifeCounter->getCount());
+            combatGes.enqueueGameEvent(ev, target->getPlayerId());
+            combatGesHasEvents = true;
+        }
+        if (e.has_attackers_declared()) {
+            const auto &ad = e.attackers_declared();
+            Server_AbstractPlayer *attacker = getPlayer(ad.attacking_player_id());
+            if (!attacker) {
+                continue;
+            }
+            auto *attackerPlayer = static_cast<Server_Player *>(attacker);
+            for (int i = 0; i < ad.attacker_object_ids_size(); ++i) {
+                const quint32 oid = static_cast<quint32>(ad.attacker_object_ids(i));
+                Server_Card *card = attackerPlayer->findCardByEngineOid(oid);
+                if (!card) {
+                    continue;
+                }
+                card->setAttacking(true);
+                Event_SetCardAttr attEv;
+                attEv.set_zone_name(std::string(ZoneNames::TABLE));
+                attEv.set_card_id(card->getId());
+                attEv.set_attribute(AttrAttacking);
+                attEv.set_attr_value("1");
+                combatGes.enqueueGameEvent(attEv, attacker->getPlayerId());
+                combatGesHasEvents = true;
+            }
+        }
+    }
+    if (combatGesHasEvents) {
+        combatGes.sendToGame(this);
     }
     return result;
 }
@@ -1195,6 +1326,57 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
     stripRuledZoneViewForBroadcast(&toSend);
     if (!toSend.has_batch()) {
         return;
+    }
+    // Append a server-built BattlefieldObjectMap so clients can map their visible
+    // CardItem (Server_Card.id) back to the engine ObjectId that DeclareAttackers /
+    // DeclareBlockers expects. This is rebuilt every batch from the latest sync.
+    {
+        ruled::v1::RuledEvent mapEvent;
+        auto *map = mapEvent.mutable_battlefield_object_map();
+        for (Server_AbstractPlayer *ab : getPlayers().values()) {
+            if (!ab) {
+                continue;
+            }
+            auto *pl = static_cast<Server_Player *>(ab);
+            const QHash<quint32, int> oidMap = pl->getEngineOidToServerCardId();
+            Server_CardZone *tableZone = pl->getZones().value(ZoneNames::TABLE);
+            int ordinal = 0;
+            // Iterate the table zone in current order so `ordinal` matches the
+            // controller-order seen in RuledPerPlayerView.battlefield.
+            if (tableZone) {
+                for (Server_Card *card : tableZone->getCards()) {
+                    if (!card) {
+                        continue;
+                    }
+                    QString tr = card->getName().toLower();
+                    tr.replace(' ', '_');
+                    quint32 engineOid = 0;
+                    bool found = false;
+                    for (auto it = oidMap.constBegin(); it != oidMap.constEnd(); ++it) {
+                        if (it.value() == card->getId()) {
+                            engineOid = it.key();
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        ++ordinal;
+                        continue;
+                    }
+                    auto *entry = map->add_entries();
+                    entry->set_player_id(pl->getPlayerId());
+                    entry->set_engine_object_id(engineOid);
+                    entry->set_card_id(tr.toStdString());
+                    entry->set_ordinal(static_cast<uint32_t>(ordinal));
+                    entry->set_server_card_id(card->getId());
+                    ++ordinal;
+                }
+            }
+        }
+        // Only inject when we have something useful so trivial batches stay small.
+        if (map->entries_size() > 0) {
+            *toSend.mutable_batch()->add_events() = mapEvent;
+        }
     }
     const ruled::v1::RuledEventBatch &batch = toSend.batch();
     for (auto *participant : participants) {

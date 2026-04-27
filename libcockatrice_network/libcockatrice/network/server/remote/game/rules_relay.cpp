@@ -67,7 +67,10 @@ bool RulesRelay::writeFrame(const google::protobuf::Message &msg)
     if (socket->write(data.data(), static_cast<qint64>(data.size())) != static_cast<qint64>(data.size())) {
         return false;
     }
-    return socket->waitForBytesWritten(3000);
+    if (!socket->waitForBytesWritten(3000)) {
+        return false;
+    }
+    return true;
 }
 
 bool RulesRelay::readFrame(QByteArray &out)
@@ -79,7 +82,7 @@ bool RulesRelay::readFrame(QByteArray &out)
     {
         int got = 0;
         while (got < 4) {
-            if (!socket->waitForReadyRead(5000)) {
+            if (socket->bytesAvailable() <= 0 && !socket->waitForReadyRead(5000)) {
                 return false;
             }
             const qint64 n = socket->read(lenLeRaw + got, 4 - got);
@@ -100,7 +103,7 @@ bool RulesRelay::readFrame(QByteArray &out)
     out.resize(static_cast<int>(len));
     qint64 got = 0;
     while (got < static_cast<qint64>(len)) {
-        if (!socket->waitForReadyRead(5000)) {
+        if (socket->bytesAvailable() <= 0 && !socket->waitForReadyRead(5000)) {
             return false;
         }
         const qint64 n = socket->read(out.data() + got, static_cast<qint64>(len) - got);

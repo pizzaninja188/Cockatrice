@@ -385,11 +385,29 @@ fn declare_attackers_handoff_emits_defender_priority() {
         .expect("declare attackers");
     assert_eq!(
         e.state.turn_step,
+        tricerules_core::TurnStep::DeclareAttackers
+    );
+    assert!(
+        priority_changes_in(&b).contains(&0),
+        "after declaring attackers, active player keeps priority in declare attackers"
+    );
+    let to_defender = e
+        .apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    assert!(
+        priority_changes_in(&to_defender).contains(&1),
+        "defender should receive priority in declare attackers"
+    );
+    let to_blockers = e
+        .apply_command(1, &pass())
+        .expect("defender pass declare attackers");
+    assert_eq!(
+        e.state.turn_step,
         tricerules_core::TurnStep::DeclareBlockers
     );
     assert!(
-        priority_changes_in(&b).contains(&1),
-        "defending player should get priority in declare blockers"
+        priority_changes_in(&to_blockers).contains(&1),
+        "on entering declare blockers, defender has priority"
     );
 }
 
@@ -465,7 +483,29 @@ fn blockers_to_combat_damage_emits_priority_stop() {
     let bears_oid = battlefield_object_for_card(&e, 0, "grizzly_bears");
     e.apply_command(0, &declare_attackers(vec![bears_oid]))
         .expect("declare attackers");
-    let b = e.apply_command(1, &pass()).expect("defender no blocks");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass declare attackers");
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareBlockers
+    );
+    let declare_blockers_batch = e.apply_command(1, &pass()).expect("defender no blocks");
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareBlockers,
+        "declaring no blockers should not immediately deal combat damage"
+    );
+    assert!(
+        priority_changes_in(&declare_blockers_batch).contains(&0),
+        "after blockers are declared, active player gets priority in declare blockers"
+    );
+    e.apply_command(0, &pass())
+        .expect("active pass declare blockers");
+    let b = e
+        .apply_command(1, &pass())
+        .expect("defender pass declare blockers -> combat damage");
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::CombatDamage);
     assert!(
         priority_changes_in(&b).contains(&0),
@@ -905,6 +945,10 @@ fn same_blocker_cannot_block_two_attackers() {
         .expect("second attacker");
     e.apply_command(0, &declare_attackers(vec![attacker_a, attacker_b]))
         .expect("declare two attackers");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass declare attackers");
     let blocker = battlefield_object_for_card(&e, 1, "grizzly_bears");
 
     let err = e
@@ -926,4 +970,364 @@ fn same_blocker_cannot_block_two_attackers() {
         err.to_string(),
         "illegal command: blocker assigned more than once"
     );
+}
+
+fn put_creature_on_battlefield(e: &mut GameEngine, player: usize, card_id: &str) -> u32 {
+    let idx = hand_index_for_card(e, player, card_id);
+    let oid = e.state.players[player].hand.remove(idx);
+    e.state.players[player].battlefield.push(oid);
+    if let Some(obj) = e.state.objects.get_mut(&oid) {
+        obj.zone = tricerules_core::Zone::Battlefield;
+        obj.summoning_sick = false;
+        obj.tapped = false;
+    }
+    oid
+}
+
+fn advance_to_declare_attackers(e: &mut GameEngine) {
+    advance_to_main1_from_game_start(e);
+    e.apply_command(0, &primitive_yield())
+        .expect("main1 to begin combat");
+    e.apply_command(0, &pass()).expect("ap pass begin combat");
+    e.apply_command(1, &pass()).expect("nap pass begin combat");
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareAttackers
+    );
+}
+
+fn life_changes_in(
+    batch: &tricerules_proto::ruled::v1::RuledEventBatch,
+) -> Vec<tricerules_proto::ruled::v1::LifeChanged> {
+    batch
+        .events
+        .iter()
+        .filter_map(|ev| match &ev.ev {
+            Some(Ev::LifeChanged(lc)) => Some(lc.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+fn permanents_moved_in(
+    batch: &tricerules_proto::ruled::v1::RuledEventBatch,
+) -> Vec<tricerules_proto::ruled::v1::PermanentMoved> {
+    batch
+        .events
+        .iter()
+        .filter_map(|ev| match &ev.ev {
+            Some(Ev::PermanentMoved(pm)) => Some(pm.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+fn attackers_declared_in(
+    batch: &tricerules_proto::ruled::v1::RuledEventBatch,
+) -> Vec<tricerules_proto::ruled::v1::AttackersDeclared> {
+    batch
+        .events
+        .iter()
+        .filter_map(|ev| match &ev.ev {
+            Some(Ev::AttackersDeclared(ad)) => Some(ad.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn zone_view_includes_battlefield_object_ids() {
+    let decks = Some(vec![
+        vec![
+            "forest".into(),
+            "grizzly_bears".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+        vec![
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(404, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let bears = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    // ZoneViewSync is emitted as part of every batch via apply_command's tail.
+    let b = e.apply_command(0, &pass()).expect("ap pass main1");
+    let zone_view = b
+        .events
+        .iter()
+        .find_map(|ev| match &ev.ev {
+            Some(Ev::ZoneView(zv)) => Some(zv.clone()),
+            _ => None,
+        })
+        .expect("zone view in batch");
+    let p0 = zone_view
+        .per_player
+        .iter()
+        .find(|p| p.player_id == 0)
+        .expect("p0 view");
+    assert_eq!(p0.battlefield_object_id.len(), p0.battlefield.len());
+    let pos = p0
+        .battlefield
+        .iter()
+        .position(|c| c == "grizzly_bears")
+        .expect("bears in view");
+    assert_eq!(p0.battlefield_object_id[pos], bears);
+}
+
+#[test]
+fn declare_attackers_emits_attackers_declared_event() {
+    let mut e = GameEngine::new(505, &[0, 1], 20, None).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let bears = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let b = e
+        .apply_command(0, &declare_attackers(vec![bears]))
+        .expect("declare attackers");
+    let evs = attackers_declared_in(&b);
+    assert_eq!(evs.len(), 1, "exactly one AttackersDeclared event");
+    assert_eq!(evs[0].attacking_player_id, 0);
+    assert_eq!(evs[0].attacker_object_ids, vec![bears]);
+}
+
+#[test]
+fn unblocked_combat_damage_emits_life_changed() {
+    let mut e = GameEngine::new(606, &[0, 1], 20, None).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let bears_a = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let bears_b = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    e.apply_command(0, &declare_attackers(vec![bears_a, bears_b]))
+        .expect("two attackers");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass declare attackers");
+    let declared = e.apply_command(1, &pass()).expect("defender no blocks");
+    assert!(
+        life_changes_in(&declared).is_empty(),
+        "no damage during declare blockers immediately after no-block declaration"
+    );
+    e.apply_command(0, &pass())
+        .expect("active pass declare blockers");
+    let b = e
+        .apply_command(1, &pass())
+        .expect("defender pass declare blockers -> combat damage");
+    let life = life_changes_in(&b);
+    assert_eq!(life.len(), 1, "single LifeChanged event for defender");
+    assert_eq!(life[0].player_id, 1);
+    assert_eq!(life[0].delta, -4, "two 2/2s deal 4 damage");
+    assert_eq!(life[0].new_total, 16);
+    assert_eq!(e.state.players[1].life, 16);
+}
+
+#[test]
+fn blocked_combat_kills_blocker_and_emits_permanent_moved() {
+    let decks = Some(vec![
+        vec![
+            "forest".into(),
+            "grizzly_bears".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+        vec![
+            "forest".into(),
+            "grizzly_bears".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(707, &[0, 1], 20, decks).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let attacker = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    // Defender needs a creature on the battlefield to block. Put a 2/2 too -> mutual destruction.
+    let blocker = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass declare attackers");
+    let declared = e
+        .apply_command(
+            1,
+            &declare_blockers(vec![BlockPair {
+                attacker_id: attacker,
+                blocker_id: blocker,
+            }]),
+        )
+        .expect("declare blocker");
+    assert!(
+        permanents_moved_in(&declared).is_empty(),
+        "creatures should not die until combat damage step"
+    );
+    e.apply_command(0, &pass())
+        .expect("active pass declare blockers");
+    let b = e
+        .apply_command(1, &pass())
+        .expect("defender pass declare blockers -> combat damage");
+    let dead = permanents_moved_in(&b);
+    let dead_ids: Vec<u32> = dead.iter().map(|p| p.object_id).collect();
+    assert!(
+        dead_ids.contains(&attacker) && dead_ids.contains(&blocker),
+        "both 2/2s die in mutual block, got {dead_ids:?}"
+    );
+    for pm in &dead {
+        assert_eq!(
+            pm.destination,
+            tricerules_proto::ruled::v1::permanent_moved::Destination::Graveyard as i32
+        );
+    }
+    // No life loss on a mutual block.
+    let life = life_changes_in(&b);
+    assert!(life.is_empty(), "no life change on a fully blocked combat");
+}
+
+#[test]
+fn full_combat_2v1_trade_and_life_loss() {
+    // Active player has two 2/2 attackers; defender has one 2/2 blocker.
+    // Active player attacks with both. Defender blocks attacker_a only.
+    // Outcome: attacker_a + blocker trade (both move to graveyard); attacker_b
+    // hits the defender for 2 unblocked damage.
+    let decks = Some(vec![
+        vec![
+            "forest".into(),
+            "grizzly_bears".into(),
+            "grizzly_bears".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+        vec![
+            "forest".into(),
+            "grizzly_bears".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(808, &[0, 1], 20, decks).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let attacker_a = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let attacker_b = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let blocker = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+
+    // Snapshot pre-combat state we care about.
+    let attacker_a_pre_tapped = e
+        .state
+        .objects
+        .get(&attacker_a)
+        .map(|o| o.tapped)
+        .unwrap_or(true);
+    let attacker_b_pre_tapped = e
+        .state
+        .objects
+        .get(&attacker_b)
+        .map(|o| o.tapped)
+        .unwrap_or(true);
+    assert!(!attacker_a_pre_tapped, "attacker_a should be untapped pre-combat");
+    assert!(!attacker_b_pre_tapped, "attacker_b should be untapped pre-combat");
+
+    // Declare attackers.
+    let attack_batch = e
+        .apply_command(0, &declare_attackers(vec![attacker_a, attacker_b]))
+        .expect("declare two attackers");
+    let ad = attackers_declared_in(&attack_batch);
+    assert_eq!(ad.len(), 1);
+    assert_eq!(ad[0].attacking_player_id, 0);
+    let mut declared_ids = ad[0].attacker_object_ids.clone();
+    declared_ids.sort();
+    let mut expected = vec![attacker_a, attacker_b];
+    expected.sort();
+    assert_eq!(declared_ids, expected, "both attackers reported");
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareAttackers,
+        "after attackers are declared, still in declare attackers until priority passes"
+    );
+
+    // Engine should auto-tap attackers.
+    assert!(
+        e.state.objects.get(&attacker_a).map(|o| o.tapped).unwrap_or(false),
+        "attacker_a tapped on attack"
+    );
+    assert!(
+        e.state.objects.get(&attacker_b).map(|o| o.tapped).unwrap_or(false),
+        "attacker_b tapped on attack"
+    );
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass declare attackers");
+
+    // Declare blockers: only attacker_a is blocked.
+    let declared_blockers_batch = e
+        .apply_command(
+            1,
+            &declare_blockers(vec![BlockPair {
+                attacker_id: attacker_a,
+                blocker_id: blocker,
+            }]),
+        )
+        .expect("declare blocker");
+    assert!(
+        permanents_moved_in(&declared_blockers_batch).is_empty(),
+        "no deaths during blocker declaration itself"
+    );
+    assert!(
+        life_changes_in(&declared_blockers_batch).is_empty(),
+        "no life loss during blocker declaration itself"
+    );
+    e.apply_command(0, &pass())
+        .expect("active pass declare blockers");
+    let block_batch = e
+        .apply_command(1, &pass())
+        .expect("defender pass declare blockers -> combat damage");
+
+    // Mutual destruction on the blocked pair -> both go to graveyard.
+    let dead = permanents_moved_in(&block_batch);
+    let dead_ids: Vec<u32> = dead.iter().map(|p| p.object_id).collect();
+    assert!(
+        dead_ids.contains(&attacker_a),
+        "attacker_a dies in trade, got {dead_ids:?}"
+    );
+    assert!(
+        dead_ids.contains(&blocker),
+        "blocker dies in trade, got {dead_ids:?}"
+    );
+    assert!(
+        !dead_ids.contains(&attacker_b),
+        "attacker_b survives, got {dead_ids:?}"
+    );
+    for pm in &dead {
+        assert_eq!(
+            pm.destination,
+            tricerules_proto::ruled::v1::permanent_moved::Destination::Graveyard as i32,
+            "trade victims go to graveyard"
+        );
+    }
+
+    // Defender takes 2 from attacker_b's unblocked damage.
+    let life = life_changes_in(&block_batch);
+    assert_eq!(life.len(), 1, "exactly one life change event");
+    assert_eq!(life[0].player_id, 1);
+    assert_eq!(life[0].delta, -2, "attacker_b deals 2 unblocked");
+    assert_eq!(life[0].new_total, 18);
+    assert_eq!(e.state.players[1].life, 18);
 }
