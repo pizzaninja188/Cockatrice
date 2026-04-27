@@ -99,6 +99,16 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
 
     QSizeF translatedSize = getTranslatedSize(painter);
     qreal scaleFactor = translatedSize.width() / boundingRect().width();
+    GameEventHandler *ruledHandler = nullptr;
+    quint32 ruledOid = 0;
+    if (auto *game = owner ? owner->getGame() : nullptr) {
+        if (game->getGameMetaInfo()->proto().ruled_game()) {
+            ruledHandler = game->getGameEventHandler();
+            if (ruledHandler) {
+                ruledOid = ruledHandler->engineOidForCardId(id);
+            }
+        }
+    }
 
     if (!pt.isEmpty()) {
         painter->save();
@@ -119,7 +129,17 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
         painter->restore();
     }
 
-    if (!annotation.isEmpty()) {
+    QString renderedAnnotation = annotation;
+    if (ruledHandler && ruledOid != 0 && ruledHandler->isEngineOidSummoningSick(ruledOid)) {
+        if (!renderedAnnotation.contains(QStringLiteral("summoning sick"), Qt::CaseInsensitive)) {
+            if (!renderedAnnotation.isEmpty()) {
+                renderedAnnotation += QLatin1Char('\n');
+            }
+            renderedAnnotation += QStringLiteral("summoning sick");
+        }
+    }
+
+    if (!renderedAnnotation.isEmpty()) {
         painter->save();
 
         transformPainter(painter, translatedSize, tapAngle);
@@ -129,7 +149,7 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
 
         painter->drawText(QRectF(4 * scaleFactor, 4 * scaleFactor, translatedSize.width() - 8 * scaleFactor,
                                  translatedSize.height() - 8 * scaleFactor),
-                          Qt::AlignCenter | Qt::TextWrapAnywhere, annotation);
+                          Qt::AlignCenter | Qt::TextWrapAnywhere, renderedAnnotation);
         painter->restore();
     }
 
@@ -151,19 +171,16 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
         painter->restore();
     }
 
-    if (auto *game = owner ? owner->getGame() : nullptr) {
-        if (game->getGameMetaInfo()->proto().ruled_game()) {
-            if (auto *handler = game->getGameEventHandler()) {
-                const quint32 oid = handler->engineOidForCardId(id);
-                if (oid != 0) {
+    if (ruledHandler) {
+        if (ruledOid != 0) {
                     QColor outlineColor;
-                    if (handler->isPendingAttacker(oid)) {
+                    if (ruledHandler->isPendingAttacker(ruledOid)) {
                         outlineColor = QColor(255, 215, 0); // gold for pending attackers
-                    } else if (handler->stagedBlocker() == oid) {
+                    } else if (ruledHandler->stagedBlocker() == ruledOid) {
                         outlineColor = QColor(0, 255, 128); // green for staged blocker
-                    } else if (handler->pendingBlockTargetForBlocker(oid) != 0) {
+                    } else if (ruledHandler->pendingBlockTargetForBlocker(ruledOid) != 0) {
                         outlineColor = QColor(80, 160, 255); // blue for paired blocker
-                    } else if (handler->isCurrentAttacker(oid) && !attacking) {
+                    } else if (ruledHandler->isCurrentAttacker(ruledOid) && !attacking) {
                         // Engine has confirmed this attacker but the AttrAttacking event
                         // may not have arrived yet — draw a faint marker.
                         outlineColor = QColor(255, 80, 80, 200); // red-ish
@@ -179,8 +196,6 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
                         painter->restore();
                     }
                 }
-            }
-        }
     }
 
     painter->restore();
@@ -558,6 +573,9 @@ bool handleRuledCombatClick(CardItem *card)
 
     if (phase == Phase::DeclareAttackers && handler->localPlayerIsRuledActive() && ownCreature) {
         if (card->getTapped()) {
+            return false;
+        }
+        if (handler->isEngineOidSummoningSick(oid)) {
             return false;
         }
         handler->togglePendingAttacker(oid);

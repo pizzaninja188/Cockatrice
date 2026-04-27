@@ -1140,6 +1140,17 @@ impl GameEngine {
                     })
                     .collect(),
                 battlefield_object_id: p.battlefield.iter().map(|&oid| oid).collect(),
+                battlefield_summoning_sick: p
+                    .battlefield
+                    .iter()
+                    .map(|&oid| {
+                        self.state
+                            .objects
+                            .get(&oid)
+                            .map(|o| o.summoning_sick)
+                            .unwrap_or(false)
+                    })
+                    .collect(),
             })
             .collect();
         RuledEvent {

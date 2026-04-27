@@ -132,6 +132,8 @@ message RuledPerPlayerView {
   // Stable for the lifetime of the permanent on the battlefield. Used to map
   // server-side Server_Card instances to engine objects for combat intents.
   repeated uint32 battlefield_object_id = 7;
+  // Parallel array to `battlefield`, true if that permanent is summoning sick.
+  repeated bool battlefield_summoning_sick = 8;
 }
 
 message ZoneViewSync {
@@ -186,6 +188,8 @@ message BattlefieldObjectMap {
     uint32 ordinal = 4;
     // Server_Card.id for the same permanent on the Cockatrice side; -1 if unknown.
     int32 server_card_id = 5;
+    // True if this permanent currently has summoning sickness.
+    bool summoning_sick = 6;
   }
   repeated Entry entries = 1;
 }

@@ -71,6 +71,8 @@ private:
     QHash<quint32, int> engineOidToCardId;
     // Engine ObjectId -> owning player id, derived from BattlefieldObjectMap entries.
     QHash<quint32, int> engineOidOwner;
+    // Engine ObjectId -> summoning sickness state from BattlefieldObjectMap entries.
+    QHash<quint32, bool> engineOidSummoningSick;
 
     // Latest combat phase derived from PhaseChanged events.
     RuledCombatPhase currentRuledCombatPhase = RuledCombatPhase::None;
@@ -122,6 +124,10 @@ public:
     [[nodiscard]] int playerIdForEngineOid(quint32 engineOid) const
     {
         return engineOidOwner.value(engineOid, -1);
+    }
+    [[nodiscard]] bool isEngineOidSummoningSick(quint32 engineOid) const
+    {
+        return engineOidSummoningSick.value(engineOid, false);
     }
     [[nodiscard]] bool isPendingAttacker(quint32 engineOid) const
     {

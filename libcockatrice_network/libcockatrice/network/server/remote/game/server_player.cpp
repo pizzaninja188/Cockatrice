@@ -293,6 +293,7 @@ Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const
         if (ordered.size() == v.battlefield_size()) {
             engineOidToServerCardId.clear();
             serverCardIdToEngineOid.clear();
+            engineOidToSummoningSick.clear();
             for (int i = 0; i < ordered.size(); ++i) {
                 Server_Card *card = ordered[i];
                 if (!card) {
@@ -301,6 +302,9 @@ Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const
                 const quint32 oid = static_cast<quint32>(v.battlefield_object_id(i));
                 engineOidToServerCardId.insert(oid, card->getId());
                 serverCardIdToEngineOid.insert(card->getId(), oid);
+                const bool summoningSick = (i < v.battlefield_summoning_sick_size()) ? v.battlefield_summoning_sick(i)
+                                                                                      : false;
+                engineOidToSummoningSick.insert(oid, summoningSick);
 
                 if (tapGes && i < v.battlefield_tapped_size()) {
                     const bool desiredTapped = v.battlefield_tapped(i);

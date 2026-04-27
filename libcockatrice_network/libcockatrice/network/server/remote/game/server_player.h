@@ -17,6 +17,7 @@ private:
     // engine-side combat events into client-visible Cockatrice events.
     QHash<quint32, int> engineOidToServerCardId;
     QHash<int, quint32> serverCardIdToEngineOid;
+    QHash<quint32, bool> engineOidToSummoningSick;
 
 public:
     struct RuledZoneSyncResult
@@ -30,6 +31,10 @@ public:
     QHash<quint32, int> getEngineOidToServerCardId() const
     {
         return engineOidToServerCardId;
+    }
+    bool isEngineOidSummoningSick(quint32 engineOid) const
+    {
+        return engineOidToSummoningSick.value(engineOid, false);
     }
     Server_Card *findCardByEngineOid(quint32 engineOid) const;
 
