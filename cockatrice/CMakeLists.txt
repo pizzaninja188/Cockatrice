@@ -74,6 +74,7 @@ set(cockatrice_SOURCES
     src/game/game.cpp
     src/game/game_event_handler.cpp
     src/game/game_meta_info.cpp
+    src/game/prompt/game_prompt_widget.cpp
     src/game/game_scene.cpp
     src/game/game_state.cpp
     src/game/game_view.cpp

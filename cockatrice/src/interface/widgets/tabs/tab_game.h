@@ -51,6 +51,7 @@ class GameReplay;
 class LineEditCompleter;
 class QDockWidget;
 class QStackedWidget;
+class GamePromptWidget;
 
 class TabGame : public Tab
 {
@@ -77,6 +78,7 @@ private:
     QVBoxLayout *deckViewContainerLayout;
     QWidget *gamePlayAreaWidget, *deckViewContainerWidget;
     QDockWidget *cardInfoDock, *messageLayoutDock, *playerListDock, *replayDock;
+    GamePromptWidget *gamePromptWidget;
     QAction *playersSeparator;
     QMenu *gameMenu, *viewMenu;
     TearOffMenu *phasesMenu;

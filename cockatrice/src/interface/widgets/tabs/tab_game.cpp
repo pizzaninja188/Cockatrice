@@ -12,6 +12,7 @@
 #include "../game/phases_toolbar.h"
 #include "../game/player/player.h"
 #include "../game/player/player_list_widget.h"
+#include "../game/prompt/game_prompt_widget.h"
 #include "../game/replay.h"
 #include "../interface/card_picture_loader/card_picture_loader.h"
 #include "../interface/widgets/cards/card_info_frame_widget.h"
@@ -44,7 +45,7 @@
 #include <libcockatrice/utility/trice_limits.h>
 
 TabGame::TabGame(TabSupervisor *_tabSupervisor, GameReplay *_replay)
-    : Tab(_tabSupervisor), sayLabel(nullptr), sayEdit(nullptr)
+    : Tab(_tabSupervisor), sayLabel(nullptr), sayEdit(nullptr), gamePromptWidget(nullptr)
 {
     // THIS CTOR IS USED ON REPLAY
     game = new Replay(this, _replay);
@@ -88,7 +89,7 @@ TabGame::TabGame(TabSupervisor *_tabSupervisor,
                  QList<AbstractClient *> &_clients,
                  const Event_GameJoined &event,
                  const QMap<int, QString> &_roomGameTypes)
-    : Tab(_tabSupervisor), userListProxy(_tabSupervisor->getUserListManager())
+    : Tab(_tabSupervisor), userListProxy(_tabSupervisor->getUserListManager()), gamePromptWidget(nullptr)
 {
     // THIS CTOR IS USED ON GAMES
     game = new Game(this, _clients, event, _roomGameTypes);
@@ -165,6 +166,21 @@ void TabGame::connectToGameEventHandler()
             &TabGame::processRemotePlayerDeckSelect);
     connect(game->getGameEventHandler(), &GameEventHandler::remotePlayersDecksSelected, this,
             &TabGame::processMultipleRemotePlayerDeckSelect);
+    if (gamePromptWidget) {
+        connect(game->getGameEventHandler(), &GameEventHandler::logRuledEngine, gamePromptWidget,
+                &GamePromptWidget::setPromptFromRuledLog);
+        connect(game->getGameEventHandler(), &GameEventHandler::logActivePhaseChanged, gamePromptWidget,
+                [this](int phase) {
+                    if (phasesToolbar && phase >= 0 && phase < phasesToolbar->phaseCount()) {
+                        gamePromptWidget->setPromptText(tr("Phase: %1").arg(phasesToolbar->getLongPhaseName(phase)));
+                    }
+                });
+        connect(game->getGameEventHandler(), &GameEventHandler::logActivePlayer, gamePromptWidget, [this](Player *player) {
+            if (player) {
+                gamePromptWidget->setPromptText(tr("Active player: %1").arg(player->getPlayerInfo()->getName()));
+            }
+        });
+    }
 }
 
 void TabGame::connectMessageLogToGameEventHandler()
@@ -361,6 +377,9 @@ void TabGame::retranslateUi()
     aResetLayout->setText(tr("Reset layout"));
 
     cardInfoFrameWidget->retranslateUi();
+    if (gamePromptWidget) {
+        gamePromptWidget->retranslateUi();
+    }
 
     QMapIterator<int, Player *> i(game->getPlayerManager()->getPlayers());
 
@@ -1235,6 +1254,16 @@ void TabGame::createMessageDock(bool bReplay)
         connect(game->getGameState(), &GameState::updateTimeElapsedLabel, this, &TabGame::updateTimeElapsedLabel);
 
         messageLogLayout->addWidget(timeElapsedLabel);
+    }
+
+    if (!bReplay && game->getGameMetaInfo()->proto().ruled_game()) {
+        gamePromptWidget = new GamePromptWidget(this);
+        gamePromptWidget->setPassPriorityEnabled(true);
+        connect(gamePromptWidget, &GamePromptWidget::passPriorityRequested, game->getGameEventHandler(),
+                &GameEventHandler::handleNextTurn);
+        messageLogLayout->addWidget(gamePromptWidget);
+    } else {
+        gamePromptWidget = nullptr;
     }
 
     // message log
