@@ -247,6 +247,11 @@ bool PlayerActions::tryPlayRuledLand(CardItem *card)
 
 bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
 {
+    const int handIndex = card && card->getZone() ? card->getZone()->getCards().indexOf(card) : -1;
+    const int ruledHandIndexPreview =
+        (card && handIndex >= 0)
+            ? player->getGame()->getGameEventHandler()->getRuledSpellCastHandIndexForCard(card->getName(), handIndex)
+            : -1;
     if (!card || !player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
         return false;
     }
@@ -257,13 +262,21 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
         return false;
     }
 
-    const int handIndex = card->getZone()->getCards().indexOf(card);
     if (handIndex < 0) {
         return false;
     }
-    const int ruledHandIndex =
-        player->getGame()->getGameEventHandler()->getRuledSpellCastHandIndexForCard(card->getName(), handIndex);
+    const int ruledHandIndex = ruledHandIndexPreview;
     if (ruledHandIndex < 0) {
+        return false;
+    }
+
+    const bool isInstant = card->getCardInfo().getCardType().contains("Instant", Qt::CaseInsensitive);
+    const int currentPhase = player->getGame()->getGameState()->getCurrentPhase();
+    const int localPlayerId = player->getPlayerInfo()->getId();
+    const bool isMainPhase = currentPhase == 3 || currentPhase == 9;
+    const bool isActivePlayer = player->getGame()->getGameState()->getActivePlayer() == localPlayerId;
+    const bool hasPriority = player->getGame()->getGameState()->getPriorityPlayer() == localPlayerId;
+    if (!isInstant && (!isMainPhase || !isActivePlayer || !hasPriority)) {
         return false;
     }
 
