@@ -1291,6 +1291,22 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
                 continue;
             }
             auto *attackerPlayer = static_cast<Server_Player *>(attacker);
+            Server_CardZone *tableZone = attackerPlayer->getZones().value(ZoneNames::TABLE);
+            if (tableZone) {
+                for (Server_Card *card : tableZone->getCards()) {
+                    if (!card || !card->getAttacking()) {
+                        continue;
+                    }
+                    card->setAttacking(false);
+                    Event_SetCardAttr clearEv;
+                    clearEv.set_zone_name(std::string(ZoneNames::TABLE));
+                    clearEv.set_card_id(card->getId());
+                    clearEv.set_attribute(AttrAttacking);
+                    clearEv.set_attr_value("0");
+                    combatGes.enqueueGameEvent(clearEv, attacker->getPlayerId());
+                    combatGesHasEvents = true;
+                }
+            }
             for (int i = 0; i < ad.attacker_object_ids_size(); ++i) {
                 const quint32 oid = static_cast<quint32>(ad.attacker_object_ids(i));
                 Server_Card *card = attackerPlayer->findCardByEngineOid(oid);

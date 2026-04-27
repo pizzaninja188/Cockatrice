@@ -289,6 +289,69 @@ TEST_F(RuledBatchTest, ApplyRuledBatchMarksAttackers)
     EXPECT_TRUE(wolf->getAttacking());
 }
 
+TEST_F(RuledBatchTest, ApplyRuledBatchClearsStaleAttackersBeforeMarkingNewOnes)
+{
+    Server_Card *bear = addCardToTable(p1, "Grizzly Bears");
+    Server_Card *wolf = addCardToTable(p1, "Timber Wolves");
+
+    {
+        ruled::v1::IpcResponse seedResp;
+        seedResp.set_ok(true);
+        auto *batch = seedResp.mutable_batch();
+        auto *evZv = batch->add_events()->mutable_zone_view();
+        *evZv->add_per_player() = buildPerPlayerView(p1, {501u, 502u}, {false, false});
+        *evZv->add_per_player() = buildPerPlayerView(p2, {}, {});
+        callBatchApply(seedResp);
+    }
+
+    bear->setAttacking(true);
+    wolf->setAttacking(true);
+    EXPECT_TRUE(bear->getAttacking());
+    EXPECT_TRUE(wolf->getAttacking());
+
+    {
+        ruled::v1::IpcResponse atkResp;
+        atkResp.set_ok(true);
+        auto *batch = atkResp.mutable_batch();
+        auto *ad = batch->add_events()->mutable_attackers_declared();
+        ad->set_attacking_player_id(1);
+        ad->add_attacker_object_ids(502u);
+        callBatchApply(atkResp);
+    }
+
+    EXPECT_FALSE(bear->getAttacking());
+    EXPECT_TRUE(wolf->getAttacking());
+}
+
+TEST_F(RuledBatchTest, ApplyRuledBatchClearsAttackersOnEmptyDeclare)
+{
+    Server_Card *bear = addCardToTable(p1, "Grizzly Bears");
+
+    {
+        ruled::v1::IpcResponse seedResp;
+        seedResp.set_ok(true);
+        auto *batch = seedResp.mutable_batch();
+        auto *evZv = batch->add_events()->mutable_zone_view();
+        *evZv->add_per_player() = buildPerPlayerView(p1, {601u}, {false});
+        *evZv->add_per_player() = buildPerPlayerView(p2, {}, {});
+        callBatchApply(seedResp);
+    }
+
+    bear->setAttacking(true);
+    EXPECT_TRUE(bear->getAttacking());
+
+    {
+        ruled::v1::IpcResponse atkResp;
+        atkResp.set_ok(true);
+        auto *batch = atkResp.mutable_batch();
+        auto *ad = batch->add_events()->mutable_attackers_declared();
+        ad->set_attacking_player_id(1);
+        callBatchApply(atkResp);
+    }
+
+    EXPECT_FALSE(bear->getAttacking());
+}
+
 int main(int argc, char **argv)
 {
     ::testing::InitGoogleTest(&argc, argv);
