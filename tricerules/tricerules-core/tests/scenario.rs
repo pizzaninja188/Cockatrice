@@ -244,8 +244,8 @@ fn cast_lightning_bolt_resolves_to_graveyard_after_double_pass() {
         .iter()
         .any(|ev| matches!(ev.ev, Some(Ev::StackPushed(_)))));
 
-    e.apply_command(1, &pass()).expect("opponent pass");
-    let resolved = e.apply_command(0, &pass()).expect("active pass");
+    e.apply_command(0, &pass()).expect("caster pass");
+    let resolved = e.apply_command(1, &pass()).expect("opponent pass");
     assert!(e.state.stack.is_empty());
     assert!(e.state.players[0].graveyard.contains(&bolt_oid));
     assert!(resolved.events.iter().any(|ev| {
@@ -260,7 +260,7 @@ fn cast_lightning_bolt_resolves_to_graveyard_after_double_pass() {
 }
 
 #[test]
-fn casting_spell_emits_priority_handoff_to_opponent() {
+fn casting_spell_keeps_priority_with_caster() {
     let decks = Some(vec![
         vec![
             "mountain".into(),
@@ -291,8 +291,8 @@ fn casting_spell_emits_priority_handoff_to_opponent() {
         .apply_command(0, &cast_spell(bolt_idx, vec![]))
         .expect("cast bolt");
     assert!(
-        priority_changes_in(&pushed).contains(&1),
-        "caster should hand priority to opponent after casting"
+        priority_changes_in(&pushed).contains(&0),
+        "caster should keep priority after casting"
     );
 }
 
@@ -326,8 +326,8 @@ fn stack_resolution_emits_priority_to_active_player() {
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(0, &cast_spell(bolt_idx, vec![]))
         .expect("cast bolt");
-    e.apply_command(1, &pass()).expect("opponent pass");
-    let resolved = e.apply_command(0, &pass()).expect("active pass");
+    e.apply_command(0, &pass()).expect("caster pass");
+    let resolved = e.apply_command(1, &pass()).expect("opponent pass");
     assert!(
         priority_changes_in(&resolved).contains(&0),
         "active player should regain priority after stack resolves"
@@ -570,8 +570,8 @@ fn cast_grizzly_bears_resolves_to_battlefield_and_taps_two_forests() {
         .count();
     assert_eq!(untapped_before_resolve, 0, "both forests are tapped for 1G");
 
-    e.apply_command(1, &pass()).expect("p1 pass");
-    let resolved = e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    let resolved = e.apply_command(1, &pass()).expect("p1 pass");
 
     assert!(e.state.players[0].battlefield.contains(&bears_oid));
     assert!(resolved.events.iter().any(|ev| {
@@ -583,6 +583,63 @@ fn cast_grizzly_bears_resolves_to_battlefield_and_taps_two_forests() {
                         == tricerules_proto::ruled::v1::StackResolveDestination::Battlefield as i32
         )
     }));
+}
+
+#[test]
+fn caster_can_cast_second_spell_before_passing_priority() {
+    let decks = Some(vec![
+        vec![
+            "mountain".into(),
+            "mountain".into(),
+            "lightning_bolt".into(),
+            "lightning_bolt".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec![
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(333, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let mountain_a = hand_index_for_card(&e, 0, "mountain");
+    e.apply_command(0, &play_land(mountain_a))
+        .expect("play first mountain");
+    // Seed a second untapped mountain to allow casting another bolt while holding priority.
+    let mountain_b = hand_index_for_card(&e, 0, "mountain");
+    let mountain_b_oid = e.state.players[0].hand.remove(mountain_b);
+    e.state.players[0].battlefield.push(mountain_b_oid);
+    e.state
+        .objects
+        .get_mut(&mountain_b_oid)
+        .expect("second mountain")
+        .zone = tricerules_core::Zone::Battlefield;
+
+    let bolt_one = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(0, &cast_spell(bolt_one, vec![]))
+        .expect("cast first bolt");
+    assert_eq!(
+        e.state.priority_player_id(),
+        0,
+        "caster should keep priority after casting first spell"
+    );
+
+    let bolt_two = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(0, &cast_spell(bolt_two, vec![]))
+        .expect("cast second bolt while holding priority");
+    assert_eq!(
+        e.state.stack.len(),
+        2,
+        "both spells should be on the stack before any opponent pass"
+    );
 }
 
 #[test]
@@ -635,6 +692,8 @@ fn non_active_player_cannot_tap_lands_for_mana() {
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(0, &cast_spell(bolt_idx, vec![]))
         .expect("p0 cast bolt");
+    e.apply_command(0, &pass())
+        .expect("p0 pass to give p1 priority");
 
     let counter_idx = hand_index_for_card(&e, 1, "counterspell");
     let err = e
@@ -691,8 +750,8 @@ fn untap_and_draw_happen_in_new_turn_sequence() {
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(0, &cast_spell(bolt_idx, vec![]))
         .expect("cast lightning bolt");
-    e.apply_command(1, &pass()).expect("opponent pass");
-    e.apply_command(0, &pass()).expect("active pass to resolve");
+    e.apply_command(0, &pass()).expect("caster pass");
+    e.apply_command(1, &pass()).expect("opponent pass to resolve");
 
     assert!(
         e.state

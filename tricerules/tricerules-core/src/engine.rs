@@ -837,8 +837,8 @@ impl GameEngine {
         }
 
         self.state.passes_since_stack_change = 0;
-        // Next player gets priority (APNAP simplification)
-        self.state.priority_idx = (idx + 1) % self.state.players.len();
+        // MTG priority: after casting a spell, the caster gets priority first.
+        self.state.priority_idx = idx;
 
         let def_name = def.name.clone();
         let mut batch = RuledEventBatch::default();
