@@ -25,28 +25,31 @@ public slots:
     void setPromptText(const QString &promptText);
     void setPromptFromRuledLog(const QString &ruledLog);
     void setPassPriorityEnabled(bool enabled);
+    void setActivePhase(int phase);
+    void setLocalPlayerHasPriority(bool hasPriority);
     void setCombatMode(CombatMode mode, bool localPlayerHasButtons);
 
 signals:
     void passPriorityRequested();
     void confirmAttackersRequested();
-    void skipAttackersRequested();
     void confirmBlockersRequested();
-    void skipBlockersRequested();
+    void resetBlockersRequested();
 
 private:
+    void updatePassPriorityButtonText();
     void updateCombatButtonsVisibility();
 
     QLabel *promptTitleLabel;
     QLabel *promptLabel;
     QPushButton *passPriorityButton;
     QPushButton *confirmAttackersButton;
-    QPushButton *skipAttackersButton;
     QPushButton *confirmBlockersButton;
-    QPushButton *skipBlockersButton;
+    QPushButton *resetBlockersButton;
     QLabel *futureActionsLabel;
     QFrame *futureActionsFrame;
     QString fallbackPromptText;
+    int currentActivePhase = -1;
+    bool localPlayerHasPriority = false;
     CombatMode currentCombatMode = CombatMode::None;
     bool localPlayerHasCombatButtons = false;
 };

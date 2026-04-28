@@ -29,6 +29,28 @@ QString extractPrimaryPrompt(const QString &ruledLog)
 
     return lines.first().trimmed();
 }
+
+QString nextStepButtonTextForPhase(int phase)
+{
+    switch (phase) {
+        case 1:
+            return GamePromptWidget::tr("Draw Step");
+        case 2:
+            return GamePromptWidget::tr("First Main Phase");
+        case 3:
+            return GamePromptWidget::tr("Combat");
+        case 4:
+            return GamePromptWidget::tr("Declare Attackers");
+        case 8:
+            return GamePromptWidget::tr("Second Main Phase");
+        case 9:
+            return GamePromptWidget::tr("End Step");
+        case 10:
+            return GamePromptWidget::tr("Next Turn");
+        default:
+            return GamePromptWidget::tr("Pass Priority");
+    }
+}
 } // namespace
 
 GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
@@ -62,20 +84,15 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     connect(confirmAttackersButton, &QPushButton::clicked, this, &GamePromptWidget::confirmAttackersRequested);
     combatRow->addWidget(confirmAttackersButton);
 
-    skipAttackersButton = new QPushButton(this);
-    skipAttackersButton->setObjectName("skipAttackersButton");
-    connect(skipAttackersButton, &QPushButton::clicked, this, &GamePromptWidget::skipAttackersRequested);
-    combatRow->addWidget(skipAttackersButton);
-
     confirmBlockersButton = new QPushButton(this);
     confirmBlockersButton->setObjectName("confirmBlockersButton");
     connect(confirmBlockersButton, &QPushButton::clicked, this, &GamePromptWidget::confirmBlockersRequested);
     combatRow->addWidget(confirmBlockersButton);
 
-    skipBlockersButton = new QPushButton(this);
-    skipBlockersButton->setObjectName("skipBlockersButton");
-    connect(skipBlockersButton, &QPushButton::clicked, this, &GamePromptWidget::skipBlockersRequested);
-    combatRow->addWidget(skipBlockersButton);
+    resetBlockersButton = new QPushButton(this);
+    resetBlockersButton->setObjectName("resetBlockersButton");
+    connect(resetBlockersButton, &QPushButton::clicked, this, &GamePromptWidget::resetBlockersRequested);
+    combatRow->addWidget(resetBlockersButton);
 
     layout->addLayout(combatRow);
 
@@ -101,11 +118,10 @@ void GamePromptWidget::retranslateUi()
         fallbackPromptText = tr("Waiting for ruled action prompt...");
         promptLabel->setText(fallbackPromptText);
     }
-    passPriorityButton->setText(tr("Pass Priority"));
-    confirmAttackersButton->setText(tr("Confirm Attackers"));
-    skipAttackersButton->setText(tr("No Attackers"));
-    confirmBlockersButton->setText(tr("Confirm Blockers"));
-    skipBlockersButton->setText(tr("No Blockers"));
+    updatePassPriorityButtonText();
+    confirmAttackersButton->setText(tr("OK"));
+    confirmBlockersButton->setText(tr("OK"));
+    resetBlockersButton->setText(tr("Reset Blockers"));
     futureActionsLabel->setText(tr("Future actions"));
     futureActionsFrame->setToolTip(tr("Reserved space for upcoming action buttons (undo land tap, undo mana, etc.)."));
 }
@@ -134,6 +150,24 @@ void GamePromptWidget::setPassPriorityEnabled(bool enabled)
     passPriorityButton->setEnabled(enabled);
 }
 
+void GamePromptWidget::setActivePhase(int phase)
+{
+    if (phase == currentActivePhase) {
+        return;
+    }
+    currentActivePhase = phase;
+    updatePassPriorityButtonText();
+}
+
+void GamePromptWidget::setLocalPlayerHasPriority(bool hasPriority)
+{
+    if (localPlayerHasPriority == hasPriority) {
+        return;
+    }
+    localPlayerHasPriority = hasPriority;
+    updateCombatButtonsVisibility();
+}
+
 void GamePromptWidget::setCombatMode(CombatMode mode, bool localPlayerHasButtons)
 {
     if (mode == currentCombatMode && localPlayerHasButtons == localPlayerHasCombatButtons) {
@@ -147,11 +181,16 @@ void GamePromptWidget::setCombatMode(CombatMode mode, bool localPlayerHasButtons
 void GamePromptWidget::updateCombatButtonsVisibility()
 {
     const bool showAttackers =
-        currentCombatMode == CombatMode::DeclareAttackers && localPlayerHasCombatButtons;
+        localPlayerHasPriority && currentCombatMode == CombatMode::DeclareAttackers && localPlayerHasCombatButtons;
     const bool showBlockers =
-        currentCombatMode == CombatMode::DeclareBlockers && localPlayerHasCombatButtons;
+        localPlayerHasPriority && currentCombatMode == CombatMode::DeclareBlockers && localPlayerHasCombatButtons;
+    passPriorityButton->setVisible(localPlayerHasPriority && !showAttackers && !showBlockers);
     confirmAttackersButton->setVisible(showAttackers);
-    skipAttackersButton->setVisible(showAttackers);
     confirmBlockersButton->setVisible(showBlockers);
-    skipBlockersButton->setVisible(showBlockers);
+    resetBlockersButton->setVisible(showBlockers);
+}
+
+void GamePromptWidget::updatePassPriorityButtonText()
+{
+    passPriorityButton->setText(nextStepButtonTextForPhase(currentActivePhase));
 }

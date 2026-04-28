@@ -227,6 +227,7 @@ void TabGame::connectToGameEventHandler()
     if (gamePromptWidget) {
         connect(game->getGameEventHandler(), &GameEventHandler::logRuledEngine, gamePromptWidget,
                 &GamePromptWidget::setPromptFromRuledLog);
+        connect(game->getGameState(), &GameState::activePhaseChanged, gamePromptWidget, &GamePromptWidget::setActivePhase);
         connect(game->getGameEventHandler(), &GameEventHandler::logActivePhaseChanged, gamePromptWidget,
                 [this](int phase) {
                     if (phasesToolbar && phase >= 0 && phase < phasesToolbar->phaseCount()) {
@@ -259,12 +260,10 @@ void TabGame::connectToGameEventHandler()
                 });
         connect(gamePromptWidget, &GamePromptWidget::confirmAttackersRequested, game->getGameEventHandler(),
                 &GameEventHandler::handleConfirmRuledAttackers);
-        connect(gamePromptWidget, &GamePromptWidget::skipAttackersRequested, game->getGameEventHandler(),
-                &GameEventHandler::handleSkipRuledAttackers);
         connect(gamePromptWidget, &GamePromptWidget::confirmBlockersRequested, game->getGameEventHandler(),
                 &GameEventHandler::handleConfirmRuledBlockers);
-        connect(gamePromptWidget, &GamePromptWidget::skipBlockersRequested, game->getGameEventHandler(),
-                &GameEventHandler::handleSkipRuledBlockers);
+        connect(gamePromptWidget, &GamePromptWidget::resetBlockersRequested, game->getGameEventHandler(),
+                &GameEventHandler::clearPendingBlocks);
     }
 }
 
@@ -1054,6 +1053,9 @@ Player *TabGame::setActivePlayer(int id)
 Player *TabGame::setPriorityPlayer(int id)
 {
     Player *priorityPlayer = game->getPlayerManager()->getPlayer(id);
+    if (gamePromptWidget && game->getGameMetaInfo()->proto().ruled_game()) {
+        gamePromptWidget->setLocalPlayerHasPriority(id == game->getPlayerManager()->getLocalPlayerId());
+    }
     playerListWidget->setActivePlayer(id);
     QMapIterator<int, Player *> i(game->getPlayerManager()->getPlayers());
     while (i.hasNext()) {
@@ -1426,6 +1428,9 @@ void TabGame::createMessageDock(bool bReplay)
     if (!bReplay && game->getGameMetaInfo()->proto().ruled_game()) {
         gamePromptWidget = new GamePromptWidget(this);
         gamePromptWidget->setPassPriorityEnabled(true);
+        gamePromptWidget->setActivePhase(game->getGameState()->getCurrentPhase());
+        gamePromptWidget->setLocalPlayerHasPriority(
+            game->getGameState()->getPriorityPlayer() == game->getPlayerManager()->getLocalPlayerId());
         connect(gamePromptWidget, &GamePromptWidget::passPriorityRequested, game->getGameEventHandler(),
                 &GameEventHandler::handleNextTurn);
         messageLogLayout->addWidget(gamePromptWidget);
