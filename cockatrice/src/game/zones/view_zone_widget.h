@@ -114,7 +114,8 @@ public:
                    bool _revealZone = false,
                    bool _writeableRevealZone = false,
                    const QList<const ServerInfo_Card *> &cardList = QList<const ServerInfo_Card *>(),
-                   bool _isReversed = false);
+                   bool _isReversed = false,
+                   bool _showControls = true);
     ZoneViewZone *getZone() const
     {
         return zone;

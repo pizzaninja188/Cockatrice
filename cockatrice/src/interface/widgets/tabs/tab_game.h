@@ -40,6 +40,7 @@ class QToolButton;
 class QMenu;
 class ZoneViewLayout;
 class ZoneViewWidget;
+class CardZoneLogic;
 class PhasesToolbar;
 class PlayerListWidget;
 class ReplayTimelineWidget;
@@ -54,6 +55,7 @@ class LineEditCompleter;
 class QDockWidget;
 class QStackedWidget;
 class GamePromptWidget;
+class ZoneViewWidget;
 
 class TabGame : public Tab
 {
@@ -82,12 +84,15 @@ private:
     QDockWidget *cardInfoDock, *messageLayoutDock, *playerListDock, *replayDock;
     GamePromptWidget *gamePromptWidget;
     QList<QPointer<ArrowItem>> ruledCombatArrows;
+    QPointer<ZoneViewWidget> stackView;
+    CardZoneLogic *stackViewZone = nullptr;
     QAction *playersSeparator;
     QMenu *gameMenu, *viewMenu;
     TearOffMenu *phasesMenu;
     QAction *aGameInfo, *aConcede, *aLeaveGame, *aNextPhase, *aNextPhaseAction, *aNextTurn, *aReverseTurn,
         *aRemoveLocalArrows, *aRotateViewCW, *aRotateViewCCW, *aResetLayout, *aResetReplayLayout;
     QAction *aFocusChat;
+    QAction *aToggleStackWindow;
     QList<QAction *> phaseActions;
     QAction *aCardMenu;
 
@@ -133,6 +138,10 @@ private:
     void createReplayDock(GameReplay *replay);
     void clearRuledCombatArrows();
     void refreshRuledCombatArrows();
+    void ensureStackWindow();
+    void saveStackWindowLayout() const;
+    CardZoneLogic *findVisibleStackZone() const;
+    void syncStackWindowVisibility();
 signals:
     void gameClosing(TabGame *tab);
     void containerProcessingStarted(const GameEventContext &context);
@@ -157,6 +166,7 @@ private slots:
     void actRemoveLocalArrows();
     void actRotateViewCW();
     void actRotateViewCCW();
+    void actToggleStackWindow();
     void actSay();
     void actPhaseAction();
     void actNextPhase();

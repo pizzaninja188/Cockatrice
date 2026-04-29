@@ -9,6 +9,7 @@
 
 #include "settings_manager.h"
 
+#include <QPoint>
 #include <QSize>
 
 class LayoutsSettings : public SettingsManager
@@ -35,6 +36,8 @@ public:
 
     void setReplayPlayAreaGeometry(const QByteArray &value);
     void setReplayPlayAreaState(const QByteArray &value);
+    void setRuledStackWindowPosition(const QPoint &value);
+    void setRuledStackWindowSize(const QSize &value);
 
     QByteArray getMainWindowGeometry() const;
 
@@ -54,6 +57,8 @@ public:
 
     QByteArray getReplayPlayAreaLayoutState() const;
     QByteArray getReplayPlayAreaGeometry() const;
+    QPoint getRuledStackWindowPosition() const;
+    QSize getRuledStackWindowSize() const;
 signals:
 
 public slots:

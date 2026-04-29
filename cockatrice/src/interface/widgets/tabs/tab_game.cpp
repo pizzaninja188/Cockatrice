@@ -14,6 +14,7 @@
 #include "../game/player/player_list_widget.h"
 #include "../game/prompt/game_prompt_widget.h"
 #include "../game/replay.h"
+#include "../game/zones/view_zone_widget.h"
 #include "../interface/card_picture_loader/card_picture_loader.h"
 #include "../interface/widgets/cards/card_info_frame_widget.h"
 #include "../interface/widgets/dialogs/dlg_create_game.h"
@@ -525,6 +526,9 @@ void TabGame::retranslateUi()
     }
 
     viewMenu->setTitle(tr("&View"));
+    if (aToggleStackWindow) {
+        aToggleStackWindow->setText(tr("Stack &window"));
+    }
 
     dockToActions[cardInfoDock].menu->setTitle(tr("Card Info"));
     dockToActions[messageLayoutDock].menu->setTitle(tr("Messages"));
@@ -803,6 +807,119 @@ void TabGame::actRotateViewCCW()
     scene->adjustPlayerRotation(1);
 }
 
+void TabGame::actToggleStackWindow()
+{
+    if (!aToggleStackWindow) {
+        return;
+    }
+
+    if (aToggleStackWindow->isChecked()) {
+        syncStackWindowVisibility();
+    } else if (stackView) {
+        stackView->close();
+    }
+}
+
+CardZoneLogic *TabGame::findVisibleStackZone() const
+{
+    if (!game) {
+        return nullptr;
+    }
+    const QMap<int, Player *> &players = game->getPlayerManager()->getPlayers();
+    for (Player *player : players) {
+        if (!player || !player->getStackZone()) {
+            continue;
+        }
+        if (!player->getStackZone()->getCards().isEmpty()) {
+            return player->getStackZone();
+        }
+    }
+    return nullptr;
+}
+
+void TabGame::syncStackWindowVisibility()
+{
+    if (!aToggleStackWindow) {
+        return;
+    }
+
+    if (!findVisibleStackZone()) {
+        if (stackView) {
+            stackView->close();
+        }
+        aToggleStackWindow->setChecked(false);
+        return;
+    }
+
+    ensureStackWindow();
+}
+
+void TabGame::ensureStackWindow()
+{
+    if (!scene || !game || !aToggleStackWindow) {
+        return;
+    }
+    if (!game->getGameMetaInfo()->proto().ruled_game()) {
+        return;
+    }
+    if (!game->getGameMetaInfo()->started()) {
+        return;
+    }
+    CardZoneLogic *visibleStackZone = findVisibleStackZone();
+    if (!visibleStackZone) {
+        return;
+    }
+
+    if (stackView && stackViewZone == visibleStackZone) {
+        stackView->show();
+        aToggleStackWindow->setChecked(true);
+        return;
+    }
+
+    if (stackView) {
+        stackView->close();
+    }
+
+    Player *stackOwner = visibleStackZone->getPlayer();
+    if (!stackOwner) {
+        return;
+    }
+
+    stackView = new ZoneViewWidget(stackOwner, visibleStackZone, -1, true, true, {}, false, false);
+    stackViewZone = visibleStackZone;
+    stackView->setWindowFlags(stackView->windowFlags() | Qt::WindowStaysOnTopHint);
+    scene->addItem(stackView);
+    stackView->setPos(340, 80);
+    const LayoutsSettings &layouts = SettingsCache::instance().layouts();
+    const QSize savedSize = layouts.getRuledStackWindowSize();
+    if (savedSize.isValid()) {
+        stackView->resize(savedSize);
+    }
+    const QPoint savedPos = layouts.getRuledStackWindowPosition();
+    if (!savedPos.isNull()) {
+        stackView->setPos(savedPos);
+    }
+    connect(stackView, &ZoneViewWidget::closePressed, this, [this](ZoneViewWidget *) {
+        saveStackWindowLayout();
+        stackView = nullptr;
+        stackViewZone = nullptr;
+        if (aToggleStackWindow) {
+            aToggleStackWindow->setChecked(false);
+        }
+    });
+    aToggleStackWindow->setChecked(true);
+}
+
+void TabGame::saveStackWindowLayout() const
+{
+    if (!stackView) {
+        return;
+    }
+    LayoutsSettings &layouts = SettingsCache::instance().layouts();
+    layouts.setRuledStackWindowPosition(stackView->pos().toPoint());
+    layouts.setRuledStackWindowSize(stackView->size().toSize());
+}
+
 void TabGame::actCompleterChanged()
 {
     SettingsCache::instance().getChatMentionCompleter() ? completer->setCompletionRole(2)
@@ -837,6 +954,7 @@ Player *TabGame::addPlayer(Player *newPlayer)
 
     connect(newPlayer, &Player::newCardAdded, this, &TabGame::newCardAdded);
     connect(newPlayer->getPlayerMenu(), &PlayerMenu::cardMenuUpdated, this, &TabGame::setCardMenu);
+    connect(newPlayer->getStackZone(), &StackZoneLogic::cardCountChanged, this, &TabGame::syncStackWindowVisibility);
 
     messageLog->connectToPlayerEventHandler(newPlayer->getPlayerEventHandler());
 
@@ -847,6 +965,10 @@ Player *TabGame::addPlayer(Player *newPlayer)
             newPlayer->getPlayerInfo()->setLocal(true);
         }
         addLocalPlayer(newPlayer, newPlayer->getPlayerInfo()->getId());
+        syncStackWindowVisibility();
+        if (game->getGameMetaInfo()->started()) {
+            syncStackWindowVisibility();
+        }
     }
 
     gameMenu->insertMenu(playersSeparator, newPlayer->getPlayerMenu()->getPlayerMenu());
@@ -1001,6 +1123,7 @@ void TabGame::startGame(bool _resuming)
     playerListWidget->setGameStarted(true, game->getGameState()->isResuming());
     game->getGameMetaInfo()->setStarted(true);
     static_cast<GameScene *>(gameView->scene())->rearrange();
+    syncStackWindowVisibility();
 
     if (aConcede != nullptr) {
         aConcede->setText(tr("&Concede"));
@@ -1023,6 +1146,14 @@ void TabGame::stopGame()
     playerListWidget->setGameStarted(false, false);
 
     scene->clearViews();
+    if (stackView) {
+        saveStackWindowLayout();
+        stackView->close();
+    }
+    stackViewZone = nullptr;
+    if (aToggleStackWindow) {
+        aToggleStackWindow->setChecked(false);
+    }
 
     if (aConcede != nullptr) {
         aConcede->setText(tr("&Concede"));
@@ -1164,6 +1295,9 @@ void TabGame::createMenuItems()
     connect(aRotateViewCW, &QAction::triggered, this, &TabGame::actRotateViewCW);
     aRotateViewCCW = new QAction(this);
     connect(aRotateViewCCW, &QAction::triggered, this, &TabGame::actRotateViewCCW);
+    aToggleStackWindow = new QAction(this);
+    aToggleStackWindow->setCheckable(true);
+    connect(aToggleStackWindow, &QAction::triggered, this, &TabGame::actToggleStackWindow);
     aGameInfo = new QAction(this);
     connect(aGameInfo, &QAction::triggered, this, &TabGame::actGameInfo);
     aConcede = new QAction(this);
@@ -1228,6 +1362,7 @@ void TabGame::createReplayMenuItems()
     aGameInfo = nullptr;
     aConcede = nullptr;
     aFocusChat = nullptr;
+    aToggleStackWindow = nullptr;
     aLeaveGame = new QAction(this);
     connect(aLeaveGame, &QAction::triggered, this, &TabGame::closeRequest);
 
@@ -1252,6 +1387,10 @@ void TabGame::createViewMenuItems()
         registerDockWidget(viewMenu, replayDock, {900, 100});
     }
 
+    viewMenu->addSeparator();
+    if (aToggleStackWindow && game->getGameMetaInfo()->proto().ruled_game()) {
+        viewMenu->addAction(aToggleStackWindow);
+    }
     viewMenu->addSeparator();
 
     aResetLayout = viewMenu->addAction(QString());

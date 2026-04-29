@@ -43,7 +43,8 @@ ZoneViewWidget::ZoneViewWidget(Player *_player,
                                bool _revealZone,
                                bool _writeableRevealZone,
                                const QList<const ServerInfo_Card *> &cardList,
-                               bool _isReversed)
+                               bool _isReversed,
+                               bool _showControls)
     : QGraphicsWidget(0, Qt::Window), canBeShuffled(_origZone->getIsShufflable()), player(_player)
 {
     setAcceptHoverEvents(true);
@@ -55,7 +56,7 @@ ZoneViewWidget::ZoneViewWidget(Player *_player,
     vbox->setSpacing(2);
 
     // If the number is < 0, then it means that we can give the option to make the area sorted
-    if (numberCards < 0) {
+    if (numberCards < 0 && _showControls) {
         // search edit
         searchEdit.setFocusPolicy(Qt::ClickFocus);
         searchEdit.setPlaceholderText(tr("Search by card name (or search expressions)"));
@@ -147,7 +148,7 @@ ZoneViewWidget::ZoneViewWidget(Player *_player,
     retranslateUi();
 
     // only wire up sort options after creating ZoneViewZone, since it segfaults otherwise.
-    if (numberCards < 0) {
+    if (numberCards < 0 && _showControls) {
         connect(&groupBySelector, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this,
                 &ZoneViewWidget::processGroupBy);
         connect(&sortBySelector, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this,
