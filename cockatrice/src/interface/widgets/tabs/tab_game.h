@@ -19,7 +19,9 @@
 #include <QCompleter>
 #include <QLoggingCategory>
 #include <QMap>
+#include <QPointF>
 #include <QPointer>
+#include <QSizeF>
 
 class ServerInfo_PlayerProperties;
 class TabbedDeckViewContainer;
@@ -55,7 +57,6 @@ class LineEditCompleter;
 class QDockWidget;
 class QStackedWidget;
 class GamePromptWidget;
-class ZoneViewWidget;
 
 class TabGame : public Tab
 {
@@ -86,6 +87,8 @@ private:
     QList<QPointer<ArrowItem>> ruledCombatArrows;
     QPointer<ZoneViewWidget> stackView;
     CardZoneLogic *stackViewZone = nullptr;
+    QPointF stackWindowPos = QPointF(340, 80);
+    QSizeF stackWindowSize;
     QAction *playersSeparator;
     QMenu *gameMenu, *viewMenu;
     TearOffMenu *phasesMenu;
@@ -139,7 +142,7 @@ private:
     void clearRuledCombatArrows();
     void refreshRuledCombatArrows();
     void ensureStackWindow();
-    void saveStackWindowLayout() const;
+    void saveStackWindowLayout();
     CardZoneLogic *findVisibleStackZone() const;
     void syncStackWindowVisibility();
 signals:

@@ -12,7 +12,6 @@ const static QString GROUP_SETS_DIALOG = "setsDialog";
 const static QString GROUP_TOKEN_DIALOG = "tokenDialog";
 const static QString GROUP_GAME_PLAY_AREA = "gamePlayArea";
 const static QString GROUP_REPLAY_PLAY_AREA = "replayPlayArea";
-const static QString GROUP_RULED_STACK_WINDOW = "ruledStackWindow";
 
 LayoutsSettings::LayoutsSettings(const QString &settingPath, QObject *parent)
     : SettingsManager(settingPath + "layouts.ini", QString(), QString(), parent)
@@ -147,24 +146,4 @@ QByteArray LayoutsSettings::getReplayPlayAreaLayoutState() const
 QByteArray LayoutsSettings::getReplayPlayAreaGeometry() const
 {
     return getValue(GEOMETRY_PROP, GROUP_REPLAY_PLAY_AREA).toByteArray();
-}
-
-void LayoutsSettings::setRuledStackWindowPosition(const QPoint &value)
-{
-    setValue(value, "position", GROUP_RULED_STACK_WINDOW);
-}
-
-void LayoutsSettings::setRuledStackWindowSize(const QSize &value)
-{
-    setValue(value, SIZE_PROP, GROUP_RULED_STACK_WINDOW);
-}
-
-QPoint LayoutsSettings::getRuledStackWindowPosition() const
-{
-    return getValue("position", GROUP_RULED_STACK_WINDOW).toPoint();
-}
-
-QSize LayoutsSettings::getRuledStackWindowSize() const
-{
-    return getValue(SIZE_PROP, GROUP_RULED_STACK_WINDOW).toSize();
 }

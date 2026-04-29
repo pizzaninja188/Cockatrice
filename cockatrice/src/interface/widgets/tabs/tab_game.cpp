@@ -889,15 +889,9 @@ void TabGame::ensureStackWindow()
     stackViewZone = visibleStackZone;
     stackView->setWindowFlags(stackView->windowFlags() | Qt::WindowStaysOnTopHint);
     scene->addItem(stackView);
-    stackView->setPos(340, 80);
-    const LayoutsSettings &layouts = SettingsCache::instance().layouts();
-    const QSize savedSize = layouts.getRuledStackWindowSize();
-    if (savedSize.isValid()) {
-        stackView->resize(savedSize);
-    }
-    const QPoint savedPos = layouts.getRuledStackWindowPosition();
-    if (!savedPos.isNull()) {
-        stackView->setPos(savedPos);
+    stackView->setPos(stackWindowPos);
+    if (stackWindowSize.isValid()) {
+        stackView->resize(stackWindowSize);
     }
     connect(stackView, &ZoneViewWidget::closePressed, this, [this](ZoneViewWidget *) {
         saveStackWindowLayout();
@@ -910,14 +904,13 @@ void TabGame::ensureStackWindow()
     aToggleStackWindow->setChecked(true);
 }
 
-void TabGame::saveStackWindowLayout() const
+void TabGame::saveStackWindowLayout()
 {
     if (!stackView) {
         return;
     }
-    LayoutsSettings &layouts = SettingsCache::instance().layouts();
-    layouts.setRuledStackWindowPosition(stackView->pos().toPoint());
-    layouts.setRuledStackWindowSize(stackView->size().toSize());
+    stackWindowPos = stackView->pos();
+    stackWindowSize = stackView->size();
 }
 
 void TabGame::actCompleterChanged()
