@@ -1053,8 +1053,17 @@ Player *TabGame::setActivePlayer(int id)
 Player *TabGame::setPriorityPlayer(int id)
 {
     Player *priorityPlayer = game->getPlayerManager()->getPlayer(id);
+    const int localPlayerId = game->getPlayerManager()->getLocalPlayerId();
     if (gamePromptWidget && game->getGameMetaInfo()->proto().ruled_game()) {
-        gamePromptWidget->setLocalPlayerHasPriority(id == game->getPlayerManager()->getLocalPlayerId());
+        const bool localHasPriority = (id == localPlayerId);
+        gamePromptWidget->setLocalPlayerHasPriority(localHasPriority);
+        if (localHasPriority) {
+            const int currentPhase = game->getGameState()->getCurrentPhase();
+            const bool myTurn = (game->getGameState()->getActivePlayer() == localPlayerId);
+            if (!phasesToolbar->shouldStopAtPhase(currentPhase, myTurn)) {
+                QTimer::singleShot(0, game->getGameEventHandler(), &GameEventHandler::handleNextTurn);
+            }
+        }
     }
     playerListWidget->setActivePlayer(id);
     QMapIterator<int, Player *> i(game->getPlayerManager()->getPlayers());

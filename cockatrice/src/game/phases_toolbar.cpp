@@ -6,6 +6,7 @@
 #include <QDebug>
 #include <QPainter>
 #include <QPen>
+#include <QGraphicsSceneMouseEvent>
 #include <QTimer>
 #include <libcockatrice/protocol/pb/command_draw_cards.pb.h>
 #include <libcockatrice/protocol/pb/command_next_turn.pb.h>
@@ -15,7 +16,8 @@
 
 PhaseButton::PhaseButton(const QString &_name, QGraphicsItem *parent, QAction *_doubleClickAction, bool _highlightable)
     : QObject(), QGraphicsItem(parent), name(_name), active(false), highlightable(_highlightable),
-      activeAnimationCounter(0), doubleClickAction(_doubleClickAction), width(50)
+      hasStops(true), opponentTurnStopEnabled(false), myTurnStopEnabled(false), activeAnimationCounter(0),
+      doubleClickAction(_doubleClickAction), width(50), height(50), stopIndicatorWidth(0), stopIndicatorGap(0)
 {
     if (highlightable) {
         activeAnimationTimer = new QTimer(this);
@@ -29,12 +31,14 @@ PhaseButton::PhaseButton(const QString &_name, QGraphicsItem *parent, QAction *_
 
 QRectF PhaseButton::boundingRect() const
 {
-    return {0, 0, width, width};
+    return {0, 0, width, height};
 }
 
 void PhaseButton::paint(QPainter *painter, const QStyleOptionGraphicsItem * /*option*/, QWidget * /*widget*/)
 {
-    QRectF iconRect = boundingRect().adjusted(3, 3, -3, -3);
+    const QRectF contentRect = boundingRect().adjusted(3, 3, -3, -3);
+    const qreal iconLeft = hasStops ? stopIndicatorWidth + stopIndicatorGap + 3.0 : 3.0;
+    QRectF iconRect(iconLeft, 3, width - iconLeft - 3, height - 6);
     QRectF translatedIconRect = painter->combinedTransform().mapRect(iconRect);
     qreal scaleFactor = translatedIconRect.width() / iconRect.width();
     QPixmap iconPixmap = PhasePixmapGenerator::generatePixmap(qRound(translatedIconRect.height()), name);
@@ -43,22 +47,77 @@ void PhaseButton::paint(QPainter *painter, const QStyleOptionGraphicsItem * /*op
                              static_cast<int>(220 * (activeAnimationCounter / 10.0)),
                              static_cast<int>(220 * (activeAnimationCounter / 10.0))));
     painter->setPen(Qt::gray);
-    painter->drawRect(0, 0, static_cast<int>(width - 1), static_cast<int>(width - 1));
+    painter->drawRect(0, 0, static_cast<int>(width - 1), static_cast<int>(height - 1));
     painter->save();
     resetPainterTransform(painter);
-    painter->drawPixmap(iconPixmap.rect().translated(qRound(3 * scaleFactor), qRound(3 * scaleFactor)), iconPixmap,
-                        iconPixmap.rect());
+    painter->drawPixmap(iconPixmap.rect().translated(qRound(iconRect.x() * scaleFactor), qRound(3 * scaleFactor)),
+                        iconPixmap, iconPixmap.rect());
     painter->restore();
 
     painter->setBrush(QColor(0, 0, 0, static_cast<int>(255 * ((10 - activeAnimationCounter) / 15.0))));
     painter->setPen(Qt::gray);
-    painter->drawRect(0, 0, static_cast<int>(width - 1), static_cast<int>(width - 1));
+    painter->drawRect(0, 0, static_cast<int>(width - 1), static_cast<int>(height - 1));
+
+    if (hasStops) {
+        const qreal boxSize = stopIndicatorWidth;
+        const qreal left = 3;
+        const qreal topY = contentRect.top();
+        const qreal bottomY = contentRect.bottom() - boxSize;
+        const QRectF oppRect(left, topY, boxSize, boxSize);
+        const QRectF myRect(left, bottomY, boxSize, boxSize);
+
+        painter->setPen(Qt::lightGray);
+        painter->setBrush(opponentTurnStopEnabled ? QColor(220, 130, 50) : QColor(45, 45, 45));
+        painter->drawRect(oppRect);
+        painter->setBrush(myTurnStopEnabled ? QColor(50, 170, 220) : QColor(45, 45, 45));
+        painter->drawRect(myRect);
+    }
 }
 
 void PhaseButton::setWidth(double _width)
 {
     prepareGeometryChange();
     width = _width;
+}
+
+void PhaseButton::setHeight(double _height)
+{
+    prepareGeometryChange();
+    height = _height;
+}
+
+void PhaseButton::setStopIndicatorsLayout(double indicatorWidth, double indicatorGap)
+{
+    stopIndicatorWidth = indicatorWidth;
+    stopIndicatorGap = indicatorGap;
+}
+
+void PhaseButton::setHasStops(bool enabled)
+{
+    hasStops = enabled;
+    update();
+}
+
+void PhaseButton::setOpponentTurnStopEnabled(bool enabled)
+{
+    opponentTurnStopEnabled = enabled;
+    update();
+}
+
+void PhaseButton::setMyTurnStopEnabled(bool enabled)
+{
+    myTurnStopEnabled = enabled;
+    update();
+}
+
+bool PhaseButton::hasStopOnOpponentTurn() const
+{
+    return opponentTurnStopEnabled;
+}
+
+bool PhaseButton::hasStopOnMyTurn() const
+{
+    return myTurnStopEnabled;
 }
 
 void PhaseButton::setActive(bool _active)
@@ -87,9 +146,41 @@ void PhaseButton::updateAnimation()
     update();
 }
 
-void PhaseButton::mousePressEvent(QGraphicsSceneMouseEvent * /*event*/)
+void PhaseButton::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
+    if (event && toggleStopAtPosition(event->pos())) {
+        return;
+    }
     emit clicked();
+}
+
+bool PhaseButton::toggleStopAtPosition(const QPointF &pos)
+{
+    if (!hasStops) {
+        return false;
+    }
+
+    const qreal left = 3;
+    const qreal boxSize = stopIndicatorWidth;
+    const qreal topY = 3;
+    const qreal bottomY = height - 3 - boxSize;
+    const QRectF opponentRect(left, topY, boxSize, boxSize);
+    const QRectF myRect(left, bottomY, boxSize, boxSize);
+
+    if (opponentRect.contains(pos)) {
+        opponentTurnStopEnabled = !opponentTurnStopEnabled;
+        emit stopToggled(true, opponentTurnStopEnabled);
+        update();
+        return true;
+    }
+    if (myRect.contains(pos)) {
+        myTurnStopEnabled = !myTurnStopEnabled;
+        emit stopToggled(false, myTurnStopEnabled);
+        update();
+        return true;
+    }
+
+    return false;
 }
 
 void PhaseButton::mouseDoubleClickEvent(QGraphicsSceneMouseEvent * /*event*/)
@@ -104,7 +195,9 @@ void PhaseButton::triggerDoubleClickAction()
 }
 
 PhasesToolbar::PhasesToolbar(QGraphicsItem *parent)
-    : QGraphicsItem(parent), width(100), height(100), ySpacing(1), symbolSize(8)
+    : QGraphicsItem(parent), width(100), height(100), ySpacing(1), symbolSize(8),
+      stopOnOpponentTurn({false, false, false, false, true, true, true, false, false, false, true}),
+      stopOnMyTurn({false, false, false, true, false, true, true, false, false, true, false})
 {
     auto *aUntapAll = new QAction(this);
     connect(aUntapAll, &QAction::triggered, this, &PhasesToolbar::actUntapAll);
@@ -128,11 +221,21 @@ PhasesToolbar::PhasesToolbar(QGraphicsItem *parent)
 
     for (auto &i : buttonList)
         connect(i, &PhaseButton::clicked, this, &PhasesToolbar::phaseButtonClicked);
+    for (int i = 0; i < buttonList.size(); ++i) {
+        connect(buttonList[i], &PhaseButton::stopToggled, this, [this, i](bool opponentTurn, bool enabled) {
+            if (opponentTurn) {
+                stopOnOpponentTurn[i] = enabled;
+            } else {
+                stopOnMyTurn[i] = enabled;
+            }
+        });
+    }
 
     nextTurnButton = new PhaseButton("nextturn", this, nullptr, false);
     connect(nextTurnButton, &PhaseButton::clicked, this, &PhasesToolbar::actNextTurn);
 
     rearrangeButtons();
+    syncButtonStopsFromState();
 
     retranslateUi();
 }
@@ -144,8 +247,14 @@ QRectF PhasesToolbar::boundingRect() const
 
 void PhasesToolbar::retranslateUi()
 {
-    for (int i = 0; i < buttonList.size(); ++i)
-        buttonList[i]->setToolTip(getLongPhaseName(i));
+    for (int i = 0; i < buttonList.size(); ++i) {
+        if (i == 0) {
+            buttonList[i]->setToolTip(getLongPhaseName(i));
+        } else {
+            buttonList[i]->setToolTip(getLongPhaseName(i) + QLatin1String("\n")
+                                      + tr("Top box: stop on opponent's turn\nBottom box: stop on your turn"));
+        }
+    }
 }
 
 QString PhasesToolbar::getLongPhaseName(int phase) const
@@ -187,8 +296,18 @@ const double PhasesToolbar::marginSize = 3;
 
 void PhasesToolbar::rearrangeButtons()
 {
-    for (auto &i : buttonList)
-        i->setWidth(symbolSize);
+    const double stopIndicatorWidth = symbolSize * 0.28;
+    const double stopIndicatorGap = symbolSize * 0.18;
+    const double phaseButtonWidth = symbolSize + stopIndicatorWidth + stopIndicatorGap;
+
+    for (int i = 0; i < buttonList.size(); ++i) {
+        buttonList[i]->setHasStops(i != 0);
+        buttonList[i]->setStopIndicatorsLayout(stopIndicatorWidth, stopIndicatorGap);
+        buttonList[i]->setHeight(symbolSize);
+        buttonList[i]->setWidth(phaseButtonWidth);
+    }
+    nextTurnButton->setHasStops(false);
+    nextTurnButton->setHeight(symbolSize);
     nextTurnButton->setWidth(symbolSize);
 
     double y = marginSize;
@@ -219,7 +338,7 @@ void PhasesToolbar::setHeight(double _height)
     height = _height;
     ySpacing = (height - 2 * marginSize) / (buttonCount * 5 + spaceCount);
     symbolSize = ySpacing * 5;
-    width = symbolSize + 2 * marginSize;
+    width = symbolSize + (symbolSize * 0.28) + (symbolSize * 0.18) + 2 * marginSize;
 
     rearrangeButtons();
 }
@@ -237,6 +356,25 @@ void PhasesToolbar::triggerPhaseAction(int phase)
 {
     if (0 <= phase && phase < buttonList.size()) {
         buttonList[phase]->triggerDoubleClickAction();
+    }
+}
+
+bool PhasesToolbar::shouldStopAtPhase(int phase, bool myTurn) const
+{
+    if (phase < 0 || phase >= static_cast<int>(stopOnMyTurn.size())) {
+        return false;
+    }
+    if (myTurn) {
+        return stopOnMyTurn[phase];
+    }
+    return stopOnOpponentTurn[phase];
+}
+
+void PhasesToolbar::syncButtonStopsFromState()
+{
+    for (int i = 0; i < buttonList.size(); ++i) {
+        buttonList[i]->setOpponentTurnStopEnabled(stopOnOpponentTurn[i]);
+        buttonList[i]->setMyTurnStopEnabled(stopOnMyTurn[i]);
     }
 }
 

@@ -13,6 +13,7 @@
 #include <QFrame>
 #include <QGraphicsObject>
 #include <QList>
+#include <array>
 
 namespace google
 {
@@ -31,12 +32,19 @@ class PhaseButton : public QObject, public QGraphicsItem
 private:
     QString name;
     bool active, highlightable;
+    bool hasStops;
+    bool opponentTurnStopEnabled;
+    bool myTurnStopEnabled;
     int activeAnimationCounter;
     QTimer *activeAnimationTimer;
     QAction *doubleClickAction;
     double width;
+    double height;
+    double stopIndicatorWidth;
+    double stopIndicatorGap;
 
     // void updatePixmap(QPixmap &pixmap);
+    bool toggleStopAtPosition(const QPointF &pos);
 private slots:
     void updateAnimation();
 
@@ -47,6 +55,13 @@ public:
                          bool _highlightable = true);
     [[nodiscard]] QRectF boundingRect() const override;
     void setWidth(double _width);
+    void setHeight(double _height);
+    void setStopIndicatorsLayout(double indicatorWidth, double indicatorGap);
+    void setHasStops(bool enabled);
+    void setOpponentTurnStopEnabled(bool enabled);
+    void setMyTurnStopEnabled(bool enabled);
+    [[nodiscard]] bool hasStopOnOpponentTurn() const;
+    [[nodiscard]] bool hasStopOnMyTurn() const;
     void setActive(bool _active);
     [[nodiscard]] bool getActive() const
     {
@@ -55,6 +70,7 @@ public:
     void triggerDoubleClickAction();
 signals:
     void clicked();
+    void stopToggled(bool opponentTurn, bool enabled);
 
 protected:
     void paint(QPainter *painter, const QStyleOptionGraphicsItem * /*option*/, QWidget * /*widget*/) override;
@@ -70,6 +86,8 @@ private:
     QList<PhaseButton *> buttonList;
     PhaseButton *nextTurnButton;
     double width, height, ySpacing, symbolSize;
+    std::array<bool, 11> stopOnOpponentTurn;
+    std::array<bool, 11> stopOnMyTurn;
     static const int buttonCount = 12;
     static const int spaceCount = 6;
     static const double marginSize;
@@ -89,6 +107,8 @@ public:
         return buttonList.size();
     }
     [[nodiscard]] QString getLongPhaseName(int phase) const;
+    [[nodiscard]] bool shouldStopAtPhase(int phase, bool myTurn) const;
+    void syncButtonStopsFromState();
 public slots:
     void setActivePhase(int phase);
     void triggerPhaseAction(int phase);
