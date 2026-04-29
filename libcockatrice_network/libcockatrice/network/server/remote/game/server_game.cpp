@@ -1128,6 +1128,14 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
     }
 
     GameEventStorage tapSyncGes;
+    bool batchHasUntapPhase = false;
+    for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
+        const auto &e = resp.batch().events(ei);
+        if (e.has_phase_changed() && e.phase_changed().phase() == "untap") {
+            batchHasUntapPhase = true;
+            break;
+        }
+    }
     // Capture the pre-batch engine_oid -> Server_Card map per player. The engine has
     // already removed dead permanents from its battlefield, so the upcoming zone-view
     // sync will rebuild the map without them. We need the *prior* mapping to translate
@@ -1182,7 +1190,7 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
         for (const auto &p : e.zone_view().per_player()) {
             if (Server_AbstractPlayer *ab = getPlayer(p.player_id())) {
                 const Server_Player::RuledZoneSyncResult sync =
-                    static_cast<Server_Player *>(ab)->applyRuledEngineZoneView(p, &tapSyncGes);
+                    static_cast<Server_Player *>(ab)->applyRuledEngineZoneView(p, &tapSyncGes, batchHasUntapPhase);
                 result.handOrLibraryChanged = result.handOrLibraryChanged || sync.handOrLibraryChanged;
                 result.tapStateEventsQueued = result.tapStateEventsQueued || sync.tapStateChanged;
                 result.zoneViewApplied = true;

@@ -1308,7 +1308,6 @@ Server_AbstractPlayer::cmdSetCardAttr(const Command_SetCardAttr &cmd, ResponseCo
     if (game->getRuledGame() && cmd.attribute() == AttrTapped && playerId != game->getRuledPriorityPlayer()) {
         return Response::RespInvalidCommand;
     }
-
     return setCardAttrHelper(ges, playerId, nameFromStdString(cmd.zone()), cmd.card_id(), cmd.attribute(),
                              nameFromStdString(cmd.attr_value()));
 }

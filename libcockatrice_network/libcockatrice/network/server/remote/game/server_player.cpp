@@ -154,7 +154,8 @@ void Server_Player::setupZones()
 }
 
 Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const ruled::v1::RuledPerPlayerView &v,
-                                                                            GameEventStorage *tapGes)
+                                                                            GameEventStorage *tapGes,
+                                                                            bool allowUntapReset)
 {
     RuledZoneSyncResult result;
     if (v.player_id() != playerId) {
@@ -309,6 +310,11 @@ Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const
                 if (tapGes && i < v.battlefield_tapped_size()) {
                     const bool desiredTapped = v.battlefield_tapped(i);
                     if (card->getTapped() != desiredTapped) {
+                        // Preserve manual table taps between priority passes in ruled mode;
+                        // only force untap from engine during explicit untap transitions.
+                        if (!allowUntapReset && card->getTapped() && !desiredTapped) {
+                            continue;
+                        }
                         card->setTapped(desiredTapped);
                         result.tapStateChanged = true;
                         Event_SetCardAttr tapEv;

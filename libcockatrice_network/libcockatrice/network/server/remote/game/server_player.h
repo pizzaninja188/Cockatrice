@@ -54,7 +54,8 @@ public:
     void setupZones() override;
     void clearZones() override;
     RuledZoneSyncResult applyRuledEngineZoneView(const ruled::v1::RuledPerPlayerView &v,
-                                                 GameEventStorage *tapGes = nullptr);
+                                                 GameEventStorage *tapGes = nullptr,
+                                                 bool allowUntapReset = true);
     void shuffleMainDeckForRuledFallback();
 
     Response::ResponseCode drawCards(GameEventStorage &ges, int number);
