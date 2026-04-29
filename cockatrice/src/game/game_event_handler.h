@@ -88,6 +88,8 @@ private:
     // Defender's locally confirmed block pairs to keep combat arrows visible
     // after submit until combat ends (or permanents leave battlefield).
     QHash<quint32, quint32> committedBlocks;
+    // Rule-engine stack object ids currently waiting to resolve.
+    QSet<quint32> ruledStackObjectIds;
     // Defender's currently "armed" blocker waiting to be paired.
     quint32 stagedBlockerOid = 0;
     // Local UI guard flags: once we submit declarations for the current declare step,
@@ -167,6 +169,10 @@ public:
     }
     [[nodiscard]] bool localPlayerIsRuledActive() const;
     [[nodiscard]] bool localPlayerIsRuledDefender() const;
+    [[nodiscard]] bool hasRuledStackItems() const
+    {
+        return !ruledStackObjectIds.isEmpty();
+    }
 
     void togglePendingAttacker(quint32 engineOid);
     void clearPendingAttackers();

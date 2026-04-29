@@ -443,6 +443,8 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             if (e.has_phase_changed()) {
                                 const auto &pc = e.phase_changed();
                                 lines += QStringLiteral("Phase: %1\n").arg(QString::fromStdString(pc.phase()));
+                                // Reaching a new phase guarantees the previous stack emptied.
+                                ruledStackObjectIds.clear();
                                 if (game->getGameState()->getActivePlayer() != pc.active_player_id()) {
                                     game->getGameState()->setActivePlayer(pc.active_player_id());
                                 }
@@ -479,6 +481,13 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 game->getGameState()->setPriorityPlayer(e.priority_changed().player_id());
                                 lines +=
                                     QStringLiteral("Priority: P%1\n").arg(e.priority_changed().player_id());
+                            }
+                            if (e.has_stack_pushed()) {
+                                const auto &sp = e.stack_pushed();
+                                ruledStackObjectIds.insert(sp.object_id());
+                            }
+                            if (e.has_stack_resolved()) {
+                                ruledStackObjectIds.remove(e.stack_resolved().object_id());
                             }
                             if (e.has_battlefield_object_map()) {
                                 cardIdToEngineOid.clear();

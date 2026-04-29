@@ -1060,7 +1060,9 @@ Player *TabGame::setPriorityPlayer(int id)
         if (localHasPriority) {
             const int currentPhase = game->getGameState()->getCurrentPhase();
             const bool myTurn = (game->getGameState()->getActivePlayer() == localPlayerId);
-            if (!phasesToolbar->shouldStopAtPhase(currentPhase, myTurn)) {
+            const bool hasManualStop = phasesToolbar->shouldStopAtPhase(currentPhase, myTurn);
+            const bool stackIsEmpty = !game->getGameEventHandler()->hasRuledStackItems();
+            if (!hasManualStop && stackIsEmpty) {
                 QTimer::singleShot(0, game->getGameEventHandler(), &GameEventHandler::handleNextTurn);
             }
         }
