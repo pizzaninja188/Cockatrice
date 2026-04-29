@@ -1,9 +1,13 @@
 #include "player_target.h"
 
 #include "../../interface/pixel_map_generator.h"
+#include "../abstract_game.h"
+#include "../player/player_actions.h"
+#include "../player/player_manager.h"
 #include "player.h"
 
 #include <QDebug>
+#include <QGraphicsSceneMouseEvent>
 #include <QPainter>
 #include <QPixmapCache>
 #include <QtMath>
@@ -187,4 +191,20 @@ AbstractCounter *PlayerTarget::addCounter(int _counterId, const QString &_name, 
 void PlayerTarget::counterDeleted()
 {
     playerCounter = nullptr;
+}
+
+void PlayerTarget::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton && owner && owner->getGame()) {
+        auto *playerManager = owner->getGame()->getPlayerManager();
+        if (playerManager) {
+            Player *localPlayer = playerManager->getPlayers().value(playerManager->getLocalPlayerId(), nullptr);
+            if (localPlayer && localPlayer->getPlayerActions() &&
+                localPlayer->getPlayerActions()->tryHandleRuledSpellTargetPlayerClick(owner)) {
+                event->accept();
+                return;
+            }
+        }
+    }
+    QGraphicsItem::mouseReleaseEvent(event);
 }

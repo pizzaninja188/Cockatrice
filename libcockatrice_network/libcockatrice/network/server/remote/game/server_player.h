@@ -24,6 +24,8 @@ public:
     {
         bool handOrLibraryChanged = false;
         bool tapStateChanged = false;
+        /// TABLE card order was rewritten to match engine battlefield order.
+        bool battlefieldOrderChanged = false;
         // engine_oid -> Server_Card.id, captured this sync. Empty when sync failed.
         QHash<quint32, int> engineOidToServerCardId;
     };

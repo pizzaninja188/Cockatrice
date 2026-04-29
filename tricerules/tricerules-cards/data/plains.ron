@@ -1,0 +1,7 @@
+(
+  id: "plains",
+  name: "Plains",
+  mana_cost: "",
+  types: ["Land", "Plains"],
+  is_land: true,
+)

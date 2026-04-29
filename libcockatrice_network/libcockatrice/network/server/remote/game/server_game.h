@@ -29,6 +29,7 @@
 #include <QObject>
 #include <QSet>
 #include <QStringList>
+#include <QVector>
 #include <libcockatrice/protocol/pb/event_leave.pb.h>
 #include <libcockatrice/protocol/pb/response.pb.h>
 #include <libcockatrice/protocol/pb/command_ruled_payload.pb.h>
@@ -93,10 +94,23 @@ private:
     std::unique_ptr<RulesRelay> rulesRelay;
     /// StackPushed.object_id -> engine card name; push and resolve may arrive in different ruled IPC batches.
     QHash<quint32, QString> ruledEngineStackPushDescriptionsByObjectId;
+    // Stack object id -> Server_Card.id currently in the Cockatrice STACK zone.
+    QHash<quint32, int> ruledStackObjectIdToServerCardId;
+    // Stack object id -> target engine object ids captured from CastSpell intent.
+    QHash<quint32, QVector<quint32>> ruledStackTargetsByObjectId;
+    struct PendingRuledCastVisual
+    {
+        QString cardName;
+        int serverCardId = -1;
+        QVector<quint32> targetOids;
+    };
+    // Pending local cast intents waiting to be bound to the next StackPushed.object_id.
+    QList<PendingRuledCastVisual> ruledPendingCastVisualQueue;
     struct RuledBatchApplyResult
     {
         bool zoneViewApplied = false;
         bool handOrLibraryChanged = false;
+        bool battlefieldOrderChanged = false;
         bool tapStateEventsQueued = false;
         bool phaseChanged = false;
     };

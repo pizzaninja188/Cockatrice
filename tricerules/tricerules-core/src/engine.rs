@@ -304,8 +304,9 @@ impl GameEngine {
                 },
             )),
         });
-        b.events
-            .push(ev_log("Attackers committed — priority in declare attackers".to_string()));
+        b.events.push(ev_log(
+            "Attackers committed — priority in declare attackers".to_string(),
+        ));
         b.events.push(ev_priority_changed(self));
         b.events.push(ev_log(
             "Pass priority to proceed to declare blockers".to_string(),
@@ -366,8 +367,7 @@ impl GameEngine {
         }
         self.state.passes_since_stack_change = 0;
         b.events.push(ev_log(
-            "Blockers declared — active player receives priority before combat damage"
-                .to_string(),
+            "Blockers declared — active player receives priority before combat damage".to_string(),
         ));
         b.events.push(ev_priority_changed(self));
         fill_legal(&mut b, self);
@@ -820,6 +820,15 @@ impl GameEngine {
                         if t.is_creature(&self.registry) {
                             t.damage += amount;
                         }
+                    } else if let Some(pi) = self.state.player_idx(tid as i32) {
+                        self.state.players[pi].life -= amount as i32;
+                        events.push(rv1::RuledEvent {
+                            ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                                player_id: self.state.players[pi].id,
+                                new_total: self.state.players[pi].life,
+                                delta: -(amount as i32),
+                            })),
+                        });
                     }
                 }
             }
@@ -905,7 +914,8 @@ impl GameEngine {
         if !def.is_sorcery && !def.is_instant && !can_sorc {
             return Err(EngineError::Illegal("spell only in main"));
         }
-        pay_mana_simple(&mut self.state, idx, &def.mana_cost)?;
+        validate_spell_targets(&self.state, &self.registry, &card_id, targets)?;
+        pay_mana_simple(&mut self.state, &self.registry, idx, &def.mana_cost)?;
 
         self.state.players[idx].hand.retain(|&x| x != oid);
         let trefs: Vec<ObjectId> = targets.iter().map(|t| t.object_id).collect();
@@ -1139,7 +1149,7 @@ impl GameEngine {
                             .unwrap_or(false)
                     })
                     .collect(),
-                battlefield_object_id: p.battlefield.iter().map(|&oid| oid).collect(),
+                battlefield_object_id: p.battlefield.to_vec(),
                 battlefield_summoning_sick: p
                     .battlefield
                     .iter()
@@ -1148,6 +1158,54 @@ impl GameEngine {
                             .objects
                             .get(&oid)
                             .map(|o| o.summoning_sick)
+                            .unwrap_or(false)
+                    })
+                    .collect(),
+                battlefield_power: p
+                    .battlefield
+                    .iter()
+                    .map(|&oid| {
+                        self.state.objects.get(&oid).map_or(0, |o| {
+                            if o.is_creature(&self.registry) {
+                                o.power.unwrap_or(0)
+                            } else {
+                                0
+                            }
+                        })
+                    })
+                    .collect(),
+                battlefield_toughness: p
+                    .battlefield
+                    .iter()
+                    .map(|&oid| {
+                        self.state.objects.get(&oid).map_or(0, |o| {
+                            if o.is_creature(&self.registry) {
+                                o.toughness.unwrap_or(0)
+                            } else {
+                                0
+                            }
+                        })
+                    })
+                    .collect(),
+                battlefield_damage: p
+                    .battlefield
+                    .iter()
+                    .map(|&oid| {
+                        self.state
+                            .objects
+                            .get(&oid)
+                            .filter(|o| o.is_creature(&self.registry))
+                            .map_or(0, |o| o.damage)
+                    })
+                    .collect(),
+                battlefield_is_creature: p
+                    .battlefield
+                    .iter()
+                    .map(|&oid| {
+                        self.state
+                            .objects
+                            .get(&oid)
+                            .map(|o| o.is_creature(&self.registry))
                             .unwrap_or(false)
                     })
                     .collect(),
@@ -1308,20 +1366,27 @@ fn destroy_permanent(state: &mut GameState, oid: ObjectId) -> Result<(), EngineE
 
 fn pay_mana_simple(
     state: &mut GameState,
+    registry: &CardRegistry,
     player_idx: usize,
     cost: &str,
 ) -> Result<(), EngineError> {
-    if player_idx != state.active_player_idx {
+    // Paying spell costs taps the controller's lands while they have priority — not
+    // restricted to the active player (e.g. responding with Counterspell on NAP's turn).
+    if player_idx != state.priority_idx {
         return Err(EngineError::Illegal(
-            "only active player can activate mana abilities",
+            "only priority player can pay mana for spells",
         ));
     }
+    let mut need_w = 0u32;
+    let mut need_u = 0u32;
+    let mut need_b = 0u32;
     let mut need_r = 0u32;
     let mut need_g = 0u32;
-    let mut need_u = 0u32;
     let mut need_c = 0u32;
     for ch in cost.chars() {
         match ch {
+            'W' => need_w += 1,
+            'B' => need_b += 1,
             'R' => need_r += 1,
             'G' => need_g += 1,
             'U' => need_u += 1,
@@ -1335,19 +1400,25 @@ fn pay_mana_simple(
         if o.tapped {
             continue;
         }
-        let cid = &o.card_id;
-        if need_r > 0 && cid == "mountain" {
+        let land_color = basic_land_color_from_object(o, registry);
+        if need_w > 0 && land_color == Some('W') {
             o.tapped = true;
-            need_r -= 1;
-        } else if need_g > 0 && cid == "forest" {
-            o.tapped = true;
-            need_g -= 1;
-        } else if need_u > 0 && cid == "island" {
+            need_w -= 1;
+        } else if need_u > 0 && land_color == Some('U') {
             o.tapped = true;
             need_u -= 1;
+        } else if need_b > 0 && land_color == Some('B') {
+            o.tapped = true;
+            need_b -= 1;
+        } else if need_r > 0 && land_color == Some('R') {
+            o.tapped = true;
+            need_r -= 1;
+        } else if need_g > 0 && land_color == Some('G') {
+            o.tapped = true;
+            need_g -= 1;
         }
     }
-    let mut need = need_c + need_r + need_g + need_u;
+    let mut need = need_c + need_w + need_u + need_b + need_r + need_g;
     if need == 0 {
         return Ok(());
     }
@@ -1360,13 +1431,95 @@ fn pay_mana_simple(
         if o.tapped {
             continue;
         }
-        if matches!(o.card_id.as_str(), "mountain" | "forest" | "island") {
+        if basic_land_color_from_object(o, registry).is_some() {
             o.tapped = true;
             need -= 1;
         }
     }
     if need > 0 {
         return Err(EngineError::Illegal("cannot pay mana"));
+    }
+    Ok(())
+}
+
+fn basic_land_color_from_object(obj: &GameObject, registry: &CardRegistry) -> Option<char> {
+    let def = registry.get(&obj.card_id)?;
+    if !def.is_land {
+        return None;
+    }
+    if def.types.iter().any(|t| t == "Plains") {
+        return Some('W');
+    }
+    if def.types.iter().any(|t| t == "Island") {
+        return Some('U');
+    }
+    if def.types.iter().any(|t| t == "Swamp") {
+        return Some('B');
+    }
+    if def.types.iter().any(|t| t == "Mountain") {
+        return Some('R');
+    }
+    if def.types.iter().any(|t| t == "Forest") {
+        return Some('G');
+    }
+    None
+}
+
+fn validate_spell_targets(
+    state: &GameState,
+    registry: &CardRegistry,
+    card_id: &str,
+    targets: &[rv1::TargetRef],
+) -> Result<(), EngineError> {
+    let effect = registry
+        .get(card_id)
+        .and_then(|c| c.spell_effect.as_ref())
+        .map(|s| spell_effect_from_key(s))
+        .unwrap_or(SpellEffectKind::None);
+
+    match effect {
+        SpellEffectKind::DestroyTarget => {
+            let target = targets
+                .first()
+                .ok_or(EngineError::Illegal("destroy spells need a target"))?
+                .object_id;
+            let obj = state
+                .objects
+                .get(&target)
+                .ok_or(EngineError::Illegal("target object does not exist"))?;
+            if obj.zone != Zone::Battlefield || !obj.is_creature(registry) {
+                return Err(EngineError::Illegal(
+                    "destroy target must be a creature on battlefield",
+                ));
+            }
+        }
+        SpellEffectKind::CounterTargetSpell => {
+            let target = targets
+                .first()
+                .ok_or(EngineError::Illegal("counterspell needs a stack target"))?
+                .object_id;
+            if !state.stack.iter().any(|s| s.id == target) {
+                return Err(EngineError::Illegal("counter target must be on stack"));
+            }
+        }
+        SpellEffectKind::DealDamage { .. } => {
+            let Some(target_ref) = targets.first() else {
+                return Ok(());
+            };
+            let target = target_ref.object_id;
+            if let Some(obj) = state.objects.get(&target) {
+                if obj.zone != Zone::Battlefield || !obj.is_creature(registry) {
+                    return Err(EngineError::Illegal(
+                        "damage target must be a battlefield creature or player",
+                    ));
+                }
+            } else if state.player_idx(target as i32).is_none() {
+                return Err(EngineError::Illegal(
+                    "damage target must be a battlefield creature or player",
+                ));
+            }
+        }
+        _ => {}
     }
     Ok(())
 }

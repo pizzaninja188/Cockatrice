@@ -8,6 +8,7 @@
 #include "../phase.h"
 #include "../player/player.h"
 #include "../player/player_actions.h"
+#include "../player/player_manager.h"
 #include "../zones/logic/view_zone_logic.h"
 #include "../zones/table_zone.h"
 #include "../zones/view_zone.h"
@@ -637,6 +638,17 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
             }
         }
     } else if ((event->modifiers() != Qt::AltModifier) && (event->button() == Qt::LeftButton)) {
+        if (owner != nullptr) {
+            auto *game = owner->getGame();
+            auto *playerManager = game ? game->getPlayerManager() : nullptr;
+            auto *localPlayer = playerManager ? playerManager->getPlayers().value(playerManager->getLocalPlayerId()) : nullptr;
+            auto *actions = localPlayer ? localPlayer->getPlayerActions() : nullptr;
+            if (actions && actions->tryHandleRuledSpellTargetClick(this)) {
+                setCursor(Qt::OpenHandCursor);
+                AbstractCardItem::mouseReleaseEvent(event);
+                return;
+            }
+        }
         // Ruled-mode combat clicks take priority over normal play handling on the table.
         if (handleRuledCombatClick(this)) {
             update();

@@ -134,6 +134,12 @@ message RuledPerPlayerView {
   repeated uint32 battlefield_object_id = 7;
   // Parallel array to `battlefield`, true if that permanent is summoning sick.
   repeated bool battlefield_summoning_sick = 8;
+  // Parallel array to `battlefield`: engine creature stats for Servatrice/UI sync.
+  // When `battlefield_is_creature` is false, ignore power/toughness/damage for that slot.
+  repeated uint32 battlefield_power = 9;
+  repeated uint32 battlefield_toughness = 10;
+  repeated uint32 battlefield_damage = 11;
+  repeated bool battlefield_is_creature = 12;
 }
 
 message ZoneViewSync {

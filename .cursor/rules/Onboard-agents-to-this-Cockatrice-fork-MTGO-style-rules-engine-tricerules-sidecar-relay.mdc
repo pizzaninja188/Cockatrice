@@ -17,12 +17,21 @@ This repo extends upstream Cockatrice with a **server-authoritative MTG-style ru
 2. **Single writer of ruled state:** the engine session actor owns `GameState`; Servatrice forwards commands and **filters** per-player views where hidden info applies (see plan).
 3. **Determinism:** randomness via seeded RNG; replays are **`(seed, command log) → state`** (see plan milestones M4+).
 4. **Card model:** hybrid — Ron **`tricerules-cards/data/`**, primitives **`tricerules-cards/primitives/`**, **`custom/`** Rust `CardEffect` when data is insufficient; validate card data at startup.
+5. **MTG rules fidelity:** Ruled behavior should match **Magic** as documented in the **Comprehensive Rules** (and **Oracle text** for card-specific effects). When adding or changing mechanics, verify timing, zones, and control/priority against the CR; encode expectations in **`tricerules-core/tests/scenario.rs`** where practical. See **`tricerules-engine-change-safety.mdc`** for full guard rails.
 ## Milestones (short)
 - **M1:** Scaffold — workspace, proto crate, sidecar session, relay shell, CMake/CI.  
 - **M2:** `vanilla_core` rules + small card pool + scenario tests.  
 - **M3:** End-to-end desktop + protocol for real play.  
 - **M4+:** Replay/reconnect/spectators; expand primitives and card pool.
 **First-milestone non-goals** (do not scope-creep without explicit ask): full keyword coverage, Bo3/sideboard, webclient in-game ruled UI, fancy anti-cheat beyond server authority + seed — see plan.
+## Ruled features: integrate UI in the same task
+Unless the user **explicitly** scopes work to backend-only (engine, proto-only, or server relay without client), treat **ruled** work as **end-to-end**: engine, shared **protobuf**, **Servatrice** relay, and **Cockatrice** UI should move together so features are playable, not “engine-complete + manual UI later.”
+
+- After adding or changing **commands, prompts, targets, phases, or player-visible state**, wire the **desktop client** in the same change set (or immediate follow-up in the same session): e.g. `tab_game`, `player_actions`, `card_item`, `game/prompt`, and related handlers—following existing ruled vs freeform gates.
+- **Minimal viable UI is enough**: one obvious path (button, menu, click target, prompt action) beats leaving integration for the user. Log-only or placeholder UI is only for **phased rollout** when the user asks for it.
+- Prompt/dock placement and signal wiring: see **`Use-ruled-prompt-module-in-tab-game-right-panel.mdc`**.
+- **Do not break freeform**: keep new UI and code paths behind ruled-mode checks.
+
 ## When editing
 - Prefer **small, reviewable diffs**; keep legacy paths intact unless the task is explicitly to migrate them.
 - Any change to `.proto` definitions requires **both** C++ and Rust consumers to stay buildable (regenerate/bindings as the project already does).

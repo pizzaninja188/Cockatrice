@@ -6,6 +6,14 @@ alwaysApply: false
 
 # Tricerules Engine Change Safety
 
+## MTG Comprehensive Rules verification
+
+When implementing or changing **ruled** mechanics (timing, zones, combat, the stack, state-based actions, priority, keywords, replacement/prevention effects, etc.):
+
+- Treat the **Magic: The Gathering Comprehensive Rules** as the primary authority for *how* the game works. For **card-specific** behavior, align with **Oracle text** (and normal templating) for that card or effect shape.
+- Before merging non-trivial behavior, **look up the relevant CR sections** (and gather rulings or Oracle notes when edge cases matter) so timing, zone changes, and “who chooses / when” match published rules—not informal table rules, streamer shorthand, or another digital client when those disagree with the CR.
+- If the fork **intentionally** simplifies or defers behavior (see project milestone non-goals), keep it deterministic and make that limitation explicit in the task or review; do not silently ship “almost right” as if it were CR-accurate.
+
 When changing `tricerules-core` engine behavior:
 
 - Preserve server-authoritative behavior; do not rely on client-side legality checks.
@@ -22,3 +30,4 @@ Testing expectations for rules changes:
 If protocol or command shapes change:
 
 - Ensure `ruled_v1.proto` and Rust/C++ consumers remain aligned.
+- When the change adds or alters **player intents**, **selection/targeting**, or **visible ruled state**, also wire **Servatrice relay + Cockatrice ruled UI** in the same effort (see project onboard rule: “Ruled features: integrate UI in the same task”) unless the user scoped backend-only.

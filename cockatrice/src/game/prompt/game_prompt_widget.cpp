@@ -94,6 +94,11 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     connect(resetBlockersButton, &QPushButton::clicked, this, &GamePromptWidget::resetBlockersRequested);
     combatRow->addWidget(resetBlockersButton);
 
+    cancelTargetingButton = new QPushButton(this);
+    cancelTargetingButton->setObjectName("cancelTargetingButton");
+    connect(cancelTargetingButton, &QPushButton::clicked, this, &GamePromptWidget::cancelTargetingRequested);
+    layout->addWidget(cancelTargetingButton);
+
     layout->addLayout(combatRow);
 
     futureActionsLabel = new QLabel(this);
@@ -122,6 +127,7 @@ void GamePromptWidget::retranslateUi()
     confirmAttackersButton->setText(tr("OK"));
     confirmBlockersButton->setText(tr("OK"));
     resetBlockersButton->setText(tr("Reset Blockers"));
+    cancelTargetingButton->setText(tr("Cancel"));
     futureActionsLabel->setText(tr("Future actions"));
     futureActionsFrame->setToolTip(tr("Reserved space for upcoming action buttons (undo land tap, undo mana, etc.)."));
 }
@@ -178,8 +184,26 @@ void GamePromptWidget::setCombatMode(CombatMode mode, bool localPlayerHasButtons
     updateCombatButtonsVisibility();
 }
 
+void GamePromptWidget::setTargetingMode(bool enabled, const QString &cardName)
+{
+    targetingModeEnabled = enabled;
+    if (enabled) {
+        setPromptText(tr("Cast %1 selected. Select a target card, or press Cancel.").arg(cardName));
+    }
+    updateCombatButtonsVisibility();
+}
+
 void GamePromptWidget::updateCombatButtonsVisibility()
 {
+    if (targetingModeEnabled) {
+        passPriorityButton->setVisible(false);
+        confirmAttackersButton->setVisible(false);
+        confirmBlockersButton->setVisible(false);
+        resetBlockersButton->setVisible(false);
+        cancelTargetingButton->setVisible(true);
+        return;
+    }
+
     const bool showAttackers =
         localPlayerHasPriority && currentCombatMode == CombatMode::DeclareAttackers && localPlayerHasCombatButtons;
     const bool showBlockers =
@@ -188,6 +212,7 @@ void GamePromptWidget::updateCombatButtonsVisibility()
     confirmAttackersButton->setVisible(showAttackers);
     confirmBlockersButton->setVisible(showBlockers);
     resetBlockersButton->setVisible(showBlockers);
+    cancelTargetingButton->setVisible(false);
 }
 
 void GamePromptWidget::updatePassPriorityButtonText()

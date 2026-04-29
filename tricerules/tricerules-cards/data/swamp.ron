@@ -1,0 +1,7 @@
+(
+  id: "swamp",
+  name: "Swamp",
+  mana_cost: "",
+  types: ["Land", "Swamp"],
+  is_land: true,
+)

@@ -111,8 +111,22 @@ QString PlayerActions::formatSimpleManaCost(const QMap<QChar, int> &cost)
 
 void PlayerActions::clearPendingRuledSpellCast()
 {
+    const bool hadTargeting = pendingRuledSpellCast.valid && pendingRuledSpellCast.waitingForTarget;
     pendingRuledSpellCast = PendingRuledSpellCast{};
+    if (hadTargeting) {
+        emit ruledSpellTargetingChanged(false, {});
+    }
 }
+void PlayerActions::cancelPendingRuledSpellCast()
+{
+    if (!pendingRuledSpellCast.valid) {
+        return;
+    }
+    player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+        tr("Canceled casting %1.").arg(pendingRuledSpellCast.cardName));
+    clearPendingRuledSpellCast();
+}
+
 
 bool PlayerActions::completePendingRuledSpellCast()
 {
@@ -122,7 +136,12 @@ bool PlayerActions::completePendingRuledSpellCast()
     }
 
     ruled::v1::RuledCommand ruledCommand;
-    ruledCommand.mutable_cast_spell()->set_hand_card_index(pendingRuledSpellCast.handIndex);
+    auto *cast = ruledCommand.mutable_cast_spell();
+    cast->set_hand_card_index(pendingRuledSpellCast.handIndex);
+    for (const quint32 targetOid : pendingRuledSpellCast.selectedTargetOids) {
+        auto *target = cast->add_targets();
+        target->set_object_id(targetOid);
+    }
     std::string payload;
     if (!ruledCommand.SerializeToString(&payload)) {
         clearPendingRuledSpellCast();
@@ -137,6 +156,23 @@ bool PlayerActions::completePendingRuledSpellCast()
         tr("Casting %1.").arg(pendingRuledSpellCast.cardName));
     clearPendingRuledSpellCast();
     return true;
+}
+
+bool PlayerActions::ruledSpellNeedsTarget(const CardItem *card)
+{
+    if (!card) {
+        return false;
+    }
+    const QString rulesText = card->getCardInfo().getText();
+    if (rulesText.contains(QStringLiteral("target"), Qt::CaseInsensitive)) {
+        return true;
+    }
+    // Fallback for cards without complete rules text metadata.
+    const QString name = card->getName().trimmed();
+    return name.compare(QStringLiteral("Go for the Throat"), Qt::CaseInsensitive) == 0 ||
+           name.compare(QStringLiteral("Counterspell"), Qt::CaseInsensitive) == 0 ||
+           name.compare(QStringLiteral("Giant Growth"), Qt::CaseInsensitive) == 0 ||
+           name.compare(QStringLiteral("Lightning Bolt"), Qt::CaseInsensitive) == 0;
 }
 
 bool PlayerActions::tryPayRuledSpellWithCounter(const QString &counterName)
@@ -269,6 +305,11 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
     if (ruledHandIndex < 0) {
         return false;
     }
+    if (pendingRuledSpellCast.valid && pendingRuledSpellCast.waitingForTarget &&
+        pendingRuledSpellCast.handIndex == ruledHandIndex) {
+        cancelPendingRuledSpellCast();
+        return true;
+    }
 
     const bool isInstant = card->getCardInfo().getCardType().contains("Instant", Qt::CaseInsensitive);
     const int currentPhase = player->getGame()->getGameState()->getCurrentPhase();
@@ -285,6 +326,15 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
     pendingRuledSpellCast.handIndex = ruledHandIndex;
     pendingRuledSpellCast.cardName = card->getName();
     pendingRuledSpellCast.remainingCost = parseSimpleManaCost(card->getCardInfo().getManaCost());
+    pendingRuledSpellCast.selectedTargetOids.clear();
+    pendingRuledSpellCast.waitingForTarget = ruledSpellNeedsTarget(card);
+
+    if (pendingRuledSpellCast.waitingForTarget) {
+        emit ruledSpellTargetingChanged(true, pendingRuledSpellCast.cardName);
+        player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+            tr("Cast %1 selected. Select a target card, or press Cancel.").arg(card->getName()));
+        return true;
+    }
 
     int totalRequired = 0;
     for (auto it = pendingRuledSpellCast.remainingCost.constBegin(); it != pendingRuledSpellCast.remainingCost.constEnd();
@@ -298,6 +348,90 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
     player->getGame()->getGameEventHandler()->emitLocalRuledLog(
         tr("Cast %1 selected. Pay mana by clicking counters: %2.")
             .arg(card->getName(), formatSimpleManaCost(pendingRuledSpellCast.remainingCost)));
+    return true;
+}
+
+bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
+{
+    if (!pendingRuledSpellCast.valid || !pendingRuledSpellCast.waitingForTarget) {
+        return false;
+    }
+    if (!card || !card->getZone()) {
+        return true;
+    }
+    if (!player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+        clearPendingRuledSpellCast();
+        return false;
+    }
+
+    const QString zoneName = card->getZone()->getName();
+    if (zoneName != ZoneNames::TABLE && zoneName != ZoneNames::STACK) {
+        player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+            tr("Select a target on the battlefield (or stack), or press Cancel.")
+                .arg(pendingRuledSpellCast.cardName));
+        return true;
+    }
+
+    auto *handler = player->getGame()->getGameEventHandler();
+    const quint32 targetOid = handler ? handler->engineOidForCardId(card->getId()) : 0;
+    if (targetOid == 0) {
+        player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+            tr("That target is not selectable yet. Select another target or cancel %1.")
+                .arg(pendingRuledSpellCast.cardName));
+        return true;
+    }
+
+    pendingRuledSpellCast.selectedTargetOids = {targetOid};
+    pendingRuledSpellCast.waitingForTarget = false;
+    emit ruledSpellTargetingChanged(false, {});
+
+    int totalRequired = 0;
+    for (auto it = pendingRuledSpellCast.remainingCost.constBegin(); it != pendingRuledSpellCast.remainingCost.constEnd();
+         ++it) {
+        totalRequired += it.value();
+    }
+    if (totalRequired == 0) {
+        return completePendingRuledSpellCast();
+    }
+
+    player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+        tr("Target selected for %1. Pay mana by clicking counters: %2.")
+            .arg(pendingRuledSpellCast.cardName, formatSimpleManaCost(pendingRuledSpellCast.remainingCost)));
+    return true;
+}
+
+bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
+{
+    if (!pendingRuledSpellCast.valid || !pendingRuledSpellCast.waitingForTarget) {
+        return false;
+    }
+    if (!targetPlayer || !player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+        clearPendingRuledSpellCast();
+        return false;
+    }
+
+    const int targetPlayerId = targetPlayer->getPlayerInfo()->getId();
+    if (targetPlayerId < 0) {
+        return true;
+    }
+
+    const quint32 targetOid = static_cast<quint32>(targetPlayerId);
+    pendingRuledSpellCast.selectedTargetOids = {targetOid};
+    pendingRuledSpellCast.waitingForTarget = false;
+    emit ruledSpellTargetingChanged(false, {});
+
+    int totalRequired = 0;
+    for (auto it = pendingRuledSpellCast.remainingCost.constBegin(); it != pendingRuledSpellCast.remainingCost.constEnd();
+         ++it) {
+        totalRequired += it.value();
+    }
+    if (totalRequired == 0) {
+        return completePendingRuledSpellCast();
+    }
+
+    player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+        tr("Target selected for %1. Pay mana by clicking counters: %2.")
+            .arg(pendingRuledSpellCast.cardName, formatSimpleManaCost(pendingRuledSpellCast.remainingCost)));
     return true;
 }
 

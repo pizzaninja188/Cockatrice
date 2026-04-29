@@ -1,0 +1,9 @@
+(
+  id: "walking_corpse",
+  name: "Walking Corpse",
+  mana_cost: "1B",
+  types: ["Creature", "Zombie"],
+  is_creature: true,
+  power: 2,
+  toughness: 2,
+)

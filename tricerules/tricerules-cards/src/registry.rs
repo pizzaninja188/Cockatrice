@@ -45,10 +45,16 @@ impl CardRegistry {
 
 /// Ron snippets compiled into the binary (hybrid model: data-first).
 const EMBEDDED_RON_CHUNKS: &[&str] = &[
+    include_str!("../data/plains.ron"),
     include_str!("../data/mountain.ron"),
     include_str!("../data/island.ron"),
     include_str!("../data/forest.ron"),
+    include_str!("../data/swamp.ron"),
     include_str!("../data/grizzly_bears.ron"),
+    include_str!("../data/savannah_lions.ron"),
+    include_str!("../data/walking_corpse.ron"),
+    include_str!("../data/balduvian_barbarians.ron"),
+    include_str!("../data/coral_merfolk.ron"),
     include_str!("../data/lightning_bolt.ron"),
     include_str!("../data/giant_growth.ron"),
     include_str!("../data/divination.ron"),

@@ -15,6 +15,7 @@
 #include <QMenu>
 #include <QObject>
 #include <QMap>
+#include <QVector>
 #include <libcockatrice/card/relation/card_relation_type.h>
 #include <libcockatrice/filters/filter_string.h>
 #include <libcockatrice/protocol/pb/card_attributes.pb.h>
@@ -41,6 +42,7 @@ signals:
     void logSetAnnotation(Player *player, CardItem *card, QString newAnnotation);
     void logSetDoesntUntap(Player *player, CardItem *card, bool doesntUntap);
     void logSetPT(Player *player, CardItem *card, QString newPT);
+    void ruledSpellTargetingChanged(bool active, const QString &cardName);
 
 public:
     enum CardsToReveal
@@ -66,6 +68,9 @@ public:
     void moveOneCardUntil(CardItem *card);
     void stopMoveTopCardsUntil();
     bool tryPayRuledSpellWithCounter(const QString &counterName);
+    bool tryHandleRuledSpellTargetClick(CardItem *card);
+    bool tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer);
+    void cancelPendingRuledSpellCast();
 
     [[nodiscard]] bool isMovingCardsUntil() const
     {
@@ -174,12 +179,15 @@ private:
         int handIndex = -1;
         QString cardName;
         QMap<QChar, int> remainingCost;
+        QVector<quint32> selectedTargetOids;
+        bool waitingForTarget = false;
         bool valid = false;
     };
 
     Player *player;
     bool tryPlayRuledLand(CardItem *card);
     bool tryStartRuledSpellCast(CardItem *card);
+    static bool ruledSpellNeedsTarget(const CardItem *card);
     static QMap<QChar, int> parseSimpleManaCost(const QString &manaCost);
     static QString formatSimpleManaCost(const QMap<QChar, int> &cost);
     void clearPendingRuledSpellCast();

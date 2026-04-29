@@ -11,6 +11,7 @@
 #include "../game/log/message_log_widget.h"
 #include "../game/phases_toolbar.h"
 #include "../game/player/player.h"
+#include "../game/player/player_actions.h"
 #include "../game/player/player_list_widget.h"
 #include "../game/prompt/game_prompt_widget.h"
 #include "../game/replay.h"
@@ -265,6 +266,17 @@ void TabGame::connectToGameEventHandler()
                 &GameEventHandler::handleConfirmRuledBlockers);
         connect(gamePromptWidget, &GamePromptWidget::resetBlockersRequested, game->getGameEventHandler(),
                 &GameEventHandler::clearPendingBlocks);
+        connect(gamePromptWidget, &GamePromptWidget::cancelTargetingRequested, this, [this]() {
+            if (!game) {
+                return;
+            }
+            const int localPlayerId = game->getPlayerManager()->getLocalPlayerId();
+            Player *localPlayer = game->getPlayerManager()->getPlayers().value(localPlayerId, nullptr);
+            if (!localPlayer || !localPlayer->getPlayerActions()) {
+                return;
+            }
+            localPlayer->getPlayerActions()->cancelPendingRuledSpellCast();
+        });
     }
 }
 
@@ -981,6 +993,11 @@ void TabGame::addLocalPlayer(Player *newPlayer, int playerId)
     connect(deckView->playerDeckView, &DeckViewContainer::newCardAdded, this, &TabGame::newCardAdded);
     deckViewContainers.insert(playerId, deckView);
     deckViewContainerLayout->addWidget(deckView);
+
+    if (gamePromptWidget && newPlayer->getPlayerActions()) {
+        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledSpellTargetingChanged, gamePromptWidget,
+                &GamePromptWidget::setTargetingMode);
+    }
 
     // auto load deck for player if that debug setting is enabled
     QString deckPath = SettingsCache::instance().debug().getDeckPathForPlayer(newPlayer->getPlayerInfo()->getName());

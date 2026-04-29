@@ -25,6 +25,8 @@ fn initial_batch_includes_zone_view_for_cockatrice() {
                     60 - 7,
                     "rest in library (csv)"
                 );
+                assert_eq!(p.battlefield_power.len(), p.battlefield.len());
+                assert_eq!(p.battlefield_is_creature.len(), p.battlefield.len());
             }
         }
         _ => panic!("expected ZoneView, got {:?}", e0.ev),

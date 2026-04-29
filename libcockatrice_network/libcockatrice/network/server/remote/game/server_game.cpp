@@ -130,6 +130,11 @@ static bool ruledResolvedStackSpellGoesToBattlefield(const Server_Card *card, co
     return true;
 }
 
+QString normalizeRuledCardName(const QString &name)
+{
+    return name.trimmed().toLower().replace(QLatin1Char('_'), QLatin1Char(' '));
+}
+
 int countCsvEntries(const std::string &csv)
 {
     if (csv.empty()) {
@@ -502,6 +507,9 @@ void Server_Game::doStartGameIfReady(bool forceStartGame)
     }
 
     ruledEngineStackPushDescriptionsByObjectId.clear();
+    ruledStackObjectIdToServerCardId.clear();
+    ruledStackTargetsByObjectId.clear();
+    ruledPendingCastVisualQueue.clear();
 
     gameStarted = true;
     for (auto *player : players.values()) {
@@ -1046,6 +1054,13 @@ Response::ResponseCode Server_Game::processRuledPayload(int playerId, const Comm
                 const int handIndex = static_cast<int>(ruledCmd.cast_spell().hand_card_index());
                 if (handZone && stackZone && handIndex >= 0 && handIndex < handZone->getCards().size()) {
                     Server_Card *card = handZone->getCards().at(handIndex);
+                    PendingRuledCastVisual pending;
+                    pending.cardName = card ? card->getName() : QString();
+                    pending.serverCardId = card ? card->getId() : -1;
+                    for (int ti = 0; ti < ruledCmd.cast_spell().targets_size(); ++ti) {
+                        pending.targetOids.append(static_cast<quint32>(ruledCmd.cast_spell().targets(ti).object_id()));
+                    }
+                    ruledPendingCastVisualQueue.append(pending);
                     CardToMove cardToMove;
                     cardToMove.set_card_id(card->getId());
                     GameEventStorage moveGes;
@@ -1063,7 +1078,8 @@ Response::ResponseCode Server_Game::processRuledPayload(int playerId, const Comm
         // In ruled mode, floating mana empties whenever the step/phase changes.
         clearRuledManaPoolsOnServer(this);
     }
-    if (batchResult.zoneViewApplied && batchResult.handOrLibraryChanged) {
+    if (batchResult.zoneViewApplied &&
+        (batchResult.handOrLibraryChanged || batchResult.battlefieldOrderChanged)) {
         sendGameStateToPlayers();
     }
     // Append to deterministic replay log (concatenated RuledCommand bytes)
@@ -1117,7 +1133,6 @@ void Server_Game::applyRuledStackResolvedEvent(const ruled::v1::StackResolved &s
         }
         break;
     }
-    ruledEngineStackPushDescriptionsByObjectId.remove(resolvedOid);
 }
 
 Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1::IpcResponse &resp)
@@ -1179,8 +1194,20 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
         }
         if (!e.has_zone_view()) {
             if (e.has_stack_pushed()) {
-                ruledEngineStackPushDescriptionsByObjectId.insert(static_cast<quint32>(e.stack_pushed().object_id()),
-                                                                  QString::fromStdString(e.stack_pushed().description()));
+                const quint32 pushedOid = static_cast<quint32>(e.stack_pushed().object_id());
+                const QString pushedName = QString::fromStdString(e.stack_pushed().description());
+                ruledEngineStackPushDescriptionsByObjectId.insert(pushedOid, pushedName);
+                const QString normalizedPushedName = normalizeRuledCardName(pushedName);
+                for (auto it = ruledPendingCastVisualQueue.begin(); it != ruledPendingCastVisualQueue.end(); ++it) {
+                    if (normalizeRuledCardName(it->cardName) == normalizedPushedName) {
+                        ruledStackTargetsByObjectId.insert(pushedOid, it->targetOids);
+                        if (it->serverCardId >= 0) {
+                            ruledStackObjectIdToServerCardId.insert(pushedOid, it->serverCardId);
+                        }
+                        ruledPendingCastVisualQueue.erase(it);
+                        break;
+                    }
+                }
             }
             if (e.has_stack_resolved()) {
                 applyRuledStackResolvedEvent(e.stack_resolved());
@@ -1192,6 +1219,7 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
                 const Server_Player::RuledZoneSyncResult sync =
                     static_cast<Server_Player *>(ab)->applyRuledEngineZoneView(p, &tapSyncGes, batchHasUntapPhase);
                 result.handOrLibraryChanged = result.handOrLibraryChanged || sync.handOrLibraryChanged;
+                result.battlefieldOrderChanged = result.battlefieldOrderChanged || sync.battlefieldOrderChanged;
                 result.tapStateEventsQueued = result.tapStateEventsQueued || sync.tapStateChanged;
                 result.zoneViewApplied = true;
             }
@@ -1331,6 +1359,44 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
                 combatGesHasEvents = true;
             }
         }
+        if (e.has_stack_resolved()) {
+            const quint32 resolvedOid = static_cast<quint32>(e.stack_resolved().object_id());
+            const QString resolvedName = normalizeRuledCardName(
+                ruledEngineStackPushDescriptionsByObjectId.value(resolvedOid));
+            const QVector<quint32> targets = ruledStackTargetsByObjectId.take(resolvedOid);
+
+            if (resolvedName == QStringLiteral("counterspell")) {
+                if (!targets.isEmpty()) {
+                    const quint32 targetStackOid = targets.first();
+                    const auto targetCardIdIt = ruledStackObjectIdToServerCardId.constFind(targetStackOid);
+                    if (targetCardIdIt != ruledStackObjectIdToServerCardId.constEnd()) {
+                        for (Server_AbstractPlayer *ab : getPlayers().values()) {
+                            if (!ab) {
+                                continue;
+                            }
+                            Server_CardZone *stackZone = ab->getZones().value(ZoneNames::STACK);
+                            Server_CardZone *graveZone = ab->getZones().value(ZoneNames::GRAVE);
+                            if (!stackZone || !graveZone) {
+                                continue;
+                            }
+                            Server_Card *targetStackCard = stackZone->getCard(*targetCardIdIt, nullptr, false);
+                            if (!targetStackCard) {
+                                continue;
+                            }
+                            CardToMove cardToMove;
+                            cardToMove.set_card_id(targetStackCard->getId());
+                            if (ab->moveCard(combatGes, stackZone, QList<const CardToMove *>() << &cardToMove, graveZone,
+                                             -1, 0, true) == Response::RespOk) {
+                                combatGesHasEvents = true;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            ruledStackObjectIdToServerCardId.remove(resolvedOid);
+            ruledEngineStackPushDescriptionsByObjectId.remove(resolvedOid);
+        }
     }
     if (combatGesHasEvents) {
         combatGes.sendToGame(this);
@@ -1395,6 +1461,39 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
                     entry->set_server_card_id(card->getId());
                     entry->set_summoning_sick(pl->isEngineOidSummoningSick(engineOid));
                     ++ordinal;
+                }
+            }
+            Server_CardZone *stackZone = pl->getZones().value(ZoneNames::STACK);
+            if (stackZone) {
+                int stackOrdinal = 0;
+                for (Server_Card *stackCard : stackZone->getCards()) {
+                    if (!stackCard) {
+                        continue;
+                    }
+                    quint32 stackOid = 0;
+                    bool foundStackOid = false;
+                    for (auto it = ruledStackObjectIdToServerCardId.constBegin();
+                         it != ruledStackObjectIdToServerCardId.constEnd(); ++it) {
+                        if (it.value() == stackCard->getId()) {
+                            stackOid = it.key();
+                            foundStackOid = true;
+                            break;
+                        }
+                    }
+                    if (!foundStackOid) {
+                        ++stackOrdinal;
+                        continue;
+                    }
+                    QString tr = stackCard->getName().toLower();
+                    tr.replace(' ', '_');
+                    auto *entry = map->add_entries();
+                    entry->set_player_id(pl->getPlayerId());
+                    entry->set_engine_object_id(stackOid);
+                    entry->set_card_id(tr.toStdString());
+                    entry->set_ordinal(static_cast<uint32_t>(stackOrdinal));
+                    entry->set_server_card_id(stackCard->getId());
+                    entry->set_summoning_sick(false);
+                    ++stackOrdinal;
                 }
             }
         }

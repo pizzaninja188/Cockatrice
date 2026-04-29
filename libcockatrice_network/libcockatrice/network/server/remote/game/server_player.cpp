@@ -53,6 +53,40 @@
 #include <libcockatrice/utility/trice_limits.h>
 #include <libcockatrice/utility/zone_names.h>
 
+#include <libcockatrice/protocol/pb/card_attributes.pb.h>
+
+namespace {
+QString stripRuledDamageLine(const QString &ann)
+{
+    if (ann.isEmpty()) {
+        return ann;
+    }
+    const QString marker = QStringLiteral("Ruled Dmg:");
+    QStringList kept;
+    for (const QString &line : ann.split(QLatin1Char('\n'))) {
+        const QString trimmed = line.trimmed();
+        if (trimmed.startsWith(marker)) {
+            continue;
+        }
+        kept.append(line);
+    }
+    return kept.join(QLatin1Char('\n')).trimmed();
+}
+
+QString mergeRuledDamageIntoAnnotation(const QString &baseAnn, uint32_t damage)
+{
+    QString without = stripRuledDamageLine(baseAnn);
+    if (damage == 0) {
+        return without;
+    }
+    const QString dmgLine = QStringLiteral("Ruled Dmg: %1").arg(damage);
+    if (without.isEmpty()) {
+        return dmgLine;
+    }
+    return without + QLatin1Char('\n') + dmgLine;
+}
+} // namespace
+
 Server_Player::Server_Player(Server_Game *_game,
                              int _playerId,
                              const ServerInfo_User &_userInfo,
@@ -271,7 +305,11 @@ Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const
     // doesn't ask for tap propagation, so combat translation in Server_Game can rely on it.
     if (v.battlefield_size() == tableZone->getCards().size() &&
         v.battlefield_size() == v.battlefield_object_id_size()) {
-        QList<Server_Card *> tablePool = tableZone->getCards();
+        QList<Server_Card *> tablePool;
+        tablePool.reserve(tableZone->getCards().size());
+        for (Server_Card *c : tableZone->getCards()) {
+            tablePool.append(c);
+        }
         QList<Server_Card *> ordered;
         ordered.reserve(v.battlefield_size());
 
@@ -292,9 +330,48 @@ Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const
         }
 
         if (ordered.size() == v.battlefield_size()) {
+            const QList<Server_Card *> &zoneOrderBefore = tableZone->getCards();
+            bool orderMismatch = false;
+            if (zoneOrderBefore.size() == ordered.size()) {
+                for (int i = 0; i < ordered.size(); ++i) {
+                    if (zoneOrderBefore.at(i) != ordered[i]) {
+                        orderMismatch = true;
+                        break;
+                    }
+                }
+            } else {
+                orderMismatch = true;
+            }
+            if (orderMismatch && tableZone->hasCoords()) {
+                QList<int> preservedY;
+                preservedY.reserve(ordered.size());
+                for (Server_Card *c : ordered) {
+                    preservedY.append(c ? c->getY() : 0);
+                }
+                for (Server_Card *c : ordered) {
+                    if (c) {
+                        tableZone->removeCard(c);
+                    }
+                }
+                for (int i = 0; i < ordered.size(); ++i) {
+                    Server_Card *c = ordered[i];
+                    if (!c) {
+                        continue;
+                    }
+                    const int y = preservedY[i];
+                    const int x = tableZone->getFreeGridColumn(-1, y, c->getName(), false);
+                    tableZone->insertCard(c, x, y);
+                }
+                result.battlefieldOrderChanged = true;
+            }
+
             engineOidToServerCardId.clear();
             serverCardIdToEngineOid.clear();
             engineOidToSummoningSick.clear();
+            const bool haveCreatureStats = v.battlefield_power_size() == v.battlefield_size() &&
+                                           v.battlefield_toughness_size() == v.battlefield_size() &&
+                                           v.battlefield_damage_size() == v.battlefield_size() &&
+                                           v.battlefield_is_creature_size() == v.battlefield_size();
             for (int i = 0; i < ordered.size(); ++i) {
                 Server_Card *card = ordered[i];
                 if (!card) {
@@ -323,6 +400,39 @@ Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const
                         tapEv.set_attribute(AttrTapped);
                         tapEv.set_attr_value(desiredTapped ? "1" : "0");
                         tapGes->enqueueGameEvent(tapEv, playerId);
+                    }
+                }
+
+                if (tapGes && haveCreatureStats) {
+                    const bool isCreature = v.battlefield_is_creature(i);
+                    const auto pwr = static_cast<uint32_t>(v.battlefield_power(i));
+                    const auto tgh = static_cast<uint32_t>(v.battlefield_toughness(i));
+                    const auto dmg = static_cast<uint32_t>(v.battlefield_damage(i));
+
+                    if (isCreature) {
+                        const QString newPt = QStringLiteral("%1/%2").arg(pwr).arg(tgh);
+                        if (card->getPT() != newPt) {
+                            card->setPT(newPt);
+                            result.tapStateChanged = true;
+                            Event_SetCardAttr ptEv;
+                            ptEv.set_zone_name(std::string(ZoneNames::TABLE));
+                            ptEv.set_card_id(card->getId());
+                            ptEv.set_attribute(AttrPT);
+                            ptEv.set_attr_value(newPt.toStdString());
+                            tapGes->enqueueGameEvent(ptEv, playerId);
+                        }
+                    }
+
+                    const QString mergedAnn = mergeRuledDamageIntoAnnotation(card->getAnnotation(), isCreature ? dmg : 0);
+                    if (mergedAnn != card->getAnnotation()) {
+                        card->setAnnotation(mergedAnn);
+                        result.tapStateChanged = true;
+                        Event_SetCardAttr annEv;
+                        annEv.set_zone_name(std::string(ZoneNames::TABLE));
+                        annEv.set_card_id(card->getId());
+                        annEv.set_attribute(AttrAnnotation);
+                        annEv.set_attr_value(mergedAnn.toStdString());
+                        tapGes->enqueueGameEvent(annEv, playerId);
                     }
                 }
             }

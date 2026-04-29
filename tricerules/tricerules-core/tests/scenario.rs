@@ -683,7 +683,7 @@ fn caster_can_cast_second_spell_before_passing_priority() {
 }
 
 #[test]
-fn non_active_player_cannot_tap_lands_for_mana() {
+fn non_active_player_with_priority_pays_mana_for_counterspell() {
     let decks = Some(vec![
         vec![
             "mountain".into(),
@@ -695,13 +695,13 @@ fn non_active_player_cannot_tap_lands_for_mana() {
             "mountain".into(),
         ],
         vec![
-            "forest".into(),
+            "island".into(),
             "counterspell".into(),
-            "forest".into(),
-            "forest".into(),
-            "forest".into(),
-            "forest".into(),
-            "forest".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
         ],
     ]);
     let mut e = GameEngine::new(144, &[0, 1], 20, decks).expect("new");
@@ -711,44 +711,56 @@ fn non_active_player_cannot_tap_lands_for_mana() {
     e.apply_command(0, &play_land(mountain_idx))
         .expect("p0 play mountain");
 
-    let forest_idx = hand_index_for_card(&e, 1, "forest");
-    let forest_oid = e.state.players[1].hand.remove(forest_idx);
-    e.state.players[1].battlefield.push(forest_oid);
-    e.state
-        .objects
-        .get_mut(&forest_oid)
-        .expect("seeded forest")
-        .zone = tricerules_core::Zone::Battlefield;
+    for _ in 0..2 {
+        let island_idx = hand_index_for_card(&e, 1, "island");
+        let island_oid = e.state.players[1].hand.remove(island_idx);
+        e.state.players[1].battlefield.push(island_oid);
+        e.state
+            .objects
+            .get_mut(&island_oid)
+            .expect("seeded island")
+            .zone = tricerules_core::Zone::Battlefield;
+    }
 
-    let p1_forest_oid = battlefield_object_for_card(&e, 1, "forest");
+    let p1_island_a = battlefield_object_for_card(&e, 1, "island");
     assert!(
         !e.state
             .objects
-            .get(&p1_forest_oid)
-            .expect("p1 forest")
+            .get(&p1_island_a)
+            .expect("p1 island")
             .tapped
     );
 
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(0, &cast_spell(bolt_idx, vec![]))
         .expect("p0 cast bolt");
+    let bolt_oid = e.state.stack.last().expect("bolt on stack").id;
     e.apply_command(0, &pass())
         .expect("p0 pass to give p1 priority");
 
     let counter_idx = hand_index_for_card(&e, 1, "counterspell");
-    let err = e
-        .apply_command(1, &cast_spell(counter_idx, vec![]))
-        .expect_err("non-active player should not be able to tap for mana");
-    assert_eq!(
-        err.to_string(),
-        "illegal command: only active player can activate mana abilities"
-    );
+    e.apply_command(
+        1,
+        &cast_spell(
+            counter_idx,
+            vec![TargetRef {
+                object_id: bolt_oid,
+            }],
+        ),
+    )
+    .expect("NAP with priority should tap lands and cast counterspell");
     assert!(
-        !e.state
+        e.state
             .objects
-            .get(&p1_forest_oid)
-            .expect("p1 forest")
-            .tapped
+            .get(&p1_island_a)
+            .expect("p1 island")
+            .tapped,
+        "an island should tap to help pay UU"
+    );
+    assert_eq!(
+        e.state.stack.len(),
+        2,
+        "bolt and counterspell on stack"
     );
 }
 
@@ -791,7 +803,8 @@ fn untap_and_draw_happen_in_new_turn_sequence() {
     e.apply_command(0, &cast_spell(bolt_idx, vec![]))
         .expect("cast lightning bolt");
     e.apply_command(0, &pass()).expect("caster pass");
-    e.apply_command(1, &pass()).expect("opponent pass to resolve");
+    e.apply_command(1, &pass())
+        .expect("opponent pass to resolve");
 
     assert!(
         e.state
@@ -1076,12 +1089,20 @@ fn zone_view_includes_battlefield_object_ids() {
         .find(|p| p.player_id == 0)
         .expect("p0 view");
     assert_eq!(p0.battlefield_object_id.len(), p0.battlefield.len());
+    assert_eq!(p0.battlefield_power.len(), p0.battlefield.len());
+    assert_eq!(p0.battlefield_toughness.len(), p0.battlefield.len());
+    assert_eq!(p0.battlefield_damage.len(), p0.battlefield.len());
+    assert_eq!(p0.battlefield_is_creature.len(), p0.battlefield.len());
     let pos = p0
         .battlefield
         .iter()
         .position(|c| c == "grizzly_bears")
         .expect("bears in view");
     assert_eq!(p0.battlefield_object_id[pos], bears);
+    assert!(p0.battlefield_is_creature[pos]);
+    assert_eq!(p0.battlefield_power[pos], 2);
+    assert_eq!(p0.battlefield_toughness[pos], 2);
+    assert_eq!(p0.battlefield_damage[pos], 0);
 }
 
 #[test]
@@ -1241,8 +1262,14 @@ fn full_combat_2v1_trade_and_life_loss() {
         .get(&attacker_b)
         .map(|o| o.tapped)
         .unwrap_or(true);
-    assert!(!attacker_a_pre_tapped, "attacker_a should be untapped pre-combat");
-    assert!(!attacker_b_pre_tapped, "attacker_b should be untapped pre-combat");
+    assert!(
+        !attacker_a_pre_tapped,
+        "attacker_a should be untapped pre-combat"
+    );
+    assert!(
+        !attacker_b_pre_tapped,
+        "attacker_b should be untapped pre-combat"
+    );
 
     // Declare attackers.
     let attack_batch = e
@@ -1264,11 +1291,19 @@ fn full_combat_2v1_trade_and_life_loss() {
 
     // Engine should auto-tap attackers.
     assert!(
-        e.state.objects.get(&attacker_a).map(|o| o.tapped).unwrap_or(false),
+        e.state
+            .objects
+            .get(&attacker_a)
+            .map(|o| o.tapped)
+            .unwrap_or(false),
         "attacker_a tapped on attack"
     );
     assert!(
-        e.state.objects.get(&attacker_b).map(|o| o.tapped).unwrap_or(false),
+        e.state
+            .objects
+            .get(&attacker_b)
+            .map(|o| o.tapped)
+            .unwrap_or(false),
         "attacker_b tapped on attack"
     );
     e.apply_command(0, &pass())
@@ -1330,4 +1365,314 @@ fn full_combat_2v1_trade_and_life_loss() {
     assert_eq!(life[0].delta, -2, "attacker_b deals 2 unblocked");
     assert_eq!(life[0].new_total, 18);
     assert_eq!(e.state.players[1].life, 18);
+}
+
+#[test]
+fn cast_divination_draws_two_cards() {
+    let decks = Some(vec![
+        vec![
+            "island".into(),
+            "divination".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+        ],
+        vec![
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(901, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    for _ in 0..2 {
+        let seeded_island_idx = hand_index_for_card(&e, 0, "island");
+        let seeded_island = e.state.players[0].hand.remove(seeded_island_idx);
+        e.state.players[0].battlefield.push(seeded_island);
+        e.state
+            .objects
+            .get_mut(&seeded_island)
+            .expect("seeded island")
+            .zone = tricerules_core::Zone::Battlefield;
+    }
+
+    let island_to_play_idx = hand_index_for_card(&e, 0, "island");
+    e.apply_command(0, &play_land(island_to_play_idx))
+        .expect("play third island");
+
+    let hand_before_cast = e.state.players[0].hand.len();
+    let div_idx = hand_index_for_card(&e, 0, "divination");
+    e.apply_command(0, &cast_spell(div_idx, vec![]))
+        .expect("cast divination");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass()).expect("p1 pass");
+
+    assert_eq!(
+        e.state.players[0].hand.len(),
+        hand_before_cast + 1,
+        "cast consumes one card and draws two"
+    );
+}
+
+#[test]
+fn giant_growth_changes_combat_outcome() {
+    let decks = Some(vec![
+        vec![
+            "forest".into(),
+            "forest".into(),
+            "giant_growth".into(),
+            "grizzly_bears".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+        vec![
+            "forest".into(),
+            "grizzly_bears".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(902, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let p0_bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let p1_bear = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+
+    let forest_idx = hand_index_for_card(&e, 0, "forest");
+    let forest_oid = e.state.players[0].hand.remove(forest_idx);
+    e.state.players[0].battlefield.push(forest_oid);
+    e.state.objects.get_mut(&forest_oid).expect("forest").zone = tricerules_core::Zone::Battlefield;
+
+    let growth_idx = hand_index_for_card(&e, 0, "giant_growth");
+    e.apply_command(
+        0,
+        &cast_spell(growth_idx, vec![TargetRef { object_id: p0_bear }]),
+    )
+    .expect("cast growth");
+    e.apply_command(0, &pass()).expect("p0 pass growth");
+    e.apply_command(1, &pass()).expect("p1 pass growth");
+
+    e.apply_command(0, &primitive_yield())
+        .expect("main1 to begin combat");
+    e.apply_command(0, &pass()).expect("ap pass begin combat");
+    e.apply_command(1, &pass()).expect("nap pass begin combat");
+    e.apply_command(0, &declare_attackers(vec![p0_bear]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass())
+        .expect("ap pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("nap pass declare attackers");
+    e.apply_command(
+        1,
+        &declare_blockers(vec![BlockPair {
+            attacker_id: p0_bear,
+            blocker_id: p1_bear,
+        }]),
+    )
+    .expect("declare blocker");
+    e.apply_command(0, &pass())
+        .expect("ap pass declare blockers");
+    let damage_batch = e
+        .apply_command(1, &pass())
+        .expect("nap pass declare blockers");
+
+    let moved_ids: Vec<u32> = permanents_moved_in(&damage_batch)
+        .iter()
+        .map(|p| p.object_id)
+        .collect();
+    assert!(moved_ids.contains(&p1_bear), "blocked bear should die");
+    assert!(
+        !moved_ids.contains(&p0_bear),
+        "grown attacker should survive combat"
+    );
+}
+
+#[test]
+fn counterspell_counters_a_spell_on_stack() {
+    let decks = Some(vec![
+        vec![
+            "mountain".into(),
+            "island".into(),
+            "island".into(),
+            "lightning_bolt".into(),
+            "counterspell".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec![
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(903, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let mountain_idx = hand_index_for_card(&e, 0, "mountain");
+    e.apply_command(0, &play_land(mountain_idx))
+        .expect("play mountain");
+
+    for _ in 0..2 {
+        let island_idx = hand_index_for_card(&e, 0, "island");
+        let island_oid = e.state.players[0].hand.remove(island_idx);
+        e.state.players[0].battlefield.push(island_oid);
+        e.state
+            .objects
+            .get_mut(&island_oid)
+            .expect("seed island")
+            .zone = tricerules_core::Zone::Battlefield;
+    }
+
+    let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(0, &cast_spell(bolt_idx, vec![]))
+        .expect("cast bolt");
+    let bolt_oid = e.state.stack.last().expect("bolt on stack").id;
+
+    let cs_idx = hand_index_for_card(&e, 0, "counterspell");
+    e.apply_command(
+        0,
+        &cast_spell(
+            cs_idx,
+            vec![TargetRef {
+                object_id: bolt_oid,
+            }],
+        ),
+    )
+    .expect("cast counterspell");
+    let counterspell_oid = e.state.stack.last().expect("counterspell on stack").id;
+
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass()).expect("p1 pass");
+
+    assert!(e.state.stack.is_empty(), "counterspell should clear stack");
+    assert!(e.state.players[0].graveyard.contains(&counterspell_oid));
+    assert!(e.state.players[0].graveyard.contains(&bolt_oid));
+}
+
+#[test]
+fn go_for_the_throat_destroys_target_creature() {
+    let decks = Some(vec![
+        vec![
+            "swamp".into(),
+            "go_for_the_throat".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+        ],
+        vec![
+            "forest".into(),
+            "grizzly_bears".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(904, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let p1_bear = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+
+    let seeded_swamp_idx = hand_index_for_card(&e, 0, "swamp");
+    let seeded_swamp = e.state.players[0].hand.remove(seeded_swamp_idx);
+    e.state.players[0].battlefield.push(seeded_swamp);
+    e.state
+        .objects
+        .get_mut(&seeded_swamp)
+        .expect("seeded swamp")
+        .zone = tricerules_core::Zone::Battlefield;
+
+    let swamp_to_play_idx = hand_index_for_card(&e, 0, "swamp");
+    e.apply_command(0, &play_land(swamp_to_play_idx))
+        .expect("play second swamp");
+
+    let gftt_idx = hand_index_for_card(&e, 0, "go_for_the_throat");
+    e.apply_command(
+        0,
+        &cast_spell(gftt_idx, vec![TargetRef { object_id: p1_bear }]),
+    )
+    .expect("cast go for the throat");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass()).expect("p1 pass");
+    assert!(e.state.players[1].graveyard.contains(&p1_bear));
+    assert_eq!(
+        e.state
+            .objects
+            .get(&p1_bear)
+            .expect("target creature object")
+            .zone,
+        tricerules_core::Zone::Graveyard
+    );
+}
+
+#[test]
+fn can_cast_new_vanilla_creature_with_swamp() {
+    let decks = Some(vec![
+        vec![
+            "swamp".into(),
+            "walking_corpse".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+        ],
+        vec![
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(905, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let seeded_swamp_idx = hand_index_for_card(&e, 0, "swamp");
+    let seeded_swamp = e.state.players[0].hand.remove(seeded_swamp_idx);
+    e.state.players[0].battlefield.push(seeded_swamp);
+    e.state
+        .objects
+        .get_mut(&seeded_swamp)
+        .expect("seeded swamp")
+        .zone = tricerules_core::Zone::Battlefield;
+
+    let swamp_to_play_idx = hand_index_for_card(&e, 0, "swamp");
+    e.apply_command(0, &play_land(swamp_to_play_idx))
+        .expect("play second swamp");
+
+    let corpse_idx = hand_index_for_card(&e, 0, "walking_corpse");
+    e.apply_command(0, &cast_spell(corpse_idx, vec![]))
+        .expect("cast walking corpse");
+    let corpse_oid = e.state.stack.first().expect("corpse on stack").id;
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass()).expect("p1 pass");
+
+    assert!(e.state.players[0].battlefield.contains(&corpse_oid));
 }

@@ -51,6 +51,9 @@ public:
     void setPriorityHighlighted(bool highlighted);
 
     AbstractCounter *addCounter(int _counterId, const QString &_name, int _value);
+
+protected:
+    void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
 };
 
 #endif

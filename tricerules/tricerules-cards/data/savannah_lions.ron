@@ -1,0 +1,9 @@
+(
+  id: "savannah_lions",
+  name: "Savannah Lions",
+  mana_cost: "W",
+  types: ["Creature", "Cat"],
+  is_creature: true,
+  power: 2,
+  toughness: 1,
+)

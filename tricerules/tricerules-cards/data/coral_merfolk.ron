@@ -1,0 +1,9 @@
+(
+  id: "coral_merfolk",
+  name: "Coral Merfolk",
+  mana_cost: "1U",
+  types: ["Creature", "Merfolk"],
+  is_creature: true,
+  power: 2,
+  toughness: 1,
+)
