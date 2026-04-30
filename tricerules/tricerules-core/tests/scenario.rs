@@ -1677,6 +1677,49 @@ fn giant_growth_pump_expires_after_active_turn_ends() {
 }
 
 #[test]
+fn marked_damage_clears_at_cleanup() {
+    let decks = Some(vec![
+        {
+            let mut d = vec!["forest".into(), "giant_growth".into(), "grizzly_bears".into()];
+            d.extend(std::iter::repeat_n("forest".into(), 17));
+            d
+        },
+        vec!["mountain".into(); 20],
+    ]);
+    let mut e = GameEngine::new(906, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let forest_idx = hand_index_for_card(&e, 0, "forest");
+    let forest_oid = e.state.players[0].hand.remove(forest_idx);
+    e.state.players[0].battlefield.push(forest_oid);
+    e.state.objects.get_mut(&forest_oid).expect("forest").zone = tricerules_core::Zone::Battlefield;
+
+    let growth_idx = hand_index_for_card(&e, 0, "giant_growth");
+    e.apply_command(
+        0,
+        &cast_spell(growth_idx, vec![TargetRef { object_id: bear }]),
+    )
+    .expect("cast growth");
+    pass_both_players(&mut e);
+
+    assert_eq!(e.state.objects.get(&bear).expect("bear").damage, 0);
+
+    if let Some(o) = e.state.objects.get_mut(&bear) {
+        o.damage = 1;
+    }
+    assert_eq!(e.state.objects.get(&bear).expect("bear").damage, 1);
+
+    end_active_turn(&mut e, 0);
+
+    assert_eq!(
+        e.state.objects.get(&bear).expect("bear after cleanup").damage,
+        0,
+        "marked damage should clear during cleanup"
+    );
+}
+
+#[test]
 fn counterspell_counters_a_spell_on_stack() {
     let decks = Some(vec![
         vec![

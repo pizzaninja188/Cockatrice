@@ -74,6 +74,8 @@ private:
     QHash<quint32, int> engineOidOwner;
     // Engine ObjectId -> summoning sickness state from BattlefieldObjectMap entries.
     QHash<quint32, bool> engineOidSummoningSick;
+    // Engine ObjectId -> marked damage currently shown in ruled ZoneView.
+    QHash<quint32, int> engineOidMarkedDamage;
 
     // Latest combat phase derived from PhaseChanged events.
     RuledCombatPhase currentRuledCombatPhase = RuledCombatPhase::None;
@@ -136,6 +138,10 @@ public:
     [[nodiscard]] bool isEngineOidSummoningSick(quint32 engineOid) const
     {
         return engineOidSummoningSick.value(engineOid, false);
+    }
+    [[nodiscard]] int markedDamageForEngineOid(quint32 engineOid) const
+    {
+        return engineOidMarkedDamage.value(engineOid, 0);
     }
     [[nodiscard]] bool isPendingAttacker(quint32 engineOid) const
     {

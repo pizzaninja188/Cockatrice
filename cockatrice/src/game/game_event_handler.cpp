@@ -494,6 +494,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 engineOidToCardId.clear();
                                 engineOidOwner.clear();
                                 engineOidSummoningSick.clear();
+                                engineOidMarkedDamage.clear();
                                 QSet<quint32> validOids;
                                 for (const auto &entry : e.battlefield_object_map().entries()) {
                                     validOids.insert(entry.engine_object_id());
@@ -521,6 +522,20 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 }
                                 battlefieldMapDirty = true;
                                 combatStateDirty = true;
+                            }
+                            if (e.has_zone_view()) {
+                                engineOidMarkedDamage.clear();
+                                for (const auto &p : e.zone_view().per_player()) {
+                                    const int count = std::min(p.battlefield_object_id_size(), p.battlefield_damage_size());
+                                    for (int i = 0; i < count; ++i) {
+                                        const quint32 oid = p.battlefield_object_id(i);
+                                        const int damage = static_cast<int>(p.battlefield_damage(i));
+                                        if (oid != 0 && damage > 0) {
+                                            engineOidMarkedDamage.insert(oid, damage);
+                                        }
+                                    }
+                                }
+                                battlefieldMapDirty = true;
                             }
                             if (e.has_attackers_declared()) {
                                 currentAttackerOids.clear();

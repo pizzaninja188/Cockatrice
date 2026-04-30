@@ -131,6 +131,21 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
         painter->restore();
     }
 
+    if (ruledHandler && ruledOid != 0) {
+        const int markedDamage = ruledHandler->markedDamageForEngineOid(ruledOid);
+        if (markedDamage > 0) {
+            painter->save();
+            transformPainter(painter, translatedSize, tapAngle);
+            painter->setPen(QColor(220, 20, 60)); // crimson
+            painter->setBackground(Qt::black);
+            painter->setBackgroundMode(Qt::OpaqueMode);
+            painter->drawText(QRectF(4 * scaleFactor, 4 * scaleFactor, translatedSize.width() - 10 * scaleFactor,
+                                     translatedSize.height() - 28 * scaleFactor),
+                              Qt::AlignRight | Qt::AlignBottom, QString::number(markedDamage));
+            painter->restore();
+        }
+    }
+
     QString renderedAnnotation = annotation;
     if (ruledHandler && ruledOid != 0 && ruledHandler->isEngineOidSummoningSick(ruledOid)) {
         if (!renderedAnnotation.contains(QStringLiteral("summoning sick"), Qt::CaseInsensitive)) {

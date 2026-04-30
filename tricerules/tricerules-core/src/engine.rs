@@ -752,9 +752,19 @@ impl GameEngine {
         }
     }
 
+    /// CR 514.2: damage marked on permanents is removed during cleanup.
+    fn cleanup_marked_damage(&mut self) {
+        for o in self.state.objects.values_mut() {
+            if o.zone == Zone::Battlefield && o.damage != 0 {
+                o.damage = 0;
+            }
+        }
+    }
+
     fn new_turn(&mut self) -> Result<RuledEventBatch, EngineError> {
         // CR 514.2: "until end of turn" effects end during cleanup before the next turn begins.
         self.cleanup_until_end_of_turn_creature_pt();
+        self.cleanup_marked_damage();
         self.clear_all_mana_pools();
         self.state.land_dropped_this_turn = false;
         self.state.active_player_idx = (self.state.active_player_idx + 1) % 2;
