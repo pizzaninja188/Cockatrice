@@ -729,7 +729,32 @@ impl GameEngine {
         Ok(finish_with_events(self, std::mem::take(ev)))
     }
 
+    /// Cleanup-step analogue: until-end-of-turn P/T boosts (e.g. Giant Growth) are modeled by
+    /// mutating `GameObject::power` / `toughness`; restore printed values from the card registry.
+    fn cleanup_until_end_of_turn_creature_pt(&mut self) {
+        let ids: Vec<ObjectId> = self
+            .state
+            .players
+            .iter()
+            .flat_map(|p| p.battlefield.iter().copied())
+            .collect();
+        for oid in ids {
+            let Some(o) = self.state.objects.get_mut(&oid) else {
+                continue;
+            };
+            if !o.is_creature(&self.registry) {
+                continue;
+            }
+            if let Some(def) = self.registry.get(&o.card_id) {
+                o.power = def.power;
+                o.toughness = def.toughness;
+            }
+        }
+    }
+
     fn new_turn(&mut self) -> Result<RuledEventBatch, EngineError> {
+        // CR 514.2: "until end of turn" effects end during cleanup before the next turn begins.
+        self.cleanup_until_end_of_turn_creature_pt();
         self.clear_all_mana_pools();
         self.state.land_dropped_this_turn = false;
         self.state.active_player_idx = (self.state.active_player_idx + 1) % 2;

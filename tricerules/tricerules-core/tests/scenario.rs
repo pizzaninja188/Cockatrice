@@ -1635,6 +1635,48 @@ fn giant_growth_changes_combat_outcome() {
 }
 
 #[test]
+fn giant_growth_pump_expires_after_active_turn_ends() {
+    let decks = Some(vec![
+        vec![
+            "forest".into(),
+            "giant_growth".into(),
+            "grizzly_bears".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+        vec!["forest".into(); 7],
+    ]);
+    let mut e = GameEngine::new(904, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let forest_idx = hand_index_for_card(&e, 0, "forest");
+    let forest_oid = e.state.players[0].hand.remove(forest_idx);
+    e.state.players[0].battlefield.push(forest_oid);
+    e.state.objects.get_mut(&forest_oid).expect("forest").zone = tricerules_core::Zone::Battlefield;
+
+    let growth_idx = hand_index_for_card(&e, 0, "giant_growth");
+    e.apply_command(
+        0,
+        &cast_spell(growth_idx, vec![TargetRef { object_id: bear }]),
+    )
+    .expect("cast growth");
+    pass_both_players(&mut e);
+
+    let o = e.state.objects.get(&bear).expect("bear");
+    assert_eq!(o.power, Some(5));
+    assert_eq!(o.toughness, Some(5));
+
+    end_active_turn(&mut e, 0);
+
+    let o2 = e.state.objects.get(&bear).expect("bear after turn");
+    assert_eq!(o2.power, Some(2), "Giant Growth should expire at end of turn");
+    assert_eq!(o2.toughness, Some(2));
+}
+
+#[test]
 fn counterspell_counters_a_spell_on_stack() {
     let decks = Some(vec![
         vec![
