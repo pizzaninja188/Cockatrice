@@ -880,7 +880,17 @@ impl GameEngine {
             }
             SpellEffectKind::DestroyTarget => {
                 if let Some(&tid) = targets.first() {
+                    let owner = self.state.objects.get(&tid).map(|o| o.owner);
                     destroy_permanent(&mut self.state, tid)?;
+                    if let Some(owner_id) = owner {
+                        events.push(rv1::RuledEvent {
+                            ev: Some(rv1::ruled_event::Ev::PermanentMoved(rv1::PermanentMoved {
+                                object_id: tid,
+                                owner_player_id: owner_id,
+                                destination: rv1::permanent_moved::Destination::Graveyard as i32,
+                            })),
+                        });
+                    }
                 }
             }
             SpellEffectKind::CounterTargetSpell => {
