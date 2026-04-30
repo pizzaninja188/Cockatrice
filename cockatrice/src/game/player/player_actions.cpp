@@ -164,6 +164,9 @@ bool PlayerActions::completePendingRuledSpellCast()
         clearPendingRuledSpellCast();
         return false;
     }
+    if (pendingRuledSpellCast.waitingForTarget) {
+        return false;
+    }
 
     ruled::v1::RuledCommand ruledCommand;
     auto *cast = ruledCommand.mutable_cast_spell();
@@ -208,6 +211,13 @@ bool PlayerActions::ruledSpellNeedsTarget(const CardItem *card)
 bool PlayerActions::tryPayRuledSpellWithCounter(const QString &counterName)
 {
     if (!pendingRuledSpellCast.valid) {
+        return false;
+    }
+    // Cast flow picks targets before mana (see tryStartRuledSpellCast). Paying mana here while
+    // still waiting for a target would complete the cast with no targets and burn pool counters.
+    if (pendingRuledSpellCast.waitingForTarget) {
+        player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+            tr("Choose a target for %1 before paying mana.").arg(pendingRuledSpellCast.cardName));
         return false;
     }
     const QString n = counterName.trimmed().toUpper();
