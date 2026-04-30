@@ -3,7 +3,7 @@
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
 use tricerules_proto::ruled::v1::ruled_event::Ev;
 use tricerules_proto::ruled::v1::{
-    BlockPair, CastSpell, DeclareAttackers, DeclareBlockers, PassPriority, PlayLand,
+    AddManaToPool, BlockPair, CastSpell, DeclareAttackers, DeclareBlockers, PassPriority, PlayLand,
     PrimitiveYieldStructured, RuledCommand, TargetRef,
 };
 
@@ -35,6 +35,12 @@ fn cast_spell(hand_card_index: usize, targets: Vec<TargetRef>) -> RuledCommand {
             hand_card_index: hand_card_index as u32,
             targets,
         })),
+    }
+}
+
+fn add_mana_to_pool(m: AddManaToPool) -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::AddManaToPool(m)),
     }
 }
 
@@ -699,6 +705,69 @@ fn new_turn_stops_at_upkeep_then_draw_then_main1() {
     assert!(
         priority_changes_in(&to_main).contains(&1),
         "main1 should open priority for the active player"
+    );
+}
+
+#[test]
+fn cast_1u_creature_pays_from_mana_pool_without_tapping_extra_island() {
+    let decks = Some(vec![
+        vec![
+            "island".into(),
+            "island".into(),
+            "mountain".into(),
+            "coral_merfolk".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+        ],
+        vec!["mountain".into(); 7],
+    ]);
+    let mut e = GameEngine::new(202, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Two islands + mountain on the battlefield (no land drop this turn).
+    for _ in 0..2 {
+        let idx = hand_index_for_card(&e, 0, "island");
+        let oid = e.state.players[0].hand.remove(idx);
+        e.state.players[0].battlefield.push(oid);
+        e.state.objects.get_mut(&oid).expect("obj").zone = tricerules_core::Zone::Battlefield;
+    }
+    {
+        let idx = hand_index_for_card(&e, 0, "mountain");
+        let oid = e.state.players[0].hand.remove(idx);
+        e.state.players[0].battlefield.push(oid);
+        e.state.objects.get_mut(&oid).expect("obj").zone = tricerules_core::Zone::Battlefield;
+    }
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            u: 1,
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("pool like two land taps");
+    let merfolk_idx = hand_index_for_card(&e, 0, "coral_merfolk");
+    e.apply_command(0, &cast_spell(merfolk_idx, vec![])).expect("cast");
+    let tapped_islands = e.state.players[0]
+        .battlefield
+        .iter()
+        .filter(|oid| {
+            e.state
+                .objects
+                .get(*oid)
+                .map(|o| o.card_id == "island" && o.tapped)
+                .unwrap_or(false)
+        })
+        .count();
+    assert_eq!(
+        tapped_islands, 0,
+        "1U paid from pool; no extra island should auto-tap"
+    );
+    let mountain_oid = battlefield_object_for_card(&e, 0, "mountain");
+    assert!(
+        !e.state.objects.get(&mountain_oid).expect("mountain").tapped,
+        "mountain should not be tapped by engine payment"
     );
 }
 

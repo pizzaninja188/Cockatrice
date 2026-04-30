@@ -219,6 +219,9 @@ public:
     {
         return ruledGame;
     }
+    /// Ruled mode: forward a serialized `ruled.v1.RuledCommand` to tricerules and broadcast the batch
+    /// (used for mana-pool sync on land taps — not every payload goes through `Command_RuledPayload`).
+    void relayRuledPayloadAndBroadcast(int playerId, const QByteArray &ruledCmdBytes);
     Response::ResponseCode
     checkJoin(ServerInfo_User *user, const QString &_password, bool spectator, bool overrideRestrictions, bool asJudge);
     bool containsUser(const QString &userName) const;

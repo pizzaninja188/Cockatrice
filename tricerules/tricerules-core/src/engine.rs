@@ -192,6 +192,7 @@ impl GameEngine {
                 self.cast_spell(player, cs.hand_card_index as usize, &cs.targets)
             }
             Some(Cmd::PlayLand(pl)) => self.play_land(player, pl.hand_card_index as usize),
+            Some(Cmd::AddManaToPool(m)) => self.add_mana_to_pool(player, m),
         };
         let mut b = res?;
         self.sweep_life();
@@ -1044,6 +1045,29 @@ impl GameEngine {
         Ok(batch)
     }
 
+    fn add_mana_to_pool(
+        &mut self,
+        player: PlayerId,
+        m: &rv1::AddManaToPool,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let idx = self
+            .state
+            .player_idx(player)
+            .ok_or(EngineError::UnknownPlayer(player))?;
+        if idx != self.state.priority_idx {
+            return Err(EngineError::Illegal("only priority player can add mana"));
+        }
+        let clamp = |v: u32, d: i32| -> u32 { (v as i64 + i64::from(d)).clamp(0, 10_000) as u32 };
+        let p = &mut self.state.players[idx].mana_pool;
+        p.white = clamp(p.white, m.w);
+        p.blue = clamp(p.blue, m.u);
+        p.black = clamp(p.black, m.b);
+        p.red = clamp(p.red, m.r);
+        p.green = clamp(p.green, m.g);
+        p.colorless = clamp(p.colorless, m.c);
+        Ok(RuledEventBatch::default())
+    }
+
     fn apply_sbas(&mut self, out: &mut Vec<rv1::RuledEvent>) -> Result<(), EngineError> {
         let mut to_destroy = Vec::new();
         for (&id, o) in &self.state.objects {
@@ -1462,6 +1486,47 @@ fn pay_mana_simple(
             _ => {}
         }
     }
+    // Floating mana from Cockatrice pool counters (AddManaToPool) pays before auto-tapping.
+    {
+        let pool = &mut state.players[player_idx].mana_pool;
+        let take = |need: &mut u32, avail: &mut u32| {
+            let t = (*need).min(*avail);
+            *avail -= t;
+            *need -= t;
+        };
+        take(&mut need_w, &mut pool.white);
+        take(&mut need_u, &mut pool.blue);
+        take(&mut need_b, &mut pool.black);
+        take(&mut need_r, &mut pool.red);
+        take(&mut need_g, &mut pool.green);
+
+        let mut generic = need_c;
+        while generic > 0 {
+            if pool.colorless > 0 {
+                pool.colorless -= 1;
+                generic -= 1;
+            } else if pool.white > 0 {
+                pool.white -= 1;
+                generic -= 1;
+            } else if pool.blue > 0 {
+                pool.blue -= 1;
+                generic -= 1;
+            } else if pool.black > 0 {
+                pool.black -= 1;
+                generic -= 1;
+            } else if pool.red > 0 {
+                pool.red -= 1;
+                generic -= 1;
+            } else if pool.green > 0 {
+                pool.green -= 1;
+                generic -= 1;
+            } else {
+                break;
+            }
+        }
+        need_c = generic;
+    }
+
     let bf = state.players[player_idx].battlefield.clone();
     for &oid in &bf {
         let o = state.objects.get_mut(&oid).unwrap();

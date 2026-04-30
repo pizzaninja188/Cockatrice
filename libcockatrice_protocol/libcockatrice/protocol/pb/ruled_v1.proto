@@ -15,7 +15,20 @@ message RuledCommand {
     // Cockatrice "pass turn" in ruled mode: one empty-stack structural advance
     // (active player outside declare blockers; defender during declare blockers).
     PrimitiveYieldStructured primitive_yield_structured = 8;
+    // Cockatrice ruled mode: mana pool counters increment when lands add mana (IncCounter).
+    // Positive deltas only from Servatrice; spell payment still consumes pool inside the engine on cast.
+    AddManaToPool add_mana_to_pool = 9;
   }
+}
+
+// Sint32 so Servatrice can forward IncCounter deltas; engine clamps each component at 0.
+message AddManaToPool {
+  sint32 w = 1;
+  sint32 u = 2;
+  sint32 b = 3;
+  sint32 r = 4;
+  sint32 g = 5;
+  sint32 c = 6;
 }
 
 message PassPriority {}

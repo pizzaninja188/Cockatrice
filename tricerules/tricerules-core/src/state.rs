@@ -105,9 +105,11 @@ impl PlayerState {
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ManaPool {
+    pub white: u32,
+    pub blue: u32,
+    pub black: u32,
     pub red: u32,
     pub green: u32,
-    pub blue: u32,
     pub colorless: u32,
 }
 

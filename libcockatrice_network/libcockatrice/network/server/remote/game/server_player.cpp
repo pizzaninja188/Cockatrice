@@ -54,6 +54,7 @@
 #include <libcockatrice/utility/zone_names.h>
 
 #include <libcockatrice/protocol/pb/card_attributes.pb.h>
+#include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 
 namespace {
 QString stripRuledDamageLine(const QString &ann)
@@ -770,6 +771,33 @@ Server_Player::cmdIncCounter(const Command_IncCounter &cmd, ResponseContainer & 
     event.set_counter_id(c->getId());
     event.set_value(c->getCount());
     ges.enqueueGameEvent(event, playerId);
+
+    if (game->getRuledGame() && cmd.delta() > 0) {
+        ruled::v1::RuledCommand rc;
+        auto *m = rc.mutable_add_mana_to_pool();
+        bool mapped = true;
+        const QString n = c->getName().toLower();
+        if (n == QStringLiteral("w")) {
+            m->set_w(cmd.delta());
+        } else if (n == QStringLiteral("u")) {
+            m->set_u(cmd.delta());
+        } else if (n == QStringLiteral("b")) {
+            m->set_b(cmd.delta());
+        } else if (n == QStringLiteral("r")) {
+            m->set_r(cmd.delta());
+        } else if (n == QStringLiteral("g")) {
+            m->set_g(cmd.delta());
+        } else if (n == QStringLiteral("x") || n == QStringLiteral("c")) {
+            m->set_c(cmd.delta());
+        } else {
+            mapped = false;
+        }
+        if (mapped) {
+            std::string serialized;
+            rc.SerializeToString(&serialized);
+            game->relayRuledPayloadAndBroadcast(playerId, QByteArray::fromStdString(serialized));
+        }
+    }
 
     return Response::RespOk;
 }

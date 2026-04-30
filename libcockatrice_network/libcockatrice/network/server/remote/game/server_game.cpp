@@ -34,6 +34,7 @@
 #include "server_player.h"
 #include "server_spectator.h"
 
+#include <QDateTime>
 #include <QDebug>
 #include <QRandomGenerator>
 #include <QRegularExpression>
@@ -1090,6 +1091,30 @@ Response::ResponseCode Server_Game::processRuledPayload(int playerId, const Comm
     return Response::RespOk;
 }
 
+void Server_Game::relayRuledPayloadAndBroadcast(int playerId, const QByteArray &ruledCmdBytes)
+{
+    if (!ruledGame || !rulesRelay || ruledCmdBytes.isEmpty()) {
+        return;
+    }
+    ruled::v1::IpcResponse resp;
+    if (!rulesRelay->playerCommand(playerId, ruledCmdBytes, resp) || !resp.ok()) {
+        return;
+    }
+    const RuledBatchApplyResult batchResult = applyRuledBatch(resp);
+    if (batchResult.phaseChanged) {
+        clearRuledManaPoolsOnServer(this);
+    }
+    if (batchResult.zoneViewApplied &&
+        (batchResult.handOrLibraryChanged || batchResult.battlefieldOrderChanged)) {
+        sendGameStateToPlayers();
+    }
+    if (currentReplay) {
+        currentReplay->mutable_ruled_command_log()->append(ruledCmdBytes.constData(),
+                                                          static_cast<size_t>(ruledCmdBytes.size()));
+    }
+    broadcastRuledResponse(resp);
+}
+
 void Server_Game::applyRuledStackResolvedEvent(const ruled::v1::StackResolved &stackResolved)
 {
     const quint32 resolvedOid = static_cast<quint32>(stackResolved.object_id());
@@ -1215,9 +1240,12 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
             continue;
         }
         for (const auto &p : e.zone_view().per_player()) {
+            // Untap-step "reset" applies only to the active player's view; NAP may stay tapped.
+            const bool perPlayerAllowUntap =
+                batchHasUntapPhase && p.player_id() == getActivePlayer();
             if (Server_AbstractPlayer *ab = getPlayer(p.player_id())) {
                 const Server_Player::RuledZoneSyncResult sync =
-                    static_cast<Server_Player *>(ab)->applyRuledEngineZoneView(p, &tapSyncGes, batchHasUntapPhase);
+                    static_cast<Server_Player *>(ab)->applyRuledEngineZoneView(p, &tapSyncGes, perPlayerAllowUntap);
                 result.handOrLibraryChanged = result.handOrLibraryChanged || sync.handOrLibraryChanged;
                 result.battlefieldOrderChanged = result.battlefieldOrderChanged || sync.battlefieldOrderChanged;
                 result.tapStateEventsQueued = result.tapStateEventsQueued || sync.tapStateChanged;
