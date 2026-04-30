@@ -39,6 +39,36 @@
 // milliseconds in between triggers of the move top cards until action
 static constexpr int MOVE_TOP_CARD_UNTIL_INTERVAL = 100;
 
+namespace {
+/**
+ * Ruled-mode object targeting for the pending spell. Player targets use a separate path
+ * (`tryHandleRuledSpellTargetPlayerClick`). Must stay aligned with tricerules `validate_spell_targets`.
+ */
+bool ruledObjectTargetLegalForPendingSpell(const QString &spellName, const CardItem *targetCard)
+{
+    if (!targetCard || !targetCard->getZone()) {
+        return false;
+    }
+    const QString zoneName = targetCard->getZone()->getName();
+    const QString typeLine = targetCard->getCardInfo().getCardType();
+    const bool isCreature = typeLine.contains(QStringLiteral("Creature"), Qt::CaseInsensitive);
+
+    const QString sn = spellName.trimmed();
+    if (sn.compare(QStringLiteral("Counterspell"), Qt::CaseInsensitive) == 0) {
+        return zoneName == ZoneNames::STACK;
+    }
+    if (sn.compare(QStringLiteral("Lightning Bolt"), Qt::CaseInsensitive) == 0) {
+        return zoneName == ZoneNames::TABLE && isCreature;
+    }
+    if (sn.compare(QStringLiteral("Giant Growth"), Qt::CaseInsensitive) == 0 ||
+        sn.compare(QStringLiteral("Go for the Throat"), Qt::CaseInsensitive) == 0) {
+        return zoneName == ZoneNames::TABLE && isCreature;
+    }
+    // Default for other ruled instants that required a target: battlefield creatures only.
+    return zoneName == ZoneNames::TABLE && isCreature;
+}
+} // namespace
+
 PlayerActions::PlayerActions(Player *_player)
     : QObject(_player), player(_player), lastTokenTableRow(0), movingCardsUntil(false)
 {
@@ -374,6 +404,11 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
                 .arg(pendingRuledSpellCast.cardName));
         return true;
     }
+    if (!ruledObjectTargetLegalForPendingSpell(pendingRuledSpellCast.cardName, card)) {
+        player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+            tr("That is not a legal target for %1.").arg(pendingRuledSpellCast.cardName));
+        return true;
+    }
 
     auto *handler = player->getGame()->getGameEventHandler();
     const quint32 targetOid = handler ? handler->engineOidForCardId(card->getId()) : 0;
@@ -411,6 +446,13 @@ bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
     if (!targetPlayer || !player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
         clearPendingRuledSpellCast();
         return false;
+    }
+
+    if (pendingRuledSpellCast.cardName.trimmed().compare(QStringLiteral("Lightning Bolt"),
+                                                          Qt::CaseInsensitive) != 0) {
+        player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+            tr("%1 does not target players.").arg(pendingRuledSpellCast.cardName));
+        return true;
     }
 
     const int targetPlayerId = targetPlayer->getPlayerInfo()->getId();

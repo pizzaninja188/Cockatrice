@@ -1,0 +1,14 @@
+---
+description: Final summaries must state MTG CR/Oracle applicability and how changes comply
+alwaysApply: true
+---
+
+# Agent summary: MTG rules applicability
+
+When you finish a turn that includes **substantive edits** (ruled engine, cards/primitives, proto intents or ruled events, relay filtering, or Cockatrice ruled UI/prompts), end your **final user-facing summary** with a compact **MTG rules** note:
+
+1. **Does it apply?** Say whether **Magic: The Gathering Comprehensive Rules** and/or **Oracle text** meaningfully govern the behavior you touched (timing, zones, stack, combat, priority, SBAs, targeting, control, replacement/prevention, card-specific wording, hidden information in ruled mode, etc.).
+2. **If yes:** Name the relevant **rules concepts** (CR section numbers are optional but helpful when you know them). In plain language, explain **how the change complies** with those rules—or call out an **intentional** simplification or deferral that matches project **milestones / non-goals** (see onboard rule), so it is not mistaken for silent CR inaccuracy.
+3. **If no:** One line is enough, e.g. **No MTG rules surface area** (build-only, freeform-only path, comments, unrelated refactors).
+
+Implementation-time verification stays in **`tricerules-engine-change-safety.mdc`** (`tricerules/**/*.rs`). This rule is for **reviewers and handoff**: the summary should make rules intent obvious without rereading the whole diff.

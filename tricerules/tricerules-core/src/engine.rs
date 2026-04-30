@@ -53,7 +53,10 @@ impl GameEngine {
         let registry =
             CardRegistry::from_embedded().map_err(|_| EngineError::Illegal("bad registry"))?;
         let mut objects = HashMap::new();
-        let mut next_object_id: ObjectId = 1;
+        // Player targets in commands use raw `PlayerId` values as `TargetRef.object_id`. Game
+        // objects must use disjoint ids so e.g. P1 (id 1) is never confused with object id 1.
+        let max_pid: i32 = player_ids.iter().copied().max().unwrap_or(0);
+        let mut next_object_id: ObjectId = (max_pid.max(0) as u32).saturating_add(1);
         let mut players = Vec::new();
 
         for (i, &pid) in player_ids.iter().enumerate() {
@@ -816,11 +819,7 @@ impl GameEngine {
         match effect {
             SpellEffectKind::DealDamage { amount } => {
                 if let Some(&tid) = targets.first() {
-                    if let Some(t) = self.state.objects.get_mut(&tid) {
-                        if t.is_creature(&self.registry) {
-                            t.damage += amount;
-                        }
-                    } else if let Some(pi) = self.state.player_idx(tid as i32) {
+                    if let Some(pi) = self.state.player_idx(tid as i32) {
                         self.state.players[pi].life -= amount as i32;
                         events.push(rv1::RuledEvent {
                             ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
@@ -829,6 +828,10 @@ impl GameEngine {
                                 delta: -(amount as i32),
                             })),
                         });
+                    } else if let Some(t) = self.state.objects.get_mut(&tid) {
+                        if t.is_creature(&self.registry) {
+                            t.damage += amount;
+                        }
                     }
                 }
             }
@@ -841,10 +844,12 @@ impl GameEngine {
             SpellEffectKind::PumpTarget { power, toughness } => {
                 if let Some(&tid) = targets.first() {
                     if let Some(t) = self.state.objects.get_mut(&tid) {
-                        let p = t.power.unwrap_or(0) as i32 + power;
-                        let tt = t.toughness.unwrap_or(0) as i32 + toughness;
-                        t.power = Some(p.max(0) as u32);
-                        t.toughness = Some(tt.max(0) as u32);
+                        if t.is_creature(&self.registry) {
+                            let p = t.power.unwrap_or(0) as i32 + power;
+                            let tt = t.toughness.unwrap_or(0) as i32 + toughness;
+                            t.power = Some(p.max(0) as u32);
+                            t.toughness = Some(tt.max(0) as u32);
+                        }
                     }
                 }
             }
@@ -1269,14 +1274,8 @@ fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
 /// players may take spell/activated actions that require priority (CR 508 / 509).
 fn priority_locked_for_combat_declaration(state: &GameState) -> bool {
     match state.turn_step {
-        TurnStep::DeclareAttackers => state
-            .combat
-            .as_ref()
-            .is_some_and(|c| !c.attackers_declared),
-        TurnStep::DeclareBlockers => state
-            .combat
-            .as_ref()
-            .is_some_and(|c| !c.blockers_declared),
+        TurnStep::DeclareAttackers => state.combat.as_ref().is_some_and(|c| !c.attackers_declared),
+        TurnStep::DeclareBlockers => state.combat.as_ref().is_some_and(|c| !c.blockers_declared),
         _ => false,
     }
 }
@@ -1503,10 +1502,12 @@ fn validate_spell_targets(
 
     match effect {
         SpellEffectKind::DestroyTarget => {
-            let target = targets
-                .first()
-                .ok_or(EngineError::Illegal("destroy spells need a target"))?
-                .object_id;
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal(
+                    "destroy spells require exactly one target",
+                ));
+            }
+            let target = targets[0].object_id;
             let obj = state
                 .objects
                 .get(&target)
@@ -1518,28 +1519,49 @@ fn validate_spell_targets(
             }
         }
         SpellEffectKind::CounterTargetSpell => {
-            let target = targets
-                .first()
-                .ok_or(EngineError::Illegal("counterspell needs a stack target"))?
-                .object_id;
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal(
+                    "counterspell requires exactly one stack target",
+                ));
+            }
+            let target = targets[0].object_id;
             if !state.stack.iter().any(|s| s.id == target) {
                 return Err(EngineError::Illegal("counter target must be on stack"));
             }
         }
         SpellEffectKind::DealDamage { .. } => {
-            let Some(target_ref) = targets.first() else {
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal(
+                    "damage spells require exactly one target",
+                ));
+            }
+            let target = targets[0].object_id;
+            if state.player_idx(target as i32).is_some() {
                 return Ok(());
-            };
-            let target = target_ref.object_id;
-            if let Some(obj) = state.objects.get(&target) {
-                if obj.zone != Zone::Battlefield || !obj.is_creature(registry) {
-                    return Err(EngineError::Illegal(
-                        "damage target must be a battlefield creature or player",
-                    ));
-                }
-            } else if state.player_idx(target as i32).is_none() {
+            }
+            let obj = state.objects.get(&target).ok_or(EngineError::Illegal(
+                "damage target must be a battlefield creature or player",
+            ))?;
+            if obj.zone != Zone::Battlefield || !obj.is_creature(registry) {
                 return Err(EngineError::Illegal(
                     "damage target must be a battlefield creature or player",
+                ));
+            }
+        }
+        SpellEffectKind::PumpTarget { .. } => {
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal(
+                    "pump spells require exactly one target",
+                ));
+            }
+            let target = targets[0].object_id;
+            let obj = state
+                .objects
+                .get(&target)
+                .ok_or(EngineError::Illegal("target object does not exist"))?;
+            if obj.zone != Zone::Battlefield || !obj.is_creature(registry) {
+                return Err(EngineError::Illegal(
+                    "pump target must be a creature on the battlefield",
                 ));
             }
         }

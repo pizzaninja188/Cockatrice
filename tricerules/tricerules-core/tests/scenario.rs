@@ -38,6 +38,13 @@ fn cast_spell(hand_card_index: usize, targets: Vec<TargetRef>) -> RuledCommand {
     }
 }
 
+/// Player targets for `DealDamage` spells use `TargetRef.object_id == player_id` (see engine).
+fn target_player(pid: i32) -> Vec<TargetRef> {
+    vec![TargetRef {
+        object_id: pid as u32,
+    }]
+}
+
 fn declare_attackers(creature_ids: Vec<u32>) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::DeclareAttackers(DeclareAttackers { creature_ids })),
@@ -69,24 +76,14 @@ fn take_card_from_library_to_hand(e: &mut GameEngine, player: usize, card_id: &s
     let pos = e.state.players[player]
         .library
         .iter()
-        .position(|oid| {
-            e.state
-                .objects
-                .get(oid)
-                .map(|o| o.card_id.as_str())
-                == Some(card_id)
-        })
+        .position(|oid| e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some(card_id))
         .unwrap_or_else(|| panic!("missing card {card_id} in P{player} library"));
     let oid = e.state.players[player]
         .library
         .remove(pos)
         .expect("index from position()");
     e.state.players[player].hand.push(oid);
-    e.state
-        .objects
-        .get_mut(&oid)
-        .expect("object")
-        .zone = tricerules_core::Zone::Hand;
+    e.state.objects.get_mut(&oid).expect("object").zone = tricerules_core::Zone::Hand;
 }
 
 fn battlefield_object_for_card(e: &GameEngine, player: usize, card_id: &str) -> u32 {
@@ -260,7 +257,7 @@ fn cast_lightning_bolt_resolves_to_graveyard_after_double_pass() {
 
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     let pushed = e
-        .apply_command(0, &cast_spell(bolt_idx, vec![]))
+        .apply_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("cast bolt");
     let bolt_oid = e.state.stack.last().expect("spell on stack").id;
     assert!(pushed
@@ -281,6 +278,129 @@ fn cast_lightning_bolt_resolves_to_graveyard_after_double_pass() {
                         == tricerules_proto::ruled::v1::StackResolveDestination::Graveyard as i32
         )
     }));
+}
+
+#[test]
+fn lightning_bolt_rejects_basic_land_target() {
+    let decks = Some(vec![
+        vec![
+            "mountain".into(),
+            "lightning_bolt".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec![
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(1401, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let mountain_idx = hand_index_for_card(&e, 0, "mountain");
+    e.apply_command(0, &play_land(mountain_idx))
+        .expect("play mountain");
+    let land_oid = battlefield_object_for_card(&e, 0, "mountain");
+    let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
+    let err = e
+        .apply_command(
+            0,
+            &cast_spell(
+                bolt_idx,
+                vec![TargetRef {
+                    object_id: land_oid,
+                }],
+            ),
+        )
+        .expect_err("bolt cannot target land");
+    assert!(err.to_string().contains("creature"), "unexpected: {err}");
+}
+
+#[test]
+fn lightning_bolt_rejects_missing_target() {
+    let decks = Some(vec![
+        vec![
+            "mountain".into(),
+            "lightning_bolt".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec![
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(1402, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let mountain_idx = hand_index_for_card(&e, 0, "mountain");
+    e.apply_command(0, &play_land(mountain_idx))
+        .expect("play mountain");
+    let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
+    let err = e
+        .apply_command(0, &cast_spell(bolt_idx, vec![]))
+        .expect_err("bolt needs a target");
+    assert!(
+        err.to_string().contains("exactly one target"),
+        "unexpected: {err}"
+    );
+}
+
+#[test]
+fn giant_growth_rejects_land_target() {
+    let decks = Some(vec![
+        vec![
+            "forest".into(),
+            "giant_growth".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+        vec![
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(1403, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let forest_idx = hand_index_for_card(&e, 0, "forest");
+    e.apply_command(0, &play_land(forest_idx))
+        .expect("play forest");
+    let land_oid = battlefield_object_for_card(&e, 0, "forest");
+    let growth_idx = hand_index_for_card(&e, 0, "giant_growth");
+    let err = e
+        .apply_command(
+            0,
+            &cast_spell(
+                growth_idx,
+                vec![TargetRef {
+                    object_id: land_oid,
+                }],
+            ),
+        )
+        .expect_err("growth cannot target land");
+    assert!(err.to_string().contains("creature"), "unexpected: {err}");
 }
 
 #[test]
@@ -312,7 +432,7 @@ fn casting_spell_keeps_priority_with_caster() {
         .expect("play mountain");
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     let pushed = e
-        .apply_command(0, &cast_spell(bolt_idx, vec![]))
+        .apply_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("cast bolt");
     assert!(
         priority_changes_in(&pushed).contains(&0),
@@ -348,7 +468,7 @@ fn stack_resolution_emits_priority_to_active_player() {
     e.apply_command(0, &play_land(mountain_idx))
         .expect("play mountain");
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_idx, vec![]))
+    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("cast bolt");
     e.apply_command(0, &pass()).expect("caster pass");
     let resolved = e.apply_command(1, &pass()).expect("opponent pass");
@@ -688,7 +808,7 @@ fn caster_can_cast_second_spell_before_passing_priority() {
         .zone = tricerules_core::Zone::Battlefield;
 
     let bolt_one = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_one, vec![]))
+    e.apply_command(0, &cast_spell(bolt_one, target_player(1)))
         .expect("cast first bolt");
     assert_eq!(
         e.state.priority_player_id(),
@@ -697,7 +817,7 @@ fn caster_can_cast_second_spell_before_passing_priority() {
     );
 
     let bolt_two = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_two, vec![]))
+    e.apply_command(0, &cast_spell(bolt_two, target_player(1)))
         .expect("cast second bolt while holding priority");
     assert_eq!(
         e.state.stack.len(),
@@ -747,16 +867,10 @@ fn non_active_player_with_priority_pays_mana_for_counterspell() {
     }
 
     let p1_island_a = battlefield_object_for_card(&e, 1, "island");
-    assert!(
-        !e.state
-            .objects
-            .get(&p1_island_a)
-            .expect("p1 island")
-            .tapped
-    );
+    assert!(!e.state.objects.get(&p1_island_a).expect("p1 island").tapped);
 
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_idx, vec![]))
+    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("p0 cast bolt");
     let bolt_oid = e.state.stack.last().expect("bolt on stack").id;
     e.apply_command(0, &pass())
@@ -774,18 +888,10 @@ fn non_active_player_with_priority_pays_mana_for_counterspell() {
     )
     .expect("NAP with priority should tap lands and cast counterspell");
     assert!(
-        e.state
-            .objects
-            .get(&p1_island_a)
-            .expect("p1 island")
-            .tapped,
+        e.state.objects.get(&p1_island_a).expect("p1 island").tapped,
         "an island should tap to help pay UU"
     );
-    assert_eq!(
-        e.state.stack.len(),
-        2,
-        "bolt and counterspell on stack"
-    );
+    assert_eq!(e.state.stack.len(), 2, "bolt and counterspell on stack");
 }
 
 #[test]
@@ -824,7 +930,7 @@ fn untap_and_draw_happen_in_new_turn_sequence() {
 
     let mountain_oid = battlefield_object_for_card(&e, 0, "mountain");
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_idx, vec![]))
+    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("cast lightning bolt");
     e.apply_command(0, &pass()).expect("caster pass");
     e.apply_command(1, &pass())
@@ -1569,7 +1675,7 @@ fn counterspell_counters_a_spell_on_stack() {
     }
 
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_idx, vec![]))
+    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("cast bolt");
     let bolt_oid = e.state.stack.last().expect("bolt on stack").id;
 
@@ -1706,21 +1812,20 @@ fn cannot_cast_spell_until_attackers_declared() {
     let mut e = GameEngine::new(9200, &[0, 1], 20, None).expect("new");
     advance_to_declare_attackers(&mut e);
     let _bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
-    while !e.state.players[0].hand.iter().any(|oid| {
-        e.state
-            .objects
-            .get(oid)
-            .map(|o| o.card_id.as_str())
-            == Some("lightning_bolt")
-    }) {
+    while !e.state.players[0]
+        .hand
+        .iter()
+        .any(|oid| e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some("lightning_bolt"))
+    {
         take_card_from_library_to_hand(&mut e, 0, "lightning_bolt");
     }
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     let err = e
-        .apply_command(0, &cast_spell(bolt_idx, vec![]))
+        .apply_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect_err("cast before attackers illegal");
     assert!(
-        err.to_string().contains("cannot cast until attack or block declaration is complete"),
+        err.to_string()
+            .contains("cannot cast until attack or block declaration is complete"),
         "unexpected: {err}"
     );
 
@@ -1728,13 +1833,11 @@ fn cannot_cast_spell_until_attackers_declared() {
     e.apply_command(0, &declare_attackers(vec![bear_oid]))
         .expect("declare attackers");
 
-    while !e.state.players[0].hand.iter().any(|oid| {
-        e.state
-            .objects
-            .get(oid)
-            .map(|o| o.card_id.as_str())
-            == Some("mountain")
-    }) {
+    while !e.state.players[0]
+        .hand
+        .iter()
+        .any(|oid| e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some("mountain"))
+    {
         take_card_from_library_to_hand(&mut e, 0, "mountain");
     }
     let m_idx = hand_index_for_card(&e, 0, "mountain");
@@ -1746,7 +1849,7 @@ fn cannot_cast_spell_until_attackers_declared() {
     o.tapped = false;
 
     let bolt_idx2 = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_idx2, vec![]))
+    e.apply_command(0, &cast_spell(bolt_idx2, target_player(1)))
         .expect("instant legal after attackers committed");
     assert_eq!(e.state.stack.len(), 1);
 }
@@ -1758,26 +1861,23 @@ fn cannot_cast_spell_until_blockers_declared() {
     let attacker = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     e.apply_command(0, &declare_attackers(vec![attacker]))
         .expect("declare");
-    e.apply_command(0, &pass()).expect("ap pass declare attackers");
+    e.apply_command(0, &pass())
+        .expect("ap pass declare attackers");
     e.apply_command(1, &pass())
         .expect("defender pass declare attackers -> declare blockers");
 
-    while !e.state.players[1].hand.iter().any(|oid| {
-        e.state
-            .objects
-            .get(oid)
-            .map(|o| o.card_id.as_str())
-            == Some("giant_growth")
-    }) {
+    while !e.state.players[1]
+        .hand
+        .iter()
+        .any(|oid| e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some("giant_growth"))
+    {
         take_card_from_library_to_hand(&mut e, 1, "giant_growth");
     }
-    while !e.state.players[1].hand.iter().any(|oid| {
-        e.state
-            .objects
-            .get(oid)
-            .map(|o| o.card_id.as_str())
-            == Some("forest")
-    }) {
+    while !e.state.players[1]
+        .hand
+        .iter()
+        .any(|oid| e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some("forest"))
+    {
         take_card_from_library_to_hand(&mut e, 1, "forest");
     }
     let f_idx = hand_index_for_card(&e, 1, "forest");
@@ -1801,13 +1901,15 @@ fn cannot_cast_spell_until_blockers_declared() {
         )
         .expect_err("cast before blockers illegal");
     assert!(
-        err.to_string().contains("cannot cast until attack or block declaration is complete"),
+        err.to_string()
+            .contains("cannot cast until attack or block declaration is complete"),
         "unexpected: {err}"
     );
 
     e.apply_command(1, &declare_blockers(vec![]))
         .expect("declare no blockers");
-    e.apply_command(0, &pass()).expect("ap pass declare blockers");
+    e.apply_command(0, &pass())
+        .expect("ap pass declare blockers");
     let growth_idx2 = hand_index_for_card(&e, 1, "giant_growth");
     e.apply_command(
         1,

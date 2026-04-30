@@ -17,7 +17,7 @@ This repo extends upstream Cockatrice with a **server-authoritative MTG-style ru
 2. **Single writer of ruled state:** the engine session actor owns `GameState`; Servatrice forwards commands and **filters** per-player views where hidden info applies (see plan).
 3. **Determinism:** randomness via seeded RNG; replays are **`(seed, command log) → state`** (see plan milestones M4+).
 4. **Card model:** hybrid — Ron **`tricerules-cards/data/`**, primitives **`tricerules-cards/primitives/`**, **`custom/`** Rust `CardEffect` when data is insufficient; validate card data at startup.
-5. **MTG rules fidelity:** Ruled behavior should match **Magic** as documented in the **Comprehensive Rules** (and **Oracle text** for card-specific effects). When adding or changing mechanics, verify timing, zones, and control/priority against the CR; encode expectations in **`tricerules-core/tests/scenario.rs`** where practical. See **`tricerules-engine-change-safety.mdc`** for full guard rails.
+5. **MTG rules fidelity:** Ruled behavior should match **Magic** as documented in the **Comprehensive Rules** (and **Oracle text** for card-specific effects). When adding or changing mechanics, verify timing, zones, and control/priority against the CR; encode expectations in **`tricerules-core/tests/scenario.rs`** where practical. See **`tricerules-engine-change-safety.mdc`** for full guard rails. In your **final summary**, follow **`Agent-summary-MTG-rules-compliance.mdc`** so applicability and compliance are explicit for reviewers.
 ## Milestones (short)
 - **M1:** Scaffold — workspace, proto crate, sidecar session, relay shell, CMake/CI.  
 - **M2:** `vanilla_core` rules + small card pool + scenario tests.  
