@@ -14,6 +14,7 @@
 #include <QObject>
 #include <QMultiHash>
 #include <QSet>
+#include <QtGlobal>
 #include <libcockatrice/protocol/pb/event_leave.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_player.pb.h>
 
@@ -65,9 +66,9 @@ private:
     QSet<int> legalRuledSpellCastHandIndices;
     QMultiHash<QString, int> legalRuledSpellCastIndicesByCardName;
 
-    // Server_Card.id (the wire id we see on CardItem) <-> engine ObjectId,
-    // refreshed from BattlefieldObjectMap events injected by the server.
-    QHash<int, quint32> cardIdToEngineOid;
+    // (owner player id, Server_Card.id) -> engine ObjectId, refreshed from
+    // BattlefieldObjectMap events injected by the server.
+    QHash<quint64, quint32> ownerCardIdToEngineOid;
     QHash<quint32, int> engineOidToCardId;
     // Engine ObjectId -> owning player id, derived from BattlefieldObjectMap entries.
     QHash<quint32, int> engineOidOwner;
@@ -115,9 +116,14 @@ public:
     {
         return currentRuledActivePlayerId;
     }
-    [[nodiscard]] quint32 engineOidForCardId(int cardId) const
+    [[nodiscard]] static quint64 makeOwnedCardKey(int ownerPlayerId, int cardId)
     {
-        return cardIdToEngineOid.value(cardId, 0);
+        return (static_cast<quint64>(static_cast<quint32>(ownerPlayerId)) << 32) |
+               static_cast<quint64>(static_cast<quint32>(cardId));
+    }
+    [[nodiscard]] quint32 engineOidForCardId(int ownerPlayerId, int cardId) const
+    {
+        return ownerCardIdToEngineOid.value(makeOwnedCardKey(ownerPlayerId, cardId), 0);
     }
     [[nodiscard]] int cardIdForEngineOid(quint32 engineOid) const
     {

@@ -421,7 +421,8 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
     }
 
     auto *handler = player->getGame()->getGameEventHandler();
-    const quint32 targetOid = handler ? handler->engineOidForCardId(card->getId()) : 0;
+    const int ownerPlayerId = card && card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
+    const quint32 targetOid = handler ? handler->engineOidForCardId(ownerPlayerId, card->getId()) : 0;
     if (targetOid == 0) {
         player->getGame()->getGameEventHandler()->emitLocalRuledLog(
             tr("That target is not selectable yet. Select another target or cancel %1.")

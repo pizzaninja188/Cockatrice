@@ -490,7 +490,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 ruledStackObjectIds.remove(e.stack_resolved().object_id());
                             }
                             if (e.has_battlefield_object_map()) {
-                                cardIdToEngineOid.clear();
+                                ownerCardIdToEngineOid.clear();
                                 engineOidToCardId.clear();
                                 engineOidOwner.clear();
                                 engineOidSummoningSick.clear();
@@ -500,7 +500,8 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                     engineOidOwner.insert(entry.engine_object_id(), entry.player_id());
                                     engineOidSummoningSick.insert(entry.engine_object_id(), entry.summoning_sick());
                                     if (entry.server_card_id() >= 0) {
-                                        cardIdToEngineOid.insert(entry.server_card_id(), entry.engine_object_id());
+                                        ownerCardIdToEngineOid.insert(makeOwnedCardKey(entry.player_id(), entry.server_card_id()),
+                                                                      entry.engine_object_id());
                                         engineOidToCardId.insert(entry.engine_object_id(), entry.server_card_id());
                                     }
                                 }

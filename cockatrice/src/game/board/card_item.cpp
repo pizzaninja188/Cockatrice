@@ -106,7 +106,8 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
         if (game->getGameMetaInfo()->proto().ruled_game()) {
             ruledHandler = game->getGameEventHandler();
             if (ruledHandler) {
-                ruledOid = ruledHandler->engineOidForCardId(id);
+                const int ownerPlayerId = owner ? owner->getPlayerInfo()->getId() : -1;
+                ruledOid = ruledHandler->engineOidForCardId(ownerPlayerId, id);
             }
         }
     }
@@ -563,13 +564,14 @@ bool handleRuledCombatClick(CardItem *card)
     if (!isCombatEligibleCreature(card)) {
         return false;
     }
-    const quint32 oid = handler->engineOidForCardId(card->getId());
+    Player *owner = card->getOwner();
+    const int ownerPlayerId = owner ? owner->getPlayerInfo()->getId() : -1;
+    const quint32 oid = handler->engineOidForCardId(ownerPlayerId, card->getId());
     if (oid == 0) {
         return false;
     }
     const auto phase = handler->getRuledCombatPhase();
     using Phase = GameEventHandler::RuledCombatPhase;
-    Player *owner = card->getOwner();
     const bool ownCreature = owner && owner->getPlayerInfo()->getLocal();
 
     if (phase == Phase::DeclareAttackers && handler->localPlayerIsRuledActive() && ownCreature) {
