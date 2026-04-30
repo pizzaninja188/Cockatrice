@@ -305,6 +305,9 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
     if (ruledHandIndex < 0) {
         return false;
     }
+    if (!player->getGame()->getGameEventHandler()->isRuledSpellCastLegalForHandIndex(ruledHandIndex)) {
+        return false;
+    }
     if (pendingRuledSpellCast.valid && pendingRuledSpellCast.waitingForTarget &&
         pendingRuledSpellCast.handIndex == ruledHandIndex) {
         cancelPendingRuledSpellCast();

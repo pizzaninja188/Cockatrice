@@ -65,6 +65,30 @@ fn hand_index_for_card(e: &GameEngine, player: usize, card_id: &str) -> usize {
         .unwrap_or_else(|| panic!("missing card {card_id} in hand"))
 }
 
+fn take_card_from_library_to_hand(e: &mut GameEngine, player: usize, card_id: &str) {
+    let pos = e.state.players[player]
+        .library
+        .iter()
+        .position(|oid| {
+            e.state
+                .objects
+                .get(oid)
+                .map(|o| o.card_id.as_str())
+                == Some(card_id)
+        })
+        .unwrap_or_else(|| panic!("missing card {card_id} in P{player} library"));
+    let oid = e.state.players[player]
+        .library
+        .remove(pos)
+        .expect("index from position()");
+    e.state.players[player].hand.push(oid);
+    e.state
+        .objects
+        .get_mut(&oid)
+        .expect("object")
+        .zone = tricerules_core::Zone::Hand;
+}
+
 fn battlefield_object_for_card(e: &GameEngine, player: usize, card_id: &str) -> u32 {
     e.state.players[player]
         .battlefield
@@ -1675,4 +1699,125 @@ fn can_cast_new_vanilla_creature_with_swamp() {
     e.apply_command(1, &pass()).expect("p1 pass");
 
     assert!(e.state.players[0].battlefield.contains(&corpse_oid));
+}
+
+#[test]
+fn cannot_cast_spell_until_attackers_declared() {
+    let mut e = GameEngine::new(9200, &[0, 1], 20, None).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let _bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    while !e.state.players[0].hand.iter().any(|oid| {
+        e.state
+            .objects
+            .get(oid)
+            .map(|o| o.card_id.as_str())
+            == Some("lightning_bolt")
+    }) {
+        take_card_from_library_to_hand(&mut e, 0, "lightning_bolt");
+    }
+    let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
+    let err = e
+        .apply_command(0, &cast_spell(bolt_idx, vec![]))
+        .expect_err("cast before attackers illegal");
+    assert!(
+        err.to_string().contains("cannot cast until attack or block declaration is complete"),
+        "unexpected: {err}"
+    );
+
+    let bear_oid = battlefield_object_for_card(&e, 0, "grizzly_bears");
+    e.apply_command(0, &declare_attackers(vec![bear_oid]))
+        .expect("declare attackers");
+
+    while !e.state.players[0].hand.iter().any(|oid| {
+        e.state
+            .objects
+            .get(oid)
+            .map(|o| o.card_id.as_str())
+            == Some("mountain")
+    }) {
+        take_card_from_library_to_hand(&mut e, 0, "mountain");
+    }
+    let m_idx = hand_index_for_card(&e, 0, "mountain");
+    let m_oid = e.state.players[0].hand.remove(m_idx);
+    e.state.players[0].battlefield.push(m_oid);
+    let o = e.state.objects.get_mut(&m_oid).expect("mountain");
+    o.zone = tricerules_core::Zone::Battlefield;
+    o.summoning_sick = false;
+    o.tapped = false;
+
+    let bolt_idx2 = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(0, &cast_spell(bolt_idx2, vec![]))
+        .expect("instant legal after attackers committed");
+    assert_eq!(e.state.stack.len(), 1);
+}
+
+#[test]
+fn cannot_cast_spell_until_blockers_declared() {
+    let mut e = GameEngine::new(9300, &[0, 1], 20, None).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let attacker = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("declare");
+    e.apply_command(0, &pass()).expect("ap pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass declare attackers -> declare blockers");
+
+    while !e.state.players[1].hand.iter().any(|oid| {
+        e.state
+            .objects
+            .get(oid)
+            .map(|o| o.card_id.as_str())
+            == Some("giant_growth")
+    }) {
+        take_card_from_library_to_hand(&mut e, 1, "giant_growth");
+    }
+    while !e.state.players[1].hand.iter().any(|oid| {
+        e.state
+            .objects
+            .get(oid)
+            .map(|o| o.card_id.as_str())
+            == Some("forest")
+    }) {
+        take_card_from_library_to_hand(&mut e, 1, "forest");
+    }
+    let f_idx = hand_index_for_card(&e, 1, "forest");
+    let f_oid = e.state.players[1].hand.remove(f_idx);
+    e.state.players[1].battlefield.push(f_oid);
+    let fo = e.state.objects.get_mut(&f_oid).expect("forest");
+    fo.zone = tricerules_core::Zone::Battlefield;
+    fo.summoning_sick = false;
+    fo.tapped = false;
+
+    let growth_idx = hand_index_for_card(&e, 1, "giant_growth");
+    let err = e
+        .apply_command(
+            1,
+            &cast_spell(
+                growth_idx,
+                vec![TargetRef {
+                    object_id: attacker,
+                }],
+            ),
+        )
+        .expect_err("cast before blockers illegal");
+    assert!(
+        err.to_string().contains("cannot cast until attack or block declaration is complete"),
+        "unexpected: {err}"
+    );
+
+    e.apply_command(1, &declare_blockers(vec![]))
+        .expect("declare no blockers");
+    e.apply_command(0, &pass()).expect("ap pass declare blockers");
+    let growth_idx2 = hand_index_for_card(&e, 1, "giant_growth");
+    e.apply_command(
+        1,
+        &cast_spell(
+            growth_idx2,
+            vec![TargetRef {
+                object_id: attacker,
+            }],
+        ),
+    )
+    .expect("instant legal after blockers committed");
+    assert_eq!(e.state.stack.len(), 1);
 }

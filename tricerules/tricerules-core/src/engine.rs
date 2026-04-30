@@ -914,6 +914,13 @@ impl GameEngine {
         if !def.is_sorcery && !def.is_instant && !can_sorc {
             return Err(EngineError::Illegal("spell only in main"));
         }
+        // CR 508.1 / 508.2: attackers are declared before any player gets priority in the
+        // declare-attackers step. CR 509.1 / 509.3: same for blockers in declare blockers.
+        if priority_locked_for_combat_declaration(&self.state) {
+            return Err(EngineError::Illegal(
+                "cannot cast until attack or block declaration is complete",
+            ));
+        }
         validate_spell_targets(&self.state, &self.registry, &card_id, targets)?;
         pay_mana_simple(&mut self.state, &self.registry, idx, &def.mana_cost)?;
 
@@ -1258,6 +1265,22 @@ fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
     }
 }
 
+/// True while the game is waiting for attack or block declarations before
+/// players may take spell/activated actions that require priority (CR 508 / 509).
+fn priority_locked_for_combat_declaration(state: &GameState) -> bool {
+    match state.turn_step {
+        TurnStep::DeclareAttackers => state
+            .combat
+            .as_ref()
+            .is_some_and(|c| !c.attackers_declared),
+        TurnStep::DeclareBlockers => state
+            .combat
+            .as_ref()
+            .is_some_and(|c| !c.blockers_declared),
+        _ => false,
+    }
+}
+
 fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
     let mut v = vec!["Pass priority".into()];
     if eng.state.priority_player_id() != pid {
@@ -1268,6 +1291,7 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
         None => return v,
     };
     let in_main = matches!(eng.state.turn_step, TurnStep::Main1 | TurnStep::Main2);
+    let combat_decl_lock = priority_locked_for_combat_declaration(&eng.state);
     for (i, &oid) in eng.state.players[idx].hand.iter().enumerate() {
         let cid = &eng.state.objects.get(&oid).unwrap().card_id;
         if let Some(def) = eng.registry.get(cid) {
@@ -1276,10 +1300,10 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
                 if in_main && !eng.state.land_dropped_this_turn {
                     v.push(format!("Play land {name} (hand idx {i})"));
                 }
-            } else {
+            } else if !combat_decl_lock {
                 v.push(format!("Cast {name} (hand idx {i})"));
             }
-        } else {
+        } else if !combat_decl_lock {
             v.push(format!("Play unknown card (hand idx {i})"));
         }
     }
