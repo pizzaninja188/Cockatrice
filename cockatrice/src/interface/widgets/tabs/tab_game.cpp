@@ -277,6 +277,9 @@ void TabGame::connectToGameEventHandler()
             }
             localPlayer->getPlayerActions()->cancelPendingRuledSpellCast();
         });
+        connect(game->getGameEventHandler(), &GameEventHandler::ruledStackHasItemsChanged, gamePromptWidget,
+                &GamePromptWidget::setRuledStackHasItems);
+        gamePromptWidget->setRuledStackHasItems(game->getGameEventHandler()->hasRuledStackItems());
     }
 }
 

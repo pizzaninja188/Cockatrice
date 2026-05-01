@@ -278,6 +278,7 @@ signals:
     void logRuledEngine(QString message);
     void ruledCombatStateChanged();
     void ruledBattlefieldMapUpdated();
+    void ruledStackHasItemsChanged(bool hasItems);
 };
 
 #endif // COCKATRICE_GAME_EVENT_HANDLER_H

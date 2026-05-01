@@ -29,6 +29,7 @@ public slots:
     void setLocalPlayerHasPriority(bool hasPriority);
     void setCombatMode(CombatMode mode, bool localPlayerHasButtons);
     void setTargetingMode(bool enabled, const QString &cardName = {});
+    void setRuledStackHasItems(bool hasItems);
 
 signals:
     void passPriorityRequested();
@@ -56,6 +57,7 @@ private:
     CombatMode currentCombatMode = CombatMode::None;
     bool localPlayerHasCombatButtons = false;
     bool targetingModeEnabled = false;
+    bool ruledStackHasItems = false;
 };
 
 #endif // COCKATRICE_GAME_PROMPT_WIDGET_H

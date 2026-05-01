@@ -41,6 +41,12 @@ QString nextStepButtonTextForPhase(int phase)
             return GamePromptWidget::tr("Combat");
         case 4:
             return GamePromptWidget::tr("Declare Attackers");
+        case 5:
+            return GamePromptWidget::tr("Declare Blockers");
+        case 6:
+            return GamePromptWidget::tr("Combat Damage");
+        case 7:
+            return GamePromptWidget::tr("End of Combat");
         case 8:
             return GamePromptWidget::tr("Second Main Phase");
         case 9:
@@ -193,6 +199,15 @@ void GamePromptWidget::setTargetingMode(bool enabled, const QString &cardName)
     updateCombatButtonsVisibility();
 }
 
+void GamePromptWidget::setRuledStackHasItems(bool hasItems)
+{
+    if (ruledStackHasItems == hasItems) {
+        return;
+    }
+    ruledStackHasItems = hasItems;
+    updatePassPriorityButtonText();
+}
+
 void GamePromptWidget::updateCombatButtonsVisibility()
 {
     if (targetingModeEnabled) {
@@ -217,5 +232,9 @@ void GamePromptWidget::updateCombatButtonsVisibility()
 
 void GamePromptWidget::updatePassPriorityButtonText()
 {
+    if (ruledStackHasItems) {
+        passPriorityButton->setText(tr("No Response"));
+        return;
+    }
     passPriorityButton->setText(nextStepButtonTextForPhase(currentActivePhase));
 }

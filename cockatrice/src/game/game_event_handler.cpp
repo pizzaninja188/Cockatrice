@@ -436,6 +436,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                         QString lines;
                         bool combatStateDirty = false;
                         bool battlefieldMapDirty = false;
+                        bool ruledStackTrackingDirty = false;
                         for (const auto &e : batch.events()) {
                             if (e.has_log()) {
                                 lines += QString::fromStdString(e.log().text()) + QLatin1Char('\n');
@@ -445,6 +446,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 lines += QStringLiteral("Phase: %1\n").arg(QString::fromStdString(pc.phase()));
                                 // Reaching a new phase guarantees the previous stack emptied.
                                 ruledStackObjectIds.clear();
+                                ruledStackTrackingDirty = true;
                                 if (game->getGameState()->getActivePlayer() != pc.active_player_id()) {
                                     game->getGameState()->setActivePlayer(pc.active_player_id());
                                 }
@@ -485,9 +487,11 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             if (e.has_stack_pushed()) {
                                 const auto &sp = e.stack_pushed();
                                 ruledStackObjectIds.insert(sp.object_id());
+                                ruledStackTrackingDirty = true;
                             }
                             if (e.has_stack_resolved()) {
                                 ruledStackObjectIds.remove(e.stack_resolved().object_id());
+                                ruledStackTrackingDirty = true;
                             }
                             if (e.has_battlefield_object_map()) {
                                 ownerCardIdToEngineOid.clear();
@@ -573,6 +577,9 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             legalRuledLandPlayIndicesByCardName.clear();
                             legalRuledSpellCastHandIndices.clear();
                             legalRuledSpellCastIndicesByCardName.clear();
+                        }
+                        if (ruledStackTrackingDirty) {
+                            emit ruledStackHasItemsChanged(!ruledStackObjectIds.isEmpty());
                         }
                         emit logRuledEngine(lines);
                         if (battlefieldMapDirty) {
