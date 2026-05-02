@@ -356,7 +356,7 @@ void GameEventHandler::pruneCleanupDiscardSelectionAndEmitUi()
 
 void GameEventHandler::emitLocalRuledLog(const QString &message)
 {
-    emit logRuledEngine(message);
+    emit ruledEnginePromptFeed(message);
 }
 
 bool GameEventHandler::localPlayerIsRuledActive() const
@@ -591,17 +591,23 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                     legalRuledCleanupDiscardHandIndices.clear();
                     legalRuledCleanupDiscardIndicesByCardName.clear();
                     if (batch.ParseFromString(ruled.payload())) {
-                        QString lines;
+                        QString timeline;
+                        QString promptFeed;
                         bool combatStateDirty = false;
                         bool battlefieldMapDirty = false;
                         bool ruledStackTrackingDirty = false;
                         for (const auto &e : batch.events()) {
                             if (e.has_log()) {
-                                lines += QString::fromStdString(e.log().text()) + QLatin1Char('\n');
+                                const QString logLine =
+                                    QString::fromStdString(e.log().text()).trimmed();
+                                if (!logLine.isEmpty()) {
+                                    timeline += logLine + QLatin1Char('\n');
+                                }
                             }
                             if (e.has_phase_changed()) {
                                 const auto &pc = e.phase_changed();
-                                lines += QStringLiteral("Phase: %1\n").arg(QString::fromStdString(pc.phase()));
+                                // Phase is already reflected by Event_SetActivePhase from the server
+                                // (toolbar highlight + logSetActivePhase); do not duplicate here.
                                 // Reaching a new phase guarantees the previous stack emptied.
                                 ruledStackObjectIds.clear();
                                 ruledStackTrackingDirty = true;
@@ -639,8 +645,8 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             }
                             if (e.has_priority_changed()) {
                                 game->getGameState()->setPriorityPlayer(e.priority_changed().player_id());
-                                lines +=
-                                    QStringLiteral("Priority: P%1\n").arg(e.priority_changed().player_id());
+                                promptFeed += QStringLiteral("Priority: P%1\n")
+                                                   .arg(e.priority_changed().player_id());
                             }
                             if (e.has_stack_pushed()) {
                                 const auto &sp = e.stack_pushed();
@@ -711,10 +717,11 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             }
                             if (e.has_life_changed()) {
                                 const auto &lc = e.life_changed();
-                                lines += QStringLiteral("Life: P%1 -> %2 (delta %3)\n")
-                                             .arg(lc.player_id())
-                                             .arg(lc.new_total())
-                                             .arg(lc.delta());
+                                const QString lifeLine = QStringLiteral("Life: P%1 is now %2 (%3)\n")
+                                                             .arg(lc.player_id())
+                                                             .arg(lc.new_total())
+                                                             .arg(lc.delta());
+                                timeline += lifeLine;
                             }
                         }
                         const auto lit =
@@ -729,9 +736,9 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             const ParsedRuledLandActions parsedCleanup = parseRuledCleanupDiscardActions(lit->second);
                             legalRuledCleanupDiscardHandIndices = parsedCleanup.handIndices;
                             legalRuledCleanupDiscardIndicesByCardName = parsedCleanup.handIndicesByCardName;
-                            lines += tr("Legal actions:\n");
+                            promptFeed += tr("Legal actions:\n");
                             for (const auto &l : lit->second.labels()) {
-                                lines += QStringLiteral(" — %1\n").arg(QString::fromStdString(l));
+                                promptFeed += QStringLiteral(" — %1\n").arg(QString::fromStdString(l));
                             }
                         } else {
                             legalRuledLandPlayHandIndices.clear();
@@ -745,7 +752,8 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                         if (ruledStackTrackingDirty) {
                             emit ruledStackHasItemsChanged(!ruledStackObjectIds.isEmpty());
                         }
-                        emit logRuledEngine(lines);
+                        emit ruledEngineTimeline(timeline);
+                        emit ruledEnginePromptFeed(promptFeed);
                         if (battlefieldMapDirty) {
                             emit ruledBattlefieldMapUpdated();
                         }

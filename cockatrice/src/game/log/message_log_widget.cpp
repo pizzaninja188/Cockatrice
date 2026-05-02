@@ -848,7 +848,10 @@ MessageLogWidget::MessageLogWidget(TabSupervisor *_tabSupervisor, AbstractGame *
 {
 }
 
-void MessageLogWidget::logRuledEngine(QString message)
+void MessageLogWidget::logRuledGameplay(QString message)
 {
-    appendHtmlServerMessage(QStringLiteral("<b>Ruled engine</b><br/>") + sanitizeHtml(message));
+    if (message.trimmed().isEmpty()) {
+        return;
+    }
+    appendHtmlServerMessage(QStringLiteral("<b>%1</b><br/>").arg(tr("Ruled game")) + sanitizeHtml(message));
 }

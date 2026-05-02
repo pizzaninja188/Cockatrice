@@ -14,7 +14,7 @@ alwaysApply: false
 - Preserve mode safety:
   - ruled prompt visible only in ruled non-replay games
   - no behavior changes for legacy freeform/replay paths
-- Prefer consuming existing signals (`logRuledEngine`, `logActivePhaseChanged`, `logActivePlayer`) instead of adding new protocol events for UI text.
+- Prefer consuming existing signals (`ruledEnginePromptFeed`, `logActivePhaseChanged`, `logActivePlayer`) instead of adding new protocol events for UI text.
 - Keep prompt widget compact and action-first; reserve space for future action buttons without wiring unsupported actions.
 
 ## Quick check before finishing

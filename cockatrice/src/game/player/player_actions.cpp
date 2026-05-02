@@ -186,8 +186,6 @@ bool PlayerActions::completePendingRuledSpellCast()
     cmd.set_payload(payload);
     sendGameCommand(cmd);
 
-    player->getGame()->getGameEventHandler()->emitLocalRuledLog(
-        tr("Casting %1.").arg(pendingRuledSpellCast.cardName));
     clearPendingRuledSpellCast();
     return true;
 }

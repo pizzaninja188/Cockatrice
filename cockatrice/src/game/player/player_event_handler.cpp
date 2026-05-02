@@ -32,6 +32,18 @@
 #include <libcockatrice/protocol/pb/event_shuffle.pb.h>
 #include <libcockatrice/utility/zone_names.h>
 
+namespace {
+/// Matches `isRuledModeManaPoolCounterName` in servatrice (ruled floating mana).
+bool isRuledManaPoolCounterName(const QString &name)
+{
+    const QString n = name.trimmed().toLower();
+    if (n.length() != 1) {
+        return false;
+    }
+    return QStringLiteral("wubrgxc").contains(n.at(0));
+}
+} // namespace
+
 PlayerEventHandler::PlayerEventHandler(Player *_player) : QObject(_player), player(_player)
 {
 }
@@ -197,6 +209,10 @@ void PlayerEventHandler::eventSetCounter(const Event_SetCounter &event)
     }
     int oldValue = ctr->getValue();
     ctr->setValue(event.value());
+    if (player->getGame() && player->getGame()->getGameMetaInfo()->proto().ruled_game() &&
+        isRuledManaPoolCounterName(ctr->getName())) {
+        return;
+    }
     emit logSetCounter(player, ctr->getName(), event.value(), oldValue);
 }
 

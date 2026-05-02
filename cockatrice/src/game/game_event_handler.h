@@ -294,7 +294,10 @@ signals:
     void logActivePhaseChanged(int activePhase);
     void logConcede(int playerId);
     void logUnconcede(int playerId);
-    void logRuledEngine(QString message);
+    /// Authoritative ruled-game timeline (lands, spells, combat, life) for the message log.
+    void ruledEngineTimeline(QString message);
+    /// Phase, priority, legal actions, and local UI hints for the ruled prompt panel only.
+    void ruledEnginePromptFeed(QString message);
     void ruledCombatStateChanged();
     void ruledBattlefieldMapUpdated();
     void ruledStackHasItemsChanged(bool hasItems);

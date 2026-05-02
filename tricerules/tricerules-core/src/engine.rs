@@ -309,17 +309,20 @@ impl GameEngine {
             ev: Some(rv1::ruled_event::Ev::AttackersDeclared(
                 rv1::AttackersDeclared {
                     attacking_player_id: ap,
-                    attacker_object_ids: attackers_for_event,
+                    attacker_object_ids: attackers_for_event.clone(),
                 },
             )),
         });
-        b.events.push(ev_log(
-            "Attackers committed — priority in declare attackers".to_string(),
-        ));
+        let atk_names: Vec<String> = attackers_for_event
+            .iter()
+            .map(|&oid| object_display_name(&self.state, &self.registry, oid))
+            .collect();
+        b.events.push(ev_log(format!(
+            "P{} attacks with {}",
+            ap,
+            atk_names.join(", ")
+        )));
         b.events.push(ev_priority_changed(self));
-        b.events.push(ev_log(
-            "Pass priority to proceed to declare blockers".to_string(),
-        ));
         Ok(b)
     }
 
@@ -366,6 +369,19 @@ impl GameEngine {
             }
             c.blockers_declared = true;
         }
+        let block_line = if pairs.is_empty() {
+            "declares no blockers".to_string()
+        } else {
+            pairs
+                .iter()
+                .map(|p| {
+                    let att = object_display_name(&self.state, &self.registry, p.attacker_id);
+                    let blk = object_display_name(&self.state, &self.registry, p.blocker_id);
+                    format!("{blk} blocks {att}")
+                })
+                .collect::<Vec<_>>()
+                .join("; ")
+        };
         let mut b = RuledEventBatch::default();
         self.clear_all_mana_pools();
         // MTG timing: blockers are declared in declare-blockers, then players get priority
@@ -375,9 +391,10 @@ impl GameEngine {
             self.state.priority_idx = i;
         }
         self.state.passes_since_stack_change = 0;
-        b.events.push(ev_log(
-            "Blockers declared — active player receives priority before combat damage".to_string(),
-        ));
+        b.events.push(ev_log(format!(
+            "P{} {}",
+            defending_player, block_line
+        )));
         b.events.push(ev_priority_changed(self));
         fill_legal(&mut b, self);
         Ok(b)
@@ -591,9 +608,7 @@ impl GameEngine {
                 ev.push(ev_phase_labeled(self, "draw"));
                 let skip_opening_draw = self.state.turn == 1 && self.state.active_player_idx == 0;
                 if skip_opening_draw {
-                    ev.push(ev_log(
-                        "Opening turn: active player skips draw step card draw".into(),
-                    ));
+                    ev.push(ev_log("Skipped first draw (opening of the duel).".into()));
                 } else if let Some(idx) = self.state.player_idx(ap) {
                     if self.state.players[idx].library.is_empty() {
                         for p in &mut self.state.players {
@@ -656,9 +671,6 @@ impl GameEngine {
                     }
                 }
                 self.state.passes_since_stack_change = 0;
-                ev.push(ev_log(
-                    "Declare blockers (defense has priority)".to_string(),
-                ));
                 ev.push(ev_phase_labeled(self, "declare_blockers"));
                 ev.push(ev_priority_changed(self));
             }
@@ -679,13 +691,7 @@ impl GameEngine {
                 self.state.passes_since_stack_change = 0;
                 let legend_events = self.apply_legend_sbas()?;
                 ev.extend(legend_events);
-                ev.push(ev_log(
-                    "Combat damage: blocked creatures trade; unblocked hits defending player"
-                        .to_string(),
-                ));
-                ev.push(ev_log(
-                    "Combat damage dealt (priority in combat damage step)".to_string(),
-                ));
+                ev.push(ev_log("Combat damage dealt.".to_string()));
                 ev.push(ev_phase_labeled(self, "combat_damage"));
                 ev.push(ev_priority_changed(self));
             }
@@ -733,9 +739,6 @@ impl GameEngine {
                     self.state.priority_idx = i;
                 }
                 self.state.passes_since_stack_change = 0;
-                ev.push(ev_log(
-                    "Open priority (M2: unexpected step, reset)".to_string(),
-                ));
                 ev.push(ev_phase_labeled(self, "main1"));
                 ev.push(ev_priority_changed(self));
             }
@@ -943,7 +946,7 @@ impl GameEngine {
         ev.extend(legend_events);
         self.apply_sbas(&mut ev)?;
         ev.push(ev_log(format!(
-            "Turn {} — new active P{}, upkeep",
+            "Turn {} — active player P{} (untap/upkeep).",
             self.state.turn, ap
         )));
         ev.push(ev_priority_changed(self));
@@ -996,10 +999,17 @@ impl GameEngine {
             .map(|s| spell_effect_from_key(s))
             .unwrap_or(SpellEffectKind::None);
 
+        let spell_label = self
+            .registry
+            .get(&card_id)
+            .map(|d| d.name.clone())
+            .unwrap_or_else(|| "Spell".into());
+
         match effect {
             SpellEffectKind::DealDamage { amount } => {
                 if let Some(&tid) = targets.first() {
                     if let Some(pi) = self.state.player_idx(tid as i32) {
+                        let pid = self.state.players[pi].id;
                         self.state.players[pi].life -= amount as i32;
                         events.push(rv1::RuledEvent {
                             ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
@@ -1008,10 +1018,19 @@ impl GameEngine {
                                 delta: -(amount as i32),
                             })),
                         });
-                    } else if let Some(t) = self.state.objects.get_mut(&tid) {
-                        if t.is_creature(&self.registry) {
-                            t.damage += amount;
+                        events.push(ev_log(format!(
+                            "{spell_label} deals {amount} damage to P{pid}"
+                        )));
+                    } else if self.state.objects.contains_key(&tid) {
+                        let tgt = object_display_name(&self.state, &self.registry, tid);
+                        if let Some(t) = self.state.objects.get_mut(&tid) {
+                            if t.is_creature(&self.registry) {
+                                t.damage += amount;
+                            }
                         }
+                        events.push(ev_log(format!(
+                            "{spell_label} deals {amount} damage to {tgt}"
+                        )));
                     }
                 }
             }
@@ -1020,9 +1039,14 @@ impl GameEngine {
                 for _ in 0..count {
                     draw_card(&mut self.state.players[idx], &mut self.state.objects)?;
                 }
+                let noun = if count == 1 { "card" } else { "cards" };
+                events.push(ev_log(format!(
+                    "P{controller} draws {count} {noun} ({spell_label})."
+                )));
             }
             SpellEffectKind::PumpTarget { power, toughness } => {
                 if let Some(&tid) = targets.first() {
+                    let tgt = object_display_name(&self.state, &self.registry, tid);
                     if let Some(t) = self.state.objects.get_mut(&tid) {
                         if t.is_creature(&self.registry) {
                             let p = t.power.unwrap_or(0) as i32 + power;
@@ -1031,10 +1055,15 @@ impl GameEngine {
                             t.toughness = Some(tt.max(0) as u32);
                         }
                     }
+                    events.push(ev_log(format!(
+                        "{spell_label} gives +{power}/+{toughness} to {tgt}"
+                    )));
                 }
             }
             SpellEffectKind::DestroyTarget => {
                 if let Some(&tid) = targets.first() {
+                    let tgt = object_display_name(&self.state, &self.registry, tid);
+                    events.push(ev_log(format!("{spell_label} destroys {tgt}")));
                     let owner = self.state.objects.get(&tid).map(|o| o.owner);
                     destroy_permanent(&mut self.state, tid)?;
                     if let Some(owner_id) = owner {
@@ -1052,13 +1081,21 @@ impl GameEngine {
                 if let Some(&tid) = targets.first() {
                     if let Some(pos) = self.state.stack.iter().position(|s| s.id == tid) {
                         let st = self.state.stack.remove(pos);
+                        let tgt = self
+                            .registry
+                            .get(&st.card_id)
+                            .map(|d| d.name.as_str())
+                            .unwrap_or("spell");
                         move_object_to_zone(&mut self.state, st.id, Zone::Graveyard)?;
-                        events.push(ev_log("Countered spell".into()));
+                        events.push(ev_log(format!(
+                            "{spell_label} counters {tgt}"
+                        )));
                     }
                 }
             }
             SpellEffectKind::None => {}
         }
+        events.push(ev_log(format!("{spell_label} resolves.")));
         Ok(())
     }
 
@@ -1124,6 +1161,7 @@ impl GameEngine {
 
         self.state.players[idx].hand.retain(|&x| x != oid);
         let trefs: Vec<ObjectId> = targets.iter().map(|t| t.object_id).collect();
+        let tgt_line = format_spell_targets_log(&self.state, &self.registry, &trefs);
 
         self.state.stack.push(StackItem {
             id: oid,
@@ -1141,6 +1179,10 @@ impl GameEngine {
 
         let def_name = def.name.clone();
         let mut batch = RuledEventBatch::default();
+        batch.events.push(ev_log(format!(
+            "P{} casts {}{}",
+            player, def.name, tgt_line
+        )));
         batch.events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
                 object_id: oid,
@@ -1187,7 +1229,8 @@ impl GameEngine {
         }
         self.state.passes_since_stack_change = 0;
         let mut batch = RuledEventBatch::default();
-        batch.events.push(ev_log(format!("Played {}", def.name)));
+        batch.events
+            .push(ev_log(format!("P{} played {}", player, def.name)));
         fill_legal(&mut batch, self);
         Ok(batch)
     }
@@ -1289,7 +1332,7 @@ impl GameEngine {
         batch.events.push(ev_phase_labeled(self, "upkeep"));
         batch.events.push(ev_priority_changed(self));
         batch.events.push(ev_log(format!(
-            "Start — active P{}, priority P{}, step upkeep",
+            "Game started — active P{}, priority P{} (upkeep).",
             self.state.active_player_id(),
             self.state.priority_player_id(),
         )));
@@ -1455,6 +1498,39 @@ impl GameEngine {
             })),
         });
         b
+    }
+}
+
+fn object_display_name(state: &GameState, registry: &CardRegistry, oid: ObjectId) -> String {
+    state
+        .objects
+        .get(&oid)
+        .and_then(|o| registry.get(&o.card_id))
+        .map(|d| d.name.clone())
+        .unwrap_or_else(|| format!("[object {}]", oid))
+}
+
+fn describe_target_for_log(state: &GameState, registry: &CardRegistry, tid: ObjectId) -> String {
+    if state.player_idx(tid as i32).is_some() {
+        format!("P{tid}")
+    } else {
+        object_display_name(state, registry, tid)
+    }
+}
+
+fn format_spell_targets_log(
+    state: &GameState,
+    registry: &CardRegistry,
+    targets: &[ObjectId],
+) -> String {
+    if targets.is_empty() {
+        String::new()
+    } else {
+        let s: Vec<String> = targets
+            .iter()
+            .map(|&t| describe_target_for_log(state, registry, t))
+            .collect();
+        format!(" — {}", s.join(", "))
     }
 }
 

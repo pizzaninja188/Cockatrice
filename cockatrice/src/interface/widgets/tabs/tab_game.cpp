@@ -227,7 +227,7 @@ void TabGame::connectToGameEventHandler()
     connect(game->getGameEventHandler(), &GameEventHandler::ruledBattlefieldMapUpdated, this,
             &TabGame::refreshRuledCombatArrows);
     if (gamePromptWidget) {
-        connect(game->getGameEventHandler(), &GameEventHandler::logRuledEngine, gamePromptWidget,
+        connect(game->getGameEventHandler(), &GameEventHandler::ruledEnginePromptFeed, gamePromptWidget,
                 [this](const QString &lines) {
                     auto *handler = game->getGameEventHandler();
                     if (handler && handler->localPlayerMustCleanupDiscard()) {
@@ -349,8 +349,8 @@ void TabGame::connectMessageLogToGameEventHandler()
     connect(game->getGameEventHandler(), &GameEventHandler::logConcede, messageLog, &MessageLogWidget::logConcede);
     connect(game->getGameEventHandler(), &GameEventHandler::logUnconcede, messageLog, &MessageLogWidget::logUnconcede);
 
-    connect(game->getGameEventHandler(), &GameEventHandler::logRuledEngine, messageLog,
-            &MessageLogWidget::logRuledEngine);
+    connect(game->getGameEventHandler(), &GameEventHandler::ruledEngineTimeline, messageLog,
+            &MessageLogWidget::logRuledGameplay);
     connect(game->getGameEventHandler(), &GameEventHandler::logGameClosed, messageLog,
             &MessageLogWidget::logGameClosed);
 }
