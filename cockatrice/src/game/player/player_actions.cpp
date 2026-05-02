@@ -341,20 +341,21 @@ bool PlayerActions::tryToggleRuledCleanupDiscard(CardItem *card)
     }
     int sameNameOrdinal = -1;
     int seenSameName = 0;
+    int sameNameCardsInHand = 0;
     for (const auto *zoneCard : card->getZone()->getCards()) {
         if (!zoneCard) {
             continue;
         }
         if (zoneCard->getName() == card->getName()) {
+            ++sameNameCardsInHand;
             if (zoneCard == card) {
                 sameNameOrdinal = seenSameName;
-                break;
             }
             ++seenSameName;
         }
     }
-    const int ruledHandIndex =
-        handler->resolveRuledCleanupDiscardEngineHandIndex(card->getName(), handIndex, sameNameOrdinal);
+    const int ruledHandIndex = handler->resolveRuledCleanupDiscardEngineHandIndex(
+        card->getName(), handIndex, sameNameOrdinal, sameNameCardsInHand);
     if (ruledHandIndex < 0 || !handler->isRuledCleanupDiscardLegalForHandIndex(ruledHandIndex)) {
         return false;
     }

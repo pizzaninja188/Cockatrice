@@ -220,20 +220,21 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
             if (handIndex >= 0) {
                 int sameNameOrdinal = -1;
                 int seenSameName = 0;
+                int sameNameCardsInHand = 0;
                 for (const CardItem *zoneCard : zone->getCards()) {
                     if (!zoneCard) {
                         continue;
                     }
                     if (zoneCard->getName() == getName()) {
+                        ++sameNameCardsInHand;
                         if (zoneCard == this) {
                             sameNameOrdinal = seenSameName;
-                            break;
                         }
                         ++seenSameName;
                     }
                 }
-                const int ri = ruledHandler->resolveRuledCleanupDiscardEngineHandIndex(getName(), handIndex,
-                                                                                       sameNameOrdinal);
+                const int ri = ruledHandler->resolveRuledCleanupDiscardEngineHandIndex(
+                    getName(), handIndex, sameNameOrdinal, sameNameCardsInHand);
                 if (ri >= 0 && ruledHandler->isRuledCleanupDiscardLegalForHandIndex(ri) &&
                     ruledHandler->isRuledCleanupDiscardHandIndexSelected(ri)) {
                     painter->save();

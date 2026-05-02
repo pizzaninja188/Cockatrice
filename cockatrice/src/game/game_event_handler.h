@@ -116,9 +116,10 @@ public:
     [[nodiscard]] QList<int> getRuledCleanupDiscardHandIndicesForCardName(const QString &cardName) const;
     /// Maps a visible hand card to the engine hand index used in cleanup-discard legal actions.
     /// \a sameNameOrdinal is the 0-based index among cards with \a cardName left-to-right in the hand zone.
+    /// \a sameNameCardsInHand is the count of hand cards with \a cardName (including the clicked card).
     /// When several legal discards share a name, mapping is by ordinal only (visual index can collide).
     [[nodiscard]] int resolveRuledCleanupDiscardEngineHandIndex(const QString &cardName, int visualHandIndex,
-                                                              int sameNameOrdinal) const;
+                                                              int sameNameOrdinal, int sameNameCardsInHand) const;
     [[nodiscard]] bool localPlayerMustCleanupDiscard() const;
     [[nodiscard]] int ruledCleanupDiscardRequiredCount() const;
     [[nodiscard]] int ruledCleanupDiscardSelectedCount() const;

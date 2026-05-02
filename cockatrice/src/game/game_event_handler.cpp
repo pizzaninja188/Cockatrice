@@ -245,7 +245,7 @@ QList<int> GameEventHandler::getRuledCleanupDiscardHandIndicesForCardName(const 
 }
 
 int GameEventHandler::resolveRuledCleanupDiscardEngineHandIndex(const QString &cardName, int visualHandIndex,
-                                                                 int sameNameOrdinal) const
+                                                                 int sameNameOrdinal, int sameNameCardsInHand) const
 {
     const QList<int> matchingIndices = getRuledCleanupDiscardHandIndicesForCardName(cardName);
     if (matchingIndices.isEmpty()) {
@@ -260,8 +260,15 @@ int GameEventHandler::resolveRuledCleanupDiscardEngineHandIndex(const QString &c
         }
         return -1;
     }
-    // Single legal index for this name: only the card at that engine/visual slot is that choice.
     const int only = matchingIndices.first();
+    // Exactly one legal discard label for this name. If there is only one physical card with this
+    // name in hand, it must be that discard regardless of whether UI card order matches engine
+    // hand indices (see debug: Island at visual 7 vs engine idx 0).
+    if (sameNameCardsInHand == 1) {
+        return only;
+    }
+    // Several same-named cards but only one legal line: disambiguate by engine/visual alignment
+    // when the client hand list order matches engine hand order (legacy fallback).
     return (only == visualHandIndex) ? only : -1;
 }
 
