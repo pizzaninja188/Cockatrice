@@ -458,6 +458,12 @@ void CardItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
         } else if (!owner->getPlayerInfo()->getLocalOrJudge())
             return;
 
+        if (auto *game = owner->getGame();
+            game && game->getGameMetaInfo() && game->getGameMetaInfo()->proto().ruled_game()) {
+            setCursor(Qt::OpenHandCursor);
+            return;
+        }
+
         bool forceFaceDown = event->modifiers().testFlag(Qt::ShiftModifier);
 
         // Use the buttonDownPos to align the hot spot with the position when
@@ -514,6 +520,13 @@ static bool isUnwritableRevealZone(CardZoneLogic *zone)
         return view->getRevealZone() && !view->getWriteableRevealZone();
     }
     return false;
+}
+
+/** True if the left press/release pair is a click, not a drag-away (matches drag-start threshold in mouseMoveEvent). */
+static bool isStationaryLeftRelease(const QGraphicsSceneMouseEvent *event)
+{
+    return (event->screenPos() - event->buttonDownScreenPos(Qt::LeftButton)).manhattanLength() <
+           QApplication::startDragDistance();
 }
 
 static bool isRuledLandSingleClickLegal(const CardItem *card)
@@ -689,25 +702,26 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
             }
         }
     } else if ((event->modifiers() != Qt::AltModifier) && (event->button() == Qt::LeftButton)) {
+        const bool stationaryLeft = isStationaryLeftRelease(event);
         if (owner != nullptr) {
             auto *game = owner->getGame();
             auto *playerManager = game ? game->getPlayerManager() : nullptr;
             auto *localPlayer = playerManager ? playerManager->getPlayers().value(playerManager->getLocalPlayerId()) : nullptr;
             auto *actions = localPlayer ? localPlayer->getPlayerActions() : nullptr;
-            if (owner->getPlayerInfo()->getLocal() && actions && zone && zone->getName() == ZoneNames::HAND &&
-                actions->tryToggleRuledCleanupDiscard(this)) {
+            if (stationaryLeft && owner->getPlayerInfo()->getLocal() && actions && zone &&
+                zone->getName() == ZoneNames::HAND && actions->tryToggleRuledCleanupDiscard(this)) {
                 update();
                 AbstractCardItem::mouseReleaseEvent(event);
                 return;
             }
-            if (actions && actions->tryHandleRuledSpellTargetClick(this)) {
+            if (stationaryLeft && actions && actions->tryHandleRuledSpellTargetClick(this)) {
                 setCursor(Qt::OpenHandCursor);
                 AbstractCardItem::mouseReleaseEvent(event);
                 return;
             }
         }
         // Ruled-mode combat clicks take priority over normal play handling on the table.
-        if (handleRuledCombatClick(this)) {
+        if (stationaryLeft && handleRuledCombatClick(this)) {
             update();
             if (owner != nullptr) {
                 setCursor(Qt::OpenHandCursor);
@@ -715,8 +729,9 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
             AbstractCardItem::mouseReleaseEvent(event);
             return;
         }
-        if (!SettingsCache::instance().getDoubleClickToPlay() || isRuledLandSingleClickLegal(this) ||
-            isRuledSpellSingleClickLegal(this) || isTableLandSingleClickLegal(this)) {
+        if (stationaryLeft &&
+            (!SettingsCache::instance().getDoubleClickToPlay() || isRuledLandSingleClickLegal(this) ||
+             isRuledSpellSingleClickLegal(this) || isTableLandSingleClickLegal(this))) {
             handleClickedToPlay(event->modifiers().testFlag(Qt::ShiftModifier));
         }
     }

@@ -2,7 +2,9 @@
 
 #include "../../client/settings/cache_settings.h"
 #include "../../interface/card_picture_loader/card_picture_loader.h"
+#include "../abstract_game.h"
 #include "../game_scene.h"
+#include "../player/player.h"
 #include "../z_values.h"
 
 #include <QCursor>
@@ -179,11 +181,14 @@ void AbstractCardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *
 
     painter->setRenderHint(QPainter::Antialiasing, false);
 
-    if (isSelected() || isHovered) {
+    const bool ruledGame = owner && owner->getGame() && owner->getGame()->getGameMetaInfo() &&
+                           owner->getGame()->getGameMetaInfo()->proto().ruled_game();
+    // Ruled games: no red "selected" outline (freeform sandbox affordance); keep yellow hover.
+    if (isHovered || (isSelected() && !ruledGame)) {
         QPen pen;
         if (isHovered)
             pen.setColor(Qt::yellow);
-        if (isSelected())
+        if (isSelected() && !(ruledGame && isHovered))
             pen.setColor(Qt::red);
         pen.setWidth(0); // Cosmetic pen
         painter->setPen(pen);

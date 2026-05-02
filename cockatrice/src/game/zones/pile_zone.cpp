@@ -1,5 +1,6 @@
 #include "pile_zone.h"
 
+#include "../abstract_game.h"
 #include "../board/card_drag_item.h"
 #include "../board/card_item.h"
 #include "../player/player.h"
@@ -105,6 +106,12 @@ void PileZone::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
 
     if (getLogic()->getCards().isEmpty())
         return;
+
+    if (auto *game = getLogic()->getPlayer()->getGame();
+        game && game->getGameMetaInfo() && game->getGameMetaInfo()->proto().ruled_game()) {
+        setCursor(Qt::OpenHandCursor);
+        return;
+    }
 
     bool forceFaceDown = event->modifiers().testFlag(Qt::ShiftModifier);
     bool bottomCard = event->modifiers().testFlag(Qt::ControlModifier);
