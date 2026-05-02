@@ -70,6 +70,8 @@ public:
     bool tryPayRuledSpellWithCounter(const QString &counterName);
     bool tryHandleRuledSpellTargetClick(CardItem *card);
     bool tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer);
+    /// True when the local player must pick a player (not permanent) for the pending ruled cast.
+    [[nodiscard]] bool isAwaitingRuledPlayerTargetSelection() const;
     void cancelPendingRuledSpellCast();
     bool tryToggleRuledCleanupDiscard(CardItem *card);
     bool sendRuledCleanupDiscardBatchIfComplete();

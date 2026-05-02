@@ -193,6 +193,22 @@ void PlayerTarget::counterDeleted()
     playerCounter = nullptr;
 }
 
+void PlayerTarget::mousePressEvent(QGraphicsSceneMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton && owner && owner->getGame()) {
+        auto *playerManager = owner->getGame()->getPlayerManager();
+        if (playerManager) {
+            Player *localPlayer = playerManager->getPlayers().value(playerManager->getLocalPlayerId(), nullptr);
+            if (localPlayer && localPlayer->getPlayerActions() &&
+                localPlayer->getPlayerActions()->isAwaitingRuledPlayerTargetSelection()) {
+                event->accept();
+                return;
+            }
+        }
+    }
+    ArrowTarget::mousePressEvent(event);
+}
+
 void PlayerTarget::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton && owner && owner->getGame()) {

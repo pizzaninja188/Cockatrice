@@ -451,8 +451,13 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
 
     if (pendingRuledSpellCast.waitingForTarget) {
         emit ruledSpellTargetingChanged(true, pendingRuledSpellCast.cardName);
-        player->getGame()->getGameEventHandler()->emitLocalRuledLog(
-            tr("Cast %1 selected. Select a target card, or press Cancel.").arg(card->getName()));
+        if (card->getName().trimmed().compare(QStringLiteral("Lightning Bolt"), Qt::CaseInsensitive) == 0) {
+            player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+                tr("Cast %1 selected. Click a player's portrait or a creature, or press Cancel.").arg(card->getName()));
+        } else {
+            player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+                tr("Cast %1 selected. Select a target card, or press Cancel.").arg(card->getName()));
+        }
         return true;
     }
 
@@ -526,6 +531,15 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
     return true;
 }
 
+bool PlayerActions::isAwaitingRuledPlayerTargetSelection() const
+{
+    if (!pendingRuledSpellCast.valid || !pendingRuledSpellCast.waitingForTarget) {
+        return false;
+    }
+    return pendingRuledSpellCast.cardName.trimmed().compare(QStringLiteral("Lightning Bolt"), Qt::CaseInsensitive) ==
+           0;
+}
+
 bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
 {
     if (!pendingRuledSpellCast.valid || !pendingRuledSpellCast.waitingForTarget) {
@@ -536,8 +550,7 @@ bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
         return false;
     }
 
-    if (pendingRuledSpellCast.cardName.trimmed().compare(QStringLiteral("Lightning Bolt"),
-                                                          Qt::CaseInsensitive) != 0) {
+    if (!isAwaitingRuledPlayerTargetSelection()) {
         player->getGame()->getGameEventHandler()->emitLocalRuledLog(
             tr("%1 does not target players.").arg(pendingRuledSpellCast.cardName));
         return true;

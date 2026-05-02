@@ -11,6 +11,7 @@
 #include "../board/abstract_counter.h"
 #include "../board/arrow_target.h"
 
+#include <QGraphicsSceneMouseEvent>
 #include <QPixmap>
 
 class Player;
@@ -53,6 +54,7 @@ public:
     AbstractCounter *addCounter(int _counterId, const QString &_name, int _value);
 
 protected:
+    void mousePressEvent(QGraphicsSceneMouseEvent *event) override;
     void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
 };
 
