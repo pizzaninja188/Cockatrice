@@ -160,6 +160,8 @@ pub struct GameState {
     pub combat: Option<CombatState>,
     /// If set, game is over; winning player
     pub winner: Option<PlayerId>,
+    /// CR 514.1: player who must discard next during cleanup, if any.
+    pub cleanup_discard_player: Option<PlayerId>,
 }
 
 impl GameState {

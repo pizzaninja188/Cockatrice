@@ -11,10 +11,10 @@ class Server_Player : public Server_AbstractPlayer
 private:
     QMap<int, Server_Counter *> counters;
     QList<int> lastDrawList;
-    // Latest mapping between engine ObjectIds (parallel to RuledPerPlayerView::battlefield)
-    // and the corresponding Server_Card on this player's TABLE zone. Updated each
+    // Latest mapping between engine ObjectIds (parallel to RuledPerPlayerView::battlefield
+    // and `hand_object_id`) and the corresponding Server_Card. Updated each
     // applyRuledEngineZoneView; consumed by Server_Game::applyRuledBatch when translating
-    // engine-side combat events into client-visible Cockatrice events.
+    // engine-side events into client-visible Cockatrice events.
     QHash<quint32, int> engineOidToServerCardId;
     QHash<int, quint32> serverCardIdToEngineOid;
     QHash<quint32, bool> engineOidToSummoningSick;

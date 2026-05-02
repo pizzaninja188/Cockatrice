@@ -437,9 +437,30 @@ Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const
                     }
                 }
             }
-            result.engineOidToServerCardId = engineOidToServerCardId;
         }
     }
+
+    // Hand OIDs (discard, bounce-to-hand, etc.): register after battlefield rebuild so
+    // engineOidToServerCardId.clear() above does not drop them, and strip stale hand keys
+    // before insert so moved cards do not leave orphan map entries.
+    if (v.hand_object_id_size() == v.hand_size() && v.hand_size() == handZone->getCards().size()) {
+        for (Server_Card *hc : handZone->getCards()) {
+            const int cid = hc->getId();
+            const auto soIt = serverCardIdToEngineOid.constFind(cid);
+            if (soIt != serverCardIdToEngineOid.constEnd()) {
+                engineOidToServerCardId.remove(*soIt);
+                serverCardIdToEngineOid.remove(cid);
+            }
+        }
+        for (int i = 0; i < v.hand_size(); ++i) {
+            const quint32 oid = static_cast<quint32>(v.hand_object_id(i));
+            Server_Card *card = handZone->getCards().at(i);
+            engineOidToServerCardId.insert(oid, card->getId());
+            serverCardIdToEngineOid.insert(card->getId(), oid);
+        }
+    }
+
+    result.engineOidToServerCardId = engineOidToServerCardId;
     return result;
 }
 
@@ -449,11 +470,15 @@ Server_Card *Server_Player::findCardByEngineOid(quint32 engineOid) const
     if (it == engineOidToServerCardId.constEnd()) {
         return nullptr;
     }
-    Server_CardZone *tableZone = zones.value(ZoneNames::TABLE);
-    if (!tableZone) {
-        return nullptr;
+    const int serverCardId = *it;
+    for (const char *zn : {ZoneNames::TABLE, ZoneNames::HAND, ZoneNames::STACK}) {
+        if (Server_CardZone *z = zones.value(zn)) {
+            if (Server_Card *c = z->getCard(serverCardId, nullptr, false)) {
+                return c;
+            }
+        }
     }
-    return tableZone->getCard(*it, nullptr, false);
+    return nullptr;
 }
 
 void Server_Player::shuffleMainDeckForRuledFallback()

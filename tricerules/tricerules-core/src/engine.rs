@@ -16,6 +16,9 @@ use tricerules_proto::ruled::v1::{
     IpcResponse, LegalActions, RuledCommand, RuledEvent, RuledEventBatch,
 };
 
+/// CR 514.1: default maximum hand size (Reliquary Tower–style overrides not modeled yet).
+const MAX_HAND_SIZE: usize = 7;
+
 #[derive(Debug, Error)]
 pub enum EngineError {
     #[error("unknown player {0}")]
@@ -117,6 +120,7 @@ impl GameEngine {
             land_dropped_this_turn: false,
             combat: None,
             winner: None,
+            cleanup_discard_player: None,
         };
         let mut eng = GameEngine { state, registry };
         let mut e = vec![];
@@ -193,6 +197,7 @@ impl GameEngine {
             }
             Some(Cmd::PlayLand(pl)) => self.play_land(player, pl.hand_card_index as usize),
             Some(Cmd::AddManaToPool(m)) => self.add_mana_to_pool(player, m),
+            Some(Cmd::DiscardToHandSize(d)) => self.discard_to_hand_size(player, d),
         };
         let mut b = res?;
         self.sweep_life();
@@ -495,6 +500,12 @@ impl GameEngine {
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("not your priority"));
         }
+        if self.state.stack.is_empty()
+            && self.state.turn_step == TurnStep::Cleanup
+            && self.state.cleanup_discard_player.is_some()
+        {
+            return Err(EngineError::Illegal("discard to hand size first"));
+        }
         let n = self.state.players.len() as u32;
         if !self.state.stack.is_empty() {
             return self.pass_priority_on_stack(player, n);
@@ -708,10 +719,13 @@ impl GameEngine {
                 ev.push(ev_priority_changed(self));
             }
             EndStep => {
-                if let Some(i) = self.state.player_idx(ap) {
-                    self.state.priority_idx = i;
-                }
-                return self.new_turn();
+                self.clear_all_mana_pools();
+                self.state.turn_step = Cleanup;
+                self.state.passes_since_stack_change = 0;
+                // No PhaseChanged: clients keep highlighting end step during engine cleanup (CR 514).
+                let mut ev = vec![];
+                self.apply_sbas(&mut ev)?;
+                return self.start_cleanup_or_roll_turn(ev);
             }
             _ => {
                 self.clear_all_mana_pools();
@@ -762,19 +776,149 @@ impl GameEngine {
         }
     }
 
-    fn new_turn(&mut self) -> Result<RuledEventBatch, EngineError> {
-        // CR 514.2: "until end of turn" effects end during cleanup before the next turn begins.
+    fn next_cleanup_discard_needed(&self) -> Option<PlayerId> {
+        let n = self.state.players.len();
+        if n == 0 {
+            return None;
+        }
+        let start = self.state.active_player_idx;
+        for k in 0..n {
+            let i = (start + k) % n;
+            if self.state.players[i].hand.len() > MAX_HAND_SIZE {
+                return Some(self.state.players[i].id);
+            }
+        }
+        None
+    }
+
+    fn start_cleanup_or_roll_turn(
+        &mut self,
+        mut ev: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        if let Some(pid) = self.next_cleanup_discard_needed() {
+            self.state.cleanup_discard_player = Some(pid);
+            if let Some(i) = self.state.player_idx(pid) {
+                self.state.priority_idx = i;
+            }
+            self.state.passes_since_stack_change = 0;
+            ev.push(ev_log(format!(
+                "P{pid}: discard to hand size ({MAX_HAND_SIZE})"
+            )));
+            ev.push(ev_priority_changed(self));
+            self.apply_sbas(&mut ev)?;
+            return Ok(finish_with_events(self, ev));
+        }
+        self.state.cleanup_discard_player = None;
+        self.finish_cleanup_roll_new_turn(ev)
+    }
+
+    fn discard_to_hand_size(
+        &mut self,
+        player: PlayerId,
+        d: &rv1::DiscardToHandSize,
+    ) -> Result<RuledEventBatch, EngineError> {
+        if self.state.turn_step != TurnStep::Cleanup {
+            return Err(EngineError::Illegal("discard only during cleanup"));
+        }
+        if self.state.cleanup_discard_player != Some(player) {
+            return Err(EngineError::Illegal("not your cleanup discard"));
+        }
+        let idx = self
+            .state
+            .player_idx(player)
+            .ok_or(EngineError::UnknownPlayer(player))?;
+        let hand_len = self.state.players[idx].hand.len();
+        if hand_len <= MAX_HAND_SIZE {
+            return Err(EngineError::Illegal("hand size not over max"));
+        }
+        let must_discard = hand_len - MAX_HAND_SIZE;
+        let mut positions: Vec<usize> = if !d.hand_card_indices.is_empty() {
+            d.hand_card_indices.iter().map(|&i| i as usize).collect()
+        } else {
+            vec![d.hand_card_index as usize]
+        };
+        positions.sort_unstable();
+        positions.dedup();
+        if positions.len() != must_discard {
+            return Err(EngineError::Illegal("wrong discard count"));
+        }
+        for &hi in &positions {
+            if hi >= hand_len {
+                return Err(EngineError::Illegal("bad hand index"));
+            }
+        }
+        let mut oids = Vec::with_capacity(positions.len());
+        for &hi in &positions {
+            let oid = *self.state.players[idx]
+                .hand
+                .get(hi)
+                .ok_or(EngineError::Illegal("bad hand index"))?;
+            oids.push(oid);
+        }
+
+        let mut ev = vec![];
+        for oid in oids {
+            let owner = self
+                .state
+                .objects
+                .get(&oid)
+                .map(|o| o.owner)
+                .ok_or(EngineError::Illegal("no object"))?;
+            let card_name = self
+                .registry
+                .get(&self.state.objects.get(&oid).unwrap().card_id)
+                .map(|d| d.name.clone())
+                .unwrap_or_else(|| "card".into());
+            move_object_to_zone(&mut self.state, oid, Zone::Graveyard)?;
+            ev.push(ev_log(format!("P{player} discards {card_name} (cleanup)")));
+            ev.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::PermanentMoved(rv1::PermanentMoved {
+                    object_id: oid,
+                    owner_player_id: owner,
+                    destination: rv1::permanent_moved::Destination::Graveyard as i32,
+                })),
+            });
+        }
+        self.apply_sbas(&mut ev)?;
+        if self.state.players[idx].hand.len() > MAX_HAND_SIZE {
+            ev.push(ev_priority_changed(self));
+            return Ok(finish_with_events(self, ev));
+        }
+        self.state.cleanup_discard_player = None;
+        if let Some(pid) = self.next_cleanup_discard_needed() {
+            self.state.cleanup_discard_player = Some(pid);
+            if let Some(i) = self.state.player_idx(pid) {
+                self.state.priority_idx = i;
+            }
+            ev.push(ev_log(format!(
+                "P{pid}: discard to hand size ({MAX_HAND_SIZE})"
+            )));
+            ev.push(ev_priority_changed(self));
+            return Ok(finish_with_events(self, ev));
+        }
+        self.finish_cleanup_roll_new_turn(ev)
+    }
+
+    /// After cleanup discards (514.1), apply 514.2-style clearing and advance the turn.
+    fn finish_cleanup_roll_new_turn(
+        &mut self,
+        mut ev: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        self.state.cleanup_discard_player = None;
         self.cleanup_until_end_of_turn_creature_pt();
         self.cleanup_marked_damage();
         self.clear_all_mana_pools();
         self.state.land_dropped_this_turn = false;
-        self.state.active_player_idx = (self.state.active_player_idx + 1) % 2;
+        let n = self.state.players.len();
+        if n >= 1 {
+            self.state.active_player_idx = (self.state.active_player_idx + 1) % n;
+        }
         if self.state.active_player_idx == 0 {
             self.state.turn = self.state.turn.saturating_add(1);
         }
         let ap = self.state.active_player_id();
         self.state.turn_step = TurnStep::Untap;
-        let mut ev = vec![ev_phase_labeled(self, "untap")];
+        ev.push(ev_phase_labeled(self, "untap"));
 
         for o in self.state.objects.values_mut() {
             if o.owner == ap {
@@ -926,6 +1070,9 @@ impl GameEngine {
     ) -> Result<RuledEventBatch, EngineError> {
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("not your priority"));
+        }
+        if self.state.turn_step == TurnStep::Cleanup {
+            return Err(EngineError::Illegal("no spells during cleanup"));
         }
         let idx = self
             .state
@@ -1196,6 +1343,7 @@ impl GameEngine {
                             .unwrap_or_default()
                     })
                     .collect(),
+                hand_object_id: p.hand.clone(),
                 lib_ids_csv: p
                     .library
                     .iter()
@@ -1353,6 +1501,30 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
     let mut v = vec!["Pass priority".into()];
     if eng.state.priority_player_id() != pid {
         return v;
+    }
+    if eng.state.turn_step == TurnStep::Cleanup {
+        if let Some(cp) = eng.state.cleanup_discard_player {
+            if pid != cp {
+                return vec!["Waiting (opponent cleanup discard)".into()];
+            }
+            let idx = eng.state.player_idx(cp).unwrap();
+            let hand = &eng.state.players[idx].hand;
+            if hand.len() <= MAX_HAND_SIZE {
+                return v;
+            }
+            let mut out = Vec::new();
+            for (i, &oid) in hand.iter().enumerate() {
+                let name = eng
+                    .state
+                    .objects
+                    .get(&oid)
+                    .and_then(|o| eng.registry.get(&o.card_id))
+                    .map(|d| d.name.as_str())
+                    .unwrap_or("card");
+                out.push(format!("Discard {name} (cleanup, hand idx {i})"));
+            }
+            return out;
+        }
     }
     let idx = match eng.state.player_idx(pid) {
         Some(i) => i,

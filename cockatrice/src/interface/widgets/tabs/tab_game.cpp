@@ -228,7 +228,32 @@ void TabGame::connectToGameEventHandler()
             &TabGame::refreshRuledCombatArrows);
     if (gamePromptWidget) {
         connect(game->getGameEventHandler(), &GameEventHandler::logRuledEngine, gamePromptWidget,
-                &GamePromptWidget::setPromptFromRuledLog);
+                [this](const QString &lines) {
+                    auto *handler = game->getGameEventHandler();
+                    if (handler && handler->localPlayerMustCleanupDiscard()) {
+                        gamePromptWidget->setCleanupDiscardMode(
+                            true, handler->ruledCleanupDiscardRequiredCount(), handler->ruledCleanupDiscardSelectedCount());
+                        return;
+                    }
+                    gamePromptWidget->setCleanupDiscardMode(false, 0, 0);
+                    gamePromptWidget->setPromptFromRuledLog(lines);
+                });
+        connect(game->getGameEventHandler(), &GameEventHandler::ruledCleanupDiscardUiChanged, this,
+                [this](int required, int selected) {
+                    if (!gamePromptWidget) {
+                        return;
+                    }
+                    if (required > 0) {
+                        gamePromptWidget->setCleanupDiscardMode(true, required, selected);
+                        const int localId = game->getPlayerManager()->getLocalPlayerId();
+                        Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+                        if (localPlayer && localPlayer->getPlayerActions() && selected == required) {
+                            localPlayer->getPlayerActions()->sendRuledCleanupDiscardBatchIfComplete();
+                        }
+                    } else {
+                        gamePromptWidget->setCleanupDiscardMode(false, 0, 0);
+                    }
+                });
         connect(game->getGameState(), &GameState::activePhaseChanged, gamePromptWidget, &GamePromptWidget::setActivePhase);
         connect(game->getGameEventHandler(), &GameEventHandler::logActivePhaseChanged, gamePromptWidget,
                 [this](int phase) {
@@ -1206,7 +1231,8 @@ Player *TabGame::setPriorityPlayer(int id)
             const bool myTurn = (game->getGameState()->getActivePlayer() == localPlayerId);
             const bool hasManualStop = phasesToolbar->shouldStopAtPhase(currentPhase, myTurn);
             const bool stackIsEmpty = !game->getGameEventHandler()->hasRuledStackItems();
-            if (!hasManualStop && stackIsEmpty) {
+            const bool cleanupDiscard = game->getGameEventHandler()->localPlayerMustCleanupDiscard();
+            if (!hasManualStop && stackIsEmpty && !cleanupDiscard) {
                 QTimer::singleShot(0, game->getGameEventHandler(), &GameEventHandler::handleNextTurn);
             }
         }

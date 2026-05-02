@@ -1,5 +1,6 @@
 #include "player_actions.h"
 
+#include "../game/game_event_handler.h"
 #include "../../interface/widgets/tabs/tab_game.h"
 #include "../../interface/widgets/utility/get_text_with_max.h"
 #include "../board/abstract_counter.h"
@@ -315,6 +316,84 @@ bool PlayerActions::tryPlayRuledLand(CardItem *card)
         return false;
     }
 
+    Command_RuledPayload cmd;
+    cmd.set_payload(payload);
+    sendGameCommand(cmd);
+    return true;
+}
+
+bool PlayerActions::tryToggleRuledCleanupDiscard(CardItem *card)
+{
+    if (!card || !player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+        return false;
+    }
+    if (!player->getPlayerInfo()->getLocal()) {
+        return false;
+    }
+    if (card->getZone()->getName() != ZoneNames::HAND || card->getZone()->getPlayer() != player) {
+        return false;
+    }
+    GameEventHandler *handler = player->getGame()->getGameEventHandler();
+    if (!handler || !handler->localPlayerMustCleanupDiscard()) {
+        return false;
+    }
+    const int handIndex = card->getZone()->getCards().indexOf(card);
+    if (handIndex < 0) {
+        return false;
+    }
+    int sameNameOrdinal = -1;
+    int seenSameName = 0;
+    for (const auto *zoneCard : card->getZone()->getCards()) {
+        if (!zoneCard) {
+            continue;
+        }
+        if (zoneCard->getName() == card->getName()) {
+            if (zoneCard == card) {
+                sameNameOrdinal = seenSameName;
+                break;
+            }
+            ++seenSameName;
+        }
+    }
+    const int ruledHandIndex =
+        handler->resolveRuledCleanupDiscardEngineHandIndex(card->getName(), handIndex, sameNameOrdinal);
+    if (ruledHandIndex < 0 || !handler->isRuledCleanupDiscardLegalForHandIndex(ruledHandIndex)) {
+        return false;
+    }
+    handler->toggleRuledCleanupDiscardHandIndex(ruledHandIndex);
+    return true;
+}
+
+bool PlayerActions::sendRuledCleanupDiscardBatchIfComplete()
+{
+    if (!player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+        return false;
+    }
+    GameEventHandler *h = player->getGame()->getGameEventHandler();
+    if (!h || !h->localPlayerMustCleanupDiscard()) {
+        return false;
+    }
+    const int need = h->ruledCleanupDiscardRequiredCount();
+    if (need <= 0 || h->ruledCleanupDiscardSelectedCount() != need) {
+        return false;
+    }
+    const QList<int> idx = h->ruledCleanupDiscardSelectedIndicesSorted();
+    h->clearRuledCleanupDiscardSelection(false);
+    h->notifyRuledHandUiChanged();
+
+    ruled::v1::RuledCommand ruledCommand;
+    auto *d = ruledCommand.mutable_discard_to_hand_size();
+    if (need == 1) {
+        d->set_hand_card_index(static_cast<quint32>(idx.first()));
+    } else {
+        for (int i : idx) {
+            d->add_hand_card_indices(static_cast<quint32>(i));
+        }
+    }
+    std::string payload;
+    if (!ruledCommand.SerializeToString(&payload)) {
+        return false;
+    }
     Command_RuledPayload cmd;
     cmd.set_payload(payload);
     sendGameCommand(cmd);

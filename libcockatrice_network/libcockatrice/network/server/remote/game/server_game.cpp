@@ -1189,6 +1189,80 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
                                static_cast<Server_Player *>(ab)->getEngineOidToServerCardId());
     }
 
+    // Apply every PermanentMoved before zone_view. Hand discards are already absent from the
+    // engine hand list in the sync that follows, so the server must move the physical card
+    // first or applyRuledEngineZoneView's deck+hand pool counts disagree with the engine.
+    GameEventStorage permanentMoveGes;
+    bool permanentMoveGesHasEvents = false;
+    for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
+        const auto &e = resp.batch().events(ei);
+        if (!e.has_permanent_moved()) {
+            continue;
+        }
+        const auto &pm = e.permanent_moved();
+        const int ownerId = pm.owner_player_id();
+        const quint32 oid = static_cast<quint32>(pm.object_id());
+        Server_AbstractPlayer *owner = getPlayer(ownerId);
+        if (!owner) {
+            continue;
+        }
+        const auto preIt = preBatchOidMaps.constFind(ownerId);
+        if (preIt == preBatchOidMaps.constEnd()) {
+            continue;
+        }
+        const auto cardIdIt = preIt->constFind(oid);
+        if (cardIdIt == preIt->constEnd()) {
+            continue;
+        }
+        Server_Card *card = nullptr;
+        for (const char *zn : {ZoneNames::TABLE, ZoneNames::HAND, ZoneNames::STACK}) {
+            Server_CardZone *z = owner->getZones().value(zn);
+            if (!z) {
+                continue;
+            }
+            if (Server_Card *c = z->getCard(*cardIdIt, nullptr, false)) {
+                card = c;
+                break;
+            }
+        }
+        if (!card) {
+            continue;
+        }
+        Server_CardZone *startZone = card->getZone();
+        if (!startZone) {
+            continue;
+        }
+        const char *destZone = ZoneNames::GRAVE;
+        switch (pm.destination()) {
+            case ruled::v1::PermanentMoved::DESTINATION_HAND:
+                destZone = ZoneNames::HAND;
+                break;
+            case ruled::v1::PermanentMoved::DESTINATION_LIBRARY:
+                destZone = ZoneNames::DECK;
+                break;
+            case ruled::v1::PermanentMoved::DESTINATION_EXILE:
+                destZone = ZoneNames::EXILE;
+                break;
+            case ruled::v1::PermanentMoved::DESTINATION_GRAVEYARD:
+            default:
+                destZone = ZoneNames::GRAVE;
+                break;
+        }
+        Server_CardZone *targetZone = owner->getZones().value(destZone);
+        if (!targetZone) {
+            continue;
+        }
+        CardToMove cardToMove;
+        cardToMove.set_card_id(card->getId());
+        if (owner->moveCard(permanentMoveGes, startZone, QList<const CardToMove *>() << &cardToMove, targetZone, -1, 0,
+                            true) == Response::RespOk) {
+            permanentMoveGesHasEvents = true;
+        }
+    }
+    if (permanentMoveGesHasEvents) {
+        permanentMoveGes.sendToGame(this);
+    }
+
     // First pass: phase / priority / zone view + tap sync, plus stack resolution.
     // Tap state propagates from the engine on every batch — declare attackers, mana
     // payment, and untap all use this path (no longer gated on an explicit untap event).
@@ -1257,67 +1331,13 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
         tapSyncGes.sendToGame(this);
     }
 
-    // Second pass: combat-related events that depend on the freshly-built engine OID
-    // map (PermanentMoved, LifeChanged, AttackersDeclared) and that synthesize standard
-    // Cockatrice events for clients.
+    // Second pass: combat-related events that depend on the engine OID map (LifeChanged,
+    // AttackersDeclared) and stack resolution side effects that synthesize standard
+    // Cockatrice events for clients. PermanentMoved is handled earlier (before zone_view).
     GameEventStorage combatGes;
     bool combatGesHasEvents = false;
     for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
         const auto &e = resp.batch().events(ei);
-        if (e.has_permanent_moved()) {
-            const auto &pm = e.permanent_moved();
-            const int ownerId = pm.owner_player_id();
-            const quint32 oid = static_cast<quint32>(pm.object_id());
-            Server_AbstractPlayer *owner = getPlayer(ownerId);
-            if (!owner) {
-                continue;
-            }
-            Server_CardZone *tableZone = owner->getZones().value(ZoneNames::TABLE);
-            if (!tableZone) {
-                continue;
-            }
-            // Look the dead permanent up in the pre-batch map: the engine already
-            // removed it from its current battlefield, so the freshly-rebuilt map
-            // doesn't contain it.
-            const auto preIt = preBatchOidMaps.constFind(ownerId);
-            if (preIt == preBatchOidMaps.constEnd()) {
-                continue;
-            }
-            const auto cardIdIt = preIt->constFind(oid);
-            if (cardIdIt == preIt->constEnd()) {
-                continue;
-            }
-            Server_Card *card = tableZone->getCard(*cardIdIt, nullptr, false);
-            if (!card) {
-                continue;
-            }
-            const char *destZone = ZoneNames::GRAVE;
-            switch (pm.destination()) {
-                case ruled::v1::PermanentMoved::DESTINATION_HAND:
-                    destZone = ZoneNames::HAND;
-                    break;
-                case ruled::v1::PermanentMoved::DESTINATION_LIBRARY:
-                    destZone = ZoneNames::DECK;
-                    break;
-                case ruled::v1::PermanentMoved::DESTINATION_EXILE:
-                    destZone = ZoneNames::EXILE;
-                    break;
-                case ruled::v1::PermanentMoved::DESTINATION_GRAVEYARD:
-                default:
-                    destZone = ZoneNames::GRAVE;
-                    break;
-            }
-            Server_CardZone *targetZone = owner->getZones().value(destZone);
-            if (!targetZone) {
-                continue;
-            }
-            CardToMove cardToMove;
-            cardToMove.set_card_id(card->getId());
-            if (owner->moveCard(combatGes, tableZone, QList<const CardToMove *>() << &cardToMove, targetZone, -1,
-                                0, true) == Response::RespOk) {
-                combatGesHasEvents = true;
-            }
-        }
         if (e.has_life_changed()) {
             const auto &lc = e.life_changed();
             Server_AbstractPlayer *target = getPlayer(lc.player_id());

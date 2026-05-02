@@ -65,6 +65,9 @@ private:
     QMultiHash<QString, int> legalRuledLandPlayIndicesByCardName;
     QSet<int> legalRuledSpellCastHandIndices;
     QMultiHash<QString, int> legalRuledSpellCastIndicesByCardName;
+    QSet<int> legalRuledCleanupDiscardHandIndices;
+    QMultiHash<QString, int> legalRuledCleanupDiscardIndicesByCardName;
+    QSet<int> cleanupDiscardSelectedIndices;
 
     // (owner player id, Server_Card.id) -> engine ObjectId, refreshed from
     // BattlefieldObjectMap events injected by the server.
@@ -108,6 +111,22 @@ public:
     [[nodiscard]] bool isRuledSpellCastLegalForHandIndex(int handIndex) const;
     [[nodiscard]] int getRuledSpellCastHandIndexForCard(const QString &cardName, int preferredHandIndex) const;
     [[nodiscard]] QList<int> getRuledSpellCastHandIndicesForCardName(const QString &cardName) const;
+    [[nodiscard]] bool isRuledCleanupDiscardLegalForHandIndex(int handIndex) const;
+    [[nodiscard]] int getRuledCleanupDiscardHandIndexForCard(const QString &cardName, int preferredHandIndex) const;
+    [[nodiscard]] QList<int> getRuledCleanupDiscardHandIndicesForCardName(const QString &cardName) const;
+    /// Maps a visible hand card to the engine hand index used in cleanup-discard legal actions.
+    /// \a sameNameOrdinal is the 0-based index among cards with \a cardName left-to-right in the hand zone.
+    /// When several legal discards share a name, mapping is by ordinal only (visual index can collide).
+    [[nodiscard]] int resolveRuledCleanupDiscardEngineHandIndex(const QString &cardName, int visualHandIndex,
+                                                              int sameNameOrdinal) const;
+    [[nodiscard]] bool localPlayerMustCleanupDiscard() const;
+    [[nodiscard]] int ruledCleanupDiscardRequiredCount() const;
+    [[nodiscard]] int ruledCleanupDiscardSelectedCount() const;
+    [[nodiscard]] bool isRuledCleanupDiscardHandIndexSelected(int handIndex) const;
+    void toggleRuledCleanupDiscardHandIndex(int ruledHandIndex);
+    void clearRuledCleanupDiscardSelection(bool emitUiChange = true);
+    [[nodiscard]] QList<int> ruledCleanupDiscardSelectedIndicesSorted() const;
+    void notifyRuledHandUiChanged();
     void emitLocalRuledLog(const QString &message);
 
     [[nodiscard]] RuledCombatPhase getRuledCombatPhase() const
@@ -279,6 +298,10 @@ signals:
     void ruledCombatStateChanged();
     void ruledBattlefieldMapUpdated();
     void ruledStackHasItemsChanged(bool hasItems);
+    void ruledCleanupDiscardUiChanged(int required, int selected);
+
+private:
+    void pruneCleanupDiscardSelectionAndEmitUi();
 };
 
 #endif // COCKATRICE_GAME_EVENT_HANDLER_H

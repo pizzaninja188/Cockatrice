@@ -30,6 +30,7 @@ public slots:
     void setCombatMode(CombatMode mode, bool localPlayerHasButtons);
     void setTargetingMode(bool enabled, const QString &cardName = {});
     void setRuledStackHasItems(bool hasItems);
+    void setCleanupDiscardMode(bool active, int cardsRequired, int cardsSelected);
 
 signals:
     void passPriorityRequested();
@@ -58,6 +59,9 @@ private:
     bool localPlayerHasCombatButtons = false;
     bool targetingModeEnabled = false;
     bool ruledStackHasItems = false;
+    bool cleanupDiscardMode = false;
+    int cleanupCardsRequired = 0;
+    int cleanupCardsSelected = 0;
 };
 
 #endif // COCKATRICE_GAME_PROMPT_WIDGET_H

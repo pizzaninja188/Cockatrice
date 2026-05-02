@@ -23,6 +23,7 @@
 #include <QPen>
 #include <libcockatrice/card/card_info.h>
 #include <libcockatrice/protocol/pb/serverinfo_card.pb.h>
+#include <libcockatrice/utility/zone_names.h>
 
 CardItem::CardItem(Player *_owner, QGraphicsItem *parent, const CardRef &cardRef, int _cardid, CardZoneLogic *_zone)
     : AbstractCardItem(parent, cardRef, _owner, _cardid), zone(_zone), attacking(false), destroyOnZoneChange(false),
@@ -190,29 +191,62 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
 
     if (ruledHandler) {
         if (ruledOid != 0) {
-                    QColor outlineColor;
-                    if (ruledHandler->isPendingAttacker(ruledOid)) {
-                        outlineColor = QColor(255, 215, 0); // gold for pending attackers
-                    } else if (ruledHandler->stagedBlocker() == ruledOid) {
-                        outlineColor = QColor(0, 255, 128); // green for staged blocker
-                    } else if (ruledHandler->pendingBlockTargetForBlocker(ruledOid) != 0) {
-                        outlineColor = QColor(80, 160, 255); // blue for paired blocker
-                    } else if (ruledHandler->isCurrentAttacker(ruledOid) && !attacking) {
-                        // Engine has confirmed this attacker but the AttrAttacking event
-                        // may not have arrived yet — draw a faint marker.
-                        outlineColor = QColor(255, 80, 80, 200); // red-ish
+            QColor outlineColor;
+            if (ruledHandler->isPendingAttacker(ruledOid)) {
+                outlineColor = QColor(255, 215, 0); // gold for pending attackers
+            } else if (ruledHandler->stagedBlocker() == ruledOid) {
+                outlineColor = QColor(0, 255, 128); // green for staged blocker
+            } else if (ruledHandler->pendingBlockTargetForBlocker(ruledOid) != 0) {
+                outlineColor = QColor(80, 160, 255); // blue for paired blocker
+            } else if (ruledHandler->isCurrentAttacker(ruledOid) && !attacking) {
+                // Engine has confirmed this attacker but the AttrAttacking event
+                // may not have arrived yet — draw a faint marker.
+                outlineColor = QColor(255, 80, 80, 200); // red-ish
+            }
+            if (outlineColor.isValid()) {
+                painter->save();
+                painter->setRenderHint(QPainter::Antialiasing, true);
+                QPen pen;
+                pen.setColor(outlineColor);
+                pen.setWidth(3);
+                painter->setPen(pen);
+                painter->drawPath(shape());
+                painter->restore();
+            }
+        }
+        if (zone && zone->getName() == ZoneNames::HAND && owner && owner->getPlayerInfo()->getLocal() &&
+            ruledHandler->localPlayerMustCleanupDiscard()) {
+            const int handIndex = zone->getCards().indexOf(const_cast<CardItem *>(this));
+            if (handIndex >= 0) {
+                int sameNameOrdinal = -1;
+                int seenSameName = 0;
+                for (const CardItem *zoneCard : zone->getCards()) {
+                    if (!zoneCard) {
+                        continue;
                     }
-                    if (outlineColor.isValid()) {
-                        painter->save();
-                        painter->setRenderHint(QPainter::Antialiasing, true);
-                        QPen pen;
-                        pen.setColor(outlineColor);
-                        pen.setWidth(3);
-                        painter->setPen(pen);
-                        painter->drawPath(shape());
-                        painter->restore();
+                    if (zoneCard->getName() == getName()) {
+                        if (zoneCard == this) {
+                            sameNameOrdinal = seenSameName;
+                            break;
+                        }
+                        ++seenSameName;
                     }
                 }
+                const int ri = ruledHandler->resolveRuledCleanupDiscardEngineHandIndex(getName(), handIndex,
+                                                                                       sameNameOrdinal);
+                if (ri >= 0 && ruledHandler->isRuledCleanupDiscardLegalForHandIndex(ri) &&
+                    ruledHandler->isRuledCleanupDiscardHandIndexSelected(ri)) {
+                    painter->save();
+                    painter->setRenderHint(QPainter::Antialiasing, true);
+                    QPen pen;
+                    pen.setColor(QColor(255, 165, 0)); // orange for cleanup discard selection
+                    pen.setWidth(4);
+                    painter->setPen(pen);
+                    painter->drawPath(shape());
+                    painter->restore();
+                }
+            }
+        }
     }
 
     painter->restore();
@@ -660,6 +694,12 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
             auto *playerManager = game ? game->getPlayerManager() : nullptr;
             auto *localPlayer = playerManager ? playerManager->getPlayers().value(playerManager->getLocalPlayerId()) : nullptr;
             auto *actions = localPlayer ? localPlayer->getPlayerActions() : nullptr;
+            if (owner->getPlayerInfo()->getLocal() && actions && zone && zone->getName() == ZoneNames::HAND &&
+                actions->tryToggleRuledCleanupDiscard(this)) {
+                update();
+                AbstractCardItem::mouseReleaseEvent(event);
+                return;
+            }
             if (actions && actions->tryHandleRuledSpellTargetClick(this)) {
                 setCursor(Qt::OpenHandCursor);
                 AbstractCardItem::mouseReleaseEvent(event);

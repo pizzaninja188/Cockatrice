@@ -4,7 +4,7 @@
 // the engine -> Cockatrice translation produces the expected state changes:
 //   * battlefield engine_oid <-> Server_Card.id mapping is built from RuledPerPlayerView
 //   * tap state propagates from `battlefield_tapped` even outside the untap step
-//   * PermanentMoved -> Server_Card moveCard from TABLE to GRAVE
+//   * PermanentMoved -> Server_Card moveCard from TABLE/HAND/STACK to destination zone
 //   * LifeChanged    -> per-player life counter updated
 //   * AttackersDeclared -> Server_Card::attacking flag flipped
 //

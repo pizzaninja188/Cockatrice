@@ -208,8 +208,32 @@ void GamePromptWidget::setRuledStackHasItems(bool hasItems)
     updatePassPriorityButtonText();
 }
 
+void GamePromptWidget::setCleanupDiscardMode(bool active, int cardsRequired, int cardsSelected)
+{
+    cleanupDiscardMode = active;
+    cleanupCardsRequired = cardsRequired;
+    cleanupCardsSelected = cardsSelected;
+    if (active && cardsRequired > 0) {
+        setPromptText(tr("Cleanup — discard %2 card(s) to reach hand size 7. Selected: %1 of %2. Click hand cards to "
+                         "toggle; click again to deselect.")
+                          .arg(cardsSelected)
+                          .arg(cardsRequired));
+    } else if (!active) {
+        setPromptText({});
+    }
+    updateCombatButtonsVisibility();
+}
+
 void GamePromptWidget::updateCombatButtonsVisibility()
 {
+    if (cleanupDiscardMode) {
+        passPriorityButton->setVisible(false);
+        confirmAttackersButton->setVisible(false);
+        confirmBlockersButton->setVisible(false);
+        resetBlockersButton->setVisible(false);
+        cancelTargetingButton->setVisible(false);
+        return;
+    }
     if (targetingModeEnabled) {
         passPriorityButton->setVisible(false);
         confirmAttackersButton->setVisible(false);

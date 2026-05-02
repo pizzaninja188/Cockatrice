@@ -3,8 +3,8 @@
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
 use tricerules_proto::ruled::v1::ruled_event::Ev;
 use tricerules_proto::ruled::v1::{
-    AddManaToPool, BlockPair, CastSpell, DeclareAttackers, DeclareBlockers, PassPriority, PlayLand,
-    PrimitiveYieldStructured, RuledCommand, TargetRef,
+    AddManaToPool, BlockPair, CastSpell, DeclareAttackers, DeclareBlockers, DiscardToHandSize,
+    PassPriority, PlayLand, PrimitiveYieldStructured, RuledCommand, TargetRef,
 };
 
 use tricerules_core::GameEngine;
@@ -18,6 +18,40 @@ fn pass() -> RuledCommand {
 fn primitive_yield() -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::PrimitiveYieldStructured(PrimitiveYieldStructured {})),
+    }
+}
+
+fn discard_cleanup(hand_card_index: u32) -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::DiscardToHandSize(DiscardToHandSize {
+            hand_card_index,
+            hand_card_indices: vec![],
+        })),
+    }
+}
+
+fn discard_cleanup_batch(indices: Vec<u32>) -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::DiscardToHandSize(DiscardToHandSize {
+            hand_card_index: 0,
+            hand_card_indices: indices,
+        })),
+    }
+}
+
+/// After leaving the end step, the engine may stop in cleanup for 514.1 discards.
+fn resolve_cleanup_discards_if_any(e: &mut GameEngine) {
+    while e.state.turn_step == tricerules_core::TurnStep::Cleanup {
+        let Some(cp) = e.state.cleanup_discard_player else {
+            break;
+        };
+        let idx = e.state.player_idx(cp).expect("cleanup discard player");
+        assert!(
+            e.state.players[idx].hand.len() > 7,
+            "cleanup without over-max hand"
+        );
+        e.apply_command(cp, &discard_cleanup(0))
+            .expect("discard during cleanup");
     }
 }
 
@@ -119,7 +153,8 @@ fn end_active_turn(e: &mut GameEngine, player: i32) {
     e.apply_command(player, &primitive_yield())
         .expect("main2 to end step");
     e.apply_command(player, &primitive_yield())
-        .expect("end step to next turn upkeep");
+        .expect("end step to cleanup or next upkeep");
+    resolve_cleanup_discards_if_any(e);
 }
 
 fn priority_changes_in(batch: &tricerules_proto::ruled::v1::RuledEventBatch) -> Vec<i32> {
@@ -664,6 +699,67 @@ fn blockers_to_combat_damage_emits_priority_stop() {
 }
 
 #[test]
+fn cleanup_batch_discard_three_at_once() {
+    let mut e = GameEngine::new(1002, &[0, 1], 20, None).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let ap_idx = e.state.player_idx(0).unwrap();
+    for _ in 0..3 {
+        let oid = e.state.players[ap_idx].library.pop_front().expect("library");
+        e.state.players[ap_idx].hand.push(oid);
+        e.state
+            .objects
+            .get_mut(&oid)
+            .expect("obj")
+            .zone = tricerules_core::Zone::Hand;
+    }
+    assert_eq!(e.state.players[ap_idx].hand.len(), 10);
+
+    e.apply_command(0, &primitive_yield()).expect("main1->begin combat");
+    e.apply_command(0, &primitive_yield()).expect("begin combat->declare");
+    e.apply_command(0, &primitive_yield()).expect("skip attackers");
+    e.apply_command(0, &primitive_yield()).expect("end combat->main2");
+    e.apply_command(0, &primitive_yield()).expect("main2->end step");
+    e.apply_command(0, &primitive_yield()).expect("end step->cleanup");
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Cleanup);
+
+    e.apply_command(0, &discard_cleanup_batch(vec![9, 8, 7]))
+        .expect("batch discard top three");
+    assert_eq!(e.state.players[ap_idx].hand.len(), 7);
+    assert_eq!(e.state.active_player_id(), 1);
+}
+
+#[test]
+fn cleanup_step_opens_when_hand_exceeds_max_and_discard_finishes_turn() {
+    let mut e = GameEngine::new(1001, &[0, 1], 20, None).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let ap_idx = e.state.player_idx(0).unwrap();
+    let oid = e.state.players[ap_idx].library.pop_front().expect("library");
+    e.state.players[ap_idx].hand.push(oid);
+    e.state
+        .objects
+        .get_mut(&oid)
+        .expect("obj")
+        .zone = tricerules_core::Zone::Hand;
+    assert!(e.state.players[ap_idx].hand.len() > 7);
+
+    e.apply_command(0, &primitive_yield()).expect("main1->begin combat");
+    e.apply_command(0, &primitive_yield()).expect("begin combat->declare");
+    e.apply_command(0, &primitive_yield()).expect("skip attackers");
+    e.apply_command(0, &primitive_yield()).expect("end combat->main2");
+    e.apply_command(0, &primitive_yield()).expect("main2->end step");
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::EndStep);
+
+    e.apply_command(0, &primitive_yield()).expect("end step->cleanup");
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Cleanup);
+    assert_eq!(e.state.cleanup_discard_player, Some(0));
+
+    e.apply_command(0, &discard_cleanup(0)).expect("discard one");
+    assert_eq!(e.state.players[ap_idx].hand.len(), 7);
+    assert_eq!(e.state.active_player_id(), 1);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
+}
+
+#[test]
 fn main2_double_pass_advances_to_end_step_stop() {
     let mut e = GameEngine::new(69, &[0, 1], 20, None).expect("new");
     advance_to_main1_from_game_start(&mut e);
@@ -1024,7 +1120,8 @@ fn untap_and_draw_happen_in_new_turn_sequence() {
         .expect("p1 no attackers to end combat");
     pass_both_players(&mut e); // end combat -> main2
     pass_both_players(&mut e); // main2 -> end step
-    pass_both_players(&mut e); // end step -> p0 upkeep
+    pass_both_players(&mut e); // end step -> cleanup or p0 upkeep
+    resolve_cleanup_discards_if_any(&mut e);
     pass_both_players(&mut e); // upkeep -> draw
     pass_both_players(&mut e); // draw -> main1
 
@@ -1292,6 +1389,7 @@ fn zone_view_includes_battlefield_object_ids() {
     assert_eq!(p0.battlefield_toughness.len(), p0.battlefield.len());
     assert_eq!(p0.battlefield_damage.len(), p0.battlefield.len());
     assert_eq!(p0.battlefield_is_creature.len(), p0.battlefield.len());
+    assert_eq!(p0.hand_object_id.len(), p0.hand.len());
     let pos = p0
         .battlefield
         .iter()

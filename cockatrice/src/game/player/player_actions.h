@@ -71,6 +71,8 @@ public:
     bool tryHandleRuledSpellTargetClick(CardItem *card);
     bool tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer);
     void cancelPendingRuledSpellCast();
+    bool tryToggleRuledCleanupDiscard(CardItem *card);
+    bool sendRuledCleanupDiscardBatchIfComplete();
 
     [[nodiscard]] bool isMovingCardsUntil() const
     {

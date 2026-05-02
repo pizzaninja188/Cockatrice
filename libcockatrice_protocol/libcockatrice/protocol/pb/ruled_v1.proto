@@ -18,7 +18,16 @@ message RuledCommand {
     // Cockatrice ruled mode: mana pool counters increment when lands add mana (IncCounter).
     // Positive deltas only from Servatrice; spell payment still consumes pool inside the engine on cast.
     AddManaToPool add_mana_to_pool = 9;
+    // CR 514.1: discard during cleanup when above maximum hand size (vanilla: 7).
+    DiscardToHandSize discard_to_hand_size = 10;
   }
+}
+
+message DiscardToHandSize {
+  // Single-card discard (cleanup or legacy); use when discarding exactly one card.
+  uint32 hand_card_index = 1;
+  // Batch discard in one command: must list exactly (current hand size − 7) distinct indices.
+  repeated uint32 hand_card_indices = 2;
 }
 
 // Sint32 so Servatrice can forward IncCounter deltas; engine clamps each component at 0.
@@ -153,6 +162,8 @@ message RuledPerPlayerView {
   repeated uint32 battlefield_toughness = 10;
   repeated uint32 battlefield_damage = 11;
   repeated bool battlefield_is_creature = 12;
+  // Parallel array to `hand`: engine ObjectId for each card in hand order.
+  repeated uint32 hand_object_id = 13;
 }
 
 message ZoneViewSync {

@@ -144,6 +144,28 @@ ParsedRuledCastActions parseRuledCastActions(const ruled::v1::LegalActions &acti
     }
     return parsed;
 }
+
+ParsedRuledLandActions parseRuledCleanupDiscardActions(const ruled::v1::LegalActions &actions)
+{
+    static const QRegularExpression labelRegex(
+        QStringLiteral(R"(^Discard (.*) \(cleanup, hand idx (\d+)\)$)"));
+    ParsedRuledLandActions parsed;
+
+    for (const auto &label : actions.labels()) {
+        const QRegularExpressionMatch match = labelRegex.match(QString::fromStdString(label));
+        if (!match.hasMatch()) {
+            continue;
+        }
+
+        bool ok = false;
+        const int handIndex = match.captured(2).toInt(&ok);
+        if (ok) {
+            parsed.handIndices.insert(handIndex);
+            parsed.handIndicesByCardName.insert(match.captured(1), handIndex);
+        }
+    }
+    return parsed;
+}
 } // namespace
 
 GameEventHandler::GameEventHandler(AbstractGame *_game) : QObject(_game), game(_game)
@@ -196,6 +218,140 @@ QList<int> GameEventHandler::getRuledSpellCastHandIndicesForCardName(const QStri
     QList<int> matching = legalRuledSpellCastIndicesByCardName.values(cardName);
     std::sort(matching.begin(), matching.end());
     return matching;
+}
+
+bool GameEventHandler::isRuledCleanupDiscardLegalForHandIndex(int handIndex) const
+{
+    return legalRuledCleanupDiscardHandIndices.contains(handIndex);
+}
+
+int GameEventHandler::getRuledCleanupDiscardHandIndexForCard(const QString &cardName, int preferredHandIndex) const
+{
+    const QList<int> matching = getRuledCleanupDiscardHandIndicesForCardName(cardName);
+    if (matching.contains(preferredHandIndex)) {
+        return preferredHandIndex;
+    }
+    if (matching.isEmpty()) {
+        return -1;
+    }
+    return matching.first();
+}
+
+QList<int> GameEventHandler::getRuledCleanupDiscardHandIndicesForCardName(const QString &cardName) const
+{
+    QList<int> matching = legalRuledCleanupDiscardIndicesByCardName.values(cardName);
+    std::sort(matching.begin(), matching.end());
+    return matching;
+}
+
+int GameEventHandler::resolveRuledCleanupDiscardEngineHandIndex(const QString &cardName, int visualHandIndex,
+                                                                 int sameNameOrdinal) const
+{
+    const QList<int> matchingIndices = getRuledCleanupDiscardHandIndicesForCardName(cardName);
+    if (matchingIndices.isEmpty()) {
+        return -1;
+    }
+    // Multiple legal discards for this name: engine indices need not match visual order.
+    // Never trust preferredHandIndex alone — it can equal a legal index for the *other* copy
+    // (e.g. legal {2,3}, second Forest at visual 2 would incorrectly map to engine 2).
+    if (matchingIndices.size() > 1) {
+        if (sameNameOrdinal >= 0 && sameNameOrdinal < matchingIndices.size()) {
+            return matchingIndices.at(sameNameOrdinal);
+        }
+        return -1;
+    }
+    // Single legal index for this name: only the card at that engine/visual slot is that choice.
+    const int only = matchingIndices.first();
+    return (only == visualHandIndex) ? only : -1;
+}
+
+bool GameEventHandler::localPlayerMustCleanupDiscard() const
+{
+    return !legalRuledCleanupDiscardHandIndices.isEmpty();
+}
+
+int GameEventHandler::ruledCleanupDiscardRequiredCount() const
+{
+    const int n = legalRuledCleanupDiscardHandIndices.size();
+    if (n <= 7) {
+        return 0;
+    }
+    return n - 7;
+}
+
+int GameEventHandler::ruledCleanupDiscardSelectedCount() const
+{
+    return cleanupDiscardSelectedIndices.size();
+}
+
+bool GameEventHandler::isRuledCleanupDiscardHandIndexSelected(int handIndex) const
+{
+    return cleanupDiscardSelectedIndices.contains(handIndex);
+}
+
+void GameEventHandler::toggleRuledCleanupDiscardHandIndex(int ruledHandIndex)
+{
+    if (!isRuledCleanupDiscardLegalForHandIndex(ruledHandIndex)) {
+        return;
+    }
+    const int need = ruledCleanupDiscardRequiredCount();
+    if (need <= 0) {
+        return;
+    }
+    if (cleanupDiscardSelectedIndices.contains(ruledHandIndex)) {
+        cleanupDiscardSelectedIndices.remove(ruledHandIndex);
+    } else if (cleanupDiscardSelectedIndices.size() < need) {
+        cleanupDiscardSelectedIndices.insert(ruledHandIndex);
+    }
+    emit ruledCleanupDiscardUiChanged(need, cleanupDiscardSelectedIndices.size());
+    emit ruledCombatStateChanged();
+}
+
+void GameEventHandler::clearRuledCleanupDiscardSelection(bool emitUiChange)
+{
+    if (cleanupDiscardSelectedIndices.isEmpty()) {
+        return;
+    }
+    cleanupDiscardSelectedIndices.clear();
+    if (emitUiChange) {
+        emit ruledCleanupDiscardUiChanged(ruledCleanupDiscardRequiredCount(), 0);
+        emit ruledCombatStateChanged();
+    }
+}
+
+QList<int> GameEventHandler::ruledCleanupDiscardSelectedIndicesSorted() const
+{
+    QList<int> out;
+    out.reserve(cleanupDiscardSelectedIndices.size());
+    for (int x : cleanupDiscardSelectedIndices) {
+        out.append(x);
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+void GameEventHandler::notifyRuledHandUiChanged()
+{
+    emit ruledCombatStateChanged();
+}
+
+void GameEventHandler::pruneCleanupDiscardSelectionAndEmitUi()
+{
+    if (legalRuledCleanupDiscardHandIndices.isEmpty()) {
+        cleanupDiscardSelectedIndices.clear();
+        emit ruledCleanupDiscardUiChanged(0, 0);
+        emit ruledCombatStateChanged();
+        return;
+    }
+    for (auto it = cleanupDiscardSelectedIndices.begin(); it != cleanupDiscardSelectedIndices.end();) {
+        if (!legalRuledCleanupDiscardHandIndices.contains(*it)) {
+            it = cleanupDiscardSelectedIndices.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    emit ruledCleanupDiscardUiChanged(ruledCleanupDiscardRequiredCount(), cleanupDiscardSelectedIndices.size());
+    emit ruledCombatStateChanged();
 }
 
 void GameEventHandler::emitLocalRuledLog(const QString &message)
@@ -432,6 +588,8 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                     legalRuledLandPlayIndicesByCardName.clear();
                     legalRuledSpellCastHandIndices.clear();
                     legalRuledSpellCastIndicesByCardName.clear();
+                    legalRuledCleanupDiscardHandIndices.clear();
+                    legalRuledCleanupDiscardIndicesByCardName.clear();
                     if (batch.ParseFromString(ruled.payload())) {
                         QString lines;
                         bool combatStateDirty = false;
@@ -568,6 +726,9 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             const ParsedRuledCastActions parsedCast = parseRuledCastActions(lit->second);
                             legalRuledSpellCastHandIndices = parsedCast.handIndices;
                             legalRuledSpellCastIndicesByCardName = parsedCast.handIndicesByCardName;
+                            const ParsedRuledLandActions parsedCleanup = parseRuledCleanupDiscardActions(lit->second);
+                            legalRuledCleanupDiscardHandIndices = parsedCleanup.handIndices;
+                            legalRuledCleanupDiscardIndicesByCardName = parsedCleanup.handIndicesByCardName;
                             lines += tr("Legal actions:\n");
                             for (const auto &l : lit->second.labels()) {
                                 lines += QStringLiteral(" — %1\n").arg(QString::fromStdString(l));
@@ -577,7 +738,10 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             legalRuledLandPlayIndicesByCardName.clear();
                             legalRuledSpellCastHandIndices.clear();
                             legalRuledSpellCastIndicesByCardName.clear();
+                            legalRuledCleanupDiscardHandIndices.clear();
+                            legalRuledCleanupDiscardIndicesByCardName.clear();
                         }
+                        pruneCleanupDiscardSelectionAndEmitUi();
                         if (ruledStackTrackingDirty) {
                             emit ruledStackHasItemsChanged(!ruledStackObjectIds.isEmpty());
                         }
