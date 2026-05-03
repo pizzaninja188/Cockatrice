@@ -1,11 +1,13 @@
 ---
-description: After substantive edits, verify with Windows MSVC full CMake preset (client + server + tests + rules engine).
+description: After any workspace edits, run Windows MSVC full CMake preset build and fix errors/warnings until clean.
 alwaysApply: true
 ---
 
-# Windows: MSVC full build after changes
+# Windows: MSVC full build after any changes
 
-When you finish **substantive edits** that affect compiled code or the build (C/C++, CMake, `CMakePresets.json`, shared `.proto`, Rust under `tricerules/`, vcpkg manifests, or anything that would fail at compile/link/test time), **run a full verify build from the repository root** if the shell is **Windows** (or the user’s environment is clearly Windows MSVC).
+Whenever you **modify any file** in this repository during a turn, **run the full verify build from the repository root** before you consider the work done — if the shell is **Windows** (or the user’s environment is clearly Windows MSVC).
+
+Read-only investigation (no writes) does not require a build.
 
 ## Preset (matches CMake Tools label)
 
@@ -14,19 +16,21 @@ When you finish **substantive edits** that affect compiled code or the build (C/
 
 ## Commands (repo root)
 
-Prefer a single chained invocation so configure failures surface before build:
-
 ```bash
 cmake --preset windows-msvc-all && cmake --build --preset windows-msvc-all-release
 ```
 
 **Prerequisites** (same as `CMakePresets.json` for this preset): **QTDIR** pointing at a Qt 6 MSVC kit, **cargo** on PATH for `WITH_RULES_ENGINE`, and MSVC/VS 2022 toolset available.
 
-## When to skip
+## Errors and warnings
 
-- **Non-Windows** dev shells: do not force this preset; use the project’s Linux/macOS presets or the user’s documented flow instead.
-- **Trivial-only** changes (comments, markdown-only, formatting with no compile impact): building is optional unless the user asked for verification.
+If **configure** or **build** fails (**non-zero exit**), **fix the causes** in source, CMake, protos, Rust, or other repo files — do not hand off a failing preset build.
 
-## When not to skip
+If the build **succeeds** but prints **warnings** (MSVC, linker/librarian, CMake, **Rust**/`cargo` from `WITH_RULES_ENGINE`, etc.), **fix them** when they touch files you changed or when the fix is small and local. If warnings are **clearly pre-existing and unrelated** to your edits, say so briefly instead of refactoring unrelated code.
 
-- Any change where a broken build would be easy to miss without compiling — run the commands above and fix failures before handing off.
+- **Iterate:** edit → re-run the same `cmake --preset` / `cmake --build` commands until configure and build **exit 0** and you have handled warnings per above (prefer real fixes over blanket suppression unless the project already uses that pattern nearby).
+- **Environment gaps** (missing `QTDIR`, wrong generator, toolchain not installed): fix or state clearly for the user if you cannot correct them from the repo alone.
+
+## Non-Windows
+
+On **non-Windows** hosts, do not run this MSVC preset; use the project’s Linux/macOS CMake presets or the user’s documented build flow instead.

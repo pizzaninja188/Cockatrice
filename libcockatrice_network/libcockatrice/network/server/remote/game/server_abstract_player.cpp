@@ -271,8 +271,13 @@ Response::ResponseCode Server_AbstractPlayer::moveCard(GameEventStorage &ges,
                                                        bool isReversed)
 {
     // Disallow controller change to other zones than the table.
+    // Ruled MTG stack is shared: cast_spell moves from the caster's hand onto one canonical stack zone
+    // (see Server_Game::processRuledPayload), which may belong to another player in this data model.
+    const bool ruledHandToSharedStack = game && game->getRuledGame() &&
+                                        startzone->getName() == ZoneNames::HAND &&
+                                        targetzone->getName() == ZoneNames::STACK;
     if (((targetzone->getType() != ServerInfo_Zone::PublicZone) || !targetzone->hasCoords()) &&
-        (startzone->getPlayer() != targetzone->getPlayer()) && !judge) {
+        (startzone->getPlayer() != targetzone->getPlayer()) && !judge && !ruledHandToSharedStack) {
         return Response::RespContextError;
     }
 
@@ -482,12 +487,15 @@ void Server_AbstractPlayer::processMoveCard(GameEventStorage &ges,
 
         eventPrivate.set_x(newX);
 
-        if (
-            // cards from public zones have their id known, their previous position is already known, the event does
-            // not accomodate for previous locations in zones with coordinates (which are always public)
-            (startzone->getType() != ServerInfo_Zone::PublicZone) &&
-            // other players are not allowed to be able to track which card is which in private zones like the hand
-            (startzone->getType() != ServerInfo_Zone::PrivateZone)) {
+        // Other clients need a list index to remove from a private hand when card_ids are not mirrored locally
+        // (opponent hands use contentsKnown=false and CardItems keep id -1). Hidden zones (e.g. library) already
+        // sent position here; add Private -> Public (hand to stack/table) so takeCard(position, ...) succeeds.
+        const bool sendHandIndexToOthers =
+            ((startzone->getType() != ServerInfo_Zone::PublicZone) &&
+             (startzone->getType() != ServerInfo_Zone::PrivateZone)) ||
+            (startzone->getType() == ServerInfo_Zone::PrivateZone &&
+             targetzone->getType() == ServerInfo_Zone::PublicZone);
+        if (sendHandIndexToOthers) {
             eventOthers.set_position(position);
         }
         if (

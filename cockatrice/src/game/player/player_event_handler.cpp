@@ -1,6 +1,7 @@
 #include "player_event_handler.h"
 
 #include "../../interface/widgets/tabs/tab_game.h"
+#include "../game_event_handler.h"
 #include "../board/arrow_item.h"
 #include "../board/card_item.h"
 #include "../board/card_list.h"
@@ -262,8 +263,39 @@ void PlayerEventHandler::eventMoveCard(const Event_MoveCard &event, const GameEv
 
     int logPosition = position;
     int logX = x;
-    if (x == -1) {
+    // Stack has no coordinates: x is a list index. Server uses -1 / out-of-range to mean "append" (see
+    // Server_AbstractPlayer::moveCard). Mapping -1 to 0 prepends every spell, breaks list sync with the zone-view
+    // mirror, and makes prepareAddCard / fan layout behave erratically.
+    if (targetZone->getName() == QLatin1String(ZoneNames::STACK)) {
+        const int stackSz = targetZone->getCards().size();
+        if (x < 0 || x > stackSz) {
+            x = stackSz;
+        }
+        // Objects entering the stack from another zone must append (LIFO). Some move events carry x=0 while the stack
+        // is non-empty; inserting at 0 prepends, desyncs the stack window, and makes resolution (server pops last)
+        // remove the wrong Cockatrice card. Do not gate on ruled_game — ServerInfo_Game may omit the flag on some paths.
+        if (startZone != targetZone) {
+            x = stackSz;
+        }
+    } else if (x == -1) {
         x = 0;
+    }
+    // Ruled: opponent hands use contentsKnown=false (card ids are not mirrored). Server Event_MoveCard position
+    // is the server's hand index and can disagree with this client's ordering. Prefer engine HandSlotMap when it
+    // maps (start_player_id, card_id) to a valid local index so takeCard removes the correct CardItem.
+    if (player->getGame() && player->getGame()->getGameMetaInfo()->proto().ruled_game() &&
+        startZoneString == QLatin1String(ZoneNames::HAND) && !startZone->getCards().getContentsKnown()) {
+        if (GameEventHandler *geh = player->getGame()->getGameEventHandler()) {
+            if (event.has_card_id()) {
+                const int sid = static_cast<int>(event.card_id());
+                if (sid >= 0) {
+                    const int slot = geh->ruledEngineHandSlotForServerCard(static_cast<int>(event.start_player_id()), sid);
+                    if (slot >= 0 && slot < startZone->getCards().size()) {
+                        position = slot;
+                    }
+                }
+            }
+        }
     }
     CardItem *card = startZone->takeCard(position, event.card_id(), startZone != targetZone);
     if (card == nullptr) {

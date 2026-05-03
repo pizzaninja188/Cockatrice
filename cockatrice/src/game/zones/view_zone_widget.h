@@ -115,7 +115,8 @@ public:
                    bool _writeableRevealZone = false,
                    const QList<const ServerInfo_Card *> &cardList = QList<const ServerInfo_Card *>(),
                    bool _isReversed = false,
-                   bool _showControls = true);
+                   bool _showControls = true,
+                   bool forStackWindow = false);
     ZoneViewZone *getZone() const
     {
         return zone;
@@ -125,6 +126,8 @@ public:
         return player;
     }
     void retranslateUi();
+    /** Re-run layout from zone optimum size (e.g. after restoring a saved window size narrower than content). */
+    void refreshContentLayout();
 
 protected:
     void closeEvent(QCloseEvent *event) override;

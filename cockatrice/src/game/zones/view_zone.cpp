@@ -6,8 +6,10 @@
 #include "../player/player_actions.h"
 #include "logic/view_zone_logic.h"
 
+#include "../card_dimensions.h"
 #include <QBrush>
 #include <QDebug>
+#include <QString>
 #include <QGraphicsSceneWheelEvent>
 #include <QPainter>
 #include <QtMath>
@@ -17,11 +19,18 @@
 #include <libcockatrice/protocol/pb/serverinfo_card.pb.h>
 #include <libcockatrice/protocol/pending_command.h>
 
+namespace
+{
+/** Horizontal offset between stack objects in the stack window (fan layout). */
+constexpr qreal kStackFanStepX = 20.0;
+} // namespace
+
 /**
  * @param parent the parent QGraphicsWidget containing the reveal zone
  */
 ZoneViewZone::ZoneViewZone(ZoneViewZoneLogic *_logic, QGraphicsItem *parent)
-    : SelectZone(_logic, parent), bRect(QRectF()), minRows(0), groupBy(CardList::NoSort), sortBy(CardList::NoSort)
+    : SelectZone(_logic, parent), bRect(QRectF()), minRows(0), groupBy(CardList::NoSort), sortBy(CardList::NoSort),
+      pileView(false)
 {
     if (!(qobject_cast<ZoneViewZoneLogic *>(getLogic())->getRevealZone() &&
           !qobject_cast<ZoneViewZoneLogic *>(getLogic())->getWriteableRevealZone())) {
@@ -156,6 +165,33 @@ void ZoneViewZone::reorganizeCards()
     }
 
     cardsToDisplay.sortBy(sortOptions);
+
+    const int cardCount = cardsToDisplay.size();
+    const auto *zvLogic = qobject_cast<ZoneViewZoneLogic *>(getLogic());
+    const bool isStackZoneView =
+        forceStackFanLayout ||
+        (zvLogic && zvLogic->getOriginalZone()->getName().compare(QStringLiteral("stack"), Qt::CaseInsensitive) == 0);
+
+    if (isStackZoneView) {
+        // Horizontal fan: bottom of stack on the left, next to resolve (last index) on the right; z rises with i.
+        // Ruled stack window uses a wider step so faces stay readable (default 20px overlaps most of a 72px card).
+        const qreal fanStepX =
+            forceStackFanLayout ? qMax(kStackFanStepX, CardDimensions::WIDTH_F * 0.42) : kStackFanStepX;
+        for (int i = 0; i < cardCount; ++i) {
+            CardItem *c = cardsToDisplay.at(i);
+            const qreal px = HORIZONTAL_PADDING + i * fanStepX;
+            const qreal py = VERTICAL_PADDING;
+            c->setPos(px, py);
+            c->setRealZValue(i);
+        }
+        const qreal awidth = HORIZONTAL_PADDING * 2 + CardDimensions::WIDTH_F +
+                             qMax(0, cardCount - 1) * fanStepX;
+        const qreal aheight = VERTICAL_PADDING * 2 + CardDimensions::HEIGHT_F;
+        optimumRect = QRectF(0, 0, awidth, aheight);
+        updateGeometry();
+        emit optimumRectChanged();
+        return;
+    }
 
     // position cards
     GridSize gridSize;

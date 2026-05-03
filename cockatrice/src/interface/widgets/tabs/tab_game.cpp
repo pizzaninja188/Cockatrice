@@ -226,6 +226,12 @@ void TabGame::connectToGameEventHandler()
             &TabGame::refreshRuledCombatArrows);
     connect(game->getGameEventHandler(), &GameEventHandler::ruledBattlefieldMapUpdated, this,
             &TabGame::refreshRuledCombatArrows);
+    connect(game->getGameEventHandler(), &GameEventHandler::ruledStackHasItemsChanged, this,
+            [this](bool /*hasItems*/) {
+                if (game && game->getGameMetaInfo()->proto().ruled_game()) {
+                    syncStackWindowVisibility();
+                }
+            });
     if (gamePromptWidget) {
         connect(game->getGameEventHandler(), &GameEventHandler::ruledEnginePromptFeed, gamePromptWidget,
                 [this](const QString &lines) {
@@ -865,16 +871,30 @@ CardZoneLogic *TabGame::findVisibleStackZone() const
     if (!game) {
         return nullptr;
     }
-    const QMap<int, Player *> &players = game->getPlayerManager()->getPlayers();
+    PlayerManager *pm = game->getPlayerManager();
+    const QMap<int, Player *> &players = pm->getPlayers();
+    // Prefer the non-empty stack with the most objects (the zone that is actually accumulating spells in 1v1 ruled
+    // play). QMap iteration alone can pick another player's stale single card while the active stack grows elsewhere.
+    CardZoneLogic *best = nullptr;
+    int bestCount = -1;
+    Player *localPlayer = pm->isSpectator() ? nullptr : pm->getPlayer(pm->getLocalPlayerId());
     for (Player *player : players) {
         if (!player || !player->getStackZone()) {
             continue;
         }
-        if (!player->getStackZone()->getCards().isEmpty()) {
-            return player->getStackZone();
+        CardZoneLogic *zs = player->getStackZone();
+        const int n = zs->getCards().size();
+        if (n == 0) {
+            continue;
+        }
+        if (n > bestCount) {
+            bestCount = n;
+            best = zs;
+        } else if (n == bestCount && localPlayer && player == localPlayer) {
+            best = zs;
         }
     }
-    return nullptr;
+    return best;
 }
 
 void TabGame::syncStackWindowVisibility()
@@ -912,6 +932,7 @@ void TabGame::ensureStackWindow()
 
     if (stackView && stackViewZone == visibleStackZone) {
         stackView->show();
+        stackView->refreshContentLayout();
         aToggleStackWindow->setChecked(true);
         return;
     }
@@ -925,7 +946,7 @@ void TabGame::ensureStackWindow()
         return;
     }
 
-    stackView = new ZoneViewWidget(stackOwner, visibleStackZone, -1, true, true, {}, false, false);
+    stackView = new ZoneViewWidget(stackOwner, visibleStackZone, -1, true, true, {}, false, false, true);
     stackViewZone = visibleStackZone;
     stackView->setWindowFlags(stackView->windowFlags() | Qt::WindowStaysOnTopHint);
     scene->addItem(stackView);
@@ -933,6 +954,8 @@ void TabGame::ensureStackWindow()
     if (stackWindowSize.isValid()) {
         stackView->resize(stackWindowSize);
     }
+    // Saved geometry can be narrower than a fanned stack; widen from optimum so all objects stay visible.
+    stackView->refreshContentLayout();
     connect(stackView, &ZoneViewWidget::closePressed, this, [this](ZoneViewWidget *) {
         saveStackWindowLayout();
         stackView = nullptr;

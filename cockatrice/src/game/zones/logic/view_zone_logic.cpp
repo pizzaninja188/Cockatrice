@@ -3,6 +3,8 @@
 #include "../../../client/settings/cache_settings.h"
 #include "../../board/card_item.h"
 
+#include <QString>
+
 /**
  * @param _player the player that the cards are revealed to.
  * @param _origZone the zone the cards were revealed from.
@@ -39,7 +41,19 @@ bool ZoneViewZoneLogic::prepareAddCard(int x)
 {
     bool doInsert = false;
     if (!isReversed) {
-        if (x <= cards.size() || cards.size() == -1) {
+        // Full-zone mirror of the stack: the view list can trail the origin (e.g. stack window opened after
+        // spells were already on the stack). Comparing only to our own size rejected valid server indices
+        // (x > cards.size()) so the mirror never caught up and only one object appeared.
+        const bool fullStackMirror = (numberCards < 0 && origZone->getName().compare(QStringLiteral("stack"),
+                                                                                   Qt::CaseInsensitive) == 0);
+        if (fullStackMirror) {
+            // Accept any non-negative server index: the physical stack can briefly trail or lead the view by one
+            // tick; addCardImpl clamps x to a valid insert index. A strict x<=origSize check dropped the 3rd+ mirror
+            // copy when x matched append semantics but the inequality was false at the snapshot instant.
+            if (x >= 0) {
+                doInsert = true;
+            }
+        } else if (x <= cards.size()) {
             doInsert = true;
         }
     } else {

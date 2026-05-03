@@ -44,7 +44,8 @@ ZoneViewWidget::ZoneViewWidget(Player *_player,
                                bool _writeableRevealZone,
                                const QList<const ServerInfo_Card *> &cardList,
                                bool _isReversed,
-                               bool _showControls)
+                               bool _showControls,
+                               bool forStackWindow)
     : QGraphicsWidget(0, Qt::Window), canBeShuffled(_origZone->getIsShufflable()), player(_player)
 {
     setAcceptHoverEvents(true);
@@ -126,7 +127,10 @@ ZoneViewWidget::ZoneViewWidget(Player *_player,
 
     zoneContainer = new QGraphicsWidget(this);
     zoneContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    zoneContainer->setFlag(QGraphicsItem::ItemClipsChildrenToShape);
+    // Stack fan extends diagonally; clipping to the viewport rect hid all but the top object for narrow windows.
+    if (!forStackWindow) {
+        zoneContainer->setFlag(QGraphicsItem::ItemClipsChildrenToShape);
+    }
     zoneHBox->addItem(zoneContainer);
 
     scrollBar = new QScrollBar(Qt::Vertical);
@@ -143,6 +147,9 @@ ZoneViewWidget::ZoneViewWidget(Player *_player,
     zone = new ZoneViewZone(new ZoneViewZoneLogic(player, _origZone, numberCards, _revealZone, _writeableRevealZone,
                                                   _isReversed, zoneContainer),
                             zoneContainer);
+    if (forStackWindow) {
+        zone->setForceStackFanLayout(true);
+    }
     connect(zone, &ZoneViewZone::wheelEventReceived, scrollBarProxy, &ScrollableGraphicsProxyWidget::recieveWheelEvent);
 
     retranslateUi();
@@ -486,13 +493,26 @@ static qreal determineNewZoneHeight(qreal oldZoneHeight)
     return calcMaxInitialHeight();
 }
 
+void ZoneViewWidget::refreshContentLayout()
+{
+    resizeToZoneContents(false);
+}
+
 void ZoneViewWidget::resizeToZoneContents(bool forceInitialHeight)
 {
     QRectF zoneRect = zone->getOptimumRect();
     qreal totalZoneHeight = zoneRect.height();
 
+    // Ensure the scroll viewport is at least as wide as laid-out cards (saved window sizes and layout timing
+    // otherwise leave zoneContainer narrow and ItemClipsChildrenToShape clips fanned stack objects).
+    zoneContainer->setMinimumSize(QSizeF(zoneRect.width(), 0.0));
+
     qreal width = qMax(QGraphicsWidget::layout()->effectiveSizeHint(Qt::MinimumSize, QSizeF()).width(),
                        zoneRect.width() + scrollBar->width() + 10);
+    // Ruled stack window: a saved narrow width must not clip the horizontal fan (window frame clips children).
+    if (zone->getForceStackFanLayout()) {
+        setMinimumWidth(zoneRect.width() + scrollBar->width() + 24);
+    }
 
     QSizeF maxSize(width, zoneRect.height() + extraHeight + 10);
 
@@ -505,10 +525,16 @@ void ZoneViewWidget::resizeToZoneContents(bool forceInitialHeight)
     resize(initialSize);
     resizeScrollbar(newZoneHeight);
 
-    zone->setGeometry(QRectF(0, -scrollBar->value(), zoneContainer->size().width(), totalZoneHeight));
+    if (layout()) {
+        layout()->activate();
+    }
 
-    if (layout())
+    const qreal zoneW = qMax(zoneContainer->size().width(), zoneRect.width());
+    zone->setGeometry(QRectF(0, -scrollBar->value(), zoneW, totalZoneHeight));
+
+    if (layout()) {
         layout()->invalidate();
+    }
 }
 
 void ZoneViewWidget::handleScrollBarChange(int value)

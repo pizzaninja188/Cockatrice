@@ -1051,7 +1051,20 @@ Response::ResponseCode Server_Game::processRuledPayload(int playerId, const Comm
                     }
                 }
             } else if (ruledCmd.has_cast_spell()) {
-                Server_CardZone *stackZone = cmdPlayer->getZones().value(ZoneNames::STACK);
+                // Cockatrice gives each player a stack zone, but MTG has one shared stack. Route every
+                // ruled cast onto a single canonical zone so all clients see one growing pile (and stack
+                // resolution can still find cards via ruledStackObjectIdToServerCardId).
+                Server_AbstractPlayer *canonicalStackOwner = nullptr;
+                for (Server_AbstractPlayer *ab : getPlayers().values()) {
+                    if (!ab) {
+                        continue;
+                    }
+                    if (!canonicalStackOwner || ab->getPlayerId() < canonicalStackOwner->getPlayerId()) {
+                        canonicalStackOwner = ab;
+                    }
+                }
+                Server_CardZone *stackZone =
+                    canonicalStackOwner ? canonicalStackOwner->getZones().value(ZoneNames::STACK) : nullptr;
                 const int handIndex = static_cast<int>(ruledCmd.cast_spell().hand_card_index());
                 if (handZone && stackZone && handIndex >= 0 && handIndex < handZone->getCards().size()) {
                     Server_Card *card = handZone->getCards().at(handIndex);
@@ -1119,21 +1132,13 @@ void Server_Game::applyRuledStackResolvedEvent(const ruled::v1::StackResolved &s
 {
     const quint32 resolvedOid = static_cast<quint32>(stackResolved.object_id());
     const QString engineStackDescription = ruledEngineStackPushDescriptionsByObjectId.value(resolvedOid);
-    for (Server_AbstractPlayer *ab : getPlayers().values()) {
-        if (!ab) {
-            continue;
-        }
-        Server_CardZone *stackZone = ab->getZones().value(ZoneNames::STACK);
-        if (!stackZone || stackZone->getCards().isEmpty()) {
-            continue;
-        }
 
-        // Resolve the top-most Cockatrice stack object when the engine pops a stack item.
-        Server_Card *card = stackZone->getCards().last();
-        if (!card) {
-            continue;
+    auto tryResolveCardOnStack = [this, &stackResolved, &engineStackDescription](Server_AbstractPlayer *ab,
+                                                                                 Server_CardZone *stackZone,
+                                                                                 Server_Card *card) -> bool {
+        if (!ab || !stackZone || !card) {
+            return false;
         }
-
         bool goesToBattlefield = false;
         const ruled::v1::StackResolveDestination dest = stackResolved.destination();
         if (dest == ruled::v1::STACK_RESOLVE_DESTINATION_BATTLEFIELD) {
@@ -1145,7 +1150,7 @@ void Server_Game::applyRuledStackResolvedEvent(const ruled::v1::StackResolved &s
         }
         Server_CardZone *targetZone = ab->getZones().value(goesToBattlefield ? ZoneNames::TABLE : ZoneNames::GRAVE);
         if (!targetZone) {
-            continue;
+            return false;
         }
 
         CardToMove cardToMove;
@@ -1155,6 +1160,47 @@ void Server_Game::applyRuledStackResolvedEvent(const ruled::v1::StackResolved &s
         if (ab->moveCard(moveGes, stackZone, QList<const CardToMove *>() << &cardToMove, targetZone, -1, targetY,
                          true) == Response::RespOk) {
             moveGes.sendToGame(this);
+            return true;
+        }
+        return false;
+    };
+
+    // Multiplayer: each player has their own Cockatrice stack zone. Prefer the physical card that was mapped when
+    // this object was pushed (cast_spell → stack_pushed); never pop "first non-empty stack in player iteration order".
+    const auto mappedIdIt = ruledStackObjectIdToServerCardId.constFind(resolvedOid);
+    if (mappedIdIt != ruledStackObjectIdToServerCardId.constEnd()) {
+        const int serverCardId = mappedIdIt.value();
+        for (Server_AbstractPlayer *ab : getPlayers().values()) {
+            if (!ab) {
+                continue;
+            }
+            Server_CardZone *stackZone = ab->getZones().value(ZoneNames::STACK);
+            if (!stackZone) {
+                continue;
+            }
+            if (Server_Card *card = stackZone->getCard(serverCardId, nullptr, false)) {
+                if (tryResolveCardOnStack(ab, stackZone, card)) {
+                    return;
+                }
+            }
+        }
+    }
+
+    // Fallback when no cast mapping exists (tokens / older batches): top of first non-empty stack.
+    for (Server_AbstractPlayer *ab : getPlayers().values()) {
+        if (!ab) {
+            continue;
+        }
+        Server_CardZone *stackZone = ab->getZones().value(ZoneNames::STACK);
+        if (!stackZone || stackZone->getCards().isEmpty()) {
+            continue;
+        }
+        Server_Card *card = stackZone->getCards().last();
+        if (!card) {
+            continue;
+        }
+        if (tryResolveCardOnStack(ab, stackZone, card)) {
+            return;
         }
         break;
     }

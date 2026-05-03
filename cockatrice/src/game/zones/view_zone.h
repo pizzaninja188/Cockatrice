@@ -44,6 +44,8 @@ private:
     FilterString filterString = FilterString("");
     CardList::SortOption groupBy, sortBy;
     bool pileView;
+    /** When true, use stack fan layout (ruled stack window); does not rely on zone name matching alone. */
+    bool forceStackFanLayout = false;
 
     struct GridSize
     {
@@ -75,6 +77,15 @@ public slots:
     void setGroupBy(CardList::SortOption _groupBy);
     void setSortBy(CardList::SortOption _sortBy);
     void setPileView(int _pileView);
+    void setForceStackFanLayout(bool v)
+    {
+        forceStackFanLayout = v;
+    }
+    [[nodiscard]] bool getForceStackFanLayout() const
+    {
+        return forceStackFanLayout;
+    }
+
 private slots:
     void zoneDumpReceived(const Response &r);
 signals:

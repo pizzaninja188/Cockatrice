@@ -147,6 +147,12 @@ public:
         return (static_cast<quint64>(static_cast<quint32>(ownerPlayerId)) << 32) |
                static_cast<quint64>(static_cast<quint32>(cardId));
     }
+    /// Last HandSlotMap from the rules engine: (owner, server card id) -> hand index. Used when applying
+    /// Event_MoveCard to a private opponent hand whose Cockatrice list order may not match server indices.
+    [[nodiscard]] int ruledEngineHandSlotForServerCard(int ownerPlayerId, int serverCardId) const
+    {
+        return ruledOwnedCardToEngineHandSlot.value(makeOwnedCardKey(ownerPlayerId, serverCardId), -1);
+    }
     [[nodiscard]] quint32 engineOidForCardId(int ownerPlayerId, int cardId) const
     {
         return ownerCardIdToEngineOid.value(makeOwnedCardKey(ownerPlayerId, cardId), 0);
