@@ -1353,7 +1353,7 @@ fn life_changes_in(
         .events
         .iter()
         .filter_map(|ev| match &ev.ev {
-            Some(Ev::LifeChanged(lc)) => Some(lc.clone()),
+            Some(Ev::LifeChanged(lc)) => Some(*lc),
             _ => None,
         })
         .collect()
@@ -1366,7 +1366,7 @@ fn permanents_moved_in(
         .events
         .iter()
         .filter_map(|ev| match &ev.ev {
-            Some(Ev::PermanentMoved(pm)) => Some(pm.clone()),
+            Some(Ev::PermanentMoved(pm)) => Some(*pm),
             _ => None,
         })
         .collect()
@@ -1851,6 +1851,317 @@ fn giant_growth_changes_combat_outcome() {
         !moved_ids.contains(&p0_bear),
         "grown attacker should survive combat"
     );
+}
+
+/// Stack LIFO: `Lightning Bolt` on top kills the creature; `Giant Growth` underneath fizzles (CR 608.2b).
+#[test]
+fn giant_growth_fizzles_if_creature_target_dies_before_resolution() {
+    let decks = Some(vec![
+        vec![
+            "forest".into(),
+            "grizzly_bears".into(),
+            "giant_growth".into(),
+            "lightning_bolt".into(),
+            "mountain".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+        vec!["forest".into(); 7],
+    ]);
+    let mut e = GameEngine::new(91021, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+
+    let forest_idx = hand_index_for_card(&e, 0, "forest");
+    let forest_oid = e.state.players[0].hand.remove(forest_idx);
+    e.state.players[0].battlefield.push(forest_oid);
+    e.state
+        .objects
+        .get_mut(&forest_oid)
+        .expect("forest")
+        .zone = tricerules_core::Zone::Battlefield;
+
+    let mountain_idx = hand_index_for_card(&e, 0, "mountain");
+    let mountain_oid = e.state.players[0].hand.remove(mountain_idx);
+    e.state.players[0].battlefield.push(mountain_oid);
+    e.state
+        .objects
+        .get_mut(&mountain_oid)
+        .expect("mountain")
+        .zone = tricerules_core::Zone::Battlefield;
+
+    let growth_idx = hand_index_for_card(&e, 0, "giant_growth");
+    e.apply_command(
+        0,
+        &cast_spell(growth_idx, vec![TargetRef { object_id: bear }]),
+    )
+    .expect("cast growth");
+
+    let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(
+        0,
+        &cast_spell(bolt_idx, vec![TargetRef { object_id: bear }]),
+    )
+    .expect("cast bolt on top of growth");
+
+    assert_eq!(e.state.stack.len(), 2);
+
+    let mut growth_fizzled = false;
+    let mut saw_pump_log = false;
+    while !e.state.stack.is_empty() {
+        let first = e.state.priority_player_id();
+        let second = if first == e.state.players[0].id {
+            e.state.players[1].id
+        } else {
+            e.state.players[0].id
+        };
+        e.apply_command(first, &pass()).expect("pass");
+        let batch = e.apply_command(second, &pass()).expect("pass resolves");
+        for ev in &batch.events {
+            if let Some(Ev::Log(lm)) = &ev.ev {
+                if lm.text.contains("Giant Growth") && lm.text.contains("fizzles") {
+                    growth_fizzled = true;
+                }
+                if lm.text.contains("+3/+3") {
+                    saw_pump_log = true;
+                }
+            }
+        }
+    }
+
+    assert!(growth_fizzled, "expected Giant Growth to fizzle");
+    assert!(
+        !saw_pump_log,
+        "fizzled pump spell must not log +3/+3 line"
+    );
+    let dead = e.state.objects.get(&bear).expect("bear object");
+    assert_eq!(dead.zone, tricerules_core::Zone::Graveyard);
+    assert_eq!(dead.power, Some(2));
+    assert_eq!(dead.toughness, Some(2));
+}
+
+/// Second bolt should not add damage to a creature already in the graveyard (608.2b).
+#[test]
+fn lightning_bolt_fizzles_when_creature_target_left_battlefield() {
+    let decks = Some(vec![
+        vec![
+            "mountain".into(),
+            "mountain".into(),
+            "grizzly_bears".into(),
+            "lightning_bolt".into(),
+            "lightning_bolt".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+        vec!["forest".into(); 7],
+    ]);
+    let mut e = GameEngine::new(91022, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+
+    for _ in 0..2 {
+        let mi = hand_index_for_card(&e, 0, "mountain");
+        let oid = e.state.players[0].hand.remove(mi);
+        e.state.players[0].battlefield.push(oid);
+        e.state.objects.get_mut(&oid).expect("mountain").zone =
+            tricerules_core::Zone::Battlefield;
+    }
+
+    let bolt_a = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(
+        0,
+        &cast_spell(bolt_a, vec![TargetRef { object_id: bear }]),
+    )
+    .expect("first bolt");
+    let bolt_b = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(
+        0,
+        &cast_spell(bolt_b, vec![TargetRef { object_id: bear }]),
+    )
+    .expect("second bolt on top");
+
+    resolve_entire_stack_two_player(&mut e);
+
+    let dead = e.state.objects.get(&bear).expect("bear");
+    assert_eq!(dead.zone, tricerules_core::Zone::Graveyard);
+    assert_eq!(dead.damage, 3, "only the first resolving bolt should deal damage");
+}
+
+/// `Go for the Throat` under a bolt that kills the same creature fizzles on resolution.
+#[test]
+fn go_for_the_throat_fizzles_when_creature_target_left_battlefield() {
+    let decks = Some(vec![
+        vec![
+            "swamp".into(),
+            "swamp".into(),
+            "grizzly_bears".into(),
+            "go_for_the_throat".into(),
+            "lightning_bolt".into(),
+            "mountain".into(),
+            "forest".into(),
+        ],
+        vec!["forest".into(); 7],
+    ]);
+    let mut e = GameEngine::new(91023, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+
+    let mountain_idx = hand_index_for_card(&e, 0, "mountain");
+    let mountain_oid = e.state.players[0].hand.remove(mountain_idx);
+    e.state.players[0].battlefield.push(mountain_oid);
+    e.state
+        .objects
+        .get_mut(&mountain_oid)
+        .expect("mountain")
+        .zone = tricerules_core::Zone::Battlefield;
+
+    for _ in 0..2 {
+        let si = hand_index_for_card(&e, 0, "swamp");
+        let oid = e.state.players[0].hand.remove(si);
+        e.state.players[0].battlefield.push(oid);
+        e.state.objects.get_mut(&oid).expect("swamp").zone = tricerules_core::Zone::Battlefield;
+    }
+
+    let gfth_idx = hand_index_for_card(&e, 0, "go_for_the_throat");
+    e.apply_command(
+        0,
+        &cast_spell(gfth_idx, vec![TargetRef { object_id: bear }]),
+    )
+    .expect("go for the throat");
+
+    let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(
+        0,
+        &cast_spell(bolt_idx, vec![TargetRef { object_id: bear }]),
+    )
+    .expect("bolt on top");
+
+    let mut saw_destroy = false;
+    let mut saw_fizzle = false;
+    while !e.state.stack.is_empty() {
+        let first = e.state.priority_player_id();
+        let second = if first == e.state.players[0].id {
+            e.state.players[1].id
+        } else {
+            e.state.players[0].id
+        };
+        e.apply_command(first, &pass()).expect("pass");
+        let batch = e.apply_command(second, &pass()).expect("resolve");
+        for ev in &batch.events {
+            if let Some(Ev::Log(lm)) = &ev.ev {
+                if lm.text.contains("destroys") && lm.text.contains("Grizzly Bears") {
+                    saw_destroy = true;
+                }
+                if lm.text.contains("Go for the Throat") && lm.text.contains("fizzles") {
+                    saw_fizzle = true;
+                }
+            }
+        }
+    }
+
+    assert!(
+        !saw_destroy,
+        "destroy effect should not run when the creature is already gone"
+    );
+    assert!(saw_fizzle);
+}
+
+/// Top counterspell counters the bolt; the second counterspell's target is gone — it fizzles.
+#[test]
+fn counterspell_fizzles_when_original_target_already_left_stack() {
+    let decks = Some(vec![
+        vec![
+            "mountain".into(),
+            "lightning_bolt".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec![
+            "island".into(),
+            "island".into(),
+            "counterspell".into(),
+            "island".into(),
+            "island".into(),
+            "counterspell".into(),
+            "island".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(91024, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let m0 = hand_index_for_card(&e, 0, "mountain");
+    e.apply_command(0, &play_land(m0)).expect("mountain");
+
+    let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+        .expect("bolt");
+    e.apply_command(0, &pass()).expect("AP pass so NAP can respond");
+
+    let bolt_oid = e
+        .state
+        .stack
+        .iter()
+        .find(|s| s.card_id == "lightning_bolt")
+        .expect("bolt on stack")
+        .id;
+
+    for _ in 0..4 {
+        let ii = hand_index_for_card(&e, 1, "island");
+        let oid = e.state.players[1].hand.remove(ii);
+        e.state.players[1].battlefield.push(oid);
+        e.state.objects.get_mut(&oid).expect("island").zone =
+            tricerules_core::Zone::Battlefield;
+    }
+
+    let cs1 = hand_index_for_card(&e, 1, "counterspell");
+    e.apply_command(
+        1,
+        &cast_spell(
+            cs1,
+            vec![TargetRef {
+                object_id: bolt_oid,
+            }],
+        ),
+    )
+    .expect("counter 1");
+
+    let cs2 = hand_index_for_card(&e, 1, "counterspell");
+    e.apply_command(
+        1,
+        &cast_spell(
+            cs2,
+            vec![TargetRef {
+                object_id: bolt_oid,
+            }],
+        ),
+    )
+    .expect("counter 2 on top");
+
+    assert_eq!(e.state.stack.len(), 3);
+
+    let mut fizzle_logs = 0usize;
+    while !e.state.stack.is_empty() {
+        let first = e.state.priority_player_id();
+        let second = if first == e.state.players[0].id {
+            e.state.players[1].id
+        } else {
+            e.state.players[0].id
+        };
+        e.apply_command(first, &pass()).expect("pass");
+        let batch = e.apply_command(second, &pass()).expect("resolve");
+        fizzle_logs += batch.events.iter().filter(|ev| {
+            matches!(&ev.ev, Some(Ev::Log(l)) if l.text.contains("fizzles"))
+        }).count();
+    }
+
+    assert_eq!(fizzle_logs, 1, "only the second counterspell should fizzle");
+    assert_eq!(e.state.players[1].life, 20, "bolt never dealt damage");
 }
 
 #[test]

@@ -1009,6 +1009,19 @@ impl GameEngine {
             .map(|d| d.name.clone())
             .unwrap_or_else(|| "Spell".into());
 
+        let fizzle = spell_has_no_legal_targets_at_resolution(
+            &self.state,
+            &self.registry,
+            &effect,
+            &targets,
+        );
+        if fizzle {
+            events.push(ev_log(format!(
+                "{spell_label} fizzles (no legal targets)."
+            )));
+            return Ok(());
+        }
+
         match effect {
             SpellEffectKind::DealDamage { amount } => {
                 if let Some(&tid) = targets.first() {
@@ -1025,16 +1038,16 @@ impl GameEngine {
                         events.push(ev_log(format!(
                             "{spell_label} deals {amount} damage to P{pid}"
                         )));
-                    } else if self.state.objects.contains_key(&tid) {
+                    } else {
                         let tgt = object_display_name(&self.state, &self.registry, tid);
                         if let Some(t) = self.state.objects.get_mut(&tid) {
-                            if t.is_creature(&self.registry) {
+                            if t.zone == Zone::Battlefield && t.is_creature(&self.registry) {
                                 t.damage += amount;
+                                events.push(ev_log(format!(
+                                    "{spell_label} deals {amount} damage to {tgt}"
+                                )));
                             }
                         }
-                        events.push(ev_log(format!(
-                            "{spell_label} deals {amount} damage to {tgt}"
-                        )));
                     }
                 }
             }
@@ -1052,16 +1065,16 @@ impl GameEngine {
                 if let Some(&tid) = targets.first() {
                     let tgt = object_display_name(&self.state, &self.registry, tid);
                     if let Some(t) = self.state.objects.get_mut(&tid) {
-                        if t.is_creature(&self.registry) {
+                        if t.zone == Zone::Battlefield && t.is_creature(&self.registry) {
                             let p = t.power.unwrap_or(0) as i32 + power;
                             let tt = t.toughness.unwrap_or(0) as i32 + toughness;
                             t.power = Some(p.max(0) as u32);
                             t.toughness = Some(tt.max(0) as u32);
+                            events.push(ev_log(format!(
+                                "{spell_label} gives +{power}/+{toughness} to {tgt}"
+                            )));
                         }
                     }
-                    events.push(ev_log(format!(
-                        "{spell_label} gives +{power}/+{toughness} to {tgt}"
-                    )));
                 }
             }
             SpellEffectKind::DestroyTarget => {
@@ -1851,6 +1864,67 @@ fn basic_land_color_from_object(obj: &GameObject, registry: &CardRegistry) -> Op
     None
 }
 
+/// Player or creature permanent on the battlefield (matches cast validation for `bolt`).
+fn damage_spell_target_legal(
+    state: &GameState,
+    registry: &CardRegistry,
+    tid: ObjectId,
+) -> bool {
+    if state.player_idx(tid as i32).is_some() {
+        return true;
+    }
+    state
+        .objects
+        .get(&tid)
+        .is_some_and(|o| o.zone == Zone::Battlefield && o.is_creature(registry))
+}
+
+fn pump_spell_target_legal(
+    state: &GameState,
+    registry: &CardRegistry,
+    tid: ObjectId,
+) -> bool {
+    state
+        .objects
+        .get(&tid)
+        .is_some_and(|o| o.zone == Zone::Battlefield && o.is_creature(registry))
+}
+
+fn destroy_spell_target_legal(
+    state: &GameState,
+    registry: &CardRegistry,
+    tid: ObjectId,
+) -> bool {
+    state
+        .objects
+        .get(&tid)
+        .is_some_and(|o| o.zone == Zone::Battlefield && o.is_creature(registry))
+}
+
+/// CR 608.2b-style: if every target for the spell is now illegal, none of its effects happen.
+fn spell_has_no_legal_targets_at_resolution(
+    state: &GameState,
+    registry: &CardRegistry,
+    effect: &SpellEffectKind,
+    targets: &[ObjectId],
+) -> bool {
+    match effect {
+        SpellEffectKind::None | SpellEffectKind::Draw { .. } => false,
+        SpellEffectKind::DealDamage { .. } => !targets
+            .first()
+            .is_some_and(|&tid| damage_spell_target_legal(state, registry, tid)),
+        SpellEffectKind::PumpTarget { .. } => !targets
+            .first()
+            .is_some_and(|&tid| pump_spell_target_legal(state, registry, tid)),
+        SpellEffectKind::DestroyTarget => !targets
+            .first()
+            .is_some_and(|&tid| destroy_spell_target_legal(state, registry, tid)),
+        SpellEffectKind::CounterTargetSpell => !targets
+            .first()
+            .is_some_and(|&tid| state.stack.iter().any(|s| s.id == tid)),
+    }
+}
+
 fn validate_spell_targets(
     state: &GameState,
     registry: &CardRegistry,
@@ -1871,11 +1945,7 @@ fn validate_spell_targets(
                 ));
             }
             let target = targets[0].object_id;
-            let obj = state
-                .objects
-                .get(&target)
-                .ok_or(EngineError::Illegal("target object does not exist"))?;
-            if obj.zone != Zone::Battlefield || !obj.is_creature(registry) {
+            if !destroy_spell_target_legal(state, registry, target) {
                 return Err(EngineError::Illegal(
                     "destroy target must be a creature on battlefield",
                 ));
@@ -1899,13 +1969,7 @@ fn validate_spell_targets(
                 ));
             }
             let target = targets[0].object_id;
-            if state.player_idx(target as i32).is_some() {
-                return Ok(());
-            }
-            let obj = state.objects.get(&target).ok_or(EngineError::Illegal(
-                "damage target must be a battlefield creature or player",
-            ))?;
-            if obj.zone != Zone::Battlefield || !obj.is_creature(registry) {
+            if !damage_spell_target_legal(state, registry, target) {
                 return Err(EngineError::Illegal(
                     "damage target must be a battlefield creature or player",
                 ));
@@ -1918,11 +1982,7 @@ fn validate_spell_targets(
                 ));
             }
             let target = targets[0].object_id;
-            let obj = state
-                .objects
-                .get(&target)
-                .ok_or(EngineError::Illegal("target object does not exist"))?;
-            if obj.zone != Zone::Battlefield || !obj.is_creature(registry) {
+            if !pump_spell_target_legal(state, registry, target) {
                 return Err(EngineError::Illegal(
                     "pump target must be a creature on the battlefield",
                 ));
