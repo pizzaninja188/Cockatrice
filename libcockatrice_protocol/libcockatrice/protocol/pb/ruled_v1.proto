@@ -130,6 +130,9 @@ message PriorityChanged {
 message StackPushed {
   uint32 object_id = 1;
   string description = 2;
+  // Chosen targets for this spell while it is on the stack (object ids; player targets use
+  // the engine's PlayerId as object_id, same as CastSpell.targets).
+  repeated TargetRef targets = 3;
 }
 
 // Where the resolved spell object ends up (Servatrice maps this to TABLE vs GRAVE).

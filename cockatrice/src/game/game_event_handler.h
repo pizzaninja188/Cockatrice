@@ -11,8 +11,10 @@
 
 #include <QHash>
 #include <QLoggingCategory>
+#include <QList>
 #include <QObject>
 #include <QMultiHash>
+#include <QPair>
 #include <QSet>
 #include <QtGlobal>
 #include <libcockatrice/protocol/pb/event_leave.pb.h>
@@ -102,6 +104,10 @@ private:
     QHash<quint32, quint32> committedBlocks;
     // Rule-engine stack object ids currently waiting to resolve.
     QSet<quint32> ruledStackObjectIds;
+    // Stack spell engine ObjectId -> target object ids (or PlayerId for player-targeted damage).
+    QHash<quint32, QVector<quint32>> ruledStackTargetsByStackOid;
+    QList<QPair<Player *, int>> ruledSpellTargetSyntheticArrows;
+    int nextRuledSpellTargetArrowId = -2;
     // Defender's currently "armed" blocker waiting to be paired.
     quint32 stagedBlockerOid = 0;
     // Local UI guard flags: once we submit declarations for the current declare step,
@@ -216,6 +222,9 @@ public:
         return !ruledStackObjectIds.isEmpty();
     }
 
+    /// Rebuild ruled spell→target arrows (stack window layout / map updates may require a refresh).
+    void refreshRuledSpellTargetArrows();
+
     void togglePendingAttacker(quint32 engineOid);
     void clearPendingAttackers();
     void selectStagedBlocker(quint32 blockerOid);
@@ -316,6 +325,8 @@ signals:
 
 private:
     void pruneCleanupDiscardSelectionAndEmitUi();
+    void clearRuledSpellTargetArrows();
+    void syncRuledSpellTargetingArrows();
 };
 
 #endif // COCKATRICE_GAME_EVENT_HANDLER_H

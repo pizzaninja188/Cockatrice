@@ -84,9 +84,27 @@ void ArrowItem::updatePath(const QPointF &endPoint)
     qreal lineLength = line.length();
 
     prepareGeometryChange();
-    if (lineLength < 30)
+    // Curved arrow math needs lineLength > headLength (~28px) for a valid body/head split. The stack fan uses ~20px
+    // between adjacent spell centers, so Counterspell → another spell on the stack was invisible (old threshold 30
+    // cleared the path entirely).
+    const qreal minLineForCurved = headLength + 6.0;
+    if (lineLength < 3.0) {
         path = QPainterPath();
-    else {
+    } else if (lineLength < minLineForCurved) {
+        const qreal hl = qMin(headLength * 0.42, lineLength * 0.48);
+        const qreal body = qMax(0.0, lineLength - hl);
+        const qreal sw = qMin(arrowWidth * 0.45, qMax(2.5, body * 0.14));
+        const qreal hb = qMin(headWidth * 0.32, qMax(sw + 1.0, hl * 0.55));
+        path = QPainterPath();
+        path.moveTo(0, -sw);
+        path.lineTo(body, -sw);
+        path.lineTo(body, -hb);
+        path.lineTo(lineLength, 0);
+        path.lineTo(body, hb);
+        path.lineTo(body, sw);
+        path.lineTo(0, sw);
+        path.closeSubpath();
+    } else {
         QPointF c(lineLength / 2, qTan(phi * M_PI / 180) * lineLength);
 
         QPainterPath centerLine;

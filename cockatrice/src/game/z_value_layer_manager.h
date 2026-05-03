@@ -20,8 +20,8 @@
  *
  * 3. **Overlay Layer (2,000,000,000+)**: UI elements that must appear above all cards
  *    - Hovered cards (+1)
- *    - Arrows (+3)
- *    - Zone views (+4)
+ *    - Zone views (+3)
+ *    - Arrows (+4)
  *    - Drag items (+5, +6)
  *    - Top UI elements (+7)
  *

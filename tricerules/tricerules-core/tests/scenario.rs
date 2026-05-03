@@ -322,10 +322,16 @@ fn cast_lightning_bolt_resolves_to_graveyard_after_double_pass() {
         .apply_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("cast bolt");
     let bolt_oid = e.state.stack.last().expect("spell on stack").id;
-    assert!(pushed
+    let stack_push = pushed
         .events
         .iter()
-        .any(|ev| matches!(ev.ev, Some(Ev::StackPushed(_)))));
+        .find_map(|ev| match &ev.ev {
+            Some(Ev::StackPushed(s)) => Some(s),
+            _ => None,
+        })
+        .expect("stack pushed");
+    assert_eq!(stack_push.targets.len(), 1);
+    assert_eq!(stack_push.targets[0].object_id, 1);
 
     e.apply_command(0, &pass()).expect("caster pass");
     let resolved = e.apply_command(1, &pass()).expect("opponent pass");
@@ -1779,11 +1785,22 @@ fn giant_growth_changes_combat_outcome() {
     e.state.objects.get_mut(&forest_oid).expect("forest").zone = tricerules_core::Zone::Battlefield;
 
     let growth_idx = hand_index_for_card(&e, 0, "giant_growth");
-    e.apply_command(
-        0,
-        &cast_spell(growth_idx, vec![TargetRef { object_id: p0_bear }]),
-    )
-    .expect("cast growth");
+    let growth_batch = e
+        .apply_command(
+            0,
+            &cast_spell(growth_idx, vec![TargetRef { object_id: p0_bear }]),
+        )
+        .expect("cast growth");
+    let growth_push = growth_batch
+        .events
+        .iter()
+        .find_map(|ev| match &ev.ev {
+            Some(Ev::StackPushed(s)) => Some(s),
+            _ => None,
+        })
+        .expect("growth stack pushed");
+    assert_eq!(growth_push.targets.len(), 1);
+    assert_eq!(growth_push.targets[0].object_id, p0_bear);
     e.apply_command(0, &pass()).expect("p0 pass growth");
     e.apply_command(1, &pass()).expect("p1 pass growth");
 
@@ -1953,16 +1970,27 @@ fn counterspell_counters_a_spell_on_stack() {
     let bolt_oid = e.state.stack.last().expect("bolt on stack").id;
 
     let cs_idx = hand_index_for_card(&e, 0, "counterspell");
-    e.apply_command(
-        0,
-        &cast_spell(
-            cs_idx,
-            vec![TargetRef {
-                object_id: bolt_oid,
-            }],
-        ),
-    )
-    .expect("cast counterspell");
+    let cs_batch = e
+        .apply_command(
+            0,
+            &cast_spell(
+                cs_idx,
+                vec![TargetRef {
+                    object_id: bolt_oid,
+                }],
+            ),
+        )
+        .expect("cast counterspell");
+    let cs_push = cs_batch
+        .events
+        .iter()
+        .find_map(|ev| match &ev.ev {
+            Some(Ev::StackPushed(s)) => Some(s),
+            _ => None,
+        })
+        .expect("counterspell stack pushed");
+    assert_eq!(cs_push.targets.len(), 1);
+    assert_eq!(cs_push.targets[0].object_id, bolt_oid);
     let counterspell_oid = e.state.stack.last().expect("counterspell on stack").id;
 
     e.apply_command(0, &pass()).expect("p0 pass");

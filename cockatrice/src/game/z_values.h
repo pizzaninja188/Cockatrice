@@ -34,8 +34,9 @@ constexpr qreal OVERLAY_BASE = ZValueLayerManager::OVERLAY_BASE;
 
 // Overlay layer Z-values for items that should appear above normal cards
 constexpr qreal HOVERED_CARD = ZValueLayerManager::overlayZValue(1.0);
-constexpr qreal ARROWS = ZValueLayerManager::overlayZValue(3.0);
-constexpr qreal ZONE_VIEW_WIDGET = ZValueLayerManager::overlayZValue(4.0);
+// Zone view popouts (stack window, reveals) sit below arrows so combat / spell arrows stay visible.
+constexpr qreal ZONE_VIEW_WIDGET = ZValueLayerManager::overlayZValue(3.0);
+constexpr qreal ARROWS = ZValueLayerManager::overlayZValue(4.0);
 constexpr qreal DRAG_ITEM = ZValueLayerManager::overlayZValue(5.0);
 constexpr qreal DRAG_ITEM_CHILD = ZValueLayerManager::overlayZValue(6.0);
 constexpr qreal TOP_UI = ZValueLayerManager::overlayZValue(7.0);

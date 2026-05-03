@@ -136,6 +136,48 @@ QString normalizeRuledCardName(const QString &name)
     return name.trimmed().toLower().replace(QLatin1Char('_'), QLatin1Char(' '));
 }
 
+/// Ruled mode routes every cast onto the lowest player-id stack zone (see `processRuledPayload`).
+static Server_CardZone *ruledCanonicalStackZone(Server_Game *game)
+{
+    if (!game) {
+        return nullptr;
+    }
+    Server_AbstractPlayer *canonicalStackOwner = nullptr;
+    for (Server_AbstractPlayer *ab : game->getPlayers().values()) {
+        if (!ab) {
+            continue;
+        }
+        if (!canonicalStackOwner || ab->getPlayerId() < canonicalStackOwner->getPlayerId()) {
+            canonicalStackOwner = ab;
+        }
+    }
+    return canonicalStackOwner ? canonicalStackOwner->getZones().value(ZoneNames::STACK) : nullptr;
+}
+
+/// Bind `StackPushed` to the cockatrice `Server_Card` that actually sits on the shared stack.
+/// Walk from the end of the zone list toward the bottom so the most recently moved spell wins
+/// when multiple copies share a name; if nothing matches, use the last card (expected cast).
+static Server_Card *ruledPhysicalSpellOnCanonicalStack(Server_CardZone *stackZone, const QString &normalizedPushedName)
+{
+    if (!stackZone) {
+        return nullptr;
+    }
+    const QList<Server_Card *> &cards = stackZone->getCards();
+    if (cards.isEmpty()) {
+        return nullptr;
+    }
+    for (int i = cards.size() - 1; i >= 0; --i) {
+        Server_Card *c = cards.at(i);
+        if (!c) {
+            continue;
+        }
+        if (normalizeRuledCardName(c->getName()) == normalizedPushedName) {
+            return c;
+        }
+    }
+    return cards.last();
+}
+
 int countCsvEntries(const std::string &csv)
 {
     if (csv.empty()) {
@@ -1349,21 +1391,48 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
         }
         if (!e.has_zone_view()) {
             if (e.has_stack_pushed()) {
-                const quint32 pushedOid = static_cast<quint32>(e.stack_pushed().object_id());
-                const QString pushedName = QString::fromStdString(e.stack_pushed().description());
+                const auto &sp = e.stack_pushed();
+                const quint32 pushedOid = static_cast<quint32>(sp.object_id());
+                const QString pushedName = QString::fromStdString(sp.description());
                 ruledEngineStackPushDescriptionsByObjectId.insert(pushedOid, pushedName);
                 const QString normalizedPushedName = normalizeRuledCardName(pushedName);
+                QList<PendingRuledCastVisual>::iterator bindIt = ruledPendingCastVisualQueue.end();
                 for (auto it = ruledPendingCastVisualQueue.begin(); it != ruledPendingCastVisualQueue.end(); ++it) {
                     if (normalizeRuledCardName(it->cardName) == normalizedPushedName) {
-                        ruledStackTargetsByObjectId.insert(pushedOid, it->targetOids);
-                        if (it->serverCardId >= 0) {
-                            ruledStackObjectIdToServerCardId.insert(pushedOid, it->serverCardId);
-                        }
-                        if (it->casterPlayerId >= 0) {
-                            ruledStackObjectIdToCasterPlayerId.insert(pushedOid, it->casterPlayerId);
-                        }
-                        ruledPendingCastVisualQueue.erase(it);
+                        bindIt = it;
                         break;
+                    }
+                }
+                // CastSpell always enqueues one pending entry before applyRuledBatch; if the engine
+                // stack description and Cockatrice printing names differ, name match fails and clients
+                // never get BattlefieldObjectMap rows for stack oids (spell targeting arrows break).
+                if (bindIt == ruledPendingCastVisualQueue.end() && !ruledPendingCastVisualQueue.isEmpty()) {
+                    bindIt = ruledPendingCastVisualQueue.begin();
+                }
+                if (bindIt != ruledPendingCastVisualQueue.end()) {
+                    ruledStackTargetsByObjectId.insert(pushedOid, bindIt->targetOids);
+                    if (bindIt->serverCardId >= 0) {
+                        ruledStackObjectIdToServerCardId.insert(pushedOid, bindIt->serverCardId);
+                    }
+                    if (bindIt->casterPlayerId >= 0) {
+                        ruledStackObjectIdToCasterPlayerId.insert(pushedOid, bindIt->casterPlayerId);
+                    }
+                    ruledPendingCastVisualQueue.erase(bindIt);
+                } else {
+                    QVector<quint32> tlist;
+                    tlist.reserve(sp.targets_size());
+                    for (int ti = 0; ti < sp.targets_size(); ++ti) {
+                        tlist.append(static_cast<quint32>(sp.targets(ti).object_id()));
+                    }
+                    if (!tlist.isEmpty()) {
+                        ruledStackTargetsByObjectId.insert(pushedOid, tlist);
+                    }
+                }
+                // Authoritative: map engine stack oid to whichever cockatrice card is actually on the
+                // canonical stack (fixes wrong FIFO / pending ids so `findStackCardByServerId` works).
+                if (Server_CardZone *stackZone = ruledCanonicalStackZone(this)) {
+                    if (Server_Card *phys = ruledPhysicalSpellOnCanonicalStack(stackZone, normalizedPushedName)) {
+                        ruledStackObjectIdToServerCardId.insert(pushedOid, phys->getId());
                     }
                 }
             }

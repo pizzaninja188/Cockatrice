@@ -1,11 +1,14 @@
 #include "game_event_handler.h"
 
+#include "board/arrow_item.h"
+#include "board/arrow_target.h"
 #include "board/card_item.h"
 #include "../interface/widgets/tabs/tab_game.h"
 #include "zones/logic/card_zone_logic.h"
 #include "abstract_game.h"
 #include "log/message_log_widget.h"
 #include "player/player.h"
+#include "player/player_manager.h"
 
 #include <libcockatrice/network/client/abstract/abstract_client.h>
 #include <libcockatrice/protocol/get_pb_extension.h>
@@ -35,7 +38,10 @@
 #include <libcockatrice/protocol/pb/event_set_active_player.pb.h>
 #include <libcockatrice/protocol/pb/game_event_container.pb.h>
 #include <libcockatrice/protocol/pending_command.h>
+#include <libcockatrice/utility/zone_names.h>
+#include <QColor>
 #include <QRegularExpression>
+#include <QTimer>
 #include <algorithm>
 
 namespace {
@@ -168,6 +174,146 @@ ParsedRuledLandActions parseRuledCleanupDiscardActions(const ruled::v1::LegalAct
         }
     }
     return parsed;
+}
+
+CardItem *findStackCardByServerId(AbstractGame *ag, int serverCardId)
+{
+    if (!ag || serverCardId < 0) {
+        return nullptr;
+    }
+    for (Player *p : ag->getPlayerManager()->getPlayers()) {
+        if (!p) {
+            continue;
+        }
+        if (CardItem *c = ag->getCard(p->getPlayerInfo()->getId(), QString::fromLatin1(ZoneNames::STACK), serverCardId)) {
+            return c;
+        }
+    }
+    return nullptr;
+}
+
+CardItem *findBattlefieldCardByEngineOid(AbstractGame *ag, const GameEventHandler *handler, quint32 engineOid)
+{
+    if (!ag || !handler || engineOid == 0) {
+        return nullptr;
+    }
+    const int sid = handler->cardIdForEngineOid(engineOid);
+    const int owner = handler->playerIdForEngineOid(engineOid);
+    if (sid >= 0 && owner >= 0) {
+        if (CardItem *c = ag->getCard(owner, QString::fromLatin1(ZoneNames::TABLE), sid)) {
+            return c;
+        }
+    }
+    PlayerManager *pm = ag->getPlayerManager();
+    for (Player *p : pm->getPlayers()) {
+        if (!p) {
+            continue;
+        }
+        CardZoneLogic *zt = p->getZones().value(QString::fromLatin1(ZoneNames::TABLE), nullptr);
+        if (!zt) {
+            continue;
+        }
+        for (CardItem *c : zt->getCards()) {
+            if (!c) {
+                continue;
+            }
+            const int cid = c->getId();
+            // BattlefieldObjectMap keys (player_id, server_card_id) use the server zone controller; CardItem
+            // ownership can disagree, so try every seat id that appears in the ruled oid map.
+            for (Player *op : pm->getPlayers()) {
+                if (!op || !op->getPlayerInfo()) {
+                    continue;
+                }
+                const int opId = op->getPlayerInfo()->getId();
+                if (handler->engineOidForCardId(opId, cid) == engineOid) {
+                    return c;
+                }
+            }
+        }
+    }
+    return nullptr;
+}
+
+CardItem *resolveStackCardItemByEngineOid(AbstractGame *ag,
+                                          TabGame *tab,
+                                          const GameEventHandler *handler,
+                                          PlayerManager *pm,
+                                          quint32 stackSpellOid)
+{
+    const int sid = handler->cardIdForEngineOid(stackSpellOid);
+    if (sid >= 0) {
+        if (tab) {
+            if (CardItem *c = tab->findVisibleStackSpellCardItem(sid)) {
+                return c;
+            }
+        }
+        if (CardItem *c = findStackCardByServerId(ag, sid)) {
+            return c;
+        }
+    }
+    for (Player *p : pm->getPlayers()) {
+        if (!p) {
+            continue;
+        }
+        CardZoneLogic *sz = p->getZones().value(QString::fromLatin1(ZoneNames::STACK), nullptr);
+        if (!sz) {
+            continue;
+        }
+        for (CardItem *c : sz->getCards()) {
+            if (!c) {
+                continue;
+            }
+            const int cid = c->getId();
+            for (Player *op : pm->getPlayers()) {
+                if (!op || !op->getPlayerInfo()) {
+                    continue;
+                }
+                if (handler->engineOidForCardId(op->getPlayerInfo()->getId(), cid) == stackSpellOid) {
+                    return c;
+                }
+            }
+        }
+    }
+    return nullptr;
+}
+
+ArrowTarget *resolveRuledSpellTarget(AbstractGame *ag,
+                                     TabGame *tab,
+                                     const GameEventHandler *handler,
+                                     const QSet<quint32> &stackOids,
+                                     quint32 targetOid)
+{
+    if (!ag || !handler) {
+        return nullptr;
+    }
+    PlayerManager *pm = ag->getPlayerManager();
+    // Only Cockatrice seat ids count as player targets (engine object ids never collide with seats).
+    const int seatId = static_cast<int>(targetOid);
+    if (pm->getPlayers().contains(seatId)) {
+        if (Player *asPlayer = pm->getPlayer(seatId)) {
+            return asPlayer->getGraphicsItem()->getPlayerTarget();
+        }
+    }
+    if (stackOids.contains(targetOid)) {
+        return resolveStackCardItemByEngineOid(ag, tab, handler, pm, targetOid);
+    }
+    // Counterspell target: the countered spell's oid may already be removed from `ruledStackObjectIds` in the same
+    // batch as StackResolved, while StackPushed.targets still reference it — resolve via map + physical stack zone.
+    const int sidProbe = handler->cardIdForEngineOid(targetOid);
+    if (sidProbe >= 0) {
+        if (CardItem *stk = findStackCardByServerId(ag, sidProbe)) {
+            if (stk->getZone() &&
+                stk->getZone()->getName().compare(QStringLiteral("stack"), Qt::CaseInsensitive) == 0) {
+                if (tab) {
+                    if (CardItem *vis = tab->findVisibleStackSpellCardItem(sidProbe)) {
+                        return vis;
+                    }
+                }
+                return stk;
+            }
+        }
+    }
+    return findBattlefieldCardByEngineOid(ag, handler, targetOid);
 }
 } // namespace
 
@@ -652,6 +798,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 // (toolbar highlight + logSetActivePhase); do not duplicate here.
                                 // Reaching a new phase guarantees the previous stack emptied.
                                 ruledStackObjectIds.clear();
+                                ruledStackTargetsByStackOid.clear();
                                 ruledStackTrackingDirty = true;
                                 if (game->getGameState()->getActivePlayer() != pc.active_player_id()) {
                                     game->getGameState()->setActivePlayer(pc.active_player_id());
@@ -693,10 +840,18 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             if (e.has_stack_pushed()) {
                                 const auto &sp = e.stack_pushed();
                                 ruledStackObjectIds.insert(sp.object_id());
+                                QVector<quint32> tlist;
+                                tlist.reserve(sp.targets_size());
+                                for (int ti = 0; ti < sp.targets_size(); ++ti) {
+                                    tlist.append(static_cast<quint32>(sp.targets(ti).object_id()));
+                                }
+                                ruledStackTargetsByStackOid.insert(sp.object_id(), tlist);
                                 ruledStackTrackingDirty = true;
                             }
                             if (e.has_stack_resolved()) {
-                                ruledStackObjectIds.remove(e.stack_resolved().object_id());
+                                const quint32 rid = e.stack_resolved().object_id();
+                                ruledStackObjectIds.remove(rid);
+                                ruledStackTargetsByStackOid.remove(rid);
                                 ruledStackTrackingDirty = true;
                             }
                             if (e.has_battlefield_object_map()) {
@@ -810,6 +965,8 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                         if (combatStateDirty) {
                             emit ruledCombatStateChanged();
                         }
+                        // Defer so stack window / zone views finish layout before we resolve CardItem positions.
+                        QTimer::singleShot(0, this, [this] { syncRuledSpellTargetingArrows(); });
                     }
                     break;
                 }
@@ -1252,4 +1409,67 @@ void GameEventHandler::eventSetActivePhase(const Event_SetActivePhase &event,
     }
     game->getGameState()->setCurrentPhase(phase);
     emitUserEvent();
+}
+
+void GameEventHandler::refreshRuledSpellTargetArrows()
+{
+    syncRuledSpellTargetingArrows();
+}
+
+void GameEventHandler::clearRuledSpellTargetArrows()
+{
+    for (const auto &pr : ruledSpellTargetSyntheticArrows) {
+        if (pr.first) {
+            pr.first->delArrow(pr.second);
+        }
+    }
+    ruledSpellTargetSyntheticArrows.clear();
+}
+
+void GameEventHandler::syncRuledSpellTargetingArrows()
+{
+    if (!game || !game->getGameMetaInfo()->proto().ruled_game()) {
+        clearRuledSpellTargetArrows();
+        return;
+    }
+
+    clearRuledSpellTargetArrows();
+
+    static const QColor spellTargetRed(220, 40, 40);
+
+    for (auto it = ruledStackTargetsByStackOid.constBegin(); it != ruledStackTargetsByStackOid.constEnd(); ++it) {
+        const quint32 stackOid = it.key();
+        if (!ruledStackObjectIds.contains(stackOid)) {
+            continue;
+        }
+        const int spellServerId = cardIdForEngineOid(stackOid);
+        TabGame *tab = game->getTab();
+        CardItem *startCard = tab ? tab->findVisibleStackSpellCardItem(spellServerId) : nullptr;
+        if (!startCard) {
+            startCard = findStackCardByServerId(game, spellServerId);
+        }
+        if (!startCard) {
+            continue;
+        }
+        Player *arrowOwner = startCard->getZone()->getPlayer();
+        if (!arrowOwner) {
+            continue;
+        }
+
+        const QVector<quint32> targets = it.value();
+        for (int ti = 0; ti < targets.size(); ++ti) {
+            ArrowTarget *tgt =
+                resolveRuledSpellTarget(game, tab, this, ruledStackObjectIds, targets.at(ti));
+            if (!tgt || tgt == startCard) {
+                continue;
+            }
+            const int aid = nextRuledSpellTargetArrowId--;
+            ArrowItem *arr = arrowOwner->addArrow(aid, startCard, tgt, spellTargetRed);
+            if (!arr) {
+                continue;
+            }
+            arr->setAcceptedMouseButtons(Qt::NoButton);
+            ruledSpellTargetSyntheticArrows.append(qMakePair(arrowOwner, aid));
+        }
+    }
 }

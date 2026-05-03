@@ -15,6 +15,7 @@
 #include "../game/player/player_list_widget.h"
 #include "../game/prompt/game_prompt_widget.h"
 #include "../game/replay.h"
+#include "../game/zones/view_zone.h"
 #include "../game/zones/view_zone_widget.h"
 #include "../interface/card_picture_loader/card_picture_loader.h"
 #include "../interface/widgets/cards/card_info_frame_widget.h"
@@ -897,6 +898,27 @@ CardZoneLogic *TabGame::findVisibleStackZone() const
     return best;
 }
 
+CardItem *TabGame::findVisibleStackSpellCardItem(int serverCardId) const
+{
+    if (serverCardId < 0 || !stackView) {
+        return nullptr;
+    }
+    ZoneViewZone *zv = stackView->getZone();
+    if (!zv) {
+        return nullptr;
+    }
+    CardZoneLogic *logic = zv->getLogic();
+    if (!logic || logic->getName().compare(QStringLiteral("stack"), Qt::CaseInsensitive) != 0) {
+        return nullptr;
+    }
+    for (CardItem *c : logic->getCards()) {
+        if (c && c->getId() == serverCardId) {
+            return c;
+        }
+    }
+    return nullptr;
+}
+
 void TabGame::syncStackWindowVisibility()
 {
     if (!aToggleStackWindow) {
@@ -933,6 +955,9 @@ void TabGame::ensureStackWindow()
     if (stackView && stackViewZone == visibleStackZone) {
         stackView->show();
         stackView->refreshContentLayout();
+        if (GameEventHandler *geh = game->getGameEventHandler()) {
+            geh->refreshRuledSpellTargetArrows();
+        }
         aToggleStackWindow->setChecked(true);
         return;
     }
@@ -956,6 +981,9 @@ void TabGame::ensureStackWindow()
     }
     // Saved geometry can be narrower than a fanned stack; widen from optimum so all objects stay visible.
     stackView->refreshContentLayout();
+    if (GameEventHandler *geh = game->getGameEventHandler()) {
+        geh->refreshRuledSpellTargetArrows();
+    }
     connect(stackView, &ZoneViewWidget::closePressed, this, [this](ZoneViewWidget *) {
         saveStackWindowLayout();
         stackView = nullptr;

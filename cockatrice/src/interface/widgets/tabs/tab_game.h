@@ -215,6 +215,10 @@ public:
         return game;
     }
 
+    /// When the ruled stack window is open, stack `CardItem`s live in the zone view (visible positions).
+    /// Returns nullptr if the window is closed or the id is not found in the view.
+    [[nodiscard]] CardItem *findVisibleStackSpellCardItem(int serverCardId) const;
+
 public slots:
     void viewCardInfo(const CardRef &cardRef = {}) const;
     void resetChatAndPhase();

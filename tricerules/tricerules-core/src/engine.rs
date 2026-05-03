@@ -1191,6 +1191,7 @@ impl GameEngine {
             ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
                 object_id: oid,
                 description: def_name,
+                targets: targets.to_vec(),
             })),
         });
         batch.events.push(ev_priority_changed(self));
