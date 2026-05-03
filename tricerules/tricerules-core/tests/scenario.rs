@@ -1084,6 +1084,20 @@ fn non_active_player_with_priority_pays_mana_for_counterspell() {
         "an island should tap to help pay UU"
     );
     assert_eq!(e.state.stack.len(), 2, "bolt and counterspell on stack");
+
+    e.apply_command(1, &pass()).expect("p1 pass after casting counter");
+    e.apply_command(0, &pass()).expect("p0 pass resolves counterspell");
+    assert!(e.state.stack.is_empty(), "stack empty after counter");
+    assert_eq!(e.state.active_player_id(), 0, "AP is P0 in this test");
+    assert_eq!(
+        e.state.priority_player_id(),
+        0,
+        "with empty stack, priority should return to active player (CR 117.3c)"
+    );
+    assert_eq!(
+        e.state.passes_since_stack_change, 0,
+        "pass counter should reset after stack closed"
+    );
 }
 
 #[test]

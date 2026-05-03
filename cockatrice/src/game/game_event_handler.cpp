@@ -850,8 +850,15 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             }
                             if (e.has_stack_resolved()) {
                                 const quint32 rid = e.stack_resolved().object_id();
+                                // Countered spells leave the engine stack without their own StackResolved;
+                                // remove this spell's stack targets (e.g. the countered object id) so
+                                // ruledStackObjectIds matches the real stack (pass button + stack window).
+                                const QVector<quint32> spellTargets = ruledStackTargetsByStackOid.value(rid);
                                 ruledStackObjectIds.remove(rid);
                                 ruledStackTargetsByStackOid.remove(rid);
+                                for (quint32 t : spellTargets) {
+                                    ruledStackObjectIds.remove(t);
+                                }
                                 ruledStackTrackingDirty = true;
                             }
                             if (e.has_battlefield_object_map()) {
