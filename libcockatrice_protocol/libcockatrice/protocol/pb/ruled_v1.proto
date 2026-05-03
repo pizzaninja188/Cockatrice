@@ -88,6 +88,17 @@ message LegalActions {
   repeated string labels = 1;
 }
 
+// Servatrice-injected each ruled broadcast: engine hand slot index -> Server_Card.id for that player,
+// after server hand zones are synced to the engine (zone_view is stripped for clients).
+message HandSlotMap {
+  message Entry {
+    int32 player_id = 1;
+    uint32 hand_index = 2;
+    int32 server_card_id = 3;
+  }
+  repeated Entry entries = 1;
+}
+
 message RuledEvent {
   oneof ev {
     PhaseChanged phase_changed = 1;
@@ -103,6 +114,7 @@ message RuledEvent {
     LifeChanged life_changed = 11;
     BattlefieldObjectMap battlefield_object_map = 12;
     AttackersDeclared attackers_declared = 13;
+    HandSlotMap hand_slot_map = 14;
   }
 }
 

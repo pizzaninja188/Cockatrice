@@ -41,6 +41,7 @@ class Event_GameSay;
 class Event_Kicked;
 class Event_ReverseTurn;
 class AbstractGame;
+class CardItem;
 class PendingCommand;
 class Player;
 
@@ -79,6 +80,11 @@ private:
     QHash<quint32, bool> engineOidSummoningSick;
     // Engine ObjectId -> marked damage currently shown in ruled ZoneView.
     QHash<quint32, int> engineOidMarkedDamage;
+    // Servatrice HandSlotMap: (owner player id, Server_Card.id) -> engine hand index for ruled commands.
+    QHash<quint64, int> ruledOwnedCardToEngineHandSlot;
+
+    [[nodiscard]] int resolveEngineHandIndexFromLegalSlots(const CardItem *card,
+                                                           const QList<int> &sortedLegalHandIndices) const;
 
     // Latest combat phase derived from PhaseChanged events.
     RuledCombatPhase currentRuledCombatPhase = RuledCombatPhase::None;
@@ -111,15 +117,13 @@ public:
     [[nodiscard]] bool isRuledSpellCastLegalForHandIndex(int handIndex) const;
     [[nodiscard]] int getRuledSpellCastHandIndexForCard(const QString &cardName, int preferredHandIndex) const;
     [[nodiscard]] QList<int> getRuledSpellCastHandIndicesForCardName(const QString &cardName) const;
+    /// Maps the clicked hand card to an engine hand index by matching Server_Card ids at legal slots.
+    [[nodiscard]] int resolveRuledSpellCastHandIndexForClickedCard(const CardItem *card) const;
+    [[nodiscard]] int resolveRuledLandPlayHandIndexForClickedCard(const CardItem *card) const;
     [[nodiscard]] bool isRuledCleanupDiscardLegalForHandIndex(int handIndex) const;
     [[nodiscard]] int getRuledCleanupDiscardHandIndexForCard(const QString &cardName, int preferredHandIndex) const;
     [[nodiscard]] QList<int> getRuledCleanupDiscardHandIndicesForCardName(const QString &cardName) const;
-    /// Maps a visible hand card to the engine hand index used in cleanup-discard legal actions.
-    /// \a sameNameOrdinal is the 0-based index among cards with \a cardName left-to-right in the hand zone.
-    /// \a sameNameCardsInHand is the count of hand cards with \a cardName (including the clicked card).
-    /// When several legal discards share a name, mapping is by ordinal only (visual index can collide).
-    [[nodiscard]] int resolveRuledCleanupDiscardEngineHandIndex(const QString &cardName, int visualHandIndex,
-                                                              int sameNameOrdinal, int sameNameCardsInHand) const;
+    [[nodiscard]] int resolveRuledCleanupDiscardHandIndexForClickedCard(const CardItem *card) const;
     [[nodiscard]] bool localPlayerMustCleanupDiscard() const;
     [[nodiscard]] int ruledCleanupDiscardRequiredCount() const;
     [[nodiscard]] int ruledCleanupDiscardSelectedCount() const;

@@ -275,34 +275,12 @@ bool PlayerActions::tryPlayRuledLand(CardItem *card)
         return false;
     }
 
-    const int handIndex = card->getZone()->getCards().indexOf(card);
-    if (handIndex < 0) {
+    if (card->getZone()->getCards().indexOf(card) < 0) {
         return false;
     }
-    int sameNameOrdinal = -1;
-    int seenSameName = 0;
-    for (const auto *zoneCard : card->getZone()->getCards()) {
-        if (!zoneCard) {
-            continue;
-        }
-        if (zoneCard->getName() == card->getName()) {
-            if (zoneCard == card) {
-                sameNameOrdinal = seenSameName;
-                break;
-            }
-            ++seenSameName;
-        }
-    }
 
-    int ruledHandIndex =
-        player->getGame()->getGameEventHandler()->getRuledLandPlayHandIndexForCard(card->getName(), handIndex);
-    if (ruledHandIndex != handIndex) {
-        const QList<int> matchingIndices =
-            player->getGame()->getGameEventHandler()->getRuledLandPlayHandIndicesForCardName(card->getName());
-        if (sameNameOrdinal >= 0 && sameNameOrdinal < matchingIndices.size()) {
-            ruledHandIndex = matchingIndices.at(sameNameOrdinal);
-        }
-    }
+    const int ruledHandIndex = player->getGame()->getGameEventHandler()->resolveRuledLandPlayHandIndexForClickedCard(
+        card);
     if (ruledHandIndex < 0) {
         return false;
     }
@@ -335,27 +313,10 @@ bool PlayerActions::tryToggleRuledCleanupDiscard(CardItem *card)
     if (!handler || !handler->localPlayerMustCleanupDiscard()) {
         return false;
     }
-    const int handIndex = card->getZone()->getCards().indexOf(card);
-    if (handIndex < 0) {
+    if (card->getZone()->getCards().indexOf(card) < 0) {
         return false;
     }
-    int sameNameOrdinal = -1;
-    int seenSameName = 0;
-    int sameNameCardsInHand = 0;
-    for (const auto *zoneCard : card->getZone()->getCards()) {
-        if (!zoneCard) {
-            continue;
-        }
-        if (zoneCard->getName() == card->getName()) {
-            ++sameNameCardsInHand;
-            if (zoneCard == card) {
-                sameNameOrdinal = seenSameName;
-            }
-            ++seenSameName;
-        }
-    }
-    const int ruledHandIndex = handler->resolveRuledCleanupDiscardEngineHandIndex(
-        card->getName(), handIndex, sameNameOrdinal, sameNameCardsInHand);
+    const int ruledHandIndex = handler->resolveRuledCleanupDiscardHandIndexForClickedCard(card);
     if (ruledHandIndex < 0 || !handler->isRuledCleanupDiscardLegalForHandIndex(ruledHandIndex)) {
         return false;
     }
@@ -402,10 +363,6 @@ bool PlayerActions::sendRuledCleanupDiscardBatchIfComplete()
 bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
 {
     const int handIndex = card && card->getZone() ? card->getZone()->getCards().indexOf(card) : -1;
-    const int ruledHandIndexPreview =
-        (card && handIndex >= 0)
-            ? player->getGame()->getGameEventHandler()->getRuledSpellCastHandIndexForCard(card->getName(), handIndex)
-            : -1;
     if (!card || !player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
         return false;
     }
@@ -419,7 +376,8 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
     if (handIndex < 0) {
         return false;
     }
-    const int ruledHandIndex = ruledHandIndexPreview;
+    GameEventHandler *const geh = player->getGame()->getGameEventHandler();
+    const int ruledHandIndex = geh->resolveRuledSpellCastHandIndexForClickedCard(card);
     if (ruledHandIndex < 0) {
         return false;
     }

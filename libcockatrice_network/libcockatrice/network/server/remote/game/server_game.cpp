@@ -1550,6 +1550,33 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
             *toSend.mutable_batch()->add_events() = mapEvent;
         }
     }
+    // Clients never receive stripped zone_view; publish engine hand index <-> Server_Card.id for ruled UI intents.
+    {
+        ruled::v1::RuledEvent handEv;
+        auto *hm = handEv.mutable_hand_slot_map();
+        for (Server_AbstractPlayer *ab : getPlayers().values()) {
+            if (!ab) {
+                continue;
+            }
+            auto *pl = static_cast<Server_Player *>(ab);
+            Server_CardZone *handZone = pl->getZones().value(ZoneNames::HAND);
+            if (!handZone) {
+                continue;
+            }
+            const int pid = pl->getPlayerId();
+            for (int i = 0; i < handZone->getCards().size(); ++i) {
+                Server_Card *c = handZone->getCards().at(i);
+                if (!c) {
+                    continue;
+                }
+                auto *ent = hm->add_entries();
+                ent->set_player_id(pid);
+                ent->set_hand_index(static_cast<uint32_t>(i));
+                ent->set_server_card_id(c->getId());
+            }
+        }
+        *toSend.mutable_batch()->add_events() = handEv;
+    }
     const ruled::v1::RuledEventBatch &batch = toSend.batch();
     for (auto *participant : participants) {
         GameEventStorage ges;

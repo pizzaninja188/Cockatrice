@@ -1,8 +1,11 @@
 #include "game_event_handler.h"
 
+#include "board/card_item.h"
 #include "../interface/widgets/tabs/tab_game.h"
+#include "zones/logic/card_zone_logic.h"
 #include "abstract_game.h"
 #include "log/message_log_widget.h"
+#include "player/player.h"
 
 #include <libcockatrice/network/client/abstract/abstract_client.h>
 #include <libcockatrice/protocol/get_pb_extension.h>
@@ -220,6 +223,57 @@ QList<int> GameEventHandler::getRuledSpellCastHandIndicesForCardName(const QStri
     return matching;
 }
 
+int GameEventHandler::resolveEngineHandIndexFromLegalSlots(const CardItem *card,
+                                                           const QList<int> &sortedLegalHandIndices) const
+{
+    if (!card || !card->getZone()) {
+        return -1;
+    }
+    const CardZoneLogic *zone = card->getZone();
+    Player *handPlayer = zone->getPlayer();
+    const int clickedId = card->getId();
+    if (handPlayer && handPlayer->getPlayerInfo()) {
+        const int pid = handPlayer->getPlayerInfo()->getId();
+        const auto mit = ruledOwnedCardToEngineHandSlot.constFind(makeOwnedCardKey(pid, clickedId));
+        if (mit != ruledOwnedCardToEngineHandSlot.constEnd()) {
+            const int mapped = mit.value();
+            if (mapped >= 0 && sortedLegalHandIndices.contains(mapped)) {
+                return mapped;
+            }
+        }
+    }
+    for (int h : sortedLegalHandIndices) {
+        if (h < 0 || h >= zone->getCards().size()) {
+            continue;
+        }
+        const CardItem *slot = zone->getCards().at(h);
+        if (slot && slot->getId() == clickedId) {
+            return h;
+        }
+    }
+    const int handIndex = zone->getCards().indexOf(const_cast<CardItem *>(card));
+    if (handIndex >= 0 && sortedLegalHandIndices.contains(handIndex)) {
+        return handIndex;
+    }
+    return -1;
+}
+
+int GameEventHandler::resolveRuledSpellCastHandIndexForClickedCard(const CardItem *card) const
+{
+    if (!card) {
+        return -1;
+    }
+    return resolveEngineHandIndexFromLegalSlots(card, getRuledSpellCastHandIndicesForCardName(card->getName()));
+}
+
+int GameEventHandler::resolveRuledLandPlayHandIndexForClickedCard(const CardItem *card) const
+{
+    if (!card) {
+        return -1;
+    }
+    return resolveEngineHandIndexFromLegalSlots(card, getRuledLandPlayHandIndicesForCardName(card->getName()));
+}
+
 bool GameEventHandler::isRuledCleanupDiscardLegalForHandIndex(int handIndex) const
 {
     return legalRuledCleanupDiscardHandIndices.contains(handIndex);
@@ -244,32 +298,12 @@ QList<int> GameEventHandler::getRuledCleanupDiscardHandIndicesForCardName(const 
     return matching;
 }
 
-int GameEventHandler::resolveRuledCleanupDiscardEngineHandIndex(const QString &cardName, int visualHandIndex,
-                                                                 int sameNameOrdinal, int sameNameCardsInHand) const
+int GameEventHandler::resolveRuledCleanupDiscardHandIndexForClickedCard(const CardItem *card) const
 {
-    const QList<int> matchingIndices = getRuledCleanupDiscardHandIndicesForCardName(cardName);
-    if (matchingIndices.isEmpty()) {
+    if (!card) {
         return -1;
     }
-    // Multiple legal discards for this name: engine indices need not match visual order.
-    // Never trust preferredHandIndex alone — it can equal a legal index for the *other* copy
-    // (e.g. legal {2,3}, second Forest at visual 2 would incorrectly map to engine 2).
-    if (matchingIndices.size() > 1) {
-        if (sameNameOrdinal >= 0 && sameNameOrdinal < matchingIndices.size()) {
-            return matchingIndices.at(sameNameOrdinal);
-        }
-        return -1;
-    }
-    const int only = matchingIndices.first();
-    // Exactly one legal discard label for this name. If there is only one physical card with this
-    // name in hand, it must be that discard regardless of whether UI card order matches engine
-    // hand indices (see debug: Island at visual 7 vs engine idx 0).
-    if (sameNameCardsInHand == 1) {
-        return only;
-    }
-    // Several same-named cards but only one legal line: disambiguate by engine/visual alignment
-    // when the client hand list order matches engine hand order (legacy fallback).
-    return (only == visualHandIndex) ? only : -1;
+    return resolveEngineHandIndexFromLegalSlots(card, getRuledCleanupDiscardHandIndicesForCardName(card->getName()));
 }
 
 bool GameEventHandler::localPlayerMustCleanupDiscard() const
@@ -597,6 +631,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                     legalRuledSpellCastIndicesByCardName.clear();
                     legalRuledCleanupDiscardHandIndices.clear();
                     legalRuledCleanupDiscardIndicesByCardName.clear();
+                    ruledOwnedCardToEngineHandSlot.clear();
                     if (batch.ParseFromString(ruled.payload())) {
                         QString timeline;
                         QString promptFeed;
@@ -697,6 +732,14 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 }
                                 battlefieldMapDirty = true;
                                 combatStateDirty = true;
+                            }
+                            if (e.has_hand_slot_map()) {
+                                for (int hi = 0; hi < e.hand_slot_map().entries_size(); ++hi) {
+                                    const auto &ent = e.hand_slot_map().entries(hi);
+                                    ruledOwnedCardToEngineHandSlot.insert(
+                                        makeOwnedCardKey(ent.player_id(), ent.server_card_id()),
+                                        static_cast<int>(ent.hand_index()));
+                                }
                             }
                             if (e.has_zone_view()) {
                                 engineOidMarkedDamage.clear();

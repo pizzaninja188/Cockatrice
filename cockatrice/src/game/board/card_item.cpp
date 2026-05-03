@@ -216,25 +216,8 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
         }
         if (zone && zone->getName() == ZoneNames::HAND && owner && owner->getPlayerInfo()->getLocal() &&
             ruledHandler->localPlayerMustCleanupDiscard()) {
-            const int handIndex = zone->getCards().indexOf(const_cast<CardItem *>(this));
-            if (handIndex >= 0) {
-                int sameNameOrdinal = -1;
-                int seenSameName = 0;
-                int sameNameCardsInHand = 0;
-                for (const CardItem *zoneCard : zone->getCards()) {
-                    if (!zoneCard) {
-                        continue;
-                    }
-                    if (zoneCard->getName() == getName()) {
-                        ++sameNameCardsInHand;
-                        if (zoneCard == this) {
-                            sameNameOrdinal = seenSameName;
-                        }
-                        ++seenSameName;
-                    }
-                }
-                const int ri = ruledHandler->resolveRuledCleanupDiscardEngineHandIndex(
-                    getName(), handIndex, sameNameOrdinal, sameNameCardsInHand);
+            if (zone->getCards().indexOf(const_cast<CardItem *>(this)) >= 0) {
+                const int ri = ruledHandler->resolveRuledCleanupDiscardHandIndexForClickedCard(this);
                 if (ri >= 0 && ruledHandler->isRuledCleanupDiscardLegalForHandIndex(ri) &&
                     ruledHandler->isRuledCleanupDiscardHandIndexSelected(ri)) {
                     painter->save();
@@ -551,7 +534,8 @@ static bool isRuledLandSingleClickLegal(const CardItem *card)
     if (handIndex < 0) {
         return false;
     }
-    return game->getGameEventHandler()->getRuledLandPlayHandIndexForCard(card->getName(), handIndex) >= 0;
+    const int resolved = game->getGameEventHandler()->resolveRuledLandPlayHandIndexForClickedCard(card);
+    return resolved >= 0;
 }
 
 static bool isRuledSpellSingleClickLegal(const CardItem *card)
@@ -575,7 +559,8 @@ static bool isRuledSpellSingleClickLegal(const CardItem *card)
     if (handIndex < 0) {
         return false;
     }
-    return game->getGameEventHandler()->getRuledSpellCastHandIndexForCard(card->getName(), handIndex) >= 0;
+    const int resolved = game->getGameEventHandler()->resolveRuledSpellCastHandIndexForClickedCard(card);
+    return resolved >= 0;
 }
 
 static bool isTableLandSingleClickLegal(const CardItem *card)

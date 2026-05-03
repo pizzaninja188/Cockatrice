@@ -1,0 +1,32 @@
+---
+description: After substantive edits, verify with Windows MSVC full CMake preset (client + server + tests + rules engine).
+alwaysApply: true
+---
+
+# Windows: MSVC full build after changes
+
+When you finish **substantive edits** that affect compiled code or the build (C/C++, CMake, `CMakePresets.json`, shared `.proto`, Rust under `tricerules/`, vcpkg manifests, or anything that would fail at compile/link/test time), **run a full verify build from the repository root** if the shell is **Windows** (or the user’s environment is clearly Windows MSVC).
+
+## Preset (matches CMake Tools label)
+
+- **Configure preset:** `windows-msvc-all` — display name *Windows: MSVC full build (client + server + tests + rules engine)*  
+- **Build preset:** `windows-msvc-all-release` — *All: Build Release*
+
+## Commands (repo root)
+
+Prefer a single chained invocation so configure failures surface before build:
+
+```bash
+cmake --preset windows-msvc-all && cmake --build --preset windows-msvc-all-release
+```
+
+**Prerequisites** (same as `CMakePresets.json` for this preset): **QTDIR** pointing at a Qt 6 MSVC kit, **cargo** on PATH for `WITH_RULES_ENGINE`, and MSVC/VS 2022 toolset available.
+
+## When to skip
+
+- **Non-Windows** dev shells: do not force this preset; use the project’s Linux/macOS presets or the user’s documented flow instead.
+- **Trivial-only** changes (comments, markdown-only, formatting with no compile impact): building is optional unless the user asked for verification.
+
+## When not to skip
+
+- Any change where a broken build would be easy to miss without compiling — run the commands above and fix failures before handing off.
