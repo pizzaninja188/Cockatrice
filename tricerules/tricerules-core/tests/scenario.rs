@@ -112,6 +112,19 @@ fn hand_index_for_card(e: &GameEngine, player: usize, card_id: &str) -> usize {
         .unwrap_or_else(|| panic!("missing card {card_id} in hand"))
 }
 
+fn count_card_id_in_graveyard(e: &GameEngine, player: usize, card_id: &str) -> usize {
+    e.state.players[player]
+        .graveyard
+        .iter()
+        .filter(|oid| {
+            e.state
+                .objects
+                .get(oid)
+                .map(|o| o.card_id.as_str()) == Some(card_id)
+        })
+        .count()
+}
+
 fn take_card_from_library_to_hand(e: &mut GameEngine, player: usize, card_id: &str) {
     let pos = e.state.players[player]
         .library
@@ -2275,6 +2288,123 @@ fn three_bolts_stack_lifo_active_sequential_then_non_active_response() {
     assert_eq!(
         e.state.players[1].life, 14,
         "then both AP bolts (6 total to P1)"
+    );
+}
+
+/// Five `Lightning Bolt`s on one stack (AP stacks three, passes; NAP stacks two). Covers the
+/// Cockatrice/Servatrice case where resolved NAP spells must move from the canonical stack zone
+/// (lowest player id) into the caster's graveyard — engine-only regression for LIFO + zone state.
+#[test]
+fn five_lightning_bolts_combined_stack_resolves_lifo_two_players() {
+    let decks = Some(vec![
+        vec![
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "lightning_bolt".into(),
+            "lightning_bolt".into(),
+            "lightning_bolt".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec![
+            "mountain".into(),
+            "mountain".into(),
+            "lightning_bolt".into(),
+            "lightning_bolt".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(4405, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let m0a = hand_index_for_card(&e, 0, "mountain");
+    e.apply_command(0, &play_land(m0a))
+        .expect("p0 play first mountain");
+    for _ in 0..2 {
+        let mi = hand_index_for_card(&e, 0, "mountain");
+        let oid = e.state.players[0].hand.remove(mi);
+        e.state.players[0].battlefield.push(oid);
+        e.state
+            .objects
+            .get_mut(&oid)
+            .expect("p0 seeded mountain")
+            .zone = tricerules_core::Zone::Battlefield;
+    }
+
+    let b0 = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(0, &cast_spell(b0, target_player(1)))
+        .expect("p0 first bolt");
+    let b1 = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(0, &cast_spell(b1, target_player(1)))
+        .expect("p0 second bolt");
+    let b2 = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(0, &cast_spell(b2, target_player(1)))
+        .expect("p0 third bolt");
+    assert_eq!(
+        e.state.stack.len(),
+        3,
+        "AP should stack three bolts before passing"
+    );
+    assert_eq!(e.state.priority_player_id(), 0);
+
+    e.apply_command(0, &pass()).expect("AP pass — priority to NAP");
+
+    for _ in 0..2 {
+        let mi = hand_index_for_card(&e, 1, "mountain");
+        let oid = e.state.players[1].hand.remove(mi);
+        e.state.players[1].battlefield.push(oid);
+        e.state
+            .objects
+            .get_mut(&oid)
+            .expect("p1 seeded mountain")
+            .zone = tricerules_core::Zone::Battlefield;
+    }
+    let b3 = hand_index_for_card(&e, 1, "lightning_bolt");
+    e.apply_command(1, &cast_spell(b3, target_player(0)))
+        .expect("p1 first bolt");
+    let b4 = hand_index_for_card(&e, 1, "lightning_bolt");
+    e.apply_command(1, &cast_spell(b4, target_player(0)))
+        .expect("p1 second bolt while holding priority");
+
+    assert_eq!(
+        e.state.stack.len(),
+        5,
+        "combined stack: three from AP (bottom) then two from NAP (top)"
+    );
+    assert_eq!(
+        e.state
+            .stack
+            .iter()
+            .map(|s| s.card_id.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "lightning_bolt",
+            "lightning_bolt",
+            "lightning_bolt",
+            "lightning_bolt",
+            "lightning_bolt"
+        ]
+    );
+    assert_eq!(e.state.priority_player_id(), 1);
+
+    resolve_entire_stack_two_player(&mut e);
+
+    assert!(e.state.stack.is_empty());
+    assert_eq!(e.state.players[0].life, 14, "NAP's two bolts resolve first (6 to P0)");
+    assert_eq!(e.state.players[1].life, 11, "then AP's three bolts (9 to P1)");
+    assert_eq!(
+        count_card_id_in_graveyard(&e, 0, "lightning_bolt"),
+        3,
+        "AP's three bolts in AP graveyard"
+    );
+    assert_eq!(
+        count_card_id_in_graveyard(&e, 1, "lightning_bolt"),
+        2,
+        "NAP's two bolts in NAP graveyard"
     );
 }
 
