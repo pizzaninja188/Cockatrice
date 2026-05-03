@@ -509,6 +509,7 @@ void Server_Game::doStartGameIfReady(bool forceStartGame)
 
     ruledEngineStackPushDescriptionsByObjectId.clear();
     ruledStackObjectIdToServerCardId.clear();
+    ruledStackObjectIdToCasterPlayerId.clear();
     ruledStackTargetsByObjectId.clear();
     ruledPendingCastVisualQueue.clear();
 
@@ -1071,6 +1072,7 @@ Response::ResponseCode Server_Game::processRuledPayload(int playerId, const Comm
                     PendingRuledCastVisual pending;
                     pending.cardName = card ? card->getName() : QString();
                     pending.serverCardId = card ? card->getId() : -1;
+                    pending.casterPlayerId = playerId;
                     for (int ti = 0; ti < ruledCmd.cast_spell().targets_size(); ++ti) {
                         pending.targetOids.append(static_cast<quint32>(ruledCmd.cast_spell().targets(ti).object_id()));
                     }
@@ -1148,7 +1150,15 @@ void Server_Game::applyRuledStackResolvedEvent(const ruled::v1::StackResolved &s
         } else {
             goesToBattlefield = ruledResolvedStackSpellGoesToBattlefield(card, engineStackDescription);
         }
-        Server_CardZone *targetZone = ab->getZones().value(goesToBattlefield ? ZoneNames::TABLE : ZoneNames::GRAVE);
+        const quint32 resolvedOidLocal = static_cast<quint32>(stackResolved.object_id());
+        const int casterPid = ruledStackObjectIdToCasterPlayerId.value(resolvedOidLocal, -1);
+        Server_AbstractPlayer *destPlayer = ab;
+        if (casterPid >= 0) {
+            if (Server_AbstractPlayer *cp = getPlayer(casterPid)) {
+                destPlayer = cp;
+            }
+        }
+        Server_CardZone *targetZone = destPlayer->getZones().value(goesToBattlefield ? ZoneNames::TABLE : ZoneNames::GRAVE);
         if (!targetZone) {
             return false;
         }
@@ -1349,6 +1359,9 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
                         if (it->serverCardId >= 0) {
                             ruledStackObjectIdToServerCardId.insert(pushedOid, it->serverCardId);
                         }
+                        if (it->casterPlayerId >= 0) {
+                            ruledStackObjectIdToCasterPlayerId.insert(pushedOid, it->casterPlayerId);
+                        }
                         ruledPendingCastVisualQueue.erase(it);
                         break;
                     }
@@ -1489,6 +1502,7 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
                 }
             }
             ruledStackObjectIdToServerCardId.remove(resolvedOid);
+            ruledStackObjectIdToCasterPlayerId.remove(resolvedOid);
             ruledEngineStackPushDescriptionsByObjectId.remove(resolvedOid);
         }
     }

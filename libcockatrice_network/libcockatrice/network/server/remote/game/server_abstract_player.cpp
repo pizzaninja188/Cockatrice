@@ -553,8 +553,10 @@ void Server_AbstractPlayer::onCardBeingMoved(GameEventStorage &ges,
     }
 
     // If card is transferring to a different player, leave an annotation of who actually "owns" the card
+    // (freeform / judge moves). Ruled games use engine identity instead; Owner: clutters creature text.
     const auto &priorAnnotation = card->getAnnotation();
-    if (startzone->getPlayer() != targetzone->getPlayer() && !priorAnnotation.contains("Owner:")) {
+    if (startzone->getPlayer() != targetzone->getPlayer() && !priorAnnotation.contains("Owner:") &&
+        !(game && game->getRuledGame())) {
         const auto &ownerAnnotation = "Owner: " + QString::fromStdString(startzone->getPlayer()->getUserInfo()->name());
         const auto &newAnnotation =
             priorAnnotation.isEmpty() ? ownerAnnotation : ownerAnnotation + "\n\n" + priorAnnotation;

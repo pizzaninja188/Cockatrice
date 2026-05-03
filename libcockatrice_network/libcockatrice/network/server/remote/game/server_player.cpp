@@ -314,14 +314,29 @@ Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const
         }
         QList<Server_Card *> ordered;
         ordered.reserve(v.battlefield_size());
+        // Match engine slots to physical cards by stable engine ObjectId when possible.
+        // Name-only matching mis-orders duplicates (e.g. two Forests), assigning the wrong
+        // battlefield_tapped[] entry to each Server_Card and causing spurious tap/untap events.
+        const QHash<int, quint32> prevServerCardIdToEngineOid = serverCardIdToEngineOid;
 
         for (int i = 0; i < v.battlefield_size(); ++i) {
             const QString want = QString::fromStdString(v.battlefield(i));
+            const quint32 wantOid = static_cast<quint32>(v.battlefield_object_id(i));
             int found = -1;
-            for (int j = 0; j < tablePool.size(); ++j) {
-                if (trId(tablePool[j]) == want) {
-                    found = j;
-                    break;
+            if (wantOid != 0) {
+                for (int j = 0; j < tablePool.size(); ++j) {
+                    if (prevServerCardIdToEngineOid.value(tablePool[j]->getId()) == wantOid) {
+                        found = j;
+                        break;
+                    }
+                }
+            }
+            if (found < 0) {
+                for (int j = 0; j < tablePool.size(); ++j) {
+                    if (trId(tablePool[j]) == want) {
+                        found = j;
+                        break;
+                    }
                 }
             }
             if (found < 0) {
@@ -389,11 +404,15 @@ Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const
                 if (tapGes && i < v.battlefield_tapped_size()) {
                     const bool desiredTapped = v.battlefield_tapped(i);
                     if (card->getTapped() != desiredTapped) {
-                        // Preserve manual table taps between priority passes in ruled mode;
-                        // only force untap from engine during explicit untap transitions.
+                        // Do not force untap from engine during non-untap batches: Cockatrice may have
+                        // tapped permanents for mana (or other UI) that the engine has not yet
+                        // reflected in battlefield_tapped. Real untap-step sync is delivered in the
+                        // same ruled batch as phase_changed("untap") (see tricerules finish_cleanup_roll_new_turn).
                         if (!allowUntapReset && card->getTapped() && !desiredTapped) {
                             continue;
                         }
+                        // Engine tap state is authoritative for ruled games (taps, and untaps
+                        // during the untap step when allowUntapReset is true for the active player).
                         card->setTapped(desiredTapped);
                         result.tapStateChanged = true;
                         Event_SetCardAttr tapEv;

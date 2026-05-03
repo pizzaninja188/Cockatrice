@@ -96,12 +96,15 @@ private:
     QHash<quint32, QString> ruledEngineStackPushDescriptionsByObjectId;
     // Stack object id -> Server_Card.id currently in the Cockatrice STACK zone.
     QHash<quint32, int> ruledStackObjectIdToServerCardId;
+    /// Stack object id -> player who cast the spell (may differ from canonical stack zone owner).
+    QHash<quint32, int> ruledStackObjectIdToCasterPlayerId;
     // Stack object id -> target engine object ids captured from CastSpell intent.
     QHash<quint32, QVector<quint32>> ruledStackTargetsByObjectId;
     struct PendingRuledCastVisual
     {
         QString cardName;
         int serverCardId = -1;
+        int casterPlayerId = -1;
         QVector<quint32> targetOids;
     };
     // Pending local cast intents waiting to be bound to the next StackPushed.object_id.

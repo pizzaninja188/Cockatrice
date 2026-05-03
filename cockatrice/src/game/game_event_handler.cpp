@@ -745,9 +745,9 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 engineOidMarkedDamage.clear();
                                 for (const auto &p : e.zone_view().per_player()) {
                                     const int count = std::min(p.battlefield_object_id_size(), p.battlefield_damage_size());
-                                    for (int i = 0; i < count; ++i) {
-                                        const quint32 oid = p.battlefield_object_id(i);
-                                        const int damage = static_cast<int>(p.battlefield_damage(i));
+                                    for (int zdi = 0; zdi < count; ++zdi) {
+                                        const quint32 oid = p.battlefield_object_id(zdi);
+                                        const int damage = static_cast<int>(p.battlefield_damage(zdi));
                                         if (oid != 0 && damage > 0) {
                                             engineOidMarkedDamage.insert(oid, damage);
                                         }

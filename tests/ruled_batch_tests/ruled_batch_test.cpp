@@ -3,7 +3,7 @@
 // These tests feed synthetic ruled::v1::IpcResponse batches to the server and assert that
 // the engine -> Cockatrice translation produces the expected state changes:
 //   * battlefield engine_oid <-> Server_Card.id mapping is built from RuledPerPlayerView
-//   * tap state propagates from `battlefield_tapped` even outside the untap step
+//   * tap state propagates from `battlefield_tapped`; forced untaps only in untap-step batches
 //   * PermanentMoved -> Server_Card moveCard from TABLE/HAND/STACK to destination zone
 //   * LifeChanged    -> per-player life counter updated
 //   * AttackersDeclared -> Server_Card::attacking flag flipped
@@ -158,6 +158,7 @@ TEST_F(RuledBatchTest, ZoneViewBuildsOidMapAndPropagatesTapState)
     ruled::v1::RuledPerPlayerView v = buildPerPlayerView(p1, {101u, 102u}, {true, false});
 
     GameEventStorage tapGes;
+    // Default allowUntapReset=true (startup-style sync): engine may set taps freely.
     Server_Player::RuledZoneSyncResult result = p1->applyRuledEngineZoneView(v, &tapGes);
 
     EXPECT_TRUE(result.tapStateChanged);
@@ -171,6 +172,30 @@ TEST_F(RuledBatchTest, ZoneViewBuildsOidMapAndPropagatesTapState)
     EXPECT_EQ(p1->findCardByEngineOid(101u), bear);
     EXPECT_EQ(p1->findCardByEngineOid(102u), wolf);
     EXPECT_EQ(p1->findCardByEngineOid(999u), nullptr);
+}
+
+TEST_F(RuledBatchTest, ZoneViewDoesNotForceUntapOutsideUntapStep)
+{
+    Server_Card *bear = addCardToTable(p1, "Grizzly Bears");
+    bear->setTapped(true);
+    ruled::v1::RuledPerPlayerView v = buildPerPlayerView(p1, {101u}, {false});
+
+    GameEventStorage tapGes;
+    Server_Player::RuledZoneSyncResult result = p1->applyRuledEngineZoneView(v, &tapGes, false);
+    EXPECT_FALSE(result.tapStateChanged);
+    EXPECT_TRUE(bear->getTapped());
+}
+
+TEST_F(RuledBatchTest, ZoneViewForcesUntapDuringUntapStepBatch)
+{
+    Server_Card *bear = addCardToTable(p1, "Grizzly Bears");
+    bear->setTapped(true);
+    ruled::v1::RuledPerPlayerView v = buildPerPlayerView(p1, {101u}, {false});
+
+    GameEventStorage tapGes;
+    Server_Player::RuledZoneSyncResult result = p1->applyRuledEngineZoneView(v, &tapGes, true);
+    EXPECT_TRUE(result.tapStateChanged);
+    EXPECT_FALSE(bear->getTapped());
 }
 
 TEST_F(RuledBatchTest, ApplyRuledBatchMovesPermanentToGraveyard)
