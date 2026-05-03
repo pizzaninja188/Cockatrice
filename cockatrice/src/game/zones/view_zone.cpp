@@ -173,16 +173,18 @@ void ZoneViewZone::reorganizeCards()
         (zvLogic && zvLogic->getOriginalZone()->getName().compare(QStringLiteral("stack"), Qt::CaseInsensitive) == 0);
 
     if (isStackZoneView) {
-        // Horizontal fan: bottom of stack on the left, next to resolve (last index) on the right; z rises with i.
-        // Ruled stack window uses a wider step so faces stay readable (default 20px overlaps most of a 72px card).
+        // Horizontal fan: list index 0 on the right (stack top / LIFO front); older objects fan left; z rises to the
+        // right so the foremost spell stays visually on top. Ruled stack window uses a wider step so faces stay
+        // readable (default 20px overlaps most of a 72px card).
         const qreal fanStepX =
             forceStackFanLayout ? qMax(kStackFanStepX, CardDimensions::WIDTH_F * 0.42) : kStackFanStepX;
         for (int i = 0; i < cardCount; ++i) {
             CardItem *c = cardsToDisplay.at(i);
-            const qreal px = HORIZONTAL_PADDING + i * fanStepX;
+            const int slotFromLeft = cardCount - 1 - i;
+            const qreal px = HORIZONTAL_PADDING + slotFromLeft * fanStepX;
             const qreal py = VERTICAL_PADDING;
             c->setPos(px, py);
-            c->setRealZValue(i);
+            c->setRealZValue(slotFromLeft);
         }
         const qreal awidth = HORIZONTAL_PADDING * 2 + CardDimensions::WIDTH_F +
                              qMax(0, cardCount - 1) * fanStepX;
