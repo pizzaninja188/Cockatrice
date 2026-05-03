@@ -180,6 +180,14 @@ fn pass_both_players(e: &mut GameEngine) {
         .expect("second player pass");
 }
 
+/// After each stack resolution the active player receives priority (CR-style);
+/// repeat a full two-player pass cycle until the stack is empty.
+fn resolve_entire_stack_two_player(e: &mut GameEngine) {
+    while !e.state.stack.is_empty() {
+        pass_both_players(e);
+    }
+}
+
 fn advance_to_main1_from_game_start(e: &mut GameEngine) {
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
     pass_both_players(e); // upkeep -> draw
@@ -2174,4 +2182,241 @@ fn cannot_cast_spell_until_blockers_declared() {
     )
     .expect("instant legal after blockers committed");
     assert_eq!(e.state.stack.len(), 1);
+}
+
+/// Active casts two `Lightning Bolt` while holding priority, then non-active responds
+/// with a third bolt. Stack resolves LIFO: NAP's bolt, then AP's second, then AP's first.
+#[test]
+fn three_bolts_stack_lifo_active_sequential_then_non_active_response() {
+    let decks = Some(vec![
+        vec![
+            "mountain".into(),
+            "mountain".into(),
+            "lightning_bolt".into(),
+            "lightning_bolt".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec![
+            "mountain".into(),
+            "lightning_bolt".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(4401, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let m0a = hand_index_for_card(&e, 0, "mountain");
+    e.apply_command(0, &play_land(m0a))
+        .expect("p0 play mountain");
+    let m0b = hand_index_for_card(&e, 0, "mountain");
+    let m0b_oid = e.state.players[0].hand.remove(m0b);
+    e.state.players[0].battlefield.push(m0b_oid);
+    e.state
+        .objects
+        .get_mut(&m0b_oid)
+        .expect("p0 second mountain")
+        .zone = tricerules_core::Zone::Battlefield;
+
+    let bolt_p0_first = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(0, &cast_spell(bolt_p0_first, target_player(1)))
+        .expect("p0 first bolt");
+    let bolt_p0_second = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(0, &cast_spell(bolt_p0_second, target_player(1)))
+        .expect("p0 second bolt while holding priority");
+    assert_eq!(
+        e.state.stack.len(),
+        2,
+        "p0 should have stacked two bolts before passing"
+    );
+    assert_eq!(
+        e.state.priority_player_id(),
+        0,
+        "active player keeps priority after sequential casts"
+    );
+
+    for _ in 0..2 {
+        let mi = hand_index_for_card(&e, 1, "mountain");
+        let oid = e.state.players[1].hand.remove(mi);
+        e.state.players[1].battlefield.push(oid);
+        e.state
+            .objects
+            .get_mut(&oid)
+            .expect("p1 seeded mountain")
+            .zone = tricerules_core::Zone::Battlefield;
+    }
+    let bolt_p1 = hand_index_for_card(&e, 1, "lightning_bolt");
+    e.apply_command(0, &pass()).expect("p0 pass to NAP");
+    e.apply_command(1, &cast_spell(bolt_p1, target_player(0)))
+        .expect("p1 bolt on top of stack");
+
+    assert_eq!(
+        e.state
+            .stack
+            .iter()
+            .map(|s| s.card_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["lightning_bolt", "lightning_bolt", "lightning_bolt"],
+        "bottom-to-top: AP bolt, AP bolt, NAP bolt"
+    );
+    assert_eq!(e.state.priority_player_id(), 1);
+
+    // Do not pass here alone: with `passes_since_stack_change == 0`, a lone NAP pass would
+    // leave `passes_since == 1` and the next AP pass would resolve the top spell mid–`pass_both_players`.
+    resolve_entire_stack_two_player(&mut e);
+
+    assert!(e.state.stack.is_empty());
+    assert_eq!(e.state.players[0].life, 17, "NAP bolt resolves first (3 to P0)");
+    assert_eq!(
+        e.state.players[1].life, 14,
+        "then both AP bolts (6 total to P1)"
+    );
+}
+
+/// NAP casts two bolts in a row while holding priority in response to AP's bolt.
+#[test]
+fn non_active_holds_priority_two_bolts_on_stack_above_active_bolt() {
+    let decks = Some(vec![
+        vec![
+            "mountain".into(),
+            "lightning_bolt".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec![
+            "mountain".into(),
+            "mountain".into(),
+            "lightning_bolt".into(),
+            "lightning_bolt".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(4402, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let m0 = hand_index_for_card(&e, 0, "mountain");
+    e.apply_command(0, &play_land(m0))
+        .expect("p0 play mountain");
+    let bolt_ap = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(0, &cast_spell(bolt_ap, target_player(1)))
+        .expect("AP bolt targeting P1");
+    e.apply_command(0, &pass()).expect("AP pass — priority to P1");
+
+    for _ in 0..2 {
+        let mi = hand_index_for_card(&e, 1, "mountain");
+        let oid = e.state.players[1].hand.remove(mi);
+        e.state.players[1].battlefield.push(oid);
+        e.state
+            .objects
+            .get_mut(&oid)
+            .expect("p1 seeded mountain")
+            .zone = tricerules_core::Zone::Battlefield;
+    }
+
+    let b1 = hand_index_for_card(&e, 1, "lightning_bolt");
+    e.apply_command(1, &cast_spell(b1, target_player(0)))
+        .expect("NAP first bolt");
+    assert_eq!(e.state.priority_player_id(), 1);
+    let b2 = hand_index_for_card(&e, 1, "lightning_bolt");
+    e.apply_command(1, &cast_spell(b2, target_player(0)))
+        .expect("NAP second bolt while holding priority");
+    assert_eq!(e.state.stack.len(), 3);
+
+    resolve_entire_stack_two_player(&mut e);
+
+    assert!(e.state.stack.is_empty());
+    assert_eq!(e.state.players[0].life, 14, "two NAP bolts resolve before AP's");
+    assert_eq!(e.state.players[1].life, 17, "AP bolt still resolves last");
+}
+
+/// AP stacks two bolts, passes; NAP counters the top (second) bolt so only the first resolves.
+#[test]
+fn counterspell_on_top_bolt_fizzles_second_leaves_bottom_bolt() {
+    let decks = Some(vec![
+        vec![
+            "mountain".into(),
+            "mountain".into(),
+            "lightning_bolt".into(),
+            "lightning_bolt".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec![
+            "island".into(),
+            "island".into(),
+            "counterspell".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(4403, &[0, 1], 20, decks).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let m0a = hand_index_for_card(&e, 0, "mountain");
+    e.apply_command(0, &play_land(m0a))
+        .expect("p0 play mountain");
+    let m0b = hand_index_for_card(&e, 0, "mountain");
+    let m0b_oid = e.state.players[0].hand.remove(m0b);
+    e.state.players[0].battlefield.push(m0b_oid);
+    e.state
+        .objects
+        .get_mut(&m0b_oid)
+        .expect("p0 second mountain")
+        .zone = tricerules_core::Zone::Battlefield;
+
+    let bolt_bottom = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(0, &cast_spell(bolt_bottom, target_player(1)))
+        .expect("first bolt (stack bottom)");
+    let bolt_top = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(0, &cast_spell(bolt_top, target_player(1)))
+        .expect("second bolt while holding priority (stack top before counter)");
+    let top_bolt_oid = e.state.stack.last().expect("top bolt").id;
+    e.apply_command(0, &pass()).expect("AP pass");
+
+    for _ in 0..2 {
+        let ii = hand_index_for_card(&e, 1, "island");
+        let oid = e.state.players[1].hand.remove(ii);
+        e.state.players[1].battlefield.push(oid);
+        e.state
+            .objects
+            .get_mut(&oid)
+            .expect("p1 island")
+            .zone = tricerules_core::Zone::Battlefield;
+    }
+    let cs_idx = hand_index_for_card(&e, 1, "counterspell");
+    e.apply_command(
+        1,
+        &cast_spell(
+            cs_idx,
+            vec![TargetRef {
+                object_id: top_bolt_oid,
+            }],
+        ),
+    )
+    .expect("counterspell targets AP's second bolt");
+
+    assert_eq!(e.state.stack.len(), 3, "bottom bolt, top bolt, counterspell");
+
+    resolve_entire_stack_two_player(&mut e);
+
+    assert!(e.state.stack.is_empty());
+    assert_eq!(
+        e.state.players[1].life,
+        17,
+        "only the uncountered first bolt deals 3 damage"
+    );
+    assert_eq!(e.state.players[0].life, 20);
 }

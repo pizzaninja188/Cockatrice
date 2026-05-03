@@ -276,8 +276,15 @@ Response::ResponseCode Server_AbstractPlayer::moveCard(GameEventStorage &ges,
     const bool ruledHandToSharedStack = game && game->getRuledGame() &&
                                         startzone->getName() == ZoneNames::HAND &&
                                         targetzone->getName() == ZoneNames::STACK;
+    // Stack objects live on the canonical player's STACK zone, but instants/sorceries resolve to the caster's
+    // graveyard (or exile). Without this, applyRuledStackResolvedEvent's moveCard fails for NAP casts in 1v1.
+    const bool ruledSharedStackToCasterPublicNoCoords =
+        game && game->getRuledGame() && startzone->getName() == ZoneNames::STACK &&
+        targetzone->getType() == ServerInfo_Zone::PublicZone && !targetzone->hasCoords() &&
+        (targetzone->getName() == ZoneNames::GRAVE || targetzone->getName() == ZoneNames::EXILE);
     if (((targetzone->getType() != ServerInfo_Zone::PublicZone) || !targetzone->hasCoords()) &&
-        (startzone->getPlayer() != targetzone->getPlayer()) && !judge && !ruledHandToSharedStack) {
+        (startzone->getPlayer() != targetzone->getPlayer()) && !judge && !ruledHandToSharedStack &&
+        !ruledSharedStackToCasterPublicNoCoords) {
         return Response::RespContextError;
     }
 
