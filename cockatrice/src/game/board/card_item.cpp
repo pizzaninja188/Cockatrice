@@ -475,6 +475,8 @@ void CardItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
     setCursor(Qt::OpenHandCursor);
 }
 
+static bool isTableLandSingleClickLegal(const CardItem *card);
+
 void CardItem::playCard(bool faceDown)
 {
     // Do nothing if the card belongs to another player
@@ -482,9 +484,16 @@ void CardItem::playCard(bool faceDown)
         return;
 
     TableZoneLogic *tz = qobject_cast<TableZoneLogic *>(zone);
-    if (tz)
+    if (tz) {
+        if (auto *game = owner->getGame();
+            game && game->getGameMetaInfo() && game->getGameMetaInfo()->proto().ruled_game()) {
+            // Non-lands: no freeform click-to-tap. Face-up lands: still use table tap for local mana shortcut.
+            if (!isTableLandSingleClickLegal(this) || faceDown) {
+                return;
+            }
+        }
         emit tz->toggleTapped();
-    else {
+    } else {
         if (SettingsCache::instance().getClickPlaysAllSelected()) {
             faceDown ? zone->getPlayer()->getPlayerActions()->actPlayFacedown()
                      : zone->getPlayer()->getPlayerActions()->actPlay();
