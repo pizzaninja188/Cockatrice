@@ -451,13 +451,22 @@ impl GameEngine {
         if self.state.winner.is_some() {
             return Err(EngineError::Illegal("game over"));
         }
+        use rv1::ruled_command::Cmd;
+        if matches!(
+            cmd.cmd.as_ref(),
+            Some(Cmd::PreviewDeclareBlockers(_) | Cmd::PreviewDeclareAttackers(_))
+        ) {
+            return Err(EngineError::Illegal("preview is not a game command"));
+        }
         self.state.command_index += 1;
         if self.state.opening.is_some() {
             return self.apply_opening_command(player, cmd);
         }
-        use rv1::ruled_command::Cmd;
         let res = match cmd.cmd.as_ref() {
             None => return Err(EngineError::Illegal("empty command")),
+            Some(Cmd::PreviewDeclareBlockers(_) | Cmd::PreviewDeclareAttackers(_)) => {
+                unreachable!("preview rejected before command_index bump")
+            }
             Some(Cmd::Mulligan(_)) => {
                 return Err(EngineError::Illegal("mulligan only during opening"));
             }
@@ -698,6 +707,12 @@ impl GameEngine {
                 .join("; ")
         };
         let mut b = RuledEventBatch::default();
+        let block_pairs_for_event: Vec<rv1::BlockPair> = pairs.iter().cloned().collect();
+        b.events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::BlockersDeclared(rv1::BlockersDeclared {
+                block_pairs: block_pairs_for_event,
+            })),
+        });
         self.clear_all_mana_pools();
         // MTG timing: blockers are declared in declare-blockers, then players get priority
         // before the game advances into combat-damage where damage is actually dealt.

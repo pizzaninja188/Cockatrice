@@ -4,7 +4,8 @@ use tricerules_proto::ruled::v1::ruled_command::Cmd;
 use tricerules_proto::ruled::v1::ruled_event::Ev;
 use tricerules_proto::ruled::v1::{
     AddManaToPool, BlockPair, CastSpell, DeclareAttackers, DeclareBlockers, DiscardToHandSize,
-    PassPriority, PlayLand, PrimitiveYieldStructured, RuledCommand, TargetRef,
+    PassPriority, PlayLand, PreviewDeclareAttackers, PreviewDeclareBlockers, PrimitiveYieldStructured,
+    RuledCommand, TargetRef,
 };
 
 use tricerules_core::GameEngine;
@@ -1385,6 +1386,19 @@ fn attackers_declared_in(
         .collect()
 }
 
+fn blockers_declared_in(
+    batch: &tricerules_proto::ruled::v1::RuledEventBatch,
+) -> Vec<tricerules_proto::ruled::v1::BlockersDeclared> {
+    batch
+        .events
+        .iter()
+        .filter_map(|ev| match &ev.ev {
+            Some(Ev::BlockersDeclared(bd)) => Some(bd.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
 #[test]
 fn zone_view_includes_battlefield_object_ids() {
     let decks = Some(vec![
@@ -1455,6 +1469,93 @@ fn declare_attackers_emits_attackers_declared_event() {
     assert_eq!(evs.len(), 1, "exactly one AttackersDeclared event");
     assert_eq!(evs[0].attacking_player_id, 0);
     assert_eq!(evs[0].attacker_object_ids, vec![bears]);
+}
+
+#[test]
+fn preview_declare_attackers_is_rejected_by_engine() {
+    let mut e = GameEngine::new(508, &[0, 1], 20, None, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let idx_before = e.state.command_index;
+    let cmd = RuledCommand {
+        cmd: Some(Cmd::PreviewDeclareAttackers(PreviewDeclareAttackers {
+            creature_ids: vec![],
+        })),
+    };
+    let err = e.apply_command(0, &cmd).expect_err("preview must not apply");
+    assert!(
+        err.to_string().contains("preview"),
+        "unexpected err: {err}"
+    );
+    assert_eq!(e.state.command_index, idx_before);
+}
+
+#[test]
+fn preview_declare_blockers_is_rejected_by_engine() {
+    let mut e = GameEngine::new(507, &[0, 1], 20, None, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let idx_before = e.state.command_index;
+    let cmd = RuledCommand {
+        cmd: Some(Cmd::PreviewDeclareBlockers(PreviewDeclareBlockers {
+            block_pairs: vec![],
+        })),
+    };
+    let err = e.apply_command(0, &cmd).expect_err("preview must not apply");
+    assert!(
+        err.to_string().contains("preview"),
+        "unexpected err: {err}"
+    );
+    assert_eq!(
+        e.state.command_index, idx_before,
+        "preview must not advance command_index"
+    );
+}
+
+#[test]
+fn declare_blockers_emits_blockers_declared_event() {
+    let decks = Some(vec![
+        vec![
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "grizzly_bears".into(),
+        ],
+        vec![
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "grizzly_bears".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(506, &[0, 1], 20, decks, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let atk = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let blk = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    e.apply_command(0, &declare_attackers(vec![atk]))
+        .expect("declare attackers");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass declare attackers");
+    let b = e
+        .apply_command(
+            1,
+            &declare_blockers(vec![BlockPair {
+                attacker_id: atk,
+                blocker_id: blk,
+            }]),
+        )
+        .expect("declare blockers");
+    let evs = blockers_declared_in(&b);
+    assert_eq!(evs.len(), 1, "exactly one BlockersDeclared event");
+    assert_eq!(evs[0].block_pairs.len(), 1);
+    assert_eq!(evs[0].block_pairs[0].attacker_id, atk);
+    assert_eq!(evs[0].block_pairs[0].blocker_id, blk);
 }
 
 #[test]

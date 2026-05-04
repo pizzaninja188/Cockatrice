@@ -111,11 +111,15 @@ private:
     QSet<quint32> pendingAttackerOids;
     // Engine-confirmed attackers from AttackersDeclared (defender uses these to choose blocks).
     QSet<quint32> currentAttackerOids;
+    // Opponent's in-progress attacker picks from AttackersPreview (Servatrice).
+    QSet<quint32> remoteAttackerPreviewOids;
     // Defender's local pending block pairs: blockerOid -> attackerOid.
     QHash<quint32, quint32> pendingBlocks;
     // Defender's locally confirmed block pairs to keep combat arrows visible
     // after submit until combat ends (or permanents leave battlefield).
     QHash<quint32, quint32> committedBlocks;
+    // Opponent's in-progress pairs from BlockersPreview (Servatrice); cleared on declare / phase reset.
+    QHash<quint32, quint32> remoteBlockPreviewPairs;
     // Rule-engine stack object ids currently waiting to resolve.
     QSet<quint32> ruledStackObjectIds;
     // Stack spell engine ObjectId -> target object ids (or PlayerId for player-targeted damage).
@@ -209,6 +213,10 @@ public:
     {
         return currentAttackerOids;
     }
+    [[nodiscard]] const QSet<quint32> &getRemoteAttackerPreviewOids() const
+    {
+        return remoteAttackerPreviewOids;
+    }
     [[nodiscard]] bool hasStagedBlocker() const
     {
         return stagedBlockerOid != 0;
@@ -228,6 +236,10 @@ public:
     [[nodiscard]] const QHash<quint32, quint32> &getCommittedBlocks() const
     {
         return committedBlocks;
+    }
+    [[nodiscard]] const QHash<quint32, quint32> &getRemoteBlockPreviewPairs() const
+    {
+        return remoteBlockPreviewPairs;
     }
     [[nodiscard]] bool localPlayerIsRuledActive() const;
     [[nodiscard]] bool localPlayerIsRuledDefender() const;
@@ -359,6 +371,8 @@ private:
     void pruneCleanupDiscardSelectionAndEmitUi();
     void clearRuledSpellTargetArrows();
     void syncRuledSpellTargetingArrows();
+    void syncRuledBlockersPreviewToServer();
+    void syncRuledAttackersPreviewToServer();
 };
 
 #endif // COCKATRICE_GAME_EVENT_HANDLER_H

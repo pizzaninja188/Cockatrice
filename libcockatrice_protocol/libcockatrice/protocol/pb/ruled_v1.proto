@@ -24,6 +24,12 @@ message RuledCommand {
     ChooseStartingPlayer choose_starting_player = 11;
     // Opening (London mulligan): put one hand card on bottom of library; repeat until quota met.
     PutOpeningHandOnBottom put_opening_hand_on_bottom = 12;
+    // UI-only: defender's in-progress block pairs. Servatrice broadcasts BlockersPreview without
+    // forwarding to the engine; DeclareBlockers remains the legal commit.
+    PreviewDeclareBlockers preview_declare_blockers = 13;
+    // UI-only: active player's in-progress attacker selection. Servatrice broadcasts AttackersPreview
+    // without forwarding to the engine; DeclareAttackers remains the legal commit.
+    PreviewDeclareAttackers preview_declare_attackers = 14;
   }
 }
 
@@ -91,6 +97,16 @@ message DeclareBlockers {
   repeated BlockPair block_pairs = 1;
 }
 
+// Defender-only intent: not applied by the engine (server rejects relay). Used so the
+// opponent's client can draw block arrows while assignments are still tentative.
+message PreviewDeclareBlockers {
+  repeated BlockPair block_pairs = 1;
+}
+
+message PreviewDeclareAttackers {
+  repeated uint32 creature_ids = 1;
+}
+
 // Engine output batch; carried inside GameEvent Event_RuledPayload.payload
 message RuledEventBatch {
   repeated RuledEvent events = 1;
@@ -128,6 +144,13 @@ message RuledEvent {
     BattlefieldObjectMap battlefield_object_map = 12;
     AttackersDeclared attackers_declared = 13;
     HandSlotMap hand_slot_map = 14;
+    // After a successful DeclareBlockers (or defender pass = no blocks). Same BlockPair
+    // semantics as the intent; both players' clients use this for combat arrows.
+    BlockersDeclared blockers_declared = 15;
+    // Servatrice-synthesized from PreviewDeclareBlockers; not emitted by the engine.
+    BlockersPreview blockers_preview = 16;
+    // Servatrice-synthesized from PreviewDeclareAttackers; not emitted by the engine.
+    AttackersPreview attackers_preview = 17;
   }
 }
 
@@ -257,6 +280,20 @@ message BattlefieldObjectMap {
 // (AttrAttacking) translation server-side).
 message AttackersDeclared {
   int32 attacking_player_id = 1;
+  repeated uint32 attacker_object_ids = 2;
+}
+
+message BlockersDeclared {
+  repeated BlockPair block_pairs = 1;
+}
+
+message BlockersPreview {
+  int32 declaring_player_id = 1;
+  repeated BlockPair block_pairs = 2;
+}
+
+message AttackersPreview {
+  int32 declaring_player_id = 1;
   repeated uint32 attacker_object_ids = 2;
 }
 

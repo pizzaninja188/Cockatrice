@@ -595,6 +595,7 @@ void GameEventHandler::togglePendingAttacker(quint32 engineOid)
     } else {
         pendingAttackerOids.insert(engineOid);
     }
+    syncRuledAttackersPreviewToServer();
     emit ruledCombatStateChanged();
 }
 
@@ -604,6 +605,7 @@ void GameEventHandler::clearPendingAttackers()
         return;
     }
     pendingAttackerOids.clear();
+    syncRuledAttackersPreviewToServer();
     emit ruledCombatStateChanged();
 }
 
@@ -635,6 +637,7 @@ void GameEventHandler::pairStagedBlockerToAttacker(quint32 attackerOid)
     }
     pendingBlocks.insert(stagedBlockerOid, attackerOid);
     stagedBlockerOid = 0;
+    syncRuledBlockersPreviewToServer();
     emit ruledCombatStateChanged();
 }
 
@@ -646,6 +649,7 @@ void GameEventHandler::clearPendingBlocks()
     pendingBlocks.clear();
     committedBlocks.clear();
     stagedBlockerOid = 0;
+    syncRuledBlockersPreviewToServer();
     emit ruledCombatStateChanged();
 }
 
@@ -836,6 +840,8 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                     pendingAttackerOids.clear();
                                     pendingBlocks.clear();
                                     committedBlocks.clear();
+                                    remoteBlockPreviewPairs.clear();
+                                    remoteAttackerPreviewOids.clear();
                                     stagedBlockerOid = 0;
                                     if (combatPhase == RuledCombatPhase::DeclareAttackers) {
                                         attackersSubmittedThisStep = false;
@@ -847,6 +853,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                     }
                                     if (combatPhase == RuledCombatPhase::None) {
                                         currentAttackerOids.clear();
+                                        remoteAttackerPreviewOids.clear();
                                     }
                                     combatStateDirty = true;
                                 }
@@ -908,6 +915,15 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 };
                                 pruneByKnownOid(pendingBlocks);
                                 pruneByKnownOid(committedBlocks);
+                                pruneByKnownOid(remoteBlockPreviewPairs);
+                                for (auto it = remoteAttackerPreviewOids.begin();
+                                     it != remoteAttackerPreviewOids.end();) {
+                                    if (!validOids.contains(*it)) {
+                                        it = remoteAttackerPreviewOids.erase(it);
+                                    } else {
+                                        ++it;
+                                    }
+                                }
                                 if (stagedBlockerOid != 0 && !validOids.contains(stagedBlockerOid)) {
                                     stagedBlockerOid = 0;
                                 }
@@ -943,7 +959,44 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 }
                                 // Active player's pending picks are now committed; clear them.
                                 pendingAttackerOids.clear();
+                                remoteAttackerPreviewOids.clear();
                                 attackersSubmittedThisStep = true;
+                                combatStateDirty = true;
+                            }
+                            if (e.has_attackers_preview()) {
+                                const int declId = e.attackers_preview().declaring_player_id();
+                                if (declId != game->getPlayerManager()->getLocalPlayerId()) {
+                                    remoteAttackerPreviewOids.clear();
+                                    for (int ai = 0; ai < e.attackers_preview().attacker_object_ids_size(); ++ai) {
+                                        remoteAttackerPreviewOids.insert(
+                                            static_cast<quint32>(e.attackers_preview().attacker_object_ids(ai)));
+                                    }
+                                }
+                                combatStateDirty = true;
+                            }
+                            if (e.has_blockers_declared()) {
+                                committedBlocks.clear();
+                                pendingBlocks.clear();
+                                remoteBlockPreviewPairs.clear();
+                                stagedBlockerOid = 0;
+                                for (int bpi = 0; bpi < e.blockers_declared().block_pairs_size(); ++bpi) {
+                                    const auto &bp = e.blockers_declared().block_pairs(bpi);
+                                    committedBlocks.insert(static_cast<quint32>(bp.blocker_id()),
+                                                           static_cast<quint32>(bp.attacker_id()));
+                                }
+                                blockersSubmittedThisStep = true;
+                                combatStateDirty = true;
+                            }
+                            if (e.has_blockers_preview()) {
+                                const int declId = e.blockers_preview().declaring_player_id();
+                                if (declId != game->getPlayerManager()->getLocalPlayerId()) {
+                                    remoteBlockPreviewPairs.clear();
+                                    for (int bpi = 0; bpi < e.blockers_preview().block_pairs_size(); ++bpi) {
+                                        const auto &bp = e.blockers_preview().block_pairs(bpi);
+                                        remoteBlockPreviewPairs.insert(static_cast<quint32>(bp.blocker_id()),
+                                                                       static_cast<quint32>(bp.attacker_id()));
+                                    }
+                                }
                                 combatStateDirty = true;
                             }
                             if (e.has_life_changed()) {
@@ -1077,6 +1130,62 @@ void sendRuledCommandFromHandler(GameEventHandler *handler,
     client->sendCommand(pend);
 }
 } // namespace
+
+void GameEventHandler::syncRuledBlockersPreviewToServer()
+{
+    if (!game->getGameMetaInfo()->proto().ruled_game()) {
+        return;
+    }
+    if (currentRuledCombatPhase != RuledCombatPhase::DeclareBlockers) {
+        return;
+    }
+    if (blockersSubmittedThisStep) {
+        return;
+    }
+    const int localId = game->getPlayerManager()->getLocalPlayerId();
+    if (localId < 0 || currentRuledActivePlayerId < 0) {
+        return;
+    }
+    if (localId == currentRuledActivePlayerId) {
+        return;
+    }
+
+    ruled::v1::RuledCommand ruledCommand;
+    auto *preview = ruledCommand.mutable_preview_declare_blockers();
+    for (auto it = pendingBlocks.constBegin(); it != pendingBlocks.constEnd(); ++it) {
+        auto *pair = preview->add_block_pairs();
+        pair->set_blocker_id(it.key());
+        pair->set_attacker_id(it.value());
+    }
+    sendRuledCommandFromHandler(this, game, ruledCommand);
+}
+
+void GameEventHandler::syncRuledAttackersPreviewToServer()
+{
+    if (!game->getGameMetaInfo()->proto().ruled_game()) {
+        return;
+    }
+    if (currentRuledCombatPhase != RuledCombatPhase::DeclareAttackers) {
+        return;
+    }
+    if (attackersSubmittedThisStep) {
+        return;
+    }
+    const int localId = game->getPlayerManager()->getLocalPlayerId();
+    if (localId < 0 || currentRuledActivePlayerId < 0) {
+        return;
+    }
+    if (localId != currentRuledActivePlayerId) {
+        return;
+    }
+
+    ruled::v1::RuledCommand ruledCommand;
+    auto *preview = ruledCommand.mutable_preview_declare_attackers();
+    for (const quint32 oid : pendingAttackerOids) {
+        preview->add_creature_ids(oid);
+    }
+    sendRuledCommandFromHandler(this, game, ruledCommand);
+}
 
 void GameEventHandler::handleConfirmRuledAttackers()
 {

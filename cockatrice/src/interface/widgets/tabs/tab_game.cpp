@@ -486,6 +486,10 @@ void TabGame::refreshRuledCombatArrows()
     for (auto it = pendingBlocks.constBegin(); it != pendingBlocks.constEnd(); ++it) {
         blocksToDraw.insert(it.key(), it.value());
     }
+    const QHash<quint32, quint32> &remotePreview = handler->getRemoteBlockPreviewPairs();
+    for (auto it = remotePreview.constBegin(); it != remotePreview.constEnd(); ++it) {
+        blocksToDraw.insert(it.key(), it.value());
+    }
 
     for (auto it = blocksToDraw.constBegin(); it != blocksToDraw.constEnd(); ++it) {
         const int blockerCardId = handler->cardIdForEngineOid(it.key());
@@ -504,6 +508,10 @@ void TabGame::refreshRuledCombatArrows()
     QSet<quint32> attackersToDraw = handler->getCurrentAttackerOids();
     const QSet<quint32> &pendingAttackers = handler->getPendingAttackerOids();
     for (const quint32 oid : pendingAttackers) {
+        attackersToDraw.insert(oid);
+    }
+    const QSet<quint32> &remoteAtk = handler->getRemoteAttackerPreviewOids();
+    for (const quint32 oid : remoteAtk) {
         attackersToDraw.insert(oid);
     }
 

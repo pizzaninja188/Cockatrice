@@ -1066,6 +1066,49 @@ Response::ResponseCode Server_Game::processRuledPayload(int playerId, const Comm
     if (!ruledGame || !rulesRelay) {
         return Response::RespInvalidCommand;
     }
+
+    ruled::v1::RuledCommand uiOnlyCmd;
+    if (uiOnlyCmd.ParseFromString(cmd.payload())) {
+        if (uiOnlyCmd.has_preview_declare_blockers()) {
+            // Cockatrice-only: show tentative blocks to the opponent. Never touch the engine or replay log.
+            constexpr int declareBlockersToolbarPhase = 6;
+            if (getActivePhase() != declareBlockersToolbarPhase || getActivePlayer() < 0 ||
+                playerId == getActivePlayer()) {
+                return Response::RespContextError;
+            }
+            ruled::v1::IpcResponse previewResp;
+            previewResp.set_ok(true);
+            auto *bpMsg = previewResp.mutable_batch()->add_events()->mutable_blockers_preview();
+            bpMsg->set_declaring_player_id(playerId);
+            const auto &pairs = uiOnlyCmd.preview_declare_blockers();
+            for (int pi = 0; pi < pairs.block_pairs_size(); ++pi) {
+                const auto &pr = pairs.block_pairs(pi);
+                auto *out = bpMsg->add_block_pairs();
+                out->set_attacker_id(pr.attacker_id());
+                out->set_blocker_id(pr.blocker_id());
+            }
+            broadcastRuledResponse(previewResp);
+            return Response::RespOk;
+        }
+        if (uiOnlyCmd.has_preview_declare_attackers()) {
+            constexpr int declareAttackersToolbarPhase = 5;
+            if (getActivePhase() != declareAttackersToolbarPhase || getActivePlayer() < 0 ||
+                playerId != getActivePlayer()) {
+                return Response::RespContextError;
+            }
+            ruled::v1::IpcResponse previewResp;
+            previewResp.set_ok(true);
+            auto *apMsg = previewResp.mutable_batch()->add_events()->mutable_attackers_preview();
+            apMsg->set_declaring_player_id(playerId);
+            const auto &ids = uiOnlyCmd.preview_declare_attackers();
+            for (int ai = 0; ai < ids.creature_ids_size(); ++ai) {
+                apMsg->add_attacker_object_ids(static_cast<uint32_t>(ids.creature_ids(ai)));
+            }
+            broadcastRuledResponse(previewResp);
+            return Response::RespOk;
+        }
+    }
+
     ruled::v1::IpcResponse resp;
     QByteArray payload = QByteArray::fromStdString(cmd.payload());
     if (!rulesRelay->playerCommand(playerId, payload, resp)) {
