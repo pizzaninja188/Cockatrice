@@ -16,6 +16,7 @@
 #include <QMultiHash>
 #include <QPair>
 #include <QSet>
+#include <QVector>
 #include <QtGlobal>
 #include <libcockatrice/protocol/pb/event_leave.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_player.pb.h>
@@ -62,6 +63,15 @@ public:
         CombatDamage
     };
 
+    /// Local ruled prompt panel: pre-game choose-first / mulligan / bottom-library.
+    enum class RuledOpeningUiKind
+    {
+        None,
+        ChooseFirst,
+        MulliganChoice,
+        BottomLibrary,
+    };
+
 private:
     AbstractGame *game;
     QSet<int> legalRuledLandPlayHandIndices;
@@ -71,6 +81,10 @@ private:
     QSet<int> legalRuledCleanupDiscardHandIndices;
     QMultiHash<QString, int> legalRuledCleanupDiscardIndicesByCardName;
     QSet<int> cleanupDiscardSelectedIndices;
+    QSet<int> legalRuledOpeningBottomHandIndices;
+    QVector<int> ruledOpeningPickSeatIds;
+    RuledOpeningUiKind ruledOpeningUiKind = RuledOpeningUiKind::None;
+    QString lastRuledEnginePhaseSlug;
 
     // (owner player id, Server_Card.id) -> engine ObjectId, refreshed from
     // BattlefieldObjectMap events injected by the server.
@@ -221,6 +235,20 @@ public:
     {
         return !ruledStackObjectIds.isEmpty();
     }
+    [[nodiscard]] bool ruledEngineOpeningPhaseActive() const
+    {
+        return lastRuledEnginePhaseSlug.startsWith(QLatin1String("opening_"));
+    }
+    [[nodiscard]] RuledOpeningUiKind getRuledOpeningUiKind() const
+    {
+        return ruledOpeningUiKind;
+    }
+    [[nodiscard]] QVector<int> getRuledOpeningPickSeatIds() const
+    {
+        return ruledOpeningPickSeatIds;
+    }
+    [[nodiscard]] bool isRuledOpeningBottomLegalForHandIndex(int handIndex) const;
+    [[nodiscard]] int resolveRuledOpeningBottomHandIndexForClickedCard(const CardItem *card) const;
 
     /// Rebuild ruled spell→target arrows (stack window layout / map updates may require a refresh).
     void refreshRuledSpellTargetArrows();
@@ -238,6 +266,9 @@ public:
     void handleSkipRuledAttackers();
     void handleConfirmRuledBlockers();
     void handleSkipRuledBlockers();
+    void handleRuledOpeningPickFirstSeat(int seatId);
+    void handleRuledOpeningMulliganKeep();
+    void handleRuledOpeningMulliganRedraw();
 
     void handleActiveLocalPlayerConceded();
     void handleActiveLocalPlayerUnconceded();
@@ -322,6 +353,7 @@ signals:
     void ruledBattlefieldMapUpdated();
     void ruledStackHasItemsChanged(bool hasItems);
     void ruledCleanupDiscardUiChanged(int required, int selected);
+    void ruledOpeningUiChanged();
 
 private:
     void pruneCleanupDiscardSelectionAndEmitUi();

@@ -74,6 +74,7 @@ public:
     [[nodiscard]] bool isAwaitingRuledPlayerTargetSelection() const;
     void cancelPendingRuledSpellCast();
     bool tryToggleRuledCleanupDiscard(CardItem *card);
+    bool tryRuledOpeningBottomCard(CardItem *card);
     bool sendRuledCleanupDiscardBatchIfComplete();
 
     [[nodiscard]] bool isMovingCardsUntil() const

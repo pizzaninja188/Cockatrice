@@ -1,7 +1,8 @@
 //! Core rules processing (vanilla core ΓÇö simplified combat & mana).
 
 use crate::state::{
-    CombatState, GameObject, GameState, ObjectId, PlayerId, PlayerState, StackItem, TurnStep, Zone,
+    CombatState, GameObject, GameState, ObjectId, OpeningSequence, PlayerId, PlayerState, StackItem,
+    TurnStep, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -18,6 +19,35 @@ use tricerules_proto::ruled::v1::{
 
 /// CR 514.1: default maximum hand size (Reliquary Tower–style overrides not modeled yet).
 const MAX_HAND_SIZE: usize = 7;
+
+fn shuffle_player_library(state: &mut GameState, player_idx: usize, mix: u64) {
+    let mut rng = StdRng::seed_from_u64(mix);
+    let mut v: Vec<ObjectId> = state.players[player_idx].library.iter().copied().collect();
+    v.shuffle(&mut rng);
+    state.players[player_idx].library = v.into_iter().collect();
+}
+
+fn mulligan_redraw(state: &mut GameState, player: PlayerId) -> Result<(), EngineError> {
+    let idx = state
+        .player_idx(player)
+        .ok_or(EngineError::UnknownPlayer(player))?;
+    let hand: Vec<ObjectId> = state.players[idx].hand.drain(..).collect();
+    for oid in hand {
+        move_object_to_zone(state, oid, Zone::Library)?;
+    }
+    shuffle_player_library(
+        state,
+        idx,
+        state
+            .seed
+            .wrapping_add(state.command_index)
+            .wrapping_add(player as u64),
+    );
+    for _ in 0..7 {
+        draw_card(&mut state.players[idx], &mut state.objects)?;
+    }
+    Ok(())
+}
 
 #[derive(Debug, Error)]
 pub enum EngineError {
@@ -44,11 +74,15 @@ impl GameEngine {
     }
 
     /// Optional `decks` per player (tricerules id strings); if missing/empty, uses the default M2 test deck.
+    ///
+    /// When `skip_opening_sequence` is true (scenario tests), opening hands are dealt immediately
+    /// like the legacy engine (no choose-first / mulligan prompts).
     pub fn new(
         seed: u64,
         player_ids: &[PlayerId],
         starting_life: i32,
         decks: Option<Vec<Vec<String>>>,
+        skip_opening_sequence: bool,
     ) -> Result<Self, EngineError> {
         if player_ids.len() != 2 {
             return Err(EngineError::Illegal("M2: exactly 2 players"));
@@ -99,19 +133,47 @@ impl GameEngine {
             let mut lib: Vec<ObjectId> = p.library.iter().copied().collect();
             lib.shuffle(&mut rng);
             p.library = lib.into_iter().collect();
-            for _ in 0..7 {
-                draw_card(&mut p, &mut objects)?;
+            if skip_opening_sequence {
+                for _ in 0..7 {
+                    draw_card(&mut p, &mut objects)?;
+                }
             }
             players.push(p);
         }
+
+        let opening = if skip_opening_sequence {
+            None
+        } else {
+            let chooser = player_ids[(seed as usize).wrapping_rem(player_ids.len())];
+            Some(OpeningSequence {
+                chooser,
+                starting_player: None,
+                mulligan_actor: None,
+                bottom: None,
+                mulligans_taken: [0, 0],
+                resolved: [false, false],
+            })
+        };
+        let chooser_idx = opening
+            .as_ref()
+            .and_then(|o| player_ids.iter().position(|&id| id == o.chooser))
+            .unwrap_or(0);
 
         let state = GameState {
             seed,
             players,
             objects,
             stack: Vec::new(),
-            priority_idx: 0,
-            active_player_idx: 0,
+            priority_idx: if skip_opening_sequence {
+                0
+            } else {
+                chooser_idx
+            },
+            active_player_idx: if skip_opening_sequence {
+                0
+            } else {
+                chooser_idx
+            },
             turn_step: TurnStep::Upkeep,
             turn: 1,
             next_object_id,
@@ -121,6 +183,7 @@ impl GameEngine {
             combat: None,
             winner: None,
             cleanup_discard_player: None,
+            opening,
         };
         let mut eng = GameEngine { state, registry };
         let mut e = vec![];
@@ -133,7 +196,251 @@ impl GameEngine {
         player_ids: &[PlayerId],
         starting_life: i32,
     ) -> Result<Self, EngineError> {
-        Self::new(seed, player_ids, starting_life, None)
+        Self::new(seed, player_ids, starting_life, None, true)
+    }
+
+    fn apply_opening_command(
+        &mut self,
+        player: PlayerId,
+        cmd: &RuledCommand,
+    ) -> Result<RuledEventBatch, EngineError> {
+        use rv1::ruled_command::Cmd;
+        let mut events = Vec::new();
+        match cmd.cmd.as_ref() {
+            Some(Cmd::ChooseStartingPlayer(ch)) => {
+                let chooser = {
+                    let op = self.state.opening.as_ref().ok_or(EngineError::Illegal("opening"))?;
+                    if op.starting_player.is_some() {
+                        return Err(EngineError::Illegal("starting player already chosen"));
+                    }
+                    if player != op.chooser {
+                        return Err(EngineError::Illegal("not your choice"));
+                    }
+                    op.chooser
+                };
+                let sp = ch.starting_player_id;
+                self.state
+                    .player_idx(sp)
+                    .ok_or(EngineError::UnknownPlayer(sp))?;
+                {
+                    let op = self.state.opening.as_mut().ok_or(EngineError::Illegal("opening"))?;
+                    op.starting_player = Some(sp);
+                    op.mulligan_actor = Some(sp);
+                }
+                let sp_idx = self.state.player_idx(sp).unwrap();
+                self.state.active_player_idx = sp_idx;
+                self.state.priority_idx = sp_idx;
+                for pi in 0..self.state.players.len() {
+                    let p = &mut self.state.players[pi];
+                    for _ in 0..7 {
+                        draw_card(p, &mut self.state.objects)?;
+                    }
+                }
+                events.push(ev_log(format!(
+                    "P{chooser} chooses: P{sp} takes the first turn. Each player draws to 7. Mulligan decisions start with P{sp}."
+                )));
+                events.push(ev_phase_labeled(self, "opening_mulligan"));
+                events.push(ev_priority_changed(self));
+            }
+            Some(Cmd::Mulligan(md)) => {
+                let actor = {
+                    let op = self.state.opening.as_ref().ok_or(EngineError::Illegal("opening"))?;
+                    if op.bottom.is_some() {
+                        return Err(EngineError::Illegal("finish bottoming first"));
+                    }
+                    op.mulligan_actor
+                        .ok_or(EngineError::Illegal("no mulligan actor"))?
+                };
+                if player != actor {
+                    return Err(EngineError::Illegal("not your mulligan decision"));
+                }
+                let idx = self.state.player_idx(player).unwrap();
+                if md.keep {
+                    let k = {
+                        let op = self.state.opening.as_mut().unwrap();
+                        op.mulligans_taken[idx]
+                    };
+                    if k == 0 {
+                        let final_size = self.state.players[idx].hand.len();
+                        {
+                            let op = self.state.opening.as_mut().unwrap();
+                            op.resolved[idx] = true;
+                            op.mulligan_actor = None;
+                        }
+                        events.push(ev_log(format!(
+                            "P{player} keeps their opening hand ({final_size} cards; no mulligans)."
+                        )));
+                        Self::opening_pick_next_or_finish(self, &mut events)?;
+                    } else {
+                        {
+                            let op = self.state.opening.as_mut().unwrap();
+                            op.bottom = Some((player, k));
+                            op.mulligan_actor = Some(player);
+                        }
+                        events.push(ev_log(format!(
+                            "P{player} keeps after {k} mulligan(s); putting {k} card(s) on the bottom of their library (click hand cards one at a time)."
+                        )));
+                        events.push(ev_priority_changed(self));
+                    }
+                } else {
+                    let prev = {
+                        let op = self.state.opening.as_mut().unwrap();
+                        op.mulligans_taken[idx] += 1;
+                        op.mulligans_taken[idx]
+                    };
+                    mulligan_redraw(&mut self.state, player)?;
+                    events.push(ev_log(format!(
+                        "P{player} mulligans — shuffles back and redraws to 7 (mulligan count this opening: {prev}). If they keep next, they will put {prev} card(s) on the bottom."
+                    )));
+                    events.push(self.ev_zone_view_sync());
+                    Self::opening_set_next_actor_after_mulligan(self, idx, &mut events)?;
+                    let mut b = RuledEventBatch {
+                        events,
+                        legal_by_player: Default::default(),
+                    };
+                    self.apply_sbas(&mut b.events)?;
+                    fill_legal(&mut b, self);
+                    return Ok(b);
+                }
+            }
+            Some(Cmd::PutOpeningHandOnBottom(pb)) => {
+                let idx = self.state.player_idx(player).unwrap();
+                let (owner, rem_before) = {
+                    let op = self.state.opening.as_ref().ok_or(EngineError::Illegal("opening"))?;
+                    let (bp, rem) = op.bottom.as_ref().ok_or(EngineError::Illegal("not bottoming"))?;
+                    if *bp != player {
+                        return Err(EngineError::Illegal("not your bottom step"));
+                    }
+                    (player, *rem)
+                };
+                let hi = pb.hand_card_index as usize;
+                let oid = *self.state.players[idx]
+                    .hand
+                    .get(hi)
+                    .ok_or(EngineError::Illegal("bad hand index"))?;
+                move_object_to_zone(&mut self.state, oid, Zone::Library)?;
+                let rem_after = rem_before - 1;
+                events.push(rv1::RuledEvent {
+                    ev: Some(rv1::ruled_event::Ev::PermanentMoved(rv1::PermanentMoved {
+                        object_id: oid,
+                        owner_player_id: owner,
+                        destination: rv1::permanent_moved::Destination::Library as i32,
+                    })),
+                });
+                if rem_after > 0 {
+                    events.push(ev_log(format!(
+                        "P{player} puts a card on the bottom ({rem_after} more to place)."
+                    )));
+                    {
+                        let op = self.state.opening.as_mut().unwrap();
+                        op.bottom = Some((player, rem_after));
+                    }
+                } else {
+                    let kept = self.state.players[idx].hand.len();
+                    {
+                        let op = self.state.opening.as_mut().unwrap();
+                        op.bottom = None;
+                        op.resolved[idx] = true;
+                        op.mulligan_actor = None;
+                        let total_mulls = op.mulligans_taken[idx];
+                        events.push(ev_log(format!(
+                            "P{player} finishes the opening: keeps a hand of {kept} card(s) after {total_mulls} mulligan(s) (all bottom cards placed)."
+                        )));
+                    }
+                    Self::opening_pick_next_or_finish(self, &mut events)?;
+                }
+            }
+            _ => return Err(EngineError::Illegal("illegal command during opening")),
+        }
+        events.push(self.ev_zone_view_sync());
+        let mut b = RuledEventBatch {
+            events,
+            legal_by_player: Default::default(),
+        };
+        self.apply_sbas(&mut b.events)?;
+        fill_legal(&mut b, self);
+        Ok(b)
+    }
+
+    /// After a mulligan (redraw): alternate to the other player unless they have already kept —
+    /// then the mulliganing player decides again (CR-style table flow for this fork).
+    fn opening_set_next_actor_after_mulligan(
+        eng: &mut GameEngine,
+        mulliganed_idx: usize,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let other_idx = 1 - mulliganed_idx;
+        let next_idx = {
+            let op = eng.state.opening.as_mut().ok_or(EngineError::Illegal("opening"))?;
+            if op.resolved[other_idx] {
+                mulliganed_idx
+            } else {
+                other_idx
+            }
+        };
+        let pid = eng.state.players[next_idx].id;
+        {
+            let op = eng.state.opening.as_mut().unwrap();
+            op.mulligan_actor = Some(pid);
+        }
+        eng.state.priority_idx = next_idx;
+        events.push(ev_log(format!(
+            "Opening: P{pid} — choose to keep or mulligan (London: redraw to 7)."
+        )));
+        events.push(ev_phase_labeled(eng, "opening_mulligan"));
+        events.push(ev_priority_changed(eng));
+        Ok(())
+    }
+
+    fn opening_pick_next_or_finish(
+        eng: &mut GameEngine,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let done = {
+            let op = eng.state.opening.as_ref().unwrap();
+            op.resolved[0] && op.resolved[1]
+        };
+        if done {
+            let sp = {
+                let op = eng.state.opening.take().unwrap();
+                op.starting_player.ok_or(EngineError::Illegal("opening?"))?
+            };
+            let sp_idx = eng.state.player_idx(sp).unwrap();
+            eng.state.active_player_idx = sp_idx;
+            eng.state.priority_idx = sp_idx;
+            eng.state.turn_step = TurnStep::Upkeep;
+            eng.state.turn = 1;
+            events.push(ev_log(format!(
+                "Opening complete — P{sp} is the first player. Game begins (upkeep, turn 1)."
+            )));
+            events.push(ev_phase_labeled(eng, "upkeep"));
+            events.push(ev_priority_changed(eng));
+            return Ok(());
+        }
+        {
+            let spid = {
+                let op = eng.state.opening.as_ref().unwrap();
+                op.starting_player
+                    .ok_or(EngineError::Illegal("opening not started"))?
+            };
+            let start = eng.state.player_idx(spid).unwrap();
+            let order = [start, 1 - start];
+            let op = eng.state.opening.as_mut().unwrap();
+            for oi in order {
+                if !op.resolved[oi] {
+                    let pid = eng.state.players[oi].id;
+                    op.mulligan_actor = Some(pid);
+                    eng.state.priority_idx = oi;
+                    events.push(ev_log(format!(
+                        "Opening: P{pid} — choose to keep or mulligan (London: redraw to 7)."
+                    )));
+                    events.push(ev_phase_labeled(eng, "opening_mulligan"));
+                    events.push(ev_priority_changed(eng));
+                    break;
+                }
+            }
+        }
+        Ok(())
     }
 
     pub fn apply_command(
@@ -145,10 +452,18 @@ impl GameEngine {
             return Err(EngineError::Illegal("game over"));
         }
         self.state.command_index += 1;
+        if self.state.opening.is_some() {
+            return self.apply_opening_command(player, cmd);
+        }
         use rv1::ruled_command::Cmd;
         let res = match cmd.cmd.as_ref() {
             None => return Err(EngineError::Illegal("empty command")),
-            Some(Cmd::Mulligan(_)) => return Ok(empty_batch_with_legal(self)),
+            Some(Cmd::Mulligan(_)) => {
+                return Err(EngineError::Illegal("mulligan only during opening"));
+            }
+            Some(Cmd::ChooseStartingPlayer(_)) | Some(Cmd::PutOpeningHandOnBottom(_)) => {
+                return Err(EngineError::Illegal("opening-only command"));
+            }
             Some(Cmd::Concede(_)) => return self.concede_batch(player),
             Some(Cmd::DeclareAttackers(a)) => {
                 if self.state.turn_step != TurnStep::DeclareAttackers
@@ -606,7 +921,8 @@ impl GameEngine {
                     self.state.priority_idx = i;
                 }
                 ev.push(ev_phase_labeled(self, "draw"));
-                let skip_opening_draw = self.state.turn == 1 && self.state.active_player_idx == 0;
+                // First draw step of the duel: the first player does not draw (CR 103.8 / skip first draw).
+                let skip_opening_draw = self.state.turn == 1;
                 if skip_opening_draw {
                     ev.push(ev_log("Skipped first draw (opening of the duel).".into()));
                 } else if let Some(idx) = self.state.player_idx(ap) {
@@ -1347,6 +1663,16 @@ impl GameEngine {
     pub fn initial_response_batch(&self) -> RuledEventBatch {
         let mut batch = RuledEventBatch::default();
         batch.events.push(self.ev_zone_view_sync());
+        if let Some(op) = &self.state.opening {
+            batch.events.push(ev_phase_labeled(self, "opening_choose_first"));
+            batch.events.push(ev_priority_changed(self));
+            batch.events.push(ev_log(format!(
+                "Randomly selected: P{} — choose who goes first.",
+                op.chooser
+            )));
+            fill_legal(&mut batch, self);
+            return batch;
+        }
         batch.events.push(ev_phase_labeled(self, "upkeep"));
         batch.events.push(ev_priority_changed(self));
         batch.events.push(ev_log(format!(
@@ -1568,12 +1894,6 @@ fn default_deck_list(player_index: usize) -> Vec<String> {
     }
 }
 
-fn empty_batch_with_legal(eng: &GameEngine) -> RuledEventBatch {
-    let mut b = RuledEventBatch::default();
-    fill_legal(&mut b, eng);
-    b
-}
-
 fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
     for p in &eng.state.players {
         let labels = legal_labels(eng, p.id);
@@ -1591,7 +1911,51 @@ fn priority_locked_for_combat_declaration(state: &GameState) -> bool {
     }
 }
 
+fn opening_legal_labels(eng: &GameEngine, pid: PlayerId, op: &OpeningSequence) -> Vec<String> {
+    if op.starting_player.is_none() {
+        if pid == op.chooser {
+            return vec![
+                "You start (opening pick)".into(),
+                "Opponent starts (opening pick)".into(),
+            ];
+        }
+        return vec!["Wait: opponent chooses who goes first (opening)".into()];
+    }
+    if let Some((bp, _rem)) = op.bottom {
+        if pid != bp {
+            return vec!["Wait: opponent is bottoming cards (opening)".into()];
+        }
+        let idx = eng.state.player_idx(bp).unwrap();
+        let hand = &eng.state.players[idx].hand;
+        let mut out = Vec::new();
+        for (i, &oid) in hand.iter().enumerate() {
+            let name = eng
+                .state
+                .objects
+                .get(&oid)
+                .and_then(|o| eng.registry.get(&o.card_id))
+                .map(|d| d.name.as_str())
+                .unwrap_or("card");
+            out.push(format!("Put {name} on bottom (opening, hand idx {i})"));
+        }
+        return out;
+    }
+    if let Some(actor) = op.mulligan_actor {
+        if pid != actor {
+            return vec!["Wait: opponent mulligan decision (opening)".into()];
+        }
+        return vec![
+            "Keep opening hand (opening)".into(),
+            "Mulligan — redraw to 7 (opening)".into(),
+        ];
+    }
+    vec!["Wait (opening)".into()]
+}
+
 fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
+    if let Some(op) = &eng.state.opening {
+        return opening_legal_labels(eng, pid, op);
+    }
     let mut v = vec!["Pass priority".into()];
     if eng.state.priority_player_id() != pid {
         return v;

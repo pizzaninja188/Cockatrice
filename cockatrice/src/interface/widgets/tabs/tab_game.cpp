@@ -261,6 +261,36 @@ void TabGame::connectToGameEventHandler()
                         gamePromptWidget->setCleanupDiscardMode(false, 0, 0);
                     }
                 });
+        connect(game->getGameEventHandler(), &GameEventHandler::ruledOpeningUiChanged, this, [this]() {
+            if (!gamePromptWidget || !game) {
+                return;
+            }
+            auto *h = game->getGameEventHandler();
+            const auto kind = h->getRuledOpeningUiKind();
+            if (kind == GameEventHandler::RuledOpeningUiKind::ChooseFirst) {
+                const int localId = game->getPlayerManager()->getLocalPlayerId();
+                int opponentId = -1;
+                for (int pid : game->getPlayerManager()->getPlayers().keys()) {
+                    if (pid != localId) {
+                        opponentId = pid;
+                        break;
+                    }
+                }
+                if (opponentId >= 0) {
+                    gamePromptWidget->setRuledOpeningUi(1, QVector<int>({localId, opponentId}));
+                } else {
+                    gamePromptWidget->setRuledOpeningUi(0, {});
+                }
+            } else {
+                gamePromptWidget->setRuledOpeningUi(static_cast<int>(kind), h->getRuledOpeningPickSeatIds());
+            }
+        });
+        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningPickSeatRequested, game->getGameEventHandler(),
+                &GameEventHandler::handleRuledOpeningPickFirstSeat);
+        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningMulliganKeepRequested, game->getGameEventHandler(),
+                &GameEventHandler::handleRuledOpeningMulliganKeep);
+        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningMulliganRedrawRequested, game->getGameEventHandler(),
+                &GameEventHandler::handleRuledOpeningMulliganRedraw);
         connect(game->getGameState(), &GameState::activePhaseChanged, gamePromptWidget, &GamePromptWidget::setActivePhase);
         connect(game->getGameEventHandler(), &GameEventHandler::logActivePhaseChanged, gamePromptWidget,
                 [this](int phase) {
@@ -1283,7 +1313,8 @@ Player *TabGame::setPriorityPlayer(int id)
             const bool hasManualStop = phasesToolbar->shouldStopAtPhase(currentPhase, myTurn);
             const bool stackIsEmpty = !game->getGameEventHandler()->hasRuledStackItems();
             const bool cleanupDiscard = game->getGameEventHandler()->localPlayerMustCleanupDiscard();
-            if (!hasManualStop && stackIsEmpty && !cleanupDiscard) {
+            const bool openingPhase = game->getGameEventHandler()->ruledEngineOpeningPhaseActive();
+            if (!openingPhase && !hasManualStop && stackIsEmpty && !cleanupDiscard) {
                 QTimer::singleShot(0, game->getGameEventHandler(), &GameEventHandler::handleNextTurn);
             }
         }

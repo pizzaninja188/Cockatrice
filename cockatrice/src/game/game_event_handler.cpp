@@ -452,6 +452,21 @@ int GameEventHandler::resolveRuledCleanupDiscardHandIndexForClickedCard(const Ca
     return resolveEngineHandIndexFromLegalSlots(card, getRuledCleanupDiscardHandIndicesForCardName(card->getName()));
 }
 
+bool GameEventHandler::isRuledOpeningBottomLegalForHandIndex(int handIndex) const
+{
+    return legalRuledOpeningBottomHandIndices.contains(handIndex);
+}
+
+int GameEventHandler::resolveRuledOpeningBottomHandIndexForClickedCard(const CardItem *card) const
+{
+    if (!card) {
+        return -1;
+    }
+    QList<int> legal = legalRuledOpeningBottomHandIndices.values();
+    std::sort(legal.begin(), legal.end());
+    return resolveEngineHandIndexFromLegalSlots(card, legal);
+}
+
 bool GameEventHandler::localPlayerMustCleanupDiscard() const
 {
     return !legalRuledCleanupDiscardHandIndices.isEmpty();
@@ -777,6 +792,9 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                     legalRuledSpellCastIndicesByCardName.clear();
                     legalRuledCleanupDiscardHandIndices.clear();
                     legalRuledCleanupDiscardIndicesByCardName.clear();
+                    legalRuledOpeningBottomHandIndices.clear();
+                    ruledOpeningPickSeatIds.clear();
+                    ruledOpeningUiKind = RuledOpeningUiKind::None;
                     ruledOwnedCardToEngineHandSlot.clear();
                     if (batch.ParseFromString(ruled.payload())) {
                         QString timeline;
@@ -794,6 +812,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             }
                             if (e.has_phase_changed()) {
                                 const auto &pc = e.phase_changed();
+                                lastRuledEnginePhaseSlug = QString::fromStdString(pc.phase());
                                 // Phase is already reflected by Event_SetActivePhase from the server
                                 // (toolbar highlight + logSetActivePhase); do not duplicate here.
                                 // Reaching a new phase guarantees the previous stack emptied.
@@ -948,6 +967,42 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             const ParsedRuledLandActions parsedCleanup = parseRuledCleanupDiscardActions(lit->second);
                             legalRuledCleanupDiscardHandIndices = parsedCleanup.handIndices;
                             legalRuledCleanupDiscardIndicesByCardName = parsedCleanup.handIndicesByCardName;
+                            ruledOpeningUiKind = RuledOpeningUiKind::None;
+                            ruledOpeningPickSeatIds.clear();
+                            legalRuledOpeningBottomHandIndices.clear();
+                            static const QRegularExpression openingBottomRe(
+                                QStringLiteral(R"(^Put .+ on bottom \(opening, hand idx (\d+)\)$)"));
+                            for (const auto &l : lit->second.labels()) {
+                                const QString qs = QString::fromStdString(l);
+                                if (const QRegularExpressionMatch bm = openingBottomRe.match(qs); bm.hasMatch()) {
+                                    bool ok = false;
+                                    const int hi = bm.captured(1).toInt(&ok);
+                                    if (ok) {
+                                        legalRuledOpeningBottomHandIndices.insert(hi);
+                                    }
+                                }
+                            }
+                            if (!legalRuledOpeningBottomHandIndices.isEmpty()) {
+                                ruledOpeningUiKind = RuledOpeningUiKind::BottomLibrary;
+                            } else {
+                                for (const auto &l : lit->second.labels()) {
+                                    const QString qs = QString::fromStdString(l);
+                                    if (qs == QLatin1String("Keep opening hand (opening)")) {
+                                        ruledOpeningUiKind = RuledOpeningUiKind::MulliganChoice;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (ruledOpeningUiKind == RuledOpeningUiKind::None) {
+                                for (const auto &l : lit->second.labels()) {
+                                    const QString qs = QString::fromStdString(l);
+                                    if (qs == QLatin1String("You start (opening pick)") ||
+                                        qs == QLatin1String("Opponent starts (opening pick)")) {
+                                        ruledOpeningUiKind = RuledOpeningUiKind::ChooseFirst;
+                                        break;
+                                    }
+                                }
+                            }
                             promptFeed += tr("Legal actions:\n");
                             for (const auto &l : lit->second.labels()) {
                                 promptFeed += QStringLiteral(" — %1\n").arg(QString::fromStdString(l));
@@ -959,6 +1014,9 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             legalRuledSpellCastIndicesByCardName.clear();
                             legalRuledCleanupDiscardHandIndices.clear();
                             legalRuledCleanupDiscardIndicesByCardName.clear();
+                            legalRuledOpeningBottomHandIndices.clear();
+                            ruledOpeningPickSeatIds.clear();
+                            ruledOpeningUiKind = RuledOpeningUiKind::None;
                         }
                         pruneCleanupDiscardSelectionAndEmitUi();
                         if (ruledStackTrackingDirty) {
@@ -966,6 +1024,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                         }
                         emit ruledEngineTimeline(timeline);
                         emit ruledEnginePromptFeed(promptFeed);
+                        emit ruledOpeningUiChanged();
                         if (battlefieldMapDirty) {
                             emit ruledBattlefieldMapUpdated();
                         }
@@ -1081,6 +1140,36 @@ void GameEventHandler::handleSkipRuledBlockers()
     committedBlocks.clear();
     stagedBlockerOid = 0;
     emit ruledCombatStateChanged();
+}
+
+void GameEventHandler::handleRuledOpeningPickFirstSeat(int seatId)
+{
+    if (!game->getGameMetaInfo()->proto().ruled_game()) {
+        return;
+    }
+    ruled::v1::RuledCommand ruledCommand;
+    ruledCommand.mutable_choose_starting_player()->set_starting_player_id(seatId);
+    sendRuledCommandFromHandler(this, game, ruledCommand);
+}
+
+void GameEventHandler::handleRuledOpeningMulliganKeep()
+{
+    if (!game->getGameMetaInfo()->proto().ruled_game()) {
+        return;
+    }
+    ruled::v1::RuledCommand ruledCommand;
+    ruledCommand.mutable_mulligan()->set_keep(true);
+    sendRuledCommandFromHandler(this, game, ruledCommand);
+}
+
+void GameEventHandler::handleRuledOpeningMulliganRedraw()
+{
+    if (!game->getGameMetaInfo()->proto().ruled_game()) {
+        return;
+    }
+    ruled::v1::RuledCommand ruledCommand;
+    ruledCommand.mutable_mulligan()->set_keep(false);
+    sendRuledCommandFromHandler(this, game, ruledCommand);
 }
 
 void GameEventHandler::handleReverseTurn()

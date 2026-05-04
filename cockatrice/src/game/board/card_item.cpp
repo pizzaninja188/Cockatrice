@@ -695,6 +695,12 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
             auto *localPlayer = playerManager ? playerManager->getPlayers().value(playerManager->getLocalPlayerId()) : nullptr;
             auto *actions = localPlayer ? localPlayer->getPlayerActions() : nullptr;
             if (stationaryLeft && owner->getPlayerInfo()->getLocal() && actions && zone &&
+                zone->getName() == ZoneNames::HAND && actions->tryRuledOpeningBottomCard(this)) {
+                update();
+                AbstractCardItem::mouseReleaseEvent(event);
+                return;
+            }
+            if (stationaryLeft && owner->getPlayerInfo()->getLocal() && actions && zone &&
                 zone->getName() == ZoneNames::HAND && actions->tryToggleRuledCleanupDiscard(this)) {
                 update();
                 AbstractCardItem::mouseReleaseEvent(event);

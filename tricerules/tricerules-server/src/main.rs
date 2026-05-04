@@ -50,7 +50,7 @@ async fn handle_connection(
                     }
                     Some(out)
                 };
-                match GameEngine::new(s.seed, &pids, 20, decks) {
+                match GameEngine::new(s.seed, &pids, 20, decks, false) {
                     Ok(e) => {
                         let batch = e.initial_response_batch();
                         engine = Some(e);

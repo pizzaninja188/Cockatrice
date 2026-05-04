@@ -127,6 +127,23 @@ pub struct StackItem {
     pub targets: Vec<ObjectId>,
 }
 
+/// Pre-game: choose first player, then London-style mulligans (redraw to 7, then put N on bottom).
+#[derive(Debug, Clone)]
+pub struct OpeningSequence {
+    /// Seat id chosen by RNG to pick who goes first.
+    pub chooser: PlayerId,
+    /// Set once the chooser commits; that player takes the first turn.
+    pub starting_player: Option<PlayerId>,
+    /// Who must keep/mulligan or bottom cards next.
+    pub mulligan_actor: Option<PlayerId>,
+    /// During bottom step: (player, cards still to place on bottom).
+    pub bottom: Option<(PlayerId, u32)>,
+    /// Mulligans already taken this opening (indexed by `players` vec index).
+    pub mulligans_taken: [u32; 2],
+    /// Opening fully finished for each seat (indexed by `players` vec index).
+    pub resolved: [bool; 2],
+}
+
 /// During combat, after attack/block declarations.
 #[derive(Debug, Clone)]
 pub struct CombatState {
@@ -162,6 +179,8 @@ pub struct GameState {
     pub winner: Option<PlayerId>,
     /// CR 514.1: player who must discard next during cleanup, if any.
     pub cleanup_discard_player: Option<PlayerId>,
+    /// Pre-game flow; `None` once the duel has started (upkeep of turn 1).
+    pub opening: Option<OpeningSequence>,
 }
 
 impl GameState {

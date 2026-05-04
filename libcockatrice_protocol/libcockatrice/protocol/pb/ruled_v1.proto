@@ -20,6 +20,10 @@ message RuledCommand {
     AddManaToPool add_mana_to_pool = 9;
     // CR 514.1: discard during cleanup when above maximum hand size (vanilla: 7).
     DiscardToHandSize discard_to_hand_size = 10;
+    // Opening: randomly chosen player picks who takes the first turn (seat id).
+    ChooseStartingPlayer choose_starting_player = 11;
+    // Opening (London mulligan): put one hand card on bottom of library; repeat until quota met.
+    PutOpeningHandOnBottom put_opening_hand_on_bottom = 12;
   }
 }
 
@@ -59,6 +63,15 @@ message PlayLand {
 
 message MulliganDecision {
   bool keep = 1;
+}
+
+message ChooseStartingPlayer {
+  // Cockatrice seat / engine PlayerId of the player who will take the first turn.
+  int32 starting_player_id = 1;
+}
+
+message PutOpeningHandOnBottom {
+  uint32 hand_card_index = 1;
 }
 
 message Concede {}

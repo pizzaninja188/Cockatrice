@@ -3,13 +3,13 @@ use tricerules_proto::ruled::v1::ruled_event::Ev;
 
 #[test]
 fn engine_new_two_players() {
-    let eng = GameEngine::new(12345, &[0, 1], 20, None).expect("engine");
+    let eng = GameEngine::new(12345, &[0, 1], 20, None, true).expect("engine");
     assert_eq!(eng.state.players.len(), 2);
 }
 
 #[test]
 fn initial_batch_includes_zone_view_for_cockatrice() {
-    let eng = GameEngine::new(12345, &[0, 1], 20, None).expect("engine");
+    let eng = GameEngine::new(12345, &[0, 1], 20, None, true).expect("engine");
     let b = eng.initial_response_batch();
     let e0 = b
         .events

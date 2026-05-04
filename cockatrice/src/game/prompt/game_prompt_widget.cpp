@@ -3,6 +3,7 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QObject>
 #include <QPushButton>
 #include <QVBoxLayout>
 
@@ -76,6 +77,24 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     promptLabel->setMinimumHeight(34);
     layout->addWidget(promptLabel);
 
+    openingRowLayout = new QHBoxLayout;
+    openingRowLayout->setSpacing(4);
+    openingPickSeatButton1 = new QPushButton(this);
+    openingPickSeatButton2 = new QPushButton(this);
+    openingKeepButton = new QPushButton(this);
+    openingMulliganButton = new QPushButton(this);
+    openingPickSeatButton1->hide();
+    openingPickSeatButton2->hide();
+    openingKeepButton->hide();
+    openingMulliganButton->hide();
+    openingRowLayout->addWidget(openingPickSeatButton1);
+    openingRowLayout->addWidget(openingPickSeatButton2);
+    openingRowLayout->addWidget(openingKeepButton);
+    openingRowLayout->addWidget(openingMulliganButton);
+    layout->addLayout(openingRowLayout);
+    connect(openingKeepButton, &QPushButton::clicked, this, &GamePromptWidget::ruledOpeningMulliganKeepRequested);
+    connect(openingMulliganButton, &QPushButton::clicked, this, &GamePromptWidget::ruledOpeningMulliganRedrawRequested);
+
     passPriorityButton = new QPushButton(this);
     passPriorityButton->setObjectName("passPriorityButton");
     connect(passPriorityButton, &QPushButton::clicked, this, &GamePromptWidget::passPriorityRequested);
@@ -134,6 +153,12 @@ void GamePromptWidget::retranslateUi()
     confirmBlockersButton->setText(tr("OK"));
     resetBlockersButton->setText(tr("Reset Blockers"));
     cancelTargetingButton->setText(tr("Cancel"));
+    openingKeepButton->setText(tr("Keep hand"));
+    openingMulliganButton->setText(tr("Mulligan (redraw to 7)"));
+    if (ruledOpeningUiKind == 1 && ruledOpeningPickSeatIds.size() >= 2) {
+        openingPickSeatButton1->setText(tr("You"));
+        openingPickSeatButton2->setText(tr("Opponent"));
+    }
     futureActionsLabel->setText(tr("Future actions"));
     futureActionsFrame->setToolTip(tr("Reserved space for upcoming action buttons (undo land tap, undo mana, etc.)."));
 }
@@ -208,6 +233,31 @@ void GamePromptWidget::setRuledStackHasItems(bool hasItems)
     updatePassPriorityButtonText();
 }
 
+void GamePromptWidget::setRuledOpeningUi(int kind, QVector<int> pickSeatIds)
+{
+    ruledOpeningUiKind = kind;
+    ruledOpeningPickSeatIds = std::move(pickSeatIds);
+    openingPickSeatButton1->disconnect();
+    openingPickSeatButton2->disconnect();
+    if (kind == 1 && ruledOpeningPickSeatIds.size() >= 2) {
+        setPromptText(tr("Choose who goes first."));
+        openingPickSeatButton1->setText(tr("You"));
+        openingPickSeatButton2->setText(tr("Opponent"));
+        const int selfSeatId = ruledOpeningPickSeatIds[0];
+        const int opponentSeatId = ruledOpeningPickSeatIds[1];
+        QObject::connect(openingPickSeatButton1, &QPushButton::clicked, this, [this, selfSeatId] {
+            emit ruledOpeningPickSeatRequested(selfSeatId);
+        });
+        QObject::connect(openingPickSeatButton2, &QPushButton::clicked, this, [this, opponentSeatId] {
+            emit ruledOpeningPickSeatRequested(opponentSeatId);
+        });
+    }
+    if (kind == 3) {
+        setPromptText(tr("Opening: click a highlighted hand card to put it on the bottom of your deck."));
+    }
+    updateCombatButtonsVisibility();
+}
+
 void GamePromptWidget::setCleanupDiscardMode(bool active, int cardsRequired, int cardsSelected)
 {
     cleanupDiscardMode = active;
@@ -226,6 +276,23 @@ void GamePromptWidget::setCleanupDiscardMode(bool active, int cardsRequired, int
 
 void GamePromptWidget::updateCombatButtonsVisibility()
 {
+    if (ruledOpeningUiKind != 0) {
+        passPriorityButton->setVisible(false);
+        confirmAttackersButton->setVisible(false);
+        confirmBlockersButton->setVisible(false);
+        resetBlockersButton->setVisible(false);
+        cancelTargetingButton->setVisible(false);
+        const bool showPick = ruledOpeningUiKind == 1 && !ruledOpeningPickSeatIds.isEmpty();
+        openingPickSeatButton1->setVisible(showPick && ruledOpeningPickSeatIds.size() >= 1);
+        openingPickSeatButton2->setVisible(showPick && ruledOpeningPickSeatIds.size() >= 2);
+        openingKeepButton->setVisible(ruledOpeningUiKind == 2);
+        openingMulliganButton->setVisible(ruledOpeningUiKind == 2);
+        return;
+    }
+    openingPickSeatButton1->hide();
+    openingPickSeatButton2->hide();
+    openingKeepButton->hide();
+    openingMulliganButton->hide();
     if (cleanupDiscardMode) {
         passPriorityButton->setVisible(false);
         confirmAttackersButton->setVisible(false);

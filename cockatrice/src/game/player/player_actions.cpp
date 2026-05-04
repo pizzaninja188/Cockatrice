@@ -298,6 +298,37 @@ bool PlayerActions::tryPlayRuledLand(CardItem *card)
     return true;
 }
 
+bool PlayerActions::tryRuledOpeningBottomCard(CardItem *card)
+{
+    if (!card || !player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+        return false;
+    }
+    if (!player->getPlayerInfo()->getLocal()) {
+        return false;
+    }
+    if (card->getZone()->getName() != ZoneNames::HAND || card->getZone()->getPlayer() != player) {
+        return false;
+    }
+    GameEventHandler *handler = player->getGame()->getGameEventHandler();
+    if (!handler || handler->getRuledOpeningUiKind() != GameEventHandler::RuledOpeningUiKind::BottomLibrary) {
+        return false;
+    }
+    const int ruledHandIndex = handler->resolveRuledOpeningBottomHandIndexForClickedCard(card);
+    if (ruledHandIndex < 0 || !handler->isRuledOpeningBottomLegalForHandIndex(ruledHandIndex)) {
+        return false;
+    }
+    ruled::v1::RuledCommand ruledCommand;
+    ruledCommand.mutable_put_opening_hand_on_bottom()->set_hand_card_index(static_cast<quint32>(ruledHandIndex));
+    std::string payload;
+    if (!ruledCommand.SerializeToString(&payload)) {
+        return false;
+    }
+    Command_RuledPayload cmd;
+    cmd.set_payload(payload);
+    sendGameCommand(cmd);
+    return true;
+}
+
 bool PlayerActions::tryToggleRuledCleanupDiscard(CardItem *card)
 {
     if (!card || !player->getGame()->getGameMetaInfo()->proto().ruled_game()) {

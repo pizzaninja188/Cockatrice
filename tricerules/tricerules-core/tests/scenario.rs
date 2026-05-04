@@ -210,7 +210,7 @@ fn advance_to_main1_from_game_start(e: &mut GameEngine) {
 
 #[test]
 fn primitive_yield_active_skips_double_pass_main1() {
-    let mut e = GameEngine::new(99, &[0, 1], 20, None).expect("new");
+    let mut e = GameEngine::new(99, &[0, 1], 20, None, true).expect("new");
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
     e.apply_command(0, &primitive_yield())
         .expect("active primitive");
@@ -219,7 +219,7 @@ fn primitive_yield_active_skips_double_pass_main1() {
 
 #[test]
 fn two_player_passes_empty_stack_advances_toward_combat() {
-    let mut e = GameEngine::new(99, &[0, 1], 20, None).expect("new");
+    let mut e = GameEngine::new(99, &[0, 1], 20, None, true).expect("new");
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
     e.apply_command(0, &pass()).expect("p0");
     e.apply_command(1, &pass()).expect("p1");
@@ -229,7 +229,7 @@ fn two_player_passes_empty_stack_advances_toward_combat() {
 
 #[test]
 fn empty_stack_double_pass_emits_ap_priority_in_new_phase() {
-    let mut e = GameEngine::new(99, &[0, 1], 20, None).expect("new");
+    let mut e = GameEngine::new(99, &[0, 1], 20, None, true).expect("new");
     e.apply_command(0, &pass()).expect("p0 pass");
     let b = e.apply_command(1, &pass()).expect("p1 pass");
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Draw);
@@ -241,7 +241,7 @@ fn empty_stack_double_pass_emits_ap_priority_in_new_phase() {
 
 #[test]
 fn mana_pools_empty_on_step_change() {
-    let mut e = GameEngine::new(99, &[0, 1], 20, None).expect("new");
+    let mut e = GameEngine::new(99, &[0, 1], 20, None, true).expect("new");
     e.state.players[0].mana_pool.red = 2;
     e.state.players[1].mana_pool.green = 1;
 
@@ -262,7 +262,7 @@ fn mana_pools_empty_on_step_change() {
 #[test]
 fn new_with_custom_deck_length() {
     let decks = Some(vec![vec!["mountain".into(); 30], vec!["forest".into(); 30]]);
-    let e = GameEngine::new(1, &[0, 1], 20, decks).expect("new");
+    let e = GameEngine::new(1, &[0, 1], 20, decks, true).expect("new");
     assert_eq!(
         e.state.players[0].library.len() + e.state.players[0].hand.len(),
         30
@@ -272,7 +272,7 @@ fn new_with_custom_deck_length() {
 #[test]
 fn play_land_moves_card_from_hand_to_battlefield() {
     let decks = Some(vec![vec!["mountain".into(); 7], vec!["forest".into(); 7]]);
-    let mut e = GameEngine::new(7, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(7, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
     let hand_before = e.state.players[0].hand.len();
     let battlefield_before = e.state.players[0].battlefield.len();
@@ -310,7 +310,7 @@ fn cast_lightning_bolt_resolves_to_graveyard_after_double_pass() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(13, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(13, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
@@ -370,7 +370,7 @@ fn lightning_bolt_rejects_basic_land_target() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(1401, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(1401, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
     e.apply_command(0, &play_land(mountain_idx))
@@ -413,7 +413,7 @@ fn lightning_bolt_rejects_missing_target() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(1402, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(1402, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
     e.apply_command(0, &play_land(mountain_idx))
@@ -450,7 +450,7 @@ fn giant_growth_rejects_land_target() {
             "mountain".into(),
         ],
     ]);
-    let mut e = GameEngine::new(1403, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(1403, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
     let forest_idx = hand_index_for_card(&e, 0, "forest");
     e.apply_command(0, &play_land(forest_idx))
@@ -493,7 +493,7 @@ fn casting_spell_keeps_priority_with_caster() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(13, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(13, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
     e.apply_command(0, &play_land(mountain_idx))
@@ -530,7 +530,7 @@ fn stack_resolution_emits_priority_to_active_player() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(13, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(13, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
     e.apply_command(0, &play_land(mountain_idx))
@@ -568,7 +568,7 @@ fn declare_attackers_handoff_emits_defender_priority() {
             "mountain".into(),
         ],
     ]);
-    let mut e = GameEngine::new(66, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(66, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
     // Put one creature and two forests on battlefield to mimic later turn.
     for card in ["forest", "forest", "grizzly_bears"] {
@@ -625,7 +625,7 @@ fn declare_attackers_handoff_emits_defender_priority() {
 
 #[test]
 fn no_attackers_skip_to_end_combat_emits_active_priority() {
-    let mut e = GameEngine::new(67, &[0, 1], 20, None).expect("new");
+    let mut e = GameEngine::new(67, &[0, 1], 20, None, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
     e.apply_command(0, &primitive_yield())
         .expect("main1 to begin combat");
@@ -677,7 +677,7 @@ fn blockers_to_combat_damage_emits_priority_stop() {
             "mountain".into(),
         ],
     ]);
-    let mut e = GameEngine::new(68, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(68, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
     for card in ["forest", "grizzly_bears"] {
         let idx = hand_index_for_card(&e, 0, card);
@@ -727,7 +727,7 @@ fn blockers_to_combat_damage_emits_priority_stop() {
 
 #[test]
 fn cleanup_batch_discard_three_at_once() {
-    let mut e = GameEngine::new(1002, &[0, 1], 20, None).expect("new");
+    let mut e = GameEngine::new(1002, &[0, 1], 20, None, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
     let ap_idx = e.state.player_idx(0).unwrap();
     for _ in 0..3 {
@@ -757,7 +757,7 @@ fn cleanup_batch_discard_three_at_once() {
 
 #[test]
 fn cleanup_step_opens_when_hand_exceeds_max_and_discard_finishes_turn() {
-    let mut e = GameEngine::new(1001, &[0, 1], 20, None).expect("new");
+    let mut e = GameEngine::new(1001, &[0, 1], 20, None, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
     let ap_idx = e.state.player_idx(0).unwrap();
     let oid = e.state.players[ap_idx].library.pop_front().expect("library");
@@ -788,7 +788,7 @@ fn cleanup_step_opens_when_hand_exceeds_max_and_discard_finishes_turn() {
 
 #[test]
 fn main2_double_pass_advances_to_end_step_stop() {
-    let mut e = GameEngine::new(69, &[0, 1], 20, None).expect("new");
+    let mut e = GameEngine::new(69, &[0, 1], 20, None, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
     e.apply_command(0, &primitive_yield())
         .expect("main1 to begin combat");
@@ -810,7 +810,7 @@ fn main2_double_pass_advances_to_end_step_stop() {
 
 #[test]
 fn new_turn_stops_at_upkeep_then_draw_then_main1() {
-    let mut e = GameEngine::new(70, &[0, 1], 20, None).expect("new");
+    let mut e = GameEngine::new(70, &[0, 1], 20, None, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
     end_active_turn(&mut e, 0);
     assert_eq!(e.state.active_player_id(), 1);
@@ -845,7 +845,7 @@ fn cast_1u_creature_pays_from_mana_pool_without_tapping_extra_island() {
         ],
         vec!["mountain".into(); 7],
     ]);
-    let mut e = GameEngine::new(202, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(202, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // Two islands + mountain on the battlefield (no land drop this turn).
@@ -916,7 +916,7 @@ fn cast_grizzly_bears_resolves_to_battlefield_and_taps_two_forests() {
             "mountain".into(),
         ],
     ]);
-    let mut e = GameEngine::new(22, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(22, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     // Simulate one untapped Forest that was played on a previous turn.
@@ -983,7 +983,7 @@ fn caster_can_cast_second_spell_before_passing_priority() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(333, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(333, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_a = hand_index_for_card(&e, 0, "mountain");
@@ -1040,7 +1040,7 @@ fn non_active_player_with_priority_pays_mana_for_counterspell() {
             "island".into(),
         ],
     ]);
-    let mut e = GameEngine::new(144, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(144, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
@@ -1126,7 +1126,7 @@ fn untap_and_draw_happen_in_new_turn_sequence() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(88, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(88, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let hand_before_turn = e.state.players[0].hand.len();
@@ -1205,7 +1205,7 @@ fn duplicate_attacker_ids_are_rejected() {
             "mountain".into(),
         ],
     ]);
-    let mut e = GameEngine::new(101, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(101, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
     for card in ["forest", "grizzly_bears"] {
         let idx = hand_index_for_card(&e, 0, card);
@@ -1251,7 +1251,7 @@ fn same_blocker_cannot_block_two_attackers() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(202, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(202, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     for card in ["forest", "forest", "grizzly_bears", "grizzly_bears"] {
@@ -1407,7 +1407,7 @@ fn zone_view_includes_battlefield_object_ids() {
             "mountain".into(),
         ],
     ]);
-    let mut e = GameEngine::new(404, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(404, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
     let bears = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     // ZoneViewSync is emitted as part of every batch via apply_command's tail.
@@ -1445,7 +1445,7 @@ fn zone_view_includes_battlefield_object_ids() {
 
 #[test]
 fn declare_attackers_emits_attackers_declared_event() {
-    let mut e = GameEngine::new(505, &[0, 1], 20, None).expect("new");
+    let mut e = GameEngine::new(505, &[0, 1], 20, None, true).expect("new");
     advance_to_declare_attackers(&mut e);
     let bears = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let b = e
@@ -1459,7 +1459,7 @@ fn declare_attackers_emits_attackers_declared_event() {
 
 #[test]
 fn unblocked_combat_damage_emits_life_changed() {
-    let mut e = GameEngine::new(606, &[0, 1], 20, None).expect("new");
+    let mut e = GameEngine::new(606, &[0, 1], 20, None, true).expect("new");
     advance_to_declare_attackers(&mut e);
     let bears_a = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let bears_b = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -1509,7 +1509,7 @@ fn blocked_combat_kills_blocker_and_emits_permanent_moved() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(707, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(707, &[0, 1], 20, decks, true).expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     // Defender needs a creature on the battlefield to block. Put a 2/2 too -> mutual destruction.
@@ -1581,7 +1581,7 @@ fn full_combat_2v1_trade_and_life_loss() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(808, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(808, &[0, 1], 20, decks, true).expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker_a = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let attacker_b = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -1733,7 +1733,7 @@ fn cast_divination_draws_two_cards() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(901, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(901, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     for _ in 0..2 {
@@ -1787,7 +1787,7 @@ fn giant_growth_changes_combat_outcome() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(902, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(902, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let p0_bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -1868,7 +1868,7 @@ fn giant_growth_fizzles_if_creature_target_dies_before_resolution() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(91021, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(91021, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -1956,7 +1956,7 @@ fn lightning_bolt_fizzles_when_creature_target_left_battlefield() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(91022, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(91022, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -2004,7 +2004,7 @@ fn go_for_the_throat_fizzles_when_creature_target_left_battlefield() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(91023, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(91023, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -2092,7 +2092,7 @@ fn counterspell_fizzles_when_original_target_already_left_stack() {
             "island".into(),
         ],
     ]);
-    let mut e = GameEngine::new(91024, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(91024, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let m0 = hand_index_for_card(&e, 0, "mountain");
@@ -2178,7 +2178,7 @@ fn giant_growth_pump_expires_after_active_turn_ends() {
         ],
         vec!["forest".into(); 7],
     ]);
-    let mut e = GameEngine::new(904, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(904, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -2216,7 +2216,7 @@ fn marked_damage_clears_at_cleanup() {
         },
         vec!["mountain".into(); 20],
     ]);
-    let mut e = GameEngine::new(906, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(906, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
@@ -2271,7 +2271,7 @@ fn counterspell_counters_a_spell_on_stack() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(903, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(903, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
@@ -2348,7 +2348,7 @@ fn go_for_the_throat_destroys_target_creature() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(904, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(904, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let p1_bear = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
@@ -2407,7 +2407,7 @@ fn can_cast_new_vanilla_creature_with_swamp() {
             "forest".into(),
         ],
     ]);
-    let mut e = GameEngine::new(905, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(905, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let seeded_swamp_idx = hand_index_for_card(&e, 0, "swamp");
@@ -2435,7 +2435,7 @@ fn can_cast_new_vanilla_creature_with_swamp() {
 
 #[test]
 fn cannot_cast_spell_until_attackers_declared() {
-    let mut e = GameEngine::new(9200, &[0, 1], 20, None).expect("new");
+    let mut e = GameEngine::new(9200, &[0, 1], 20, None, true).expect("new");
     advance_to_declare_attackers(&mut e);
     let _bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     while !e.state.players[0]
@@ -2482,7 +2482,7 @@ fn cannot_cast_spell_until_attackers_declared() {
 
 #[test]
 fn cannot_cast_spell_until_blockers_declared() {
-    let mut e = GameEngine::new(9300, &[0, 1], 20, None).expect("new");
+    let mut e = GameEngine::new(9300, &[0, 1], 20, None, true).expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     e.apply_command(0, &declare_attackers(vec![attacker]))
@@ -2574,7 +2574,7 @@ fn three_bolts_stack_lifo_active_sequential_then_non_active_response() {
             "mountain".into(),
         ],
     ]);
-    let mut e = GameEngine::new(4401, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(4401, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let m0a = hand_index_for_card(&e, 0, "mountain");
@@ -2671,7 +2671,7 @@ fn five_lightning_bolts_combined_stack_resolves_lifo_two_players() {
             "mountain".into(),
         ],
     ]);
-    let mut e = GameEngine::new(4405, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(4405, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let m0a = hand_index_for_card(&e, 0, "mountain");
@@ -2784,7 +2784,7 @@ fn non_active_holds_priority_two_bolts_on_stack_above_active_bolt() {
             "mountain".into(),
         ],
     ]);
-    let mut e = GameEngine::new(4402, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(4402, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let m0 = hand_index_for_card(&e, 0, "mountain");
@@ -2845,7 +2845,7 @@ fn counterspell_on_top_bolt_fizzles_second_leaves_bottom_bolt() {
             "island".into(),
         ],
     ]);
-    let mut e = GameEngine::new(4403, &[0, 1], 20, decks).expect("new");
+    let mut e = GameEngine::new(4403, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
 
     let m0a = hand_index_for_card(&e, 0, "mountain");
@@ -2902,4 +2902,72 @@ fn counterspell_on_top_bolt_fizzles_second_leaves_bottom_bolt() {
         "only the uncountered first bolt deals 3 damage"
     );
     assert_eq!(e.state.players[0].life, 20);
+}
+
+#[test]
+fn opening_choose_first_london_mulligan_then_start() {
+    use tricerules_proto::ruled::v1::ruled_command::Cmd;
+    use tricerules_proto::ruled::v1::{
+        ChooseStartingPlayer, MulliganDecision, PutOpeningHandOnBottom, RuledCommand,
+    };
+    // seed 100 → chooser is player_ids[0] == 5
+    let mut e = GameEngine::new(100, &[5, 6], 20, None, false).expect("new");
+    let chooser = e.state.opening.as_ref().expect("opening").chooser;
+    assert_eq!(chooser, 5);
+    e.apply_command(
+        chooser,
+        &RuledCommand {
+            cmd: Some(Cmd::ChooseStartingPlayer(ChooseStartingPlayer {
+                starting_player_id: 5,
+            })),
+        },
+    )
+    .expect("choose first");
+    assert_eq!(e.state.players[0].hand.len(), 7);
+    assert_eq!(e.state.players[1].hand.len(), 7);
+    e.apply_command(
+        5,
+        &RuledCommand {
+            cmd: Some(Cmd::Mulligan(MulliganDecision { keep: false })),
+        },
+    )
+    .expect("mulligan");
+    assert_eq!(e.state.opening.as_ref().unwrap().mulligans_taken[0], 1);
+    assert_eq!(
+        e.state.opening.as_ref().unwrap().mulligan_actor,
+        Some(6),
+        "after a mulligan, the other player is offered a decision while they have not kept"
+    );
+    e.apply_command(
+        6,
+        &RuledCommand {
+            cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
+        },
+    )
+    .expect("p6 keep (opponent locked in first)");
+    assert!(e.state.opening.as_ref().unwrap().resolved[1]);
+    assert_eq!(
+        e.state.opening.as_ref().unwrap().mulligan_actor,
+        Some(5),
+        "once the opponent has kept, the mulliganing player acts again"
+    );
+    e.apply_command(
+        5,
+        &RuledCommand {
+            cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
+        },
+    )
+    .expect("keep to bottom");
+    let hi = 0u32;
+    e.apply_command(
+        5,
+        &RuledCommand {
+            cmd: Some(Cmd::PutOpeningHandOnBottom(PutOpeningHandOnBottom {
+                hand_card_index: hi,
+            })),
+        },
+    )
+    .expect("bottom one");
+    assert!(e.state.opening.is_none());
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
 }
