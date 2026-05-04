@@ -1893,6 +1893,79 @@ fn cast_divination_draws_two_cards() {
 }
 
 #[test]
+fn second_sorcery_rejected_while_spell_on_stack_even_with_priority() {
+    let p0_deck: Vec<String> = std::iter::repeat_n("island".into(), 25)
+        .chain(std::iter::repeat_n("divination".into(), 5))
+        .collect();
+    let decks = Some(vec![p0_deck, vec!["forest".into(); 15]]);
+    let mut e = GameEngine::new(904, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    while e
+        .state
+        .players[0]
+        .hand
+        .iter()
+        .filter(|oid| {
+            e.state
+                .objects
+                .get(*oid)
+                .map(|o| o.card_id.as_str())
+                == Some("divination")
+        })
+        .count()
+        < 2
+    {
+        take_card_from_library_to_hand(&mut e, 0, "divination");
+    }
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            u: 1,
+            c: 2,
+            ..Default::default()
+        }),
+    )
+    .expect("mana for 2U");
+    let div0 = hand_index_for_card(&e, 0, "divination");
+    e.apply_command(0, &cast_spell(div0, vec![]))
+        .expect("first divination");
+    assert_eq!(
+        e.state.stack.len(),
+        1,
+        "first sorcery should sit on the stack while AP still has priority"
+    );
+
+    let div1 = hand_index_for_card(&e, 0, "divination");
+    let err = e
+        .apply_command(0, &cast_spell(div1, vec![]))
+        .expect_err("second sorcery with stack nonempty");
+    assert!(
+        err.to_string().contains("sorcery speed"),
+        "unexpected: {err}"
+    );
+}
+
+#[test]
+fn nonactive_player_cannot_play_land_in_opponents_main() {
+    let decks = Some(vec![
+        vec!["mountain".into(); 10],
+        vec!["forest".into(); 10],
+    ]);
+    let mut e = GameEngine::new(905, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    e.apply_command(0, &pass()).expect("active passes");
+    assert_eq!(e.state.priority_player_id(), 1);
+    let forest_idx = hand_index_for_card(&e, 1, "forest");
+    let err = e
+        .apply_command(1, &play_land(forest_idx))
+        .expect_err("NAP cannot play land during AP main");
+    assert!(
+        err.to_string().contains("sorcery speed"),
+        "unexpected: {err}"
+    );
+}
+
+#[test]
 fn giant_growth_changes_combat_outcome() {
     let decks = Some(vec![
         vec![

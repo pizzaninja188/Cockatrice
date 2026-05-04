@@ -20,6 +20,30 @@ use tricerules_proto::ruled::v1::{
 /// CR 514.1: default maximum hand size (Reliquary Tower–style overrides not modeled yet).
 const MAX_HAND_SIZE: usize = 7;
 
+/// Sorcery-speed window: your main phase, stack empty, you are the active player (CR 307.5,
+/// 601.2; lands CR 305.3).
+fn sorcery_speed_available(state: &GameState, player: PlayerId) -> bool {
+    matches!(state.turn_step, TurnStep::Main1 | TurnStep::Main2)
+        && state.stack.is_empty()
+        && player == state.active_player_id()
+}
+
+fn instant_timing_step_allowed(step: TurnStep) -> bool {
+    matches!(
+        step,
+        TurnStep::Main1
+            | TurnStep::Main2
+            | TurnStep::Upkeep
+            | TurnStep::Draw
+            | TurnStep::BeginCombat
+            | TurnStep::DeclareAttackers
+            | TurnStep::DeclareBlockers
+            | TurnStep::CombatDamage
+            | TurnStep::EndCombat
+            | TurnStep::EndStep
+    )
+}
+
 fn shuffle_player_library(state: &mut GameState, player_idx: usize, mix: u64) {
     let mut rng = StdRng::seed_from_u64(mix);
     let mut v: Vec<ObjectId> = state.players[player_idx].library.iter().copied().collect();
@@ -1481,27 +1505,16 @@ impl GameEngine {
         if def.is_land {
             return Err(EngineError::Illegal("use play land"));
         }
-        let can_sorc = matches!(self.state.turn_step, TurnStep::Main1 | TurnStep::Main2);
-        let can_inst = can_sorc
-            || matches!(
-                self.state.turn_step,
-                TurnStep::Upkeep
-                    | TurnStep::Draw
-                    | TurnStep::BeginCombat
-                    | TurnStep::DeclareAttackers
-                    | TurnStep::DeclareBlockers
-                    | TurnStep::CombatDamage
-                    | TurnStep::EndCombat
-                    | TurnStep::EndStep
-            );
-        if def.is_sorcery && !can_sorc {
-            return Err(EngineError::Illegal("sorceries only in main"));
+        let sorcery_ok = sorcery_speed_available(&self.state, player);
+        let instant_ok = instant_timing_step_allowed(self.state.turn_step);
+        if def.is_sorcery && !sorcery_ok {
+            return Err(EngineError::Illegal("sorcery speed only"));
         }
-        if def.is_instant && !can_inst {
+        if def.is_instant && !instant_ok {
             return Err(EngineError::Illegal("instant timing"));
         }
-        if !def.is_sorcery && !def.is_instant && !can_sorc {
-            return Err(EngineError::Illegal("spell only in main"));
+        if !def.is_sorcery && !def.is_instant && !sorcery_ok {
+            return Err(EngineError::Illegal("sorcery speed only"));
         }
         // CR 508.1 / 508.2: attackers are declared before any player gets priority in the
         // declare-attackers step. CR 509.1 / 509.3: same for blockers in declare blockers.
@@ -1560,8 +1573,8 @@ impl GameEngine {
         if self.state.land_dropped_this_turn {
             return Err(EngineError::Illegal("one land per turn"));
         }
-        if !matches!(self.state.turn_step, TurnStep::Main1 | TurnStep::Main2) {
-            return Err(EngineError::Illegal("play land in main only"));
+        if !sorcery_speed_available(&self.state, player) {
+            return Err(EngineError::Illegal("play land only at sorcery speed"));
         }
         let idx = self
             .state
@@ -2009,20 +2022,24 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
         Some(i) => i,
         None => return v,
     };
-    let in_main = matches!(eng.state.turn_step, TurnStep::Main1 | TurnStep::Main2);
+    let instant_ok = instant_timing_step_allowed(eng.state.turn_step);
+    let sorcery_ok = sorcery_speed_available(&eng.state, pid);
     let combat_decl_lock = priority_locked_for_combat_declaration(&eng.state);
     for (i, &oid) in eng.state.players[idx].hand.iter().enumerate() {
         let cid = &eng.state.objects.get(&oid).unwrap().card_id;
         if let Some(def) = eng.registry.get(cid) {
             let name = def.name.as_str();
             if def.is_land {
-                if in_main && !eng.state.land_dropped_this_turn {
+                if sorcery_ok && !eng.state.land_dropped_this_turn {
                     v.push(format!("Play land {name} (hand idx {i})"));
                 }
             } else if !combat_decl_lock {
-                v.push(format!("Cast {name} (hand idx {i})"));
+                let cast_ok = (def.is_instant && instant_ok) || (!def.is_instant && sorcery_ok);
+                if cast_ok {
+                    v.push(format!("Cast {name} (hand idx {i})"));
+                }
             }
-        } else if !combat_decl_lock {
+        } else if !combat_decl_lock && (instant_ok || sorcery_ok) {
             v.push(format!("Play unknown card (hand idx {i})"));
         }
     }
