@@ -832,6 +832,32 @@ fn new_turn_stops_at_upkeep_then_draw_then_main1() {
     );
 }
 
+/// CR 103.8: only the starting player skips their first draw. The duel `turn` counter can remain 1
+/// for the second seat's first turn (it bumps when active wraps to seat 0), so skip logic must
+/// key off who started, not `turn == 1` alone.
+#[test]
+fn second_seat_first_draw_draws_when_seat_zero_started() {
+    let mut e = GameEngine::new(71, &[0, 1], 20, None, true).expect("new");
+    assert_eq!(e.state.starting_player_idx, 0);
+    advance_to_main1_from_game_start(&mut e);
+    assert_eq!(
+        e.state.players[0].hand.len(),
+        7,
+        "starting seat skipped first draw"
+    );
+    end_active_turn(&mut e, 0);
+    assert_eq!(e.state.active_player_id(), 1);
+    assert_eq!(e.state.turn, 1);
+    e.apply_command(1, &pass()).expect("ap pass upkeep");
+    e.apply_command(0, &pass()).expect("nap pass upkeep");
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Draw);
+    assert_eq!(
+        e.state.players[1].hand.len(),
+        8,
+        "second seat must draw on their first draw step"
+    );
+}
+
 #[test]
 fn cast_1u_creature_pays_from_mana_pool_without_tapping_extra_island() {
     let decks = Some(vec![

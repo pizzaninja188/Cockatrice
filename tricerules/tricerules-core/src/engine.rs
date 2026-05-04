@@ -184,6 +184,7 @@ impl GameEngine {
             winner: None,
             cleanup_discard_player: None,
             opening,
+            starting_player_idx: 0,
         };
         let mut eng = GameEngine { state, registry };
         let mut e = vec![];
@@ -230,6 +231,7 @@ impl GameEngine {
                 let sp_idx = self.state.player_idx(sp).unwrap();
                 self.state.active_player_idx = sp_idx;
                 self.state.priority_idx = sp_idx;
+                self.state.starting_player_idx = sp_idx;
                 for pi in 0..self.state.players.len() {
                     let p = &mut self.state.players[pi];
                     for _ in 0..7 {
@@ -408,6 +410,7 @@ impl GameEngine {
             let sp_idx = eng.state.player_idx(sp).unwrap();
             eng.state.active_player_idx = sp_idx;
             eng.state.priority_idx = sp_idx;
+            eng.state.starting_player_idx = sp_idx;
             eng.state.turn_step = TurnStep::Upkeep;
             eng.state.turn = 1;
             events.push(ev_log(format!(
@@ -936,8 +939,11 @@ impl GameEngine {
                     self.state.priority_idx = i;
                 }
                 ev.push(ev_phase_labeled(self, "draw"));
-                // First draw step of the duel: the first player does not draw (CR 103.8 / skip first draw).
-                let skip_opening_draw = self.state.turn == 1;
+                // First draw step of the duel: only the starting player skips (CR 103.8). `turn`
+                // may stay 1 for the second seat's first turn because we bump `turn` when wrapping
+                // to seat 0, not on every active change.
+                let skip_opening_draw = self.state.turn == 1
+                    && self.state.active_player_idx == self.state.starting_player_idx;
                 if skip_opening_draw {
                     ev.push(ev_log("Skipped first draw (opening of the duel).".into()));
                 } else if let Some(idx) = self.state.player_idx(ap) {

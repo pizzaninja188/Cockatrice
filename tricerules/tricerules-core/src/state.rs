@@ -181,6 +181,8 @@ pub struct GameState {
     pub cleanup_discard_player: Option<PlayerId>,
     /// Pre-game flow; `None` once the duel has started (upkeep of turn 1).
     pub opening: Option<OpeningSequence>,
+    /// Seat index of the player who takes the first turn (CR 103.8: only they skip their first draw step).
+    pub starting_player_idx: usize,
 }
 
 impl GameState {
