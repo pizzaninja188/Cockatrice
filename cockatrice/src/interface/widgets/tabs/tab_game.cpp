@@ -243,6 +243,18 @@ void TabGame::connectToGameEventHandler()
                         return;
                     }
                     gamePromptWidget->setCleanupDiscardMode(false, 0, 0);
+                    // If the local player has a pending spell cast waiting for mana, keep showing
+                    // the remaining cost instead of letting server state updates (like "Legal actions:")
+                    // overwrite the prompt. This happens e.g. when tapping a land for mana.
+                    const int localId = game->getPlayerManager()->getLocalPlayerId();
+                    Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+                    if (localPlayer && localPlayer->getPlayerActions()) {
+                        const QString spellPrompt = localPlayer->getPlayerActions()->pendingRuledSpellPromptText();
+                        if (!spellPrompt.isEmpty()) {
+                            gamePromptWidget->setPromptText(spellPrompt);
+                            return;
+                        }
+                    }
                     gamePromptWidget->setPromptFromRuledLog(lines);
                 });
         connect(game->getGameEventHandler(), &GameEventHandler::ruledCleanupDiscardUiChanged, this,

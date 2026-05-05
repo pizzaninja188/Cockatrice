@@ -73,6 +73,8 @@ public:
     /// True when the local player must pick a player (not permanent) for the pending ruled cast.
     [[nodiscard]] bool isAwaitingRuledPlayerTargetSelection() const;
     void cancelPendingRuledSpellCast();
+    /// Returns the mana-payment prompt text if a spell is pending and still needs mana, otherwise empty.
+    [[nodiscard]] QString pendingRuledSpellPromptText() const;
     bool tryToggleRuledCleanupDiscard(CardItem *card);
     bool tryRuledOpeningBottomCard(CardItem *card);
     bool sendRuledCleanupDiscardBatchIfComplete();

@@ -140,6 +140,23 @@ QString PlayerActions::formatSimpleManaCost(const QMap<QChar, int> &cost)
     return parts.join(' ');
 }
 
+QString PlayerActions::pendingRuledSpellPromptText() const
+{
+    if (!pendingRuledSpellCast.valid || pendingRuledSpellCast.waitingForTarget) {
+        return {};
+    }
+    int total = 0;
+    for (auto it = pendingRuledSpellCast.remainingCost.constBegin(); it != pendingRuledSpellCast.remainingCost.constEnd();
+         ++it) {
+        total += it.value();
+    }
+    if (total == 0) {
+        return {};
+    }
+    return tr("Pay mana for %1: %2 remaining (click mana counters).")
+        .arg(pendingRuledSpellCast.cardName, formatSimpleManaCost(pendingRuledSpellCast.remainingCost));
+}
+
 void PlayerActions::clearPendingRuledSpellCast()
 {
     const bool hadTargeting = pendingRuledSpellCast.valid && pendingRuledSpellCast.waitingForTarget;
@@ -153,9 +170,9 @@ void PlayerActions::cancelPendingRuledSpellCast()
     if (!pendingRuledSpellCast.valid) {
         return;
     }
-    player->getGame()->getGameEventHandler()->emitLocalRuledLog(
-        tr("Canceled casting %1.").arg(pendingRuledSpellCast.cardName));
+    const QString cardName = pendingRuledSpellCast.cardName;
     clearPendingRuledSpellCast();
+    player->getGame()->getGameEventHandler()->emitLocalRuledLog(tr("Canceled casting %1.").arg(cardName));
 }
 
 

@@ -12,6 +12,9 @@ preferences
 compile_commands.json
 .vs/
 .vscode/
+.claude/
+claude.md
+CLAUDE.md
 .cache
 .gdb_history
 cockatrice/resources/config/qtlogging.ini
