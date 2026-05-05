@@ -15,10 +15,12 @@
 #include <QMenu>
 #include <QObject>
 #include <QMap>
+#include <QPair>
 #include <QVector>
 #include <libcockatrice/card/relation/card_relation_type.h>
 #include <libcockatrice/filters/filter_string.h>
 #include <libcockatrice/protocol/pb/card_attributes.pb.h>
+#include <libcockatrice/protocol/pb/command_ruled_payload.pb.h>
 
 namespace google
 {
@@ -45,6 +47,8 @@ signals:
     void ruledSpellTargetingChanged(bool active, const QString &cardName);
     void landTapUndoAvailableChanged(bool available);
     void ruledSpellCastPendingChanged(bool pending);
+    /// Emitted when `remainingCost` changes during ruled spell payment (land or counter).
+    void ruledSpellManaPromptChanged();
 
 public:
     enum CardsToReveal
@@ -70,6 +74,12 @@ public:
     void moveOneCardUntil(CardItem *card);
     void stopMoveTopCardsUntil();
     bool tryPayRuledSpellWithCounter(const QString &counterName);
+    /// Apply one land mana pip toward pending spell cost (local only). Returns { consumed, costFullyPaid }.
+    [[nodiscard]] QPair<bool, bool> tryConsumeLandManaPipTowardPendingSpell(const QString &manaCounterName);
+    /// Call after tap `SetCardAttr` commands are sent. Completes cast and/or updates prompt.
+    void afterRuledLandTapsAppliedForSpellMana(bool completeCast, bool partialCostRemainPrompt);
+    /// Ruled engine pool +1 for this land pip (no UI counter). Caller owns the pointer; nullptr if N/A.
+    [[nodiscard]] Command_RuledPayload *newRuledPayloadAddManaToPoolForLandName(const QString &manaCounterName);
     bool tryHandleRuledSpellTargetClick(CardItem *card);
     bool tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer);
     /// True when the local player must pick a player (not permanent) for the pending ruled cast.
@@ -213,6 +223,8 @@ private:
     static QString formatSimpleManaCost(const QMap<QChar, int> &cost);
     void clearPendingRuledSpellCast();
     bool completePendingRuledSpellCast();
+    bool tryReducePendingSpellRemainingCostOnePip(bool colorlessMana, QChar coloredMana);
+    void finishPendingSpellManaPaymentStep();
 
     int defaultNumberTopCards = 1;
     int defaultNumberTopCardsToPlaceBelow = 1;

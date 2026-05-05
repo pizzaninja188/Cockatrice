@@ -99,6 +99,36 @@ Command_RuledPayload *buildManaPoolDecrementPayload(const QString &counterName)
     cmd->set_payload(payload);
     return cmd;
 }
+
+// +1 for each pip; mirrors server `cmdIncCounter` positive delta → engine pool (no Cockatrice counter).
+Command_RuledPayload *buildManaPoolIncrementPayload(const QString &counterName)
+{
+    ruled::v1::RuledCommand rc;
+    auto *m = rc.mutable_add_mana_to_pool();
+    const QString n = counterName.toLower();
+    if (n == QLatin1String("w")) {
+        m->set_w(1);
+    } else if (n == QLatin1String("u")) {
+        m->set_u(1);
+    } else if (n == QLatin1String("b")) {
+        m->set_b(1);
+    } else if (n == QLatin1String("r")) {
+        m->set_r(1);
+    } else if (n == QLatin1String("g")) {
+        m->set_g(1);
+    } else if (n == QLatin1String("c") || n == QLatin1String("x")) {
+        m->set_c(1);
+    } else {
+        return nullptr;
+    }
+    std::string payload;
+    if (!rc.SerializeToString(&payload)) {
+        return nullptr;
+    }
+    auto *cmd = new Command_RuledPayload;
+    cmd->set_payload(payload);
+    return cmd;
+}
 } // namespace
 
 PlayerActions::PlayerActions(Player *_player)
@@ -246,6 +276,11 @@ void PlayerActions::cancelPendingRuledSpellCast()
                     cmdList.append(poolCmd);
                 }
             }
+        } else if (player->getGame()->getGameMetaInfo()->proto().ruled_game() && !entry.counterName.isEmpty()) {
+            // Land paid spell cost without IncCounter; engine pool was incremented — remove it on cancel.
+            if (Command_RuledPayload *poolCmd = buildManaPoolDecrementPayload(entry.counterName)) {
+                cmdList.append(poolCmd);
+            }
         }
     }
     midCastLandTapStack.clear();
@@ -377,6 +412,101 @@ bool PlayerActions::ruledSpellNeedsTarget(const CardItem *card)
            name.compare(QStringLiteral("Lightning Bolt"), Qt::CaseInsensitive) == 0;
 }
 
+bool PlayerActions::tryReducePendingSpellRemainingCostOnePip(bool colorlessMana, QChar coloredMana)
+{
+    if (!pendingRuledSpellCast.valid || pendingRuledSpellCast.waitingForTarget) {
+        return false;
+    }
+    if (colorlessMana) {
+        if (pendingRuledSpellCast.remainingCost.value('X', 0) > 0) {
+            pendingRuledSpellCast.remainingCost['X'] -= 1;
+        } else if (pendingRuledSpellCast.remainingCost.value('C', 0) > 0) {
+            pendingRuledSpellCast.remainingCost['C'] -= 1;
+        } else {
+            return false;
+        }
+    } else {
+        const QChar sym = coloredMana.toUpper();
+        if (pendingRuledSpellCast.remainingCost.value(sym, 0) > 0) {
+            pendingRuledSpellCast.remainingCost[sym] -= 1;
+        } else if (pendingRuledSpellCast.remainingCost.value('X', 0) > 0) {
+            pendingRuledSpellCast.remainingCost['X'] -= 1;
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
+
+void PlayerActions::finishPendingSpellManaPaymentStep()
+{
+    int totalRemaining = 0;
+    for (auto it = pendingRuledSpellCast.remainingCost.constBegin(); it != pendingRuledSpellCast.remainingCost.constEnd();
+         ++it) {
+        totalRemaining += it.value();
+    }
+    if (totalRemaining == 0) {
+        completePendingRuledSpellCast();
+        return;
+    }
+    emit ruledSpellManaPromptChanged();
+    player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+        tr("Pay mana for %1: %2 remaining (click mana counters).")
+            .arg(pendingRuledSpellCast.cardName, formatSimpleManaCost(pendingRuledSpellCast.remainingCost)));
+}
+
+QPair<bool, bool> PlayerActions::tryConsumeLandManaPipTowardPendingSpell(const QString &manaCounterName)
+{
+    if (manaCounterName.trimmed().isEmpty()) {
+        return {false, false};
+    }
+    const QString rawLower = manaCounterName.trimmed().toLower();
+    const bool colorlessOnly = (rawLower == QLatin1String("x") || rawLower == QLatin1String("c"));
+    QChar sym;
+    if (!colorlessOnly) {
+        if (rawLower.size() != 1) {
+            return {false, false};
+        }
+        const QChar c = rawLower.at(0).toUpper();
+        if (!QStringLiteral("WUBRGC").contains(c)) {
+            return {false, false};
+        }
+        sym = c;
+    } else {
+        sym = QChar();
+    }
+
+    if (!tryReducePendingSpellRemainingCostOnePip(colorlessOnly, sym)) {
+        return {false, false};
+    }
+    int totalRemaining = 0;
+    for (auto it = pendingRuledSpellCast.remainingCost.constBegin(); it != pendingRuledSpellCast.remainingCost.constEnd();
+         ++it) {
+        totalRemaining += it.value();
+    }
+    return {true, totalRemaining == 0};
+}
+
+void PlayerActions::afterRuledLandTapsAppliedForSpellMana(bool completeCast, bool partialCostRemainPrompt)
+{
+    if (completeCast) {
+        completePendingRuledSpellCast();
+    } else if (partialCostRemainPrompt) {
+        emit ruledSpellManaPromptChanged();
+        player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+            tr("Pay mana for %1: %2 remaining (click mana counters).")
+                .arg(pendingRuledSpellCast.cardName, formatSimpleManaCost(pendingRuledSpellCast.remainingCost)));
+    }
+}
+
+Command_RuledPayload *PlayerActions::newRuledPayloadAddManaToPoolForLandName(const QString &manaCounterName)
+{
+    if (!player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+        return nullptr;
+    }
+    return buildManaPoolIncrementPayload(manaCounterName);
+}
+
 bool PlayerActions::tryPayRuledSpellWithCounter(const QString &counterName)
 {
     if (!pendingRuledSpellCast.valid) {
@@ -389,11 +519,19 @@ bool PlayerActions::tryPayRuledSpellWithCounter(const QString &counterName)
             tr("Choose a target for %1 before paying mana.").arg(pendingRuledSpellCast.cardName));
         return false;
     }
-    const QString n = counterName.trimmed().toUpper();
-    if (n.size() != 1 || !QStringLiteral("WUBRGC").contains(n.at(0))) {
-        return false;
+    const QString rawLower = counterName.trimmed().toLower();
+    const bool colorlessOnly = (rawLower == QLatin1String("x") || rawLower == QLatin1String("c"));
+    QChar sym;
+    if (!colorlessOnly) {
+        const QString n = counterName.trimmed().toUpper();
+        if (n.size() != 1 || !QStringLiteral("WUBRGC").contains(n.at(0))) {
+            return false;
+        }
+        sym = n.at(0);
+    } else {
+        sym = QChar();
     }
-    const QChar sym = n.at(0);
+
     int counterId = -1;
     for (auto it = player->getCounters().constBegin(); it != player->getCounters().constEnd(); ++it) {
         if (it.value() && it.value()->getName().trimmed().compare(counterName.trimmed(), Qt::CaseInsensitive) == 0) {
@@ -405,18 +543,8 @@ bool PlayerActions::tryPayRuledSpellWithCounter(const QString &counterName)
         return false;
     }
 
-    if (pendingRuledSpellCast.remainingCost.value(sym, 0) > 0) {
-        pendingRuledSpellCast.remainingCost[sym] -= 1;
-    } else if (pendingRuledSpellCast.remainingCost.value('X', 0) > 0) {
-        pendingRuledSpellCast.remainingCost['X'] -= 1;
-    } else {
+    if (!tryReducePendingSpellRemainingCostOnePip(colorlessOnly, sym)) {
         return false;
-    }
-
-    int totalRemaining = 0;
-    for (auto it = pendingRuledSpellCast.remainingCost.constBegin(); it != pendingRuledSpellCast.remainingCost.constEnd();
-         ++it) {
-        totalRemaining += it.value();
     }
 
     manaPaymentCounterIds.append(counterId);
@@ -424,13 +552,7 @@ bool PlayerActions::tryPayRuledSpellWithCounter(const QString &counterName)
     cmd.set_counter_id(counterId);
     cmd.set_delta(-1);
     sendGameCommand(cmd);
-    if (totalRemaining == 0) {
-        return completePendingRuledSpellCast();
-    }
-
-    player->getGame()->getGameEventHandler()->emitLocalRuledLog(
-        tr("Pay mana for %1: %2 remaining (click mana counters).")
-            .arg(pendingRuledSpellCast.cardName, formatSimpleManaCost(pendingRuledSpellCast.remainingCost)));
+    finishPendingSpellManaPaymentStep();
     return true;
 }
 

@@ -21,6 +21,7 @@
 #include <libcockatrice/card/card_info.h>
 #include <libcockatrice/protocol/pb/command_inc_counter.pb.h>
 #include <libcockatrice/protocol/pb/command_move_card.pb.h>
+#include <libcockatrice/protocol/pb/command_ruled_payload.pb.h>
 #include <libcockatrice/protocol/pb/command_set_card_attr.pb.h>
 #include <libcockatrice/utility/zone_names.h>
 
@@ -297,6 +298,10 @@ void TableZone::toggleTapped()
     if (ruledGame && localPlayerId != priorityPlayer) {
         return;
     }
+    bool spellLandManaConsumed = false;
+    bool spellCostFullyPaidAfterLands = false;
+    bool spellLandPartialRemain = false;
+    PlayerActions *const playerActions = getLogic()->getPlayer()->getPlayerActions();
     for (const auto &selectedItem : selectedItems) {
         CardItem *temp = qgraphicsitem_cast<CardItem *>(selectedItem);
         const bool wasTapped = temp->getTapped();
@@ -312,7 +317,23 @@ void TableZone::toggleTapped()
             if (tapAll && !wasTapped) {
                 const QString manaCounterName = inferLandManaCounterName(temp);
                 const int manaCounterId = findCounterIdByName(getLogic()->getPlayer(), manaCounterName);
-                if (manaCounterId >= 0) {
+                const QPair<bool, bool> spellLand =
+                    playerActions->tryConsumeLandManaPipTowardPendingSpell(manaCounterName);
+                if (spellLand.first) {
+                    spellLandManaConsumed = true;
+                    playerActions->recordLandTapUndo(temp->getId(), manaCounterName, -1);
+                    if (ruledGame) {
+                        if (Command_RuledPayload *poolAdd =
+                                playerActions->newRuledPayloadAddManaToPoolForLandName(manaCounterName)) {
+                            cmdList.append(poolAdd);
+                        }
+                    }
+                    if (spellLand.second) {
+                        spellCostFullyPaidAfterLands = true;
+                    } else {
+                        spellLandPartialRemain = true;
+                    }
+                } else if (manaCounterId >= 0 && !spellCostFullyPaidAfterLands) {
                     auto *counterCmd = new Command_IncCounter;
                     counterCmd->set_counter_id(manaCounterId);
                     counterCmd->set_delta(1);
@@ -322,15 +343,17 @@ void TableZone::toggleTapped()
                         counter->setValue(counter->getValue() + 1);
                     }
 
-                    getLogic()->getPlayer()->getPlayerActions()->recordLandTapUndo(
-                        temp->getId(), manaCounterName, manaCounterId);
+                    playerActions->recordLandTapUndo(temp->getId(), manaCounterName, manaCounterId);
                 }
             }
         }
     }
     if (!cmdList.isEmpty()) {
-        getLogic()->getPlayer()->getPlayerActions()->sendGameCommand(
-            getLogic()->getPlayer()->getPlayerActions()->prepareGameCommand(cmdList));
+        playerActions->sendGameCommand(playerActions->prepareGameCommand(cmdList));
+    }
+    if (spellLandManaConsumed) {
+        playerActions->afterRuledLandTapsAppliedForSpellMana(spellCostFullyPaidAfterLands,
+                                                               spellLandPartialRemain && !spellCostFullyPaidAfterLands);
     }
 }
 

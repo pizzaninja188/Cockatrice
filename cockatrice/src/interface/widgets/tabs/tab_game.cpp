@@ -1130,6 +1130,16 @@ void TabGame::addLocalPlayer(Player *newPlayer, int playerId)
                 &GamePromptWidget::setLandTapUndoAvailable);
         connect(newPlayer->getPlayerActions(), &PlayerActions::ruledSpellCastPendingChanged, gamePromptWidget,
                 &GamePromptWidget::setSpellCastPending);
+        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledSpellManaPromptChanged, this,
+                [this, newPlayer]() {
+                    if (!gamePromptWidget || !newPlayer->getPlayerInfo()->getLocal()) {
+                        return;
+                    }
+                    const QString t = newPlayer->getPlayerActions()->pendingRuledSpellPromptText();
+                    if (!t.isEmpty()) {
+                        gamePromptWidget->setPromptText(t);
+                    }
+                });
         connect(gamePromptWidget, &GamePromptWidget::undoLandTapRequested, newPlayer->getPlayerActions(),
                 &PlayerActions::undoLastLandTap);
     }
