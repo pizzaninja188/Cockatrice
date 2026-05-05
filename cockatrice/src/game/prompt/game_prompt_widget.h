@@ -6,7 +6,6 @@
 
 class QLabel;
 class QPushButton;
-class QFrame;
 class QHBoxLayout;
 
 class GamePromptWidget : public QWidget
@@ -35,6 +34,8 @@ public slots:
     void setCleanupDiscardMode(bool active, int cardsRequired, int cardsSelected);
     /// `kind`: 0 none, 1 choose first seat, 2 mulligan choice, 3 bottom cards (hand clicks).
     void setRuledOpeningUi(int kind, QVector<int> pickSeatIds);
+    void setLandTapUndoAvailable(bool available);
+    void setSpellCastPending(bool pending);
 
 signals:
     void passPriorityRequested();
@@ -45,6 +46,7 @@ signals:
     void ruledOpeningPickSeatRequested(int seatId);
     void ruledOpeningMulliganKeepRequested();
     void ruledOpeningMulliganRedrawRequested();
+    void undoLandTapRequested();
 
 private:
     void updatePassPriorityButtonText();
@@ -57,9 +59,10 @@ private:
     QPushButton *confirmBlockersButton;
     QPushButton *resetBlockersButton;
     QPushButton *cancelTargetingButton;
-    QLabel *futureActionsLabel;
-    QFrame *futureActionsFrame;
+    QPushButton *undoLandTapButton;
     QString fallbackPromptText;
+    bool landTapUndoAvailable = false;
+    bool spellCastPending = false;
     int currentActivePhase = -1;
     bool localPlayerHasPriority = false;
     CombatMode currentCombatMode = CombatMode::None;

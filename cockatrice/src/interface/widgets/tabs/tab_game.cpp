@@ -1126,6 +1126,12 @@ void TabGame::addLocalPlayer(Player *newPlayer, int playerId)
     if (gamePromptWidget && newPlayer->getPlayerActions()) {
         connect(newPlayer->getPlayerActions(), &PlayerActions::ruledSpellTargetingChanged, gamePromptWidget,
                 &GamePromptWidget::setTargetingMode);
+        connect(newPlayer->getPlayerActions(), &PlayerActions::landTapUndoAvailableChanged, gamePromptWidget,
+                &GamePromptWidget::setLandTapUndoAvailable);
+        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledSpellCastPendingChanged, gamePromptWidget,
+                &GamePromptWidget::setSpellCastPending);
+        connect(gamePromptWidget, &GamePromptWidget::undoLandTapRequested, newPlayer->getPlayerActions(),
+                &PlayerActions::undoLastLandTap);
     }
 
     // auto load deck for player if that debug setting is enabled
@@ -1336,6 +1342,11 @@ Player *TabGame::setPriorityPlayer(int id)
             const bool openingPhase = game->getGameEventHandler()->ruledEngineOpeningPhaseActive();
             if (!openingPhase && !hasManualStop && stackIsEmpty && !cleanupDiscard) {
                 QTimer::singleShot(0, game->getGameEventHandler(), &GameEventHandler::handleNextTurn);
+            }
+        } else {
+            Player *localPlayer = game->getPlayerManager()->getPlayers().value(localPlayerId, nullptr);
+            if (localPlayer && localPlayer->getPlayerActions()) {
+                localPlayer->getPlayerActions()->clearLandTapUndoStack();
             }
         }
     }

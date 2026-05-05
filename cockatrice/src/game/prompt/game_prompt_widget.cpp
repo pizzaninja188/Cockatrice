@@ -1,6 +1,5 @@
 #include "game_prompt_widget.h"
 
-#include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QObject>
@@ -122,19 +121,19 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     cancelTargetingButton = new QPushButton(this);
     cancelTargetingButton->setObjectName("cancelTargetingButton");
     connect(cancelTargetingButton, &QPushButton::clicked, this, &GamePromptWidget::cancelTargetingRequested);
-    layout->addWidget(cancelTargetingButton);
+
+    undoLandTapButton = new QPushButton(this);
+    undoLandTapButton->setObjectName("undoLandTapButton");
+    connect(undoLandTapButton, &QPushButton::clicked, this, &GamePromptWidget::undoLandTapRequested);
+
+    auto *actionRow = new QHBoxLayout;
+    actionRow->setContentsMargins(0, 0, 0, 0);
+    actionRow->setSpacing(4);
+    actionRow->addWidget(cancelTargetingButton);
+    actionRow->addWidget(undoLandTapButton);
+    layout->addLayout(actionRow);
 
     layout->addLayout(combatRow);
-
-    futureActionsLabel = new QLabel(this);
-    futureActionsLabel->setObjectName("futureActionsLabel");
-    layout->addWidget(futureActionsLabel);
-
-    futureActionsFrame = new QFrame(this);
-    futureActionsFrame->setObjectName("futureActionsFrame");
-    futureActionsFrame->setFrameShape(QFrame::StyledPanel);
-    futureActionsFrame->setMinimumHeight(48);
-    layout->addWidget(futureActionsFrame);
 
     fallbackPromptText = tr("Waiting for ruled action prompt...");
     updateCombatButtonsVisibility();
@@ -153,14 +152,13 @@ void GamePromptWidget::retranslateUi()
     confirmBlockersButton->setText(tr("OK"));
     resetBlockersButton->setText(tr("Reset Blockers"));
     cancelTargetingButton->setText(tr("Cancel"));
+    undoLandTapButton->setText(tr("Undo"));
     openingKeepButton->setText(tr("Keep hand"));
     openingMulliganButton->setText(tr("Mulligan (redraw to 7)"));
     if (ruledOpeningUiKind == 1 && ruledOpeningPickSeatIds.size() >= 2) {
         openingPickSeatButton1->setText(tr("You"));
         openingPickSeatButton2->setText(tr("Opponent"));
     }
-    futureActionsLabel->setText(tr("Future actions"));
-    futureActionsFrame->setToolTip(tr("Reserved space for upcoming action buttons (undo land tap, undo mana, etc.)."));
 }
 
 void GamePromptWidget::setPromptText(const QString &promptText)
@@ -274,6 +272,24 @@ void GamePromptWidget::setCleanupDiscardMode(bool active, int cardsRequired, int
     updateCombatButtonsVisibility();
 }
 
+void GamePromptWidget::setLandTapUndoAvailable(bool available)
+{
+    if (landTapUndoAvailable == available) {
+        return;
+    }
+    landTapUndoAvailable = available;
+    updateCombatButtonsVisibility();
+}
+
+void GamePromptWidget::setSpellCastPending(bool pending)
+{
+    if (spellCastPending == pending) {
+        return;
+    }
+    spellCastPending = pending;
+    updateCombatButtonsVisibility();
+}
+
 void GamePromptWidget::updateCombatButtonsVisibility()
 {
     if (ruledOpeningUiKind != 0) {
@@ -282,6 +298,7 @@ void GamePromptWidget::updateCombatButtonsVisibility()
         confirmBlockersButton->setVisible(false);
         resetBlockersButton->setVisible(false);
         cancelTargetingButton->setVisible(false);
+        undoLandTapButton->setVisible(false);
         const bool showPick = ruledOpeningUiKind == 1 && !ruledOpeningPickSeatIds.isEmpty();
         openingPickSeatButton1->setVisible(showPick && ruledOpeningPickSeatIds.size() >= 1);
         openingPickSeatButton2->setVisible(showPick && ruledOpeningPickSeatIds.size() >= 2);
@@ -299,14 +316,16 @@ void GamePromptWidget::updateCombatButtonsVisibility()
         confirmBlockersButton->setVisible(false);
         resetBlockersButton->setVisible(false);
         cancelTargetingButton->setVisible(false);
+        undoLandTapButton->setVisible(false);
         return;
     }
-    if (targetingModeEnabled) {
+    if (targetingModeEnabled || spellCastPending) {
         passPriorityButton->setVisible(false);
         confirmAttackersButton->setVisible(false);
         confirmBlockersButton->setVisible(false);
         resetBlockersButton->setVisible(false);
         cancelTargetingButton->setVisible(true);
+        undoLandTapButton->setVisible(false);
         return;
     }
 
@@ -319,6 +338,7 @@ void GamePromptWidget::updateCombatButtonsVisibility()
     confirmBlockersButton->setVisible(showBlockers);
     resetBlockersButton->setVisible(showBlockers);
     cancelTargetingButton->setVisible(false);
+    undoLandTapButton->setVisible(localPlayerHasPriority && landTapUndoAvailable && !showAttackers && !showBlockers);
 }
 
 void GamePromptWidget::updatePassPriorityButtonText()

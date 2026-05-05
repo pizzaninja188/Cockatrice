@@ -68,6 +68,37 @@ bool ruledObjectTargetLegalForPendingSpell(const QString &spellName, const CardI
     // Default for other ruled instants that required a target: battlefield creatures only.
     return zoneName == ZoneNames::TABLE && isCreature;
 }
+
+// Builds a Command_RuledPayload that decrements the engine's mana pool by 1 for the given counter
+// color. Returns nullptr if the counter name doesn't map to a known mana color (nothing to send).
+Command_RuledPayload *buildManaPoolDecrementPayload(const QString &counterName)
+{
+    ruled::v1::RuledCommand rc;
+    auto *m = rc.mutable_add_mana_to_pool();
+    const QString n = counterName.toLower();
+    if (n == QLatin1String("w")) {
+        m->set_w(-1);
+    } else if (n == QLatin1String("u")) {
+        m->set_u(-1);
+    } else if (n == QLatin1String("b")) {
+        m->set_b(-1);
+    } else if (n == QLatin1String("r")) {
+        m->set_r(-1);
+    } else if (n == QLatin1String("g")) {
+        m->set_g(-1);
+    } else if (n == QLatin1String("c") || n == QLatin1String("x")) {
+        m->set_c(-1);
+    } else {
+        return nullptr;
+    }
+    std::string payload;
+    if (!rc.SerializeToString(&payload)) {
+        return nullptr;
+    }
+    auto *cmd = new Command_RuledPayload;
+    cmd->set_payload(payload);
+    return cmd;
+}
 } // namespace
 
 PlayerActions::PlayerActions(Player *_player)
@@ -160,9 +191,13 @@ QString PlayerActions::pendingRuledSpellPromptText() const
 void PlayerActions::clearPendingRuledSpellCast()
 {
     const bool hadTargeting = pendingRuledSpellCast.valid && pendingRuledSpellCast.waitingForTarget;
+    const bool hadPending = pendingRuledSpellCast.valid;
     pendingRuledSpellCast = PendingRuledSpellCast{};
     if (hadTargeting) {
         emit ruledSpellTargetingChanged(false, {});
+    }
+    if (hadPending) {
+        emit ruledSpellCastPendingChanged(false);
     }
 }
 void PlayerActions::cancelPendingRuledSpellCast()
@@ -171,8 +206,123 @@ void PlayerActions::cancelPendingRuledSpellCast()
         return;
     }
     const QString cardName = pendingRuledSpellCast.cardName;
+
+    QList<const ::google::protobuf::Message *> cmdList;
+
+    // Refund mana paid toward the spell (last-in first-out) BEFORE undoing taps so counters
+    // never dip below zero. Payments were delta=-1; refund is delta=+1.
+    for (int i = manaPaymentCounterIds.size() - 1; i >= 0; --i) {
+        const int cid = manaPaymentCounterIds[i];
+        auto *counterCmd = new Command_IncCounter;
+        counterCmd->set_counter_id(cid);
+        counterCmd->set_delta(1);
+        cmdList.append(counterCmd);
+    }
+    manaPaymentCounterIds.clear();
+
+    // Undo any lands tapped for mana after the spell was initiated.
+    for (int i = midCastLandTapStack.size() - 1; i >= 0; --i) {
+        const LandTapUndoEntry &entry = midCastLandTapStack[i];
+        CardItem *card = player->getTableZone()->getCards().findCard(entry.cardId);
+        if (card) {
+            card->setTapped(false, true);
+            auto *attrCmd = new Command_SetCardAttr;
+            attrCmd->set_zone(ZoneNames::TABLE);
+            attrCmd->set_card_id(entry.cardId);
+            attrCmd->set_attribute(AttrTapped);
+            attrCmd->set_attr_value("0");
+            cmdList.append(attrCmd);
+        }
+        if (entry.counterId >= 0) {
+            if (auto *counter = player->getCounters().value(entry.counterId, nullptr)) {
+                counter->setValue(counter->getValue() - 1);
+            }
+            auto *counterCmd = new Command_IncCounter;
+            counterCmd->set_counter_id(entry.counterId);
+            counterCmd->set_delta(-1);
+            cmdList.append(counterCmd);
+            if (player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+                if (Command_RuledPayload *poolCmd = buildManaPoolDecrementPayload(entry.counterName)) {
+                    cmdList.append(poolCmd);
+                }
+            }
+        }
+    }
+    midCastLandTapStack.clear();
+
+    if (!cmdList.isEmpty()) {
+        sendGameCommand(prepareGameCommand(cmdList));
+    }
+
     clearPendingRuledSpellCast();
+    emit landTapUndoAvailableChanged(!landTapUndoStack.isEmpty());
     player->getGame()->getGameEventHandler()->emitLocalRuledLog(tr("Canceled casting %1.").arg(cardName));
+}
+
+void PlayerActions::recordLandTapUndo(int cardId, const QString &counterName, int counterId)
+{
+    if (pendingRuledSpellCast.valid) {
+        midCastLandTapStack.append({cardId, counterName, counterId});
+        return;
+    }
+    const bool hadEntries = !landTapUndoStack.isEmpty();
+    landTapUndoStack.append({cardId, counterName, counterId});
+    if (!hadEntries) {
+        emit landTapUndoAvailableChanged(true);
+    }
+}
+
+void PlayerActions::undoLastLandTap()
+{
+    if (landTapUndoStack.isEmpty()) {
+        return;
+    }
+    const LandTapUndoEntry entry = landTapUndoStack.takeLast();
+
+    QList<const ::google::protobuf::Message *> cmdList;
+
+    CardItem *card = player->getTableZone()->getCards().findCard(entry.cardId);
+    if (card) {
+        card->setTapped(false, true);
+        auto *attrCmd = new Command_SetCardAttr;
+        attrCmd->set_zone(ZoneNames::TABLE);
+        attrCmd->set_card_id(entry.cardId);
+        attrCmd->set_attribute(AttrTapped);
+        attrCmd->set_attr_value("0");
+        cmdList.append(attrCmd);
+    }
+
+    if (entry.counterId >= 0) {
+        if (auto *counter = player->getCounters().value(entry.counterId, nullptr)) {
+            counter->setValue(counter->getValue() - 1);
+        }
+        auto *counterCmd = new Command_IncCounter;
+        counterCmd->set_counter_id(entry.counterId);
+        counterCmd->set_delta(-1);
+        cmdList.append(counterCmd);
+        if (player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+            if (Command_RuledPayload *poolCmd = buildManaPoolDecrementPayload(entry.counterName)) {
+                cmdList.append(poolCmd);
+            }
+        }
+    }
+
+    if (!cmdList.isEmpty()) {
+        sendGameCommand(prepareGameCommand(cmdList));
+    }
+
+    emit landTapUndoAvailableChanged(!landTapUndoStack.isEmpty());
+}
+
+void PlayerActions::clearLandTapUndoStack()
+{
+    manaPaymentCounterIds.clear();
+    midCastLandTapStack.clear();
+    if (landTapUndoStack.isEmpty()) {
+        return;
+    }
+    landTapUndoStack.clear();
+    emit landTapUndoAvailableChanged(false);
 }
 
 
@@ -203,6 +353,9 @@ bool PlayerActions::completePendingRuledSpellCast()
     cmd.set_payload(payload);
     sendGameCommand(cmd);
 
+    manaPaymentCounterIds.clear();
+    midCastLandTapStack.clear();
+    clearLandTapUndoStack();
     clearPendingRuledSpellCast();
     return true;
 }
@@ -266,6 +419,7 @@ bool PlayerActions::tryPayRuledSpellWithCounter(const QString &counterName)
         totalRemaining += it.value();
     }
 
+    manaPaymentCounterIds.append(counterId);
     Command_IncCounter cmd;
     cmd.set_counter_id(counterId);
     cmd.set_delta(-1);
@@ -312,6 +466,7 @@ bool PlayerActions::tryPlayRuledLand(CardItem *card)
     Command_RuledPayload cmd;
     cmd.set_payload(payload);
     sendGameCommand(cmd);
+    clearLandTapUndoStack();
     return true;
 }
 
@@ -448,6 +603,8 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
         return false;
     }
 
+    manaPaymentCounterIds.clear();
+    midCastLandTapStack.clear();
     clearPendingRuledSpellCast();
     pendingRuledSpellCast.valid = true;
     pendingRuledSpellCast.handIndex = ruledHandIndex;
@@ -455,6 +612,8 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
     pendingRuledSpellCast.remainingCost = parseSimpleManaCost(card->getCardInfo().getManaCost());
     pendingRuledSpellCast.selectedTargetOids.clear();
     pendingRuledSpellCast.waitingForTarget = ruledSpellNeedsTarget(card);
+    emit landTapUndoAvailableChanged(false);
+    emit ruledSpellCastPendingChanged(true);
 
     if (pendingRuledSpellCast.waitingForTarget) {
         emit ruledSpellTargetingChanged(true, pendingRuledSpellCast.cardName);

@@ -43,6 +43,8 @@ signals:
     void logSetDoesntUntap(Player *player, CardItem *card, bool doesntUntap);
     void logSetPT(Player *player, CardItem *card, QString newPT);
     void ruledSpellTargetingChanged(bool active, const QString &cardName);
+    void landTapUndoAvailableChanged(bool available);
+    void ruledSpellCastPendingChanged(bool pending);
 
 public:
     enum CardsToReveal
@@ -78,6 +80,11 @@ public:
     bool tryToggleRuledCleanupDiscard(CardItem *card);
     bool tryRuledOpeningBottomCard(CardItem *card);
     bool sendRuledCleanupDiscardBatchIfComplete();
+
+    void recordLandTapUndo(int cardId, const QString &counterName, int counterId);
+    void undoLastLandTap();
+    void clearLandTapUndoStack();
+    [[nodiscard]] bool hasLandTapUndoEntries() const { return !landTapUndoStack.isEmpty(); }
 
     [[nodiscard]] bool isMovingCardsUntil() const
     {
@@ -191,6 +198,13 @@ private:
         bool valid = false;
     };
 
+    struct LandTapUndoEntry
+    {
+        int cardId;
+        QString counterName;
+        int counterId;
+    };
+
     Player *player;
     bool tryPlayRuledLand(CardItem *card);
     bool tryStartRuledSpellCast(CardItem *card);
@@ -214,6 +228,9 @@ private:
     int movingCardsUntilCounter = 0;
     MoveTopCardsUntilOptions movingCardsUntilOptions;
     PendingRuledSpellCast pendingRuledSpellCast;
+    QVector<LandTapUndoEntry> landTapUndoStack;
+    QVector<LandTapUndoEntry> midCastLandTapStack;
+    QVector<int> manaPaymentCounterIds;
 
     void moveTopCardsTo(const QString &targetZone, const QString &zoneDisplayName, bool faceDown);
     void moveBottomCardsTo(const QString &targetZone, const QString &zoneDisplayName, bool faceDown);

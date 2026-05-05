@@ -321,6 +321,9 @@ void TableZone::toggleTapped()
                     if (auto *counter = getLogic()->getPlayer()->getCounters().value(manaCounterId, nullptr)) {
                         counter->setValue(counter->getValue() + 1);
                     }
+
+                    getLogic()->getPlayer()->getPlayerActions()->recordLandTapUndo(
+                        temp->getId(), manaCounterName, manaCounterId);
                 }
             }
         }
