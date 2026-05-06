@@ -549,6 +549,12 @@ impl GameEngine {
             Some(Cmd::PlayLand(pl)) => self.play_land(player, pl.hand_card_index as usize),
             Some(Cmd::AddManaToPool(m)) => self.add_mana_to_pool(player, m),
             Some(Cmd::DiscardToHandSize(d)) => self.discard_to_hand_size(player, d),
+            Some(Cmd::AssignDamageOrder(ado)) => {
+                if self.state.active_player_id() != player {
+                    return Err(EngineError::Illegal("not active player"));
+                }
+                self.assign_damage_order(ado.attacker_id, &ado.ordered_blocker_ids)
+            }
         };
         let mut b = res?;
         self.sweep_life();
@@ -636,15 +642,21 @@ impl GameEngine {
         let attackers_for_event = list.clone();
         if let Some(c) = self.state.combat.as_mut() {
             c.attacking = list;
-            c.blocker.clear();
+            c.blockers.clear();
+            c.damage_order.clear();
+            c.damage_order_needed = false;
+            c.assign_damage_order_phase = false;
             c.attackers_declared = true;
             c.blockers_declared = false;
         } else {
             self.state.combat = Some(CombatState {
                 attacking: list,
-                blocker: HashMap::new(),
+                blockers: HashMap::new(),
+                damage_order: HashMap::new(),
+                damage_order_needed: false,
                 attackers_declared: true,
                 blockers_declared: false,
+                assign_damage_order_phase: false,
             });
         }
         self.clear_all_mana_pools();
@@ -682,16 +694,19 @@ impl GameEngine {
             .state
             .defending_player_id_1v1()
             .ok_or(EngineError::Illegal("defender missing"))?;
-        let mut seen_attackers = HashSet::new();
+        // A blocker may appear at most once: CR 509.2 — a creature can only block one attacker.
         let mut seen_blockers = HashSet::new();
+        // Build attacker → [blockers] map while validating.
+        let mut attacker_to_blockers: HashMap<ObjectId, Vec<ObjectId>> = HashMap::new();
         for p in pairs {
-            if let Some(c) = self.state.combat.as_mut() {
-                if c.blocker.contains_key(&p.attacker_id) || !seen_attackers.insert(p.attacker_id) {
-                    return Err(EngineError::Illegal("duplicate attacker block assignment"));
-                }
-                if !c.attacking.contains(&p.attacker_id) {
-                    return Err(EngineError::Illegal("bad attacker"));
-                }
+            let in_attack = self
+                .state
+                .combat
+                .as_ref()
+                .map(|c| c.attacking.contains(&p.attacker_id))
+                .unwrap_or(false);
+            if !in_attack {
+                return Err(EngineError::Illegal("bad attacker"));
             }
             if !seen_blockers.insert(p.blocker_id) {
                 return Err(EngineError::Illegal("blocker assigned more than once"));
@@ -713,11 +728,17 @@ impl GameEngine {
             if bobj.tapped {
                 return Err(EngineError::Illegal("blocker tapped"));
             }
+            attacker_to_blockers
+                .entry(p.attacker_id)
+                .or_default()
+                .push(p.blocker_id);
         }
+        let damage_order_needed = attacker_to_blockers.values().any(|v| v.len() > 1);
         if let Some(c) = self.state.combat.as_mut() {
-            for p in pairs {
-                c.blocker.insert(p.attacker_id, p.blocker_id);
-            }
+            c.blockers = attacker_to_blockers;
+            c.damage_order.clear();
+            c.damage_order_needed = damage_order_needed;
+            c.assign_damage_order_phase = false;
             c.blockers_declared = true;
         }
         let block_line = if pairs.is_empty() {
@@ -734,7 +755,7 @@ impl GameEngine {
                 .join("; ")
         };
         let mut b = RuledEventBatch::default();
-        let block_pairs_for_event: Vec<rv1::BlockPair> = pairs.iter().cloned().collect();
+        let block_pairs_for_event: Vec<rv1::BlockPair> = pairs.to_vec();
         b.events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::BlockersDeclared(rv1::BlockersDeclared {
                 block_pairs: block_pairs_for_event,
@@ -748,11 +769,90 @@ impl GameEngine {
             self.state.priority_idx = i;
         }
         self.state.passes_since_stack_change = 0;
-        b.events.push(ev_log(format!(
-            "P{} {}",
-            defending_player, block_line
-        )));
+        b.events.push(ev_log(format!("P{} {}", defending_player, block_line)));
         b.events.push(ev_priority_changed(self));
+        fill_legal(&mut b, self);
+        Ok(b)
+    }
+
+    fn assign_damage_order(
+        &mut self,
+        attacker_id: ObjectId,
+        ordered_ids: &[ObjectId],
+    ) -> Result<RuledEventBatch, EngineError> {
+        let c = self
+            .state
+            .combat
+            .as_ref()
+            .ok_or(EngineError::Illegal("not in combat"))?;
+        if !c.blockers_declared || !c.damage_order_needed || !c.assign_damage_order_phase {
+            return Err(EngineError::Illegal("damage order not open"));
+        }
+        let expected: HashSet<ObjectId> = c
+            .blockers
+            .get(&attacker_id)
+            .ok_or(EngineError::Illegal("attacker not multiply-blocked"))?
+            .iter()
+            .copied()
+            .collect();
+        if expected.len() < 2 {
+            return Err(EngineError::Illegal("attacker not multiply-blocked"));
+        }
+        let provided: HashSet<ObjectId> = ordered_ids.iter().copied().collect();
+        if provided != expected {
+            return Err(EngineError::Illegal(
+                "ordered ids must match blockers exactly",
+            ));
+        }
+
+        let mut b = RuledEventBatch::default();
+        // Apply the order.
+        let c = self.state.combat.as_mut().unwrap();
+        c.damage_order.insert(attacker_id, ordered_ids.to_vec());
+        let all_done = c
+            .blockers
+            .iter()
+            .filter(|(_, blks)| blks.len() > 1)
+            .all(|(atk, _)| c.damage_order.contains_key(atk));
+        if all_done {
+            c.damage_order_needed = false;
+        }
+        b.events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::DamageOrderAssigned(
+                rv1::DamageOrderAssigned {
+                    attacker_id,
+                    ordered_blocker_ids: ordered_ids.to_vec(),
+                },
+            )),
+        });
+        let att_name = object_display_name(&self.state, &self.registry, attacker_id);
+        b.events
+            .push(ev_log(format!("Damage order assigned for {att_name}.")));
+
+        // Once all orders are assigned, immediately move to combat damage and apply it.
+        // This avoids an extra priority loop in declare blockers.
+        if !self.state.combat.as_ref().unwrap().damage_order_needed {
+            let c_now = self
+                .state
+                .combat
+                .clone()
+                .ok_or(EngineError::Illegal("combat?"))?;
+            self.resolve_combat_damage(&c_now, &mut b.events)?;
+            self.state.combat = None;
+            self.clear_all_mana_pools();
+            self.state.turn_step = TurnStep::CombatDamage;
+            if let Some(i) = self.state.player_idx(self.state.active_player_id()) {
+                self.state.priority_idx = i;
+            }
+            self.state.passes_since_stack_change = 0;
+            let legend_events = self.apply_legend_sbas()?;
+            b.events.extend(legend_events);
+            b.events.push(ev_log("Combat damage dealt.".to_string()));
+            b.events.push(ev_phase_labeled(self, "combat_damage"));
+            b.events.push(ev_priority_changed(self));
+        } else {
+            b.events.push(ev_priority_changed(self));
+        }
         fill_legal(&mut b, self);
         Ok(b)
     }
@@ -768,13 +868,24 @@ impl GameEngine {
             if self.state.objects.get(&att).map(|a| a.zone) != Some(Zone::Battlefield) {
                 continue;
             }
-            if let Some(&blk) = c.blocker.get(&att) {
-                let apw = self
-                    .state
-                    .objects
-                    .get(&att)
-                    .and_then(|o| o.power)
-                    .unwrap_or(0);
+            let blockers = c.blockers.get(&att).map(|v| v.as_slice()).unwrap_or(&[]);
+            let att_power = self
+                .state
+                .objects
+                .get(&att)
+                .and_then(|o| o.power)
+                .unwrap_or(0);
+
+            if blockers.is_empty() {
+                // Unblocked: deal full power to defending player.
+                let p = att_power as i32;
+                if let Some(di) = self.state.player_idx(dfd) {
+                    self.state.players[di].life -= p;
+                    total_life_lost += p;
+                }
+            } else if blockers.len() == 1 {
+                // Single blocker: exchange full power (unchanged from M2).
+                let blk = blockers[0];
                 let bpw = self
                     .state
                     .objects
@@ -785,18 +896,53 @@ impl GameEngine {
                     af.damage += bpw;
                 }
                 if let Some(bf) = self.state.objects.get_mut(&blk) {
-                    bf.damage += apw;
+                    bf.damage += att_power;
                 }
             } else {
-                let p = self
-                    .state
-                    .objects
+                // Multiple blockers (CR 510.1b): all blockers deal their power to the attacker
+                // simultaneously; attacker assigns damage in declared order with lethal-first rule.
+                let total_blocker_power: u32 = blockers
+                    .iter()
+                    .filter_map(|&b| self.state.objects.get(&b).and_then(|o| o.power))
+                    .sum();
+                if let Some(af) = self.state.objects.get_mut(&att) {
+                    af.damage += total_blocker_power;
+                }
+                // Walk the damage order, assigning attacker power lethally in sequence.
+                let order: &[ObjectId] = c
+                    .damage_order
                     .get(&att)
-                    .and_then(|o| o.power)
-                    .unwrap_or(0) as i32;
-                if let Some(di) = self.state.player_idx(dfd) {
-                    self.state.players[di].life -= p;
-                    total_life_lost += p;
+                    .map(|v| v.as_slice())
+                    .unwrap_or(blockers);
+                let mut remaining = att_power;
+                for (i, &blk) in order.iter().enumerate() {
+                    if remaining == 0 {
+                        break;
+                    }
+                    let is_last = i == order.len() - 1;
+                    let assign = if is_last {
+                        // Last blocker gets all remaining power.
+                        remaining
+                    } else {
+                        let toughness = self
+                            .state
+                            .objects
+                            .get(&blk)
+                            .and_then(|o| o.toughness)
+                            .unwrap_or(1);
+                        let already = self
+                            .state
+                            .objects
+                            .get(&blk)
+                            .map(|o| o.damage)
+                            .unwrap_or(0);
+                        // Lethal = damage needed to bring total to toughness, minimum 1.
+                        toughness.saturating_sub(already).max(1).min(remaining)
+                    };
+                    if let Some(bf) = self.state.objects.get_mut(&blk) {
+                        bf.damage += assign;
+                    }
+                    remaining = remaining.saturating_sub(assign);
                 }
             }
         }
@@ -833,6 +979,16 @@ impl GameEngine {
                 self.set_attackers(&[], player)
             }
             DeclareBlockers => {
+                if let Some(c) = &self.state.combat {
+                    if c.assign_damage_order_phase {
+                        return Err(EngineError::Illegal(
+                            "cannot use structured yield during damage order",
+                        ));
+                    }
+                    if c.blockers_declared {
+                        return Err(EngineError::Illegal("blockers already declared"));
+                    }
+                }
                 if Some(player) != self.state.defending_player_id_1v1() {
                     return Err(EngineError::Illegal("not defending player"));
                 }
@@ -1016,9 +1172,12 @@ impl GameEngine {
                 }
                 self.state.combat = Some(CombatState {
                     attacking: vec![],
-                    blocker: HashMap::new(),
+                    blockers: HashMap::new(),
+                    damage_order: HashMap::new(),
+                    damage_order_needed: false,
                     attackers_declared: false,
                     blockers_declared: false,
+                    assign_damage_order_phase: false,
                 });
                 ev.push(ev_phase_labeled(self, "declare_attackers"));
                 ev.push(ev_priority_changed(self));
@@ -1036,25 +1195,58 @@ impl GameEngine {
                 ev.push(ev_priority_changed(self));
             }
             DeclareBlockers => {
-                // Advancing out of declare-blockers is where combat damage is dealt.
+                // After blockers are declared, players receive priority in declare blockers before
+                // moving to damage-order assignment (multi-block) or combat damage.
                 let c = self
                     .state
                     .combat
                     .clone()
                     .ok_or(EngineError::Illegal("combat?"))?;
-                self.resolve_combat_damage(&c, ev)?;
-                self.state.combat = None;
-                self.clear_all_mana_pools();
-                self.state.turn_step = CombatDamage;
-                if let Some(i) = self.state.player_idx(ap) {
-                    self.state.priority_idx = i;
+                let multiblock_missing = c.blockers.iter().any(|(atk, blks)| {
+                    blks.len() > 1 && !c.damage_order.contains_key(atk)
+                });
+                if multiblock_missing {
+                    if !c.assign_damage_order_phase {
+                        if let Some(cc) = self.state.combat.as_mut() {
+                            cc.assign_damage_order_phase = true;
+                        }
+                        self.clear_all_mana_pools();
+                        self.state.turn_step = DeclareBlockers;
+                        if let Some(i) = self.state.player_idx(ap) {
+                            self.state.priority_idx = i;
+                        }
+                        self.state.passes_since_stack_change = 0;
+                        ev.push(ev_log(
+                            "Proceeding to damage order assignment (after declare blockers)."
+                                .into(),
+                        ));
+                        ev.push(ev_phase_labeled(self, "assign_damage_order"));
+                        ev.push(ev_priority_changed(self));
+                    } else {
+                        return Err(EngineError::Illegal(
+                            "must assign damage order before combat damage",
+                        ));
+                    }
+                } else {
+                    if c.damage_order_needed {
+                        return Err(EngineError::Illegal(
+                            "must assign damage order before combat damage",
+                        ));
+                    }
+                    self.resolve_combat_damage(&c, ev)?;
+                    self.state.combat = None;
+                    self.clear_all_mana_pools();
+                    self.state.turn_step = CombatDamage;
+                    if let Some(i) = self.state.player_idx(ap) {
+                        self.state.priority_idx = i;
+                    }
+                    self.state.passes_since_stack_change = 0;
+                    let legend_events = self.apply_legend_sbas()?;
+                    ev.extend(legend_events);
+                    ev.push(ev_log("Combat damage dealt.".to_string()));
+                    ev.push(ev_phase_labeled(self, "combat_damage"));
+                    ev.push(ev_priority_changed(self));
                 }
-                self.state.passes_since_stack_change = 0;
-                let legend_events = self.apply_legend_sbas()?;
-                ev.extend(legend_events);
-                ev.push(ev_log("Combat damage dealt.".to_string()));
-                ev.push(ev_phase_labeled(self, "combat_damage"));
-                ev.push(ev_priority_changed(self));
             }
             CombatDamage => {
                 self.clear_all_mana_pools();
@@ -1940,7 +2132,10 @@ fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
 fn priority_locked_for_combat_declaration(state: &GameState) -> bool {
     match state.turn_step {
         TurnStep::DeclareAttackers => state.combat.as_ref().is_some_and(|c| !c.attackers_declared),
-        TurnStep::DeclareBlockers => state.combat.as_ref().is_some_and(|c| !c.blockers_declared),
+        TurnStep::DeclareBlockers => state
+            .combat
+            .as_ref()
+            .is_some_and(|c| !c.blockers_declared),
         _ => false,
     }
 }
@@ -1989,6 +2184,25 @@ fn opening_legal_labels(eng: &GameEngine, pid: PlayerId, op: &OpeningSequence) -
 fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
     if let Some(op) = &eng.state.opening {
         return opening_legal_labels(eng, pid, op);
+    }
+    // Damage order sub-phase: active player must assign order before anything else.
+    if let Some(c) = &eng.state.combat {
+        if c.blockers_declared && c.damage_order_needed && c.assign_damage_order_phase {
+            if pid == eng.state.active_player_id() {
+                let mut out = Vec::new();
+                for (&att, blks) in &c.blockers {
+                    if blks.len() > 1 && !c.damage_order.contains_key(&att) {
+                        let name = object_display_name(&eng.state, &eng.registry, att);
+                        out.push(format!(
+                            "Assign damage order for {name} (attacker_id {att})"
+                        ));
+                    }
+                }
+                return out;
+            } else {
+                return vec!["Waiting: opponent assigning damage order".into()];
+            }
+        }
     }
     let mut v = vec!["Pass priority".into()];
     if eng.state.priority_player_id() != pid {

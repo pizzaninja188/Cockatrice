@@ -40,6 +40,7 @@ CardItem::CardItem(Player *_owner, QGraphicsItem *parent, const CardRef &cardRef
         if (auto *handler = game->getGameEventHandler()) {
             connect(handler, &GameEventHandler::ruledCombatStateChanged, this, [this]() { update(); });
             connect(handler, &GameEventHandler::ruledBattlefieldMapUpdated, this, [this]() { update(); });
+            connect(handler, &GameEventHandler::ruledDamageOrderUiChanged, this, [this]() { update(); });
         }
     }
 }
@@ -192,10 +193,20 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
     if (ruledHandler) {
         if (ruledOid != 0) {
             QColor outlineColor;
-            if (ruledHandler->isPendingAttacker(ruledOid)) {
+            const auto ruledPhase = ruledHandler->getRuledCombatPhase();
+            using RuledPhase = GameEventHandler::RuledCombatPhase;
+            if (ruledPhase == RuledPhase::AssignDamageOrder) {
+                const quint32 curAtt = ruledHandler->currentDamageOrderAttackerOid();
+                const int ordinal = ruledHandler->damageOrderOrdinalForBlocker(ruledOid);
+                if (ordinal > 0) {
+                    outlineColor = QColor(128, 0, 200); // purple for ordered blockers
+                } else if (curAtt != 0 && ruledHandler->getCommittedBlocks().value(ruledOid, 0) == curAtt) {
+                    outlineColor = QColor(255, 200, 0); // yellow for unordered blockers of current attacker
+                }
+            } else if (ruledHandler->isPendingAttacker(ruledOid)) {
                 outlineColor = QColor(255, 215, 0); // gold for pending attackers
-            } else if (ruledHandler->stagedBlocker() == ruledOid) {
-                outlineColor = QColor(0, 255, 128); // green for staged blocker
+            } else if (ruledHandler->isStagedBlocker(ruledOid)) {
+                outlineColor = QColor(0, 255, 128); // green for staged blockers
             } else if (ruledHandler->pendingBlockTargetForBlocker(ruledOid) != 0) {
                 outlineColor = QColor(80, 160, 255); // blue for paired blocker
             } else if (ruledHandler->isCurrentAttacker(ruledOid) && !attacking) {
@@ -212,6 +223,12 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
                 painter->setPen(pen);
                 painter->drawPath(shape());
                 painter->restore();
+            }
+            if (ruledPhase == RuledPhase::AssignDamageOrder) {
+                const int ordinal = ruledHandler->damageOrderOrdinalForBlocker(ruledOid);
+                if (ordinal > 0) {
+                    paintNumberEllipse(ordinal, 14, QColor(128, 0, 200), 0, 1, painter);
+                }
             }
         }
         if (zone && zone->getName() == ZoneNames::HAND && owner && owner->getPlayerInfo()->getLocal() &&
@@ -647,19 +664,28 @@ bool handleRuledCombatClick(CardItem *card)
             if (card->getTapped()) {
                 return false;
             }
-            // Toggle: clicking the staged blocker again clears the staging.
-            if (handler->stagedBlocker() == oid) {
-                handler->clearStagedBlocker();
-            } else {
-                handler->selectStagedBlocker(oid);
-            }
+            // Toggle this creature in/out of the staged blocker set.
+            handler->toggleStagedBlocker(oid);
             return true;
         }
-        // Clicked an enemy creature — pair with the staged blocker if it's an attacker.
+        // Clicked an enemy attacker — pair all staged blockers to it.
         if (handler->hasStagedBlocker() && handler->isCurrentAttacker(oid)) {
             handler->pairStagedBlockerToAttacker(oid);
             return true;
         }
+    }
+
+    if (phase == Phase::AssignDamageOrder && handler->localPlayerIsRuledActive()) {
+        const quint32 curAtt = handler->currentDamageOrderAttackerOid();
+        if (curAtt == 0) {
+            return false;
+        }
+        // Only accept blockers assigned to the current attacker.
+        if (handler->getCommittedBlocks().value(oid, 0) != curAtt) {
+            return false;
+        }
+        handler->appendToDamageOrderSequence(oid);
+        return true;
     }
 
     return false;

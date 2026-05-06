@@ -118,6 +118,11 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     connect(resetBlockersButton, &QPushButton::clicked, this, &GamePromptWidget::resetBlockersRequested);
     combatRow->addWidget(resetBlockersButton);
 
+    resetDamageOrderButton = new QPushButton(this);
+    resetDamageOrderButton->setObjectName("resetDamageOrderButton");
+    connect(resetDamageOrderButton, &QPushButton::clicked, this, &GamePromptWidget::resetDamageOrderRequested);
+    combatRow->addWidget(resetDamageOrderButton);
+
     cancelTargetingButton = new QPushButton(this);
     cancelTargetingButton->setObjectName("cancelTargetingButton");
     connect(cancelTargetingButton, &QPushButton::clicked, this, &GamePromptWidget::cancelTargetingRequested);
@@ -151,6 +156,7 @@ void GamePromptWidget::retranslateUi()
     confirmAttackersButton->setText(tr("OK"));
     confirmBlockersButton->setText(tr("OK"));
     resetBlockersButton->setText(tr("Reset Blockers"));
+    resetDamageOrderButton->setText(tr("Reset Order"));
     cancelTargetingButton->setText(tr("Cancel"));
     undoLandTapButton->setText(tr("Undo"));
     openingKeepButton->setText(tr("Keep hand"));
@@ -315,6 +321,7 @@ void GamePromptWidget::updateCombatButtonsVisibility()
         confirmAttackersButton->setVisible(false);
         confirmBlockersButton->setVisible(false);
         resetBlockersButton->setVisible(false);
+        resetDamageOrderButton->setVisible(false);
         cancelTargetingButton->setVisible(false);
         undoLandTapButton->setVisible(false);
         return;
@@ -324,6 +331,7 @@ void GamePromptWidget::updateCombatButtonsVisibility()
         confirmAttackersButton->setVisible(false);
         confirmBlockersButton->setVisible(false);
         resetBlockersButton->setVisible(false);
+        resetDamageOrderButton->setVisible(false);
         cancelTargetingButton->setVisible(true);
         undoLandTapButton->setVisible(false);
         return;
@@ -333,12 +341,16 @@ void GamePromptWidget::updateCombatButtonsVisibility()
         localPlayerHasPriority && currentCombatMode == CombatMode::DeclareAttackers && localPlayerHasCombatButtons;
     const bool showBlockers =
         localPlayerHasPriority && currentCombatMode == CombatMode::DeclareBlockers && localPlayerHasCombatButtons;
-    passPriorityButton->setVisible(localPlayerHasPriority && !showAttackers && !showBlockers);
+    const bool showDamageOrder =
+        localPlayerHasPriority && currentCombatMode == CombatMode::AssignDamageOrder && localPlayerHasCombatButtons;
+    passPriorityButton->setVisible(localPlayerHasPriority && !showAttackers && !showBlockers && !showDamageOrder);
     confirmAttackersButton->setVisible(showAttackers);
     confirmBlockersButton->setVisible(showBlockers);
     resetBlockersButton->setVisible(showBlockers);
+    resetDamageOrderButton->setVisible(showDamageOrder);
     cancelTargetingButton->setVisible(false);
-    undoLandTapButton->setVisible(localPlayerHasPriority && landTapUndoAvailable && !showAttackers && !showBlockers);
+    undoLandTapButton->setVisible(localPlayerHasPriority && landTapUndoAvailable && !showAttackers && !showBlockers &&
+                                   !showDamageOrder);
 }
 
 void GamePromptWidget::updatePassPriorityButtonText()

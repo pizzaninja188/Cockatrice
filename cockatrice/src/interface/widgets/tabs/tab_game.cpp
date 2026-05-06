@@ -331,6 +331,9 @@ void TabGame::connectToGameEventHandler()
                     } else if (phase == Phase::DeclareBlockers) {
                         mode = GamePromptWidget::CombatMode::DeclareBlockers;
                         localHasButtons = handler->localPlayerIsRuledDefender();
+                    } else if (phase == Phase::AssignDamageOrder) {
+                        mode = GamePromptWidget::CombatMode::AssignDamageOrder;
+                        localHasButtons = handler->localPlayerIsRuledActive();
                     }
                     gamePromptWidget->setCombatMode(mode, localHasButtons);
                 });
@@ -340,6 +343,8 @@ void TabGame::connectToGameEventHandler()
                 &GameEventHandler::handleConfirmRuledBlockers);
         connect(gamePromptWidget, &GamePromptWidget::resetBlockersRequested, game->getGameEventHandler(),
                 &GameEventHandler::clearPendingBlocks);
+        connect(gamePromptWidget, &GamePromptWidget::resetDamageOrderRequested, game->getGameEventHandler(),
+                &GameEventHandler::resetCurrentDamageOrderSequence);
         connect(gamePromptWidget, &GamePromptWidget::cancelTargetingRequested, this, [this]() {
             if (!game) {
                 return;

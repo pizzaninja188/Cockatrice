@@ -65,11 +65,14 @@ GameEventHandler::RuledCombatPhase mapRuledPhaseSlugToCombatPhase(const QString 
     if (slug == QLatin1String("declare_blockers")) {
         return GameEventHandler::RuledCombatPhase::DeclareBlockers;
     }
+    if (slug == QLatin1String("assign_damage_order")) {
+        return GameEventHandler::RuledCombatPhase::AssignDamageOrder;
+    }
     if (slug == QLatin1String("combat_damage")) {
         return GameEventHandler::RuledCombatPhase::CombatDamage;
     }
     if (slug == QLatin1String("end_combat")) {
-        return GameEventHandler::RuledCombatPhase::CombatDamage;
+        return GameEventHandler::RuledCombatPhase::None;
     }
     return GameEventHandler::RuledCombatPhase::None;
 }
@@ -94,7 +97,7 @@ int mapRuledPhaseSlugToToolbarPhase(const QString &slug)
     if (slug == QLatin1String("declare_attackers")) {
         return 5;
     }
-    if (slug == QLatin1String("declare_blockers")) {
+    if (slug == QLatin1String("declare_blockers") || slug == QLatin1String("assign_damage_order")) {
         return 6;
     }
     if (slug == QLatin1String("combat_damage")) {
@@ -609,48 +612,116 @@ void GameEventHandler::clearPendingAttackers()
     emit ruledCombatStateChanged();
 }
 
-void GameEventHandler::selectStagedBlocker(quint32 blockerOid)
+void GameEventHandler::toggleStagedBlocker(quint32 blockerOid)
 {
-    if (stagedBlockerOid == blockerOid) {
-        return;
+    if (stagedBlockerOids.contains(blockerOid)) {
+        stagedBlockerOids.remove(blockerOid);
+    } else {
+        stagedBlockerOids.insert(blockerOid);
     }
-    stagedBlockerOid = blockerOid;
     emit ruledCombatStateChanged();
 }
 
-void GameEventHandler::clearStagedBlocker()
+void GameEventHandler::clearStagedBlockers()
 {
-    if (stagedBlockerOid == 0) {
+    if (stagedBlockerOids.isEmpty()) {
         return;
     }
-    stagedBlockerOid = 0;
+    stagedBlockerOids.clear();
     emit ruledCombatStateChanged();
 }
 
 void GameEventHandler::pairStagedBlockerToAttacker(quint32 attackerOid)
 {
-    if (stagedBlockerOid == 0 || attackerOid == 0) {
+    if (stagedBlockerOids.isEmpty() || attackerOid == 0) {
         return;
     }
     if (!currentAttackerOids.contains(attackerOid)) {
         return;
     }
-    pendingBlocks.insert(stagedBlockerOid, attackerOid);
-    stagedBlockerOid = 0;
+    for (quint32 blockerOid : std::as_const(stagedBlockerOids)) {
+        pendingBlocks.insert(blockerOid, attackerOid);
+    }
+    stagedBlockerOids.clear();
     syncRuledBlockersPreviewToServer();
     emit ruledCombatStateChanged();
 }
 
 void GameEventHandler::clearPendingBlocks()
 {
-    if (pendingBlocks.isEmpty() && stagedBlockerOid == 0 && committedBlocks.isEmpty()) {
+    if (pendingBlocks.isEmpty() && stagedBlockerOids.isEmpty() && committedBlocks.isEmpty()) {
         return;
     }
     pendingBlocks.clear();
     committedBlocks.clear();
-    stagedBlockerOid = 0;
+    stagedBlockerOids.clear();
     syncRuledBlockersPreviewToServer();
     emit ruledCombatStateChanged();
+}
+
+quint32 GameEventHandler::currentDamageOrderAttackerOid() const
+{
+    if (currentDamageOrderAttackerIdx < 0 ||
+        currentDamageOrderAttackerIdx >= damageOrderPendingAttackers.size()) {
+        return 0;
+    }
+    return damageOrderPendingAttackers[currentDamageOrderAttackerIdx];
+}
+
+int GameEventHandler::damageOrderOrdinalForBlocker(quint32 blockerOid) const
+{
+    const int idx = currentDamageOrderSequence.indexOf(blockerOid);
+    return idx >= 0 ? idx + 1 : 0;
+}
+
+void GameEventHandler::appendToDamageOrderSequence(quint32 blockerOid)
+{
+    const quint32 curAtt = currentDamageOrderAttackerOid();
+    if (curAtt == 0) {
+        return;
+    }
+    const QList<quint32> &blockers = committedBlockerGroups.value(curAtt);
+    if (!blockers.contains(blockerOid)) {
+        return;
+    }
+    if (currentDamageOrderSequence.contains(blockerOid)) {
+        // Toggle-off: remove the blocker from the sequence.
+        currentDamageOrderSequence.removeAll(blockerOid);
+        emit ruledDamageOrderUiChanged();
+        emit ruledCombatStateChanged();
+        return;
+    }
+    currentDamageOrderSequence.append(blockerOid);
+
+    // Once all blockers of the current attacker are ordered, advance to next.
+    if (currentDamageOrderSequence.size() == blockers.size()) {
+        pendingDamageOrders.insert(curAtt, currentDamageOrderSequence);
+        currentDamageOrderSequence.clear();
+        currentDamageOrderAttackerIdx++;
+
+        if (currentDamageOrderAttackerIdx >= damageOrderPendingAttackers.size()) {
+            // All attackers ordered — auto-submit.
+            handleConfirmAllDamageOrders();
+            return;
+        }
+    }
+    emit ruledDamageOrderUiChanged();
+    emit ruledCombatStateChanged();
+}
+
+void GameEventHandler::resetCurrentDamageOrderSequence()
+{
+    currentDamageOrderSequence.clear();
+    emit ruledDamageOrderUiChanged();
+}
+
+void GameEventHandler::clearDamageOrderState()
+{
+    damageOrderPendingAttackers.clear();
+    currentDamageOrderAttackerIdx = -1;
+    pendingDamageOrders.clear();
+    currentDamageOrderSequence.clear();
+    damageOrdersSubmittedThisStep = false;
 }
 
 void GameEventHandler::sendGameCommand(PendingCommand *pend, int playerId)
@@ -834,15 +905,27 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                     mapRuledPhaseSlugToCombatPhase(QString::fromStdString(pc.phase()));
                                 if (combatPhase != currentRuledCombatPhase ||
                                     currentRuledActivePlayerId != pc.active_player_id()) {
+                                    const RuledCombatPhase previousCombatPhase = currentRuledCombatPhase;
                                     currentRuledCombatPhase = combatPhase;
                                     currentRuledActivePlayerId = pc.active_player_id();
                                     // Phase transitions reset any local pending selections.
                                     pendingAttackerOids.clear();
                                     pendingBlocks.clear();
-                                    committedBlocks.clear();
                                     remoteBlockPreviewPairs.clear();
                                     remoteAttackerPreviewOids.clear();
-                                    stagedBlockerOid = 0;
+                                    stagedBlockerOids.clear();
+                                    // Keep committed block assignments visible/interactive while
+                                    // progressing from declare blockers -> assign damage order ->
+                                    // combat damage. Clear only when leaving combat.
+                                    const auto isCombatPhase = [](RuledCombatPhase phase) {
+                                        return phase == RuledCombatPhase::DeclareAttackers ||
+                                               phase == RuledCombatPhase::DeclareBlockers ||
+                                               phase == RuledCombatPhase::AssignDamageOrder ||
+                                               phase == RuledCombatPhase::CombatDamage;
+                                    };
+                                    if (!isCombatPhase(previousCombatPhase) || !isCombatPhase(combatPhase)) {
+                                        committedBlocks.clear();
+                                    }
                                     if (combatPhase == RuledCombatPhase::DeclareAttackers) {
                                         attackersSubmittedThisStep = false;
                                     } else if (combatPhase == RuledCombatPhase::DeclareBlockers) {
@@ -854,6 +937,8 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                     if (combatPhase == RuledCombatPhase::None) {
                                         currentAttackerOids.clear();
                                         remoteAttackerPreviewOids.clear();
+                                        clearDamageOrderState();
+                                        committedBlockerGroups.clear();
                                     }
                                     combatStateDirty = true;
                                 }
@@ -924,8 +1009,12 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                         ++it;
                                     }
                                 }
-                                if (stagedBlockerOid != 0 && !validOids.contains(stagedBlockerOid)) {
-                                    stagedBlockerOid = 0;
+                                for (auto it = stagedBlockerOids.begin(); it != stagedBlockerOids.end();) {
+                                    if (!validOids.contains(*it)) {
+                                        it = stagedBlockerOids.erase(it);
+                                    } else {
+                                        ++it;
+                                    }
                                 }
                                 battlefieldMapDirty = true;
                                 combatStateDirty = true;
@@ -978,13 +1067,32 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 committedBlocks.clear();
                                 pendingBlocks.clear();
                                 remoteBlockPreviewPairs.clear();
-                                stagedBlockerOid = 0;
+                                stagedBlockerOids.clear();
+                                committedBlockerGroups.clear();
                                 for (int bpi = 0; bpi < e.blockers_declared().block_pairs_size(); ++bpi) {
                                     const auto &bp = e.blockers_declared().block_pairs(bpi);
-                                    committedBlocks.insert(static_cast<quint32>(bp.blocker_id()),
-                                                           static_cast<quint32>(bp.attacker_id()));
+                                    const auto attOid = static_cast<quint32>(bp.attacker_id());
+                                    const auto blkOid = static_cast<quint32>(bp.blocker_id());
+                                    committedBlocks.insert(blkOid, attOid);
+                                    committedBlockerGroups[attOid].append(blkOid);
+                                }
+                                // Populate damage order queue for any attacker with 2+ blockers.
+                                clearDamageOrderState();
+                                for (auto it = committedBlockerGroups.constBegin();
+                                     it != committedBlockerGroups.constEnd(); ++it) {
+                                    if (it.value().size() > 1) {
+                                        damageOrderPendingAttackers.append(it.key());
+                                    }
+                                }
+                                if (!damageOrderPendingAttackers.isEmpty()) {
+                                    currentDamageOrderAttackerIdx = 0;
                                 }
                                 blockersSubmittedThisStep = true;
+                                combatStateDirty = true;
+                            }
+                            if (e.has_damage_order_assigned()) {
+                                // Engine confirmed one attacker's order; no local state change needed
+                                // (client tracks orders locally until all submitted).
                                 combatStateDirty = true;
                             }
                             if (e.has_blockers_preview()) {
@@ -1131,6 +1239,24 @@ void sendRuledCommandFromHandler(GameEventHandler *handler,
 }
 } // namespace
 
+void GameEventHandler::handleConfirmAllDamageOrders()
+{
+    if (!game->getGameMetaInfo()->proto().ruled_game()) {
+        return;
+    }
+    for (auto it = pendingDamageOrders.constBegin(); it != pendingDamageOrders.constEnd(); ++it) {
+        ruled::v1::RuledCommand ruledCommand;
+        auto *ado = ruledCommand.mutable_assign_damage_order();
+        ado->set_attacker_id(it.key());
+        for (const quint32 bid : it.value()) {
+            ado->add_ordered_blocker_ids(bid);
+        }
+        sendRuledCommandFromHandler(this, game, ruledCommand);
+    }
+    damageOrdersSubmittedThisStep = true;
+    emit ruledCombatStateChanged();
+}
+
 void GameEventHandler::syncRuledBlockersPreviewToServer()
 {
     if (!game->getGameMetaInfo()->proto().ruled_game()) {
@@ -1232,7 +1358,7 @@ void GameEventHandler::handleConfirmRuledBlockers()
     blockersSubmittedThisStep = true;
     committedBlocks = pendingBlocks;
     pendingBlocks.clear();
-    stagedBlockerOid = 0;
+    stagedBlockerOids.clear();
     emit ruledCombatStateChanged();
 }
 
@@ -1247,7 +1373,7 @@ void GameEventHandler::handleSkipRuledBlockers()
     blockersSubmittedThisStep = true;
     pendingBlocks.clear();
     committedBlocks.clear();
-    stagedBlockerOid = 0;
+    stagedBlockerOids.clear();
     emit ruledCombatStateChanged();
 }
 

@@ -148,12 +148,21 @@ pub struct OpeningSequence {
 #[derive(Debug, Clone)]
 pub struct CombatState {
     pub attacking: Vec<ObjectId>,
-    /// Each attacker at most one blocker
-    pub blocker: HashMap<ObjectId, ObjectId>,
+    /// Maps each attacker to all creatures blocking it (may be multiple — CR 509.2).
+    pub blockers: HashMap<ObjectId, Vec<ObjectId>>,
+    /// Damage assignment order per attacker (CR 510.1b); only populated when an attacker has 2+
+    /// blockers and the active player has submitted their ordering for that attacker.
+    pub damage_order: HashMap<ObjectId, Vec<ObjectId>>,
+    /// True when blockers_declared and at least one attacker has 2+ blockers without a full
+    /// damage_order entry; active player must assign order before combat damage resolves.
+    pub damage_order_needed: bool,
     /// True once active player has finalized attackers for this combat.
     pub attackers_declared: bool,
     /// True after the defending player has finalized blockers for this combat.
     pub blockers_declared: bool,
+    /// True only after both players have passed priority in declare blockers while multi-block
+    /// damage order is still required — then the active player may submit `AssignDamageOrder`.
+    pub assign_damage_order_phase: bool,
 }
 
 #[derive(Debug)]

@@ -60,6 +60,7 @@ public:
         None,
         DeclareAttackers,
         DeclareBlockers,
+        AssignDamageOrder,
         CombatDamage
     };
 
@@ -126,12 +127,20 @@ private:
     QHash<quint32, QVector<quint32>> ruledStackTargetsByStackOid;
     QList<QPair<Player *, int>> ruledSpellTargetSyntheticArrows;
     int nextRuledSpellTargetArrowId = -2;
-    // Defender's currently "armed" blocker waiting to be paired.
-    quint32 stagedBlockerOid = 0;
+    // Defender's currently selected blockers waiting to be paired to an attacker.
+    QSet<quint32> stagedBlockerOids;
     // Local UI guard flags: once we submit declarations for the current declare step,
     // keep declaration controls hidden until the next combat step resets them.
     bool attackersSubmittedThisStep = false;
     bool blockersSubmittedThisStep = false;
+    // Damage order assignment state (CR 510.1b): populated after BlockersDeclared when any
+    // attacker has 2+ blockers; auto-submitted once all orderings are clicked.
+    QList<quint32> damageOrderPendingAttackers;
+    int currentDamageOrderAttackerIdx = -1;
+    QHash<quint32, QList<quint32>> pendingDamageOrders;
+    QHash<quint32, QList<quint32>> committedBlockerGroups; // attackerOid → [blockerOids]
+    QList<quint32> currentDamageOrderSequence;
+    bool damageOrdersSubmittedThisStep = false;
 
 public:
     explicit GameEventHandler(AbstractGame *_game);
@@ -219,11 +228,11 @@ public:
     }
     [[nodiscard]] bool hasStagedBlocker() const
     {
-        return stagedBlockerOid != 0;
+        return !stagedBlockerOids.isEmpty();
     }
-    [[nodiscard]] quint32 stagedBlocker() const
+    [[nodiscard]] bool isStagedBlocker(quint32 oid) const
     {
-        return stagedBlockerOid;
+        return stagedBlockerOids.contains(oid);
     }
     [[nodiscard]] quint32 pendingBlockTargetForBlocker(quint32 blockerOid) const
     {
@@ -267,10 +276,16 @@ public:
 
     void togglePendingAttacker(quint32 engineOid);
     void clearPendingAttackers();
-    void selectStagedBlocker(quint32 blockerOid);
-    void clearStagedBlocker();
+    void toggleStagedBlocker(quint32 blockerOid);
+    void clearStagedBlockers();
     void pairStagedBlockerToAttacker(quint32 attackerOid);
     void clearPendingBlocks();
+    [[nodiscard]] quint32 currentDamageOrderAttackerOid() const;
+    [[nodiscard]] int damageOrderOrdinalForBlocker(quint32 blockerOid) const;
+    void appendToDamageOrderSequence(quint32 blockerOid);
+    void resetCurrentDamageOrderSequence();
+    void handleConfirmAllDamageOrders();
+    void clearDamageOrderState();
 
     void handleNextTurn();
     void handleReverseTurn();
@@ -362,6 +377,7 @@ signals:
     /// Phase, priority, legal actions, and local UI hints for the ruled prompt panel only.
     void ruledEnginePromptFeed(QString message);
     void ruledCombatStateChanged();
+    void ruledDamageOrderUiChanged();
     void ruledBattlefieldMapUpdated();
     void ruledStackHasItemsChanged(bool hasItems);
     void ruledCleanupDiscardUiChanged(int required, int selected);

@@ -3,9 +3,9 @@
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
 use tricerules_proto::ruled::v1::ruled_event::Ev;
 use tricerules_proto::ruled::v1::{
-    AddManaToPool, BlockPair, CastSpell, DeclareAttackers, DeclareBlockers, DiscardToHandSize,
-    PassPriority, PlayLand, PreviewDeclareAttackers, PreviewDeclareBlockers, PrimitiveYieldStructured,
-    RuledCommand, TargetRef,
+    AddManaToPool, AssignDamageOrder, BlockPair, CastSpell, DeclareAttackers, DeclareBlockers,
+    DiscardToHandSize, PassPriority, PlayLand, PreviewDeclareAttackers, PreviewDeclareBlockers,
+    PrimitiveYieldStructured, RuledCommand, TargetRef,
 };
 
 use tricerules_core::GameEngine;
@@ -3170,4 +3170,217 @@ fn opening_choose_first_london_mulligan_then_start() {
     .expect("bottom one");
     assert!(e.state.opening.is_none());
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
+}
+
+fn assign_damage_order_cmd(attacker_id: u32, ordered_blocker_ids: Vec<u32>) -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::AssignDamageOrder(AssignDamageOrder {
+            attacker_id,
+            ordered_blocker_ids,
+        })),
+    }
+}
+
+/// Ensure `card_id` is in the player's hand, pulling from library if needed.
+fn ensure_in_hand(e: &mut GameEngine, player: usize, card_id: &str) {
+    let in_hand = e.state.players[player]
+        .hand
+        .iter()
+        .any(|oid| e.state.objects.get(oid).map(|o| o.card_id == card_id).unwrap_or(false));
+    if !in_hand {
+        take_card_from_library_to_hand(e, player, card_id);
+    }
+}
+
+#[test]
+fn two_blockers_damage_order_required_and_resolves() {
+    // Attacker: grizzly_bears (2/2) = 2 power.
+    // Blockers: savannah_lions (2/1) + grizzly_bears (2/2).
+    // Order: lions first → gets 1 lethal → dies; bears gets remaining 1 dmg (< toughness 2) → survives.
+    // Attacker receives 2+2=4 damage (toughness 2) → dies. No life loss.
+    let decks = Some(vec![
+        // P0: enough grizzly_bears to guarantee one in hand after draw step
+        std::iter::repeat_n("grizzly_bears".to_string(), 10).collect::<Vec<_>>(),
+        // P1: equal mix so both are available in library after opening draw
+        {
+            let mut d: Vec<String> = std::iter::repeat_n("savannah_lions".to_string(), 5).collect();
+            d.extend(std::iter::repeat_n("grizzly_bears".to_string(), 5));
+            d
+        },
+    ]);
+    let mut e = GameEngine::new(901, &[0, 1], 20, decks, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    ensure_in_hand(&mut e, 0, "grizzly_bears");
+    ensure_in_hand(&mut e, 1, "savannah_lions");
+    ensure_in_hand(&mut e, 1, "grizzly_bears");
+    let attacker = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let blocker_lions = put_creature_on_battlefield(&mut e, 1, "savannah_lions");
+    let blocker_bears = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass()).expect("active pass declare attackers");
+    e.apply_command(1, &pass()).expect("defender pass declare attackers");
+
+    // Defender sends both blockers to the same attacker.
+    let b = e
+        .apply_command(
+            1,
+            &declare_blockers(vec![
+                BlockPair { attacker_id: attacker, blocker_id: blocker_lions },
+                BlockPair { attacker_id: attacker, blocker_id: blocker_bears },
+            ]),
+        )
+        .expect("declare two blockers");
+
+    assert!(
+        e.state.combat.as_ref().unwrap().damage_order_needed,
+        "damage_order_needed must be true after multi-block"
+    );
+    assert!(
+        !e.state
+            .combat
+            .as_ref()
+            .unwrap()
+            .assign_damage_order_phase,
+        "still in declare blockers priority before passes"
+    );
+    assert!(life_changes_in(&b).is_empty(), "no damage dealt yet");
+
+    assert!(
+        e.apply_command(
+            0,
+            &assign_damage_order_cmd(attacker, vec![blocker_lions, blocker_bears]),
+        )
+        .is_err(),
+        "cannot assign damage order before declare-blockers priority round"
+    );
+
+    e.apply_command(0, &pass()).expect("active pass declare blockers");
+    e.apply_command(1, &pass()).expect("defender pass → damage order step");
+    assert!(
+        e.state.combat.as_ref().unwrap().assign_damage_order_phase,
+        "assign_damage_order_phase after both pass"
+    );
+
+    // Active player assigns order: lions first, then bears.
+    let b3 = e
+        .apply_command(
+            0,
+            &assign_damage_order_cmd(attacker, vec![blocker_lions, blocker_bears]),
+        )
+        .expect("assign damage order");
+
+    let dead = permanents_moved_in(&b3);
+    let dead_ids: Vec<u32> = dead.iter().map(|p| p.object_id).collect();
+
+    // Attacker (2/2) gets 2+2=4 total blocker damage → dies.
+    assert!(dead_ids.contains(&attacker), "attacker dies: {dead_ids:?}");
+    // Lions (2/1) gets 1 lethal damage first in order → dies.
+    assert!(dead_ids.contains(&blocker_lions), "lions die: {dead_ids:?}");
+    // Bears (2/2) gets remaining 1 damage (< toughness 2) → survives.
+    assert!(!dead_ids.contains(&blocker_bears), "bears survive: {dead_ids:?}");
+    let bears_obj = e.state.objects.get(&blocker_bears).expect("bears object");
+    assert_eq!(bears_obj.damage, 1, "bears has 1 marked damage");
+    assert_eq!(bears_obj.zone, tricerules_core::Zone::Battlefield);
+    assert!(life_changes_in(&b3).is_empty(), "no life change on fully-blocked combat");
+}
+
+#[test]
+fn two_blockers_insufficient_power_kills_only_first_in_order() {
+    // Attacker: savannah_lions (2/1) = 2 power.
+    // Blockers: coral_merfolk (2/1) + grizzly_bears (2/2).
+    // Order: merfolk first → gets 1 lethal → dies; bears gets remaining 1 (toughness=2) → survives.
+    // Attacker receives 2+2=4 damage → dies. No life loss.
+    let decks = Some(vec![
+        {
+            let mut d: Vec<String> = std::iter::repeat_n("savannah_lions".to_string(), 5).collect();
+            d.extend(std::iter::repeat_n("grizzly_bears".to_string(), 5));
+            d
+        },
+        {
+            let mut d: Vec<String> = std::iter::repeat_n("coral_merfolk".to_string(), 5).collect();
+            d.extend(std::iter::repeat_n("grizzly_bears".to_string(), 5));
+            d
+        },
+    ]);
+    let mut e = GameEngine::new(902, &[0, 1], 20, decks, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    ensure_in_hand(&mut e, 0, "savannah_lions");
+    ensure_in_hand(&mut e, 1, "coral_merfolk");
+    ensure_in_hand(&mut e, 1, "grizzly_bears");
+    let attacker = put_creature_on_battlefield(&mut e, 0, "savannah_lions");
+    let blocker_merfolk = put_creature_on_battlefield(&mut e, 1, "coral_merfolk");
+    let blocker_bears = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass()).expect("active pass");
+    e.apply_command(1, &pass()).expect("defender pass");
+
+    e.apply_command(
+        1,
+        &declare_blockers(vec![
+            BlockPair { attacker_id: attacker, blocker_id: blocker_merfolk },
+            BlockPair { attacker_id: attacker, blocker_id: blocker_bears },
+        ]),
+    )
+    .expect("two blockers");
+    e.apply_command(0, &pass()).expect("active pass declare blockers");
+    e.apply_command(1, &pass()).expect("defender pass → damage order");
+    let b = e
+        .apply_command(
+            0,
+            &assign_damage_order_cmd(attacker, vec![blocker_merfolk, blocker_bears]),
+        )
+        .expect("assign order: merfolk first");
+
+    let dead = permanents_moved_in(&b);
+    let dead_ids: Vec<u32> = dead.iter().map(|p| p.object_id).collect();
+
+    // Attacker (2/1) gets 2+2=4 damage → dies.
+    assert!(dead_ids.contains(&attacker), "lions attacker dies: {dead_ids:?}");
+    // Merfolk (2/1) gets 1 lethal → dies.
+    assert!(dead_ids.contains(&blocker_merfolk), "merfolk die: {dead_ids:?}");
+    // Bears (2/2) gets remaining 1 damage (< toughness 2) → survives.
+    assert!(!dead_ids.contains(&blocker_bears), "bears survive: {dead_ids:?}");
+    assert!(life_changes_in(&b).is_empty(), "no life change (fully blocked)");
+}
+
+#[test]
+fn single_blocker_no_damage_order_needed() {
+    // Regression: single blocker must not trigger damage_order_needed; combat proceeds normally.
+    let decks = Some(vec![
+        std::iter::repeat_n("grizzly_bears".to_string(), 10).collect::<Vec<_>>(),
+        std::iter::repeat_n("grizzly_bears".to_string(), 10).collect::<Vec<_>>(),
+    ]);
+    let mut e = GameEngine::new(903, &[0, 1], 20, decks, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let attacker = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let blocker = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass()).expect("active pass");
+    e.apply_command(1, &pass()).expect("defender pass");
+
+    e.apply_command(
+        1,
+        &declare_blockers(vec![BlockPair { attacker_id: attacker, blocker_id: blocker }]),
+    )
+    .expect("declare single blocker");
+
+    assert!(
+        !e.state.combat.as_ref().unwrap().damage_order_needed,
+        "damage_order_needed must be false for single-blocker combat"
+    );
+
+    // Combat resolves normally without any AssignDamageOrder step: both 2/2s die.
+    e.apply_command(0, &pass()).expect("active pass declare blockers");
+    let b = e.apply_command(1, &pass()).expect("combat damage");
+    let dead = permanents_moved_in(&b);
+    let dead_ids: Vec<u32> = dead.iter().map(|p| p.object_id).collect();
+    assert!(dead_ids.contains(&attacker), "attacker dies in mutual block");
+    assert!(dead_ids.contains(&blocker), "blocker dies in mutual block");
+    assert!(life_changes_in(&b).is_empty(), "no life loss on fully blocked combat");
 }

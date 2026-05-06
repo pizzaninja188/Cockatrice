@@ -16,7 +16,8 @@ public:
     {
         None,
         DeclareAttackers,
-        DeclareBlockers
+        DeclareBlockers,
+        AssignDamageOrder
     };
 
     explicit GamePromptWidget(QWidget *parent = nullptr);
@@ -42,6 +43,7 @@ signals:
     void confirmAttackersRequested();
     void confirmBlockersRequested();
     void resetBlockersRequested();
+    void resetDamageOrderRequested();
     void cancelTargetingRequested();
     void ruledOpeningPickSeatRequested(int seatId);
     void ruledOpeningMulliganKeepRequested();
@@ -58,6 +60,7 @@ private:
     QPushButton *confirmAttackersButton;
     QPushButton *confirmBlockersButton;
     QPushButton *resetBlockersButton;
+    QPushButton *resetDamageOrderButton;
     QPushButton *cancelTargetingButton;
     QPushButton *undoLandTapButton;
     QString fallbackPromptText;
