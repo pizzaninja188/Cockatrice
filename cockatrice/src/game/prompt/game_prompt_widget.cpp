@@ -43,30 +43,31 @@ QString extractPrimaryPrompt(const QString &ruledLog)
 
 QString nextStepButtonTextForPhase(int phase)
 {
+    // Returns the name of the phase we are passing *to* (current + 1).
     // Indices match `PhasesToolbar` / `GameState::activePhaseChanged` (0 = untap … 10 = end step).
     switch (phase) {
         case 0:
-            return GamePromptWidget::tr("Untap Step");
-        case 1:
             return GamePromptWidget::tr("Upkeep Step");
-        case 2:
+        case 1:
             return GamePromptWidget::tr("Draw Step");
-        case 3:
+        case 2:
             return GamePromptWidget::tr("First Main Phase");
-        case 4:
+        case 3:
             return GamePromptWidget::tr("Beginning of Combat");
-        case 5:
+        case 4:
             return GamePromptWidget::tr("Declare Attackers");
-        case 6:
+        case 5:
             return GamePromptWidget::tr("Declare Blockers");
-        case 7:
+        case 6:
             return GamePromptWidget::tr("Combat Damage");
-        case 8:
+        case 7:
             return GamePromptWidget::tr("End of Combat");
-        case 9:
+        case 8:
             return GamePromptWidget::tr("Second Main Phase");
-        case 10:
+        case 9:
             return GamePromptWidget::tr("End Step");
+        case 10:
+            return GamePromptWidget::tr("End Turn");
         default:
             return GamePromptWidget::tr("Pass Priority");
     }
