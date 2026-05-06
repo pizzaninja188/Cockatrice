@@ -318,7 +318,7 @@ void TabGame::connectToGameEventHandler()
         connect(game->getGameEventHandler(), &GameEventHandler::ruledCombatStateChanged, gamePromptWidget,
                 [this]() {
                     auto *handler = game->getGameEventHandler();
-                    if (!handler) {
+                    if (!handler || !gamePromptWidget) {
                         return;
                     }
                     const auto phase = handler->getRuledCombatPhase();
@@ -336,6 +336,18 @@ void TabGame::connectToGameEventHandler()
                         localHasButtons = handler->localPlayerIsRuledActive();
                     }
                     gamePromptWidget->setCombatMode(mode, localHasButtons);
+                    if (!game->getGameMetaInfo()->proto().ruled_game()) {
+                        return;
+                    }
+                    if (phase == Phase::AssignDamageOrder) {
+                        if (handler->localPlayerIsRuledActive()) {
+                            gamePromptWidget->setPromptText(
+                                tr("Assign combat damage order for highlighted blockers."));
+                        } else {
+                            gamePromptWidget->setPromptText(
+                                tr("Wait — your opponent is assigning combat damage order among blockers."));
+                        }
+                    }
                 });
         connect(gamePromptWidget, &GamePromptWidget::confirmAttackersRequested, game->getGameEventHandler(),
                 &GameEventHandler::handleConfirmRuledAttackers);

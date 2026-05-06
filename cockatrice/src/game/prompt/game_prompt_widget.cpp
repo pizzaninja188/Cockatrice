@@ -16,6 +16,16 @@ QString extractPrimaryPrompt(const QString &ruledLog)
     const QStringList lines = ruledLog.split('\n', Qt::SkipEmptyParts);
     for (const QString &line : lines) {
         const QString trimmed = line.trimmed();
+        if (trimmed.contains(QStringLiteral("Assign damage order"), Qt::CaseInsensitive)) {
+            QString t = trimmed;
+            if (t.startsWith(QChar(0x2014))) {
+                t = t.mid(1).trimmed();
+            }
+            return t;
+        }
+    }
+    for (const QString &line : lines) {
+        const QString trimmed = line.trimmed();
         if (trimmed.startsWith(QStringLiteral("Priority:")) || trimmed.startsWith(QStringLiteral("Phase:"))) {
             return trimmed;
         }
@@ -32,27 +42,30 @@ QString extractPrimaryPrompt(const QString &ruledLog)
 
 QString nextStepButtonTextForPhase(int phase)
 {
+    // Indices match `PhasesToolbar` / `GameState::activePhaseChanged` (0 = untap … 10 = end step).
     switch (phase) {
+        case 0:
+            return GamePromptWidget::tr("Untap Step");
         case 1:
-            return GamePromptWidget::tr("Draw Step");
+            return GamePromptWidget::tr("Upkeep Step");
         case 2:
-            return GamePromptWidget::tr("First Main Phase");
+            return GamePromptWidget::tr("Draw Step");
         case 3:
-            return GamePromptWidget::tr("Combat");
+            return GamePromptWidget::tr("First Main Phase");
         case 4:
-            return GamePromptWidget::tr("Declare Attackers");
+            return GamePromptWidget::tr("Beginning of Combat");
         case 5:
-            return GamePromptWidget::tr("Declare Blockers");
+            return GamePromptWidget::tr("Declare Attackers");
         case 6:
-            return GamePromptWidget::tr("Combat Damage");
+            return GamePromptWidget::tr("Declare Blockers");
         case 7:
-            return GamePromptWidget::tr("End of Combat");
+            return GamePromptWidget::tr("Combat Damage");
         case 8:
-            return GamePromptWidget::tr("Second Main Phase");
+            return GamePromptWidget::tr("End of Combat");
         case 9:
-            return GamePromptWidget::tr("End Step");
+            return GamePromptWidget::tr("Second Main Phase");
         case 10:
-            return GamePromptWidget::tr("Next Turn");
+            return GamePromptWidget::tr("End Step");
         default:
             return GamePromptWidget::tr("Pass Priority");
     }
@@ -341,16 +354,21 @@ void GamePromptWidget::updateCombatButtonsVisibility()
         localPlayerHasPriority && currentCombatMode == CombatMode::DeclareAttackers && localPlayerHasCombatButtons;
     const bool showBlockers =
         localPlayerHasPriority && currentCombatMode == CombatMode::DeclareBlockers && localPlayerHasCombatButtons;
+    // Assign-damage-order UI is driven by combat role, not priority (AP always orders; engine validates).
     const bool showDamageOrder =
-        localPlayerHasPriority && currentCombatMode == CombatMode::AssignDamageOrder && localPlayerHasCombatButtons;
-    passPriorityButton->setVisible(localPlayerHasPriority && !showAttackers && !showBlockers && !showDamageOrder);
+        currentCombatMode == CombatMode::AssignDamageOrder && localPlayerHasCombatButtons;
+    // Defender has no actions while the active player assigns blocker damage order (CR 510.1).
+    const bool waitingOnOpponentDamageOrder =
+        currentCombatMode == CombatMode::AssignDamageOrder && !localPlayerHasCombatButtons;
+    passPriorityButton->setVisible(localPlayerHasPriority && !showAttackers && !showBlockers && !showDamageOrder &&
+                                   !waitingOnOpponentDamageOrder);
     confirmAttackersButton->setVisible(showAttackers);
     confirmBlockersButton->setVisible(showBlockers);
     resetBlockersButton->setVisible(showBlockers);
     resetDamageOrderButton->setVisible(showDamageOrder);
     cancelTargetingButton->setVisible(false);
     undoLandTapButton->setVisible(localPlayerHasPriority && landTapUndoAvailable && !showAttackers && !showBlockers &&
-                                   !showDamageOrder);
+                                   !showDamageOrder && !waitingOnOpponentDamageOrder);
 }
 
 void GamePromptWidget::updatePassPriorityButtonText()
