@@ -57,6 +57,32 @@ struct ParsedRuledCastActions
     QMultiHash<QString, int> handIndicesByCardName;
 };
 
+bool parseCreaturePt(const QString &pt, int *outPower, int *outToughness)
+{
+    if (!outPower || !outToughness) {
+        return false;
+    }
+    *outPower = *outToughness = 0;
+    const QString s = pt.trimmed();
+    if (s.isEmpty()) {
+        return false;
+    }
+    const int slash = s.indexOf(QLatin1Char('/'));
+    if (slash < 0) {
+        return false;
+    }
+    const QString left = s.left(slash).trimmed();
+    const QString right = s.mid(slash + 1).trimmed();
+    if (left.contains(QLatin1Char('*')) || right.contains(QLatin1Char('*'))) {
+        return false;
+    }
+    bool okP = false;
+    bool okT = false;
+    *outPower = left.toInt(&okP);
+    *outToughness = right.toInt(&okT);
+    return okP && okT;
+}
+
 GameEventHandler::RuledCombatPhase mapRuledPhaseSlugToCombatPhase(const QString &slug)
 {
     if (slug == QLatin1String("declare_attackers")) {
@@ -65,8 +91,8 @@ GameEventHandler::RuledCombatPhase mapRuledPhaseSlugToCombatPhase(const QString 
     if (slug == QLatin1String("declare_blockers")) {
         return GameEventHandler::RuledCombatPhase::DeclareBlockers;
     }
-    if (slug == QLatin1String("assign_damage_order")) {
-        return GameEventHandler::RuledCombatPhase::AssignDamageOrder;
+    if (slug == QLatin1String("assign_combat_damage")) {
+        return GameEventHandler::RuledCombatPhase::AssignCombatDamage;
     }
     if (slug == QLatin1String("combat_damage")) {
         return GameEventHandler::RuledCombatPhase::CombatDamage;
@@ -97,7 +123,7 @@ int mapRuledPhaseSlugToToolbarPhase(const QString &slug)
     if (slug == QLatin1String("declare_attackers")) {
         return 5;
     }
-    if (slug == QLatin1String("declare_blockers") || slug == QLatin1String("assign_damage_order")) {
+    if (slug == QLatin1String("declare_blockers") || slug == QLatin1String("assign_combat_damage")) {
         return 6;
     }
     if (slug == QLatin1String("combat_damage")) {
@@ -659,69 +685,183 @@ void GameEventHandler::clearPendingBlocks()
     emit ruledCombatStateChanged();
 }
 
-quint32 GameEventHandler::currentDamageOrderAttackerOid() const
+quint32 GameEventHandler::currentCombatDamageAttackerOid() const
 {
-    if (currentDamageOrderAttackerIdx < 0 ||
-        currentDamageOrderAttackerIdx >= damageOrderPendingAttackers.size()) {
+    if (currentCombatDamageAttackerIdx < 0 ||
+        currentCombatDamageAttackerIdx >= combatDamagePendingAttackers.size()) {
         return 0;
     }
-    return damageOrderPendingAttackers[currentDamageOrderAttackerIdx];
+    return combatDamagePendingAttackers.at(currentCombatDamageAttackerIdx);
 }
 
-int GameEventHandler::damageOrderOrdinalForBlocker(quint32 blockerOid) const
+quint32 GameEventHandler::assignedCombatDamageForBlocker(quint32 blockerOid) const
 {
-    const int idx = currentDamageOrderSequence.indexOf(blockerOid);
-    return idx >= 0 ? idx + 1 : 0;
+    return pendingCombatDamageByBlocker.value(blockerOid, 0);
 }
 
-void GameEventHandler::appendToDamageOrderSequence(quint32 blockerOid)
+int GameEventHandler::ruledCombatPowerForCreatureOid(quint32 engineOid) const
 {
-    const quint32 curAtt = currentDamageOrderAttackerOid();
+    const int fromEngine = engineOidBattlefieldPower.value(engineOid, 0);
+    if (fromEngine > 0) {
+        return fromEngine;
+    }
+    if (!game || engineOid == 0) {
+        return 0;
+    }
+    if (CardItem *c = findBattlefieldCardByEngineOid(game, this, engineOid)) {
+        int pow = 0;
+        int tough = 0;
+        if (parseCreaturePt(c->getPT(), &pow, &tough)) {
+            return pow;
+        }
+    }
+    return 0;
+}
+
+int GameEventHandler::ruledCombatToughnessForCreatureOid(quint32 engineOid) const
+{
+    const int fromEngine = engineOidBattlefieldToughness.value(engineOid, 0);
+    if (fromEngine > 0) {
+        return fromEngine;
+    }
+    if (!game || engineOid == 0) {
+        return 1;
+    }
+    if (CardItem *c = findBattlefieldCardByEngineOid(game, this, engineOid)) {
+        int pow = 0;
+        int tough = 0;
+        if (parseCreaturePt(c->getPT(), &pow, &tough) && tough > 0) {
+            return tough;
+        }
+    }
+    return 1;
+}
+
+void GameEventHandler::seedDefaultCombatDamageForCurrentAttacker()
+{
+    if (!game || !game->getGameMetaInfo()->proto().ruled_game() || !localPlayerIsRuledActive()) {
+        return;
+    }
+    const quint32 curAtt = currentCombatDamageAttackerOid();
     if (curAtt == 0) {
+        return;
+    }
+    const QList<quint32> blockers = committedBlockerGroups.value(curAtt);
+    if (blockers.size() < 2) {
+        return;
+    }
+    const int power = ruledCombatPowerForCreatureOid(curAtt);
+    if (power <= 0) {
+        return;
+    }
+    for (quint32 blk : blockers) {
+        pendingCombatDamageByBlocker.remove(blk);
+    }
+    int remaining = power;
+    for (int i = 0; i < blockers.size(); ++i) {
+        const quint32 blk = blockers.at(i);
+        if (i == blockers.size() - 1) {
+            if (remaining > 0) {
+                pendingCombatDamageByBlocker.insert(blk, static_cast<quint32>(remaining));
+            }
+            break;
+        }
+        const int lethal =
+            qMax(1, ruledCombatToughnessForCreatureOid(blk) - engineOidMarkedDamage.value(blk, 0));
+        const int assign = qMin(remaining, lethal);
+        remaining -= assign;
+        if (assign > 0) {
+            pendingCombatDamageByBlocker.insert(blk, static_cast<quint32>(assign));
+        }
+    }
+    emit ruledCombatDamageUiChanged();
+    emit ruledCombatStateChanged();
+}
+
+void GameEventHandler::bumpBlockerCombatDamage(quint32 blockerOid, int delta)
+{
+    const quint32 curAtt = currentCombatDamageAttackerOid();
+    if (curAtt == 0 || delta == 0) {
         return;
     }
     const QList<quint32> &blockers = committedBlockerGroups.value(curAtt);
     if (!blockers.contains(blockerOid)) {
         return;
     }
-    if (currentDamageOrderSequence.contains(blockerOid)) {
-        // Toggle-off: remove the blocker from the sequence.
-        currentDamageOrderSequence.removeAll(blockerOid);
-        emit ruledDamageOrderUiChanged();
-        emit ruledCombatStateChanged();
+    const int power = ruledCombatPowerForCreatureOid(curAtt);
+    if (power <= 0) {
         return;
     }
-    currentDamageOrderSequence.append(blockerOid);
-
-    // Once all blockers of the current attacker are ordered, advance to next.
-    if (currentDamageOrderSequence.size() == blockers.size()) {
-        pendingDamageOrders.insert(curAtt, currentDamageOrderSequence);
-        currentDamageOrderSequence.clear();
-        currentDamageOrderAttackerIdx++;
-
-        if (currentDamageOrderAttackerIdx >= damageOrderPendingAttackers.size()) {
-            // All attackers ordered — auto-submit.
-            handleConfirmAllDamageOrders();
-            return;
-        }
+    const quint32 cur = pendingCombatDamageByBlocker.value(blockerOid, 0);
+    qint64 next = static_cast<qint64>(cur) + delta;
+    if (next < 0) {
+        next = 0;
     }
-    emit ruledDamageOrderUiChanged();
+    if (next > power) {
+        next = power;
+    }
+    if (next == 0) {
+        pendingCombatDamageByBlocker.remove(blockerOid);
+    } else {
+        pendingCombatDamageByBlocker.insert(blockerOid, static_cast<quint32>(next));
+    }
+    emit ruledCombatDamageUiChanged();
     emit ruledCombatStateChanged();
 }
 
-void GameEventHandler::resetCurrentDamageOrderSequence()
+void GameEventHandler::clearCombatDamageAssignmentState()
 {
-    currentDamageOrderSequence.clear();
-    emit ruledDamageOrderUiChanged();
+    combatDamagePendingAttackers.clear();
+    currentCombatDamageAttackerIdx = -1;
+    pendingCombatDamageByBlocker.clear();
 }
 
-void GameEventHandler::clearDamageOrderState()
+QString GameEventHandler::currentCombatDamageAttackerDisplayName() const
 {
-    damageOrderPendingAttackers.clear();
-    currentDamageOrderAttackerIdx = -1;
-    pendingDamageOrders.clear();
-    currentDamageOrderSequence.clear();
-    damageOrdersSubmittedThisStep = false;
+    const quint32 att = currentCombatDamageAttackerOid();
+    if (att == 0 || !game) {
+        return {};
+    }
+    if (CardItem *c = findBattlefieldCardByEngineOid(game, this, att)) {
+        return c->getName();
+    }
+    return tr("creature");
+}
+
+int GameEventHandler::currentCombatDamageAttackerPower() const
+{
+    const quint32 att = currentCombatDamageAttackerOid();
+    if (att == 0) {
+        return 0;
+    }
+    return ruledCombatPowerForCreatureOid(att);
+}
+
+int GameEventHandler::localCombatDamageAssignedTotal() const
+{
+    int sum = 0;
+    for (auto it = pendingCombatDamageByBlocker.constBegin(); it != pendingCombatDamageByBlocker.constEnd(); ++it) {
+        sum += static_cast<int>(it.value());
+    }
+    return sum;
+}
+
+bool GameEventHandler::localCombatDamageAssignmentLegal() const
+{
+    const quint32 curAtt = currentCombatDamageAttackerOid();
+    if (curAtt == 0) {
+        return false;
+    }
+    const int power = currentCombatDamageAttackerPower();
+    if (power <= 0) {
+        return false;
+    }
+    const QList<quint32> blockers = committedBlockerGroups.value(curAtt);
+    int sum = 0;
+    for (quint32 blk : blockers) {
+        sum += static_cast<int>(pendingCombatDamageByBlocker.value(blk, 0));
+    }
+    return sum == power;
 }
 
 void GameEventHandler::sendGameCommand(PendingCommand *pend, int playerId)
@@ -915,12 +1055,12 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                     remoteAttackerPreviewOids.clear();
                                     stagedBlockerOids.clear();
                                     // Keep committed block assignments visible/interactive while
-                                    // progressing from declare blockers -> assign damage order ->
+                                    // progressing from declare blockers -> assign combat damage ->
                                     // combat damage. Clear only when leaving combat.
                                     const auto isCombatPhase = [](RuledCombatPhase phase) {
                                         return phase == RuledCombatPhase::DeclareAttackers ||
                                                phase == RuledCombatPhase::DeclareBlockers ||
-                                               phase == RuledCombatPhase::AssignDamageOrder ||
+                                               phase == RuledCombatPhase::AssignCombatDamage ||
                                                phase == RuledCombatPhase::CombatDamage;
                                     };
                                     if (!isCombatPhase(previousCombatPhase) || !isCombatPhase(combatPhase)) {
@@ -937,8 +1077,11 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                     if (combatPhase == RuledCombatPhase::None) {
                                         currentAttackerOids.clear();
                                         remoteAttackerPreviewOids.clear();
-                                        clearDamageOrderState();
+                                        clearCombatDamageAssignmentState();
                                         committedBlockerGroups.clear();
+                                    }
+                                    if (combatPhase == RuledCombatPhase::AssignCombatDamage && localPlayerIsRuledActive()) {
+                                        seedDefaultCombatDamageForCurrentAttacker();
                                     }
                                     combatStateDirty = true;
                                 }
@@ -978,6 +1121,8 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 engineOidOwner.clear();
                                 engineOidSummoningSick.clear();
                                 engineOidMarkedDamage.clear();
+                                engineOidBattlefieldPower.clear();
+                                engineOidBattlefieldToughness.clear();
                                 QSet<quint32> validOids;
                                 for (const auto &entry : e.battlefield_object_map().entries()) {
                                     validOids.insert(entry.engine_object_id());
@@ -1029,6 +1174,8 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             }
                             if (e.has_zone_view()) {
                                 engineOidMarkedDamage.clear();
+                                engineOidBattlefieldPower.clear();
+                                engineOidBattlefieldToughness.clear();
                                 for (const auto &p : e.zone_view().per_player()) {
                                     const int count = std::min(p.battlefield_object_id_size(), p.battlefield_damage_size());
                                     for (int zdi = 0; zdi < count; ++zdi) {
@@ -1036,6 +1183,23 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                         const int damage = static_cast<int>(p.battlefield_damage(zdi));
                                         if (oid != 0 && damage > 0) {
                                             engineOidMarkedDamage.insert(oid, damage);
+                                        }
+                                    }
+                                    const int nPow = std::min(p.battlefield_object_id_size(), p.battlefield_power_size());
+                                    for (int pi = 0; pi < nPow; ++pi) {
+                                        const quint32 oid = p.battlefield_object_id(pi);
+                                        if (oid != 0) {
+                                            engineOidBattlefieldPower.insert(oid,
+                                                                              static_cast<int>(p.battlefield_power(pi)));
+                                        }
+                                    }
+                                    const int nTough =
+                                        std::min(p.battlefield_object_id_size(), p.battlefield_toughness_size());
+                                    for (int ti = 0; ti < nTough; ++ti) {
+                                        const quint32 oid = p.battlefield_object_id(ti);
+                                        if (oid != 0) {
+                                            engineOidBattlefieldToughness.insert(
+                                                oid, static_cast<int>(p.battlefield_toughness(ti)));
                                         }
                                     }
                                 }
@@ -1076,23 +1240,35 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                     committedBlocks.insert(blkOid, attOid);
                                     committedBlockerGroups[attOid].append(blkOid);
                                 }
-                                // Populate damage order queue for any attacker with 2+ blockers.
-                                clearDamageOrderState();
+                                // Queue attackers that need explicit combat damage assignment (2+ blockers).
+                                clearCombatDamageAssignmentState();
                                 for (auto it = committedBlockerGroups.constBegin();
                                      it != committedBlockerGroups.constEnd(); ++it) {
                                     if (it.value().size() > 1) {
-                                        damageOrderPendingAttackers.append(it.key());
+                                        combatDamagePendingAttackers.append(it.key());
                                     }
                                 }
-                                if (!damageOrderPendingAttackers.isEmpty()) {
-                                    currentDamageOrderAttackerIdx = 0;
+                                if (!combatDamagePendingAttackers.isEmpty()) {
+                                    currentCombatDamageAttackerIdx = 0;
+                                    if (localPlayerIsRuledActive()) {
+                                        seedDefaultCombatDamageForCurrentAttacker();
+                                    }
                                 }
                                 blockersSubmittedThisStep = true;
                                 combatStateDirty = true;
                             }
-                            if (e.has_damage_order_assigned()) {
-                                // Engine confirmed one attacker's order; no local state change needed
-                                // (client tracks orders locally until all submitted).
+                            if (e.has_combat_damage_assigned()) {
+                                const quint32 doneAtt = e.combat_damage_assigned().attacker_id();
+                                if (currentCombatDamageAttackerIdx >= 0 &&
+                                    currentCombatDamageAttackerIdx < combatDamagePendingAttackers.size() &&
+                                    combatDamagePendingAttackers.at(currentCombatDamageAttackerIdx) == doneAtt) {
+                                    pendingCombatDamageByBlocker.clear();
+                                    currentCombatDamageAttackerIdx++;
+                                    if (localPlayerIsRuledActive() &&
+                                        currentCombatDamageAttackerIdx < combatDamagePendingAttackers.size()) {
+                                        seedDefaultCombatDamageForCurrentAttacker();
+                                    }
+                                }
                                 combatStateDirty = true;
                             }
                             if (e.has_blockers_preview()) {
@@ -1239,21 +1415,28 @@ void sendRuledCommandFromHandler(GameEventHandler *handler,
 }
 } // namespace
 
-void GameEventHandler::handleConfirmAllDamageOrders()
+void GameEventHandler::confirmCombatDamageForCurrentAttacker()
 {
     if (!game->getGameMetaInfo()->proto().ruled_game()) {
         return;
     }
-    for (auto it = pendingDamageOrders.constBegin(); it != pendingDamageOrders.constEnd(); ++it) {
-        ruled::v1::RuledCommand ruledCommand;
-        auto *ado = ruledCommand.mutable_assign_damage_order();
-        ado->set_attacker_id(it.key());
-        for (const quint32 bid : it.value()) {
-            ado->add_ordered_blocker_ids(bid);
-        }
-        sendRuledCommandFromHandler(this, game, ruledCommand);
+    const quint32 curAtt = currentCombatDamageAttackerOid();
+    if (curAtt == 0) {
+        return;
     }
-    damageOrdersSubmittedThisStep = true;
+    if (!localCombatDamageAssignmentLegal()) {
+        return;
+    }
+    ruled::v1::RuledCommand ruledCommand;
+    auto *acd = ruledCommand.mutable_assign_combat_damage();
+    acd->set_attacker_id(curAtt);
+    const QList<quint32> blockers = committedBlockerGroups.value(curAtt);
+    for (quint32 blk : blockers) {
+        auto *pair = acd->add_assignments();
+        pair->set_blocker_id(blk);
+        pair->set_damage(pendingCombatDamageByBlocker.value(blk, 0));
+    }
+    sendRuledCommandFromHandler(this, game, ruledCommand);
     emit ruledCombatStateChanged();
 }
 

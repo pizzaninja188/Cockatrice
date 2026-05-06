@@ -16,7 +16,8 @@ QString extractPrimaryPrompt(const QString &ruledLog)
     const QStringList lines = ruledLog.split('\n', Qt::SkipEmptyParts);
     for (const QString &line : lines) {
         const QString trimmed = line.trimmed();
-        if (trimmed.contains(QStringLiteral("Assign damage order"), Qt::CaseInsensitive)) {
+        if (trimmed.contains(QStringLiteral("Assign combat damage"), Qt::CaseInsensitive) ||
+            trimmed.contains(QStringLiteral("Assign damage order"), Qt::CaseInsensitive)) {
             QString t = trimmed;
             if (t.startsWith(QChar(0x2014))) {
                 t = t.mid(1).trimmed();
@@ -131,10 +132,10 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     connect(resetBlockersButton, &QPushButton::clicked, this, &GamePromptWidget::resetBlockersRequested);
     combatRow->addWidget(resetBlockersButton);
 
-    resetDamageOrderButton = new QPushButton(this);
-    resetDamageOrderButton->setObjectName("resetDamageOrderButton");
-    connect(resetDamageOrderButton, &QPushButton::clicked, this, &GamePromptWidget::resetDamageOrderRequested);
-    combatRow->addWidget(resetDamageOrderButton);
+    confirmCombatDamageButton = new QPushButton(this);
+    confirmCombatDamageButton->setObjectName("confirmCombatDamageButton");
+    connect(confirmCombatDamageButton, &QPushButton::clicked, this, &GamePromptWidget::confirmCombatDamageRequested);
+    combatRow->addWidget(confirmCombatDamageButton);
 
     cancelTargetingButton = new QPushButton(this);
     cancelTargetingButton->setObjectName("cancelTargetingButton");
@@ -169,7 +170,7 @@ void GamePromptWidget::retranslateUi()
     confirmAttackersButton->setText(tr("OK"));
     confirmBlockersButton->setText(tr("OK"));
     resetBlockersButton->setText(tr("Reset Blockers"));
-    resetDamageOrderButton->setText(tr("Reset Order"));
+    confirmCombatDamageButton->setText(tr("OK"));
     cancelTargetingButton->setText(tr("Cancel"));
     undoLandTapButton->setText(tr("Undo"));
     openingKeepButton->setText(tr("Keep hand"));
@@ -309,6 +310,18 @@ void GamePromptWidget::setSpellCastPending(bool pending)
     updateCombatButtonsVisibility();
 }
 
+void GamePromptWidget::setCombatDamageStatus(const QString &attackerName, int assigned, int power, bool legal)
+{
+    if (attackerName.isEmpty()) {
+        confirmCombatDamageButton->setEnabled(false);
+        return;
+    }
+    setPromptText(tr("Assign combat damage for %1\n%2")
+                      .arg(attackerName)
+                      .arg(tr("Assigned %1 of %2.").arg(assigned).arg(power)));
+    confirmCombatDamageButton->setEnabled(legal && assigned == power && power > 0);
+}
+
 void GamePromptWidget::updateCombatButtonsVisibility()
 {
     if (ruledOpeningUiKind != 0) {
@@ -316,6 +329,7 @@ void GamePromptWidget::updateCombatButtonsVisibility()
         confirmAttackersButton->setVisible(false);
         confirmBlockersButton->setVisible(false);
         resetBlockersButton->setVisible(false);
+        confirmCombatDamageButton->setVisible(false);
         cancelTargetingButton->setVisible(false);
         undoLandTapButton->setVisible(false);
         const bool showPick = ruledOpeningUiKind == 1 && !ruledOpeningPickSeatIds.isEmpty();
@@ -334,7 +348,7 @@ void GamePromptWidget::updateCombatButtonsVisibility()
         confirmAttackersButton->setVisible(false);
         confirmBlockersButton->setVisible(false);
         resetBlockersButton->setVisible(false);
-        resetDamageOrderButton->setVisible(false);
+        confirmCombatDamageButton->setVisible(false);
         cancelTargetingButton->setVisible(false);
         undoLandTapButton->setVisible(false);
         return;
@@ -344,7 +358,7 @@ void GamePromptWidget::updateCombatButtonsVisibility()
         confirmAttackersButton->setVisible(false);
         confirmBlockersButton->setVisible(false);
         resetBlockersButton->setVisible(false);
-        resetDamageOrderButton->setVisible(false);
+        confirmCombatDamageButton->setVisible(false);
         cancelTargetingButton->setVisible(true);
         undoLandTapButton->setVisible(false);
         return;
@@ -354,21 +368,20 @@ void GamePromptWidget::updateCombatButtonsVisibility()
         localPlayerHasPriority && currentCombatMode == CombatMode::DeclareAttackers && localPlayerHasCombatButtons;
     const bool showBlockers =
         localPlayerHasPriority && currentCombatMode == CombatMode::DeclareBlockers && localPlayerHasCombatButtons;
-    // Assign-damage-order UI is driven by combat role, not priority (AP always orders; engine validates).
-    const bool showDamageOrder =
-        currentCombatMode == CombatMode::AssignDamageOrder && localPlayerHasCombatButtons;
-    // Defender has no actions while the active player assigns blocker damage order (CR 510.1).
-    const bool waitingOnOpponentDamageOrder =
-        currentCombatMode == CombatMode::AssignDamageOrder && !localPlayerHasCombatButtons;
-    passPriorityButton->setVisible(localPlayerHasPriority && !showAttackers && !showBlockers && !showDamageOrder &&
-                                   !waitingOnOpponentDamageOrder);
+    // Assign combat damage UI is driven by combat role, not priority (AP assigns; engine validates).
+    const bool showCombatDamage =
+        currentCombatMode == CombatMode::AssignCombatDamage && localPlayerHasCombatButtons;
+    const bool waitingOnOpponentCombatDamage =
+        currentCombatMode == CombatMode::AssignCombatDamage && !localPlayerHasCombatButtons;
+    passPriorityButton->setVisible(localPlayerHasPriority && !showAttackers && !showBlockers && !showCombatDamage &&
+                                   !waitingOnOpponentCombatDamage);
     confirmAttackersButton->setVisible(showAttackers);
     confirmBlockersButton->setVisible(showBlockers);
     resetBlockersButton->setVisible(showBlockers);
-    resetDamageOrderButton->setVisible(showDamageOrder);
+    confirmCombatDamageButton->setVisible(showCombatDamage);
     cancelTargetingButton->setVisible(false);
     undoLandTapButton->setVisible(localPlayerHasPriority && landTapUndoAvailable && !showAttackers && !showBlockers &&
-                                   !showDamageOrder && !waitingOnOpponentDamageOrder);
+                                   !showCombatDamage && !waitingOnOpponentCombatDamage);
 }
 
 void GamePromptWidget::updatePassPriorityButtonText()

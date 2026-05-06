@@ -17,7 +17,7 @@ public:
         None,
         DeclareAttackers,
         DeclareBlockers,
-        AssignDamageOrder
+        AssignCombatDamage
     };
 
     explicit GamePromptWidget(QWidget *parent = nullptr);
@@ -37,13 +37,15 @@ public slots:
     void setRuledOpeningUi(int kind, QVector<int> pickSeatIds);
     void setLandTapUndoAvailable(bool available);
     void setSpellCastPending(bool pending);
+    /// Active player only: drives assign-combat-damage title, assigned/power line, and OK enable.
+    void setCombatDamageStatus(const QString &attackerName, int assigned, int power, bool legal);
 
 signals:
     void passPriorityRequested();
     void confirmAttackersRequested();
     void confirmBlockersRequested();
     void resetBlockersRequested();
-    void resetDamageOrderRequested();
+    void confirmCombatDamageRequested();
     void cancelTargetingRequested();
     void ruledOpeningPickSeatRequested(int seatId);
     void ruledOpeningMulliganKeepRequested();
@@ -60,7 +62,7 @@ private:
     QPushButton *confirmAttackersButton;
     QPushButton *confirmBlockersButton;
     QPushButton *resetBlockersButton;
-    QPushButton *resetDamageOrderButton;
+    QPushButton *confirmCombatDamageButton;
     QPushButton *cancelTargetingButton;
     QPushButton *undoLandTapButton;
     QString fallbackPromptText;

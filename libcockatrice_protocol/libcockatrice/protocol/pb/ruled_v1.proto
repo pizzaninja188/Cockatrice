@@ -4,6 +4,8 @@ package ruled.v1;
 
 // Intent from a client; carried inside GameCommand Command_RuledPayload.payload
 message RuledCommand {
+  reserved 15;
+  reserved "assign_damage_order";
   oneof cmd {
     PassPriority pass_priority = 1;
     CastSpell cast_spell = 2;
@@ -30,16 +32,21 @@ message RuledCommand {
     // UI-only: active player's in-progress attacker selection. Servatrice broadcasts AttackersPreview
     // without forwarding to the engine; DeclareAttackers remains the legal commit.
     PreviewDeclareAttackers preview_declare_attackers = 14;
-    // Active player assigns damage order for an attacker blocked by multiple creatures (CR 510.1b).
-    // ordered_blocker_ids must be exactly the set of blockers for that attacker.
-    AssignDamageOrder assign_damage_order = 15;
+    // Active player assigns combat damage among blockers for one multiply-blocked attacker.
+    // assignments must list each blocker exactly once; sum of damage must equal attacker power.
+    AssignCombatDamage assign_combat_damage = 16;
   }
 }
 
-// Sent once per multiply-blocked attacker to declare the damage assignment order.
-message AssignDamageOrder {
+// Per-blocker damage from one attacker during assign combat damage.
+message DamagePair {
+  uint32 blocker_id = 1;
+  uint32 damage = 2;
+}
+
+message AssignCombatDamage {
   uint32 attacker_id = 1;
-  repeated uint32 ordered_blocker_ids = 2;
+  repeated DamagePair assignments = 2;
 }
 
 message DiscardToHandSize {
@@ -139,6 +146,8 @@ message HandSlotMap {
 }
 
 message RuledEvent {
+  reserved 18;
+  reserved "damage_order_assigned";
   oneof ev {
     PhaseChanged phase_changed = 1;
     PriorityChanged priority_changed = 2;
@@ -161,15 +170,14 @@ message RuledEvent {
     BlockersPreview blockers_preview = 16;
     // Servatrice-synthesized from PreviewDeclareAttackers; not emitted by the engine.
     AttackersPreview attackers_preview = 17;
-    // Engine-emitted after active player assigns damage order for a multiply-blocked attacker.
-    DamageOrderAssigned damage_order_assigned = 18;
+    // Engine-emitted after active player assigns combat damage for a multiply-blocked attacker.
+    CombatDamageAssigned combat_damage_assigned = 19;
   }
 }
 
-// Engine-emitted confirmation of one attacker's damage assignment order.
-message DamageOrderAssigned {
+message CombatDamageAssigned {
   uint32 attacker_id = 1;
-  repeated uint32 ordered_blocker_ids = 2;
+  repeated DamagePair assignments = 2;
 }
 
 message PhaseChanged {

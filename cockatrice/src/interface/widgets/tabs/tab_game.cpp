@@ -331,32 +331,49 @@ void TabGame::connectToGameEventHandler()
                     } else if (phase == Phase::DeclareBlockers) {
                         mode = GamePromptWidget::CombatMode::DeclareBlockers;
                         localHasButtons = handler->localPlayerIsRuledDefender();
-                    } else if (phase == Phase::AssignDamageOrder) {
-                        mode = GamePromptWidget::CombatMode::AssignDamageOrder;
+                    } else if (phase == Phase::AssignCombatDamage) {
+                        mode = GamePromptWidget::CombatMode::AssignCombatDamage;
                         localHasButtons = handler->localPlayerIsRuledActive();
                     }
                     gamePromptWidget->setCombatMode(mode, localHasButtons);
                     if (!game->getGameMetaInfo()->proto().ruled_game()) {
                         return;
                     }
-                    if (phase == Phase::AssignDamageOrder) {
+                    if (phase == Phase::AssignCombatDamage) {
                         if (handler->localPlayerIsRuledActive()) {
-                            gamePromptWidget->setPromptText(
-                                tr("Assign combat damage order for highlighted blockers."));
+                            gamePromptWidget->setCombatDamageStatus(
+                                handler->currentCombatDamageAttackerDisplayName(),
+                                handler->localCombatDamageAssignedTotal(),
+                                handler->currentCombatDamageAttackerPower(),
+                                handler->localCombatDamageAssignmentLegal());
                         } else {
                             gamePromptWidget->setPromptText(
-                                tr("Wait — your opponent is assigning combat damage order among blockers."));
+                                tr("Wait — your opponent is assigning combat damage."));
                         }
                     }
                 });
+        connect(game->getGameEventHandler(), &GameEventHandler::ruledCombatDamageUiChanged, this, [this]() {
+            auto *handler = game->getGameEventHandler();
+            if (!handler || !gamePromptWidget || !game->getGameMetaInfo()->proto().ruled_game()) {
+                return;
+            }
+            if (handler->getRuledCombatPhase() != GameEventHandler::RuledCombatPhase::AssignCombatDamage ||
+                !handler->localPlayerIsRuledActive()) {
+                return;
+            }
+            gamePromptWidget->setCombatDamageStatus(handler->currentCombatDamageAttackerDisplayName(),
+                                                    handler->localCombatDamageAssignedTotal(),
+                                                    handler->currentCombatDamageAttackerPower(),
+                                                    handler->localCombatDamageAssignmentLegal());
+        });
         connect(gamePromptWidget, &GamePromptWidget::confirmAttackersRequested, game->getGameEventHandler(),
                 &GameEventHandler::handleConfirmRuledAttackers);
         connect(gamePromptWidget, &GamePromptWidget::confirmBlockersRequested, game->getGameEventHandler(),
                 &GameEventHandler::handleConfirmRuledBlockers);
         connect(gamePromptWidget, &GamePromptWidget::resetBlockersRequested, game->getGameEventHandler(),
                 &GameEventHandler::clearPendingBlocks);
-        connect(gamePromptWidget, &GamePromptWidget::resetDamageOrderRequested, game->getGameEventHandler(),
-                &GameEventHandler::resetCurrentDamageOrderSequence);
+        connect(gamePromptWidget, &GamePromptWidget::confirmCombatDamageRequested, game->getGameEventHandler(),
+                &GameEventHandler::confirmCombatDamageForCurrentAttacker);
         connect(gamePromptWidget, &GamePromptWidget::cancelTargetingRequested, this, [this]() {
             if (!game) {
                 return;

@@ -40,7 +40,7 @@ CardItem::CardItem(Player *_owner, QGraphicsItem *parent, const CardRef &cardRef
         if (auto *handler = game->getGameEventHandler()) {
             connect(handler, &GameEventHandler::ruledCombatStateChanged, this, [this]() { update(); });
             connect(handler, &GameEventHandler::ruledBattlefieldMapUpdated, this, [this]() { update(); });
-            connect(handler, &GameEventHandler::ruledDamageOrderUiChanged, this, [this]() { update(); });
+            connect(handler, &GameEventHandler::ruledCombatDamageUiChanged, this, [this]() { update(); });
         }
     }
 }
@@ -195,13 +195,13 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
             QColor outlineColor;
             const auto ruledPhase = ruledHandler->getRuledCombatPhase();
             using RuledPhase = GameEventHandler::RuledCombatPhase;
-            if (ruledPhase == RuledPhase::AssignDamageOrder) {
-                const quint32 curAtt = ruledHandler->currentDamageOrderAttackerOid();
-                const int ordinal = ruledHandler->damageOrderOrdinalForBlocker(ruledOid);
-                if (ordinal > 0) {
-                    outlineColor = QColor(128, 0, 200); // purple for ordered blockers
+            if (ruledPhase == RuledPhase::AssignCombatDamage) {
+                const quint32 curAtt = ruledHandler->currentCombatDamageAttackerOid();
+                const int dmg = static_cast<int>(ruledHandler->assignedCombatDamageForBlocker(ruledOid));
+                if (dmg > 0) {
+                    outlineColor = QColor(200, 40, 40); // red tint for blockers with assigned damage
                 } else if (curAtt != 0 && ruledHandler->getCommittedBlocks().value(ruledOid, 0) == curAtt) {
-                    outlineColor = QColor(255, 200, 0); // yellow for unordered blockers of current attacker
+                    outlineColor = QColor(255, 200, 0); // yellow for blockers of current attacker
                 }
             } else if (ruledHandler->isPendingAttacker(ruledOid)) {
                 outlineColor = QColor(255, 215, 0); // gold for pending attackers
@@ -224,10 +224,11 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
                 painter->drawPath(shape());
                 painter->restore();
             }
-            if (ruledPhase == RuledPhase::AssignDamageOrder) {
-                const int ordinal = ruledHandler->damageOrderOrdinalForBlocker(ruledOid);
-                if (ordinal > 0) {
-                    paintNumberEllipse(ordinal, 14, QColor(128, 0, 200), 0, 1, painter);
+            if (ruledPhase == RuledPhase::AssignCombatDamage) {
+                const quint32 curAtt = ruledHandler->currentCombatDamageAttackerOid();
+                if (curAtt != 0 && ruledHandler->getCommittedBlocks().value(ruledOid, 0) == curAtt) {
+                    const int dmg = static_cast<int>(ruledHandler->assignedCombatDamageForBlocker(ruledOid));
+                    paintNumberEllipse(dmg, 14, dmg > 0 ? QColor(220, 60, 60) : QColor(140, 140, 140), 0, 1, painter);
                 }
             }
         }
@@ -629,6 +630,37 @@ bool isCombatEligibleCreature(const CardItem *card)
 
 // Try to handle a left-click as a ruled-mode combat input.
 // Returns true if the click was consumed by combat handling.
+bool handleRuledCombatRightClick(CardItem *card)
+{
+    GameEventHandler *handler = ruledHandlerForCard(card);
+    if (!handler) {
+        return false;
+    }
+    if (!isCombatEligibleCreature(card)) {
+        return false;
+    }
+    Player *owner = card->getOwner();
+    const int ownerPlayerId = owner ? owner->getPlayerInfo()->getId() : -1;
+    const quint32 oid = handler->engineOidForCardId(ownerPlayerId, card->getId());
+    if (oid == 0) {
+        return false;
+    }
+    const auto phase = handler->getRuledCombatPhase();
+    using Phase = GameEventHandler::RuledCombatPhase;
+    if (phase == Phase::AssignCombatDamage && handler->localPlayerIsRuledActive()) {
+        const quint32 curAtt = handler->currentCombatDamageAttackerOid();
+        if (curAtt == 0) {
+            return false;
+        }
+        if (handler->getCommittedBlocks().value(oid, 0) != curAtt) {
+            return false;
+        }
+        handler->bumpBlockerCombatDamage(oid, -1);
+        return true;
+    }
+    return false;
+}
+
 bool handleRuledCombatClick(CardItem *card)
 {
     GameEventHandler *handler = ruledHandlerForCard(card);
@@ -675,8 +707,8 @@ bool handleRuledCombatClick(CardItem *card)
         }
     }
 
-    if (phase == Phase::AssignDamageOrder && handler->localPlayerIsRuledActive()) {
-        const quint32 curAtt = handler->currentDamageOrderAttackerOid();
+    if (phase == Phase::AssignCombatDamage && handler->localPlayerIsRuledActive()) {
+        const quint32 curAtt = handler->currentCombatDamageAttackerOid();
         if (curAtt == 0) {
             return false;
         }
@@ -684,7 +716,7 @@ bool handleRuledCombatClick(CardItem *card)
         if (handler->getCommittedBlocks().value(oid, 0) != curAtt) {
             return false;
         }
-        handler->appendToDamageOrderSequence(oid);
+        handler->bumpBlockerCombatDamage(oid, +1);
         return true;
     }
 
@@ -714,7 +746,11 @@ void CardItem::handleClickedToPlay(bool shiftHeld)
 void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
     if (event->button() == Qt::RightButton) {
-
+        if (handleRuledCombatRightClick(this)) {
+            update();
+            AbstractCardItem::mouseReleaseEvent(event);
+            return;
+        }
         if (owner != nullptr) {
             owner->getGame()->setActiveCard(this);
             if (QMenu *cardMenu = owner->getPlayerMenu()->updateCardMenu(this)) {

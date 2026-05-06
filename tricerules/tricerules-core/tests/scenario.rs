@@ -3,9 +3,9 @@
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
 use tricerules_proto::ruled::v1::ruled_event::Ev;
 use tricerules_proto::ruled::v1::{
-    AddManaToPool, AssignDamageOrder, BlockPair, CastSpell, DeclareAttackers, DeclareBlockers,
-    DiscardToHandSize, PassPriority, PlayLand, PreviewDeclareAttackers, PreviewDeclareBlockers,
-    PrimitiveYieldStructured, RuledCommand, TargetRef,
+    AddManaToPool, AssignCombatDamage, BlockPair, CastSpell, DeclareAttackers, DeclareBlockers,
+    DamagePair, DiscardToHandSize, PassPriority, PlayLand, PreviewDeclareAttackers,
+    PreviewDeclareBlockers, PrimitiveYieldStructured, RuledCommand, TargetRef,
 };
 
 use tricerules_core::GameEngine;
@@ -3172,11 +3172,17 @@ fn opening_choose_first_london_mulligan_then_start() {
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
 }
 
-fn assign_damage_order_cmd(attacker_id: u32, ordered_blocker_ids: Vec<u32>) -> RuledCommand {
+fn assign_combat_damage_cmd(attacker_id: u32, pairs: Vec<(u32, u32)>) -> RuledCommand {
     RuledCommand {
-        cmd: Some(Cmd::AssignDamageOrder(AssignDamageOrder {
+        cmd: Some(Cmd::AssignCombatDamage(AssignCombatDamage {
             attacker_id,
-            ordered_blocker_ids,
+            assignments: pairs
+                .into_iter()
+                .map(|(blocker_id, damage)| DamagePair {
+                    blocker_id,
+                    damage,
+                })
+                .collect(),
         })),
     }
 }
@@ -3196,7 +3202,7 @@ fn ensure_in_hand(e: &mut GameEngine, player: usize, card_id: &str) {
 fn two_blockers_damage_order_required_and_resolves() {
     // Attacker: grizzly_bears (2/2) = 2 power.
     // Blockers: savannah_lions (2/1) + grizzly_bears (2/2).
-    // Order: lions first → gets 1 lethal → dies; bears gets remaining 1 dmg (< toughness 2) → survives.
+    // Assignment: lions 1, bears 1 (sum = attacker power).
     // Attacker receives 2+2=4 damage (toughness 2) → dies. No life loss.
     let decks = Some(vec![
         // P0: enough grizzly_bears to guarantee one in hand after draw step
@@ -3234,15 +3240,15 @@ fn two_blockers_damage_order_required_and_resolves() {
         .expect("declare two blockers");
 
     assert!(
-        e.state.combat.as_ref().unwrap().damage_order_needed,
-        "damage_order_needed must be true after multi-block"
+        e.state.combat.as_ref().unwrap().damage_assignment_needed,
+        "damage_assignment_needed must be true after multi-block"
     );
     assert!(
         !e.state
             .combat
             .as_ref()
             .unwrap()
-            .assign_damage_order_phase,
+            .assign_combat_damage_phase,
         "still in declare blockers priority before passes"
     );
     assert!(life_changes_in(&b).is_empty(), "no damage dealt yet");
@@ -3250,26 +3256,25 @@ fn two_blockers_damage_order_required_and_resolves() {
     assert!(
         e.apply_command(
             0,
-            &assign_damage_order_cmd(attacker, vec![blocker_lions, blocker_bears]),
+            &assign_combat_damage_cmd(attacker, vec![(blocker_lions, 1), (blocker_bears, 1)]),
         )
         .is_err(),
-        "cannot assign damage order before declare-blockers priority round"
+        "cannot assign combat damage before declare-blockers priority round"
     );
 
     e.apply_command(0, &pass()).expect("active pass declare blockers");
-    e.apply_command(1, &pass()).expect("defender pass → damage order step");
+    e.apply_command(1, &pass()).expect("defender pass → assign combat damage step");
     assert!(
-        e.state.combat.as_ref().unwrap().assign_damage_order_phase,
-        "assign_damage_order_phase after both pass"
+        e.state.combat.as_ref().unwrap().assign_combat_damage_phase,
+        "assign_combat_damage_phase after both pass"
     );
 
-    // Active player assigns order: lions first, then bears.
     let b3 = e
         .apply_command(
             0,
-            &assign_damage_order_cmd(attacker, vec![blocker_lions, blocker_bears]),
+            &assign_combat_damage_cmd(attacker, vec![(blocker_lions, 1), (blocker_bears, 1)]),
         )
-        .expect("assign damage order");
+        .expect("assign combat damage");
 
     let dead = permanents_moved_in(&b3);
     let dead_ids: Vec<u32> = dead.iter().map(|p| p.object_id).collect();
@@ -3290,7 +3295,7 @@ fn two_blockers_damage_order_required_and_resolves() {
 fn two_blockers_insufficient_power_kills_only_first_in_order() {
     // Attacker: savannah_lions (2/1) = 2 power.
     // Blockers: coral_merfolk (2/1) + grizzly_bears (2/2).
-    // Order: merfolk first → gets 1 lethal → dies; bears gets remaining 1 (toughness=2) → survives.
+    // merfolk 1 lethal, bears 1 partial.
     // Attacker receives 2+2=4 damage → dies. No life loss.
     let decks = Some(vec![
         {
@@ -3327,13 +3332,13 @@ fn two_blockers_insufficient_power_kills_only_first_in_order() {
     )
     .expect("two blockers");
     e.apply_command(0, &pass()).expect("active pass declare blockers");
-    e.apply_command(1, &pass()).expect("defender pass → damage order");
+    e.apply_command(1, &pass()).expect("defender pass → assign combat damage");
     let b = e
         .apply_command(
             0,
-            &assign_damage_order_cmd(attacker, vec![blocker_merfolk, blocker_bears]),
+            &assign_combat_damage_cmd(attacker, vec![(blocker_merfolk, 1), (blocker_bears, 1)]),
         )
-        .expect("assign order: merfolk first");
+        .expect("assign combat damage");
 
     let dead = permanents_moved_in(&b);
     let dead_ids: Vec<u32> = dead.iter().map(|p| p.object_id).collect();
@@ -3349,7 +3354,7 @@ fn two_blockers_insufficient_power_kills_only_first_in_order() {
 
 #[test]
 fn single_blocker_no_damage_order_needed() {
-    // Regression: single blocker must not trigger damage_order_needed; combat proceeds normally.
+    // Regression: single blocker must not trigger damage_assignment_needed; combat proceeds normally.
     let decks = Some(vec![
         std::iter::repeat_n("grizzly_bears".to_string(), 10).collect::<Vec<_>>(),
         std::iter::repeat_n("grizzly_bears".to_string(), 10).collect::<Vec<_>>(),
@@ -3371,11 +3376,11 @@ fn single_blocker_no_damage_order_needed() {
     .expect("declare single blocker");
 
     assert!(
-        !e.state.combat.as_ref().unwrap().damage_order_needed,
-        "damage_order_needed must be false for single-blocker combat"
+        !e.state.combat.as_ref().unwrap().damage_assignment_needed,
+        "damage_assignment_needed must be false for single-blocker combat"
     );
 
-    // Combat resolves normally without any AssignDamageOrder step: both 2/2s die.
+    // Combat resolves normally without any AssignCombatDamage step: both 2/2s die.
     e.apply_command(0, &pass()).expect("active pass declare blockers");
     let b = e.apply_command(1, &pass()).expect("combat damage");
     let dead = permanents_moved_in(&b);
@@ -3383,4 +3388,133 @@ fn single_blocker_no_damage_order_needed() {
     assert!(dead_ids.contains(&attacker), "attacker dies in mutual block");
     assert!(dead_ids.contains(&blocker), "blocker dies in mutual block");
     assert!(life_changes_in(&b).is_empty(), "no life loss on fully blocked combat");
+}
+
+/// Two blockers on one 2-power attacker, both passes done → assign_combat_damage_phase.
+fn setup_two_blockers_assign_phase(
+    seed: u64,
+) -> (
+    GameEngine,
+    u32, // attacker
+    u32, // blocker_a (savannah_lions)
+    u32, // blocker_b (grizzly_bears)
+) {
+    let decks = Some(vec![
+        std::iter::repeat_n("grizzly_bears".to_string(), 10).collect::<Vec<_>>(),
+        {
+            let mut d: Vec<String> = std::iter::repeat_n("savannah_lions".to_string(), 5).collect();
+            d.extend(std::iter::repeat_n("grizzly_bears".to_string(), 5));
+            d
+        },
+    ]);
+    let mut e = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    ensure_in_hand(&mut e, 0, "grizzly_bears");
+    ensure_in_hand(&mut e, 1, "savannah_lions");
+    ensure_in_hand(&mut e, 1, "grizzly_bears");
+    let attacker = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let blocker_a = put_creature_on_battlefield(&mut e, 1, "savannah_lions");
+    let blocker_b = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass()).expect("active pass");
+    e.apply_command(1, &pass()).expect("defender pass");
+    e.apply_command(
+        1,
+        &declare_blockers(vec![
+            BlockPair {
+                attacker_id: attacker,
+                blocker_id: blocker_a,
+            },
+            BlockPair {
+                attacker_id: attacker,
+                blocker_id: blocker_b,
+            },
+        ]),
+    )
+    .expect("declare two blockers");
+    e.apply_command(0, &pass()).expect("active pass declare blockers");
+    e.apply_command(1, &pass()).expect("defender pass");
+    assert!(e.state.combat.as_ref().unwrap().assign_combat_damage_phase);
+    (e, attacker, blocker_a, blocker_b)
+}
+
+#[test]
+fn assign_combat_damage_rejects_sum_mismatch() {
+    let (mut e, attacker, a, b) = setup_two_blockers_assign_phase(910);
+    assert!(e
+        .apply_command(
+            0,
+            &assign_combat_damage_cmd(attacker, vec![(a, 1), (b, 0)]),
+        )
+        .is_err());
+    assert!(!e.state.combat.as_ref().unwrap().damage_assignments.contains_key(&attacker));
+}
+
+#[test]
+fn assign_combat_damage_accepts_split_with_two_nonlethal_hits() {
+    // Two 2/2 blockers vs 2-power attacker: 1+1 is allowed (no lethal-first requirement).
+    let decks = Some(vec![
+        std::iter::repeat_n("grizzly_bears".to_string(), 10).collect::<Vec<_>>(),
+        std::iter::repeat_n("grizzly_bears".to_string(), 10).collect::<Vec<_>>(),
+    ]);
+    let mut e = GameEngine::new(911, &[0, 1], 20, decks, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    ensure_in_hand(&mut e, 0, "grizzly_bears");
+    ensure_in_hand(&mut e, 1, "grizzly_bears");
+    let attacker = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let b1 = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    let b2 = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass()).expect("active pass");
+    e.apply_command(1, &pass()).expect("defender pass");
+    e.apply_command(
+        1,
+        &declare_blockers(vec![
+            BlockPair {
+                attacker_id: attacker,
+                blocker_id: b1,
+            },
+            BlockPair {
+                attacker_id: attacker,
+                blocker_id: b2,
+            },
+        ]),
+    )
+    .expect("declare two blockers");
+    e.apply_command(0, &pass()).expect("active pass declare blockers");
+    e.apply_command(1, &pass()).expect("defender pass");
+    let b = e
+        .apply_command(0, &assign_combat_damage_cmd(attacker, vec![(b1, 1), (b2, 1)]))
+        .expect("assign 1+1");
+    let dead = permanents_moved_in(&b);
+    let dead_ids: Vec<u32> = dead.iter().map(|p| p.object_id).collect();
+    assert!(dead_ids.contains(&attacker), "attacker dies from 2+2 blocker damage");
+    assert!(!dead_ids.contains(&b1) && !dead_ids.contains(&b2), "both blockers survive with 1 dmg");
+    assert_eq!(e.state.objects.get(&b1).unwrap().damage, 1);
+    assert_eq!(e.state.objects.get(&b2).unwrap().damage, 1);
+}
+
+#[test]
+fn assign_combat_damage_rejects_wrong_blocker_set() {
+    let (mut e, attacker, a, _b) = setup_two_blockers_assign_phase(912);
+    let other = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    assert!(e
+        .apply_command(
+            0,
+            &assign_combat_damage_cmd(attacker, vec![(a, 1), (other, 1)]),
+        )
+        .is_err());
+}
+
+#[test]
+fn assign_combat_damage_rejects_defender_player() {
+    let (mut e, attacker, a, b) = setup_two_blockers_assign_phase(913);
+    assert!(e
+        .apply_command(
+            1,
+            &assign_combat_damage_cmd(attacker, vec![(a, 1), (b, 1)]),
+        )
+        .is_err());
 }

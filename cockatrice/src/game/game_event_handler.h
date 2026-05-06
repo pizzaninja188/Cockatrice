@@ -60,7 +60,7 @@ public:
         None,
         DeclareAttackers,
         DeclareBlockers,
-        AssignDamageOrder,
+        AssignCombatDamage,
         CombatDamage
     };
 
@@ -97,6 +97,9 @@ private:
     QHash<quint32, bool> engineOidSummoningSick;
     // Engine ObjectId -> marked damage currently shown in ruled ZoneView.
     QHash<quint32, int> engineOidMarkedDamage;
+    // From ZoneViewSync battlefield_power / battlefield_toughness (ruled creatures).
+    QHash<quint32, int> engineOidBattlefieldPower;
+    QHash<quint32, int> engineOidBattlefieldToughness;
     // Servatrice HandSlotMap: (owner player id, Server_Card.id) -> engine hand index for ruled commands.
     QHash<quint64, int> ruledOwnedCardToEngineHandSlot;
 
@@ -133,14 +136,12 @@ private:
     // keep declaration controls hidden until the next combat step resets them.
     bool attackersSubmittedThisStep = false;
     bool blockersSubmittedThisStep = false;
-    // Damage order assignment state (CR 510.1b): populated after BlockersDeclared when any
-    // attacker has 2+ blockers; auto-submitted once all orderings are clicked.
-    QList<quint32> damageOrderPendingAttackers;
-    int currentDamageOrderAttackerIdx = -1;
-    QHash<quint32, QList<quint32>> pendingDamageOrders;
+    // Assign combat damage: populated after BlockersDeclared when any attacker has 2+ blockers.
+    QList<quint32> combatDamagePendingAttackers;
+    int currentCombatDamageAttackerIdx = -1;
     QHash<quint32, QList<quint32>> committedBlockerGroups; // attackerOid → [blockerOids]
-    QList<quint32> currentDamageOrderSequence;
-    bool damageOrdersSubmittedThisStep = false;
+    /// Blocker engine oid → pending damage from the current attacker (local UI until OK).
+    QHash<quint32, quint32> pendingCombatDamageByBlocker;
 
 public:
     explicit GameEventHandler(AbstractGame *_game);
@@ -280,12 +281,15 @@ public:
     void clearStagedBlockers();
     void pairStagedBlockerToAttacker(quint32 attackerOid);
     void clearPendingBlocks();
-    [[nodiscard]] quint32 currentDamageOrderAttackerOid() const;
-    [[nodiscard]] int damageOrderOrdinalForBlocker(quint32 blockerOid) const;
-    void appendToDamageOrderSequence(quint32 blockerOid);
-    void resetCurrentDamageOrderSequence();
-    void handleConfirmAllDamageOrders();
-    void clearDamageOrderState();
+    [[nodiscard]] quint32 currentCombatDamageAttackerOid() const;
+    [[nodiscard]] quint32 assignedCombatDamageForBlocker(quint32 blockerOid) const;
+    void bumpBlockerCombatDamage(quint32 blockerOid, int delta);
+    void confirmCombatDamageForCurrentAttacker();
+    void clearCombatDamageAssignmentState();
+    [[nodiscard]] QString currentCombatDamageAttackerDisplayName() const;
+    [[nodiscard]] int currentCombatDamageAttackerPower() const;
+    [[nodiscard]] int localCombatDamageAssignedTotal() const;
+    [[nodiscard]] bool localCombatDamageAssignmentLegal() const;
 
     void handleNextTurn();
     void handleReverseTurn();
@@ -377,13 +381,18 @@ signals:
     /// Phase, priority, legal actions, and local UI hints for the ruled prompt panel only.
     void ruledEnginePromptFeed(QString message);
     void ruledCombatStateChanged();
-    void ruledDamageOrderUiChanged();
+    void ruledCombatDamageUiChanged();
     void ruledBattlefieldMapUpdated();
     void ruledStackHasItemsChanged(bool hasItems);
     void ruledCleanupDiscardUiChanged(int required, int selected);
     void ruledOpeningUiChanged();
 
 private:
+    /// ZoneView is stripped on client broadcasts; fall back to CardItem P/T when maps are empty.
+    [[nodiscard]] int ruledCombatPowerForCreatureOid(quint32 engineOid) const;
+    [[nodiscard]] int ruledCombatToughnessForCreatureOid(quint32 engineOid) const;
+    /// Greedy lethal-first split in `committedBlockerGroups` order (convenience default; any sum==power split is allowed).
+    void seedDefaultCombatDamageForCurrentAttacker();
     void pruneCleanupDiscardSelectionAndEmitUi();
     void clearRuledSpellTargetArrows();
     void syncRuledSpellTargetingArrows();
