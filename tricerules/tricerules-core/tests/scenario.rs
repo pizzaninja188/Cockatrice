@@ -159,9 +159,12 @@ fn end_active_turn(e: &mut GameEngine, player: i32) {
     e.apply_command(player, &primitive_yield())
         .expect("main1 to begin combat");
     e.apply_command(player, &primitive_yield())
-        .expect("begin combat to declare attackers");
-    e.apply_command(player, &primitive_yield())
-        .expect("skip attackers to end combat");
+        .expect("begin combat advance");
+    // If eligible attackers exist, BeginCombat enters DeclareAttackers; skip them.
+    if e.state.turn_step == tricerules_core::TurnStep::DeclareAttackers {
+        e.apply_command(player, &primitive_yield())
+            .expect("skip attackers to end combat");
+    }
     e.apply_command(player, &primitive_yield())
         .expect("end combat to main2");
     e.apply_command(player, &primitive_yield())
@@ -549,6 +552,8 @@ fn stack_resolution_emits_priority_to_active_player() {
 
 #[test]
 fn declare_attackers_handoff_emits_defender_priority() {
+    // Defender needs an eligible blocker so the engine enters DeclareBlockers with
+    // the defender holding priority (rather than auto-declaring empty blockers).
     let decks = Some(vec![
         vec![
             "forest".into(),
@@ -560,8 +565,8 @@ fn declare_attackers_handoff_emits_defender_priority() {
             "forest".into(),
         ],
         vec![
-            "mountain".into(),
-            "mountain".into(),
+            "forest".into(),
+            "grizzly_bears".into(),
             "mountain".into(),
             "mountain".into(),
             "mountain".into(),
@@ -571,11 +576,22 @@ fn declare_attackers_handoff_emits_defender_priority() {
     ]);
     let mut e = GameEngine::new(66, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
-    // Put one creature and two forests on battlefield to mimic later turn.
+    // Put one creature and two forests on battlefield for attacker.
     for card in ["forest", "forest", "grizzly_bears"] {
         let idx = hand_index_for_card(&e, 0, card);
         let oid = e.state.players[0].hand.remove(idx);
         e.state.players[0].battlefield.push(oid);
+        if let Some(obj) = e.state.objects.get_mut(&oid) {
+            obj.zone = tricerules_core::Zone::Battlefield;
+            obj.summoning_sick = false;
+            obj.tapped = false;
+        }
+    }
+    // Give defender an eligible blocker (untapped, not summoning-sick).
+    for card in ["grizzly_bears"] {
+        let idx = hand_index_for_card(&e, 1, card);
+        let oid = e.state.players[1].hand.remove(idx);
+        e.state.players[1].battlefield.push(oid);
         if let Some(obj) = e.state.objects.get_mut(&oid) {
             obj.zone = tricerules_core::Zone::Battlefield;
             obj.summoning_sick = false;
@@ -626,27 +642,21 @@ fn declare_attackers_handoff_emits_defender_priority() {
 
 #[test]
 fn no_attackers_skip_to_end_combat_emits_active_priority() {
+    // No creatures on battlefield → BeginCombat auto-skips to EndCombat.
     let mut e = GameEngine::new(67, &[0, 1], 20, None, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
     e.apply_command(0, &primitive_yield())
         .expect("main1 to begin combat");
     e.apply_command(0, &pass()).expect("ap pass begin combat");
-    e.apply_command(1, &pass()).expect("nap pass begin combat");
-    assert_eq!(
-        e.state.turn_step,
-        tricerules_core::TurnStep::DeclareAttackers
-    );
-
-    let b = e
-        .apply_command(0, &declare_attackers(vec![]))
-        .expect("no attackers");
+    let b = e.apply_command(1, &pass()).expect("nap pass begin combat");
+    // Engine must skip directly to EndCombat (no DeclareAttackers needed).
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::EndCombat);
     assert!(
         priority_changes_in(&b).contains(&0),
-        "active player should keep/regain priority in end combat after no attackers"
+        "active player should hold priority in end_combat after auto-skip"
     );
 
-    // End combat still has a full priority pass cycle before postcombat main.
+    // EndCombat still has a full priority pass cycle before postcombat main.
     let to_nap = e.apply_command(0, &pass()).expect("ap pass end combat");
     assert!(
         priority_changes_in(&to_nap).contains(&1),
@@ -700,19 +710,16 @@ fn blockers_to_combat_damage_emits_priority_stop() {
         .expect("active pass declare attackers");
     e.apply_command(1, &pass())
         .expect("defender pass declare attackers");
-    assert_eq!(
-        e.state.turn_step,
-        tricerules_core::TurnStep::DeclareBlockers
-    );
-    let declare_blockers_batch = e.apply_command(1, &pass()).expect("defender no blocks");
+    // No eligible blockers for defender: engine auto-declares empty blockers,
+    // active player gets priority in DeclareBlockers.
     assert_eq!(
         e.state.turn_step,
         tricerules_core::TurnStep::DeclareBlockers,
-        "declaring no blockers should not immediately deal combat damage"
+        "engine should auto-declare empty blockers and stay in DeclareBlockers"
     );
     assert!(
-        priority_changes_in(&declare_blockers_batch).contains(&0),
-        "after blockers are declared, active player gets priority in declare blockers"
+        e.state.combat.as_ref().map_or(false, |c| c.blockers_declared),
+        "blockers_declared must be true after auto-skip"
     );
     e.apply_command(0, &pass())
         .expect("active pass declare blockers");
@@ -743,8 +750,8 @@ fn cleanup_batch_discard_three_at_once() {
     assert_eq!(e.state.players[ap_idx].hand.len(), 10);
 
     e.apply_command(0, &primitive_yield()).expect("main1->begin combat");
-    e.apply_command(0, &primitive_yield()).expect("begin combat->declare");
-    e.apply_command(0, &primitive_yield()).expect("skip attackers");
+    // No eligible attackers: BeginCombat auto-skips to EndCombat.
+    e.apply_command(0, &primitive_yield()).expect("begin combat->end combat");
     e.apply_command(0, &primitive_yield()).expect("end combat->main2");
     e.apply_command(0, &primitive_yield()).expect("main2->end step");
     e.apply_command(0, &primitive_yield()).expect("end step->cleanup");
@@ -771,8 +778,8 @@ fn cleanup_step_opens_when_hand_exceeds_max_and_discard_finishes_turn() {
     assert!(e.state.players[ap_idx].hand.len() > 7);
 
     e.apply_command(0, &primitive_yield()).expect("main1->begin combat");
-    e.apply_command(0, &primitive_yield()).expect("begin combat->declare");
-    e.apply_command(0, &primitive_yield()).expect("skip attackers");
+    // No eligible attackers: BeginCombat auto-skips to EndCombat.
+    e.apply_command(0, &primitive_yield()).expect("begin combat->end combat");
     e.apply_command(0, &primitive_yield()).expect("end combat->main2");
     e.apply_command(0, &primitive_yield()).expect("main2->end step");
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::EndStep);
@@ -793,10 +800,9 @@ fn main2_double_pass_advances_to_end_step_stop() {
     advance_to_main1_from_game_start(&mut e);
     e.apply_command(0, &primitive_yield())
         .expect("main1 to begin combat");
+    // No eligible attackers: BeginCombat auto-skips to EndCombat in one yield.
     e.apply_command(0, &primitive_yield())
-        .expect("begin combat to declare attackers");
-    e.apply_command(0, &primitive_yield())
-        .expect("skip attackers to end combat");
+        .expect("begin combat to end combat");
     e.apply_command(0, &primitive_yield())
         .expect("end combat to main2");
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main2);
@@ -1183,9 +1189,8 @@ fn untap_and_draw_happen_in_new_turn_sequence() {
     pass_both_players(&mut e); // draw -> main1
     e.apply_command(1, &primitive_yield())
         .expect("p1 main1 to begin combat");
-    pass_both_players(&mut e); // begin combat -> declare attackers
-    e.apply_command(1, &declare_attackers(vec![]))
-        .expect("p1 no attackers to end combat");
+    // No eligible attackers: BeginCombat auto-skips to EndCombat on both-player pass.
+    pass_both_players(&mut e); // begin combat -> end combat
     pass_both_players(&mut e); // end combat -> main2
     pass_both_players(&mut e); // main2 -> end step
     pass_both_players(&mut e); // end step -> cleanup or p0 upkeep
@@ -1361,10 +1366,38 @@ fn put_creature_on_battlefield(e: &mut GameEngine, player: usize, card_id: &str)
     oid
 }
 
+/// Inject a creature directly onto the battlefield without consuming a card from hand or library.
+/// Use this when you need an eligible attacker/blocker but the deck budget is already spent.
+fn inject_creature_on_battlefield(e: &mut GameEngine, player: usize, card_id: &str) -> u32 {
+    let id = e.state.next_object_id;
+    e.state.next_object_id += 1;
+    let player_id = e.state.players[player].id;
+    e.state.objects.insert(
+        id,
+        tricerules_core::state::GameObject {
+            id,
+            owner: player_id,
+            card_id: card_id.to_string(),
+            zone: tricerules_core::Zone::Battlefield,
+            tapped: false,
+            summoning_sick: false,
+            power: Some(2),
+            toughness: Some(2),
+            damage: 0,
+            plus_one_plus_one: 0,
+            minus_one_minus_one: 0,
+        },
+    );
+    e.state.players[player].battlefield.push(id);
+    id
+}
+
 fn advance_to_declare_attackers(e: &mut GameEngine) {
     advance_to_main1_from_game_start(e);
     e.apply_command(0, &primitive_yield())
         .expect("main1 to begin combat");
+    // Inject an eligible attacker (no hand/library consumed) so BeginCombat enters DeclareAttackers.
+    inject_creature_on_battlefield(e, 0, "grizzly_bears");
     e.apply_command(0, &pass()).expect("ap pass begin combat");
     e.apply_command(1, &pass()).expect("nap pass begin combat");
     assert_eq!(
@@ -1596,11 +1629,7 @@ fn unblocked_combat_damage_emits_life_changed() {
         .expect("active pass declare attackers");
     e.apply_command(1, &pass())
         .expect("defender pass declare attackers");
-    let declared = e.apply_command(1, &pass()).expect("defender no blocks");
-    assert!(
-        life_changes_in(&declared).is_empty(),
-        "no damage during declare blockers immediately after no-block declaration"
-    );
+    // No eligible blockers: engine auto-declares empty blockers, active player has priority.
     e.apply_command(0, &pass())
         .expect("active pass declare blockers");
     let b = e
@@ -2685,6 +2714,8 @@ fn cannot_cast_spell_until_blockers_declared() {
     let mut e = GameEngine::new(9300, &[0, 1], 20, None, true).expect("new");
     advance_to_declare_attackers(&mut e);
     let attacker = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    // Inject an eligible blocker for the defender so the engine prompts them in DeclareBlockers.
+    inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     e.apply_command(0, &declare_attackers(vec![attacker]))
         .expect("declare");
     e.apply_command(0, &pass())
@@ -3517,4 +3548,151 @@ fn assign_combat_damage_rejects_defender_player() {
             &assign_combat_damage_cmd(attacker, vec![(a, 1), (b, 1)]),
         )
         .is_err());
+}
+
+// ── Combat eligibility skip tests ────────────────────────────────────────────
+
+#[test]
+fn begin_combat_skips_when_no_eligible_attackers() {
+    // Default deck has no creatures on the battlefield.
+    // BeginCombat must auto-skip directly to EndCombat.
+    let mut e = GameEngine::new(4001, &[0, 1], 20, None, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    e.apply_command(0, &primitive_yield())
+        .expect("main1 to begin_combat");
+    e.apply_command(0, &pass()).expect("ap pass begin_combat");
+    let b = e
+        .apply_command(1, &pass())
+        .expect("nap pass begin_combat");
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::EndCombat,
+        "no eligible attackers must skip to end_combat"
+    );
+    assert!(
+        priority_changes_in(&b).contains(&0),
+        "active player must hold priority in end_combat after auto-skip"
+    );
+}
+
+#[test]
+fn begin_combat_skips_when_all_creatures_summoning_sick() {
+    let mut e = GameEngine::new(4002, &[0, 1], 20, None, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    e.apply_command(0, &primitive_yield())
+        .expect("main1 to begin_combat");
+    // Inject a summoning-sick creature (cannot attack).
+    let oid = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    if let Some(obj) = e.state.objects.get_mut(&oid) {
+        obj.summoning_sick = true;
+    }
+    e.apply_command(0, &pass()).expect("ap pass begin_combat");
+    e.apply_command(1, &pass()).expect("nap pass begin_combat");
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::EndCombat,
+        "summoning-sick creature must not prevent skip to end_combat"
+    );
+}
+
+#[test]
+fn begin_combat_skips_when_all_creatures_tapped() {
+    let mut e = GameEngine::new(4003, &[0, 1], 20, None, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    e.apply_command(0, &primitive_yield())
+        .expect("main1 to begin_combat");
+    // Inject a tapped creature (cannot attack).
+    let oid = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    if let Some(obj) = e.state.objects.get_mut(&oid) {
+        obj.tapped = true;
+    }
+    e.apply_command(0, &pass()).expect("ap pass begin_combat");
+    e.apply_command(1, &pass()).expect("nap pass begin_combat");
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::EndCombat,
+        "tapped creature must not prevent skip to end_combat"
+    );
+}
+
+#[test]
+fn begin_combat_enters_declare_attackers_when_eligible_attacker_exists() {
+    let mut e = GameEngine::new(4004, &[0, 1], 20, None, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    e.apply_command(0, &primitive_yield())
+        .expect("main1 to begin_combat");
+    inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    e.apply_command(0, &pass()).expect("ap pass begin_combat");
+    e.apply_command(1, &pass()).expect("nap pass begin_combat");
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareAttackers,
+        "eligible attacker must cause engine to enter declare_attackers"
+    );
+}
+
+#[test]
+fn declare_attackers_skips_blockers_when_no_eligible_blockers() {
+    // Active player has an attacker; defending player has no creatures.
+    // After both pass priority in DeclareAttackers, engine auto-declares empty blockers.
+    let mut e = GameEngine::new(4005, &[0, 1], 20, None, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    e.apply_command(0, &primitive_yield())
+        .expect("main1 to begin_combat");
+    let bears = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    e.apply_command(0, &pass()).expect("ap pass begin_combat");
+    e.apply_command(1, &pass()).expect("nap pass begin_combat");
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::DeclareAttackers);
+
+    e.apply_command(0, &declare_attackers(vec![bears]))
+        .expect("declare attacker");
+    // Both pass in DeclareAttackers.
+    e.apply_command(0, &pass()).expect("ap pass declare_attackers");
+    let b = e
+        .apply_command(1, &pass())
+        .expect("nap pass declare_attackers");
+    // Engine lands in DeclareBlockers with blockers_declared = true and active player holding priority.
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::DeclareBlockers);
+    assert!(
+        priority_changes_in(&b).contains(&0),
+        "active player must hold priority when blockers auto-declared"
+    );
+    assert!(
+        e.state.combat.as_ref().map_or(false, |c| c.blockers_declared),
+        "blockers_declared must be true after auto-skip"
+    );
+}
+
+#[test]
+fn summoning_sick_creature_can_block() {
+    // CR 302.6: summoning sickness does NOT prevent blocking.
+    // Defender has a summoning-sick but untapped creature → engine must enter DeclareBlockers
+    // with the defender holding priority.
+    let mut e = GameEngine::new(4006, &[0, 1], 20, None, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    e.apply_command(0, &primitive_yield())
+        .expect("main1 to begin_combat");
+    let attacker = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    // Defender's creature is summoning-sick but untapped → eligible blocker.
+    let blocker = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    if let Some(obj) = e.state.objects.get_mut(&blocker) {
+        obj.summoning_sick = true;
+        obj.tapped = false;
+    }
+    e.apply_command(0, &pass()).expect("ap pass begin_combat");
+    e.apply_command(1, &pass()).expect("nap pass begin_combat");
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::DeclareAttackers);
+
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass()).expect("ap pass declare_attackers");
+    let b = e
+        .apply_command(1, &pass())
+        .expect("nap pass declare_attackers");
+    // Defender has an eligible (summoning-sick) blocker → must get priority in DeclareBlockers.
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::DeclareBlockers);
+    assert!(
+        priority_changes_in(&b).contains(&1),
+        "defender must hold priority in declare_blockers when they have a summoning-sick blocker"
+    );
 }

@@ -39,6 +39,13 @@ public slots:
     void setSpellCastPending(bool pending);
     /// Active player only: drives assign-combat-damage title, assigned/power line, and OK enable.
     void setCombatDamageStatus(const QString &attackerName, int assigned, int power, bool legal);
+    /// True only when the local player must press a combat declare button (not just pass priority).
+    bool localPlayerMustDeclareCombat() const
+    {
+        return (currentCombatMode == CombatMode::DeclareAttackers ||
+                currentCombatMode == CombatMode::DeclareBlockers) &&
+               localPlayerHasCombatButtons;
+    }
 
 signals:
     void passPriorityRequested();

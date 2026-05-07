@@ -589,6 +589,40 @@ impl GameEngine {
         }
     }
 
+    fn active_player_has_eligible_attackers(&self) -> bool {
+        let ap = self.state.active_player_id();
+        let Some(ap_idx) = self.state.player_idx(ap) else {
+            return false;
+        };
+        self.state.players[ap_idx].battlefield.iter().any(|oid| {
+            self.state.objects.get(oid).is_some_and(|o| {
+                o.zone == Zone::Battlefield
+                    && o.owner == ap
+                    && o.is_creature(&self.registry)
+                    && !o.summoning_sick
+                    && !o.tapped
+            })
+        })
+    }
+
+    fn defending_player_has_eligible_blockers(&self) -> bool {
+        let Some(dp) = self.state.defending_player_id_1v1() else {
+            return false;
+        };
+        let Some(dp_idx) = self.state.player_idx(dp) else {
+            return false;
+        };
+        // CR 302.6: summoning sickness does NOT prevent blocking.
+        self.state.players[dp_idx].battlefield.iter().any(|oid| {
+            self.state.objects.get(oid).is_some_and(|o| {
+                o.zone == Zone::Battlefield
+                    && o.owner == dp
+                    && o.is_creature(&self.registry)
+                    && !o.tapped
+            })
+        })
+    }
+
     fn set_attackers(
         &mut self,
         ids: &[u32],
@@ -1167,33 +1201,82 @@ impl GameEngine {
             }
             BeginCombat => {
                 self.clear_all_mana_pools();
-                self.state.turn_step = DeclareAttackers;
-                if let Some(i) = self.state.player_idx(ap) {
-                    self.state.priority_idx = i;
+                if !self.active_player_has_eligible_attackers() {
+                    // No eligible attackers — skip all declare substeps.
+                    self.state.combat = None;
+                    self.state.turn_step = EndCombat;
+                    if let Some(i) = self.state.player_idx(ap) {
+                        self.state.priority_idx = i;
+                    }
+                    self.state.passes_since_stack_change = 0;
+                    ev.push(ev_log(
+                        "No eligible attackers — skipping to end combat.".into(),
+                    ));
+                    ev.push(ev_phase_labeled(self, "end_combat"));
+                    ev.push(ev_priority_changed(self));
+                } else {
+                    self.state.turn_step = DeclareAttackers;
+                    if let Some(i) = self.state.player_idx(ap) {
+                        self.state.priority_idx = i;
+                    }
+                    self.state.combat = Some(CombatState {
+                        attacking: vec![],
+                        blockers: HashMap::new(),
+                        damage_assignments: HashMap::new(),
+                        damage_assignment_needed: false,
+                        attackers_declared: false,
+                        blockers_declared: false,
+                        assign_combat_damage_phase: false,
+                    });
+                    ev.push(ev_phase_labeled(self, "declare_attackers"));
+                    ev.push(ev_priority_changed(self));
                 }
-                self.state.combat = Some(CombatState {
-                    attacking: vec![],
-                    blockers: HashMap::new(),
-                    damage_assignments: HashMap::new(),
-                    damage_assignment_needed: false,
-                    attackers_declared: false,
-                    blockers_declared: false,
-                    assign_combat_damage_phase: false,
-                });
-                ev.push(ev_phase_labeled(self, "declare_attackers"));
-                ev.push(ev_priority_changed(self));
             }
             DeclareAttackers => {
                 self.clear_all_mana_pools();
-                self.state.turn_step = DeclareBlockers;
-                if let Some(d) = self.state.defending_player_id_1v1() {
-                    if let Some(di) = self.state.player_idx(d) {
-                        self.state.priority_idx = di;
-                    }
-                }
                 self.state.passes_since_stack_change = 0;
-                ev.push(ev_phase_labeled(self, "declare_blockers"));
-                ev.push(ev_priority_changed(self));
+                let has_eligible_blockers = self.defending_player_has_eligible_blockers();
+                let has_attackers = self
+                    .state
+                    .combat
+                    .as_ref()
+                    .is_some_and(|c| !c.attacking.is_empty());
+                if !has_eligible_blockers || !has_attackers {
+                    // Auto-declare empty blockers; active player gets priority in DeclareBlockers.
+                    if let Some(c) = self.state.combat.as_mut() {
+                        c.blockers.clear();
+                        c.damage_assignments.clear();
+                        c.damage_assignment_needed = false;
+                        c.assign_combat_damage_phase = false;
+                        c.blockers_declared = true;
+                    }
+                    self.state.turn_step = DeclareBlockers;
+                    if let Some(i) = self.state.player_idx(ap) {
+                        self.state.priority_idx = i;
+                    }
+                    ev.push(ev_log(
+                        "No eligible blockers — auto-declaring empty blockers.".into(),
+                    ));
+                    ev.push(ev_phase_labeled(self, "declare_blockers"));
+                    // Emit BlockersDeclared (empty) AFTER phase_changed so the client's
+                    // blockersSubmittedThisStep ends up true (phase_changed resets it to false,
+                    // then BlockersDeclared sets it true; order matters).
+                    ev.push(RuledEvent {
+                        ev: Some(rv1::ruled_event::Ev::BlockersDeclared(
+                            rv1::BlockersDeclared { block_pairs: vec![] },
+                        )),
+                    });
+                    ev.push(ev_priority_changed(self));
+                } else {
+                    self.state.turn_step = DeclareBlockers;
+                    if let Some(d) = self.state.defending_player_id_1v1() {
+                        if let Some(di) = self.state.player_idx(d) {
+                            self.state.priority_idx = di;
+                        }
+                    }
+                    ev.push(ev_phase_labeled(self, "declare_blockers"));
+                    ev.push(ev_priority_changed(self));
+                }
             }
             DeclareBlockers => {
                 // After blockers are declared, players receive priority in declare blockers before

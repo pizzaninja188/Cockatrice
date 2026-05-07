@@ -1378,15 +1378,28 @@ Player *TabGame::setPriorityPlayer(int id)
         const bool localHasPriority = (id == localPlayerId);
         gamePromptWidget->setLocalPlayerHasPriority(localHasPriority);
         if (localHasPriority) {
-            const int currentPhase = game->getGameState()->getCurrentPhase();
-            const bool myTurn = (game->getGameState()->getActivePlayer() == localPlayerId);
-            const bool hasManualStop = phasesToolbar->shouldStopAtPhase(currentPhase, myTurn);
-            const bool stackIsEmpty = !game->getGameEventHandler()->hasRuledStackItems();
-            const bool cleanupDiscard = game->getGameEventHandler()->localPlayerMustCleanupDiscard();
-            const bool openingPhase = game->getGameEventHandler()->ruledEngineOpeningPhaseActive();
-            if (!openingPhase && !hasManualStop && stackIsEmpty && !cleanupDiscard) {
-                QTimer::singleShot(0, game->getGameEventHandler(), &GameEventHandler::handleNextTurn);
-            }
+            // Defer the auto-advance decision: ruledCombatStateChanged (which updates
+            // localPlayerHasCombatButtons) is emitted after the full event batch, but
+            // setPriorityPlayer is called during batch processing. Deferring ensures the
+            // mustDeclare check sees up-to-date combat state.
+            QTimer::singleShot(0, this, [this, localPlayerId]() {
+                if (!game || !game->getGameState() || !game->getGameEventHandler()) {
+                    return;
+                }
+                if (game->getGameState()->getPriorityPlayer() != localPlayerId) {
+                    return;
+                }
+                const int currentPhase = game->getGameState()->getCurrentPhase();
+                const bool myTurn = (game->getGameState()->getActivePlayer() == localPlayerId);
+                const bool hasManualStop = phasesToolbar->shouldStopAtPhase(currentPhase, myTurn);
+                const bool stackIsEmpty = !game->getGameEventHandler()->hasRuledStackItems();
+                const bool cleanupDiscard = game->getGameEventHandler()->localPlayerMustCleanupDiscard();
+                const bool openingPhase = game->getGameEventHandler()->ruledEngineOpeningPhaseActive();
+                const bool mustDeclare = gamePromptWidget && gamePromptWidget->localPlayerMustDeclareCombat();
+                if (!openingPhase && !hasManualStop && stackIsEmpty && !cleanupDiscard && !mustDeclare) {
+                    game->getGameEventHandler()->handleNextTurn();
+                }
+            });
         } else {
             Player *localPlayer = game->getPlayerManager()->getPlayers().value(localPlayerId, nullptr);
             if (localPlayer && localPlayer->getPlayerActions()) {
