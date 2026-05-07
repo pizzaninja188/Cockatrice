@@ -41,6 +41,36 @@ QString extractPrimaryPrompt(const QString &ruledLog)
     return lines.first().trimmed();
 }
 
+QString currentPhaseDisplayName(int phase)
+{
+    switch (phase) {
+        case 0:
+            return GamePromptWidget::tr("Untap Step");
+        case 1:
+            return GamePromptWidget::tr("Upkeep Step");
+        case 2:
+            return GamePromptWidget::tr("Draw Step");
+        case 3:
+            return GamePromptWidget::tr("First Main Phase");
+        case 4:
+            return GamePromptWidget::tr("Beginning of Combat");
+        case 5:
+            return GamePromptWidget::tr("Declare Attackers Step");
+        case 6:
+            return GamePromptWidget::tr("Declare Blockers Step");
+        case 7:
+            return GamePromptWidget::tr("Combat Damage Step");
+        case 8:
+            return GamePromptWidget::tr("End of Combat Step");
+        case 9:
+            return GamePromptWidget::tr("Second Main Phase");
+        case 10:
+            return GamePromptWidget::tr("End Step");
+        default:
+            return {};
+    }
+}
+
 QString nextStepButtonTextForPhase(int phase)
 {
     // Returns the name of the phase we are passing *to* (current + 1).
@@ -80,10 +110,7 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     layout->setContentsMargins(6, 6, 6, 6);
     layout->setSpacing(4);
 
-    promptTitleLabel = new QLabel(this);
-    promptTitleLabel->setObjectName("promptTitleLabel");
-    promptTitleLabel->setTextFormat(Qt::RichText);
-    layout->addWidget(promptTitleLabel);
+    promptTitleLabel = nullptr;
 
     promptLabel = new QLabel(this);
     promptLabel->setObjectName("promptLabel");
@@ -162,7 +189,6 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
 
 void GamePromptWidget::retranslateUi()
 {
-    promptTitleLabel->setText(QStringLiteral("<b>%1</b>").arg(tr("Current action")));
     if (promptLabel->text().isEmpty() || promptLabel->text() == fallbackPromptText) {
         fallbackPromptText = tr("Waiting for ruled action prompt...");
         promptLabel->setText(fallbackPromptText);
@@ -213,6 +239,7 @@ void GamePromptWidget::setActivePhase(int phase)
     }
     currentActivePhase = phase;
     updatePassPriorityButtonText();
+    refreshPromptLabel();
 }
 
 void GamePromptWidget::setLocalPlayerHasPriority(bool hasPriority)
@@ -222,6 +249,7 @@ void GamePromptWidget::setLocalPlayerHasPriority(bool hasPriority)
     }
     localPlayerHasPriority = hasPriority;
     updateCombatButtonsVisibility();
+    refreshPromptLabel();
 }
 
 void GamePromptWidget::setCombatMode(CombatMode mode, bool localPlayerHasButtons)
@@ -232,6 +260,7 @@ void GamePromptWidget::setCombatMode(CombatMode mode, bool localPlayerHasButtons
     currentCombatMode = mode;
     localPlayerHasCombatButtons = localPlayerHasButtons;
     updateCombatButtonsVisibility();
+    refreshPromptLabel();
 }
 
 void GamePromptWidget::setTargetingMode(bool enabled, const QString &cardName)
@@ -250,6 +279,7 @@ void GamePromptWidget::setRuledStackHasItems(bool hasItems)
     }
     ruledStackHasItems = hasItems;
     updatePassPriorityButtonText();
+    refreshPromptLabel();
 }
 
 void GamePromptWidget::setRuledOpeningUi(int kind, QVector<int> pickSeatIds)
@@ -392,4 +422,70 @@ void GamePromptWidget::updatePassPriorityButtonText()
         return;
     }
     passPriorityButton->setText(nextStepButtonTextForPhase(currentActivePhase));
+}
+
+void GamePromptWidget::setActivePlayerName(const QString &name)
+{
+    activePlayerName = name;
+    refreshPromptLabel();
+}
+
+void GamePromptWidget::setPriorityPlayerName(const QString &name)
+{
+    priorityPlayerName = name;
+    refreshPromptLabel();
+}
+
+void GamePromptWidget::setLocalPlayerIsActive(bool isActive)
+{
+    localPlayerIsActive = isActive;
+    refreshPromptLabel();
+}
+
+void GamePromptWidget::refreshPromptLabel()
+{
+    if (targetingModeEnabled || spellCastPending || cleanupDiscardMode || ruledOpeningUiKind != 0) {
+        return;
+    }
+    if (currentCombatMode == CombatMode::AssignCombatDamage) {
+        return;
+    }
+
+    const QString &waitName = priorityPlayerName.isEmpty() ? activePlayerName : priorityPlayerName;
+
+    if (currentCombatMode == CombatMode::DeclareAttackers) {
+        if (localPlayerHasCombatButtons) {
+            promptLabel->setText(tr("%1's Declare Attackers. Choose attackers.").arg(activePlayerName));
+        } else {
+            promptLabel->setText(tr("Waiting for %1...").arg(waitName));
+        }
+        return;
+    }
+    if (currentCombatMode == CombatMode::DeclareBlockers) {
+        if (localPlayerHasCombatButtons) {
+            promptLabel->setText(tr("%1's Declare Blockers. Choose blockers.").arg(activePlayerName));
+        } else {
+            promptLabel->setText(tr("Waiting for %1...").arg(waitName));
+        }
+        return;
+    }
+
+    if (activePlayerName.isEmpty()) {
+        return;
+    }
+
+    if (!localPlayerHasPriority) {
+        promptLabel->setText(tr("Waiting for %1...").arg(waitName));
+        return;
+    }
+
+    const QString phaseName = currentPhaseDisplayName(currentActivePhase);
+    if (phaseName.isEmpty()) {
+        return;
+    }
+    const bool isMyMainPhase = localPlayerIsActive && (currentActivePhase == 3 || currentActivePhase == 9) && !ruledStackHasItems;
+    const QString actions = isMyMainPhase
+        ? tr("Cast spells, activate abilities, and play land.")
+        : tr("Cast instants and activate abilities.");
+    promptLabel->setText(tr("%1's %2. %3").arg(activePlayerName, phaseName, actions));
 }

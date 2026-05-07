@@ -39,6 +39,10 @@ public slots:
     void setSpellCastPending(bool pending);
     /// Active player only: drives assign-combat-damage title, assigned/power line, and OK enable.
     void setCombatDamageStatus(const QString &attackerName, int assigned, int power, bool legal);
+    void setActivePlayerName(const QString &name);
+    void setPriorityPlayerName(const QString &name);
+    void setLocalPlayerIsActive(bool isActive);
+    void refreshPromptLabel();
     /// True only when the local player must press a combat declare button (not just pass priority).
     bool localPlayerMustDeclareCombat() const
     {
@@ -84,6 +88,9 @@ private:
     bool cleanupDiscardMode = false;
     int cleanupCardsRequired = 0;
     int cleanupCardsSelected = 0;
+    QString activePlayerName;
+    QString priorityPlayerName;
+    bool localPlayerIsActive = false;
     int ruledOpeningUiKind = 0;
     QVector<int> ruledOpeningPickSeatIds;
     QHBoxLayout *openingRowLayout = nullptr;

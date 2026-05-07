@@ -243,9 +243,8 @@ void TabGame::connectToGameEventHandler()
                         return;
                     }
                     gamePromptWidget->setCleanupDiscardMode(false, 0, 0);
-                    // If the local player has a pending spell cast waiting for mana, keep showing
-                    // the remaining cost instead of letting server state updates (like "Legal actions:")
-                    // overwrite the prompt. This happens e.g. when tapping a land for mana.
+                    // If the local player has a pending spell cast waiting for mana, show
+                    // the remaining cost.
                     const int localId = game->getPlayerManager()->getLocalPlayerId();
                     Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
                     if (localPlayer && localPlayer->getPlayerActions()) {
@@ -255,7 +254,8 @@ void TabGame::connectToGameEventHandler()
                             return;
                         }
                     }
-                    gamePromptWidget->setPromptFromRuledLog(lines);
+                    // Refresh after the full batch has settled (state is complete here).
+                    gamePromptWidget->refreshPromptLabel();
                 });
         connect(game->getGameEventHandler(), &GameEventHandler::ruledCleanupDiscardUiChanged, this,
                 [this](int required, int selected) {
@@ -304,15 +304,9 @@ void TabGame::connectToGameEventHandler()
         connect(gamePromptWidget, &GamePromptWidget::ruledOpeningMulliganRedrawRequested, game->getGameEventHandler(),
                 &GameEventHandler::handleRuledOpeningMulliganRedraw);
         connect(game->getGameState(), &GameState::activePhaseChanged, gamePromptWidget, &GamePromptWidget::setActivePhase);
-        connect(game->getGameEventHandler(), &GameEventHandler::logActivePhaseChanged, gamePromptWidget,
-                [this](int phase) {
-                    if (phasesToolbar && phase >= 0 && phase < phasesToolbar->phaseCount()) {
-                        gamePromptWidget->setPromptText(tr("Phase: %1").arg(phasesToolbar->getLongPhaseName(phase)));
-                    }
-                });
         connect(game->getGameEventHandler(), &GameEventHandler::logActivePlayer, gamePromptWidget, [this](Player *player) {
             if (player) {
-                gamePromptWidget->setPromptText(tr("Active player: %1").arg(player->getPlayerInfo()->getName()));
+                gamePromptWidget->setActivePlayerName(player->getPlayerInfo()->getName());
             }
         });
         connect(game->getGameEventHandler(), &GameEventHandler::ruledCombatStateChanged, gamePromptWidget,
@@ -1364,6 +1358,10 @@ Player *TabGame::setActivePlayer(int id)
         i.next();
         i.value()->setActive(i.value() == player);
     }
+    if (gamePromptWidget && player) {
+        gamePromptWidget->setActivePlayerName(player->getPlayerInfo()->getName());
+        gamePromptWidget->setLocalPlayerIsActive(id == game->getPlayerManager()->getLocalPlayerId());
+    }
     game->getGameState()->setCurrentPhase(-1);
     emitUserEvent();
     setPriorityPlayer(id);
@@ -1377,6 +1375,9 @@ Player *TabGame::setPriorityPlayer(int id)
     if (gamePromptWidget && game->getGameMetaInfo()->proto().ruled_game()) {
         const bool localHasPriority = (id == localPlayerId);
         gamePromptWidget->setLocalPlayerHasPriority(localHasPriority);
+        if (priorityPlayer) {
+            gamePromptWidget->setPriorityPlayerName(priorityPlayer->getPlayerInfo()->getName());
+        }
         if (localHasPriority) {
             // Defer the auto-advance decision: ruledCombatStateChanged (which updates
             // localPlayerHasCombatButtons) is emitted after the full event batch, but
@@ -1788,8 +1789,19 @@ void TabGame::createMessageDock(bool bReplay)
         gamePromptWidget = new GamePromptWidget(this);
         gamePromptWidget->setPassPriorityEnabled(true);
         gamePromptWidget->setActivePhase(game->getGameState()->getCurrentPhase());
-        gamePromptWidget->setLocalPlayerHasPriority(
-            game->getGameState()->getPriorityPlayer() == game->getPlayerManager()->getLocalPlayerId());
+        {
+            const int localId = game->getPlayerManager()->getLocalPlayerId();
+            const int priorityId = game->getGameState()->getPriorityPlayer();
+            const int activeId = game->getGameState()->getActivePlayer();
+            gamePromptWidget->setLocalPlayerHasPriority(priorityId == localId);
+            gamePromptWidget->setLocalPlayerIsActive(activeId == localId);
+            if (Player *ap = game->getPlayerManager()->getPlayer(activeId)) {
+                gamePromptWidget->setActivePlayerName(ap->getPlayerInfo()->getName());
+            }
+            if (Player *pp = game->getPlayerManager()->getPlayer(priorityId)) {
+                gamePromptWidget->setPriorityPlayerName(pp->getPlayerInfo()->getName());
+            }
+        }
         connect(gamePromptWidget, &GamePromptWidget::passPriorityRequested, game->getGameEventHandler(),
                 &GameEventHandler::handleNextTurn);
         messageLogLayout->addWidget(gamePromptWidget);
