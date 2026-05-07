@@ -294,7 +294,8 @@ void TabGame::connectToGameEventHandler()
                     gamePromptWidget->setRuledOpeningUi(0, {});
                 }
             } else {
-                gamePromptWidget->setRuledOpeningUi(static_cast<int>(kind), h->getRuledOpeningPickSeatIds());
+                gamePromptWidget->setRuledOpeningUi(static_cast<int>(kind), h->getRuledOpeningPickSeatIds(),
+                                                    h->getRuledOpeningMulliganCount());
             }
         });
         connect(gamePromptWidget, &GamePromptWidget::ruledOpeningPickSeatRequested, game->getGameEventHandler(),

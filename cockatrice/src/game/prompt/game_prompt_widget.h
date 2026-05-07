@@ -34,7 +34,7 @@ public slots:
     void setRuledStackHasItems(bool hasItems);
     void setCleanupDiscardMode(bool active, int cardsRequired, int cardsSelected);
     /// `kind`: 0 none, 1 choose first seat, 2 mulligan choice, 3 bottom cards (hand clicks).
-    void setRuledOpeningUi(int kind, QVector<int> pickSeatIds);
+    void setRuledOpeningUi(int kind, QVector<int> pickSeatIds, int mulliganCount = 0);
     void setLandTapUndoAvailable(bool available);
     void setSpellCastPending(bool pending);
     /// Active player only: drives assign-combat-damage title, assigned/power line, and OK enable.

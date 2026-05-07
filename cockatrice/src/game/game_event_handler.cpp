@@ -1336,6 +1336,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                     if (qs == QLatin1String("You start (opening pick)") ||
                                         qs == QLatin1String("Opponent starts (opening pick)")) {
                                         ruledOpeningUiKind = RuledOpeningUiKind::ChooseFirst;
+                                        ruledOpeningMulliganCount = 0;
                                         break;
                                     }
                                 }
@@ -1585,6 +1586,7 @@ void GameEventHandler::handleRuledOpeningMulliganRedraw()
     if (!game->getGameMetaInfo()->proto().ruled_game()) {
         return;
     }
+    ++ruledOpeningMulliganCount;
     ruled::v1::RuledCommand ruledCommand;
     ruledCommand.mutable_mulligan()->set_keep(false);
     sendRuledCommandFromHandler(this, game, ruledCommand);

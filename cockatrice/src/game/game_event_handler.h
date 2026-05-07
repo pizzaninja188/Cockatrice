@@ -85,6 +85,7 @@ private:
     QSet<int> legalRuledOpeningBottomHandIndices;
     QVector<int> ruledOpeningPickSeatIds;
     RuledOpeningUiKind ruledOpeningUiKind = RuledOpeningUiKind::None;
+    int ruledOpeningMulliganCount = 0;
     QString lastRuledEnginePhaseSlug;
 
     // (owner player id, Server_Card.id) -> engine ObjectId, refreshed from
@@ -268,6 +269,10 @@ public:
     [[nodiscard]] QVector<int> getRuledOpeningPickSeatIds() const
     {
         return ruledOpeningPickSeatIds;
+    }
+    [[nodiscard]] int getRuledOpeningMulliganCount() const
+    {
+        return ruledOpeningMulliganCount;
     }
     [[nodiscard]] bool isRuledOpeningBottomLegalForHandIndex(int handIndex) const;
     [[nodiscard]] int resolveRuledOpeningBottomHandIndexForClickedCard(const CardItem *card) const;

@@ -200,8 +200,8 @@ void GamePromptWidget::retranslateUi()
     confirmCombatDamageButton->setText(tr("OK"));
     cancelTargetingButton->setText(tr("Cancel"));
     undoLandTapButton->setText(tr("Undo"));
-    openingKeepButton->setText(tr("Keep hand"));
-    openingMulliganButton->setText(tr("Mulligan (redraw to 7)"));
+    openingKeepButton->setText(tr("Keep"));
+    openingMulliganButton->setText(tr("Mulligan"));
     if (ruledOpeningUiKind == 1 && ruledOpeningPickSeatIds.size() >= 2) {
         openingPickSeatButton1->setText(tr("You"));
         openingPickSeatButton2->setText(tr("Opponent"));
@@ -282,7 +282,7 @@ void GamePromptWidget::setRuledStackHasItems(bool hasItems)
     refreshPromptLabel();
 }
 
-void GamePromptWidget::setRuledOpeningUi(int kind, QVector<int> pickSeatIds)
+void GamePromptWidget::setRuledOpeningUi(int kind, QVector<int> pickSeatIds, int mulliganCount)
 {
     ruledOpeningUiKind = kind;
     ruledOpeningPickSeatIds = std::move(pickSeatIds);
@@ -300,6 +300,11 @@ void GamePromptWidget::setRuledOpeningUi(int kind, QVector<int> pickSeatIds)
         QObject::connect(openingPickSeatButton2, &QPushButton::clicked, this, [this, opponentSeatId] {
             emit ruledOpeningPickSeatRequested(opponentSeatId);
         });
+    }
+    if (kind == 2) {
+        const int keepCount = 7 - mulliganCount;
+        const int mulliganTo = keepCount - 1;
+        setPromptText(tr("Mulligan to %1 or keep these %2?").arg(mulliganTo).arg(keepCount));
     }
     if (kind == 3) {
         setPromptText(tr("Opening: click a highlighted hand card to put it on the bottom of your deck."));
