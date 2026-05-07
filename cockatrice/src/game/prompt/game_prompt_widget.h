@@ -92,6 +92,7 @@ private:
     QString priorityPlayerName;
     bool localPlayerIsActive = false;
     int ruledOpeningUiKind = 0;
+    int ruledOpeningMulliganCount = 0;
     QVector<int> ruledOpeningPickSeatIds;
     QHBoxLayout *openingRowLayout = nullptr;
     QPushButton *openingPickSeatButton1 = nullptr;

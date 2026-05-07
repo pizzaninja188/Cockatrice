@@ -285,6 +285,7 @@ void GamePromptWidget::setRuledStackHasItems(bool hasItems)
 void GamePromptWidget::setRuledOpeningUi(int kind, QVector<int> pickSeatIds, int mulliganCount)
 {
     ruledOpeningUiKind = kind;
+    ruledOpeningMulliganCount = mulliganCount;
     ruledOpeningPickSeatIds = std::move(pickSeatIds);
     openingPickSeatButton1->disconnect();
     openingPickSeatButton2->disconnect();
@@ -372,7 +373,7 @@ void GamePromptWidget::updateCombatButtonsVisibility()
         openingPickSeatButton1->setVisible(showPick && ruledOpeningPickSeatIds.size() >= 1);
         openingPickSeatButton2->setVisible(showPick && ruledOpeningPickSeatIds.size() >= 2);
         openingKeepButton->setVisible(ruledOpeningUiKind == 2);
-        openingMulliganButton->setVisible(ruledOpeningUiKind == 2);
+        openingMulliganButton->setVisible(ruledOpeningUiKind == 2 && (7 - ruledOpeningMulliganCount) - 1 >= 0);
         return;
     }
     openingPickSeatButton1->hide();

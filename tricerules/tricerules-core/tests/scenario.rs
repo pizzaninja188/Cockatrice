@@ -3203,6 +3203,128 @@ fn opening_choose_first_london_mulligan_then_start() {
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
 }
 
+#[test]
+fn opening_mulligan_to_zero_auto_keeps_and_enters_bottom_phase() {
+    use tricerules_proto::ruled::v1::ruled_command::Cmd;
+    use tricerules_proto::ruled::v1::{
+        ChooseStartingPlayer, MulliganDecision, PutOpeningHandOnBottom, RuledCommand,
+    };
+    let mut e = GameEngine::new(100, &[5, 6], 20, None, false).expect("new");
+    let chooser = e.state.opening.as_ref().unwrap().chooser;
+    e.apply_command(
+        chooser,
+        &RuledCommand {
+            cmd: Some(Cmd::ChooseStartingPlayer(ChooseStartingPlayer {
+                starting_player_id: 5,
+            })),
+        },
+    )
+    .expect("choose first");
+
+    // P5 (starting player) mulligans first; P6 keeps on their turn; then P5 mulligans 6 more times.
+    e.apply_command(
+        5,
+        &RuledCommand {
+            cmd: Some(Cmd::Mulligan(MulliganDecision { keep: false })),
+        },
+    )
+    .expect("p5 first mulligan");
+    e.apply_command(
+        6,
+        &RuledCommand {
+            cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
+        },
+    )
+    .expect("p6 keep");
+    // P5 mulligans 6 more times (7 total → auto-keep at 0).
+    for _ in 0..6 {
+        e.apply_command(
+            5,
+            &RuledCommand {
+                cmd: Some(Cmd::Mulligan(MulliganDecision { keep: false })),
+            },
+        )
+        .expect("mulligan");
+    }
+
+    // After the 7th mulligan the engine must auto-keep: bottom phase active, no more keep/mulligan.
+    let op = e.state.opening.as_ref().expect("opening still active for bottom");
+    assert_eq!(op.mulligans_taken[0], 7, "7 mulligans taken");
+    assert!(op.bottom.is_some(), "bottom phase must be active");
+    assert_eq!(op.bottom.unwrap().1, 7, "must place 7 cards on bottom");
+    // mulligan_actor still points to P5 (they are bottoming).
+    assert_eq!(op.mulligan_actor, Some(5));
+
+    // P5 places all 7 cards on the bottom one by one.
+    for _ in 0..7 {
+        e.apply_command(
+            5,
+            &RuledCommand {
+                cmd: Some(Cmd::PutOpeningHandOnBottom(PutOpeningHandOnBottom {
+                    hand_card_index: 0,
+                })),
+            },
+        )
+        .expect("place on bottom");
+    }
+
+    // Opening complete; P5 has 0 cards in hand.
+    assert!(e.state.opening.is_none(), "opening should be finished");
+    assert_eq!(e.state.players[0].hand.len(), 0);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
+}
+
+#[test]
+fn opening_mulligan_to_zero_cannot_mulligan_further() {
+    use tricerules_proto::ruled::v1::ruled_command::Cmd;
+    use tricerules_proto::ruled::v1::{ChooseStartingPlayer, MulliganDecision, RuledCommand};
+    let mut e = GameEngine::new(100, &[5, 6], 20, None, false).expect("new");
+    let chooser = e.state.opening.as_ref().unwrap().chooser;
+    e.apply_command(
+        chooser,
+        &RuledCommand {
+            cmd: Some(Cmd::ChooseStartingPlayer(ChooseStartingPlayer {
+                starting_player_id: 5,
+            })),
+        },
+    )
+    .expect("choose first");
+
+    // P5 mulligans first, then P6 keeps, then P5 mulligans 6 more (7 total → auto-keep).
+    e.apply_command(
+        5,
+        &RuledCommand {
+            cmd: Some(Cmd::Mulligan(MulliganDecision { keep: false })),
+        },
+    )
+    .expect("p5 first mulligan");
+    e.apply_command(
+        6,
+        &RuledCommand {
+            cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
+        },
+    )
+    .expect("p6 keep");
+    for _ in 0..6 {
+        e.apply_command(
+            5,
+            &RuledCommand {
+                cmd: Some(Cmd::Mulligan(MulliganDecision { keep: false })),
+            },
+        )
+        .expect("mulligan");
+    }
+
+    // An 8th Mulligan { keep: false } must be rejected (bottom phase is active, not mulligan phase).
+    let err = e.apply_command(
+        5,
+        &RuledCommand {
+            cmd: Some(Cmd::Mulligan(MulliganDecision { keep: false })),
+        },
+    );
+    assert!(err.is_err(), "must reject further mulligan when bottom phase is active");
+}
+
 fn assign_combat_damage_cmd(attacker_id: u32, pairs: Vec<(u32, u32)>) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::AssignCombatDamage(AssignCombatDamage {

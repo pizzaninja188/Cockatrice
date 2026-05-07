@@ -315,18 +315,32 @@ impl GameEngine {
                         op.mulligans_taken[idx]
                     };
                     mulligan_redraw(&mut self.state, player)?;
-                    events.push(ev_log(format!(
-                        "P{player} mulligans — shuffles back and redraws to 7 (mulligan count this opening: {prev}). If they keep next, they will put {prev} card(s) on the bottom."
-                    )));
-                    events.push(self.ev_zone_view_sync());
-                    Self::opening_set_next_actor_after_mulligan(self, idx, &mut events)?;
-                    let mut b = RuledEventBatch {
-                        events,
-                        legal_by_player: Default::default(),
-                    };
-                    self.apply_sbas(&mut b.events)?;
-                    fill_legal(&mut b, self);
-                    return Ok(b);
+                    if prev >= MAX_HAND_SIZE as u32 {
+                        // Mulliganed to 0 effective cards — auto-keep; go straight to bottom phase.
+                        {
+                            let op = self.state.opening.as_mut().unwrap();
+                            op.bottom = Some((player, prev));
+                            op.mulligan_actor = Some(player);
+                        }
+                        events.push(ev_log(format!(
+                            "P{player} mulliganed to 0 — automatically keeping; putting {prev} card(s) on the bottom of their library."
+                        )));
+                        events.push(ev_priority_changed(self));
+                        // Falls through to batch builder below (zone_view_sync added there).
+                    } else {
+                        events.push(ev_log(format!(
+                            "P{player} mulligans — shuffles back and redraws to 7 (mulligan count this opening: {prev}). If they keep next, they will put {prev} card(s) on the bottom."
+                        )));
+                        events.push(self.ev_zone_view_sync());
+                        Self::opening_set_next_actor_after_mulligan(self, idx, &mut events)?;
+                        let mut b = RuledEventBatch {
+                            events,
+                            legal_by_player: Default::default(),
+                        };
+                        self.apply_sbas(&mut b.events)?;
+                        fill_legal(&mut b, self);
+                        return Ok(b);
+                    }
                 }
             }
             Some(Cmd::PutOpeningHandOnBottom(pb)) => {
