@@ -262,9 +262,11 @@ impl GameEngine {
                         draw_card(p, &mut self.state.objects)?;
                     }
                 }
-                events.push(ev_log(format!(
-                    "P{chooser} chooses: P{sp} takes the first turn. Each player draws to 7. Mulligan decisions start with P{sp}."
-                )));
+                events.push(ev_log(if chooser == sp {
+                    format!("P{chooser} chooses to play first.")
+                } else {
+                    format!("P{chooser} chooses P{sp} to play first.")
+                }));
                 events.push(ev_phase_labeled(self, "opening_mulligan"));
                 events.push(ev_priority_changed(self));
             }
@@ -294,7 +296,7 @@ impl GameEngine {
                             op.mulligan_actor = None;
                         }
                         events.push(ev_log(format!(
-                            "P{player} keeps their opening hand ({final_size} cards; no mulligans)."
+                            "P{player} begins the game with 7 cards in hand."
                         )));
                         Self::opening_pick_next_or_finish(self, &mut events)?;
                     } else {
@@ -303,9 +305,6 @@ impl GameEngine {
                             op.bottom = Some((player, k));
                             op.mulligan_actor = Some(player);
                         }
-                        events.push(ev_log(format!(
-                            "P{player} keeps after {k} mulligan(s); putting {k} card(s) on the bottom of their library (click hand cards one at a time)."
-                        )));
                         events.push(ev_priority_changed(self));
                     }
                 } else {
@@ -329,7 +328,8 @@ impl GameEngine {
                         // Falls through to batch builder below (zone_view_sync added there).
                     } else {
                         events.push(ev_log(format!(
-                            "P{player} mulligans — shuffles back and redraws to 7 (mulligan count this opening: {prev}). If they keep next, they will put {prev} card(s) on the bottom."
+                            "P{player} mulligans to {} cards.",
+                            7u32.saturating_sub(prev)
                         )));
                         events.push(self.ev_zone_view_sync());
                         Self::opening_set_next_actor_after_mulligan(self, idx, &mut events)?;
@@ -384,7 +384,7 @@ impl GameEngine {
                         op.mulligan_actor = None;
                         let total_mulls = op.mulligans_taken[idx];
                         events.push(ev_log(format!(
-                            "P{player} finishes the opening: keeps a hand of {kept} card(s) after {total_mulls} mulligan(s) (all bottom cards placed)."
+                            "P{player} puts {total_mulls} card(s) on the bottom of their library and begins the game with {kept} card(s) in their hand."
                         )));
                     }
                     Self::opening_pick_next_or_finish(self, &mut events)?;
@@ -424,9 +424,6 @@ impl GameEngine {
             op.mulligan_actor = Some(pid);
         }
         eng.state.priority_idx = next_idx;
-        events.push(ev_log(format!(
-            "Opening: P{pid} — choose to keep or mulligan (London: redraw to 7)."
-        )));
         events.push(ev_phase_labeled(eng, "opening_mulligan"));
         events.push(ev_priority_changed(eng));
         Ok(())
@@ -451,9 +448,6 @@ impl GameEngine {
             eng.state.starting_player_idx = sp_idx;
             eng.state.turn_step = TurnStep::Upkeep;
             eng.state.turn = 1;
-            events.push(ev_log(format!(
-                "Opening complete — P{sp} is the first player. Game begins (upkeep, turn 1)."
-            )));
             events.push(ev_phase_labeled(eng, "upkeep"));
             events.push(ev_priority_changed(eng));
             return Ok(());
@@ -472,9 +466,6 @@ impl GameEngine {
                     let pid = eng.state.players[oi].id;
                     op.mulligan_actor = Some(pid);
                     eng.state.priority_idx = oi;
-                    events.push(ev_log(format!(
-                        "Opening: P{pid} — choose to keep or mulligan (London: redraw to 7)."
-                    )));
                     events.push(ev_phase_labeled(eng, "opening_mulligan"));
                     events.push(ev_priority_changed(eng));
                     break;
@@ -1174,7 +1165,7 @@ impl GameEngine {
                 let skip_opening_draw = self.state.turn == 1
                     && self.state.active_player_idx == self.state.starting_player_idx;
                 if skip_opening_draw {
-                    ev.push(ev_log("Skipped first draw (opening of the duel).".into()));
+                    // skip draw
                 } else if let Some(idx) = self.state.player_idx(ap) {
                     if self.state.players[idx].library.is_empty() {
                         for p in &mut self.state.players {
@@ -1991,7 +1982,7 @@ impl GameEngine {
             batch.events.push(ev_phase_labeled(self, "opening_choose_first"));
             batch.events.push(ev_priority_changed(self));
             batch.events.push(ev_log(format!(
-                "Randomly selected: P{} — choose who goes first.",
+                "P{} chooses who goes first.",
                 op.chooser
             )));
             fill_legal(&mut batch, self);
