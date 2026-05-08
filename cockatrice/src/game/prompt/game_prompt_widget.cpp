@@ -132,9 +132,19 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     openingRowLayout->addWidget(openingPickSeatButton2);
     openingRowLayout->addWidget(openingKeepButton);
     openingRowLayout->addWidget(openingMulliganButton);
+    openingBottomCancelButton = new QPushButton(this);
+    openingBottomDoneButton = new QPushButton(this);
+    openingBottomCancelButton->hide();
+    openingBottomDoneButton->hide();
+    openingRowLayout->addWidget(openingBottomCancelButton);
+    openingRowLayout->addWidget(openingBottomDoneButton);
     layout->addLayout(openingRowLayout);
     connect(openingKeepButton, &QPushButton::clicked, this, &GamePromptWidget::ruledOpeningMulliganKeepRequested);
     connect(openingMulliganButton, &QPushButton::clicked, this, &GamePromptWidget::ruledOpeningMulliganRedrawRequested);
+    connect(openingBottomCancelButton, &QPushButton::clicked,
+            this, &GamePromptWidget::ruledOpeningBottomCancelRequested);
+    connect(openingBottomDoneButton, &QPushButton::clicked,
+            this, &GamePromptWidget::ruledOpeningBottomDoneRequested);
 
     passPriorityButton = new QPushButton(this);
     passPriorityButton->setObjectName("passPriorityButton");
@@ -202,6 +212,8 @@ void GamePromptWidget::retranslateUi()
     undoLandTapButton->setText(tr("Undo"));
     openingKeepButton->setText(tr("Keep"));
     openingMulliganButton->setText(tr("Mulligan"));
+    openingBottomCancelButton->setText(tr("Cancel"));
+    openingBottomDoneButton->setText(tr("Done"));
     if (ruledOpeningUiKind == 1 && ruledOpeningPickSeatIds.size() >= 2) {
         openingPickSeatButton1->setText(tr("You"));
         openingPickSeatButton2->setText(tr("Opponent"));
@@ -308,8 +320,15 @@ void GamePromptWidget::setRuledOpeningUi(int kind, QVector<int> pickSeatIds, int
         setPromptText(tr("Mulligan to %1 or keep these %2?").arg(mulliganTo).arg(keepCount));
     }
     if (kind == 3) {
-        setPromptText(tr("Opening: click a highlighted hand card to put it on the bottom of your deck."));
+        ruledOpeningBottomSelected = 0;
+        setPromptText(tr("Put %1 card(s) to the bottom of your library.").arg(mulliganCount));
     }
+    updateCombatButtonsVisibility();
+}
+
+void GamePromptWidget::setRuledOpeningBottomProgress(int /*required*/, int selected)
+{
+    ruledOpeningBottomSelected = selected;
     updateCombatButtonsVisibility();
 }
 
@@ -374,12 +393,18 @@ void GamePromptWidget::updateCombatButtonsVisibility()
         openingPickSeatButton2->setVisible(showPick && ruledOpeningPickSeatIds.size() >= 2);
         openingKeepButton->setVisible(ruledOpeningUiKind == 2);
         openingMulliganButton->setVisible(ruledOpeningUiKind == 2 && (7 - ruledOpeningMulliganCount) - 1 >= 0);
+        const bool isBottom = (ruledOpeningUiKind == 3);
+        openingBottomCancelButton->setVisible(isBottom && ruledOpeningBottomSelected >= 1);
+        openingBottomDoneButton->setVisible(isBottom && ruledOpeningMulliganCount > 0 &&
+                                             ruledOpeningBottomSelected == ruledOpeningMulliganCount);
         return;
     }
     openingPickSeatButton1->hide();
     openingPickSeatButton2->hide();
     openingKeepButton->hide();
     openingMulliganButton->hide();
+    openingBottomCancelButton->hide();
+    openingBottomDoneButton->hide();
     if (cleanupDiscardMode) {
         passPriorityButton->setVisible(false);
         confirmAttackersButton->setVisible(false);

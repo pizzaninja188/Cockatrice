@@ -249,6 +249,26 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
                 }
             }
         }
+        if (zone && zone->getName() == ZoneNames::HAND && owner && owner->getPlayerInfo()->getLocal() &&
+            ruledHandler->getRuledOpeningUiKind() == GameEventHandler::RuledOpeningUiKind::BottomLibrary) {
+            if (zone->getCards().indexOf(const_cast<CardItem *>(this)) >= 0) {
+                const int ri = ruledHandler->resolveRuledOpeningBottomHandIndexForClickedCard(this);
+                if (ri >= 0) {
+                    const int clickOrder = ruledHandler->ruledOpeningBottomClickOrderFor(ri);
+                    if (clickOrder > 0) {
+                        painter->save();
+                        painter->setRenderHint(QPainter::Antialiasing, true);
+                        QPen pen;
+                        pen.setColor(QColor(128, 0, 255));
+                        pen.setWidth(4);
+                        painter->setPen(pen);
+                        painter->drawPath(shape());
+                        painter->restore();
+                        paintNumberEllipse(clickOrder, 14, QColor(128, 0, 255), -1, 1, painter);
+                    }
+                }
+            }
+        }
     }
 
     painter->restore();

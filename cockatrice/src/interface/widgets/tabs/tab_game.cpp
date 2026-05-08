@@ -304,6 +304,16 @@ void TabGame::connectToGameEventHandler()
                 &GameEventHandler::handleRuledOpeningMulliganKeep);
         connect(gamePromptWidget, &GamePromptWidget::ruledOpeningMulliganRedrawRequested, game->getGameEventHandler(),
                 &GameEventHandler::handleRuledOpeningMulliganRedraw);
+        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningBottomCancelRequested, game->getGameEventHandler(),
+                &GameEventHandler::handleRuledOpeningBottomCancel);
+        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningBottomDoneRequested, game->getGameEventHandler(),
+                &GameEventHandler::handleRuledOpeningBottomDone);
+        connect(game->getGameEventHandler(), &GameEventHandler::ruledOpeningBottomUiChanged, this,
+                [this](int required, int selected) {
+                    if (gamePromptWidget) {
+                        gamePromptWidget->setRuledOpeningBottomProgress(required, selected);
+                    }
+                });
         connect(game->getGameState(), &GameState::activePhaseChanged, gamePromptWidget, &GamePromptWidget::setActivePhase);
         connect(game->getGameEventHandler(), &GameEventHandler::logActivePlayer, gamePromptWidget, [this](Player *player) {
             if (player) {

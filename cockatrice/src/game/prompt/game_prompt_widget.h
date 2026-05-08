@@ -35,6 +35,7 @@ public slots:
     void setCleanupDiscardMode(bool active, int cardsRequired, int cardsSelected);
     /// `kind`: 0 none, 1 choose first seat, 2 mulligan choice, 3 bottom cards (hand clicks).
     void setRuledOpeningUi(int kind, QVector<int> pickSeatIds, int mulliganCount = 0);
+    void setRuledOpeningBottomProgress(int required, int selected);
     void setLandTapUndoAvailable(bool available);
     void setSpellCastPending(bool pending);
     /// Active player only: drives assign-combat-damage title, assigned/power line, and OK enable.
@@ -61,6 +62,8 @@ signals:
     void ruledOpeningPickSeatRequested(int seatId);
     void ruledOpeningMulliganKeepRequested();
     void ruledOpeningMulliganRedrawRequested();
+    void ruledOpeningBottomCancelRequested();
+    void ruledOpeningBottomDoneRequested();
     void undoLandTapRequested();
 
 private:
@@ -99,6 +102,9 @@ private:
     QPushButton *openingPickSeatButton2 = nullptr;
     QPushButton *openingKeepButton = nullptr;
     QPushButton *openingMulliganButton = nullptr;
+    QPushButton *openingBottomCancelButton = nullptr;
+    QPushButton *openingBottomDoneButton = nullptr;
+    int ruledOpeningBottomSelected = 0;
 };
 
 #endif // COCKATRICE_GAME_PROMPT_WIDGET_H

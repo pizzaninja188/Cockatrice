@@ -83,6 +83,7 @@ private:
     QMultiHash<QString, int> legalRuledCleanupDiscardIndicesByCardName;
     QSet<int> cleanupDiscardSelectedIndices;
     QSet<int> legalRuledOpeningBottomHandIndices;
+    QList<int> ruledOpeningBottomSelectedIndices;
     QVector<int> ruledOpeningPickSeatIds;
     RuledOpeningUiKind ruledOpeningUiKind = RuledOpeningUiKind::None;
     int ruledOpeningMulliganCount = 0;
@@ -276,6 +277,12 @@ public:
     }
     [[nodiscard]] bool isRuledOpeningBottomLegalForHandIndex(int handIndex) const;
     [[nodiscard]] int resolveRuledOpeningBottomHandIndexForClickedCard(const CardItem *card) const;
+    [[nodiscard]] int  ruledOpeningBottomRequiredCount() const;
+    [[nodiscard]] int  ruledOpeningBottomSelectedCount() const;
+    [[nodiscard]] bool isRuledOpeningBottomHandIndexSelected(int handIndex) const;
+    [[nodiscard]] int  ruledOpeningBottomClickOrderFor(int handIndex) const;
+    void toggleRuledOpeningBottomHandIndex(int ruledHandIndex);
+    void clearRuledOpeningBottomSelection(bool emitUiChange = true);
 
     /// Rebuild ruled spell→target arrows (stack window layout / map updates may require a refresh).
     void refreshRuledSpellTargetArrows();
@@ -305,6 +312,8 @@ public:
     void handleRuledOpeningPickFirstSeat(int seatId);
     void handleRuledOpeningMulliganKeep();
     void handleRuledOpeningMulliganRedraw();
+    void handleRuledOpeningBottomCancel();
+    void handleRuledOpeningBottomDone();
 
     void handleActiveLocalPlayerConceded();
     void handleActiveLocalPlayerUnconceded();
@@ -391,6 +400,7 @@ signals:
     void ruledStackHasItemsChanged(bool hasItems);
     void ruledCleanupDiscardUiChanged(int required, int selected);
     void ruledOpeningUiChanged();
+    void ruledOpeningBottomUiChanged(int required, int selected);
 
 private:
     /// ZoneView is stripped on client broadcasts; fall back to CardItem P/T when maps are empty.

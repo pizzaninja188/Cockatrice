@@ -611,15 +611,7 @@ bool PlayerActions::tryRuledOpeningBottomCard(CardItem *card)
     if (ruledHandIndex < 0 || !handler->isRuledOpeningBottomLegalForHandIndex(ruledHandIndex)) {
         return false;
     }
-    ruled::v1::RuledCommand ruledCommand;
-    ruledCommand.mutable_put_opening_hand_on_bottom()->set_hand_card_index(static_cast<quint32>(ruledHandIndex));
-    std::string payload;
-    if (!ruledCommand.SerializeToString(&payload)) {
-        return false;
-    }
-    Command_RuledPayload cmd;
-    cmd.set_payload(payload);
-    sendGameCommand(cmd);
+    handler->toggleRuledOpeningBottomHandIndex(ruledHandIndex);
     return true;
 }
 

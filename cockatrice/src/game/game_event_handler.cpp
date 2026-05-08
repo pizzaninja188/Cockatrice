@@ -566,6 +566,57 @@ void GameEventHandler::notifyRuledHandUiChanged()
     emit ruledCombatStateChanged();
 }
 
+int GameEventHandler::ruledOpeningBottomRequiredCount() const
+{
+    return ruledOpeningMulliganCount;
+}
+
+int GameEventHandler::ruledOpeningBottomSelectedCount() const
+{
+    return ruledOpeningBottomSelectedIndices.size();
+}
+
+bool GameEventHandler::isRuledOpeningBottomHandIndexSelected(int handIndex) const
+{
+    return ruledOpeningBottomSelectedIndices.contains(handIndex);
+}
+
+void GameEventHandler::toggleRuledOpeningBottomHandIndex(int ruledHandIndex)
+{
+    if (!isRuledOpeningBottomLegalForHandIndex(ruledHandIndex)) {
+        return;
+    }
+    const int need = ruledOpeningBottomRequiredCount();
+    if (need <= 0) {
+        return;
+    }
+    if (ruledOpeningBottomSelectedIndices.contains(ruledHandIndex)) {
+        ruledOpeningBottomSelectedIndices.removeOne(ruledHandIndex);
+    } else if (ruledOpeningBottomSelectedIndices.size() < need) {
+        ruledOpeningBottomSelectedIndices.append(ruledHandIndex);
+    }
+    emit ruledOpeningBottomUiChanged(need, ruledOpeningBottomSelectedIndices.size());
+    emit ruledCombatStateChanged();
+}
+
+void GameEventHandler::clearRuledOpeningBottomSelection(bool emitUiChange)
+{
+    if (ruledOpeningBottomSelectedIndices.isEmpty()) {
+        return;
+    }
+    ruledOpeningBottomSelectedIndices.clear();
+    if (emitUiChange) {
+        emit ruledOpeningBottomUiChanged(ruledOpeningBottomRequiredCount(), 0);
+        emit ruledCombatStateChanged();
+    }
+}
+
+int GameEventHandler::ruledOpeningBottomClickOrderFor(int handIndex) const
+{
+    const int pos = ruledOpeningBottomSelectedIndices.indexOf(handIndex);
+    return pos + 1; // 1-based; returns 0 if not selected
+}
+
 void GameEventHandler::pruneCleanupDiscardSelectionAndEmitUi()
 {
     if (legalRuledCleanupDiscardHandIndices.isEmpty()) {
@@ -1008,6 +1059,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                     legalRuledCleanupDiscardHandIndices.clear();
                     legalRuledCleanupDiscardIndicesByCardName.clear();
                     legalRuledOpeningBottomHandIndices.clear();
+                    ruledOpeningBottomSelectedIndices.clear();
                     ruledOpeningPickSeatIds.clear();
                     ruledOpeningUiKind = RuledOpeningUiKind::None;
                     ruledOwnedCardToEngineHandSlot.clear();
@@ -1307,6 +1359,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             ruledOpeningUiKind = RuledOpeningUiKind::None;
                             ruledOpeningPickSeatIds.clear();
                             legalRuledOpeningBottomHandIndices.clear();
+                            ruledOpeningBottomSelectedIndices.clear();
                             static const QRegularExpression openingBottomRe(
                                 QStringLiteral(R"(^Put .+ on bottom \(opening, hand idx (\d+)\)$)"));
                             for (const auto &l : lit->second.labels()) {
@@ -1353,6 +1406,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             legalRuledCleanupDiscardHandIndices.clear();
                             legalRuledCleanupDiscardIndicesByCardName.clear();
                             legalRuledOpeningBottomHandIndices.clear();
+                            ruledOpeningBottomSelectedIndices.clear();
                             ruledOpeningPickSeatIds.clear();
                             ruledOpeningUiKind = RuledOpeningUiKind::None;
                         }
@@ -1592,6 +1646,40 @@ void GameEventHandler::handleRuledOpeningMulliganRedraw()
     sendRuledCommandFromHandler(this, game, ruledCommand);
 }
 
+void GameEventHandler::handleRuledOpeningBottomCancel()
+{
+    clearRuledOpeningBottomSelection(true);
+}
+
+void GameEventHandler::handleRuledOpeningBottomDone()
+{
+    if (!game->getGameMetaInfo()->proto().ruled_game()) {
+        return;
+    }
+    const int need = ruledOpeningBottomRequiredCount();
+    if (need <= 0 || ruledOpeningBottomSelectedIndices.size() != need) {
+        return;
+    }
+    const QList<int> clickOrder = ruledOpeningBottomSelectedIndices;
+    clearRuledOpeningBottomSelection(false);
+    notifyRuledHandUiChanged();
+    // Send in click order. Each sent command removes a card from the engine hand Vec,
+    // shifting all higher indices down by one. Adjust each index for prior removals.
+    for (int k = 0; k < clickOrder.size(); ++k) {
+        const int orig = clickOrder[k];
+        int adjusted = orig;
+        for (int j = 0; j < k; ++j) {
+            if (clickOrder[j] < orig) {
+                --adjusted;
+            }
+        }
+        ruled::v1::RuledCommand ruledCommand;
+        ruledCommand.mutable_put_opening_hand_on_bottom()->set_hand_card_index(
+            static_cast<quint32>(adjusted));
+        sendRuledCommandFromHandler(this, game, ruledCommand);
+    }
+}
+
 void GameEventHandler::handleReverseTurn()
 {
     sendGameCommand(Command_ReverseTurn());
@@ -1700,6 +1788,7 @@ void GameEventHandler::eventGameStateChanged(const Event_GameStateChanged &event
     game->getGameState()->setGameTime(event.seconds_elapsed());
 
     if (event.game_started() && !game->getGameMetaInfo()->started()) {
+        ruledOpeningMulliganCount = 0;
         game->getGameState()->setResuming(!game->getGameState()->isGameStateKnown());
         game->getGameMetaInfo()->setStarted(event.game_started());
         if (game->getGameState()->isGameStateKnown())
