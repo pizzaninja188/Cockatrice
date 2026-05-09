@@ -294,6 +294,21 @@ void TabGame::connectToGameEventHandler()
                 } else {
                     gamePromptWidget->setRuledOpeningUi(0, {});
                 }
+            } else if (kind == GameEventHandler::RuledOpeningUiKind::None) {
+                gamePromptWidget->setRuledOpeningUi(0, {});
+                // During the opening phase the local player has no active action — show who we're
+                // waiting for. This must run unconditionally: activePlayerName may already be set
+                // from a prior logActivePlayer signal, so checking isEmpty() misses later rounds.
+                if (h->ruledEngineOpeningPhaseActive()) {
+                    const int localId = game->getPlayerManager()->getLocalPlayerId();
+                    for (auto *player : game->getPlayerManager()->getPlayers()) {
+                        if (player->getPlayerInfo()->getId() != localId) {
+                            gamePromptWidget->setPromptText(
+                                tr("Waiting for %1...").arg(player->getPlayerInfo()->getName()));
+                            break;
+                        }
+                    }
+                }
             } else {
                 gamePromptWidget->setRuledOpeningUi(static_cast<int>(kind), h->getRuledOpeningPickSeatIds(),
                                                     h->getRuledOpeningMulliganCount());

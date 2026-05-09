@@ -44,6 +44,7 @@ public slots:
     void setPriorityPlayerName(const QString &name);
     void setLocalPlayerIsActive(bool isActive);
     void refreshPromptLabel();
+    [[nodiscard]] QString getActivePlayerName() const { return activePlayerName; }
     /// True only when the local player must press a combat declare button (not just pass priority).
     bool localPlayerMustDeclareCombat() const
     {
