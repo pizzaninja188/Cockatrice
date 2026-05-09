@@ -3818,3 +3818,60 @@ fn summoning_sick_creature_can_block() {
         "defender must hold priority in declare_blockers when they have a summoning-sick blocker"
     );
 }
+
+#[test]
+fn cannot_add_mana_while_declaring_attackers() {
+    let mut e = GameEngine::new(4010, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    // Priority is locked until the active player declares attackers.
+    let err = e
+        .apply_command(
+            0,
+            &add_mana_to_pool(AddManaToPool {
+                r: 1,
+                ..Default::default()
+            }),
+        )
+        .expect_err("mana ability must be illegal during declare attackers");
+    assert!(
+        format!("{err:?}").contains("declaring attackers or blockers"),
+        "unexpected error: {err:?}"
+    );
+}
+
+#[test]
+fn cannot_add_mana_while_declaring_blockers() {
+    let mut e = GameEngine::new(4011, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let attacker = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("declare attackers");
+    e.apply_command(0, &pass()).expect("ap pass declare attackers");
+    let b = e
+        .apply_command(1, &pass())
+        .expect("defender pass declare attackers");
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareBlockers,
+        "should be in declare blockers"
+    );
+    assert!(
+        priority_changes_in(&b).contains(&1),
+        "defender must hold priority in declare blockers"
+    );
+    // Defender holds priority but priority is locked for blocker declaration.
+    let err = e
+        .apply_command(
+            1,
+            &add_mana_to_pool(AddManaToPool {
+                g: 1,
+                ..Default::default()
+            }),
+        )
+        .expect_err("mana ability must be illegal during declare blockers");
+    assert!(
+        format!("{err:?}").contains("declaring attackers or blockers"),
+        "unexpected error: {err:?}"
+    );
+}

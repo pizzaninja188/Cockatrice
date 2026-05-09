@@ -298,6 +298,17 @@ void TableZone::toggleTapped()
     if (ruledGame && localPlayerId != priorityPlayer) {
         return;
     }
+    if (ruledGame) {
+        const GameEventHandler *handler = getLogic()->getPlayer()->getGame()->getGameEventHandler();
+        const auto combatPhase = handler->getRuledCombatPhase();
+        const bool mustDeclareAttackers =
+            combatPhase == GameEventHandler::RuledCombatPhase::DeclareAttackers && handler->localPlayerIsRuledActive();
+        const bool mustDeclareBlockers =
+            combatPhase == GameEventHandler::RuledCombatPhase::DeclareBlockers && handler->localPlayerIsRuledDefender();
+        if (mustDeclareAttackers || mustDeclareBlockers) {
+            return;
+        }
+    }
     bool spellLandManaConsumed = false;
     bool spellCostFullyPaidAfterLands = false;
     bool spellLandPartialRemain = false;

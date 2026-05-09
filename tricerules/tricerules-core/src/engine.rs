@@ -1892,6 +1892,11 @@ impl GameEngine {
         if idx != self.state.priority_idx {
             return Err(EngineError::Illegal("only priority player can add mana"));
         }
+        if priority_locked_for_combat_declaration(&self.state) {
+            return Err(EngineError::Illegal(
+                "cannot activate mana abilities while declaring attackers or blockers",
+            ));
+        }
         let clamp = |v: u32, d: i32| -> u32 { (v as i64 + i64::from(d)).clamp(0, 10_000) as u32 };
         let p = &mut self.state.players[idx].mana_pool;
         p.white = clamp(p.white, m.w);

@@ -2605,6 +2605,20 @@ void PlayerActions::cardMenuAction()
                 case cmUntap:
                     // fallthrough
                 case cmTap: {
+                    const bool aboutToTap = !card->getTapped();
+                    if (aboutToTap && player->getGame()->getGameMetaInfo()->proto().ruled_game() &&
+                        card->getCardInfo().getCardType().contains("Land", Qt::CaseInsensitive)) {
+                        const GameEventHandler *handler = player->getGame()->getGameEventHandler();
+                        const auto combatPhase = handler->getRuledCombatPhase();
+                        const bool locked =
+                            (combatPhase == GameEventHandler::RuledCombatPhase::DeclareAttackers &&
+                             handler->localPlayerIsRuledActive()) ||
+                            (combatPhase == GameEventHandler::RuledCombatPhase::DeclareBlockers &&
+                             handler->localPlayerIsRuledDefender());
+                        if (locked) {
+                            break;
+                        }
+                    }
                     auto *cmd = new Command_SetCardAttr;
                     cmd->set_zone(card->getZone()->getName().toStdString());
                     cmd->set_card_id(card->getId());
