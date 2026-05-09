@@ -436,7 +436,7 @@ void Server_AbstractPlayer::processMoveCard(GameEventStorage &ges,
         bool faceDown = shouldBeFaceDown(cardStruct, startzone, targetzone);
 
         if (targetzone->hasCoords()) {
-            newX = targetzone->getFreeGridColumn(newX, yCoord, card->getName(), faceDown);
+            newX = targetzone->getFreeGridColumn(newX, yCoord, card->getName(), faceDown || yCoord != 2);
         } else {
             card->resetState(targetzone->getName() == ZoneNames::STACK);
         }
@@ -1030,7 +1030,7 @@ Server_AbstractPlayer::cmdCreateToken(const Command_CreateToken &cmd, ResponseCo
     const QString cardName = nameFromStdString(cmd.card_name());
     const QString cardProviderId = nameFromStdString(cmd.card_provider_id());
     if (zone->hasCoords()) {
-        bool dontStackSameName = cmd.face_down();
+        bool dontStackSameName = cmd.face_down() || yCoord != 2;
         xCoord = zone->getFreeGridColumn(xCoord, yCoord, cardName, dontStackSameName);
     }
     if (xCoord < 0) {

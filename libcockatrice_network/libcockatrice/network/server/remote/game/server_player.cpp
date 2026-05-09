@@ -347,11 +347,29 @@ Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const
         }
 
         if (ordered.size() == v.battlefield_size()) {
+            // Determine expected row per card. Creatures → row 0 (top), lands → row 2
+            // (bottom, preserved from play-land placement), other permanents → row 1 (middle).
+            const bool haveIsCreature = v.battlefield_is_creature_size() == v.battlefield_size();
+            QList<int> expectedY;
+            expectedY.reserve(ordered.size());
+            for (int i = 0; i < ordered.size(); ++i) {
+                const Server_Card *c = ordered[i];
+                const int currentY = c ? c->getY() : 0;
+                if (haveIsCreature && v.battlefield_is_creature(i)) {
+                    expectedY.append(0);
+                } else if (currentY == 2) {
+                    expectedY.append(2); // land — keep in bottom row
+                } else {
+                    expectedY.append(1); // noncreature nonland permanent
+                }
+            }
+
             const QList<Server_Card *> &zoneOrderBefore = tableZone->getCards();
             bool orderMismatch = false;
             if (zoneOrderBefore.size() == ordered.size()) {
                 for (int i = 0; i < ordered.size(); ++i) {
-                    if (zoneOrderBefore.at(i) != ordered[i]) {
+                    if (zoneOrderBefore.at(i) != ordered[i] ||
+                        (ordered[i] && ordered[i]->getY() != expectedY[i])) {
                         orderMismatch = true;
                         break;
                     }
@@ -360,11 +378,6 @@ Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const
                 orderMismatch = true;
             }
             if (orderMismatch && tableZone->hasCoords()) {
-                QList<int> preservedY;
-                preservedY.reserve(ordered.size());
-                for (Server_Card *c : ordered) {
-                    preservedY.append(c ? c->getY() : 0);
-                }
                 for (Server_Card *c : ordered) {
                     if (c) {
                         tableZone->removeCard(c);
@@ -375,7 +388,7 @@ Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const
                     if (!c) {
                         continue;
                     }
-                    const int y = preservedY[i];
+                    const int y = expectedY[i];
                     const int x = tableZone->getFreeGridColumn(-1, y, c->getName(), false);
                     tableZone->insertCard(c, x, y);
                 }

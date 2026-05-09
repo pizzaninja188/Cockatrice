@@ -1251,7 +1251,17 @@ void Server_Game::applyRuledStackResolvedEvent(const ruled::v1::StackResolved &s
         CardToMove cardToMove;
         cardToMove.set_card_id(card->getId());
         GameEventStorage moveGes;
-        const int targetY = goesToBattlefield ? 1 : 0;
+        int targetY = 0;
+        if (goesToBattlefield) {
+            targetY = 1; // default: middle row (noncreature nonland)
+            if (const CardDatabaseQuerier *q = CardDatabaseManager::query()) {
+                if (const CardInfoPtr info = q->getCardInfo(card->getName())) {
+                    if (info->getUiAttributes().tableRow == 2) {
+                        targetY = 0; // creature → top row
+                    }
+                }
+            }
+        }
         if (ab->moveCard(moveGes, stackZone, QList<const CardToMove *>() << &cardToMove, targetZone, -1, targetY,
                          true) == Response::RespOk) {
             moveGes.sendToGame(this);

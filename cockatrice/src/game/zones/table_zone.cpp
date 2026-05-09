@@ -531,8 +531,10 @@ int TableZone::clampValidTableRow(const int row)
 
 int TableZone::tableRowToGridY(int tableRow)
 {
-    if (tableRow > 2) {
-        tableRow = 1;
+    switch (tableRow) {
+        case 0:  return 2; // lands (bottom row)
+        case 1:  return 1; // nonland, noncreature permanents (middle row)
+        case 2:  return 0; // creatures (top row)
+        default: return 0;
     }
-    return clampValidTableRow(2 - tableRow);
 }
