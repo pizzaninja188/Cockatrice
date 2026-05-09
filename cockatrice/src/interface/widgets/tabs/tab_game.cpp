@@ -212,6 +212,7 @@ void TabGame::connectToGameEventHandler()
     connect(this, &TabGame::gameLeft, game->getGameEventHandler(), &GameEventHandler::handleGameLeft);
     connect(game->getGameEventHandler(), &GameEventHandler::emitUserEvent, this, &TabGame::emitUserEvent);
     connect(game->getGameEventHandler(), &GameEventHandler::gameStopped, this, &TabGame::stopGame);
+    connect(game->getGameEventHandler(), &GameEventHandler::gameStopped, messageLog, &MessageLogWidget::prepareForNewGame);
     connect(game->getGameEventHandler(), &GameEventHandler::gameClosed, this, &TabGame::closeGame);
     connect(game->getGameEventHandler(), &GameEventHandler::localPlayerReadyStateChanged, this,
             &TabGame::processLocalPlayerReadyStateChanged);

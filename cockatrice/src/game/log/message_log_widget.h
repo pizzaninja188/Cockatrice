@@ -107,6 +107,7 @@ public slots:
                                  bool optionalIsBold = false,
                                  QString optionalFontColor = QString()) override;
     void logRuledGameplay(QString message);
+    void prepareForNewGame();
 };
 
 #endif

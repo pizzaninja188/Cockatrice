@@ -423,6 +423,12 @@ void MessageLogWidget::logGameClosed()
     appendHtmlServerMessage(tr("The game has been closed."));
 }
 
+void MessageLogWidget::prepareForNewGame()
+{
+    pendingGameStartMessage = true;
+    deferredRuledMessages.clear();
+}
+
 void MessageLogWidget::logGameStart()
 {
     appendHtmlServerMessage(tr("The game has started."));
