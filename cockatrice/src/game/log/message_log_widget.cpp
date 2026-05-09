@@ -23,6 +23,11 @@ static QString cardLink(const QString &cardName)
     return QString("<i><a href=\"card://%1\">%2</a></i>").arg(cardName).arg(cardName);
 }
 
+bool MessageLogWidget::isRuledGame() const
+{
+    return game && game->getGameMetaInfo() && game->getGameMetaInfo()->proto().ruled_game();
+}
+
 QPair<QString, QString>
 MessageLogWidget::getFromStr(CardZoneLogic *zone, QString cardName, int position, bool ownerChange)
 {
@@ -107,6 +112,7 @@ void MessageLogWidget::containerProcessingStarted(const GameEventContext &contex
 
 void MessageLogWidget::logAlwaysRevealTopCard(Player *player, CardZoneLogic *zone, bool reveal)
 {
+    if (isRuledGame()) return;
     appendHtmlServerMessage((reveal ? tr("%1 is now keeping the top card %2 revealed.")
                                     : tr("%1 is not revealing the top card %2 any longer."))
                                 .arg(sanitizeHtml(player->getPlayerInfo()->getName()))
@@ -115,6 +121,7 @@ void MessageLogWidget::logAlwaysRevealTopCard(Player *player, CardZoneLogic *zon
 
 void MessageLogWidget::logAlwaysLookAtTopCard(Player *player, CardZoneLogic *zone, bool reveal)
 {
+    if (isRuledGame()) return;
     appendHtmlServerMessage((reveal ? tr("%1 can now look at top card %2 at any time.")
                                     : tr("%1 no longer can look at top card %2 at any time."))
                                 .arg(sanitizeHtml(player->getPlayerInfo()->getName()))
@@ -123,6 +130,7 @@ void MessageLogWidget::logAlwaysLookAtTopCard(Player *player, CardZoneLogic *zon
 
 void MessageLogWidget::logAttachCard(Player *player, QString cardName, Player *targetPlayer, QString targetCardName)
 {
+    if (isRuledGame()) return;
     appendHtmlServerMessage(tr("%1 attaches %2 to %3's %4.")
                                 .arg(sanitizeHtml(player->getPlayerInfo()->getName()))
                                 .arg(cardLink(std::move(cardName)))
@@ -168,6 +176,7 @@ void MessageLogWidget::logCreateArrow(Player *player,
                                       QString targetCard,
                                       bool playerTarget)
 {
+    if (isRuledGame()) return;
     startCard = cardLink(startCard);
     targetCard = cardLink(targetCard);
     QString str;
@@ -222,6 +231,7 @@ void MessageLogWidget::logCreateArrow(Player *player,
 
 void MessageLogWidget::logCreateToken(Player *player, QString cardName, QString pt, bool faceDown)
 {
+    if (isRuledGame()) return;
     if (faceDown) {
         appendHtmlServerMessage(
             tr("%1 creates a face down token.").arg(sanitizeHtml(player->getPlayerInfo()->getName())));
@@ -248,6 +258,7 @@ void MessageLogWidget::logDeckSelect(Player *player, QString deckHash, int sideb
 
 void MessageLogWidget::logDestroyCard(Player *player, QString cardName)
 {
+    if (isRuledGame()) return;
     appendHtmlServerMessage(
         tr("%1 destroys %2.").arg(sanitizeHtml(player->getPlayerInfo()->getName())).arg(cardLink(std::move(cardName))));
 }
@@ -262,6 +273,7 @@ void MessageLogWidget::logMoveCard(Player *player,
     if (currentContext == MessageContext_Mulligan) {
         return;
     }
+    if (isRuledGame()) return;
 
     QString startZoneName = startZone->getName();
     QString targetZoneName = targetZone->getName();
@@ -361,6 +373,7 @@ void MessageLogWidget::logMoveCard(Player *player,
 
 void MessageLogWidget::logDrawCards(Player *player, int number, bool deckIsEmpty)
 {
+    if (isRuledGame()) return;
     soundEngine->playSound("draw_card");
     if (currentContext == MessageContext_Mulligan) {
         logMulligan(player, number);
@@ -378,6 +391,7 @@ void MessageLogWidget::logDrawCards(Player *player, int number, bool deckIsEmpty
 
 void MessageLogWidget::logDumpZone(Player *player, CardZoneLogic *zone, int numberCards, bool isReversed)
 {
+    if (isRuledGame()) return;
     if (numberCards == -1) {
         appendHtmlServerMessage(tr("%1 is looking at %2.")
                                     .arg(sanitizeHtml(player->getPlayerInfo()->getName()))
@@ -394,6 +408,7 @@ void MessageLogWidget::logDumpZone(Player *player, CardZoneLogic *zone, int numb
 
 void MessageLogWidget::logFlipCard(Player *player, QString cardName, bool faceDown)
 {
+    if (isRuledGame()) return;
     if (faceDown) {
         appendHtmlServerMessage(
             tr("%1 turns %2 face-down.").arg(sanitizeHtml(player->getPlayerInfo()->getName())).arg(cardLink(cardName)));
@@ -411,6 +426,11 @@ void MessageLogWidget::logGameClosed()
 void MessageLogWidget::logGameStart()
 {
     appendHtmlServerMessage(tr("The game has started."));
+    if (!deferredRuledMessages.isEmpty()) {
+        appendHtmlServerMessage(deferredRuledMessages);
+        deferredRuledMessages.clear();
+    }
+    pendingGameStartMessage = false;
 }
 
 void MessageLogWidget::logGameFlooded()
@@ -458,7 +478,7 @@ void MessageLogWidget::logNotReadyStart(Player *player)
 
 void MessageLogWidget::logMulligan(Player *player, int number)
 {
-    if (!player) {
+    if (!player || isRuledGame()) {
         return;
     }
     if (number > 0) {
@@ -490,6 +510,7 @@ void MessageLogWidget::logRevealCards(Player *player,
                                       int amount,
                                       bool isLentToAnotherPlayer)
 {
+    if (isRuledGame()) return;
     // getFromStr uses cardname.empty() to check if it should contain the start zone, it's not actually used
     QPair<QString, QString> temp = getFromStr(zone, amount == 1 ? cardName : QString::number(amount), cardId, false);
     bool cardNameContainsStartZone = false;
@@ -570,6 +591,7 @@ void MessageLogWidget::logRevealCards(Player *player,
 
 void MessageLogWidget::logReverseTurn(Player *player, bool reversed)
 {
+    if (isRuledGame()) return;
     appendHtmlServerMessage(tr("%1 reversed turn order, now it's %2.")
                                 .arg(sanitizeHtml(player->getPlayerInfo()->getName()))
                                 .arg(reversed ? tr("reversed") : tr("normal")));
@@ -619,6 +641,7 @@ void MessageLogWidget::logSay(Player *player, QString message)
 
 void MessageLogWidget::logSetActivePhase(int phaseNumber)
 {
+    if (isRuledGame()) return;
     Phase phase = Phases::getPhase(phaseNumber);
 
     soundEngine->playSound(phase.soundFileName);
@@ -629,12 +652,14 @@ void MessageLogWidget::logSetActivePhase(int phaseNumber)
 
 void MessageLogWidget::logSetActivePlayer(Player *player)
 {
+    if (isRuledGame()) return;
     appendHtml("<br><font color=\"green\"><b>" + QDateTime::currentDateTime().toString("[hh:mm:ss] ") +
                QString(tr("%1's turn.")).arg(player->getPlayerInfo()->getName()) + "</b></font><br>");
 }
 
 void MessageLogWidget::logSetAnnotation(Player *player, CardItem *card, QString newAnnotation)
 {
+    if (isRuledGame()) return;
     appendHtmlServerMessage(
         QString(tr("%1 sets annotation of %2 to %3."))
             .arg(sanitizeHtml(player->getPlayerInfo()->getName()))
@@ -644,6 +669,7 @@ void MessageLogWidget::logSetAnnotation(Player *player, CardItem *card, QString 
 
 void MessageLogWidget::logSetCardCounter(Player *player, QString cardName, int counterId, int value, int oldValue)
 {
+    if (isRuledGame()) return;
     QString finalStr;
     int delta = abs(oldValue - value);
     if (value > oldValue) {
@@ -662,6 +688,7 @@ void MessageLogWidget::logSetCardCounter(Player *player, QString cardName, int c
 
 void MessageLogWidget::logSetCounter(Player *player, QString counterName, int value, int oldValue)
 {
+    if (isRuledGame()) return;
     if (counterName == "life") {
         soundEngine->playSound("life_change");
     }
@@ -677,6 +704,7 @@ void MessageLogWidget::logSetCounter(Player *player, QString counterName, int va
 
 void MessageLogWidget::logSetDoesntUntap(Player *player, CardItem *card, bool doesntUntap)
 {
+    if (isRuledGame()) return;
     QString str;
     if (doesntUntap) {
         str = tr("%1 sets %2 to not untap normally.");
@@ -688,7 +716,7 @@ void MessageLogWidget::logSetDoesntUntap(Player *player, CardItem *card, bool do
 
 void MessageLogWidget::logSetPT(Player *player, CardItem *card, QString newPT)
 {
-    if (currentContext == MessageContext_MoveCard) {
+    if (currentContext == MessageContext_MoveCard || isRuledGame()) {
         return;
     }
 
@@ -726,7 +754,7 @@ void MessageLogWidget::logSetSideboardLock(Player *player, bool locked)
 
 void MessageLogWidget::logSetTapped(Player *player, CardItem *card, bool tapped)
 {
-    if (currentContext == MessageContext_MoveCard) {
+    if (currentContext == MessageContext_MoveCard || isRuledGame()) {
         return;
     }
 
@@ -749,7 +777,7 @@ void MessageLogWidget::logSetTapped(Player *player, CardItem *card, bool tapped)
 
 void MessageLogWidget::logShuffle(Player *player, CardZoneLogic *zone, int start, int end)
 {
-    if (currentContext == MessageContext_Mulligan) {
+    if (currentContext == MessageContext_Mulligan || isRuledGame()) {
         return;
     }
 
@@ -786,6 +814,7 @@ void MessageLogWidget::logSpectatorSay(const ServerInfo_User &spectator, QString
 
 void MessageLogWidget::logUnattachCard(Player *player, QString cardName)
 {
+    if (isRuledGame()) return;
     appendHtmlServerMessage(tr("%1 unattaches %2.")
                                 .arg(sanitizeHtml(player->getPlayerInfo()->getName()))
                                 .arg(cardLink(std::move(cardName))));
@@ -793,6 +822,7 @@ void MessageLogWidget::logUnattachCard(Player *player, QString cardName)
 
 void MessageLogWidget::logUndoDraw(Player *player, QString cardName)
 {
+    if (isRuledGame()) return;
     if (cardName.isEmpty()) {
         appendHtmlServerMessage(tr("%1 undoes their last draw.").arg(sanitizeHtml(player->getPlayerInfo()->getName())));
     } else {
@@ -853,5 +883,13 @@ void MessageLogWidget::logRuledGameplay(QString message)
     if (message.trimmed().isEmpty()) {
         return;
     }
-    appendHtmlServerMessage(QStringLiteral("<b>%1</b><br/>").arg(tr("Ruled game")) + sanitizeHtml(message));
+    QString formatted = QStringLiteral("<b>%1</b><br/>").arg(tr("Ruled game")) + sanitizeHtml(message);
+    if (pendingGameStartMessage) {
+        if (!deferredRuledMessages.isEmpty()) {
+            deferredRuledMessages += QLatin1String("<br/>");
+        }
+        deferredRuledMessages += formatted;
+        return;
+    }
+    appendHtmlServerMessage(formatted);
 }

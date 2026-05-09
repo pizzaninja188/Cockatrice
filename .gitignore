@@ -28,7 +28,6 @@ tricerules/target/
 
 # Local runtime/test artifacts
 server.log
-servatrice-local.ini
 6.6.3/
 Tools/
 aqtinstall.log

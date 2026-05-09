@@ -29,7 +29,10 @@ private:
 
     MessageContext currentContext;
     QString messagePrefix, messageSuffix;
+    bool pendingGameStartMessage = true;
+    QString deferredRuledMessages;
 
+    [[nodiscard]] bool isRuledGame() const;
     static QPair<QString, QString> getFromStr(CardZoneLogic *zone, QString cardName, int position, bool ownerChange);
 
 public:

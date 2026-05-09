@@ -1,0 +1,1 @@
+.\build\windows-msvc-all\servatrice\Release\servatrice.exe --config ".\servatrice-local.ini" --log-to-console

@@ -289,7 +289,6 @@ impl GameEngine {
                         op.mulligans_taken[idx]
                     };
                     if k == 0 {
-                        let final_size = self.state.players[idx].hand.len();
                         {
                             let op = self.state.opening.as_mut().unwrap();
                             op.resolved[idx] = true;
@@ -1214,9 +1213,6 @@ impl GameEngine {
                         self.state.priority_idx = i;
                     }
                     self.state.passes_since_stack_change = 0;
-                    ev.push(ev_log(
-                        "No eligible attackers — skipping to end combat.".into(),
-                    ));
                     ev.push(ev_phase_labeled(self, "end_combat"));
                     ev.push(ev_priority_changed(self));
                 } else {
@@ -1592,7 +1588,7 @@ impl GameEngine {
         ev.extend(legend_events);
         self.apply_sbas(&mut ev)?;
         ev.push(ev_log(format!(
-            "Turn {} — active player P{} (untap/upkeep).",
+            "Turn {}: P{}",
             self.state.turn, ap
         )));
         ev.push(ev_priority_changed(self));

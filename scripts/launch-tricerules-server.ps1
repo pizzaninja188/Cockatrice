@@ -1,0 +1,1 @@
+cargo run --release --manifest-path ./tricerules/Cargo.toml -p tricerules-server

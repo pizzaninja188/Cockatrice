@@ -97,7 +97,7 @@ QString nextStepButtonTextForPhase(int phase)
         case 9:
             return GamePromptWidget::tr("End Step");
         case 10:
-            return GamePromptWidget::tr("End Turn");
+            return GamePromptWidget::tr("Next Turn");
         default:
             return GamePromptWidget::tr("Pass Priority");
     }
