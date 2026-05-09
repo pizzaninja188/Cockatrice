@@ -486,7 +486,10 @@ void GamePromptWidget::refreshPromptLabel()
 
     if (currentCombatMode == CombatMode::DeclareAttackers) {
         if (localPlayerHasCombatButtons) {
-            promptLabel->setText(tr("%1's Declare Attackers. Choose attackers.").arg(activePlayerName));
+            promptLabel->setText(tr("%1's Declare Attackers step. Choose attackers.").arg(activePlayerName));
+        } else if (localPlayerHasPriority) {
+            promptLabel->setText(
+                tr("%1's Declare Attackers step. Cast instants and activate abilities.").arg(activePlayerName));
         } else {
             promptLabel->setText(tr("Waiting for %1...").arg(waitName));
         }
@@ -494,7 +497,10 @@ void GamePromptWidget::refreshPromptLabel()
     }
     if (currentCombatMode == CombatMode::DeclareBlockers) {
         if (localPlayerHasCombatButtons) {
-            promptLabel->setText(tr("%1's Declare Blockers. Choose blockers.").arg(activePlayerName));
+            promptLabel->setText(tr("%1's Declare Blockers step. Choose blockers.").arg(activePlayerName));
+        } else if (localPlayerHasPriority) {
+            promptLabel->setText(
+                tr("%1's Declare Blockers step. Cast instants and activate abilities.").arg(activePlayerName));
         } else {
             promptLabel->setText(tr("Waiting for %1...").arg(waitName));
         }
