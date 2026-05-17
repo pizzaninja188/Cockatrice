@@ -359,6 +359,8 @@ Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const
                     expectedY.append(0);
                 } else if (currentY == 2) {
                     expectedY.append(2); // land — keep in bottom row
+                } else if (!haveIsCreature) {
+                    expectedY.append(currentY); // no creature flags from engine — preserve row to avoid flicker
                 } else {
                     expectedY.append(1); // noncreature nonland permanent
                 }
@@ -389,7 +391,7 @@ Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const
                         continue;
                     }
                     const int y = expectedY[i];
-                    const int x = tableZone->getFreeGridColumn(-1, y, c->getName(), false);
+                    const int x = tableZone->getFreeGridColumn(-1, y, c->getName(), y != 2);
                     tableZone->insertCard(c, x, y);
                 }
                 result.battlefieldOrderChanged = true;
