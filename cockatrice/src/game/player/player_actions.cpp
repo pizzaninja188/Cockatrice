@@ -58,14 +58,13 @@ bool ruledObjectTargetLegalForPendingSpell(const QString &spellName, const CardI
     if (sn.compare(QStringLiteral("Counterspell"), Qt::CaseInsensitive) == 0) {
         return zoneName == ZoneNames::STACK;
     }
-    if (sn.compare(QStringLiteral("Lightning Bolt"), Qt::CaseInsensitive) == 0) {
-        return zoneName == ZoneNames::TABLE && isCreature;
+    // Any battlefield permanent (creatures, lands, etc.): broad bounce like Boomerang.
+    if (sn.compare(QStringLiteral("Boomerang"), Qt::CaseInsensitive) == 0) {
+        return zoneName == ZoneNames::TABLE;
     }
-    if (sn.compare(QStringLiteral("Giant Growth"), Qt::CaseInsensitive) == 0 ||
-        sn.compare(QStringLiteral("Go for the Throat"), Qt::CaseInsensitive) == 0) {
-        return zoneName == ZoneNames::TABLE && isCreature;
-    }
-    // Default for other ruled instants that required a target: battlefield creatures only.
+    // Default for other ruled instants/sorceries that required a target: battlefield creatures only.
+    // (Lightning Bolt, Giant Growth, Go for the Throat, Swords to Plowshares, Eyeblight's Ending,
+    // Unsummon, etc.)
     return zoneName == ZoneNames::TABLE && isCreature;
 }
 
@@ -811,13 +810,41 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
     return true;
 }
 
+namespace
+{
+// Must stay aligned with tricerules `validate_spell_targets`:
+// spells whose sole target is a player (or that accept a player as one of multiple
+// legal target kinds, like Lightning Bolt) are listed here.
+bool spellAcceptsPlayerTarget(const QString &spellName)
+{
+    const QString sn = spellName.trimmed();
+    static const QStringList playerTargetSpells = {
+        QStringLiteral("Lightning Bolt"), QStringLiteral("Bump in the Night"),
+        QStringLiteral("Tome Scour"),     QStringLiteral("Mind Sculpt"),
+        QStringLiteral("Healing Salve"),
+    };
+    for (const QString &name : playerTargetSpells) {
+        if (sn.compare(name, Qt::CaseInsensitive) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Subset of player-target spells that may NOT target their controller (Oracle "Target opponent").
+bool spellIsOpponentOnly(const QString &spellName)
+{
+    const QString sn = spellName.trimmed();
+    return sn.compare(QStringLiteral("Bump in the Night"), Qt::CaseInsensitive) == 0;
+}
+} // namespace
+
 bool PlayerActions::isAwaitingRuledPlayerTargetSelection() const
 {
     if (!pendingRuledSpellCast.valid || !pendingRuledSpellCast.waitingForTarget) {
         return false;
     }
-    return pendingRuledSpellCast.cardName.trimmed().compare(QStringLiteral("Lightning Bolt"), Qt::CaseInsensitive) ==
-           0;
+    return spellAcceptsPlayerTarget(pendingRuledSpellCast.cardName);
 }
 
 bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
@@ -838,6 +865,15 @@ bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
 
     const int targetPlayerId = targetPlayer->getPlayerInfo()->getId();
     if (targetPlayerId < 0) {
+        return true;
+    }
+
+    // Mirror tricerules `validate_spell_targets`: opponent-only spells must reject
+    // a click on the caster so we don't begin mana payment for an illegal target.
+    if (spellIsOpponentOnly(pendingRuledSpellCast.cardName) &&
+        targetPlayerId == player->getPlayerInfo()->getId()) {
+        player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+            tr("%1 must target an opponent.").arg(pendingRuledSpellCast.cardName));
         return true;
     }
 

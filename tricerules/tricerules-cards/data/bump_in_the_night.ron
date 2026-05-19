@@ -1,0 +1,8 @@
+(
+  id: "bump_in_the_night",
+  name: "Bump in the Night",
+  mana_cost: "B",
+  types: ["Sorcery"],
+  is_sorcery: true,
+  spell_effect: "bump_in_the_night",
+)

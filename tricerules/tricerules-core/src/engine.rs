@@ -1767,6 +1767,211 @@ impl GameEngine {
                     }
                 }
             }
+            SpellEffectKind::GainLife { amount } => {
+                let pi = self.state.player_idx(controller).unwrap();
+                self.state.players[pi].life += amount as i32;
+                events.push(rv1::RuledEvent {
+                    ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                        player_id: controller,
+                        new_total: self.state.players[pi].life,
+                        delta: amount as i32,
+                    })),
+                });
+                events.push(ev_log(format!(
+                    "P{controller} gains {amount} life ({spell_label})."
+                )));
+            }
+            SpellEffectKind::TargetPlayerGainsLife { amount } => {
+                if let Some(&tid) = targets.first() {
+                    if let Some(pi) = self.state.player_idx(tid as i32) {
+                        let pid = self.state.players[pi].id;
+                        self.state.players[pi].life += amount as i32;
+                        events.push(rv1::RuledEvent {
+                            ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                                player_id: pid,
+                                new_total: self.state.players[pi].life,
+                                delta: amount as i32,
+                            })),
+                        });
+                        events.push(ev_log(format!(
+                            "P{pid} gains {amount} life ({spell_label})."
+                        )));
+                    }
+                }
+            }
+            SpellEffectKind::TargetOpponentLosesLife { amount } => {
+                if let Some(&tid) = targets.first() {
+                    if let Some(pi) = self.state.player_idx(tid as i32) {
+                        let pid = self.state.players[pi].id;
+                        self.state.players[pi].life -= amount as i32;
+                        events.push(rv1::RuledEvent {
+                            ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                                player_id: pid,
+                                new_total: self.state.players[pi].life,
+                                delta: -(amount as i32),
+                            })),
+                        });
+                        events.push(ev_log(format!(
+                            "P{pid} loses {amount} life ({spell_label})."
+                        )));
+                    }
+                }
+            }
+            SpellEffectKind::EachOpponentLosesLifeYouGainEqual { amount } => {
+                let opps: Vec<(usize, PlayerId)> = self
+                    .state
+                    .players
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, p)| p.id != controller && !p.has_lost)
+                    .map(|(i, p)| (i, p.id))
+                    .collect();
+                let mut total_lost: u32 = 0;
+                for (pi, pid) in opps {
+                    self.state.players[pi].life -= amount as i32;
+                    total_lost += amount;
+                    events.push(rv1::RuledEvent {
+                        ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                            player_id: pid,
+                            new_total: self.state.players[pi].life,
+                            delta: -(amount as i32),
+                        })),
+                    });
+                    events.push(ev_log(format!(
+                        "P{pid} loses {amount} life ({spell_label})."
+                    )));
+                }
+                if total_lost > 0 {
+                    if let Some(ci) = self.state.player_idx(controller) {
+                        self.state.players[ci].life += total_lost as i32;
+                        events.push(rv1::RuledEvent {
+                            ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                                player_id: controller,
+                                new_total: self.state.players[ci].life,
+                                delta: total_lost as i32,
+                            })),
+                        });
+                        events.push(ev_log(format!(
+                            "P{controller} gains {total_lost} life ({spell_label})."
+                        )));
+                    }
+                }
+            }
+            SpellEffectKind::ExileTarget => {
+                if let Some(&tid) = targets.first() {
+                    let tgt = object_display_name(&self.state, &self.registry, tid);
+                    let owner = self.state.objects.get(&tid).map(|o| o.owner);
+                    move_object_to_zone(&mut self.state, tid, Zone::Exile)?;
+                    events.push(ev_log(format!("{spell_label} exiles {tgt}")));
+                    if let Some(owner_id) = owner {
+                        events.push(rv1::RuledEvent {
+                            ev: Some(rv1::ruled_event::Ev::PermanentMoved(rv1::PermanentMoved {
+                                object_id: tid,
+                                owner_player_id: owner_id,
+                                destination: rv1::permanent_moved::Destination::Exile as i32,
+                            })),
+                        });
+                    }
+                }
+            }
+            SpellEffectKind::ExileTargetGainLifeEqualToPower => {
+                if let Some(&tid) = targets.first() {
+                    let tgt = object_display_name(&self.state, &self.registry, tid);
+                    // CR 608: read power at resolution before the object leaves the battlefield.
+                    let power = self
+                        .state
+                        .objects
+                        .get(&tid)
+                        .and_then(|o| o.power)
+                        .unwrap_or(0);
+                    let owner = self.state.objects.get(&tid).map(|o| o.owner);
+                    let target_controller = owner.unwrap_or(controller);
+                    move_object_to_zone(&mut self.state, tid, Zone::Exile)?;
+                    events.push(ev_log(format!("{spell_label} exiles {tgt}")));
+                    if let Some(owner_id) = owner {
+                        events.push(rv1::RuledEvent {
+                            ev: Some(rv1::ruled_event::Ev::PermanentMoved(rv1::PermanentMoved {
+                                object_id: tid,
+                                owner_player_id: owner_id,
+                                destination: rv1::permanent_moved::Destination::Exile as i32,
+                            })),
+                        });
+                    }
+                    if power > 0 {
+                        if let Some(pi) = self.state.player_idx(target_controller) {
+                            self.state.players[pi].life += power as i32;
+                            events.push(rv1::RuledEvent {
+                                ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                                    player_id: target_controller,
+                                    new_total: self.state.players[pi].life,
+                                    delta: power as i32,
+                                })),
+                            });
+                            events
+                                .push(ev_log(format!("P{target_controller} gains {power} life.")));
+                        }
+                    }
+                }
+            }
+            SpellEffectKind::ReturnTargetCreatureToHand
+            | SpellEffectKind::ReturnTargetPermanentToHand => {
+                if let Some(&tid) = targets.first() {
+                    let tgt = object_display_name(&self.state, &self.registry, tid);
+                    let owner = self.state.objects.get(&tid).map(|o| o.owner);
+                    move_object_to_zone(&mut self.state, tid, Zone::Hand)?;
+                    // Reset transient permanent state when leaving the battlefield.
+                    if let Some(o) = self.state.objects.get_mut(&tid) {
+                        o.tapped = false;
+                        o.summoning_sick = false;
+                        o.damage = 0;
+                        o.power = None;
+                        o.toughness = None;
+                    }
+                    events.push(ev_log(format!(
+                        "{spell_label} returns {tgt} to its owner's hand"
+                    )));
+                    if let Some(owner_id) = owner {
+                        events.push(rv1::RuledEvent {
+                            ev: Some(rv1::ruled_event::Ev::PermanentMoved(rv1::PermanentMoved {
+                                object_id: tid,
+                                owner_player_id: owner_id,
+                                destination: rv1::permanent_moved::Destination::Hand as i32,
+                            })),
+                        });
+                    }
+                }
+            }
+            SpellEffectKind::MillTargetPlayer { count } => {
+                if let Some(&tid) = targets.first() {
+                    if let Some(pi) = self.state.player_idx(tid as i32) {
+                        let pid = self.state.players[pi].id;
+                        let mut milled = 0u32;
+                        for _ in 0..count {
+                            let Some(oid) = self.state.players[pi].library.pop_front() else {
+                                break;
+                            };
+                            self.state.players[pi].graveyard.push(oid);
+                            if let Some(o) = self.state.objects.get_mut(&oid) {
+                                o.zone = Zone::Graveyard;
+                            }
+                            events.push(rv1::RuledEvent {
+                                ev: Some(rv1::ruled_event::Ev::PermanentMoved(
+                                    rv1::PermanentMoved {
+                                        object_id: oid,
+                                        owner_player_id: pid,
+                                        destination: rv1::permanent_moved::Destination::Graveyard
+                                            as i32,
+                                    },
+                                )),
+                            });
+                            milled += 1;
+                        }
+                        events.push(ev_log(format!(
+                            "{spell_label} mills {milled} card(s) from P{pid}"
+                        )));
+                    }
+                }
+            }
             SpellEffectKind::None => {}
         }
         events.push(ev_log(format!("{spell_label} resolves.")));
@@ -1819,7 +2024,7 @@ impl GameEngine {
                 "cannot cast until attack or block declaration is complete",
             ));
         }
-        validate_spell_targets(&self.state, &self.registry, &card_id, targets)?;
+        validate_spell_targets(&self.state, &self.registry, player, &card_id, targets)?;
         pay_mana_simple(&mut self.state, &self.registry, idx, &def.mana_cost)?;
 
         self.state.players[idx].hand.retain(|&x| x != oid);
@@ -2427,11 +2632,13 @@ fn move_object_to_zone(state: &mut GameState, oid: ObjectId, z: Zone) -> Result<
     p.hand.retain(|&x| x != oid);
     p.battlefield.retain(|&x| x != oid);
     p.graveyard.retain(|&x| x != oid);
+    p.exile.retain(|&x| x != oid);
     match z {
         Zone::Graveyard => p.graveyard.push(oid),
         Zone::Hand => p.hand.push(oid),
         Zone::Battlefield => p.battlefield.push(oid),
         Zone::Library => p.library.push_back(oid),
+        Zone::Exile => p.exile.push(oid),
         Zone::Stack => {}
     }
     if let Some(o) = state.objects.get_mut(&oid) {
@@ -2611,6 +2818,21 @@ fn destroy_spell_target_legal(state: &GameState, registry: &CardRegistry, tid: O
         .is_some_and(|o| o.zone == Zone::Battlefield && o.is_creature(registry))
 }
 
+/// Target must be an active player (not lost).
+fn player_target_legal(state: &GameState, tid: ObjectId) -> bool {
+    state
+        .player_idx(tid as i32)
+        .is_some_and(|pi| !state.players[pi].has_lost)
+}
+
+/// Any battlefield permanent (creature, land, etc.) — for broad bounce like Boomerang.
+fn any_battlefield_permanent_target_legal(state: &GameState, tid: ObjectId) -> bool {
+    state
+        .objects
+        .get(&tid)
+        .is_some_and(|o| o.zone == Zone::Battlefield)
+}
+
 /// CR 608.2b-style: if every target for the spell is now illegal, none of its effects happen.
 fn spell_has_no_legal_targets_at_resolution(
     state: &GameState,
@@ -2619,16 +2841,30 @@ fn spell_has_no_legal_targets_at_resolution(
     targets: &[ObjectId],
 ) -> bool {
     match effect {
-        SpellEffectKind::None | SpellEffectKind::Draw { .. } => false,
+        SpellEffectKind::None
+        | SpellEffectKind::Draw { .. }
+        | SpellEffectKind::GainLife { .. }
+        | SpellEffectKind::EachOpponentLosesLifeYouGainEqual { .. } => false,
         SpellEffectKind::DealDamage { .. } => !targets
             .first()
             .is_some_and(|&tid| damage_spell_target_legal(state, registry, tid)),
         SpellEffectKind::PumpTarget { .. } => !targets
             .first()
             .is_some_and(|&tid| pump_spell_target_legal(state, registry, tid)),
-        SpellEffectKind::DestroyTarget => !targets
+        SpellEffectKind::DestroyTarget
+        | SpellEffectKind::ExileTarget
+        | SpellEffectKind::ExileTargetGainLifeEqualToPower
+        | SpellEffectKind::ReturnTargetCreatureToHand => !targets
             .first()
             .is_some_and(|&tid| destroy_spell_target_legal(state, registry, tid)),
+        SpellEffectKind::ReturnTargetPermanentToHand => !targets
+            .first()
+            .is_some_and(|&tid| any_battlefield_permanent_target_legal(state, tid)),
+        SpellEffectKind::TargetPlayerGainsLife { .. }
+        | SpellEffectKind::TargetOpponentLosesLife { .. }
+        | SpellEffectKind::MillTargetPlayer { .. } => !targets
+            .first()
+            .is_some_and(|&tid| player_target_legal(state, tid)),
         SpellEffectKind::CounterTargetSpell => !targets
             .first()
             .is_some_and(|&tid| state.stack.iter().any(|s| s.id == tid)),
@@ -2638,6 +2874,7 @@ fn spell_has_no_legal_targets_at_resolution(
 fn validate_spell_targets(
     state: &GameState,
     registry: &CardRegistry,
+    caster: PlayerId,
     card_id: &str,
     targets: &[rv1::TargetRef],
 ) -> Result<(), EngineError> {
@@ -2697,6 +2934,72 @@ fn validate_spell_targets(
                     "pump target must be a creature on the battlefield",
                 ));
             }
+        }
+        SpellEffectKind::ExileTarget
+        | SpellEffectKind::ExileTargetGainLifeEqualToPower
+        | SpellEffectKind::ReturnTargetCreatureToHand => {
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal(
+                    "this spell requires exactly one creature target",
+                ));
+            }
+            let target = targets[0].object_id;
+            if !destroy_spell_target_legal(state, registry, target) {
+                return Err(EngineError::Illegal(
+                    "target must be a creature on the battlefield",
+                ));
+            }
+        }
+        SpellEffectKind::ReturnTargetPermanentToHand => {
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal(
+                    "this spell requires exactly one permanent target",
+                ));
+            }
+            let target = targets[0].object_id;
+            if !any_battlefield_permanent_target_legal(state, target) {
+                return Err(EngineError::Illegal(
+                    "target must be a permanent on the battlefield",
+                ));
+            }
+        }
+        SpellEffectKind::TargetPlayerGainsLife { .. }
+        | SpellEffectKind::MillTargetPlayer { .. } => {
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal(
+                    "this spell requires exactly one player target",
+                ));
+            }
+            let target = targets[0].object_id;
+            if !player_target_legal(state, target) {
+                return Err(EngineError::Illegal(
+                    "target must be a player still in the game",
+                ));
+            }
+        }
+        SpellEffectKind::TargetOpponentLosesLife { .. } => {
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal(
+                    "this spell requires exactly one opponent target",
+                ));
+            }
+            let target = targets[0].object_id;
+            if !player_target_legal(state, target) {
+                return Err(EngineError::Illegal(
+                    "target must be a player still in the game",
+                ));
+            }
+            if target as i32 == caster {
+                return Err(EngineError::Illegal(
+                    "target must be an opponent (cannot target yourself)",
+                ));
+            }
+        }
+        SpellEffectKind::GainLife { .. }
+        | SpellEffectKind::EachOpponentLosesLifeYouGainEqual { .. }
+            if !targets.is_empty() =>
+        {
+            return Err(EngineError::Illegal("this spell takes no targets"));
         }
         _ => {}
     }

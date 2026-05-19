@@ -203,11 +203,7 @@ Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const
     if (!deckZone || !handZone || !tableZone) {
         return result;
     }
-    const auto trId = [](Server_Card *c) {
-        QString t = c->getName().toLower();
-        t.replace(' ', '_');
-        return t;
-    };
+    const auto trId = [](Server_Card *c) { return cardNameToTricerulesId(c->getName()); };
     QList<Server_Card *> pool;
     for (Server_Card *c : deckZone->getCards()) {
         pool.append(c);

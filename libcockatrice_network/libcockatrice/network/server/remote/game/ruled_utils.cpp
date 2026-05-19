@@ -1,5 +1,13 @@
 #include "ruled_utils.h"
 
+QString cardNameToTricerulesId(const QString &cardName)
+{
+    QString t = cardName.toLower();
+    t.remove(QLatin1Char('\''));
+    t.replace(QLatin1Char(' '), QLatin1Char('_'));
+    return t;
+}
+
 bool isRuledModeManaPoolCounterName(const QString &name)
 {
     const QString n = name.trimmed().toLower();

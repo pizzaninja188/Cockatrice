@@ -1366,7 +1366,8 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
             continue;
         }
         Server_Card *card = nullptr;
-        for (const char *zn : {ZoneNames::TABLE, ZoneNames::HAND, ZoneNames::STACK}) {
+        // DECK is included so mill effects (library -> graveyard) can be relayed.
+        for (const char *zn : {ZoneNames::TABLE, ZoneNames::HAND, ZoneNames::STACK, ZoneNames::DECK}) {
             Server_CardZone *z = owner->getZones().value(zn);
             if (!z) {
                 continue;
@@ -1668,8 +1669,7 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
                     if (!card) {
                         continue;
                     }
-                    QString tr = card->getName().toLower();
-                    tr.replace(' ', '_');
+                    QString tr = cardNameToTricerulesId(card->getName());
                     quint32 engineOid = 0;
                     bool found = false;
                     for (auto it = oidMap.constBegin(); it != oidMap.constEnd(); ++it) {
@@ -1714,8 +1714,7 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
                         ++stackOrdinal;
                         continue;
                     }
-                    QString tr = stackCard->getName().toLower();
-                    tr.replace(' ', '_');
+                    QString tr = cardNameToTricerulesId(stackCard->getName());
                     auto *entry = map->add_entries();
                     entry->set_player_id(pl->getPlayerId());
                     entry->set_engine_object_id(stackOid);
@@ -1799,8 +1798,7 @@ void Server_Game::startRuledSidecarSession()
                 if (!node) {
                     continue;
                 }
-                QString t = node->getName().toLower();
-                t.replace(' ', '_');
+                const QString t = cardNameToTricerulesId(node->getName());
                 for (int k = 0; k < node->getNumber(); ++k) {
                     tricerulesIds.append(t);
                 }

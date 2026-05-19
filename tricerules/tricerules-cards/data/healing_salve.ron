@@ -1,0 +1,8 @@
+(
+  id: "healing_salve",
+  name: "Healing Salve",
+  mana_cost: "W",
+  types: ["Instant"],
+  is_instant: true,
+  spell_effect: "healing_salve",
+)

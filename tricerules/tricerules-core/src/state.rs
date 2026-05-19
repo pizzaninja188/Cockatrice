@@ -46,6 +46,7 @@ pub enum Zone {
     Battlefield,
     Graveyard,
     Stack,
+    Exile,
 }
 
 #[derive(Debug, Clone)]
@@ -85,6 +86,7 @@ pub struct PlayerState {
     pub hand: Vec<ObjectId>,
     pub battlefield: Vec<ObjectId>,
     pub graveyard: Vec<ObjectId>,
+    pub exile: Vec<ObjectId>,
     pub mana_pool: ManaPool,
 }
 
@@ -98,6 +100,7 @@ impl PlayerState {
             hand: Vec::new(),
             battlefield: Vec::new(),
             graveyard: Vec::new(),
+            exile: Vec::new(),
             mana_pool: ManaPool::default(),
         }
     }

@@ -60,6 +60,16 @@ const EMBEDDED_RON_CHUNKS: &[&str] = &[
     include_str!("../data/divination.ron"),
     include_str!("../data/go_for_the_throat.ron"),
     include_str!("../data/counterspell.ron"),
+    include_str!("../data/healing_salve.ron"),
+    include_str!("../data/angels_mercy.ron"),
+    include_str!("../data/bump_in_the_night.ron"),
+    include_str!("../data/blood_tithe.ron"),
+    include_str!("../data/swords_to_plowshares.ron"),
+    include_str!("../data/eyeblights_ending.ron"),
+    include_str!("../data/unsummon.ron"),
+    include_str!("../data/boomerang.ron"),
+    include_str!("../data/tome_scour.ron"),
+    include_str!("../data/mind_sculpt.ron"),
 ];
 
 #[cfg(test)]

@@ -1,0 +1,8 @@
+(
+  id: "mind_sculpt",
+  name: "Mind Sculpt",
+  mana_cost: "1U",
+  types: ["Sorcery"],
+  is_sorcery: true,
+  spell_effect: "mind_sculpt",
+)

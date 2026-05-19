@@ -3811,7 +3811,10 @@ fn assign_combat_damage_three_blockers_split_one_each() {
         .is_err());
     // Wrong blocker set (missing one) must be rejected.
     assert!(e
-        .apply_command(0, &assign_combat_damage_cmd(attacker, vec![(b1, 2), (b2, 1)]))
+        .apply_command(
+            0,
+            &assign_combat_damage_cmd(attacker, vec![(b1, 2), (b2, 1)])
+        )
         .is_err());
 
     let b = e
@@ -3893,10 +3896,7 @@ fn assign_combat_damage_two_multi_blocked_attackers_requires_both() {
 
     // First assignment: combat must NOT yet resolve.
     let b_first = e
-        .apply_command(
-            0,
-            &assign_combat_damage_cmd(atk1, vec![(b1a, 1), (b1b, 1)]),
-        )
+        .apply_command(0, &assign_combat_damage_cmd(atk1, vec![(b1a, 1), (b1b, 1)]))
         .expect("assign for atk1");
     assert!(
         permanents_moved_in(&b_first).is_empty(),
@@ -3913,10 +3913,7 @@ fn assign_combat_damage_two_multi_blocked_attackers_requires_both() {
 
     // Second assignment: combat resolves now.
     let b_second = e
-        .apply_command(
-            0,
-            &assign_combat_damage_cmd(atk2, vec![(b2a, 1), (b2b, 1)]),
-        )
+        .apply_command(0, &assign_combat_damage_cmd(atk2, vec![(b2a, 1), (b2b, 1)]))
         .expect("assign for atk2");
     let dead: Vec<u32> = permanents_moved_in(&b_second)
         .iter()
@@ -4147,4 +4144,714 @@ fn cannot_add_mana_while_declaring_blockers() {
         format!("{err:?}").contains("declaring attackers or blockers"),
         "unexpected error: {err:?}"
     );
+}
+
+// ----------------------------------------------------------------------------
+// New M2 primitives: GainLife, LoseLife, ExileTarget, ReturnToHand, Mill.
+// ----------------------------------------------------------------------------
+
+fn forest_only_deck() -> Vec<String> {
+    vec!["forest".into(); 30]
+}
+
+fn island_only_deck() -> Vec<String> {
+    vec!["island".into(); 30]
+}
+
+#[test]
+fn healing_salve_gains_three_life_for_target_player() {
+    let decks = Some(vec![
+        vec![
+            "plains".into(),
+            "healing_salve".into(),
+            "plains".into(),
+            "plains".into(),
+            "plains".into(),
+            "plains".into(),
+            "plains".into(),
+        ],
+        forest_only_deck(),
+    ]);
+    let mut e = GameEngine::new(2601, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            w: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("mana for W");
+
+    let salve_idx = hand_index_for_card(&e, 0, "healing_salve");
+    let p1_life_before = e.state.players[1].life;
+    e.apply_command(0, &cast_spell(salve_idx, target_player(1)))
+        .expect("cast salve targeting opponent");
+    let batch = {
+        e.apply_command(0, &pass()).expect("p0 pass");
+        e.apply_command(1, &pass()).expect("p1 pass")
+    };
+
+    assert_eq!(
+        e.state.players[1].life,
+        p1_life_before + 3,
+        "target player (P1) gains 3"
+    );
+    let life = life_changes_in(&batch);
+    assert!(
+        life.iter()
+            .any(|lc| lc.player_id == 1 && lc.delta == 3 && lc.new_total == p1_life_before + 3),
+        "LifeChanged event expected, got {life:?}"
+    );
+}
+
+#[test]
+fn healing_salve_can_target_controller() {
+    let decks = Some(vec![
+        vec![
+            "plains".into(),
+            "healing_salve".into(),
+            "plains".into(),
+            "plains".into(),
+            "plains".into(),
+            "plains".into(),
+            "plains".into(),
+        ],
+        forest_only_deck(),
+    ]);
+    let mut e = GameEngine::new(2602, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            w: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("mana");
+    let salve_idx = hand_index_for_card(&e, 0, "healing_salve");
+    let p0_life_before = e.state.players[0].life;
+    e.apply_command(0, &cast_spell(salve_idx, target_player(0)))
+        .expect("salve may target controller");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass()).expect("p1 pass");
+    assert_eq!(e.state.players[0].life, p0_life_before + 3);
+}
+
+#[test]
+fn angels_mercy_gains_seven_life_for_controller() {
+    let mut p0_deck = vec!["angels_mercy".into()];
+    for _ in 0..6 {
+        p0_deck.push("plains".into());
+    }
+    let decks = Some(vec![p0_deck, forest_only_deck()]);
+    let mut e = GameEngine::new(2603, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            w: 2,
+            c: 3,
+            ..Default::default()
+        }),
+    )
+    .expect("mana for 3WW");
+    let mercy_idx = hand_index_for_card(&e, 0, "angels_mercy");
+    let life_before = e.state.players[0].life;
+    e.apply_command(0, &cast_spell(mercy_idx, vec![]))
+        .expect("cast mercy");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass()).expect("p1 pass");
+    assert_eq!(e.state.players[0].life, life_before + 7, "mercy gains 7");
+}
+
+#[test]
+fn bump_in_the_night_drains_three_from_target_player() {
+    let decks = Some(vec![
+        vec![
+            "swamp".into(),
+            "bump_in_the_night".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+        ],
+        forest_only_deck(),
+    ]);
+    let mut e = GameEngine::new(2604, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            b: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("mana for B");
+    let bump_idx = hand_index_for_card(&e, 0, "bump_in_the_night");
+    let p1_life_before = e.state.players[1].life;
+    let p0_life_before = e.state.players[0].life;
+    e.apply_command(0, &cast_spell(bump_idx, target_player(1)))
+        .expect("cast bump");
+    let batch = {
+        e.apply_command(0, &pass()).expect("p0 pass");
+        e.apply_command(1, &pass()).expect("p1 pass")
+    };
+    assert_eq!(e.state.players[1].life, p1_life_before - 3);
+    assert_eq!(
+        e.state.players[0].life, p0_life_before,
+        "controller unaffected"
+    );
+    let life = life_changes_in(&batch);
+    assert!(
+        life.iter().any(|lc| lc.player_id == 1 && lc.delta == -3),
+        "LifeChanged(-3) on P1 expected, got {life:?}"
+    );
+}
+
+#[test]
+fn bump_in_the_night_rejects_creature_target() {
+    let decks = Some(vec![
+        vec![
+            "swamp".into(),
+            "bump_in_the_night".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+        ],
+        forest_only_deck(),
+    ]);
+    let mut e = GameEngine::new(2605, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let bear = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            b: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("mana");
+    let bump_idx = hand_index_for_card(&e, 0, "bump_in_the_night");
+    let err = e
+        .apply_command(
+            0,
+            &cast_spell(bump_idx, vec![TargetRef { object_id: bear }]),
+        )
+        .expect_err("bump cannot target creature");
+    assert!(format!("{err:?}").contains("player"), "unexpected: {err:?}");
+}
+
+#[test]
+fn bump_in_the_night_rejects_self_target() {
+    let decks = Some(vec![
+        vec![
+            "swamp".into(),
+            "bump_in_the_night".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+        ],
+        forest_only_deck(),
+    ]);
+    let mut e = GameEngine::new(2615, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            b: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("mana");
+    let bump_idx = hand_index_for_card(&e, 0, "bump_in_the_night");
+    let err = e
+        .apply_command(0, &cast_spell(bump_idx, target_player(0)))
+        .expect_err("bump cannot target self (target opponent)");
+    assert!(
+        format!("{err:?}").contains("opponent"),
+        "unexpected: {err:?}"
+    );
+}
+
+#[test]
+fn blood_tithe_drains_each_opponent_and_gains_controller_equal_life() {
+    let mut p0_deck = vec!["blood_tithe".into()];
+    for _ in 0..6 {
+        p0_deck.push("swamp".into());
+    }
+    let decks = Some(vec![p0_deck, forest_only_deck()]);
+    let mut e = GameEngine::new(2606, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            b: 1,
+            c: 2,
+            ..Default::default()
+        }),
+    )
+    .expect("mana for 2B");
+    let tithe_idx = hand_index_for_card(&e, 0, "blood_tithe");
+    let p1_life_before = e.state.players[1].life;
+    let p0_life_before = e.state.players[0].life;
+    e.apply_command(0, &cast_spell(tithe_idx, vec![]))
+        .expect("cast tithe");
+    let batch = {
+        e.apply_command(0, &pass()).expect("p0 pass");
+        e.apply_command(1, &pass()).expect("p1 pass")
+    };
+    assert_eq!(e.state.players[1].life, p1_life_before - 3);
+    assert_eq!(
+        e.state.players[0].life,
+        p0_life_before + 3,
+        "controller gains 3 (life lost from one opponent)"
+    );
+    let life = life_changes_in(&batch);
+    assert!(
+        life.iter().any(|lc| lc.player_id == 0 && lc.delta == 3),
+        "expected +3 LifeChanged on controller, got {life:?}"
+    );
+}
+
+#[test]
+fn eyeblights_ending_exiles_target_creature() {
+    let decks = Some(vec![
+        vec![
+            "swamp".into(),
+            "eyeblights_ending".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+        ],
+        forest_only_deck(),
+    ]);
+    let mut e = GameEngine::new(2607, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let bear = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            b: 1,
+            c: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("mana for 1B");
+    let idx = hand_index_for_card(&e, 0, "eyeblights_ending");
+    e.apply_command(0, &cast_spell(idx, vec![TargetRef { object_id: bear }]))
+        .expect("cast eyeblight");
+    let batch = {
+        e.apply_command(0, &pass()).expect("p0 pass");
+        e.apply_command(1, &pass()).expect("p1 pass")
+    };
+    assert_eq!(
+        e.state.objects.get(&bear).expect("bear").zone,
+        tricerules_core::Zone::Exile
+    );
+    assert!(e.state.players[1].exile.contains(&bear));
+    assert!(!e.state.players[1].battlefield.contains(&bear));
+    let moves = permanents_moved_in(&batch);
+    assert!(
+        moves.iter().any(|m| m.object_id == bear
+            && m.destination
+                == tricerules_proto::ruled::v1::permanent_moved::Destination::Exile as i32),
+        "expected PermanentMoved(Exile) for bear, got {moves:?}"
+    );
+}
+
+#[test]
+fn swords_to_plowshares_exiles_and_gains_life_equal_to_power() {
+    let decks = Some(vec![
+        vec![
+            "plains".into(),
+            "swords_to_plowshares".into(),
+            "plains".into(),
+            "plains".into(),
+            "plains".into(),
+            "plains".into(),
+            "plains".into(),
+        ],
+        forest_only_deck(),
+    ]);
+    let mut e = GameEngine::new(2608, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let bear = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    let bear_power = e.state.objects.get(&bear).unwrap().power.unwrap();
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            w: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("mana for W");
+    let idx = hand_index_for_card(&e, 0, "swords_to_plowshares");
+    let p1_life_before = e.state.players[1].life;
+    e.apply_command(0, &cast_spell(idx, vec![TargetRef { object_id: bear }]))
+        .expect("cast swords");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass()).expect("p1 pass");
+
+    assert_eq!(
+        e.state.objects.get(&bear).expect("bear").zone,
+        tricerules_core::Zone::Exile
+    );
+    // Lifegain accrues to the creature's controller (P1), per Swords' Oracle text.
+    assert_eq!(
+        e.state.players[1].life,
+        p1_life_before + bear_power as i32,
+        "controller of exiled creature gains life equal to its power"
+    );
+}
+
+#[test]
+fn swords_to_plowshares_fizzles_if_target_dies_before_resolution() {
+    let decks = Some(vec![
+        vec![
+            "plains".into(),
+            "swords_to_plowshares".into(),
+            "mountain".into(),
+            "lightning_bolt".into(),
+            "plains".into(),
+            "plains".into(),
+            "plains".into(),
+        ],
+        forest_only_deck(),
+    ]);
+    let mut e = GameEngine::new(2609, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let bear = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            w: 1,
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("mana for W+R");
+
+    let swords_idx = hand_index_for_card(&e, 0, "swords_to_plowshares");
+    e.apply_command(
+        0,
+        &cast_spell(swords_idx, vec![TargetRef { object_id: bear }]),
+    )
+    .expect("cast swords");
+    let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(
+        0,
+        &cast_spell(bolt_idx, vec![TargetRef { object_id: bear }]),
+    )
+    .expect("cast bolt on top");
+    assert_eq!(e.state.stack.len(), 2);
+
+    let p1_life_before = e.state.players[1].life;
+    resolve_entire_stack_two_player(&mut e);
+
+    // Bolt killed the bear; Swords had no legal target → fizzles, no life change.
+    assert_eq!(
+        e.state.objects.get(&bear).expect("bear").zone,
+        tricerules_core::Zone::Graveyard,
+        "bear died to bolt"
+    );
+    assert_eq!(
+        e.state.players[1].life, p1_life_before,
+        "swords fizzled, no life gain"
+    );
+}
+
+#[test]
+fn unsummon_returns_target_creature_to_owner_hand() {
+    let decks = Some(vec![
+        vec![
+            "island".into(),
+            "unsummon".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+        ],
+        forest_only_deck(),
+    ]);
+    let mut e = GameEngine::new(2610, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let bear = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            u: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("mana for U");
+    let idx = hand_index_for_card(&e, 0, "unsummon");
+    let p1_hand_before = e.state.players[1].hand.len();
+    e.apply_command(0, &cast_spell(idx, vec![TargetRef { object_id: bear }]))
+        .expect("cast unsummon");
+    let batch = {
+        e.apply_command(0, &pass()).expect("p0 pass");
+        e.apply_command(1, &pass()).expect("p1 pass")
+    };
+    assert_eq!(
+        e.state.objects.get(&bear).expect("bear").zone,
+        tricerules_core::Zone::Hand
+    );
+    assert_eq!(e.state.players[1].hand.len(), p1_hand_before + 1);
+    assert!(!e.state.players[1].battlefield.contains(&bear));
+    let moves = permanents_moved_in(&batch);
+    assert!(
+        moves.iter().any(|m| m.object_id == bear
+            && m.destination
+                == tricerules_proto::ruled::v1::permanent_moved::Destination::Hand as i32),
+        "expected PermanentMoved(Hand) for bear, got {moves:?}"
+    );
+}
+
+#[test]
+fn unsummon_rejects_land_target() {
+    let decks = Some(vec![
+        vec![
+            "island".into(),
+            "unsummon".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+        ],
+        vec![
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(2611, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let island_idx = hand_index_for_card(&e, 0, "island");
+    e.apply_command(0, &play_land(island_idx))
+        .expect("play island");
+    let island_oid = battlefield_object_for_card(&e, 0, "island");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            u: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("mana");
+    let idx = hand_index_for_card(&e, 0, "unsummon");
+    let err = e
+        .apply_command(
+            0,
+            &cast_spell(
+                idx,
+                vec![TargetRef {
+                    object_id: island_oid,
+                }],
+            ),
+        )
+        .expect_err("unsummon cannot target land");
+    assert!(
+        format!("{err:?}").contains("creature"),
+        "unexpected: {err:?}"
+    );
+}
+
+#[test]
+fn boomerang_returns_target_land_to_owner_hand() {
+    let decks = Some(vec![
+        vec![
+            "island".into(),
+            "boomerang".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+        ],
+        vec![
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(2612, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let island_idx = hand_index_for_card(&e, 0, "island");
+    e.apply_command(0, &play_land(island_idx))
+        .expect("play island");
+    let island_oid = battlefield_object_for_card(&e, 0, "island");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            u: 2,
+            ..Default::default()
+        }),
+    )
+    .expect("mana for UU");
+    let idx = hand_index_for_card(&e, 0, "boomerang");
+    e.apply_command(
+        0,
+        &cast_spell(
+            idx,
+            vec![TargetRef {
+                object_id: island_oid,
+            }],
+        ),
+    )
+    .expect("cast boomerang on own island");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass()).expect("p1 pass");
+    assert_eq!(
+        e.state.objects.get(&island_oid).expect("island").zone,
+        tricerules_core::Zone::Hand
+    );
+    assert!(!e.state.players[0].battlefield.contains(&island_oid));
+}
+
+#[test]
+fn tome_scour_mills_five_cards_from_target_player() {
+    let mut p1_deck = vec!["forest".into(); 30];
+    // Sentinel cards at the top so we can assert ordering.
+    p1_deck[0] = "grizzly_bears".into();
+    p1_deck[1] = "savannah_lions".into();
+    p1_deck[2] = "coral_merfolk".into();
+    p1_deck[3] = "walking_corpse".into();
+    p1_deck[4] = "balduvian_barbarians".into();
+    let decks = Some(vec![island_only_deck(), p1_deck]);
+    let mut e = GameEngine::new(2613, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    // Place tome_scour in P0 hand directly to avoid deck ordering churn.
+    take_card_from_library_to_hand(&mut e, 0, "island");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            u: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("mana");
+    // Inject the spell into hand from the registry.
+    let scour_id = {
+        let id = e.state.next_object_id;
+        e.state.next_object_id += 1;
+        e.state.objects.insert(
+            id,
+            tricerules_core::state::GameObject {
+                id,
+                owner: 0,
+                card_id: "tome_scour".into(),
+                zone: tricerules_core::Zone::Hand,
+                tapped: false,
+                summoning_sick: false,
+                power: None,
+                toughness: None,
+                damage: 0,
+                plus_one_plus_one: 0,
+                minus_one_minus_one: 0,
+            },
+        );
+        e.state.players[0].hand.push(id);
+        id
+    };
+    let scour_idx = e.state.players[0]
+        .hand
+        .iter()
+        .position(|&oid| oid == scour_id)
+        .expect("scour in hand");
+    let lib_before = e.state.players[1].library.len();
+    let grave_before = e.state.players[1].graveyard.len();
+    e.apply_command(0, &cast_spell(scour_idx, target_player(1)))
+        .expect("cast tome scour");
+    let batch = {
+        e.apply_command(0, &pass()).expect("p0 pass");
+        e.apply_command(1, &pass()).expect("p1 pass")
+    };
+    assert_eq!(e.state.players[1].library.len(), lib_before - 5);
+    assert_eq!(e.state.players[1].graveyard.len(), grave_before + 5);
+    let moves = permanents_moved_in(&batch);
+    let to_grave: Vec<_> = moves
+        .iter()
+        .filter(|m| {
+            m.owner_player_id == 1
+                && m.destination
+                    == tricerules_proto::ruled::v1::permanent_moved::Destination::Graveyard as i32
+        })
+        .collect();
+    assert_eq!(to_grave.len(), 5, "five PermanentMoved->Graveyard events");
+}
+
+#[test]
+fn tome_scour_caps_at_library_size() {
+    let mut p1_deck = vec!["forest".into(); 8];
+    let decks = Some(vec![island_only_deck(), p1_deck.split_off(0)]);
+    let mut e = GameEngine::new(2614, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    // Manually drain P1 library to 2 cards.
+    while e.state.players[1].library.len() > 2 {
+        let oid = e.state.players[1].library.pop_back().unwrap();
+        e.state.players[1].graveyard.push(oid);
+        if let Some(o) = e.state.objects.get_mut(&oid) {
+            o.zone = tricerules_core::Zone::Graveyard;
+        }
+    }
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            u: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("mana");
+    let scour_id = {
+        let id = e.state.next_object_id;
+        e.state.next_object_id += 1;
+        e.state.objects.insert(
+            id,
+            tricerules_core::state::GameObject {
+                id,
+                owner: 0,
+                card_id: "tome_scour".into(),
+                zone: tricerules_core::Zone::Hand,
+                tapped: false,
+                summoning_sick: false,
+                power: None,
+                toughness: None,
+                damage: 0,
+                plus_one_plus_one: 0,
+                minus_one_minus_one: 0,
+            },
+        );
+        e.state.players[0].hand.push(id);
+        id
+    };
+    let scour_idx = e.state.players[0]
+        .hand
+        .iter()
+        .position(|&oid| oid == scour_id)
+        .expect("scour in hand");
+    e.apply_command(0, &cast_spell(scour_idx, target_player(1)))
+        .expect("cast scour");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass()).expect("p1 pass");
+    // Library should be empty (only had 2 to mill), graveyard should hold both — engine must not panic.
+    assert_eq!(e.state.players[1].library.len(), 0);
 }

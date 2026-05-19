@@ -1,0 +1,8 @@
+(
+  id: "angels_mercy",
+  name: "Angel's Mercy",
+  mana_cost: "3WW",
+  types: ["Sorcery"],
+  is_sorcery: true,
+  spell_effect: "angels_mercy",
+)

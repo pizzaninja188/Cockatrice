@@ -1,0 +1,8 @@
+(
+  id: "eyeblights_ending",
+  name: "Eyeblight's Ending",
+  mana_cost: "1B",
+  types: ["Sorcery"],
+  is_sorcery: true,
+  spell_effect: "eyeblights_ending",
+)

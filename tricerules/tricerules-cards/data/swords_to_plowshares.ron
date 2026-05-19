@@ -1,0 +1,8 @@
+(
+  id: "swords_to_plowshares",
+  name: "Swords to Plowshares",
+  mana_cost: "W",
+  types: ["Instant"],
+  is_instant: true,
+  spell_effect: "swords_to_plowshares",
+)

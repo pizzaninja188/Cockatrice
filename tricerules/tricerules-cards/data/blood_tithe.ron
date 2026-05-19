@@ -1,0 +1,8 @@
+(
+  id: "blood_tithe",
+  name: "Blood Tithe",
+  mana_cost: "2B",
+  types: ["Sorcery"],
+  is_sorcery: true,
+  spell_effect: "blood_tithe",
+)
