@@ -1,8 +1,8 @@
 //! Core rules processing (vanilla core ΓÇö simplified combat & mana).
 
 use crate::state::{
-    CombatState, GameObject, GameState, ObjectId, OpeningSequence, PlayerId, PlayerState, StackItem,
-    TurnStep, Zone,
+    CombatState, GameObject, GameState, ObjectId, OpeningSequence, PlayerId, PlayerState,
+    StackItem, TurnStep, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -234,7 +234,11 @@ impl GameEngine {
         match cmd.cmd.as_ref() {
             Some(Cmd::ChooseStartingPlayer(ch)) => {
                 let chooser = {
-                    let op = self.state.opening.as_ref().ok_or(EngineError::Illegal("opening"))?;
+                    let op = self
+                        .state
+                        .opening
+                        .as_ref()
+                        .ok_or(EngineError::Illegal("opening"))?;
                     if op.starting_player.is_some() {
                         return Err(EngineError::Illegal("starting player already chosen"));
                     }
@@ -248,7 +252,11 @@ impl GameEngine {
                     .player_idx(sp)
                     .ok_or(EngineError::UnknownPlayer(sp))?;
                 {
-                    let op = self.state.opening.as_mut().ok_or(EngineError::Illegal("opening"))?;
+                    let op = self
+                        .state
+                        .opening
+                        .as_mut()
+                        .ok_or(EngineError::Illegal("opening"))?;
                     op.starting_player = Some(sp);
                     op.mulligan_actor = Some(sp);
                 }
@@ -272,7 +280,11 @@ impl GameEngine {
             }
             Some(Cmd::Mulligan(md)) => {
                 let actor = {
-                    let op = self.state.opening.as_ref().ok_or(EngineError::Illegal("opening"))?;
+                    let op = self
+                        .state
+                        .opening
+                        .as_ref()
+                        .ok_or(EngineError::Illegal("opening"))?;
                     if op.bottom.is_some() {
                         return Err(EngineError::Illegal("finish bottoming first"));
                     }
@@ -345,8 +357,15 @@ impl GameEngine {
             Some(Cmd::PutOpeningHandOnBottom(pb)) => {
                 let idx = self.state.player_idx(player).unwrap();
                 let (owner, rem_before) = {
-                    let op = self.state.opening.as_ref().ok_or(EngineError::Illegal("opening"))?;
-                    let (bp, rem) = op.bottom.as_ref().ok_or(EngineError::Illegal("not bottoming"))?;
+                    let op = self
+                        .state
+                        .opening
+                        .as_ref()
+                        .ok_or(EngineError::Illegal("opening"))?;
+                    let (bp, rem) = op
+                        .bottom
+                        .as_ref()
+                        .ok_or(EngineError::Illegal("not bottoming"))?;
                     if *bp != player {
                         return Err(EngineError::Illegal("not your bottom step"));
                     }
@@ -410,7 +429,11 @@ impl GameEngine {
     ) -> Result<(), EngineError> {
         let other_idx = 1 - mulliganed_idx;
         let next_idx = {
-            let op = eng.state.opening.as_mut().ok_or(EngineError::Illegal("opening"))?;
+            let op = eng
+                .state
+                .opening
+                .as_mut()
+                .ok_or(EngineError::Illegal("opening"))?;
             if op.resolved[other_idx] {
                 mulliganed_idx
             } else {
@@ -800,9 +823,11 @@ impl GameEngine {
         let mut b = RuledEventBatch::default();
         let block_pairs_for_event: Vec<rv1::BlockPair> = pairs.to_vec();
         b.events.push(rv1::RuledEvent {
-            ev: Some(rv1::ruled_event::Ev::BlockersDeclared(rv1::BlockersDeclared {
-                block_pairs: block_pairs_for_event,
-            })),
+            ev: Some(rv1::ruled_event::Ev::BlockersDeclared(
+                rv1::BlockersDeclared {
+                    block_pairs: block_pairs_for_event,
+                },
+            )),
         });
         self.clear_all_mana_pools();
         // MTG timing: blockers are declared in declare-blockers, then players get priority
@@ -812,7 +837,8 @@ impl GameEngine {
             self.state.priority_idx = i;
         }
         self.state.passes_since_stack_change = 0;
-        b.events.push(ev_log(format!("P{} {}", defending_player, block_line)));
+        b.events
+            .push(ev_log(format!("P{} {}", defending_player, block_line)));
         b.events.push(ev_priority_changed(self));
         fill_legal(&mut b, self);
         Ok(b)
@@ -828,10 +854,7 @@ impl GameEngine {
             .combat
             .as_ref()
             .ok_or(EngineError::Illegal("not in combat"))?;
-        if !c.blockers_declared
-            || !c.damage_assignment_needed
-            || !c.assign_combat_damage_phase
-        {
+        if !c.blockers_declared || !c.damage_assignment_needed || !c.assign_combat_damage_phase {
             return Err(EngineError::Illegal("combat damage assignment not open"));
         }
         let expected_blockers = c
@@ -1264,7 +1287,9 @@ impl GameEngine {
                     // then BlockersDeclared sets it true; order matters).
                     ev.push(RuledEvent {
                         ev: Some(rv1::ruled_event::Ev::BlockersDeclared(
-                            rv1::BlockersDeclared { block_pairs: vec![] },
+                            rv1::BlockersDeclared {
+                                block_pairs: vec![],
+                            },
                         )),
                     });
                     ev.push(ev_priority_changed(self));
@@ -1287,9 +1312,10 @@ impl GameEngine {
                     .combat
                     .clone()
                     .ok_or(EngineError::Illegal("combat?"))?;
-                let multiblock_missing = c.blockers.iter().any(|(atk, blks)| {
-                    blks.len() > 1 && !c.damage_assignments.contains_key(atk)
-                });
+                let multiblock_missing = c
+                    .blockers
+                    .iter()
+                    .any(|(atk, blks)| blks.len() > 1 && !c.damage_assignments.contains_key(atk));
                 if multiblock_missing {
                     if !c.assign_combat_damage_phase {
                         if let Some(cc) = self.state.combat.as_mut() {
@@ -1587,10 +1613,7 @@ impl GameEngine {
         let legend_events = self.apply_legend_sbas()?;
         ev.extend(legend_events);
         self.apply_sbas(&mut ev)?;
-        ev.push(ev_log(format!(
-            "Turn {}: P{}",
-            self.state.turn, ap
-        )));
+        ev.push(ev_log(format!("Turn {}: P{}", self.state.turn, ap)));
         ev.push(ev_priority_changed(self));
         Ok(finish_with_events(self, ev))
     }
@@ -1654,9 +1677,7 @@ impl GameEngine {
             &targets,
         );
         if fizzle {
-            events.push(ev_log(format!(
-                "{spell_label} fizzles (no legal targets)."
-            )));
+            events.push(ev_log(format!("{spell_label} fizzles (no legal targets).")));
             return Ok(());
         }
 
@@ -1742,9 +1763,7 @@ impl GameEngine {
                             .map(|d| d.name.as_str())
                             .unwrap_or("spell");
                         move_object_to_zone(&mut self.state, st.id, Zone::Graveyard)?;
-                        events.push(ev_log(format!(
-                            "{spell_label} counters {tgt}"
-                        )));
+                        events.push(ev_log(format!("{spell_label} counters {tgt}")));
                     }
                 }
             }
@@ -1874,7 +1893,8 @@ impl GameEngine {
         }
         self.state.passes_since_stack_change = 0;
         let mut batch = RuledEventBatch::default();
-        batch.events
+        batch
+            .events
             .push(ev_log(format!("P{} played {}", player, def.name)));
         fill_legal(&mut batch, self);
         Ok(batch)
@@ -1980,12 +2000,13 @@ impl GameEngine {
         let mut batch = RuledEventBatch::default();
         batch.events.push(self.ev_zone_view_sync());
         if let Some(op) = &self.state.opening {
-            batch.events.push(ev_phase_labeled(self, "opening_choose_first"));
+            batch
+                .events
+                .push(ev_phase_labeled(self, "opening_choose_first"));
             batch.events.push(ev_priority_changed(self));
-            batch.events.push(ev_log(format!(
-                "P{} chooses who goes first.",
-                op.chooser
-            )));
+            batch
+                .events
+                .push(ev_log(format!("P{} chooses who goes first.", op.chooser)));
             fill_legal(&mut batch, self);
             return batch;
         }
@@ -2222,10 +2243,7 @@ fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
 fn priority_locked_for_combat_declaration(state: &GameState) -> bool {
     match state.turn_step {
         TurnStep::DeclareAttackers => state.combat.as_ref().is_some_and(|c| !c.attackers_declared),
-        TurnStep::DeclareBlockers => state
-            .combat
-            .as_ref()
-            .is_some_and(|c| !c.blockers_declared),
+        TurnStep::DeclareBlockers => state.combat.as_ref().is_some_and(|c| !c.blockers_declared),
         _ => false,
     }
 }
@@ -2277,10 +2295,7 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
     }
     // Assign combat damage sub-phase: active player must assign before anything else.
     if let Some(c) = &eng.state.combat {
-        if c.blockers_declared
-            && c.damage_assignment_needed
-            && c.assign_combat_damage_phase
-        {
+        if c.blockers_declared && c.damage_assignment_needed && c.assign_combat_damage_phase {
             if pid == eng.state.active_player_id() {
                 let mut out = Vec::new();
                 for (&att, blks) in &c.blockers {
@@ -2572,11 +2587,7 @@ fn basic_land_color_from_object(obj: &GameObject, registry: &CardRegistry) -> Op
 }
 
 /// Player or creature permanent on the battlefield (matches cast validation for `bolt`).
-fn damage_spell_target_legal(
-    state: &GameState,
-    registry: &CardRegistry,
-    tid: ObjectId,
-) -> bool {
+fn damage_spell_target_legal(state: &GameState, registry: &CardRegistry, tid: ObjectId) -> bool {
     if state.player_idx(tid as i32).is_some() {
         return true;
     }
@@ -2586,22 +2597,14 @@ fn damage_spell_target_legal(
         .is_some_and(|o| o.zone == Zone::Battlefield && o.is_creature(registry))
 }
 
-fn pump_spell_target_legal(
-    state: &GameState,
-    registry: &CardRegistry,
-    tid: ObjectId,
-) -> bool {
+fn pump_spell_target_legal(state: &GameState, registry: &CardRegistry, tid: ObjectId) -> bool {
     state
         .objects
         .get(&tid)
         .is_some_and(|o| o.zone == Zone::Battlefield && o.is_creature(registry))
 }
 
-fn destroy_spell_target_legal(
-    state: &GameState,
-    registry: &CardRegistry,
-    tid: ObjectId,
-) -> bool {
+fn destroy_spell_target_legal(state: &GameState, registry: &CardRegistry, tid: ObjectId) -> bool {
     state
         .objects
         .get(&tid)

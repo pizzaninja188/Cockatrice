@@ -71,7 +71,6 @@ private:
     void updatePassPriorityButtonText();
     void updateCombatButtonsVisibility();
 
-    QLabel *promptTitleLabel;
     QLabel *promptLabel;
     QPushButton *passPriorityButton;
     QPushButton *confirmAttackersButton;
@@ -90,15 +89,12 @@ private:
     bool targetingModeEnabled = false;
     bool ruledStackHasItems = false;
     bool cleanupDiscardMode = false;
-    int cleanupCardsRequired = 0;
-    int cleanupCardsSelected = 0;
     QString activePlayerName;
     QString priorityPlayerName;
     bool localPlayerIsActive = false;
     int ruledOpeningUiKind = 0;
     int ruledOpeningMulliganCount = 0;
     QVector<int> ruledOpeningPickSeatIds;
-    QHBoxLayout *openingRowLayout = nullptr;
     QPushButton *openingPickSeatButton1 = nullptr;
     QPushButton *openingPickSeatButton2 = nullptr;
     QPushButton *openingKeepButton = nullptr;

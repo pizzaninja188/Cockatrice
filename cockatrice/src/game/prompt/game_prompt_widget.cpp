@@ -110,15 +110,13 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     layout->setContentsMargins(6, 6, 6, 6);
     layout->setSpacing(4);
 
-    promptTitleLabel = nullptr;
-
     promptLabel = new QLabel(this);
     promptLabel->setObjectName("promptLabel");
     promptLabel->setWordWrap(true);
     promptLabel->setMinimumHeight(34);
     layout->addWidget(promptLabel);
 
-    openingRowLayout = new QHBoxLayout;
+    auto *openingRowLayout = new QHBoxLayout;
     openingRowLayout->setSpacing(4);
     openingPickSeatButton1 = new QPushButton(this);
     openingPickSeatButton2 = new QPushButton(this);
@@ -335,8 +333,6 @@ void GamePromptWidget::setRuledOpeningBottomProgress(int /*required*/, int selec
 void GamePromptWidget::setCleanupDiscardMode(bool active, int cardsRequired, int cardsSelected)
 {
     cleanupDiscardMode = active;
-    cleanupCardsRequired = cardsRequired;
-    cleanupCardsSelected = cardsSelected;
     if (active && cardsRequired > 0) {
         setPromptText(tr("Cleanup — discard %2 card(s) to reach hand size 7. Selected: %1 of %2. Click hand cards to "
                          "toggle; click again to deselect.")
