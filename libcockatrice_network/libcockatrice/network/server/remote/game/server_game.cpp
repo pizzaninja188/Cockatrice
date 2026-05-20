@@ -1357,27 +1357,45 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
         if (!owner) {
             continue;
         }
-        const auto preIt = preBatchOidMaps.constFind(ownerId);
-        if (preIt == preBatchOidMaps.constEnd()) {
-            continue;
-        }
-        const auto cardIdIt = preIt->constFind(oid);
-        if (cardIdIt == preIt->constEnd()) {
-            continue;
-        }
         Server_Card *card = nullptr;
-        // DECK is included so mill effects (library -> graveyard) can be relayed.
-        for (const char *zn : {ZoneNames::TABLE, ZoneNames::HAND, ZoneNames::STACK, ZoneNames::DECK}) {
-            Server_CardZone *z = owner->getZones().value(zn);
-            if (!z) {
-                continue;
-            }
-            if (Server_Card *c = z->getCard(*cardIdIt, nullptr, false)) {
-                card = c;
-                break;
+        const auto preIt = preBatchOidMaps.constFind(ownerId);
+        if (preIt != preBatchOidMaps.constEnd()) {
+            const auto cardIdIt = preIt->constFind(oid);
+            if (cardIdIt != preIt->constEnd()) {
+                for (const char *zn : {ZoneNames::TABLE, ZoneNames::HAND, ZoneNames::STACK, ZoneNames::DECK}) {
+                    Server_CardZone *z = owner->getZones().value(zn);
+                    if (!z) {
+                        continue;
+                    }
+                    if (Server_Card *c = z->getCard(*cardIdIt, nullptr, false)) {
+                        card = c;
+                        break;
+                    }
+                }
             }
         }
         if (!card) {
+            // Library cards (mill: library -> graveyard) are never registered in the engine-oid
+            // map (the library is synced by name list, not object ids), so the lookup above
+            // misses. Resolve by tricerules card_id within the owner's deck instead; physical
+            // instances of a given printing are fungible, so any matching-named card works. Each
+            // PermanentMoved is a separate iteration and moveCard removes the card, so repeated
+            // mills of the same card name consume distinct deck cards.
+            const QString wantCardId = QString::fromStdString(pm.card_id());
+            if (!wantCardId.isEmpty()) {
+                if (Server_CardZone *deck = owner->getZones().value(ZoneNames::DECK)) {
+                    for (Server_Card *c : deck->getCards()) {
+                        if (cardNameToTricerulesId(c->getName()) == wantCardId) {
+                            card = c;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        if (!card) {
+            qWarning().noquote() << "ruled PermanentMoved unresolved: oid" << oid << "card_id"
+                                 << QString::fromStdString(pm.card_id()) << "owner" << ownerId;
             continue;
         }
         Server_CardZone *startZone = card->getZone();
@@ -1404,8 +1422,19 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
         if (!targetZone) {
             continue;
         }
+        // Hidden zones (the library) address cards by position index in moveCard/getCard, not by
+        // intrinsic card id. Mill moves come out of the deck, so pass the card's current position;
+        // public/private zones (table, hand) use the card id. Position is recomputed per event
+        // because each successful move re-indexes the hidden zone.
+        int moveCardId = card->getId();
+        if (startZone->getType() == ServerInfo_Zone::HiddenZone) {
+            moveCardId = startZone->getCards().indexOf(card);
+            if (moveCardId < 0) {
+                continue;
+            }
+        }
         CardToMove cardToMove;
-        cardToMove.set_card_id(card->getId());
+        cardToMove.set_card_id(moveCardId);
         if (owner->moveCard(permanentMoveGes, startZone, QList<const CardToMove *>() << &cardToMove, targetZone, -1, 0,
                             true) == Response::RespOk) {
             permanentMoveGesHasEvents = true;

@@ -15,7 +15,7 @@ pub enum SpellEffectKind {
     ExileTargetGainLifeEqualToPower,
     ReturnTargetCreatureToHand,
     ReturnTargetPermanentToHand,
-    MillTargetPlayer { count: u32 },
+    MillTargetPlayer { count: u32, opponent_only: bool },
     None,
 }
 
@@ -34,11 +34,17 @@ pub fn spell_effect_from_key(key: &str) -> SpellEffectKind {
         "bump_in_the_night" => SpellEffectKind::TargetOpponentLosesLife { amount: 3 },
         "blood_tithe" => SpellEffectKind::EachOpponentLosesLifeYouGainEqual { amount: 3 },
         "swords_to_plowshares" => SpellEffectKind::ExileTargetGainLifeEqualToPower,
-        "eyeblights_ending" => SpellEffectKind::ExileTarget,
+        "eyeblights_ending" => SpellEffectKind::DestroyTarget,
         "unsummon" => SpellEffectKind::ReturnTargetCreatureToHand,
         "boomerang" => SpellEffectKind::ReturnTargetPermanentToHand,
-        "tome_scour" => SpellEffectKind::MillTargetPlayer { count: 5 },
-        "mind_sculpt" => SpellEffectKind::MillTargetPlayer { count: 7 },
+        "tome_scour" => SpellEffectKind::MillTargetPlayer {
+            count: 5,
+            opponent_only: false,
+        },
+        "mind_sculpt" => SpellEffectKind::MillTargetPlayer {
+            count: 7,
+            opponent_only: true,
+        },
         _ => SpellEffectKind::None,
     }
 }

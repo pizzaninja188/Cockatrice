@@ -273,6 +273,9 @@ message PermanentMoved {
     DESTINATION_EXILE = 4;
   }
   Destination destination = 3;
+  // tricerules card id (lowercase_underscore). Lets servers resolve cards that
+  // have no engine-oid mapping (e.g. milled library cards) by name within a zone.
+  string card_id = 4;
 }
 
 // A player's life total changed. delta is signed (negative = loss).

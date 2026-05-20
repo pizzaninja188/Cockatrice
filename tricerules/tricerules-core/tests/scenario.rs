@@ -1433,7 +1433,7 @@ fn permanents_moved_in(
         .events
         .iter()
         .filter_map(|ev| match &ev.ev {
-            Some(Ev::PermanentMoved(pm)) => Some(*pm),
+            Some(Ev::PermanentMoved(pm)) => Some(pm.clone()),
             _ => None,
         })
         .collect()
@@ -4421,7 +4421,7 @@ fn blood_tithe_drains_each_opponent_and_gains_controller_equal_life() {
 }
 
 #[test]
-fn eyeblights_ending_exiles_target_creature() {
+fn eyeblights_ending_destroys_target_creature() {
     let decks = Some(vec![
         vec![
             "swamp".into(),
@@ -4455,16 +4455,16 @@ fn eyeblights_ending_exiles_target_creature() {
     };
     assert_eq!(
         e.state.objects.get(&bear).expect("bear").zone,
-        tricerules_core::Zone::Exile
+        tricerules_core::Zone::Graveyard
     );
-    assert!(e.state.players[1].exile.contains(&bear));
+    assert!(e.state.players[1].graveyard.contains(&bear));
     assert!(!e.state.players[1].battlefield.contains(&bear));
     let moves = permanents_moved_in(&batch);
     assert!(
         moves.iter().any(|m| m.object_id == bear
             && m.destination
-                == tricerules_proto::ruled::v1::permanent_moved::Destination::Exile as i32),
-        "expected PermanentMoved(Exile) for bear, got {moves:?}"
+                == tricerules_proto::ruled::v1::permanent_moved::Destination::Graveyard as i32),
+        "expected PermanentMoved(Graveyard) for bear, got {moves:?}"
     );
 }
 
@@ -4797,6 +4797,10 @@ fn tome_scour_mills_five_cards_from_target_player() {
         })
         .collect();
     assert_eq!(to_grave.len(), 5, "five PermanentMoved->Graveyard events");
+    assert!(
+        to_grave.iter().all(|m| !m.card_id.is_empty()),
+        "milled PermanentMoved events must carry card_id so servers can resolve library cards"
+    );
 }
 
 #[test]
@@ -4854,4 +4858,107 @@ fn tome_scour_caps_at_library_size() {
     e.apply_command(1, &pass()).expect("p1 pass");
     // Library should be empty (only had 2 to mill), graveyard should hold both — engine must not panic.
     assert_eq!(e.state.players[1].library.len(), 0);
+}
+
+#[test]
+fn tome_scour_can_target_controller() {
+    // Tome Scour is Oracle "target player": milling yourself is legal.
+    let decks = Some(vec![island_only_deck(), forest_only_deck()]);
+    let mut e = GameEngine::new(2615, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            u: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("mana");
+    let scour_id = {
+        let id = e.state.next_object_id;
+        e.state.next_object_id += 1;
+        e.state.objects.insert(
+            id,
+            tricerules_core::state::GameObject {
+                id,
+                owner: 0,
+                card_id: "tome_scour".into(),
+                zone: tricerules_core::Zone::Hand,
+                tapped: false,
+                summoning_sick: false,
+                power: None,
+                toughness: None,
+                damage: 0,
+                plus_one_plus_one: 0,
+                minus_one_minus_one: 0,
+            },
+        );
+        e.state.players[0].hand.push(id);
+        id
+    };
+    let scour_idx = e.state.players[0]
+        .hand
+        .iter()
+        .position(|&oid| oid == scour_id)
+        .expect("scour in hand");
+    let lib_before = e.state.players[0].library.len();
+    e.apply_command(0, &cast_spell(scour_idx, target_player(0)))
+        .expect("tome scour targeting its controller is legal");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass()).expect("p1 pass");
+    // Five cards milled from the controller's own library (the resolved sorcery also lands
+    // in the controller's graveyard, so assert the library side for an unambiguous count).
+    assert_eq!(e.state.players[0].library.len(), lib_before - 5);
+}
+
+#[test]
+fn mind_sculpt_rejects_self_target() {
+    // Mind Sculpt is opponent-only in this build: casting at yourself is illegal at cast time.
+    let decks = Some(vec![island_only_deck(), forest_only_deck()]);
+    let mut e = GameEngine::new(2616, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            u: 1,
+            c: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("mana");
+    let sculpt_id = {
+        let id = e.state.next_object_id;
+        e.state.next_object_id += 1;
+        e.state.objects.insert(
+            id,
+            tricerules_core::state::GameObject {
+                id,
+                owner: 0,
+                card_id: "mind_sculpt".into(),
+                zone: tricerules_core::Zone::Hand,
+                tapped: false,
+                summoning_sick: false,
+                power: None,
+                toughness: None,
+                damage: 0,
+                plus_one_plus_one: 0,
+                minus_one_minus_one: 0,
+            },
+        );
+        e.state.players[0].hand.push(id);
+        id
+    };
+    let sculpt_idx = e.state.players[0]
+        .hand
+        .iter()
+        .position(|&oid| oid == sculpt_id)
+        .expect("sculpt in hand");
+    let lib_before = e.state.players[0].library.len();
+    let err = e.apply_command(0, &cast_spell(sculpt_idx, target_player(0)));
+    assert!(
+        err.is_err(),
+        "mind sculpt targeting its controller must be rejected"
+    );
+    // No cards milled from the caster.
+    assert_eq!(e.state.players[0].library.len(), lib_before);
 }

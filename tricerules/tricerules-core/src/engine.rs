@@ -378,13 +378,12 @@ impl GameEngine {
                     .ok_or(EngineError::Illegal("bad hand index"))?;
                 move_object_to_zone(&mut self.state, oid, Zone::Library)?;
                 let rem_after = rem_before - 1;
-                events.push(rv1::RuledEvent {
-                    ev: Some(rv1::ruled_event::Ev::PermanentMoved(rv1::PermanentMoved {
-                        object_id: oid,
-                        owner_player_id: owner,
-                        destination: rv1::permanent_moved::Destination::Library as i32,
-                    })),
-                });
+                events.push(permanent_moved_event(
+                    &self.state,
+                    oid,
+                    owner,
+                    rv1::permanent_moved::Destination::Library,
+                ));
                 if rem_after > 0 {
                     events.push(ev_log(format!(
                         "P{player} puts a card on the bottom ({rem_after} more to place)."
@@ -1538,13 +1537,12 @@ impl GameEngine {
                 .unwrap_or_else(|| "card".into());
             move_object_to_zone(&mut self.state, oid, Zone::Graveyard)?;
             ev.push(ev_log(format!("P{player} discards {card_name} (cleanup)")));
-            ev.push(rv1::RuledEvent {
-                ev: Some(rv1::ruled_event::Ev::PermanentMoved(rv1::PermanentMoved {
-                    object_id: oid,
-                    owner_player_id: owner,
-                    destination: rv1::permanent_moved::Destination::Graveyard as i32,
-                })),
-            });
+            ev.push(permanent_moved_event(
+                &self.state,
+                oid,
+                owner,
+                rv1::permanent_moved::Destination::Graveyard,
+            ));
         }
         self.apply_sbas(&mut ev)?;
         if self.state.players[idx].hand.len() > MAX_HAND_SIZE {
@@ -1743,13 +1741,12 @@ impl GameEngine {
                     let owner = self.state.objects.get(&tid).map(|o| o.owner);
                     destroy_permanent(&mut self.state, tid)?;
                     if let Some(owner_id) = owner {
-                        events.push(rv1::RuledEvent {
-                            ev: Some(rv1::ruled_event::Ev::PermanentMoved(rv1::PermanentMoved {
-                                object_id: tid,
-                                owner_player_id: owner_id,
-                                destination: rv1::permanent_moved::Destination::Graveyard as i32,
-                            })),
-                        });
+                        events.push(permanent_moved_event(
+                            &self.state,
+                            tid,
+                            owner_id,
+                            rv1::permanent_moved::Destination::Graveyard,
+                        ));
                     }
                 }
             }
@@ -1864,13 +1861,12 @@ impl GameEngine {
                     move_object_to_zone(&mut self.state, tid, Zone::Exile)?;
                     events.push(ev_log(format!("{spell_label} exiles {tgt}")));
                     if let Some(owner_id) = owner {
-                        events.push(rv1::RuledEvent {
-                            ev: Some(rv1::ruled_event::Ev::PermanentMoved(rv1::PermanentMoved {
-                                object_id: tid,
-                                owner_player_id: owner_id,
-                                destination: rv1::permanent_moved::Destination::Exile as i32,
-                            })),
-                        });
+                        events.push(permanent_moved_event(
+                            &self.state,
+                            tid,
+                            owner_id,
+                            rv1::permanent_moved::Destination::Exile,
+                        ));
                     }
                 }
             }
@@ -1889,13 +1885,12 @@ impl GameEngine {
                     move_object_to_zone(&mut self.state, tid, Zone::Exile)?;
                     events.push(ev_log(format!("{spell_label} exiles {tgt}")));
                     if let Some(owner_id) = owner {
-                        events.push(rv1::RuledEvent {
-                            ev: Some(rv1::ruled_event::Ev::PermanentMoved(rv1::PermanentMoved {
-                                object_id: tid,
-                                owner_player_id: owner_id,
-                                destination: rv1::permanent_moved::Destination::Exile as i32,
-                            })),
-                        });
+                        events.push(permanent_moved_event(
+                            &self.state,
+                            tid,
+                            owner_id,
+                            rv1::permanent_moved::Destination::Exile,
+                        ));
                     }
                     if power > 0 {
                         if let Some(pi) = self.state.player_idx(target_controller) {
@@ -1931,17 +1926,16 @@ impl GameEngine {
                         "{spell_label} returns {tgt} to its owner's hand"
                     )));
                     if let Some(owner_id) = owner {
-                        events.push(rv1::RuledEvent {
-                            ev: Some(rv1::ruled_event::Ev::PermanentMoved(rv1::PermanentMoved {
-                                object_id: tid,
-                                owner_player_id: owner_id,
-                                destination: rv1::permanent_moved::Destination::Hand as i32,
-                            })),
-                        });
+                        events.push(permanent_moved_event(
+                            &self.state,
+                            tid,
+                            owner_id,
+                            rv1::permanent_moved::Destination::Hand,
+                        ));
                     }
                 }
             }
-            SpellEffectKind::MillTargetPlayer { count } => {
+            SpellEffectKind::MillTargetPlayer { count, .. } => {
                 if let Some(&tid) = targets.first() {
                     if let Some(pi) = self.state.player_idx(tid as i32) {
                         let pid = self.state.players[pi].id;
@@ -1954,16 +1948,12 @@ impl GameEngine {
                             if let Some(o) = self.state.objects.get_mut(&oid) {
                                 o.zone = Zone::Graveyard;
                             }
-                            events.push(rv1::RuledEvent {
-                                ev: Some(rv1::ruled_event::Ev::PermanentMoved(
-                                    rv1::PermanentMoved {
-                                        object_id: oid,
-                                        owner_player_id: pid,
-                                        destination: rv1::permanent_moved::Destination::Graveyard
-                                            as i32,
-                                    },
-                                )),
-                            });
+                            events.push(permanent_moved_event(
+                                &self.state,
+                                oid,
+                                pid,
+                                rv1::permanent_moved::Destination::Graveyard,
+                            ));
                             milled += 1;
                         }
                         events.push(ev_log(format!(
@@ -2148,13 +2138,12 @@ impl GameEngine {
             let owner = self.state.objects.get(&id).map(|o| o.owner);
             if destroy_permanent(&mut self.state, id).is_ok() {
                 if let Some(owner_id) = owner {
-                    out.push(rv1::RuledEvent {
-                        ev: Some(rv1::ruled_event::Ev::PermanentMoved(rv1::PermanentMoved {
-                            object_id: id,
-                            owner_player_id: owner_id,
-                            destination: rv1::permanent_moved::Destination::Graveyard as i32,
-                        })),
-                    });
+                    out.push(permanent_moved_event(
+                        &self.state,
+                        id,
+                        owner_id,
+                        rv1::permanent_moved::Destination::Graveyard,
+                    ));
                 }
             }
         }
@@ -2187,13 +2176,12 @@ impl GameEngine {
                 let owner = self.state.objects.get(&g).map(|o| o.owner);
                 if destroy_permanent(&mut self.state, g).is_ok() {
                     if let Some(owner_id) = owner {
-                        out.push(rv1::RuledEvent {
-                            ev: Some(rv1::ruled_event::Ev::PermanentMoved(rv1::PermanentMoved {
-                                object_id: g,
-                                owner_player_id: owner_id,
-                                destination: rv1::permanent_moved::Destination::Graveyard as i32,
-                            })),
-                        });
+                        out.push(permanent_moved_event(
+                            &self.state,
+                            g,
+                            owner_id,
+                            rv1::permanent_moved::Destination::Graveyard,
+                        ));
                     }
                 }
             }
@@ -2620,6 +2608,29 @@ fn draw_card(
     Ok(())
 }
 
+/// Build a `PermanentMoved` event, stamping the tricerules `card_id` from the object so
+/// servers can resolve cards that have no engine-oid mapping (e.g. milled library cards).
+fn permanent_moved_event(
+    state: &GameState,
+    oid: ObjectId,
+    owner_player_id: PlayerId,
+    destination: rv1::permanent_moved::Destination,
+) -> rv1::RuledEvent {
+    let card_id = state
+        .objects
+        .get(&oid)
+        .map(|o| o.card_id.clone())
+        .unwrap_or_default();
+    rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::PermanentMoved(rv1::PermanentMoved {
+            object_id: oid,
+            owner_player_id,
+            destination: destination as i32,
+            card_id,
+        })),
+    }
+}
+
 fn move_object_to_zone(state: &mut GameState, oid: ObjectId, z: Zone) -> Result<(), EngineError> {
     let owner = state
         .objects
@@ -2963,8 +2974,7 @@ fn validate_spell_targets(
                 ));
             }
         }
-        SpellEffectKind::TargetPlayerGainsLife { .. }
-        | SpellEffectKind::MillTargetPlayer { .. } => {
+        SpellEffectKind::TargetPlayerGainsLife { .. } => {
             if targets.len() != 1 {
                 return Err(EngineError::Illegal(
                     "this spell requires exactly one player target",
@@ -2974,6 +2984,24 @@ fn validate_spell_targets(
             if !player_target_legal(state, target) {
                 return Err(EngineError::Illegal(
                     "target must be a player still in the game",
+                ));
+            }
+        }
+        SpellEffectKind::MillTargetPlayer { opponent_only, .. } => {
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal(
+                    "mill spells require exactly one player target",
+                ));
+            }
+            let target = targets[0].object_id;
+            if !player_target_legal(state, target) {
+                return Err(EngineError::Illegal(
+                    "target must be a player still in the game",
+                ));
+            }
+            if opponent_only && target as i32 == caster {
+                return Err(EngineError::Illegal(
+                    "this mill spell must target an opponent (cannot target yourself)",
                 ));
             }
         }

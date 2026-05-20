@@ -831,11 +831,22 @@ bool spellAcceptsPlayerTarget(const QString &spellName)
     return false;
 }
 
-// Subset of player-target spells that may NOT target their controller (Oracle "Target opponent").
+// Subset of player-target spells that may NOT target their controller. Bump in the Night is
+// Oracle "Target opponent"; Mind Sculpt is restricted to opponents in this engine build
+// (Tome Scour stays any-player, matching Oracle "target player").
 bool spellIsOpponentOnly(const QString &spellName)
 {
     const QString sn = spellName.trimmed();
-    return sn.compare(QStringLiteral("Bump in the Night"), Qt::CaseInsensitive) == 0;
+    static const QStringList opponentOnlySpells = {
+        QStringLiteral("Bump in the Night"),
+        QStringLiteral("Mind Sculpt"),
+    };
+    for (const QString &name : opponentOnlySpells) {
+        if (sn.compare(name, Qt::CaseInsensitive) == 0) {
+            return true;
+        }
+    }
+    return false;
 }
 } // namespace
 
