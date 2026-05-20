@@ -28,4 +28,8 @@ pub struct CardDefinition {
     /// Legendary supertype (for SBA: legend rule)
     #[serde(default)]
     pub is_legendary: bool,
+    /// Implementation tracking only (ignored by the engine):
+    /// `Some("what's missing")` = partially implemented; `None` = fully implemented.
+    #[serde(default)]
+    pub partial: Option<String>,
 }

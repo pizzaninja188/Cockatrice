@@ -9,6 +9,17 @@ serde.workspace = true
 ron.workspace = true
 thiserror.workspace = true
 once_cell = "1"
+roxmltree = { version = "0.20", optional = true }
 
 [dev-dependencies]
 proptest.workspace = true
+
+# Implementation-tracking checklist generator (see src/bin/gen_checklist.rs).
+# Gated so default builds/CI don't pull roxmltree.
+[features]
+checklist = ["dep:roxmltree"]
+
+[[bin]]
+name = "gen-checklist"
+path = "src/bin/gen_checklist.rs"
+required-features = ["checklist"]

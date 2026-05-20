@@ -5,4 +5,5 @@
   types: ["Sorcery"],
   is_sorcery: true,
   spell_effect: "eyeblights_ending",
+  partial: "destroys any target creature; the 'non-Elf' targeting restriction is not enforced",
 )

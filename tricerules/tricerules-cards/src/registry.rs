@@ -38,6 +38,11 @@ impl CardRegistry {
         self.by_id.get(id)
     }
 
+    /// Iterate over every loaded card definition (order is unspecified).
+    pub fn definitions(&self) -> impl Iterator<Item = &CardDefinition> {
+        self.by_id.values()
+    }
+
     pub fn global() -> &'static RwLock<CardRegistry> {
         &GLOBAL
     }
