@@ -4,5 +4,5 @@
   mana_cost: "U",
   types: ["Sorcery"],
   is_sorcery: true,
-  spell_effect: "tome_scour",
+  spell_effect: MillTargetPlayer(count: 5, target: AnyPlayer),
 )

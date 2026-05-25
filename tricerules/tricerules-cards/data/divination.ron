@@ -4,5 +4,5 @@
   mana_cost: "2U",
   types: ["Sorcery"],
   is_sorcery: true,
-  spell_effect: "divination",
+  spell_effect: Draw(count: 2),
 )

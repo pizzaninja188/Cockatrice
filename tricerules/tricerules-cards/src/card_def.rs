@@ -1,3 +1,4 @@
+use crate::primitives::SpellEffectKind;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,9 +23,10 @@ pub struct CardDefinition {
     pub power: Option<u32>,
     #[serde(default)]
     pub toughness: Option<u32>,
-    /// Effect key for data-driven spells (see primitives)
+    /// Data-driven spell effect (see [`SpellEffectKind`]); deserialized
+    /// directly from RON, e.g. `DamageTarget(amount: 3, target: AnyTarget)`.
     #[serde(default)]
-    pub spell_effect: Option<String>,
+    pub spell_effect: Option<SpellEffectKind>,
     /// Legendary supertype (for SBA: legend rule)
     #[serde(default)]
     pub is_legendary: bool,

@@ -1,97 +1,114 @@
 //! High-level spell effects referenced by `CardDefinition.spell_effect`.
+//!
+//! These are the generic, data-driven primitives of the hybrid card model: a
+//! card's RON `spell_effect` deserializes straight into [`SpellEffectKind`]
+//! (e.g. `DamageTarget(amount: 3, target: AnyTarget)`), so numeric parameters
+//! and targeting live in card data, not in code.
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+
+/// What a single target must be. Deliberately a small, flat enum covering only
+/// the distinctions the engine makes today; richer characteristic-based filters
+/// (creature type, color, etc.) are deferred to the future Rust scripting tier
+/// rather than modeled here.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TargetSpec {
+    /// Creature or player (later expands to planeswalker/battle).
+    AnyTarget,
+    /// A creature on the battlefield.
+    Creature,
+    /// Any player still in the game, including the caster.
+    AnyPlayer,
+    /// Any player still in the game except the caster.
+    OpponentPlayer,
+}
+
+impl TargetSpec {
+    /// True for the player-only specs (used by startup validation).
+    pub fn is_player(&self) -> bool {
+        matches!(self, TargetSpec::AnyPlayer | TargetSpec::OpponentPlayer)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpellEffectKind {
-    DealDamage { amount: u32 },
+    DamageTarget { amount: u32, target: TargetSpec },
     Draw { count: u32 },
     DestroyTarget,
     PumpTarget { power: i32, toughness: i32 },
     CounterTargetSpell,
     GainLife { amount: u32 },
-    TargetPlayerGainsLife { amount: u32 },
-    TargetOpponentLosesLife { amount: u32 },
+    TargetPlayerGainsLife { amount: u32, target: TargetSpec },
+    TargetPlayerLosesLife { amount: u32, target: TargetSpec },
     EachOpponentLosesLifeYouGainEqual { amount: u32 },
     ExileTarget,
     ExileTargetGainLifeEqualToPower,
     ReturnTargetCreatureToHand,
     ReturnTargetPermanentToHand,
-    MillTargetPlayer { count: u32, opponent_only: bool },
+    MillTargetPlayer { count: u32, target: TargetSpec },
     None,
 }
 
-pub fn spell_effect_from_key(key: &str) -> SpellEffectKind {
-    match key {
-        "bolt" => SpellEffectKind::DealDamage { amount: 3 },
-        "growth" => SpellEffectKind::PumpTarget {
-            power: 3,
-            toughness: 3,
-        },
-        "divination" => SpellEffectKind::Draw { count: 2 },
-        "doom_blade" => SpellEffectKind::DestroyTarget,
-        "counterspell" => SpellEffectKind::CounterTargetSpell,
-        "healing_salve" => SpellEffectKind::TargetPlayerGainsLife { amount: 3 },
-        "angels_mercy" => SpellEffectKind::GainLife { amount: 7 },
-        "bump_in_the_night" => SpellEffectKind::TargetOpponentLosesLife { amount: 3 },
-        "blood_tithe" => SpellEffectKind::EachOpponentLosesLifeYouGainEqual { amount: 3 },
-        "swords_to_plowshares" => SpellEffectKind::ExileTargetGainLifeEqualToPower,
-        "eyeblights_ending" => SpellEffectKind::DestroyTarget,
-        "unsummon" => SpellEffectKind::ReturnTargetCreatureToHand,
-        "boomerang" => SpellEffectKind::ReturnTargetPermanentToHand,
-        "tome_scour" => SpellEffectKind::MillTargetPlayer {
-            count: 5,
-            opponent_only: false,
-        },
-        "mind_sculpt" => SpellEffectKind::MillTargetPlayer {
-            count: 7,
-            opponent_only: true,
-        },
-        _ => SpellEffectKind::None,
+impl SpellEffectKind {
+    /// Startup validation: reject effect/`TargetSpec` combinations the engine
+    /// cannot honor (e.g. a player-life effect pointed at a creature). Returns
+    /// `Err` with a human-readable reason; called from the card registry loader.
+    pub fn validate(&self) -> Result<(), String> {
+        match self {
+            SpellEffectKind::TargetPlayerGainsLife { target, .. }
+            | SpellEffectKind::TargetPlayerLosesLife { target, .. }
+            | SpellEffectKind::MillTargetPlayer { target, .. } => {
+                if target.is_player() {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "player-targeted effect requires AnyPlayer or OpponentPlayer, got {target:?}"
+                    ))
+                }
+            }
+            _ => Ok(()),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
 
     #[test]
-    fn maps_known_keys() {
-        assert!(matches!(
-            spell_effect_from_key("bolt"),
-            SpellEffectKind::DealDamage { amount: 3 }
-        ));
-    }
-
-    proptest! {
-        #[test]
-        fn unknown_keys_are_none(s in "[a-z_]{1,30}") {
-            const KNOWN: &[&str] = &[
-                "bolt",
-                "growth",
-                "divination",
-                "doom_blade",
-                "counterspell",
-                "healing_salve",
-                "angels_mercy",
-                "bump_in_the_night",
-                "blood_tithe",
-                "swords_to_plowshares",
-                "eyeblights_ending",
-                "unsummon",
-                "boomerang",
-                "tome_scour",
-                "mind_sculpt",
-            ];
-            prop_assume!(!KNOWN.contains(&s.as_str()));
-            prop_assert!(matches!(spell_effect_from_key(&s), SpellEffectKind::None));
+    fn player_effect_accepts_player_spec() {
+        assert!(SpellEffectKind::TargetPlayerLosesLife {
+            amount: 3,
+            target: TargetSpec::OpponentPlayer,
         }
+        .validate()
+        .is_ok());
     }
 
     #[test]
-    fn damage_amount_matches_bolt() {
-        assert!(matches!(
-            spell_effect_from_key("bolt"),
-            SpellEffectKind::DealDamage { amount: 3 }
-        ));
+    fn player_effect_rejects_nonplayer_spec() {
+        assert!(SpellEffectKind::TargetPlayerGainsLife {
+            amount: 3,
+            target: TargetSpec::Creature,
+        }
+        .validate()
+        .is_err());
+    }
+
+    #[test]
+    fn damage_accepts_any_spec() {
+        for spec in [
+            TargetSpec::AnyTarget,
+            TargetSpec::Creature,
+            TargetSpec::AnyPlayer,
+            TargetSpec::OpponentPlayer,
+        ] {
+            assert!(SpellEffectKind::DamageTarget {
+                amount: 3,
+                target: spec,
+            }
+            .validate()
+            .is_ok());
+        }
     }
 }

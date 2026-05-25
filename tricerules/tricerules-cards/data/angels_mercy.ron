@@ -4,5 +4,5 @@
   mana_cost: "3WW",
   types: ["Sorcery"],
   is_sorcery: true,
-  spell_effect: "angels_mercy",
+  spell_effect: GainLife(amount: 7),
 )

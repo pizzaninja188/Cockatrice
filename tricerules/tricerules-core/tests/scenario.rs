@@ -79,7 +79,7 @@ fn add_mana_to_pool(m: AddManaToPool) -> RuledCommand {
     }
 }
 
-/// Player targets for `DealDamage` spells use `TargetRef.object_id == player_id` (see engine).
+/// Player targets for `DamageTarget` spells use `TargetRef.object_id == player_id` (see engine).
 fn target_player(pid: i32) -> Vec<TargetRef> {
     vec![TargetRef {
         object_id: pid as u32,

@@ -4,5 +4,5 @@
   mana_cost: "W",
   types: ["Instant"],
   is_instant: true,
-  spell_effect: "swords_to_plowshares",
+  spell_effect: ExileTargetGainLifeEqualToPower,
 )

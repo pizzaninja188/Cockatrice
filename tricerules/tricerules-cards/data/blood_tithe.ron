@@ -4,5 +4,5 @@
   mana_cost: "2B",
   types: ["Sorcery"],
   is_sorcery: true,
-  spell_effect: "blood_tithe",
+  spell_effect: EachOpponentLosesLifeYouGainEqual(amount: 3),
 )

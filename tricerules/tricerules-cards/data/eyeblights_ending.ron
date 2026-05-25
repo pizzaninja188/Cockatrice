@@ -4,6 +4,6 @@
   mana_cost: "1B",
   types: ["Sorcery"],
   is_sorcery: true,
-  spell_effect: "eyeblights_ending",
+  spell_effect: DestroyTarget,
   partial: "destroys any target creature; the 'non-Elf' targeting restriction is not enforced",
 )

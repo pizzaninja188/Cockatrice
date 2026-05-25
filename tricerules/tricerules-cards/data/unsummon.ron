@@ -4,5 +4,5 @@
   mana_cost: "U",
   types: ["Instant"],
   is_instant: true,
-  spell_effect: "unsummon",
+  spell_effect: ReturnTargetCreatureToHand,
 )

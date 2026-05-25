@@ -10,7 +10,7 @@ use rand::seq::SliceRandom;
 use rand::SeedableRng;
 use std::collections::{HashMap, HashSet};
 use thiserror::Error;
-use tricerules_cards::primitives::{spell_effect_from_key, SpellEffectKind};
+use tricerules_cards::primitives::{SpellEffectKind, TargetSpec};
 use tricerules_cards::CardRegistry;
 use tricerules_proto::ruled::v1 as rv1;
 use tricerules_proto::ruled::v1::{
@@ -1658,8 +1658,7 @@ impl GameEngine {
         let effect = self
             .registry
             .get(&card_id)
-            .and_then(|c| c.spell_effect.as_ref())
-            .map(|s| spell_effect_from_key(s))
+            .and_then(|c| c.spell_effect.clone())
             .unwrap_or(SpellEffectKind::None);
 
         let spell_label = self
@@ -1673,6 +1672,7 @@ impl GameEngine {
             &self.registry,
             &effect,
             &targets,
+            controller,
         );
         if fizzle {
             events.push(ev_log(format!("{spell_label} fizzles (no legal targets).")));
@@ -1680,7 +1680,7 @@ impl GameEngine {
         }
 
         match effect {
-            SpellEffectKind::DealDamage { amount } => {
+            SpellEffectKind::DamageTarget { amount, .. } => {
                 if let Some(&tid) = targets.first() {
                     if let Some(pi) = self.state.player_idx(tid as i32) {
                         let pid = self.state.players[pi].id;
@@ -1778,7 +1778,7 @@ impl GameEngine {
                     "P{controller} gains {amount} life ({spell_label})."
                 )));
             }
-            SpellEffectKind::TargetPlayerGainsLife { amount } => {
+            SpellEffectKind::TargetPlayerGainsLife { amount, .. } => {
                 if let Some(&tid) = targets.first() {
                     if let Some(pi) = self.state.player_idx(tid as i32) {
                         let pid = self.state.players[pi].id;
@@ -1796,7 +1796,7 @@ impl GameEngine {
                     }
                 }
             }
-            SpellEffectKind::TargetOpponentLosesLife { amount } => {
+            SpellEffectKind::TargetPlayerLosesLife { amount, .. } => {
                 if let Some(&tid) = targets.first() {
                     if let Some(pi) = self.state.player_idx(tid as i32) {
                         let pid = self.state.players[pi].id;
@@ -2844,21 +2844,42 @@ fn any_battlefield_permanent_target_legal(state: &GameState, tid: ObjectId) -> b
         .is_some_and(|o| o.zone == Zone::Battlefield)
 }
 
+/// Legality of a single target against a data-driven [`TargetSpec`].
+/// `caster` is needed only to enforce the opponent-only restriction.
+fn target_spec_legal(
+    state: &GameState,
+    registry: &CardRegistry,
+    spec: &TargetSpec,
+    tid: ObjectId,
+    caster: PlayerId,
+) -> bool {
+    match spec {
+        TargetSpec::AnyTarget => damage_spell_target_legal(state, registry, tid),
+        TargetSpec::Creature => destroy_spell_target_legal(state, registry, tid),
+        TargetSpec::AnyPlayer => player_target_legal(state, tid),
+        TargetSpec::OpponentPlayer => player_target_legal(state, tid) && tid as i32 != caster,
+    }
+}
+
 /// CR 608.2b-style: if every target for the spell is now illegal, none of its effects happen.
 fn spell_has_no_legal_targets_at_resolution(
     state: &GameState,
     registry: &CardRegistry,
     effect: &SpellEffectKind,
     targets: &[ObjectId],
+    caster: PlayerId,
 ) -> bool {
     match effect {
         SpellEffectKind::None
         | SpellEffectKind::Draw { .. }
         | SpellEffectKind::GainLife { .. }
         | SpellEffectKind::EachOpponentLosesLifeYouGainEqual { .. } => false,
-        SpellEffectKind::DealDamage { .. } => !targets
+        SpellEffectKind::DamageTarget { target, .. }
+        | SpellEffectKind::TargetPlayerGainsLife { target, .. }
+        | SpellEffectKind::TargetPlayerLosesLife { target, .. }
+        | SpellEffectKind::MillTargetPlayer { target, .. } => !targets
             .first()
-            .is_some_and(|&tid| damage_spell_target_legal(state, registry, tid)),
+            .is_some_and(|&tid| target_spec_legal(state, registry, target, tid, caster)),
         SpellEffectKind::PumpTarget { .. } => !targets
             .first()
             .is_some_and(|&tid| pump_spell_target_legal(state, registry, tid)),
@@ -2871,11 +2892,6 @@ fn spell_has_no_legal_targets_at_resolution(
         SpellEffectKind::ReturnTargetPermanentToHand => !targets
             .first()
             .is_some_and(|&tid| any_battlefield_permanent_target_legal(state, tid)),
-        SpellEffectKind::TargetPlayerGainsLife { .. }
-        | SpellEffectKind::TargetOpponentLosesLife { .. }
-        | SpellEffectKind::MillTargetPlayer { .. } => !targets
-            .first()
-            .is_some_and(|&tid| player_target_legal(state, tid)),
         SpellEffectKind::CounterTargetSpell => !targets
             .first()
             .is_some_and(|&tid| state.stack.iter().any(|s| s.id == tid)),
@@ -2891,8 +2907,7 @@ fn validate_spell_targets(
 ) -> Result<(), EngineError> {
     let effect = registry
         .get(card_id)
-        .and_then(|c| c.spell_effect.as_ref())
-        .map(|s| spell_effect_from_key(s))
+        .and_then(|c| c.spell_effect.clone())
         .unwrap_or(SpellEffectKind::None);
 
     match effect {
@@ -2920,14 +2935,14 @@ fn validate_spell_targets(
                 return Err(EngineError::Illegal("counter target must be on stack"));
             }
         }
-        SpellEffectKind::DealDamage { .. } => {
+        SpellEffectKind::DamageTarget { target: spec, .. } => {
             if targets.len() != 1 {
                 return Err(EngineError::Illegal(
                     "damage spells require exactly one target",
                 ));
             }
             let target = targets[0].object_id;
-            if !damage_spell_target_legal(state, registry, target) {
+            if !target_spec_legal(state, registry, &spec, target, caster) {
                 return Err(EngineError::Illegal(
                     "damage target must be a battlefield creature or player",
                 ));
@@ -2974,7 +2989,9 @@ fn validate_spell_targets(
                 ));
             }
         }
-        SpellEffectKind::TargetPlayerGainsLife { .. } => {
+        SpellEffectKind::TargetPlayerGainsLife { target: spec, .. }
+        | SpellEffectKind::TargetPlayerLosesLife { target: spec, .. }
+        | SpellEffectKind::MillTargetPlayer { target: spec, .. } => {
             if targets.len() != 1 {
                 return Err(EngineError::Illegal(
                     "this spell requires exactly one player target",
@@ -2986,38 +3003,7 @@ fn validate_spell_targets(
                     "target must be a player still in the game",
                 ));
             }
-        }
-        SpellEffectKind::MillTargetPlayer { opponent_only, .. } => {
-            if targets.len() != 1 {
-                return Err(EngineError::Illegal(
-                    "mill spells require exactly one player target",
-                ));
-            }
-            let target = targets[0].object_id;
-            if !player_target_legal(state, target) {
-                return Err(EngineError::Illegal(
-                    "target must be a player still in the game",
-                ));
-            }
-            if opponent_only && target as i32 == caster {
-                return Err(EngineError::Illegal(
-                    "this mill spell must target an opponent (cannot target yourself)",
-                ));
-            }
-        }
-        SpellEffectKind::TargetOpponentLosesLife { .. } => {
-            if targets.len() != 1 {
-                return Err(EngineError::Illegal(
-                    "this spell requires exactly one opponent target",
-                ));
-            }
-            let target = targets[0].object_id;
-            if !player_target_legal(state, target) {
-                return Err(EngineError::Illegal(
-                    "target must be a player still in the game",
-                ));
-            }
-            if target as i32 == caster {
+            if matches!(spec, TargetSpec::OpponentPlayer) && target as i32 == caster {
                 return Err(EngineError::Illegal(
                     "target must be an opponent (cannot target yourself)",
                 ));

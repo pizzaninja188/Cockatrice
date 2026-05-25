@@ -17,6 +17,8 @@ static GLOBAL: Lazy<RwLock<CardRegistry>> =
 pub enum RegistryError {
     #[error("ron parse: {0}")]
     Ron(#[from] ron::error::SpannedError),
+    #[error("invalid card data for '{id}': {reason}")]
+    InvalidCard { id: String, reason: String },
 }
 
 #[derive(Debug, Default)]
@@ -29,6 +31,15 @@ impl CardRegistry {
         let mut reg = CardRegistry::default();
         for chunk in EMBEDDED_RON_CHUNKS {
             let card: CardDefinition = RON_OPTS.from_str(chunk)?;
+            // Validate effect/target-spec compatibility at startup (hybrid model).
+            if let Some(effect) = &card.spell_effect {
+                effect
+                    .validate()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
+            }
             reg.by_id.insert(card.id.clone(), card);
         }
         Ok(reg)
@@ -80,9 +91,48 @@ const EMBEDDED_RON_CHUNKS: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::primitives::{SpellEffectKind, TargetSpec};
 
     #[test]
     fn embedded_registry_loads() {
         CardRegistry::from_embedded().unwrap();
+    }
+
+    #[test]
+    fn spell_effects_deserialize_from_ron() {
+        let reg = CardRegistry::from_embedded().unwrap();
+        assert_eq!(
+            reg.get("angels_mercy").unwrap().spell_effect,
+            Some(SpellEffectKind::GainLife { amount: 7 })
+        );
+        assert_eq!(
+            reg.get("lightning_bolt").unwrap().spell_effect,
+            Some(SpellEffectKind::DamageTarget {
+                amount: 3,
+                target: TargetSpec::AnyTarget,
+            })
+        );
+        assert_eq!(
+            reg.get("mind_sculpt").unwrap().spell_effect,
+            Some(SpellEffectKind::MillTargetPlayer {
+                count: 7,
+                target: TargetSpec::OpponentPlayer,
+            })
+        );
+    }
+
+    #[test]
+    fn startup_validation_rejects_incompatible_target_spec() {
+        // A player-life effect pointed at a creature is invalid card data.
+        let bad = r#"(
+            id: "bad_card",
+            name: "Bad Card",
+            mana_cost: "W",
+            types: ["Instant"],
+            is_instant: true,
+            spell_effect: TargetPlayerGainsLife(amount: 3, target: Creature),
+        )"#;
+        let card: CardDefinition = RON_OPTS.from_str(bad).unwrap();
+        assert!(card.spell_effect.unwrap().validate().is_err());
     }
 }
