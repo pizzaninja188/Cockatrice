@@ -144,6 +144,7 @@ impl GameEngine {
                         power: def.power,
                         toughness: def.toughness,
                         damage: 0,
+                        deathtouch_damage: false,
                         plus_one_plus_one: 0,
                         minus_one_minus_one: 0,
                     },
@@ -1050,6 +1051,12 @@ impl GameEngine {
                 .get(&att)
                 .map(|o| o.has_keyword(&self.registry, Keyword::Lifelink))
                 .unwrap_or(false);
+            let att_has_deathtouch = self
+                .state
+                .objects
+                .get(&att)
+                .map(|o| o.has_keyword(&self.registry, Keyword::Deathtouch))
+                .unwrap_or(false);
             let att_owner = self
                 .state
                 .objects
@@ -1085,6 +1092,12 @@ impl GameEngine {
                     .get(&blk)
                     .map(|o| o.has_keyword(&self.registry, Keyword::Lifelink))
                     .unwrap_or(false);
+                let blk_has_deathtouch = self
+                    .state
+                    .objects
+                    .get(&blk)
+                    .map(|o| o.has_keyword(&self.registry, Keyword::Deathtouch))
+                    .unwrap_or(false);
                 let blk_owner = self
                     .state
                     .objects
@@ -1093,9 +1106,17 @@ impl GameEngine {
                     .unwrap_or(dfd);
                 if let Some(af) = self.state.objects.get_mut(&att) {
                     af.damage += bpw;
+                    // CR 702.2b / CR 704.5h: any damage from a deathtouch source is lethal.
+                    if blk_has_deathtouch && bpw > 0 {
+                        af.deathtouch_damage = true;
+                    }
                 }
                 if let Some(bf) = self.state.objects.get_mut(&blk) {
                     bf.damage += att_power;
+                    // CR 702.2b: any damage from attacker with deathtouch is lethal.
+                    if att_has_deathtouch && att_power > 0 {
+                        bf.deathtouch_damage = true;
+                    }
                 }
                 // CR 702.15a: attacker with lifelink gains life = damage dealt to blocker.
                 if att_has_lifelink && att_power > 0 {
@@ -1109,7 +1130,8 @@ impl GameEngine {
                 // Multiple blockers: all blockers deal their power to the attacker simultaneously;
                 // active player assigns how the attacker's combat damage is divided among blockers.
                 // Capture per-blocker properties before any mutation.
-                let blocker_info: Vec<(ObjectId, u32, bool, PlayerId)> = blockers
+                // Tuple: (id, power, has_lifelink, has_deathtouch, owner)
+                let blocker_info: Vec<(ObjectId, u32, bool, bool, PlayerId)> = blockers
                     .iter()
                     .map(|&blk| {
                         let pw = self
@@ -1124,18 +1146,32 @@ impl GameEngine {
                             .get(&blk)
                             .map(|o| o.has_keyword(&self.registry, Keyword::Lifelink))
                             .unwrap_or(false);
+                        let has_dt = self
+                            .state
+                            .objects
+                            .get(&blk)
+                            .map(|o| o.has_keyword(&self.registry, Keyword::Deathtouch))
+                            .unwrap_or(false);
                         let owner = self
                             .state
                             .objects
                             .get(&blk)
                             .map(|o| o.owner)
                             .unwrap_or(dfd);
-                        (blk, pw, has_ll, owner)
+                        (blk, pw, has_ll, has_dt, owner)
                     })
                     .collect();
-                let total_blocker_power: u32 = blocker_info.iter().map(|(_, pw, _, _)| pw).sum();
+                let total_blocker_power: u32 =
+                    blocker_info.iter().map(|(_, pw, _, _, _)| pw).sum();
+                // CR 702.2b: if any blocker has deathtouch and dealt damage, mark the attacker.
+                let any_blocker_deathtouch_hit = blocker_info
+                    .iter()
+                    .any(|(_, pw, _, has_dt, _)| *has_dt && *pw > 0);
                 if let Some(af) = self.state.objects.get_mut(&att) {
                     af.damage += total_blocker_power;
+                    if any_blocker_deathtouch_hit {
+                        af.deathtouch_damage = true;
+                    }
                 }
                 let pairs = c.damage_assignments.get(&att).ok_or(EngineError::Illegal(
                     "combat damage assignments missing for multiply-blocked attacker",
@@ -1143,6 +1179,10 @@ impl GameEngine {
                 for &(blk, dmg) in pairs {
                     if let Some(bf) = self.state.objects.get_mut(&blk) {
                         bf.damage += dmg;
+                        // CR 702.2b: any damage from attacker with deathtouch is lethal.
+                        if att_has_deathtouch && dmg > 0 {
+                            bf.deathtouch_damage = true;
+                        }
                     }
                 }
                 // CR 702.15a: attacker with lifelink gains life = total damage dealt to all blockers.
@@ -1150,7 +1190,7 @@ impl GameEngine {
                     lifelink_gains.push((att_owner, att_power));
                 }
                 // CR 702.15a: each blocker with lifelink gains life = damage it dealt to the attacker.
-                for (_, blk_pw, blk_has_ll, blk_owner) in blocker_info {
+                for (_, blk_pw, blk_has_ll, _, blk_owner) in blocker_info {
                     if blk_has_ll && blk_pw > 0 {
                         lifelink_gains.push((blk_owner, blk_pw));
                     }
@@ -1601,8 +1641,9 @@ impl GameEngine {
     /// CR 514.2: damage marked on permanents is removed during cleanup.
     fn cleanup_marked_damage(&mut self) {
         for o in self.state.objects.values_mut() {
-            if o.zone == Zone::Battlefield && o.damage != 0 {
+            if o.zone == Zone::Battlefield && (o.damage != 0 || o.deathtouch_damage) {
                 o.damage = 0;
+                o.deathtouch_damage = false;
             }
         }
     }
@@ -2084,6 +2125,7 @@ impl GameEngine {
                         o.tapped = false;
                         o.summoning_sick = false;
                         o.damage = 0;
+                        o.deathtouch_damage = false;
                         o.power = None;
                         o.toughness = None;
                     }
@@ -2293,7 +2335,9 @@ impl GameEngine {
         for (&id, o) in &self.state.objects {
             if o.zone == Zone::Battlefield {
                 if let Some(t) = o.toughness {
-                    if t == 0 || o.damage >= t {
+                    // CR 704.5g: destroy if damage >= toughness or toughness = 0.
+                    // CR 704.5h: destroy if any damage from a deathtouch source (any amount).
+                    if t == 0 || o.damage >= t || o.deathtouch_damage {
                         to_destroy.push(id);
                     }
                 }

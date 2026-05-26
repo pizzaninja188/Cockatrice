@@ -1,0 +1,10 @@
+(
+  id: "pharikas_chosen",
+  name: "Pharika's Chosen",
+  mana_cost: "B",
+  types: ["Creature", "Snake"],
+  is_creature: true,
+  power: 1,
+  toughness: 1,
+  keywords: [Deathtouch],
+)

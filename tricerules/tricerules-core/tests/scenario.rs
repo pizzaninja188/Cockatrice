@@ -1391,6 +1391,7 @@ fn inject_creature_on_battlefield(e: &mut GameEngine, player: usize, card_id: &s
             power: Some(2),
             toughness: Some(2),
             damage: 0,
+            deathtouch_damage: false,
             plus_one_plus_one: 0,
             minus_one_minus_one: 0,
         },
@@ -4765,6 +4766,7 @@ fn tome_scour_mills_five_cards_from_target_player() {
                 power: None,
                 toughness: None,
                 damage: 0,
+                deathtouch_damage: false,
                 plus_one_plus_one: 0,
                 minus_one_minus_one: 0,
             },
@@ -4840,6 +4842,7 @@ fn tome_scour_caps_at_library_size() {
                 power: None,
                 toughness: None,
                 damage: 0,
+                deathtouch_damage: false,
                 plus_one_plus_one: 0,
                 minus_one_minus_one: 0,
             },
@@ -4889,6 +4892,7 @@ fn tome_scour_can_target_controller() {
                 power: None,
                 toughness: None,
                 damage: 0,
+                deathtouch_damage: false,
                 plus_one_plus_one: 0,
                 minus_one_minus_one: 0,
             },
@@ -4941,6 +4945,7 @@ fn mind_sculpt_rejects_self_target() {
                 power: None,
                 toughness: None,
                 damage: 0,
+                deathtouch_damage: false,
                 plus_one_plus_one: 0,
                 minus_one_minus_one: 0,
             },
@@ -5429,6 +5434,7 @@ fn haste_creature_can_attack_same_turn_it_enters() {
             power: Some(1),
             toughness: Some(1),
             damage: 0,
+            deathtouch_damage: false,
             plus_one_plus_one: 0,
             minus_one_minus_one: 0,
         },
@@ -5472,6 +5478,7 @@ fn non_haste_summoning_sick_creature_cannot_attack() {
             power: Some(2),
             toughness: Some(2),
             damage: 0,
+            deathtouch_damage: false,
             plus_one_plus_one: 0,
             minus_one_minus_one: 0,
         },
@@ -5481,5 +5488,198 @@ fn non_haste_summoning_sick_creature_cannot_attack() {
     assert!(
         e.apply_command(0, &declare_attackers(vec![bears])).is_err(),
         "summoning-sick creature without haste must not be allowed to attack"
+    );
+}
+
+// ── Deathtouch Keyword Tests ──────────────────────────────────────────────────
+//
+// Tests for CR 702.2b / CR 704.5h: any amount of damage dealt by a deathtouch
+// source to a creature is enough to destroy it via SBA.
+
+/// Helper: inject a creature with explicit power and toughness (unlike the
+/// default 2/2 of `inject_creature_on_battlefield`).
+fn inject_creature_with_stats(
+    e: &mut GameEngine,
+    player: usize,
+    card_id: &str,
+    power: u32,
+    toughness: u32,
+) -> u32 {
+    let id = e.state.next_object_id;
+    e.state.next_object_id += 1;
+    let player_id = e.state.players[player].id;
+    e.state.objects.insert(
+        id,
+        tricerules_core::state::GameObject {
+            id,
+            owner: player_id,
+            card_id: card_id.to_string(),
+            zone: tricerules_core::Zone::Battlefield,
+            tapped: false,
+            summoning_sick: false,
+            power: Some(power),
+            toughness: Some(toughness),
+            damage: 0,
+            deathtouch_damage: false,
+            plus_one_plus_one: 0,
+            minus_one_minus_one: 0,
+        },
+    );
+    e.state.players[player].battlefield.push(id);
+    id
+}
+
+/// CR 702.2b / CR 704.5h: A deathtouch attacker destroys a blocker even when
+/// the attacker's power is less than the blocker's toughness.
+/// Pharika's Chosen (1/1 Deathtouch) attacks → Walking Corpse (2/2) blocks.
+/// Chosen deals 1 damage: insufficient to kill normally (toughness 2), but
+/// lethal via deathtouch. Walking Corpse dies; Chosen dies to the 2 damage back.
+#[test]
+fn deathtouch_attacker_kills_blocker_with_higher_toughness() {
+    let mut e = GameEngine::new(9040, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+
+    // Pharika's Chosen: 1/1 deathtouch — inject at actual power/toughness.
+    let chosen = inject_creature_with_stats(&mut e, 0, "pharikas_chosen", 1, 1);
+    // Walking Corpse: 2/2 — would survive 1 damage without deathtouch.
+    let corpse = inject_creature_with_stats(&mut e, 1, "walking_corpse", 2, 2);
+
+    e.apply_command(0, &declare_attackers(vec![chosen]))
+        .expect("declare deathtouch attacker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass declare attackers");
+    e.apply_command(
+        1,
+        &declare_blockers(vec![BlockPair {
+            attacker_id: chosen,
+            blocker_id: corpse,
+        }]),
+    )
+    .expect("declare blocker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare blockers");
+    let _ = e
+        .apply_command(1, &pass())
+        .expect("defender pass -> combat damage");
+
+    // Both should be gone: Chosen takes 2 damage ≥ toughness 1; Corpse takes 1
+    // deathtouch damage (lethal regardless of toughness).
+    assert!(
+        !e.state
+            .objects
+            .get(&chosen)
+            .is_some_and(|o| o.zone == tricerules_core::Zone::Battlefield),
+        "Pharika's Chosen should have died to 2 back-damage"
+    );
+    assert!(
+        !e.state
+            .objects
+            .get(&corpse)
+            .is_some_and(|o| o.zone == tricerules_core::Zone::Battlefield),
+        "CR 702.2b: Walking Corpse must die to deathtouch even with 2 toughness"
+    );
+}
+
+/// CR 702.2b: A deathtouch blocker destroys an attacker with higher toughness.
+/// Walking Corpse (2/2) attacks → Pharika's Chosen (1/1 Deathtouch) blocks.
+/// Chosen deals 1 deathtouch damage to the Corpse (lethal). Corpse deals 2
+/// damage to Chosen (also lethal at 1 toughness). Both die.
+#[test]
+fn deathtouch_blocker_kills_attacker_with_higher_toughness() {
+    let mut e = GameEngine::new(9041, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+
+    let corpse = inject_creature_with_stats(&mut e, 0, "walking_corpse", 2, 2);
+    let chosen = inject_creature_with_stats(&mut e, 1, "pharikas_chosen", 1, 1);
+
+    e.apply_command(0, &declare_attackers(vec![corpse]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass declare attackers");
+    e.apply_command(
+        1,
+        &declare_blockers(vec![BlockPair {
+            attacker_id: corpse,
+            blocker_id: chosen,
+        }]),
+    )
+    .expect("declare deathtouch blocker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare blockers");
+    let _ = e
+        .apply_command(1, &pass())
+        .expect("defender pass -> combat damage");
+
+    assert!(
+        !e.state
+            .objects
+            .get(&chosen)
+            .is_some_and(|o| o.zone == tricerules_core::Zone::Battlefield),
+        "Pharika's Chosen should die to 2 damage (toughness 1)"
+    );
+    assert!(
+        !e.state
+            .objects
+            .get(&corpse)
+            .is_some_and(|o| o.zone == tricerules_core::Zone::Battlefield),
+        "CR 702.2b: Walking Corpse must die to deathtouch blocker's 1 damage"
+    );
+}
+
+/// CR 702.2b (non-deathtouch control): a non-deathtouch 1-power attacker deals
+/// 1 damage to a 2-toughness blocker — the blocker does NOT die.
+/// Without deathtouch, 1 damage is not enough to kill a 2/2.
+#[test]
+fn non_deathtouch_one_power_does_not_kill_two_toughness_blocker() {
+    let mut e = GameEngine::new(9042, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+
+    // Raging Goblin: 1/1, Haste — no deathtouch.
+    let goblin = inject_creature_with_stats(&mut e, 0, "raging_goblin", 1, 1);
+    let corpse = inject_creature_with_stats(&mut e, 1, "walking_corpse", 2, 2);
+
+    e.apply_command(0, &declare_attackers(vec![goblin]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass declare attackers");
+    e.apply_command(
+        1,
+        &declare_blockers(vec![BlockPair {
+            attacker_id: goblin,
+            blocker_id: corpse,
+        }]),
+    )
+    .expect("declare blocker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare blockers");
+    let _ = e
+        .apply_command(1, &pass())
+        .expect("defender pass -> combat damage");
+
+    // Goblin (1/1) dies to 2 back-damage. Corpse (2/2) takes only 1 non-deathtouch
+    // damage — survives with 1 marked damage remaining.
+    assert!(
+        !e.state
+            .objects
+            .get(&goblin)
+            .is_some_and(|o| o.zone == tricerules_core::Zone::Battlefield),
+        "Raging Goblin should die to 2 back-damage"
+    );
+    assert!(
+        e.state
+            .objects
+            .get(&corpse)
+            .is_some_and(|o| o.zone == tricerules_core::Zone::Battlefield),
+        "Walking Corpse should survive 1 non-deathtouch damage (toughness 2)"
+    );
+    assert_eq!(
+        e.state.objects[&corpse].damage, 1,
+        "Corpse should have 1 marked damage from the non-deathtouch hit"
     );
 }

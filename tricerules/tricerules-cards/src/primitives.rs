@@ -38,6 +38,9 @@ pub enum Keyword {
     /// CR 702.10: this creature is unaffected by summoning sickness — it can attack and use
     /// activated abilities that include {T} or {Q} even on the turn it entered the battlefield.
     Haste,
+    /// CR 702.2: any amount of damage this creature deals to another creature is enough to
+    /// destroy it (as a state-based action; CR 704.5h).
+    Deathtouch,
 }
 
 /// What a single target must be. Deliberately a small, flat enum covering only

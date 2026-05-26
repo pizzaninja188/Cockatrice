@@ -60,6 +60,9 @@ pub struct GameObject {
     pub power: Option<u32>,
     pub toughness: Option<u32>,
     pub damage: u32,
+    /// True if this permanent has received any amount of damage from a source with deathtouch
+    /// this turn (CR 702.2b / CR 704.5h). Cleared during the cleanup step alongside `damage`.
+    pub deathtouch_damage: bool,
     /// Counters: used for SBA +0/+0 annihilation with -1 in future
     #[allow(dead_code)]
     pub plus_one_plus_one: u32,
