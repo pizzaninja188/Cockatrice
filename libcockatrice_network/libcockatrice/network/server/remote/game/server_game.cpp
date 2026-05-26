@@ -1719,6 +1719,7 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
                     entry->set_ordinal(static_cast<uint32_t>(ordinal));
                     entry->set_server_card_id(card->getId());
                     entry->set_summoning_sick(pl->isEngineOidSummoningSick(engineOid));
+                    entry->set_haste(pl->isEngineOidHaste(engineOid));
                     ++ordinal;
                 }
             }

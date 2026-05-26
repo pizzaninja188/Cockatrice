@@ -149,7 +149,10 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
     }
 
     QString renderedAnnotation = annotation;
-    if (ruledHandler && ruledOid != 0 && ruledHandler->isEngineOidSummoningSick(ruledOid)) {
+    // CR 702.10a: a creature with Haste is unaffected by summoning sickness — don't
+    // show the "summoning sick" tag if the creature has Haste.
+    if (ruledHandler && ruledOid != 0 && ruledHandler->isEngineOidSummoningSick(ruledOid)
+        && !ruledHandler->isEngineOidHaste(ruledOid)) {
         if (!renderedAnnotation.contains(QStringLiteral("summoning sick"), Qt::CaseInsensitive)) {
             if (!renderedAnnotation.isEmpty()) {
                 renderedAnnotation += QLatin1Char('\n');
@@ -704,7 +707,9 @@ bool handleRuledCombatClick(CardItem *card)
         if (card->getTapped()) {
             return false;
         }
-        if (handler->isEngineOidSummoningSick(oid)) {
+        // CR 702.10a: Haste bypasses summoning sickness — a creature with Haste
+        // may be selected as an attacker even on the turn it entered the battlefield.
+        if (handler->isEngineOidSummoningSick(oid) && !handler->isEngineOidHaste(oid)) {
             return false;
         }
         handler->togglePendingAttacker(oid);

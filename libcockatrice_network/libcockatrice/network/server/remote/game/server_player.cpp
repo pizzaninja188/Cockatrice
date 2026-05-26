@@ -396,6 +396,7 @@ Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const
             engineOidToServerCardId.clear();
             serverCardIdToEngineOid.clear();
             engineOidToSummoningSick.clear();
+            engineOidToHaste.clear();
             const bool haveCreatureStats = v.battlefield_power_size() == v.battlefield_size() &&
                                            v.battlefield_toughness_size() == v.battlefield_size() &&
                                            v.battlefield_damage_size() == v.battlefield_size() &&
@@ -411,6 +412,8 @@ Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const
                 const bool summoningSick = (i < v.battlefield_summoning_sick_size()) ? v.battlefield_summoning_sick(i)
                                                                                       : false;
                 engineOidToSummoningSick.insert(oid, summoningSick);
+                const bool hasHaste = (i < v.battlefield_haste_size()) ? v.battlefield_haste(i) : false;
+                engineOidToHaste.insert(oid, hasHaste);
 
                 if (tapGes && i < v.battlefield_tapped_size()) {
                     const bool desiredTapped = v.battlefield_tapped(i);

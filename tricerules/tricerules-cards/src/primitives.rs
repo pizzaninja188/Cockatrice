@@ -35,6 +35,9 @@ pub enum Keyword {
     Vigilance,
     /// CR 702.15: damage dealt by this permanent also causes its controller to gain that much life.
     Lifelink,
+    /// CR 702.10: this creature is unaffected by summoning sickness — it can attack and use
+    /// activated abilities that include {T} or {Q} even on the turn it entered the battlefield.
+    Haste,
 }
 
 /// What a single target must be. Deliberately a small, flat enum covering only

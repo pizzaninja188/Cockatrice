@@ -97,6 +97,8 @@ private:
     QHash<quint32, int> engineOidOwner;
     // Engine ObjectId -> summoning sickness state from BattlefieldObjectMap entries.
     QHash<quint32, bool> engineOidSummoningSick;
+    // Engine ObjectId -> haste keyword (CR 702.10) from BattlefieldObjectMap entries.
+    QHash<quint32, bool> engineOidHaste;
     // Engine ObjectId -> marked damage currently shown in ruled ZoneView.
     QHash<quint32, int> engineOidMarkedDamage;
     // From ZoneViewSync battlefield_power / battlefield_toughness (ruled creatures).
@@ -204,6 +206,10 @@ public:
     [[nodiscard]] bool isEngineOidSummoningSick(quint32 engineOid) const
     {
         return engineOidSummoningSick.value(engineOid, false);
+    }
+    [[nodiscard]] bool isEngineOidHaste(quint32 engineOid) const
+    {
+        return engineOidHaste.value(engineOid, false);
     }
     [[nodiscard]] int markedDamageForEngineOid(quint32 engineOid) const
     {

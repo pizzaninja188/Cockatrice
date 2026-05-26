@@ -663,10 +663,14 @@ impl GameEngine {
         };
         self.state.players[ap_idx].battlefield.iter().any(|oid| {
             self.state.objects.get(oid).is_some_and(|o| {
+                // CR 702.10a: Haste lets a creature attack (and use {T} abilities) even if it
+                // just entered the battlefield this turn (i.e. ignore summoning sickness).
+                let effectively_sick = o.summoning_sick
+                    && !o.has_keyword(&self.registry, tricerules_cards::Keyword::Haste);
                 o.zone == Zone::Battlefield
                     && o.owner == ap
                     && o.is_creature(&self.registry)
-                    && !o.summoning_sick
+                    && !effectively_sick
                     && !o.tapped
             })
         })
@@ -744,7 +748,10 @@ impl GameEngine {
             if !o.is_creature(&self.registry) {
                 return Err(EngineError::Illegal("not creature"));
             }
-            if o.summoning_sick {
+            // CR 702.10a: Haste bypasses summoning sickness — the creature may attack even
+            // if it entered the battlefield this turn.
+            let has_haste = o.has_keyword(&self.registry, tricerules_cards::Keyword::Haste);
+            if o.summoning_sick && !has_haste {
                 return Err(EngineError::Illegal("summoning sick"));
             }
             if o.tapped {
@@ -2510,6 +2517,19 @@ impl GameEngine {
                             .objects
                             .get(&oid)
                             .map(|o| o.is_creature(&self.registry))
+                            .unwrap_or(false)
+                    })
+                    .collect(),
+                // CR 702.10: clients use this to suppress the summoning-sick indicator
+                // and allow attacker selection for creatures that entered this turn.
+                battlefield_haste: p
+                    .battlefield
+                    .iter()
+                    .map(|&oid| {
+                        self.state
+                            .objects
+                            .get(&oid)
+                            .map(|o| o.has_keyword(&self.registry, tricerules_cards::Keyword::Haste))
                             .unwrap_or(false)
                     })
                     .collect(),

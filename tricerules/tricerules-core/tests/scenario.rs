@@ -5399,3 +5399,87 @@ fn intimidate_auto_skips_blockers_when_no_eligible_creatures() {
         "blockers_declared flag must be set after auto-skip"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Haste (CR 702.10)
+// ---------------------------------------------------------------------------
+
+/// CR 702.10a: A creature with Haste can attack the same turn it enters the battlefield,
+/// ignoring summoning sickness. Happy path: Raging Goblin is injected with summoning_sick=true
+/// but is allowed to be declared as an attacker.
+#[test]
+fn haste_creature_can_attack_same_turn_it_enters() {
+    let mut e = GameEngine::new(9020, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+
+    // Inject Raging Goblin directly onto the battlefield *with* summoning sickness still set,
+    // simulating the turn it just entered.
+    let goblin = e.state.next_object_id;
+    e.state.next_object_id += 1;
+    let pid = e.state.players[0].id;
+    e.state.objects.insert(
+        goblin,
+        tricerules_core::state::GameObject {
+            id: goblin,
+            owner: pid,
+            card_id: "raging_goblin".to_string(),
+            zone: tricerules_core::Zone::Battlefield,
+            tapped: false,
+            summoning_sick: true, // still sick — haste should bypass this
+            power: Some(1),
+            toughness: Some(1),
+            damage: 0,
+            plus_one_plus_one: 0,
+            minus_one_minus_one: 0,
+        },
+    );
+    e.state.players[0].battlefield.push(goblin);
+
+    // Declare the Goblin as an attacker — must succeed despite summoning_sick = true.
+    e.apply_command(0, &declare_attackers(vec![goblin]))
+        .expect("haste creature should be allowed to attack same turn it entered");
+    assert!(
+        e.state
+            .combat
+            .as_ref()
+            .unwrap()
+            .attacking
+            .contains(&goblin),
+        "raging goblin must appear in the attacking list"
+    );
+}
+
+/// CR 302.6 / 702.10: Without Haste, a summoning-sick creature may NOT be declared as an
+/// attacker. Illegal path: Grizzly Bears with summoning_sick=true are rejected.
+#[test]
+fn non_haste_summoning_sick_creature_cannot_attack() {
+    let mut e = GameEngine::new(9021, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+
+    // Inject Bears directly with summoning sickness and no haste.
+    let bears = e.state.next_object_id;
+    e.state.next_object_id += 1;
+    let pid = e.state.players[0].id;
+    e.state.objects.insert(
+        bears,
+        tricerules_core::state::GameObject {
+            id: bears,
+            owner: pid,
+            card_id: "grizzly_bears".to_string(),
+            zone: tricerules_core::Zone::Battlefield,
+            tapped: false,
+            summoning_sick: true,
+            power: Some(2),
+            toughness: Some(2),
+            damage: 0,
+            plus_one_plus_one: 0,
+            minus_one_minus_one: 0,
+        },
+    );
+    e.state.players[0].battlefield.push(bears);
+
+    assert!(
+        e.apply_command(0, &declare_attackers(vec![bears])).is_err(),
+        "summoning-sick creature without haste must not be allowed to attack"
+    );
+}

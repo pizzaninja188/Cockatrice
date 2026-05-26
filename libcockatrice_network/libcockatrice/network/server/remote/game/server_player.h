@@ -18,6 +18,7 @@ private:
     QHash<quint32, int> engineOidToServerCardId;
     QHash<int, quint32> serverCardIdToEngineOid;
     QHash<quint32, bool> engineOidToSummoningSick;
+    QHash<quint32, bool> engineOidToHaste;
 
 public:
     struct RuledZoneSyncResult
@@ -37,6 +38,10 @@ public:
     bool isEngineOidSummoningSick(quint32 engineOid) const
     {
         return engineOidToSummoningSick.value(engineOid, false);
+    }
+    bool isEngineOidHaste(quint32 engineOid) const
+    {
+        return engineOidToHaste.value(engineOid, false);
     }
     Server_Card *findCardByEngineOid(quint32 engineOid) const;
 

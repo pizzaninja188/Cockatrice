@@ -241,6 +241,10 @@ message RuledPerPlayerView {
   repeated bool battlefield_is_creature = 12;
   // Parallel array to `hand`: engine ObjectId for each card in hand order.
   repeated uint32 hand_object_id = 13;
+  // Parallel array to `battlefield`, true if that permanent has the Haste keyword
+  // (CR 702.10). Used by clients to suppress the summoning-sick indicator and
+  // allow attacker selection even when summoning_sick is still true.
+  repeated bool battlefield_haste = 14;
 }
 
 message ZoneViewSync {
@@ -300,6 +304,9 @@ message BattlefieldObjectMap {
     int32 server_card_id = 5;
     // True if this permanent currently has summoning sickness.
     bool summoning_sick = 6;
+    // True if this permanent has the Haste keyword (CR 702.10). A creature with
+    // haste can attack even while summoning_sick is true.
+    bool haste = 7;
   }
   repeated Entry entries = 1;
 }

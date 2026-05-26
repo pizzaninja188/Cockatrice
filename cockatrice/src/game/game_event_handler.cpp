@@ -1172,6 +1172,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 engineOidToCardId.clear();
                                 engineOidOwner.clear();
                                 engineOidSummoningSick.clear();
+                                engineOidHaste.clear();
                                 engineOidMarkedDamage.clear();
                                 engineOidBattlefieldPower.clear();
                                 engineOidBattlefieldToughness.clear();
@@ -1180,6 +1181,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                     validOids.insert(entry.engine_object_id());
                                     engineOidOwner.insert(entry.engine_object_id(), entry.player_id());
                                     engineOidSummoningSick.insert(entry.engine_object_id(), entry.summoning_sick());
+                                    engineOidHaste.insert(entry.engine_object_id(), entry.haste());
                                     if (entry.server_card_id() >= 0) {
                                         ownerCardIdToEngineOid.insert(makeOwnedCardKey(entry.player_id(), entry.server_card_id()),
                                                                       entry.engine_object_id());
