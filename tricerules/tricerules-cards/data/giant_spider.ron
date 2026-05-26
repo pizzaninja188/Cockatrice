@@ -1,0 +1,10 @@
+(
+  id: "giant_spider",
+  name: "Giant Spider",
+  mana_cost: "3G",
+  types: ["Creature", "Spider"],
+  is_creature: true,
+  power: 2,
+  toughness: 4,
+  keywords: [Reach],
+)

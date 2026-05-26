@@ -5,4 +5,5 @@ pub mod primitives;
 pub mod registry;
 
 pub use card_def::CardDefinition;
+pub use primitives::Keyword;
 pub use registry::CardRegistry;

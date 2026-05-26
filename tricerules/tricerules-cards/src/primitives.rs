@@ -7,6 +7,18 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Static keyword abilities that affect game rules (blocking restrictions, attack
+/// rules, damage modifiers, etc.). Parameterless only — parameterized keywords
+/// (e.g. Protection from X, Landwalk) are deferred to the custom-Rust tier since
+/// they require characteristic matching the data-driven tier can't express.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Keyword {
+    /// CR 702.9: this creature can only be blocked by creatures with flying or reach.
+    Flying,
+    /// CR 702.17: this creature can block creatures with flying.
+    Reach,
+}
+
 /// What a single target must be. Deliberately a small, flat enum covering only
 /// the distinctions the engine makes today; richer characteristic-based filters
 /// (creature type, color, etc.) are deferred to the future Rust scripting tier

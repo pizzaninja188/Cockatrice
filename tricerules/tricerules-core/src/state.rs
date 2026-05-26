@@ -74,6 +74,18 @@ impl GameObject {
             .map(|c| c.is_creature)
             .unwrap_or(false)
     }
+
+    /// Returns true if this permanent's card definition includes the given keyword ability.
+    pub fn has_keyword(
+        &self,
+        registry: &tricerules_cards::CardRegistry,
+        kw: tricerules_cards::Keyword,
+    ) -> bool {
+        registry
+            .get(&self.card_id)
+            .map(|c| c.keywords.contains(&kw))
+            .unwrap_or(false)
+    }
 }
 
 #[derive(Debug, Clone)]

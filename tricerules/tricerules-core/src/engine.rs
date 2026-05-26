@@ -615,6 +615,24 @@ impl GameEngine {
         }
     }
 
+    /// CR 702.9b: can `blocker_id` legally block `attacker_id`?
+    /// A creature with flying can only be blocked by creatures with flying or reach.
+    fn can_block(&self, attacker_id: ObjectId, blocker_id: ObjectId) -> bool {
+        use tricerules_cards::Keyword;
+        let Some(att) = self.state.objects.get(&attacker_id) else {
+            return false;
+        };
+        let Some(blk) = self.state.objects.get(&blocker_id) else {
+            return false;
+        };
+        if att.has_keyword(&self.registry, Keyword::Flying) {
+            blk.has_keyword(&self.registry, Keyword::Flying)
+                || blk.has_keyword(&self.registry, Keyword::Reach)
+        } else {
+            true
+        }
+    }
+
     fn active_player_has_eligible_attackers(&self) -> bool {
         let ap = self.state.active_player_id();
         let Some(ap_idx) = self.state.player_idx(ap) else {
@@ -638,13 +656,25 @@ impl GameEngine {
         let Some(dp_idx) = self.state.player_idx(dp) else {
             return false;
         };
+        let attacking: Vec<ObjectId> = self
+            .state
+            .combat
+            .as_ref()
+            .map(|c| c.attacking.clone())
+            .unwrap_or_default();
+        if attacking.is_empty() {
+            return false;
+        }
         // CR 302.6: summoning sickness does NOT prevent blocking.
+        // A creature is only eligible if it can legally block at least one current attacker
+        // (e.g. a ground creature cannot block a flying attacker — CR 702.9b).
         self.state.players[dp_idx].battlefield.iter().any(|oid| {
             self.state.objects.get(oid).is_some_and(|o| {
                 o.zone == Zone::Battlefield
                     && o.owner == dp
                     && o.is_creature(&self.registry)
                     && !o.tapped
+                    && attacking.iter().any(|&aid| self.can_block(aid, o.id))
             })
         })
     }
@@ -792,6 +822,12 @@ impl GameEngine {
             }
             if bobj.tapped {
                 return Err(EngineError::Illegal("blocker tapped"));
+            }
+            // CR 702.9b: flying creatures can only be blocked by flying or reach.
+            if !self.can_block(p.attacker_id, p.blocker_id) {
+                return Err(EngineError::Illegal(
+                    "blocker cannot block this attacker (flying)",
+                ));
             }
             attacker_to_blockers
                 .entry(p.attacker_id)

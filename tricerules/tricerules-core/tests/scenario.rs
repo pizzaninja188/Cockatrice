@@ -4962,3 +4962,146 @@ fn mind_sculpt_rejects_self_target() {
     // No cards milled from the caster.
     assert_eq!(e.state.players[0].library.len(), lib_before);
 }
+
+// ── Flying & Reach Keyword Tests ─────────────────────────────────────────────
+//
+// Tests for CR 702.9b (flying) and CR 702.17a (reach) blocking restrictions.
+
+/// A ground creature (no flying, no reach) attempting to block a flying attacker
+/// must be rejected by set_blockers with an Illegal error mentioning "flying".
+///
+/// Setup: P1 has *both* coral_merfolk and a storm_crow so `defending_player_has_eligible_blockers`
+/// returns true (storm_crow can block the flyer) and P1 actually reaches manual declaration.
+/// We then try to block with the ground-only merfolk — that must fail.
+#[test]
+fn flying_creature_blocked_by_ground_creature_is_illegal() {
+    let mut e = GameEngine::new(9001, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let crow_atk = inject_creature_on_battlefield(&mut e, 0, "storm_crow");
+    // P1 has a ground creature and a flying creature; engine won't auto-skip.
+    let merfolk = inject_creature_on_battlefield(&mut e, 1, "coral_merfolk");
+    let _crow_blk = inject_creature_on_battlefield(&mut e, 1, "storm_crow");
+    e.apply_command(0, &declare_attackers(vec![crow_atk]))
+        .expect("declare storm crow attacker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass declare attackers");
+    // P1 tries to block with coral_merfolk (no flying/reach) — must be rejected.
+    let err = e
+        .apply_command(
+            1,
+            &declare_blockers(vec![BlockPair {
+                attacker_id: crow_atk,
+                blocker_id: merfolk,
+            }]),
+        )
+        .expect_err("ground creature blocking a flyer should be illegal");
+    assert!(
+        err.to_string().contains("flying"),
+        "error should mention flying, got: {err}"
+    );
+}
+
+/// A creature with flying can block another creature with flying (CR 702.9b).
+#[test]
+fn flying_creature_can_be_blocked_by_flying_creature() {
+    let mut e = GameEngine::new(9002, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let crow_atk = inject_creature_on_battlefield(&mut e, 0, "storm_crow");
+    let crow_blk = inject_creature_on_battlefield(&mut e, 1, "storm_crow");
+    e.apply_command(0, &declare_attackers(vec![crow_atk]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass declare attackers");
+    e.apply_command(
+        1,
+        &declare_blockers(vec![BlockPair {
+            attacker_id: crow_atk,
+            blocker_id: crow_blk,
+        }]),
+    )
+    .expect("flying creature must be able to block another flying creature");
+}
+
+/// A creature with reach can block a creature with flying (CR 702.17a).
+#[test]
+fn flying_creature_can_be_blocked_by_reach_creature() {
+    let mut e = GameEngine::new(9003, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let crow = inject_creature_on_battlefield(&mut e, 0, "storm_crow");
+    let spider = inject_creature_on_battlefield(&mut e, 1, "giant_spider");
+    e.apply_command(0, &declare_attackers(vec![crow]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass declare attackers");
+    e.apply_command(
+        1,
+        &declare_blockers(vec![BlockPair {
+            attacker_id: crow,
+            blocker_id: spider,
+        }]),
+    )
+    .expect("reach creature must be able to block a flying creature");
+}
+
+/// When the only attacker has flying and the defender has only ground creatures,
+/// `defending_player_has_eligible_blockers` returns false and the engine emits
+/// BlockersDeclared (empty) automatically — no manual declaration needed.
+#[test]
+fn flying_auto_skips_blockers_when_no_reach_or_flyers() {
+    let mut e = GameEngine::new(9004, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let crow = inject_creature_on_battlefield(&mut e, 0, "storm_crow");
+    // P1 has only a ground creature — cannot legally block the flying crow.
+    let _bears = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    e.apply_command(0, &declare_attackers(vec![crow]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    // After P1's pass the engine should auto-skip blockers (grizzly_bears can't block flyer).
+    let b = e
+        .apply_command(1, &pass())
+        .expect("defender pass declare attackers -> auto-skip");
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareBlockers,
+        "should enter DeclareBlockers after auto-skip"
+    );
+    // Auto-skip emits BlockersDeclared with empty pairs.
+    let bd = blockers_declared_in(&b);
+    assert_eq!(bd.len(), 1, "exactly one BlockersDeclared event from auto-skip");
+    assert!(bd[0].block_pairs.is_empty(), "no block pairs in auto-skip");
+    // The blockers_declared flag is set so combat can proceed without manual declaration.
+    assert!(
+        e.state.combat.as_ref().unwrap().blockers_declared,
+        "blockers_declared flag must be set after auto-skip"
+    );
+}
+
+/// Regression: flying/reach changes must not affect normal ground-vs-ground blocking.
+#[test]
+fn ground_creature_still_blockable_by_ground_blocker_regression() {
+    let mut e = GameEngine::new(9005, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let merfolk = inject_creature_on_battlefield(&mut e, 0, "coral_merfolk");
+    let bears = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    e.apply_command(0, &declare_attackers(vec![merfolk]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass declare attackers");
+    e.apply_command(
+        1,
+        &declare_blockers(vec![BlockPair {
+            attacker_id: merfolk,
+            blocker_id: bears,
+        }]),
+    )
+    .expect("ground creature must still be able to block a ground attacker");
+}

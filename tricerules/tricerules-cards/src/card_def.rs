@@ -1,4 +1,4 @@
-use crate::primitives::SpellEffectKind;
+use crate::primitives::{Keyword, SpellEffectKind};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,6 +27,9 @@ pub struct CardDefinition {
     /// directly from RON, e.g. `DamageTarget(amount: 3, target: AnyTarget)`.
     #[serde(default)]
     pub spell_effect: Option<SpellEffectKind>,
+    /// Static keyword abilities (Flying, Reach, etc.). Omit or leave empty for keywordless cards.
+    #[serde(default)]
+    pub keywords: Vec<Keyword>,
     /// Legendary supertype (for SBA: legend rule)
     #[serde(default)]
     pub is_legendary: bool,
