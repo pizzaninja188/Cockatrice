@@ -1,0 +1,10 @@
+(
+  id: "accursed_spirit",
+  name: "Accursed Spirit",
+  mana_cost: "3B",
+  types: ["Creature", "Spirit"],
+  is_creature: true,
+  power: 3,
+  toughness: 2,
+  keywords: [Intimidate],
+)

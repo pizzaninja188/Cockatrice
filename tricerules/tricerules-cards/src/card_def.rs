@@ -1,4 +1,4 @@
-use crate::primitives::{Keyword, SpellEffectKind};
+use crate::primitives::{Color, Keyword, SpellEffectKind};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,9 +27,13 @@ pub struct CardDefinition {
     /// directly from RON, e.g. `DamageTarget(amount: 3, target: AnyTarget)`.
     #[serde(default)]
     pub spell_effect: Option<SpellEffectKind>,
-    /// Static keyword abilities (Flying, Reach, etc.). Omit or leave empty for keywordless cards.
+    /// Static keyword abilities (Flying, Reach, Intimidate, etc.). Omit or leave empty for keywordless cards.
     #[serde(default)]
     pub keywords: Vec<Keyword>,
+    /// True for artifact cards (Artifact, Artifact Creature, etc.).
+    /// Artifact creatures can block creatures with Intimidate regardless of color.
+    #[serde(default)]
+    pub is_artifact: bool,
     /// Legendary supertype (for SBA: legend rule)
     #[serde(default)]
     pub is_legendary: bool,
@@ -37,4 +41,26 @@ pub struct CardDefinition {
     /// `Some("what's missing")` = partially implemented; `None` = fully implemented.
     #[serde(default)]
     pub partial: Option<String>,
+}
+
+impl CardDefinition {
+    /// Derive the card's colors from its mana cost (CR 202.2a).
+    /// A card is colorless if its mana cost contains no color symbols (e.g. lands, "0", generic-only).
+    pub fn colors(&self) -> Vec<Color> {
+        let mut out = Vec::new();
+        for ch in self.mana_cost.chars() {
+            let c = match ch {
+                'W' => Color::White,
+                'U' => Color::Blue,
+                'B' => Color::Black,
+                'R' => Color::Red,
+                'G' => Color::Green,
+                _ => continue,
+            };
+            if !out.contains(&c) {
+                out.push(c);
+            }
+        }
+        out
+    }
 }

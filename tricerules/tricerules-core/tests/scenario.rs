@@ -4998,8 +4998,8 @@ fn flying_creature_blocked_by_ground_creature_is_illegal() {
         )
         .expect_err("ground creature blocking a flyer should be illegal");
     assert!(
-        err.to_string().contains("flying"),
-        "error should mention flying, got: {err}"
+        err.to_string().contains("evasion"),
+        "error should mention evasion, got: {err}"
     );
 }
 
@@ -5104,4 +5104,123 @@ fn ground_creature_still_blockable_by_ground_blocker_regression() {
         }]),
     )
     .expect("ground creature must still be able to block a ground attacker");
+}
+
+// ── Intimidate Keyword Tests ──────────────────────────────────────────────────
+//
+// Tests for CR 702.13b: a creature with intimidate can only be blocked by
+// artifact creatures and/or creatures that share a color with it.
+
+/// A non-artifact creature of a different color cannot block an intimidate creature.
+/// Accursed Spirit (Black) vs Grizzly Bears (Green) — no shared color, not artifact.
+#[test]
+fn intimidate_blocked_by_different_color_non_artifact_is_illegal() {
+    let mut e = GameEngine::new(9010, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let spirit = inject_creature_on_battlefield(&mut e, 0, "accursed_spirit");
+    // P1 has Grizzly Bears (Green) AND a black creature so engine won't auto-skip.
+    let bears = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    let _corpse = inject_creature_on_battlefield(&mut e, 1, "walking_corpse"); // black — keeps blockers open
+    e.apply_command(0, &declare_attackers(vec![spirit]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass declare attackers");
+    // Grizzly Bears is green, non-artifact — cannot block a black intimidate creature.
+    let err = e
+        .apply_command(
+            1,
+            &declare_blockers(vec![BlockPair {
+                attacker_id: spirit,
+                blocker_id: bears,
+            }]),
+        )
+        .expect_err("different-color non-artifact blocker must be rejected");
+    assert!(
+        err.to_string().contains("evasion"),
+        "error should mention evasion, got: {err}"
+    );
+}
+
+/// A creature that shares a color with the intimidate creature can block it.
+/// Accursed Spirit (Black) vs Walking Corpse (Black) — same color.
+#[test]
+fn intimidate_blocked_by_same_color_creature_is_legal() {
+    let mut e = GameEngine::new(9011, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let spirit = inject_creature_on_battlefield(&mut e, 0, "accursed_spirit");
+    // Walking Corpse costs 1B — it is a Black creature, shares color with the Spirit.
+    let corpse = inject_creature_on_battlefield(&mut e, 1, "walking_corpse");
+    e.apply_command(0, &declare_attackers(vec![spirit]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass declare attackers");
+    e.apply_command(
+        1,
+        &declare_blockers(vec![BlockPair {
+            attacker_id: spirit,
+            blocker_id: corpse,
+        }]),
+    )
+    .expect("same-color creature must be able to block an intimidate creature");
+}
+
+/// An artifact creature can always block an intimidate creature regardless of color.
+/// Accursed Spirit (Black) vs Ornithopter (Colorless artifact) — no shared color, but artifact.
+#[test]
+fn intimidate_blocked_by_artifact_creature_is_legal() {
+    let mut e = GameEngine::new(9012, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let spirit = inject_creature_on_battlefield(&mut e, 0, "accursed_spirit");
+    // Ornithopter is a colorless artifact creature — qualifies despite no shared color.
+    let thopter = inject_creature_on_battlefield(&mut e, 1, "ornithopter");
+    e.apply_command(0, &declare_attackers(vec![spirit]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass declare attackers");
+    e.apply_command(
+        1,
+        &declare_blockers(vec![BlockPair {
+            attacker_id: spirit,
+            blocker_id: thopter,
+        }]),
+    )
+    .expect("artifact creature must be able to block an intimidate creature");
+}
+
+/// When all of the defender's creatures are ineligible to block an intimidate creature,
+/// the engine auto-skips blocker declaration.
+/// Accursed Spirit (Black) vs Grizzly Bears only (Green, non-artifact) → auto-skip.
+#[test]
+fn intimidate_auto_skips_blockers_when_no_eligible_creatures() {
+    let mut e = GameEngine::new(9013, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let spirit = inject_creature_on_battlefield(&mut e, 0, "accursed_spirit");
+    // P1 has only Grizzly Bears — Green, non-artifact, cannot block Black intimidate.
+    let _bears = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    e.apply_command(0, &declare_attackers(vec![spirit]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    // After P1's pass the engine detects no eligible blockers and auto-skips.
+    let b = e
+        .apply_command(1, &pass())
+        .expect("defender pass declare attackers -> auto-skip");
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareBlockers,
+        "should enter DeclareBlockers after auto-skip"
+    );
+    let bd = blockers_declared_in(&b);
+    assert_eq!(bd.len(), 1, "exactly one BlockersDeclared event from auto-skip");
+    assert!(bd[0].block_pairs.is_empty(), "no block pairs in auto-skip");
+    assert!(
+        e.state.combat.as_ref().unwrap().blockers_declared,
+        "blockers_declared flag must be set after auto-skip"
+    );
 }

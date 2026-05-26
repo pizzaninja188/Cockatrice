@@ -615,8 +615,8 @@ impl GameEngine {
         }
     }
 
-    /// CR 702.9b: can `blocker_id` legally block `attacker_id`?
-    /// A creature with flying can only be blocked by creatures with flying or reach.
+    /// Returns false if `blocker_id` is not permitted to block `attacker_id` due to
+    /// keyword evasion abilities. Checks all active blocking restrictions in order.
     fn can_block(&self, attacker_id: ObjectId, blocker_id: ObjectId) -> bool {
         use tricerules_cards::Keyword;
         let Some(att) = self.state.objects.get(&attacker_id) else {
@@ -625,12 +625,35 @@ impl GameEngine {
         let Some(blk) = self.state.objects.get(&blocker_id) else {
             return false;
         };
-        if att.has_keyword(&self.registry, Keyword::Flying) {
-            blk.has_keyword(&self.registry, Keyword::Flying)
-                || blk.has_keyword(&self.registry, Keyword::Reach)
-        } else {
-            true
+
+        // CR 702.9b — flying: can only be blocked by creatures with flying or reach.
+        if att.has_keyword(&self.registry, Keyword::Flying)
+            && !blk.has_keyword(&self.registry, Keyword::Flying)
+            && !blk.has_keyword(&self.registry, Keyword::Reach)
+        {
+            return false;
         }
+
+        // CR 702.13b — intimidate: can only be blocked by artifact creatures and/or
+        // creatures that share a color with the intimidate creature.
+        if att.has_keyword(&self.registry, Keyword::Intimidate) {
+            let blk_def = self.registry.get(&blk.card_id);
+            let blk_is_artifact = blk_def.map(|d| d.is_artifact).unwrap_or(false);
+            if !blk_is_artifact {
+                let att_colors = self
+                    .registry
+                    .get(&att.card_id)
+                    .map(|d| d.colors())
+                    .unwrap_or_default();
+                let blk_colors = blk_def.map(|d| d.colors()).unwrap_or_default();
+                let shares_color = att_colors.iter().any(|c| blk_colors.contains(c));
+                if !shares_color {
+                    return false;
+                }
+            }
+        }
+
+        true
     }
 
     fn active_player_has_eligible_attackers(&self) -> bool {
@@ -823,10 +846,10 @@ impl GameEngine {
             if bobj.tapped {
                 return Err(EngineError::Illegal("blocker tapped"));
             }
-            // CR 702.9b: flying creatures can only be blocked by flying or reach.
+            // Evasion check: flying (CR 702.9b), intimidate (CR 702.13b), etc.
             if !self.can_block(p.attacker_id, p.blocker_id) {
                 return Err(EngineError::Illegal(
-                    "blocker cannot block this attacker (flying)",
+                    "blocker cannot block this attacker (evasion)",
                 ));
             }
             attacker_to_blockers

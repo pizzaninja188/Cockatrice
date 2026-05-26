@@ -88,6 +88,8 @@ const EMBEDDED_RON_CHUNKS: &[&str] = &[
     include_str!("../data/mind_sculpt.ron"),
     include_str!("../data/storm_crow.ron"),
     include_str!("../data/giant_spider.ron"),
+    include_str!("../data/accursed_spirit.ron"),
+    include_str!("../data/ornithopter.ron"),
 ];
 
 #[cfg(test)]

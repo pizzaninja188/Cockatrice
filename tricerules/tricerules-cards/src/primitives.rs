@@ -7,6 +7,17 @@
 
 use serde::{Deserialize, Serialize};
 
+/// The five MTG colors. Used for characteristic-based blocking checks (Intimidate, Protection)
+/// and derived from a card's mana cost at query time — not stored as a separate RON field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Color {
+    White,
+    Blue,
+    Black,
+    Red,
+    Green,
+}
+
 /// Static keyword abilities that affect game rules (blocking restrictions, attack
 /// rules, damage modifiers, etc.). Parameterless only — parameterized keywords
 /// (e.g. Protection from X, Landwalk) are deferred to the custom-Rust tier since
@@ -17,6 +28,9 @@ pub enum Keyword {
     Flying,
     /// CR 702.17: this creature can block creatures with flying.
     Reach,
+    /// CR 702.13: this creature can only be blocked by artifact creatures and/or
+    /// creatures that share a color with it.
+    Intimidate,
 }
 
 /// What a single target must be. Deliberately a small, flat enum covering only
