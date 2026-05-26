@@ -5231,6 +5231,143 @@ fn non_vigilance_attacker_still_taps() {
     );
 }
 
+// ── Lifelink Keyword Tests ────────────────────────────────────────────────────
+//
+// Tests for CR 702.15a: damage dealt by a lifelink permanent also causes its
+// controller to gain that much life.
+
+/// An unblocked lifelink attacker deals damage to the defending player AND its
+/// controller gains that much life simultaneously (CR 702.15a).
+/// Child of Night (2/1 Lifelink) attacks unblocked — P1 loses 2 life, P0 gains 2.
+#[test]
+fn lifelink_unblocked_attacker_gains_life() {
+    let mut e = GameEngine::new(9030, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let con = inject_creature_on_battlefield(&mut e, 0, "child_of_night");
+    // No blockers for P1 → auto-skip.
+    e.apply_command(0, &declare_attackers(vec![con]))
+        .expect("declare lifelink attacker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass declare attackers");
+    // Auto-empty blockers declared; active player has priority in DeclareBlockers.
+    e.apply_command(0, &pass())
+        .expect("active pass declare blockers");
+    let b = e
+        .apply_command(1, &pass())
+        .expect("defender pass declare blockers -> combat damage");
+    let life = life_changes_in(&b);
+    // Expect two events: defender loses 2, attacker controller gains 2.
+    let defender_ev = life
+        .iter()
+        .find(|lc| lc.player_id == 1)
+        .expect("defender LifeChanged");
+    let attacker_ev = life
+        .iter()
+        .find(|lc| lc.player_id == 0)
+        .expect("attacker controller LifeChanged (lifelink)");
+    assert_eq!(defender_ev.delta, -2, "CR 702.15a: defender takes 2 damage");
+    assert_eq!(defender_ev.new_total, 18);
+    assert_eq!(attacker_ev.delta, 2, "CR 702.15a: lifelink gains 2 life");
+    assert_eq!(attacker_ev.new_total, 22);
+    assert_eq!(e.state.players[0].life, 22);
+    assert_eq!(e.state.players[1].life, 18);
+}
+
+/// A lifelink creature gains its controller life when blocked — it deals damage to
+/// the blocker (not the player), but lifelink still triggers (CR 702.15a).
+#[test]
+fn lifelink_blocked_attacker_still_gains_life() {
+    let mut e = GameEngine::new(9031, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let con = inject_creature_on_battlefield(&mut e, 0, "child_of_night");
+    // P1 has a blocker to intercept.
+    let blocker = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    e.apply_command(0, &declare_attackers(vec![con]))
+        .expect("declare lifelink attacker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass declare attackers");
+    e.apply_command(
+        1,
+        &declare_blockers(vec![BlockPair {
+            attacker_id: con,
+            blocker_id: blocker,
+        }]),
+    )
+    .expect("declare blocker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare blockers");
+    let b = e
+        .apply_command(1, &pass())
+        .expect("defender pass declare blockers -> combat damage");
+    let life = life_changes_in(&b);
+    // Defender player takes no direct damage (blocked).
+    assert!(
+        !life.iter().any(|lc| lc.player_id == 1 && lc.delta < 0),
+        "defending player should not lose life when attack is blocked"
+    );
+    // Attacker controller should gain life equal to damage dealt to the blocker.
+    let attacker_ev = life
+        .iter()
+        .find(|lc| lc.player_id == 0)
+        .expect("attacker controller LifeChanged (lifelink)");
+    assert_eq!(
+        attacker_ev.delta, 2,
+        "CR 702.15a: lifelink gains life even when blocked"
+    );
+    assert_eq!(e.state.players[0].life, 22);
+}
+
+/// A lifelink blocker gains its controller life for the damage it deals to the
+/// attacker (CR 702.15a).
+#[test]
+fn lifelink_blocker_gains_life() {
+    let mut e = GameEngine::new(9032, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    // P0 attacks with a plain Grizzly Bears (no lifelink).
+    let attacker = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    // P1 blocks with Child of Night (Lifelink, 2 power in injected state).
+    let con = inject_creature_on_battlefield(&mut e, 1, "child_of_night");
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass declare attackers");
+    e.apply_command(
+        1,
+        &declare_blockers(vec![BlockPair {
+            attacker_id: attacker,
+            blocker_id: con,
+        }]),
+    )
+    .expect("declare lifelink blocker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare blockers");
+    let b = e
+        .apply_command(1, &pass())
+        .expect("defender pass declare blockers -> combat damage");
+    let life = life_changes_in(&b);
+    // Defending player takes no direct damage (blocked).
+    assert!(
+        !life.iter().any(|lc| lc.player_id == 1 && lc.delta < 0),
+        "defending player should not lose life (attack was blocked)"
+    );
+    // Blocker's controller (P1) gains life equal to damage the lifelink blocker dealt.
+    let blocker_ev = life
+        .iter()
+        .find(|lc| lc.player_id == 1 && lc.delta > 0)
+        .expect("blocker controller LifeChanged (lifelink)");
+    assert_eq!(
+        blocker_ev.delta, 2,
+        "CR 702.15a: lifelink blocker gains life equal to damage it dealt"
+    );
+    assert_eq!(e.state.players[1].life, 22);
+}
+
 /// When all of the defender's creatures are ineligible to block an intimidate creature,
 /// the engine auto-skips blocker declaration.
 /// Accursed Spirit (Black) vs Grizzly Bears only (Green, non-artifact) → auto-skip.

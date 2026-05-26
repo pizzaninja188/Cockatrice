@@ -33,6 +33,8 @@ pub enum Keyword {
     Intimidate,
     /// CR 702.20: this creature doesn't tap when it attacks.
     Vigilance,
+    /// CR 702.15: damage dealt by this permanent also causes its controller to gain that much life.
+    Lifelink,
 }
 
 /// What a single target must be. Deliberately a small, flat enum covering only

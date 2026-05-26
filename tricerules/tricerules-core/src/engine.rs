@@ -1019,19 +1019,38 @@ impl GameEngine {
         c: &CombatState,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
+        use tricerules_cards::Keyword;
         let dfd = self.state.defending_player_id_1v1().unwrap();
+        let ap = self.state.active_player_id();
         let mut total_life_lost: i32 = 0;
+        // (controller_id, amount) pairs — collected during damage assignment, applied after.
+        let mut lifelink_gains: Vec<(PlayerId, u32)> = Vec::new();
+
         for &att in &c.attacking {
             if self.state.objects.get(&att).map(|a| a.zone) != Some(Zone::Battlefield) {
                 continue;
             }
-            let blockers = c.blockers.get(&att).map(|v| v.as_slice()).unwrap_or(&[]);
+            // Capture attacker properties before any mutation.
             let att_power = self
                 .state
                 .objects
                 .get(&att)
                 .and_then(|o| o.power)
                 .unwrap_or(0);
+            let att_has_lifelink = self
+                .state
+                .objects
+                .get(&att)
+                .map(|o| o.has_keyword(&self.registry, Keyword::Lifelink))
+                .unwrap_or(false);
+            let att_owner = self
+                .state
+                .objects
+                .get(&att)
+                .map(|o| o.owner)
+                .unwrap_or(ap);
+
+            let blockers = c.blockers.get(&att).map(|v| v.as_slice()).unwrap_or(&[]);
 
             if blockers.is_empty() {
                 // Unblocked: deal full power to defending player.
@@ -1039,6 +1058,10 @@ impl GameEngine {
                 if let Some(di) = self.state.player_idx(dfd) {
                     self.state.players[di].life -= p;
                     total_life_lost += p;
+                }
+                // CR 702.15a: attacker with lifelink causes its controller to gain that much life.
+                if att_has_lifelink && att_power > 0 {
+                    lifelink_gains.push((att_owner, att_power));
                 }
             } else if blockers.len() == 1 {
                 // Single blocker: exchange full power (unchanged from M2).
@@ -1049,19 +1072,61 @@ impl GameEngine {
                     .get(&blk)
                     .and_then(|o| o.power)
                     .unwrap_or(0);
+                let blk_has_lifelink = self
+                    .state
+                    .objects
+                    .get(&blk)
+                    .map(|o| o.has_keyword(&self.registry, Keyword::Lifelink))
+                    .unwrap_or(false);
+                let blk_owner = self
+                    .state
+                    .objects
+                    .get(&blk)
+                    .map(|o| o.owner)
+                    .unwrap_or(dfd);
                 if let Some(af) = self.state.objects.get_mut(&att) {
                     af.damage += bpw;
                 }
                 if let Some(bf) = self.state.objects.get_mut(&blk) {
                     bf.damage += att_power;
                 }
+                // CR 702.15a: attacker with lifelink gains life = damage dealt to blocker.
+                if att_has_lifelink && att_power > 0 {
+                    lifelink_gains.push((att_owner, att_power));
+                }
+                // CR 702.15a: blocker with lifelink gains life = damage dealt to attacker.
+                if blk_has_lifelink && bpw > 0 {
+                    lifelink_gains.push((blk_owner, bpw));
+                }
             } else {
                 // Multiple blockers: all blockers deal their power to the attacker simultaneously;
                 // active player assigns how the attacker's combat damage is divided among blockers.
-                let total_blocker_power: u32 = blockers
+                // Capture per-blocker properties before any mutation.
+                let blocker_info: Vec<(ObjectId, u32, bool, PlayerId)> = blockers
                     .iter()
-                    .filter_map(|&b| self.state.objects.get(&b).and_then(|o| o.power))
-                    .sum();
+                    .map(|&blk| {
+                        let pw = self
+                            .state
+                            .objects
+                            .get(&blk)
+                            .and_then(|o| o.power)
+                            .unwrap_or(0);
+                        let has_ll = self
+                            .state
+                            .objects
+                            .get(&blk)
+                            .map(|o| o.has_keyword(&self.registry, Keyword::Lifelink))
+                            .unwrap_or(false);
+                        let owner = self
+                            .state
+                            .objects
+                            .get(&blk)
+                            .map(|o| o.owner)
+                            .unwrap_or(dfd);
+                        (blk, pw, has_ll, owner)
+                    })
+                    .collect();
+                let total_blocker_power: u32 = blocker_info.iter().map(|(_, pw, _, _)| pw).sum();
                 if let Some(af) = self.state.objects.get_mut(&att) {
                     af.damage += total_blocker_power;
                 }
@@ -1071,6 +1136,16 @@ impl GameEngine {
                 for &(blk, dmg) in pairs {
                     if let Some(bf) = self.state.objects.get_mut(&blk) {
                         bf.damage += dmg;
+                    }
+                }
+                // CR 702.15a: attacker with lifelink gains life = total damage dealt to all blockers.
+                if att_has_lifelink && att_power > 0 {
+                    lifelink_gains.push((att_owner, att_power));
+                }
+                // CR 702.15a: each blocker with lifelink gains life = damage it dealt to the attacker.
+                for (_, blk_pw, blk_has_ll, blk_owner) in blocker_info {
+                    if blk_has_ll && blk_pw > 0 {
+                        lifelink_gains.push((blk_owner, blk_pw));
                     }
                 }
             }
@@ -1085,6 +1160,21 @@ impl GameEngine {
                         delta: -total_life_lost,
                     })),
                 });
+            }
+        }
+        // Apply lifelink gains and emit LifeChanged events.
+        for (pid, amount) in lifelink_gains {
+            if let Some(pi) = self.state.player_idx(pid) {
+                self.state.players[pi].life += amount as i32;
+                let new_total = self.state.players[pi].life;
+                events.push(rv1::RuledEvent {
+                    ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                        player_id: pid,
+                        new_total,
+                        delta: amount as i32,
+                    })),
+                });
+                events.push(ev_log(format!("P{pid} gains {amount} life (lifelink).")));
             }
         }
         Ok(())
