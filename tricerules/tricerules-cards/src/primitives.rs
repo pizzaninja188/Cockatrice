@@ -31,6 +31,8 @@ pub enum Keyword {
     /// CR 702.13: this creature can only be blocked by artifact creatures and/or
     /// creatures that share a color with it.
     Intimidate,
+    /// CR 702.20: this creature doesn't tap when it attacks.
+    Vigilance,
 }
 
 /// What a single target must be. Deliberately a small, flat enum covering only

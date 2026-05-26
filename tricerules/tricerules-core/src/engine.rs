@@ -753,8 +753,17 @@ impl GameEngine {
             list.push(oid);
         }
         for &oid in &list {
-            if let Some(c) = self.state.objects.get_mut(&oid) {
-                c.tapped = true;
+            // CR 702.20a — Vigilance: attacking doesn't cause this creature to tap.
+            let has_vigilance = self
+                .state
+                .objects
+                .get(&oid)
+                .map(|o| o.has_keyword(&self.registry, tricerules_cards::Keyword::Vigilance))
+                .unwrap_or(false);
+            if !has_vigilance {
+                if let Some(c) = self.state.objects.get_mut(&oid) {
+                    c.tapped = true;
+                }
             }
         }
         let attackers_for_event = list.clone();

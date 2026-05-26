@@ -5193,6 +5193,44 @@ fn intimidate_blocked_by_artifact_creature_is_legal() {
     .expect("artifact creature must be able to block an intimidate creature");
 }
 
+// ── Vigilance Keyword Tests ───────────────────────────────────────────────────
+//
+// Tests for CR 702.20a: a creature with vigilance doesn't tap when it attacks.
+
+/// A creature with Vigilance remains untapped after being declared as an attacker.
+/// Alpine Watchdog attacks — it should still be untapped after declaration.
+#[test]
+fn vigilance_attacker_does_not_tap() {
+    let mut e = GameEngine::new(9020, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let watchdog = inject_creature_on_battlefield(&mut e, 0, "alpine_watchdog");
+    e.apply_command(0, &declare_attackers(vec![watchdog]))
+        .expect("declare vigilance attacker");
+    let obj = e.state.objects.get(&watchdog).expect("watchdog object");
+    assert!(
+        !obj.tapped,
+        "CR 702.20a: Alpine Watchdog (Vigilance) must NOT be tapped after attacking"
+    );
+}
+
+/// Regression: a creature without Vigilance still taps when attacking.
+/// Grizzly Bears attacks — it should be tapped after declaration.
+#[test]
+fn non_vigilance_attacker_still_taps() {
+    let mut e = GameEngine::new(9021, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let bears = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    // Need a blocker on P1's side so the engine doesn't auto-skip to end combat.
+    let _blocker = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    e.apply_command(0, &declare_attackers(vec![bears]))
+        .expect("declare normal attacker");
+    let obj = e.state.objects.get(&bears).expect("bears object");
+    assert!(
+        obj.tapped,
+        "a creature without Vigilance must be tapped after attacking"
+    );
+}
+
 /// When all of the defender's creatures are ineligible to block an intimidate creature,
 /// the engine auto-skips blocker declaration.
 /// Accursed Spirit (Black) vs Grizzly Bears only (Green, non-artifact) → auto-skip.
