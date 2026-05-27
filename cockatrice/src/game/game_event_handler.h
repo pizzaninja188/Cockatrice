@@ -99,6 +99,8 @@ private:
     QHash<quint32, bool> engineOidSummoningSick;
     // Engine ObjectId -> haste keyword (CR 702.10) from BattlefieldObjectMap entries.
     QHash<quint32, bool> engineOidHaste;
+    // Engine ObjectId -> trample keyword (CR 702.19) from BattlefieldObjectMap entries.
+    QHash<quint32, bool> engineOidTrample;
     // Engine ObjectId -> marked damage currently shown in ruled ZoneView.
     QHash<quint32, int> engineOidMarkedDamage;
     // From ZoneViewSync battlefield_power / battlefield_toughness (ruled creatures).
@@ -140,7 +142,8 @@ private:
     // keep declaration controls hidden until the next combat step resets them.
     bool attackersSubmittedThisStep = false;
     bool blockersSubmittedThisStep = false;
-    // Assign combat damage: populated after BlockersDeclared when any attacker has 2+ blockers.
+    // Assign combat damage: populated after BlockersDeclared when any attacker has 2+ blockers
+    // OR has trample with 1+ blockers (CR 702.19).
     QList<quint32> combatDamagePendingAttackers;
     int currentCombatDamageAttackerIdx = -1;
     QHash<quint32, QList<quint32>> committedBlockerGroups; // attackerOid → [blockerOids]
@@ -210,6 +213,10 @@ public:
     [[nodiscard]] bool isEngineOidHaste(quint32 engineOid) const
     {
         return engineOidHaste.value(engineOid, false);
+    }
+    [[nodiscard]] bool isEngineOidTrample(quint32 engineOid) const
+    {
+        return engineOidTrample.value(engineOid, false);
     }
     [[nodiscard]] int markedDamageForEngineOid(quint32 engineOid) const
     {
@@ -307,6 +314,9 @@ public:
     [[nodiscard]] QString currentCombatDamageAttackerDisplayName() const;
     [[nodiscard]] int currentCombatDamageAttackerPower() const;
     [[nodiscard]] int localCombatDamageAssignedTotal() const;
+    /// CR 702.19: for a trample attacker, the defending player's damage = max(0, power - blocker_sum).
+    /// Returns 0 for non-trample attackers.
+    [[nodiscard]] int localCombatDamagePlayerDamage() const;
     [[nodiscard]] bool localCombatDamageAssignmentLegal() const;
 
     void handleNextTurn();

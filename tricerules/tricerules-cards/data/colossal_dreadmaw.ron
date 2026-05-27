@@ -1,0 +1,10 @@
+(
+  id: "colossal_dreadmaw",
+  name: "Colossal Dreadmaw",
+  mana_cost: "4GG",
+  types: ["Creature", "Dinosaur"],
+  is_creature: true,
+  power: 6,
+  toughness: 6,
+  keywords: [Trample],
+)

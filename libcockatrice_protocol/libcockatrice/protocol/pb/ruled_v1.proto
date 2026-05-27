@@ -47,6 +47,10 @@ message DamagePair {
 message AssignCombatDamage {
   uint32 attacker_id = 1;
   repeated DamagePair assignments = 2;
+  // CR 702.19: trample excess damage assigned to the defending player.
+  // Must be 0 for non-trample attackers; for trample, sum(assignments) + defending_player_damage
+  // must equal the attacker's power and each blocker must receive >= lethal damage.
+  uint32 defending_player_damage = 3;
 }
 
 message DiscardToHandSize {
@@ -245,6 +249,9 @@ message RuledPerPlayerView {
   // (CR 702.10). Used by clients to suppress the summoning-sick indicator and
   // allow attacker selection even when summoning_sick is still true.
   repeated bool battlefield_haste = 14;
+  // Parallel array to `battlefield`, true if that permanent has the Trample keyword
+  // (CR 702.19). Used by clients to enable trample damage assignment UI.
+  repeated bool battlefield_trample = 15;
 }
 
 message ZoneViewSync {
@@ -307,6 +314,9 @@ message BattlefieldObjectMap {
     // True if this permanent has the Haste keyword (CR 702.10). A creature with
     // haste can attack even while summoning_sick is true.
     bool haste = 7;
+    // True if this permanent has the Trample keyword (CR 702.19). A trample
+    // attacker may assign excess combat damage to the defending player.
+    bool trample = 8;
   }
   repeated Entry entries = 1;
 }

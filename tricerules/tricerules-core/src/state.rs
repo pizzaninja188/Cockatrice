@@ -168,18 +168,21 @@ pub struct CombatState {
     pub attacking: Vec<ObjectId>,
     /// Maps each attacker to all creatures blocking it (may be multiple — CR 509.2).
     pub blockers: HashMap<ObjectId, Vec<ObjectId>>,
-    /// Explicit combat damage from each multiply-blocked attacker to its blockers;
+    /// Explicit combat damage from each multiply-blocked (or trample) attacker to its blockers;
     /// populated when the active player submits `AssignCombatDamage` for that attacker.
     pub damage_assignments: HashMap<ObjectId, Vec<(ObjectId, u32)>>,
-    /// True when blockers_declared and at least one attacker has 2+ blockers without a full
-    /// `damage_assignments` entry; active player must assign before combat damage resolves.
+    /// CR 702.19: for trample attackers, the excess damage assigned to the defending player
+    /// (above the lethal damage dealt to all blockers). Keyed by attacker ObjectId.
+    pub trample_player_damage: HashMap<ObjectId, u32>,
+    /// True when blockers_declared and at least one attacker has 2+ blockers (or has trample
+    /// with 1+ blockers) without a full `damage_assignments` entry; active player must assign.
     pub damage_assignment_needed: bool,
     /// True once active player has finalized attackers for this combat.
     pub attackers_declared: bool,
     /// True after the defending player has finalized blockers for this combat.
     pub blockers_declared: bool,
-    /// True only after both players have passed priority in declare blockers while multi-block
-    /// assignment is still required — then the active player may submit `AssignCombatDamage`.
+    /// True only after both players have passed priority in declare blockers while assignment
+    /// is still required — then the active player may submit `AssignCombatDamage`.
     pub assign_combat_damage_phase: bool,
 }
 

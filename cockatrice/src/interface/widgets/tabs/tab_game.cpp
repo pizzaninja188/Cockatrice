@@ -372,6 +372,7 @@ void TabGame::connectToGameEventHandler()
                                 handler->currentCombatDamageAttackerDisplayName(),
                                 handler->localCombatDamageAssignedTotal(),
                                 handler->currentCombatDamageAttackerPower(),
+                                handler->localCombatDamagePlayerDamage(),
                                 handler->localCombatDamageAssignmentLegal());
                         } else {
                             gamePromptWidget->setPromptText(
@@ -391,6 +392,7 @@ void TabGame::connectToGameEventHandler()
             gamePromptWidget->setCombatDamageStatus(handler->currentCombatDamageAttackerDisplayName(),
                                                     handler->localCombatDamageAssignedTotal(),
                                                     handler->currentCombatDamageAttackerPower(),
+                                                    handler->localCombatDamagePlayerDamage(),
                                                     handler->localCombatDamageAssignmentLegal());
         });
         connect(gamePromptWidget, &GamePromptWidget::confirmAttackersRequested, game->getGameEventHandler(),

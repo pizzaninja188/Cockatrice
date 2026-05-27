@@ -585,7 +585,7 @@ impl GameEngine {
                     .iter()
                     .map(|p| (p.blocker_id, p.damage))
                     .collect();
-                self.assign_combat_damage(acd.attacker_id, &pairs)
+                self.assign_combat_damage(acd.attacker_id, &pairs, acd.defending_player_damage)
             }
         };
         let mut b = res?;
@@ -807,6 +807,7 @@ impl GameEngine {
             c.attacking = list;
             c.blockers.clear();
             c.damage_assignments.clear();
+            c.trample_player_damage.clear();
             c.damage_assignment_needed = false;
             c.assign_combat_damage_phase = false;
             c.attackers_declared = true;
@@ -816,6 +817,7 @@ impl GameEngine {
                 attacking: list,
                 blockers: HashMap::new(),
                 damage_assignments: HashMap::new(),
+                trample_player_damage: HashMap::new(),
                 damage_assignment_needed: false,
                 attackers_declared: true,
                 blockers_declared: false,
@@ -918,10 +920,23 @@ impl GameEngine {
                 }
             }
         }
-        let damage_assignment_needed = attacker_to_blockers.values().any(|v| v.len() > 1);
+        // CR 702.19: trample attackers with 1+ blockers also require explicit damage assignment
+        // (to split damage between blockers and the defending player).
+        let damage_assignment_needed = {
+            let objects = &self.state.objects;
+            let registry = &self.registry;
+            attacker_to_blockers.iter().any(|(atk_id, blks)| {
+                let has_trample = objects
+                    .get(atk_id)
+                    .map(|o| o.has_keyword(registry, tricerules_cards::Keyword::Trample))
+                    .unwrap_or(false);
+                blks.len() > 1 || (blks.len() == 1 && has_trample)
+            })
+        };
         if let Some(c) = self.state.combat.as_mut() {
             c.blockers = attacker_to_blockers;
             c.damage_assignments.clear();
+            c.trample_player_damage.clear();
             c.damage_assignment_needed = damage_assignment_needed;
             c.assign_combat_damage_phase = false;
             c.blockers_declared = true;
@@ -967,22 +982,48 @@ impl GameEngine {
         &mut self,
         attacker_id: ObjectId,
         assignments: &[(ObjectId, u32)],
+        player_damage: u32,
     ) -> Result<RuledEventBatch, EngineError> {
-        let c = self
+        // Phase 1: check gating conditions (immutable borrow, dropped at end of block).
+        {
+            let c = self
+                .state
+                .combat
+                .as_ref()
+                .ok_or(EngineError::Illegal("not in combat"))?;
+            if !c.blockers_declared || !c.damage_assignment_needed || !c.assign_combat_damage_phase
+            {
+                return Err(EngineError::Illegal("combat damage assignment not open"));
+            }
+        }
+
+        // Phase 2: compute trample flag and expected blockers before any borrow of combat.
+        let att_has_trample = self
+            .state
+            .objects
+            .get(&attacker_id)
+            .map(|o| o.has_keyword(&self.registry, tricerules_cards::Keyword::Trample))
+            .unwrap_or(false);
+
+        // Clone expected blockers to free the immutable borrow on combat before the mutable one.
+        let expected_blockers: Vec<ObjectId> = self
             .state
             .combat
             .as_ref()
-            .ok_or(EngineError::Illegal("not in combat"))?;
-        if !c.blockers_declared || !c.damage_assignment_needed || !c.assign_combat_damage_phase {
-            return Err(EngineError::Illegal("combat damage assignment not open"));
-        }
-        let expected_blockers = c
-            .blockers
-            .get(&attacker_id)
-            .ok_or(EngineError::Illegal("attacker not blocked"))?;
-        if expected_blockers.len() < 2 {
+            .and_then(|c| c.blockers.get(&attacker_id))
+            .ok_or(EngineError::Illegal("attacker not blocked"))?
+            .clone();
+
+        if expected_blockers.len() < 2 && !att_has_trample {
             return Err(EngineError::Illegal("attacker not multiply-blocked"));
         }
+        if expected_blockers.is_empty() {
+            return Err(EngineError::Illegal(
+                "cannot assign damage for unblocked attacker",
+            ));
+        }
+
+        // Phase 3: validate assignment set (all expected blockers exactly once).
         let mut seen_block = HashSet::new();
         for &(bid, _) in assignments {
             if !seen_block.insert(bid) {
@@ -996,28 +1037,97 @@ impl GameEngine {
                 "assignments must list each blocker exactly once",
             ));
         }
+
         let att_power = self
             .state
             .objects
             .get(&attacker_id)
             .and_then(|o| o.power)
             .ok_or(EngineError::Illegal("attacker missing"))?;
-        let sum: u32 = assignments.iter().map(|(_, d)| d).sum();
-        if sum != att_power {
-            return Err(EngineError::Illegal(
-                "assigned damage must equal attacker power",
-            ));
+
+        // Phase 4: validate damage amounts per trample rules.
+        if att_has_trample {
+            // CR 702.19b: must assign >= lethal damage to each blocker before sending excess to player.
+            for &blk in &expected_blockers {
+                let blk_toughness = self
+                    .state
+                    .objects
+                    .get(&blk)
+                    .and_then(|o| o.toughness)
+                    .unwrap_or(1);
+                let marked = self
+                    .state
+                    .objects
+                    .get(&blk)
+                    .map(|o| o.damage)
+                    .unwrap_or(0);
+                let lethal = blk_toughness.saturating_sub(marked).max(1);
+                let assigned = assignments
+                    .iter()
+                    .find(|(b, _)| *b == blk)
+                    .map(|(_, d)| *d)
+                    .unwrap_or(0);
+                if assigned < lethal {
+                    return Err(EngineError::Illegal(
+                        "trample: must assign lethal damage to each blocker before assigning to player",
+                    ));
+                }
+            }
+            let blocker_sum: u32 = assignments.iter().map(|(_, d)| d).sum();
+            if blocker_sum + player_damage != att_power {
+                return Err(EngineError::Illegal(
+                    "trample: total damage (blockers + player) must equal attacker power",
+                ));
+            }
+        } else {
+            if player_damage != 0 {
+                return Err(EngineError::Illegal(
+                    "cannot assign player damage without trample",
+                ));
+            }
+            let sum: u32 = assignments.iter().map(|(_, d)| d).sum();
+            if sum != att_power {
+                return Err(EngineError::Illegal(
+                    "assigned damage must equal attacker power",
+                ));
+            }
         }
+
+        // Phase 5: store the assignment and check completion (mutable borrow).
+        // Pre-compute which attackers need assignment to avoid borrowing self inside the closure.
+        let needs_assignment: Vec<ObjectId> = {
+            let objects = &self.state.objects;
+            let registry = &self.registry;
+            self.state
+                .combat
+                .as_ref()
+                .unwrap()
+                .blockers
+                .iter()
+                .filter_map(|(atk_id, blks)| {
+                    let has_trample = objects
+                        .get(atk_id)
+                        .map(|o| o.has_keyword(registry, tricerules_cards::Keyword::Trample))
+                        .unwrap_or(false);
+                    if blks.len() > 1 || (blks.len() == 1 && has_trample) {
+                        Some(*atk_id)
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        };
 
         let mut b = RuledEventBatch::default();
         let c = self.state.combat.as_mut().unwrap();
         c.damage_assignments
             .insert(attacker_id, assignments.to_vec());
-        let all_done = c
-            .blockers
+        if att_has_trample && player_damage > 0 {
+            c.trample_player_damage.insert(attacker_id, player_damage);
+        }
+        let all_done = needs_assignment
             .iter()
-            .filter(|(_, blks)| blks.len() > 1)
-            .all(|(atk, _)| c.damage_assignments.contains_key(atk));
+            .all(|atk| c.damage_assignments.contains_key(atk));
         if all_done {
             c.damage_assignment_needed = false;
         }
@@ -1107,6 +1217,12 @@ impl GameEngine {
                 .get(&att)
                 .map(|o| o.owner)
                 .unwrap_or(ap);
+            let att_has_trample = self
+                .state
+                .objects
+                .get(&att)
+                .map(|o| o.has_keyword(&self.registry, Keyword::Trample))
+                .unwrap_or(false);
 
             let blockers = c.blockers.get(&att).map(|v| v.as_slice()).unwrap_or(&[]);
 
@@ -1121,8 +1237,8 @@ impl GameEngine {
                 if att_has_lifelink && att_power > 0 {
                     lifelink_gains.push((att_owner, att_power));
                 }
-            } else if blockers.len() == 1 {
-                // Single blocker: exchange full power (unchanged from M2).
+            } else if blockers.len() == 1 && !att_has_trample {
+                // Single blocker, no trample: exchange full power (unchanged from M2).
                 let blk = blockers[0];
                 let bpw = self
                     .state
@@ -1171,8 +1287,9 @@ impl GameEngine {
                     lifelink_gains.push((blk_owner, bpw));
                 }
             } else {
-                // Multiple blockers: all blockers deal their power to the attacker simultaneously;
-                // active player assigns how the attacker's combat damage is divided among blockers.
+                // Multiple blockers OR single-blocker with trample: all blockers deal their power
+                // to the attacker simultaneously; active player assigns how the attacker's combat
+                // damage is divided among blockers (and, for trample, the defending player).
                 // Capture per-blocker properties before any mutation.
                 // Tuple: (id, power, has_lifelink, has_deathtouch, owner)
                 let blocker_info: Vec<(ObjectId, u32, bool, bool, PlayerId)> = blockers
@@ -1227,6 +1344,14 @@ impl GameEngine {
                         if att_has_deathtouch && dmg > 0 {
                             bf.deathtouch_damage = true;
                         }
+                    }
+                }
+                // CR 702.19: deal trample excess damage to the defending player.
+                let player_trample_dmg = c.trample_player_damage.get(&att).copied().unwrap_or(0);
+                if player_trample_dmg > 0 {
+                    if let Some(di) = self.state.player_idx(dfd) {
+                        self.state.players[di].life -= player_trample_dmg as i32;
+                        total_life_lost += player_trample_dmg as i32;
                     }
                 }
                 // CR 702.15a: attacker with lifelink gains life = total damage dealt to all blockers.
@@ -1495,6 +1620,7 @@ impl GameEngine {
                         attacking: vec![],
                         blockers: HashMap::new(),
                         damage_assignments: HashMap::new(),
+                        trample_player_damage: HashMap::new(),
                         damage_assignment_needed: false,
                         attackers_declared: false,
                         blockers_declared: false,
@@ -1560,10 +1686,17 @@ impl GameEngine {
                     .combat
                     .clone()
                     .ok_or(EngineError::Illegal("combat?"))?;
-                let multiblock_missing = c
-                    .blockers
-                    .iter()
-                    .any(|(atk, blks)| blks.len() > 1 && !c.damage_assignments.contains_key(atk));
+                let objects = &self.state.objects;
+                let registry = &self.registry;
+                let multiblock_missing = c.blockers.iter().any(|(atk, blks)| {
+                    // Trample with 1+ blockers also requires explicit damage assignment (CR 702.19).
+                    let has_trample = objects
+                        .get(atk)
+                        .map(|o| o.has_keyword(registry, tricerules_cards::Keyword::Trample))
+                        .unwrap_or(false);
+                    let needs_assign = blks.len() > 1 || (blks.len() == 1 && has_trample);
+                    needs_assign && !c.damage_assignments.contains_key(atk)
+                });
                 if multiblock_missing {
                     if !c.assign_combat_damage_phase {
                         if let Some(cc) = self.state.combat.as_mut() {
@@ -2618,6 +2751,20 @@ impl GameEngine {
                             .objects
                             .get(&oid)
                             .map(|o| o.has_keyword(&self.registry, tricerules_cards::Keyword::Haste))
+                            .unwrap_or(false)
+                    })
+                    .collect(),
+                // CR 702.19: clients use this to enable trample damage assignment UI.
+                battlefield_trample: p
+                    .battlefield
+                    .iter()
+                    .map(|&oid| {
+                        self.state
+                            .objects
+                            .get(&oid)
+                            .map(|o| {
+                                o.has_keyword(&self.registry, tricerules_cards::Keyword::Trample)
+                            })
                             .unwrap_or(false)
                     })
                     .collect(),

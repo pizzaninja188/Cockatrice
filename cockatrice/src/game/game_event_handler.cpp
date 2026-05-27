@@ -798,7 +798,9 @@ void GameEventHandler::seedDefaultCombatDamageForCurrentAttacker()
         return;
     }
     const QList<quint32> blockers = committedBlockerGroups.value(curAtt);
-    if (blockers.size() < 2) {
+    const bool hasTramp = engineOidTrample.value(curAtt, false);
+    // Single-blocker without trample: no explicit assignment needed; skip.
+    if (blockers.size() < 2 && !hasTramp) {
         return;
     }
     const int power = ruledCombatPowerForCreatureOid(curAtt);
@@ -811,18 +813,29 @@ void GameEventHandler::seedDefaultCombatDamageForCurrentAttacker()
     int remaining = power;
     for (int i = 0; i < blockers.size(); ++i) {
         const quint32 blk = blockers.at(i);
-        if (i == blockers.size() - 1) {
+        const int lethal =
+            qMax(1, ruledCombatToughnessForCreatureOid(blk) - engineOidMarkedDamage.value(blk, 0));
+        if (hasTramp) {
+            // CR 702.19: trample — assign exactly lethal to each blocker; remainder goes to
+            // the defending player (not to the last blocker).
+            const int assign = qMin(remaining, lethal);
+            remaining -= assign;
+            if (assign > 0) {
+                pendingCombatDamageByBlocker.insert(blk, static_cast<quint32>(assign));
+            }
+        } else if (i == blockers.size() - 1) {
+            // Non-trample last blocker: receives all remaining damage.
             if (remaining > 0) {
                 pendingCombatDamageByBlocker.insert(blk, static_cast<quint32>(remaining));
             }
             break;
-        }
-        const int lethal =
-            qMax(1, ruledCombatToughnessForCreatureOid(blk) - engineOidMarkedDamage.value(blk, 0));
-        const int assign = qMin(remaining, lethal);
-        remaining -= assign;
-        if (assign > 0) {
-            pendingCombatDamageByBlocker.insert(blk, static_cast<quint32>(assign));
+        } else {
+            // Non-trample middle blocker: assign up to lethal.
+            const int assign = qMin(remaining, lethal);
+            remaining -= assign;
+            if (assign > 0) {
+                pendingCombatDamageByBlocker.insert(blk, static_cast<quint32>(assign));
+            }
         }
     }
     emit ruledCombatDamageUiChanged();
@@ -897,6 +910,21 @@ int GameEventHandler::localCombatDamageAssignedTotal() const
     return sum;
 }
 
+int GameEventHandler::localCombatDamagePlayerDamage() const
+{
+    const quint32 curAtt = currentCombatDamageAttackerOid();
+    if (curAtt == 0 || !engineOidTrample.value(curAtt, false)) {
+        return 0;
+    }
+    const int power = currentCombatDamageAttackerPower();
+    const QList<quint32> blockers = committedBlockerGroups.value(curAtt);
+    int sum = 0;
+    for (quint32 blk : blockers) {
+        sum += static_cast<int>(pendingCombatDamageByBlocker.value(blk, 0));
+    }
+    return qMax(0, power - sum);
+}
+
 bool GameEventHandler::localCombatDamageAssignmentLegal() const
 {
     const quint32 curAtt = currentCombatDamageAttackerOid();
@@ -911,6 +939,21 @@ bool GameEventHandler::localCombatDamageAssignmentLegal() const
     int sum = 0;
     for (quint32 blk : blockers) {
         sum += static_cast<int>(pendingCombatDamageByBlocker.value(blk, 0));
+    }
+    if (engineOidTrample.value(curAtt, false)) {
+        // CR 702.19: each blocker must receive >= lethal; total assigned to blockers must be <= power
+        // (remainder goes to the defending player).
+        if (sum > power) {
+            return false;
+        }
+        for (quint32 blk : blockers) {
+            const int lethal =
+                qMax(1, ruledCombatToughnessForCreatureOid(blk) - engineOidMarkedDamage.value(blk, 0));
+            if (static_cast<int>(pendingCombatDamageByBlocker.value(blk, 0)) < lethal) {
+                return false;
+            }
+        }
+        return true;
     }
     return sum == power;
 }
@@ -1173,6 +1216,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 engineOidOwner.clear();
                                 engineOidSummoningSick.clear();
                                 engineOidHaste.clear();
+                                engineOidTrample.clear();
                                 engineOidMarkedDamage.clear();
                                 engineOidBattlefieldPower.clear();
                                 engineOidBattlefieldToughness.clear();
@@ -1182,6 +1226,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                     engineOidOwner.insert(entry.engine_object_id(), entry.player_id());
                                     engineOidSummoningSick.insert(entry.engine_object_id(), entry.summoning_sick());
                                     engineOidHaste.insert(entry.engine_object_id(), entry.haste());
+                                    engineOidTrample.insert(entry.engine_object_id(), entry.trample());
                                     if (entry.server_card_id() >= 0) {
                                         ownerCardIdToEngineOid.insert(makeOwnedCardKey(entry.player_id(), entry.server_card_id()),
                                                                       entry.engine_object_id());
@@ -1294,11 +1339,15 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                     committedBlocks.insert(blkOid, attOid);
                                     committedBlockerGroups[attOid].append(blkOid);
                                 }
-                                // Queue attackers that need explicit combat damage assignment (2+ blockers).
+                                // Queue attackers that need explicit combat damage assignment:
+                                // any attacker with 2+ blockers, or a trample attacker with 1+ blockers
+                                // (CR 702.19: trample excess goes to defending player).
                                 clearCombatDamageAssignmentState();
                                 for (auto it = committedBlockerGroups.constBegin();
                                      it != committedBlockerGroups.constEnd(); ++it) {
-                                    if (it.value().size() > 1) {
+                                    const bool singleWithTrample =
+                                        it.value().size() == 1 && engineOidTrample.value(it.key(), false);
+                                    if (it.value().size() > 1 || singleWithTrample) {
                                         combatDamagePendingAttackers.append(it.key());
                                     }
                                 }
@@ -1488,10 +1537,19 @@ void GameEventHandler::confirmCombatDamageForCurrentAttacker()
     auto *acd = ruledCommand.mutable_assign_combat_damage();
     acd->set_attacker_id(curAtt);
     const QList<quint32> blockers = committedBlockerGroups.value(curAtt);
+    const int power = currentCombatDamageAttackerPower();
+    int blockerSum = 0;
     for (quint32 blk : blockers) {
+        const auto dmg = pendingCombatDamageByBlocker.value(blk, 0);
         auto *pair = acd->add_assignments();
         pair->set_blocker_id(blk);
-        pair->set_damage(pendingCombatDamageByBlocker.value(blk, 0));
+        pair->set_damage(dmg);
+        blockerSum += static_cast<int>(dmg);
+    }
+    // CR 702.19: for trample, set the defending player's share of the damage.
+    const int playerDmg = qMax(0, power - blockerSum);
+    if (engineOidTrample.value(curAtt, false) && playerDmg > 0) {
+        acd->set_defending_player_damage(static_cast<uint32_t>(playerDmg));
     }
     sendRuledCommandFromHandler(this, game, ruledCommand);
     emit ruledCombatStateChanged();

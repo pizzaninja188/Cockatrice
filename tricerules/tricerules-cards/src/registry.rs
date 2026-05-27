@@ -95,6 +95,7 @@ const EMBEDDED_RON_CHUNKS: &[&str] = &[
     include_str!("../data/raging_goblin.ron"),
     include_str!("../data/pharikas_chosen.ron"),
     include_str!("../data/goblin_trailblazer.ron"),
+    include_str!("../data/colossal_dreadmaw.ron"),
 ];
 
 #[cfg(test)]

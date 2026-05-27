@@ -39,7 +39,8 @@ public slots:
     void setLandTapUndoAvailable(bool available);
     void setSpellCastPending(bool pending);
     /// Active player only: drives assign-combat-damage title, assigned/power line, and OK enable.
-    void setCombatDamageStatus(const QString &attackerName, int assigned, int power, bool legal);
+    /// `playerDamage` is the implied trample damage to the defending player (0 for non-trample).
+    void setCombatDamageStatus(const QString &attackerName, int assigned, int power, int playerDamage, bool legal);
     void setActivePlayerName(const QString &name);
     void setPriorityPlayerName(const QString &name);
     void setLocalPlayerIsActive(bool isActive);

@@ -43,6 +43,9 @@ pub enum Keyword {
     Deathtouch,
     /// CR 702.110: this creature can't be blocked except by two or more creatures.
     Menace,
+    /// CR 702.19: if this creature is blocked, excess combat damage (above lethal for all blockers)
+    /// is assigned to the defending player rather than being lost.
+    Trample,
 }
 
 /// What a single target must be. Deliberately a small, flat enum covering only

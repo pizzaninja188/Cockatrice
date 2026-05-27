@@ -3344,6 +3344,14 @@ fn opening_mulligan_to_zero_cannot_mulligan_further() {
 }
 
 fn assign_combat_damage_cmd(attacker_id: u32, pairs: Vec<(u32, u32)>) -> RuledCommand {
+    assign_combat_damage_cmd_with_player(attacker_id, pairs, 0)
+}
+
+fn assign_combat_damage_cmd_with_player(
+    attacker_id: u32,
+    pairs: Vec<(u32, u32)>,
+    defending_player_damage: u32,
+) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::AssignCombatDamage(AssignCombatDamage {
             attacker_id,
@@ -3351,6 +3359,7 @@ fn assign_combat_damage_cmd(attacker_id: u32, pairs: Vec<(u32, u32)>) -> RuledCo
                 .into_iter()
                 .map(|(blocker_id, damage)| DamagePair { blocker_id, damage })
                 .collect(),
+            defending_player_damage,
         })),
     }
 }
@@ -5854,5 +5863,286 @@ fn menace_single_creature_auto_skips_blockers() {
     assert!(
         e.state.combat.as_ref().unwrap().blockers_declared,
         "blockers_declared must be set after menace auto-skip"
+    );
+}
+
+// ── Trample scenarios ─────────────────────────────────────────────────────────
+
+/// Helper: advance a Colossal Dreadmaw (6/6 Trample) to the assign-combat-damage phase
+/// with one blocker (grizzly_bears 2/2). Returns (engine, attacker_oid, blocker_oid).
+fn setup_trample_single_blocker_assign_phase() -> (GameEngine, u32, u32) {
+    let decks = Some(vec![
+        std::iter::repeat_n("colossal_dreadmaw".to_string(), 10).collect::<Vec<_>>(),
+        std::iter::repeat_n("grizzly_bears".to_string(), 10).collect::<Vec<_>>(),
+    ]);
+    let mut e = GameEngine::new(5001, &[0, 1], 20, decks, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    ensure_in_hand(&mut e, 0, "colossal_dreadmaw");
+    ensure_in_hand(&mut e, 1, "grizzly_bears");
+    let attacker = put_creature_on_battlefield(&mut e, 0, "colossal_dreadmaw");
+    let blocker = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("declare dreadmaw attacker");
+    e.apply_command(0, &pass()).expect("active pass declare attackers");
+    e.apply_command(1, &pass()).expect("defender pass declare attackers");
+
+    e.apply_command(
+        1,
+        &declare_blockers(vec![BlockPair {
+            attacker_id: attacker,
+            blocker_id: blocker,
+        }]),
+    )
+    .expect("declare single blocker");
+
+    // Trample + 1 blocker must require explicit assignment.
+    assert!(
+        e.state.combat.as_ref().unwrap().damage_assignment_needed,
+        "damage_assignment_needed must be true for trample+single-blocker"
+    );
+
+    // Pass priority in declare-blockers to open assign-combat-damage phase.
+    e.apply_command(0, &pass()).expect("active pass declare blockers");
+    e.apply_command(1, &pass()).expect("defender pass → assign phase");
+    assert!(
+        e.state.combat.as_ref().unwrap().assign_combat_damage_phase,
+        "assign_combat_damage_phase must be open"
+    );
+    (e, attacker, blocker)
+}
+
+#[test]
+fn trample_single_blocker_damage_assignment_needed() {
+    // Verify that a trample attacker with a single blocker sets damage_assignment_needed
+    // (unlike a non-trample single-blocker which proceeds automatically).
+    setup_trample_single_blocker_assign_phase();
+}
+
+#[test]
+fn trample_single_blocker_lethal_plus_excess_to_player() {
+    // Colossal Dreadmaw (6/6 Trample) vs Grizzly Bears (2/2).
+    // Legal assignment: 2 to blocker (lethal), 4 to player.
+    // Blocker dies (2 damage = toughness). Player takes 4 trample damage.
+    let (mut e, attacker, blocker) = setup_trample_single_blocker_assign_phase();
+    let p1_life_before = e.state.players[1].life;
+
+    let b = e
+        .apply_command(
+            0,
+            &assign_combat_damage_cmd_with_player(attacker, vec![(blocker, 2)], 4),
+        )
+        .expect("assign 2 to blocker + 4 to player");
+
+    let dead: Vec<u32> = permanents_moved_in(&b)
+        .iter()
+        .map(|p| p.object_id)
+        .collect();
+
+    // Blocker (2/2) receives 2 lethal → dies.
+    assert!(dead.contains(&blocker), "blocker dies from lethal damage: {dead:?}");
+    // Attacker (6/6) receives 2 damage from blocker but survives (toughness 6).
+    let att_obj = e.state.objects.get(&attacker);
+    // Attacker may still be alive (6 toughness vs 2 damage); just confirm it's not in dead list.
+    assert!(
+        !dead.contains(&attacker),
+        "dreadmaw survives (toughness 6 vs blocker power 2): {dead:?}"
+    );
+
+    // Defending player takes 4 trample damage.
+    let life_evs = life_changes_in(&b);
+    assert!(
+        life_evs.iter().any(|lc| lc.player_id == 1 && lc.delta == -4),
+        "player must take 4 trample damage: {life_evs:?}"
+    );
+    assert_eq!(
+        e.state.players[1].life,
+        p1_life_before - 4,
+        "player life after trample"
+    );
+    // Attacker stat: blocker dealt 2 power back
+    if let Some(att_o) = att_obj {
+        assert_eq!(att_o.damage, 2, "dreadmaw has 2 marked damage from the blocker");
+    }
+    assert!(e.state.combat.is_none(), "combat cleared after resolution");
+}
+
+#[test]
+fn trample_rejects_less_than_lethal_to_blocker() {
+    // CR 702.19b: must assign >= lethal damage to each blocker before trample to player.
+    // Colossal Dreadmaw (6/6) vs Grizzly Bears (2/2): assigning only 1 to blocker (< lethal 2) is illegal.
+    let (mut e, attacker, blocker) = setup_trample_single_blocker_assign_phase();
+    let err = e.apply_command(
+        0,
+        &assign_combat_damage_cmd_with_player(attacker, vec![(blocker, 1)], 5),
+    );
+    assert!(
+        err.is_err(),
+        "assigning less than lethal to blocker must be rejected"
+    );
+    // State remains in assign phase for retry.
+    assert!(e.state.combat.as_ref().unwrap().assign_combat_damage_phase);
+    assert!(e.state.combat.as_ref().unwrap().damage_assignment_needed);
+}
+
+#[test]
+fn trample_rejects_sum_mismatch() {
+    // Colossal Dreadmaw (6/6) vs Grizzly Bears (2/2).
+    // 2 to blocker + 3 to player = 5 ≠ 6 (power): must be rejected.
+    let (mut e, attacker, blocker) = setup_trample_single_blocker_assign_phase();
+    assert!(
+        e.apply_command(
+            0,
+            &assign_combat_damage_cmd_with_player(attacker, vec![(blocker, 2)], 3),
+        )
+        .is_err(),
+        "blocker + player damage not equal to attacker power must be rejected"
+    );
+}
+
+#[test]
+fn trample_rejects_player_damage_without_trample() {
+    // Non-trample multi-blocked attacker (Grizzly Bears 2/2) must not accept defending_player_damage > 0.
+    let (mut e, attacker, a, b) = setup_two_blockers_assign_phase(5010);
+    assert!(
+        e.apply_command(
+            0,
+            &assign_combat_damage_cmd_with_player(attacker, vec![(a, 1), (b, 0)], 1),
+        )
+        .is_err(),
+        "player damage on non-trample attacker must be rejected"
+    );
+}
+
+#[test]
+fn trample_all_damage_to_blocker_zero_to_player() {
+    // Colossal Dreadmaw (6/6 Trample) vs Grizzly Bears (2/2).
+    // It is legal to assign all 6 damage to the single blocker (0 to player), provided
+    // lethal is still met (6 >= 2). Blocker dies, player takes 0.
+    let (mut e, attacker, blocker) = setup_trample_single_blocker_assign_phase();
+    let p1_life_before = e.state.players[1].life;
+
+    let b = e
+        .apply_command(
+            0,
+            &assign_combat_damage_cmd_with_player(attacker, vec![(blocker, 6)], 0),
+        )
+        .expect("assign all 6 to blocker, 0 to player");
+
+    let dead: Vec<u32> = permanents_moved_in(&b)
+        .iter()
+        .map(|p| p.object_id)
+        .collect();
+    assert!(dead.contains(&blocker), "blocker dies: {dead:?}");
+    assert_eq!(
+        e.state.players[1].life,
+        p1_life_before,
+        "player takes 0 trample damage when all assigned to blocker"
+    );
+    assert!(
+        life_changes_in(&b)
+            .iter()
+            .all(|lc| lc.delta >= 0 || lc.player_id != 1),
+        "no negative life event for defending player"
+    );
+}
+
+#[test]
+fn trample_multi_blocked_excess_to_player() {
+    // Colossal Dreadmaw (6/6 Trample) vs two Grizzly Bears (2/2 each).
+    // Legal: assign 2 to first blocker (lethal), 2 to second (lethal), 2 to player.
+    // Both blockers die; player takes 2.
+    let decks = Some(vec![
+        std::iter::repeat_n("colossal_dreadmaw".to_string(), 10).collect::<Vec<_>>(),
+        std::iter::repeat_n("grizzly_bears".to_string(), 10).collect::<Vec<_>>(),
+    ]);
+    let mut e = GameEngine::new(5020, &[0, 1], 20, decks, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    ensure_in_hand(&mut e, 0, "colossal_dreadmaw");
+    ensure_in_hand(&mut e, 1, "grizzly_bears");
+    let attacker = put_creature_on_battlefield(&mut e, 0, "colossal_dreadmaw");
+    let b1 = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    let b2 = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass()).expect("active pass declare attackers");
+    e.apply_command(1, &pass()).expect("defender pass declare attackers");
+
+    e.apply_command(
+        1,
+        &declare_blockers(vec![
+            BlockPair { attacker_id: attacker, blocker_id: b1 },
+            BlockPair { attacker_id: attacker, blocker_id: b2 },
+        ]),
+    )
+    .expect("declare two blockers");
+
+    e.apply_command(0, &pass()).expect("active pass declare blockers");
+    e.apply_command(1, &pass()).expect("defender pass → assign phase");
+
+    let p1_life_before = e.state.players[1].life;
+    let batch = e
+        .apply_command(
+            0,
+            &assign_combat_damage_cmd_with_player(attacker, vec![(b1, 2), (b2, 2)], 2),
+        )
+        .expect("assign 2+2+2 trample");
+
+    let dead: Vec<u32> = permanents_moved_in(&batch)
+        .iter()
+        .map(|p| p.object_id)
+        .collect();
+    assert!(dead.contains(&b1), "b1 dies: {dead:?}");
+    assert!(dead.contains(&b2), "b2 dies: {dead:?}");
+    assert!(!dead.contains(&attacker), "dreadmaw survives (6 toughness vs 2+2 blocker power): {dead:?}");
+
+    let life_evs = life_changes_in(&batch);
+    assert!(
+        life_evs.iter().any(|lc| lc.player_id == 1 && lc.delta == -2),
+        "defending player takes 2 trample damage: {life_evs:?}"
+    );
+    assert_eq!(e.state.players[1].life, p1_life_before - 2);
+    assert!(e.state.combat.is_none(), "combat cleared");
+}
+
+#[test]
+fn trample_multi_blocked_rejects_less_than_lethal_to_first_blocker() {
+    // Colossal Dreadmaw (6/6 Trample) vs two Grizzly Bears (2/2 each).
+    // Assign 1 to first blocker (< lethal 2): must be rejected.
+    let decks = Some(vec![
+        std::iter::repeat_n("colossal_dreadmaw".to_string(), 10).collect::<Vec<_>>(),
+        std::iter::repeat_n("grizzly_bears".to_string(), 10).collect::<Vec<_>>(),
+    ]);
+    let mut e = GameEngine::new(5021, &[0, 1], 20, decks, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    ensure_in_hand(&mut e, 0, "colossal_dreadmaw");
+    ensure_in_hand(&mut e, 1, "grizzly_bears");
+    let attacker = put_creature_on_battlefield(&mut e, 0, "colossal_dreadmaw");
+    let b1 = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    let b2 = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+
+    e.apply_command(0, &declare_attackers(vec![attacker])).expect("declare");
+    e.apply_command(0, &pass()).expect("pass");
+    e.apply_command(1, &pass()).expect("pass");
+    e.apply_command(
+        1,
+        &declare_blockers(vec![
+            BlockPair { attacker_id: attacker, blocker_id: b1 },
+            BlockPair { attacker_id: attacker, blocker_id: b2 },
+        ]),
+    )
+    .expect("declare two blockers");
+    e.apply_command(0, &pass()).expect("pass");
+    e.apply_command(1, &pass()).expect("pass");
+
+    // 1 to first blocker < lethal (2): illegal.
+    assert!(
+        e.apply_command(
+            0,
+            &assign_combat_damage_cmd_with_player(attacker, vec![(b1, 1), (b2, 2)], 3),
+        )
+        .is_err(),
+        "must reject when first blocker receives less than lethal"
     );
 }

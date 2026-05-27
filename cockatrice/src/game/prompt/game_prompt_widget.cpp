@@ -375,16 +375,26 @@ void GamePromptWidget::setSpellCastPending(bool pending)
     updateCombatButtonsVisibility();
 }
 
-void GamePromptWidget::setCombatDamageStatus(const QString &attackerName, int assigned, int power, bool legal)
+void GamePromptWidget::setCombatDamageStatus(const QString &attackerName, int assigned, int power,
+                                              int playerDamage, bool legal)
 {
     if (attackerName.isEmpty()) {
         confirmCombatDamageButton->setEnabled(false);
         return;
     }
-    setPromptText(tr("Assign combat damage for %1\n%2")
-                      .arg(attackerName)
-                      .arg(tr("Assigned %1 of %2.").arg(assigned).arg(power)));
-    confirmCombatDamageButton->setEnabled(legal && assigned == power && power > 0);
+    QString detail;
+    if (playerDamage > 0) {
+        // Trample: show blocker assignment and implied player damage separately.
+        detail = tr("Assigned %1 to blockers, %2 tramples to player (of %3).")
+                     .arg(assigned)
+                     .arg(playerDamage)
+                     .arg(power);
+    } else {
+        detail = tr("Assigned %1 of %2.").arg(assigned).arg(power);
+    }
+    setPromptText(tr("Assign combat damage for %1\n%2").arg(attackerName).arg(detail));
+    // OK button: legal already validates totals; power > 0 guards against 0-power edge case.
+    confirmCombatDamageButton->setEnabled(legal && power > 0);
 }
 
 void GamePromptWidget::updateCombatButtonsVisibility()
