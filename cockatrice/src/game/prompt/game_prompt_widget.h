@@ -44,6 +44,9 @@ public slots:
     void setPriorityPlayerName(const QString &name);
     void setLocalPlayerIsActive(bool isActive);
     void refreshPromptLabel();
+    /// Show `msg` persistently in place of the normal "Choose blockers." label until
+    /// the player successfully submits legal blocks (or leaves the declare-blockers state).
+    void setStickyBlockerError(const QString &msg);
     [[nodiscard]] QString getActivePlayerName() const { return activePlayerName; }
     /// True only when the local player must press a combat declare button (not just pass priority).
     bool localPlayerMustDeclareCombat() const
@@ -92,6 +95,10 @@ private:
     QString activePlayerName;
     QString priorityPlayerName;
     bool localPlayerIsActive = false;
+    /// Non-empty while the engine has rejected a block declaration (e.g. menace with one blocker).
+    /// Shown instead of the normal "Choose blockers." text; cleared when the player successfully
+    /// submits legal blocks or leaves the declare-blockers state.
+    QString stickyBlockerError;
     int ruledOpeningUiKind = 0;
     int ruledOpeningMulliganCount = 0;
     QVector<int> ruledOpeningPickSeatIds;

@@ -400,6 +400,10 @@ signals:
     void ruledEngineTimeline(QString message);
     /// Phase, priority, legal actions, and local UI hints for the ruled prompt panel only.
     void ruledEnginePromptFeed(QString message);
+    /// Emitted when the engine rejects a DeclareBlockers command (e.g. menace with one blocker).
+    /// Precedes ruledCombatStateChanged so the prompt widget can set the sticky label before the
+    /// next refreshPromptLabel() call overwrites it.
+    void ruledBlockerRejected();
     void ruledCombatStateChanged();
     void ruledCombatDamageUiChanged();
     void ruledBattlefieldMapUpdated();

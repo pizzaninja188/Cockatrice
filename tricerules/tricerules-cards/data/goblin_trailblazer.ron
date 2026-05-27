@@ -1,0 +1,10 @@
+(
+  id: "goblin_trailblazer",
+  name: "Goblin Trailblazer",
+  mana_cost: "1R",
+  types: ["Creature", "Goblin", "Pirate"],
+  is_creature: true,
+  power: 2,
+  toughness: 1,
+  keywords: [Menace],
+)

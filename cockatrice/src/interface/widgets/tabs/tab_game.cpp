@@ -235,8 +235,14 @@ void TabGame::connectToGameEventHandler()
                 }
             });
     if (gamePromptWidget) {
+        connect(game->getGameEventHandler(), &GameEventHandler::ruledBlockerRejected, gamePromptWidget,
+                [this]() {
+                    if (gamePromptWidget) {
+                        gamePromptWidget->setStickyBlockerError(tr("Illegal blocks."));
+                    }
+                });
         connect(game->getGameEventHandler(), &GameEventHandler::ruledEnginePromptFeed, gamePromptWidget,
-                [this](const QString &lines) {
+                [this](const QString & /*lines*/) {
                     auto *handler = game->getGameEventHandler();
                     if (handler && handler->localPlayerMustCleanupDiscard()) {
                         gamePromptWidget->setCleanupDiscardMode(

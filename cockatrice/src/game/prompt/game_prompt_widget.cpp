@@ -267,9 +267,22 @@ void GamePromptWidget::setCombatMode(CombatMode mode, bool localPlayerHasButtons
     if (mode == currentCombatMode && localPlayerHasButtons == localPlayerHasCombatButtons) {
         return;
     }
+    // Clear the sticky rejection label whenever we leave the "defender has buttons" state:
+    // either the phase advanced past declare-blockers, or legal blocks were accepted and the
+    // local player no longer has blocker buttons (blockersSubmittedThisStep flipped true).
+    if (!stickyBlockerError.isEmpty() &&
+        (mode != CombatMode::DeclareBlockers || !localPlayerHasButtons)) {
+        stickyBlockerError.clear();
+    }
     currentCombatMode = mode;
     localPlayerHasCombatButtons = localPlayerHasButtons;
     updateCombatButtonsVisibility();
+    refreshPromptLabel();
+}
+
+void GamePromptWidget::setStickyBlockerError(const QString &msg)
+{
+    stickyBlockerError = msg;
     refreshPromptLabel();
 }
 
@@ -493,7 +506,11 @@ void GamePromptWidget::refreshPromptLabel()
     }
     if (currentCombatMode == CombatMode::DeclareBlockers) {
         if (localPlayerHasCombatButtons) {
-            promptLabel->setText(tr("%1's Declare Blockers step. Choose blockers.").arg(activePlayerName));
+            if (!stickyBlockerError.isEmpty()) {
+                promptLabel->setText(stickyBlockerError);
+            } else {
+                promptLabel->setText(tr("%1's Declare Blockers step. Choose blockers.").arg(activePlayerName));
+            }
         } else if (localPlayerHasPriority) {
             promptLabel->setText(
                 tr("%1's Declare Blockers step. Cast instants and activate abilities.").arg(activePlayerName));

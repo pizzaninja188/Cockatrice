@@ -5683,3 +5683,176 @@ fn non_deathtouch_one_power_does_not_kill_two_toughness_blocker() {
         "Corpse should have 1 marked damage from the non-deathtouch hit"
     );
 }
+
+// ── Menace Keyword Tests ──────────────────────────────────────────────────────
+//
+// Tests for CR 702.110: a creature with menace can't be blocked except by two
+// or more creatures. A single blocker is illegal; zero blockers (unblocked) is
+// always fine; two or more blockers is legal.
+
+/// CR 702.110 illegal path: attempting to block a menace creature with exactly
+/// one blocker must be rejected with "Illegal blocks."
+/// Goblin Trailblazer (2/1 Menace) is attacked; P1 tries to block with a single
+/// Grizzly Bears — the engine must reject the declaration, leaving game state in
+/// DeclareBlockers so the defender can correct their blocks.
+#[test]
+fn menace_single_blocker_is_illegal() {
+    let mut e = GameEngine::new(9050, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+
+    let trailblazer = inject_creature_on_battlefield(&mut e, 0, "goblin_trailblazer");
+    // Give P1 two blockers so the engine won't auto-skip — the defender will
+    // manually submit an illegal single-blocker declaration.
+    let bears1 = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    let _bears2 = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+
+    e.apply_command(0, &declare_attackers(vec![trailblazer]))
+        .expect("declare menace attacker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass declare attackers");
+
+    // One blocker on a menace attacker — must be rejected.
+    let err = e
+        .apply_command(
+            1,
+            &declare_blockers(vec![BlockPair {
+                attacker_id: trailblazer,
+                blocker_id: bears1,
+            }]),
+        )
+        .expect_err("single blocker on menace must be rejected");
+    assert_eq!(
+        err.to_string(),
+        "illegal command: Illegal blocks.",
+        "error must say 'Illegal blocks.', got: {err}"
+    );
+    // Game must NOT have advanced — still in DeclareBlockers, blockers_declared still false.
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareBlockers,
+        "game must stay in DeclareBlockers after illegal menace block"
+    );
+    assert!(
+        !e.state
+            .combat
+            .as_ref()
+            .unwrap()
+            .blockers_declared,
+        "blockers_declared must remain false after illegal menace block"
+    );
+}
+
+/// CR 702.110 happy path: a menace creature may be blocked by two or more creatures.
+/// Goblin Trailblazer blocked by two Grizzly Bears — must succeed.
+#[test]
+fn menace_two_blockers_is_legal() {
+    let mut e = GameEngine::new(9051, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+
+    let trailblazer = inject_creature_on_battlefield(&mut e, 0, "goblin_trailblazer");
+    let bears1 = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    let bears2 = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+
+    e.apply_command(0, &declare_attackers(vec![trailblazer]))
+        .expect("declare menace attacker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass declare attackers");
+
+    // Two blockers on a menace attacker — must be accepted.
+    e.apply_command(
+        1,
+        &declare_blockers(vec![
+            BlockPair {
+                attacker_id: trailblazer,
+                blocker_id: bears1,
+            },
+            BlockPair {
+                attacker_id: trailblazer,
+                blocker_id: bears2,
+            },
+        ]),
+    )
+    .expect("two blockers on a menace creature must be legal");
+    assert!(
+        e.state.combat.as_ref().unwrap().blockers_declared,
+        "blockers_declared must be true after legal two-blocker menace block"
+    );
+}
+
+/// CR 702.110 unblocked case: a menace creature that is not blocked at all is
+/// perfectly legal — menace only restricts how it *can* be blocked, not whether
+/// the defending player is forced to block it.
+/// Two defender creatures are needed here so that `defending_player_has_eligible_blockers`
+/// returns true (both can legally co-block the menace attacker), which keeps the engine
+/// in the manual declare-blockers step where we can submit an empty declaration.
+#[test]
+fn menace_unblocked_is_legal() {
+    let mut e = GameEngine::new(9052, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+
+    let trailblazer = inject_creature_on_battlefield(&mut e, 0, "goblin_trailblazer");
+    // Two defender creatures: together they could legally co-block the menace attacker, so the
+    // engine keeps the manual step open. The defender then voluntarily declares no blocks.
+    let _bears1 = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    let _bears2 = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+
+    e.apply_command(0, &declare_attackers(vec![trailblazer]))
+        .expect("declare menace attacker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass declare attackers");
+
+    // Empty blocker declaration — menace creature goes unblocked, which is always fine.
+    e.apply_command(1, &declare_blockers(vec![]))
+        .expect("empty blockers (menace unblocked) must be legal");
+    assert!(
+        e.state.combat.as_ref().unwrap().blockers_declared,
+        "blockers_declared must be true after legal empty block"
+    );
+}
+
+/// CR 702.110 auto-skip: when every attacker has menace and the defender has only one
+/// creature, no legal non-empty blocking assignment exists (a single creature can't
+/// satisfy the 2-blocker minimum alone). The engine must auto-declare empty blockers
+/// and skip the manual declare-blockers step, exactly as it does for flying evasion.
+#[test]
+fn menace_single_creature_auto_skips_blockers() {
+    let mut e = GameEngine::new(9053, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+
+    let trailblazer = inject_creature_on_battlefield(&mut e, 0, "goblin_trailblazer");
+    // Only one defender creature — cannot satisfy menace's 2-blocker requirement alone.
+    let _bears = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+
+    e.apply_command(0, &declare_attackers(vec![trailblazer]))
+        .expect("declare menace attacker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+
+    // P1 passes — engine detects no eligible blockers (menace prevents single-blocker block)
+    // and must auto-declare empty blockers, just like flying when no reach/flyers exist.
+    let b = e
+        .apply_command(1, &pass())
+        .expect("defender pass → auto-skip blockers");
+
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareBlockers,
+        "should enter DeclareBlockers after menace auto-skip"
+    );
+    let bd = blockers_declared_in(&b);
+    assert_eq!(bd.len(), 1, "exactly one BlockersDeclared event from auto-skip");
+    assert!(
+        bd[0].block_pairs.is_empty(),
+        "auto-skipped block must be empty (menace creature goes unblocked)"
+    );
+    assert!(
+        e.state.combat.as_ref().unwrap().blockers_declared,
+        "blockers_declared must be set after menace auto-skip"
+    );
+}

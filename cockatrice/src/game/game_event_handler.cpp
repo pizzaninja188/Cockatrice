@@ -1587,6 +1587,10 @@ void GameEventHandler::handleConfirmRuledBlockers()
     if (!game->getGameMetaInfo()->proto().ruled_game()) {
         return;
     }
+    AbstractClient *client = game->getClientForPlayer(-1);
+    if (!client) {
+        return;
+    }
     ruled::v1::RuledCommand ruledCommand;
     auto *declare = ruledCommand.mutable_declare_blockers();
     for (auto it = pendingBlocks.constBegin(); it != pendingBlocks.constEnd(); ++it) {
@@ -1594,7 +1598,32 @@ void GameEventHandler::handleConfirmRuledBlockers()
         pair->set_blocker_id(it.key());
         pair->set_attacker_id(it.value());
     }
-    sendRuledCommandFromHandler(this, game, ruledCommand);
+    std::string payload;
+    if (!ruledCommand.SerializeToString(&payload)) {
+        return;
+    }
+    Command_RuledPayload cmd;
+    cmd.set_payload(payload);
+    PendingCommand *pend = prepareGameCommand(cmd);
+    // On rejection (e.g. menace requires 2+ blockers), roll back the eagerly-set guard flags so
+    // the defender can fix and re-submit. On success the engine's BlockersDeclared event will
+    // update committedBlocks and set blockersSubmittedThisStep via the normal event path.
+    QObject::connect(
+        pend, &PendingCommand::finished, this,
+        [this](const Response &response, const CommandContainer &, const QVariant &) {
+            if (response.response_code() != Response::RespOk) {
+                pendingBlocks = committedBlocks;
+                committedBlocks.clear();
+                blockersSubmittedThisStep = false;
+                // Fire ruledBlockerRejected first so the prompt widget sets its sticky label
+                // before ruledCombatStateChanged triggers refreshPromptLabel().
+                emit ruledBlockerRejected();
+                emit ruledCombatStateChanged();
+            }
+        });
+    client->sendCommand(pend);
+    // Eagerly flip the guard to prevent a double-submit while the round-trip is in flight;
+    // the callback above resets it if the engine rejects.
     blockersSubmittedThisStep = true;
     committedBlocks = pendingBlocks;
     pendingBlocks.clear();

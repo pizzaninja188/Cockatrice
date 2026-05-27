@@ -41,6 +41,8 @@ pub enum Keyword {
     /// CR 702.2: any amount of damage this creature deals to another creature is enough to
     /// destroy it (as a state-based action; CR 704.5h).
     Deathtouch,
+    /// CR 702.110: this creature can't be blocked except by two or more creatures.
+    Menace,
 }
 
 /// What a single target must be. Deliberately a small, flat enum covering only

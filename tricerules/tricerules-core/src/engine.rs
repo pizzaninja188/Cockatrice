@@ -678,6 +678,7 @@ impl GameEngine {
     }
 
     fn defending_player_has_eligible_blockers(&self) -> bool {
+        use tricerules_cards::Keyword;
         let Some(dp) = self.state.defending_player_id_1v1() else {
             return false;
         };
@@ -694,15 +695,42 @@ impl GameEngine {
             return false;
         }
         // CR 302.6: summoning sickness does NOT prevent blocking.
-        // A creature is only eligible if it can legally block at least one current attacker
-        // (e.g. a ground creature cannot block a flying attacker — CR 702.9b).
-        self.state.players[dp_idx].battlefield.iter().any(|oid| {
-            self.state.objects.get(oid).is_some_and(|o| {
-                o.zone == Zone::Battlefield
-                    && o.owner == dp
-                    && o.is_creature(&self.registry)
-                    && !o.tapped
-                    && attacking.iter().any(|&aid| self.can_block(aid, o.id))
+        // Build the full list of untapped defender creatures up-front so the menace
+        // check can count potential co-blockers without re-scanning the battlefield.
+        let defenders: Vec<ObjectId> = self.state.players[dp_idx]
+            .battlefield
+            .iter()
+            .filter(|&&oid| {
+                self.state.objects.get(&oid).is_some_and(|o| {
+                    o.zone == Zone::Battlefield
+                        && o.owner == dp
+                        && o.is_creature(&self.registry)
+                        && !o.tapped
+                })
+            })
+            .copied()
+            .collect();
+        // A legal non-empty blocking assignment exists only when at least one defender
+        // creature can participate in a valid block. For menace attackers (CR 702.110),
+        // participation requires at least one OTHER defender that can block the same
+        // attacker — otherwise the only achievable result is an illegal single-blocker.
+        defenders.iter().any(|&cid| {
+            attacking.iter().any(|&aid| {
+                if !self.can_block(aid, cid) {
+                    return false;
+                }
+                let has_menace = self
+                    .state
+                    .objects
+                    .get(&aid)
+                    .map(|o| o.has_keyword(&self.registry, Keyword::Menace))
+                    .unwrap_or(false);
+                if has_menace {
+                    // Need at least one other defender that can also block this attacker.
+                    defenders.iter().any(|&other| other != cid && self.can_block(aid, other))
+                } else {
+                    true
+                }
             })
         })
     }
@@ -873,6 +901,22 @@ impl GameEngine {
                 .entry(p.attacker_id)
                 .or_default()
                 .push(p.blocker_id);
+        }
+        // CR 702.110: menace — a creature with menace can't be blocked except by two or more
+        // creatures. A menace creature with zero blockers is fine (it's unblocked); one blocker
+        // is the illegal case. Return a prompt-friendly message so the UI can surface it.
+        for (&att_id, blk_ids) in &attacker_to_blockers {
+            if blk_ids.len() < 2 {
+                let has_menace = self
+                    .state
+                    .objects
+                    .get(&att_id)
+                    .map(|o| o.has_keyword(&self.registry, tricerules_cards::Keyword::Menace))
+                    .unwrap_or(false);
+                if has_menace {
+                    return Err(EngineError::Illegal("Illegal blocks."));
+                }
+            }
         }
         let damage_assignment_needed = attacker_to_blockers.values().any(|v| v.len() > 1);
         if let Some(c) = self.state.combat.as_mut() {
