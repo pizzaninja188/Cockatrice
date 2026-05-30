@@ -417,6 +417,14 @@ void TabGame::connectToGameEventHandler()
         connect(game->getGameEventHandler(), &GameEventHandler::ruledStackHasItemsChanged, gamePromptWidget,
                 &GamePromptWidget::setRuledStackHasItems);
         gamePromptWidget->setRuledStackHasItems(game->getGameEventHandler()->hasRuledStackItems());
+        connect(game->getGameEventHandler(), &GameEventHandler::ruledFirstStrikeStepPendingChanged,
+                gamePromptWidget, &GamePromptWidget::setFirstStrikeStepPending);
+        gamePromptWidget->setFirstStrikeStepPending(
+            game->getGameEventHandler()->isRuledFirstStrikeStepPending());
+        connect(game->getGameEventHandler(), &GameEventHandler::ruledFirstStrikeDamageStepActiveChanged,
+                gamePromptWidget, &GamePromptWidget::setFirstStrikeDamageStepActive);
+        gamePromptWidget->setFirstStrikeDamageStepActive(
+            game->getGameEventHandler()->inRuledFirstStrikeDamageStep());
     }
 }
 
@@ -1432,6 +1440,11 @@ Player *TabGame::setPriorityPlayer(int id)
                 const bool cleanupDiscard = game->getGameEventHandler()->localPlayerMustCleanupDiscard();
                 const bool openingPhase = game->getGameEventHandler()->ruledEngineOpeningPhaseActive();
                 const bool mustDeclare = gamePromptWidget && gamePromptWidget->localPlayerMustDeclareCombat();
+                // CR 510.5: the first-strike damage step shares the "Combat Damage" toolbar
+                // slot (phase 7) with regular damage, matching MTGO — both substeps obey the
+                // same Combat Damage stop. If the player has that stop enabled, they get a
+                // priority window for both FS damage and regular damage; if disabled, auto-pass
+                // skips both. No special override here.
                 if (!openingPhase && !hasManualStop && stackIsEmpty && !cleanupDiscard && !mustDeclare) {
                     game->getGameEventHandler()->handleNextTurn();
                 }

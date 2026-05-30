@@ -5088,7 +5088,11 @@ fn flying_auto_skips_blockers_when_no_reach_or_flyers() {
     );
     // Auto-skip emits BlockersDeclared with empty pairs.
     let bd = blockers_declared_in(&b);
-    assert_eq!(bd.len(), 1, "exactly one BlockersDeclared event from auto-skip");
+    assert_eq!(
+        bd.len(),
+        1,
+        "exactly one BlockersDeclared event from auto-skip"
+    );
     assert!(bd[0].block_pairs.is_empty(), "no block pairs in auto-skip");
     // The blockers_declared flag is set so combat can proceed without manual declaration.
     assert!(
@@ -5406,7 +5410,11 @@ fn intimidate_auto_skips_blockers_when_no_eligible_creatures() {
         "should enter DeclareBlockers after auto-skip"
     );
     let bd = blockers_declared_in(&b);
-    assert_eq!(bd.len(), 1, "exactly one BlockersDeclared event from auto-skip");
+    assert_eq!(
+        bd.len(),
+        1,
+        "exactly one BlockersDeclared event from auto-skip"
+    );
     assert!(bd[0].block_pairs.is_empty(), "no block pairs in auto-skip");
     assert!(
         e.state.combat.as_ref().unwrap().blockers_declared,
@@ -5454,12 +5462,7 @@ fn haste_creature_can_attack_same_turn_it_enters() {
     e.apply_command(0, &declare_attackers(vec![goblin]))
         .expect("haste creature should be allowed to attack same turn it entered");
     assert!(
-        e.state
-            .combat
-            .as_ref()
-            .unwrap()
-            .attacking
-            .contains(&goblin),
+        e.state.combat.as_ref().unwrap().attacking.contains(&goblin),
         "raging goblin must appear in the attacking list"
     );
 }
@@ -5744,11 +5747,7 @@ fn menace_single_blocker_is_illegal() {
         "game must stay in DeclareBlockers after illegal menace block"
     );
     assert!(
-        !e.state
-            .combat
-            .as_ref()
-            .unwrap()
-            .blockers_declared,
+        !e.state.combat.as_ref().unwrap().blockers_declared,
         "blockers_declared must remain false after illegal menace block"
     );
 }
@@ -5855,7 +5854,11 @@ fn menace_single_creature_auto_skips_blockers() {
         "should enter DeclareBlockers after menace auto-skip"
     );
     let bd = blockers_declared_in(&b);
-    assert_eq!(bd.len(), 1, "exactly one BlockersDeclared event from auto-skip");
+    assert_eq!(
+        bd.len(),
+        1,
+        "exactly one BlockersDeclared event from auto-skip"
+    );
     assert!(
         bd[0].block_pairs.is_empty(),
         "auto-skipped block must be empty (menace creature goes unblocked)"
@@ -5884,8 +5887,10 @@ fn setup_trample_single_blocker_assign_phase() -> (GameEngine, u32, u32) {
 
     e.apply_command(0, &declare_attackers(vec![attacker]))
         .expect("declare dreadmaw attacker");
-    e.apply_command(0, &pass()).expect("active pass declare attackers");
-    e.apply_command(1, &pass()).expect("defender pass declare attackers");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass declare attackers");
 
     e.apply_command(
         1,
@@ -5903,8 +5908,10 @@ fn setup_trample_single_blocker_assign_phase() -> (GameEngine, u32, u32) {
     );
 
     // Pass priority in declare-blockers to open assign-combat-damage phase.
-    e.apply_command(0, &pass()).expect("active pass declare blockers");
-    e.apply_command(1, &pass()).expect("defender pass → assign phase");
+    e.apply_command(0, &pass())
+        .expect("active pass declare blockers");
+    e.apply_command(1, &pass())
+        .expect("defender pass → assign phase");
     assert!(
         e.state.combat.as_ref().unwrap().assign_combat_damage_phase,
         "assign_combat_damage_phase must be open"
@@ -5940,7 +5947,10 @@ fn trample_single_blocker_lethal_plus_excess_to_player() {
         .collect();
 
     // Blocker (2/2) receives 2 lethal → dies.
-    assert!(dead.contains(&blocker), "blocker dies from lethal damage: {dead:?}");
+    assert!(
+        dead.contains(&blocker),
+        "blocker dies from lethal damage: {dead:?}"
+    );
     // Attacker (6/6) receives 2 damage from blocker but survives (toughness 6).
     let att_obj = e.state.objects.get(&attacker);
     // Attacker may still be alive (6 toughness vs 2 damage); just confirm it's not in dead list.
@@ -5952,7 +5962,9 @@ fn trample_single_blocker_lethal_plus_excess_to_player() {
     // Defending player takes 4 trample damage.
     let life_evs = life_changes_in(&b);
     assert!(
-        life_evs.iter().any(|lc| lc.player_id == 1 && lc.delta == -4),
+        life_evs
+            .iter()
+            .any(|lc| lc.player_id == 1 && lc.delta == -4),
         "player must take 4 trample damage: {life_evs:?}"
     );
     assert_eq!(
@@ -5962,7 +5974,10 @@ fn trample_single_blocker_lethal_plus_excess_to_player() {
     );
     // Attacker stat: blocker dealt 2 power back
     if let Some(att_o) = att_obj {
-        assert_eq!(att_o.damage, 2, "dreadmaw has 2 marked damage from the blocker");
+        assert_eq!(
+            att_o.damage, 2,
+            "dreadmaw has 2 marked damage from the blocker"
+        );
     }
     assert!(e.state.combat.is_none(), "combat cleared after resolution");
 }
@@ -6035,8 +6050,7 @@ fn trample_all_damage_to_blocker_zero_to_player() {
         .collect();
     assert!(dead.contains(&blocker), "blocker dies: {dead:?}");
     assert_eq!(
-        e.state.players[1].life,
-        p1_life_before,
+        e.state.players[1].life, p1_life_before,
         "player takes 0 trample damage when all assigned to blocker"
     );
     assert!(
@@ -6066,20 +6080,30 @@ fn trample_multi_blocked_excess_to_player() {
 
     e.apply_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
-    e.apply_command(0, &pass()).expect("active pass declare attackers");
-    e.apply_command(1, &pass()).expect("defender pass declare attackers");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass declare attackers");
 
     e.apply_command(
         1,
         &declare_blockers(vec![
-            BlockPair { attacker_id: attacker, blocker_id: b1 },
-            BlockPair { attacker_id: attacker, blocker_id: b2 },
+            BlockPair {
+                attacker_id: attacker,
+                blocker_id: b1,
+            },
+            BlockPair {
+                attacker_id: attacker,
+                blocker_id: b2,
+            },
         ]),
     )
     .expect("declare two blockers");
 
-    e.apply_command(0, &pass()).expect("active pass declare blockers");
-    e.apply_command(1, &pass()).expect("defender pass → assign phase");
+    e.apply_command(0, &pass())
+        .expect("active pass declare blockers");
+    e.apply_command(1, &pass())
+        .expect("defender pass → assign phase");
 
     let p1_life_before = e.state.players[1].life;
     let batch = e
@@ -6095,11 +6119,16 @@ fn trample_multi_blocked_excess_to_player() {
         .collect();
     assert!(dead.contains(&b1), "b1 dies: {dead:?}");
     assert!(dead.contains(&b2), "b2 dies: {dead:?}");
-    assert!(!dead.contains(&attacker), "dreadmaw survives (6 toughness vs 2+2 blocker power): {dead:?}");
+    assert!(
+        !dead.contains(&attacker),
+        "dreadmaw survives (6 toughness vs 2+2 blocker power): {dead:?}"
+    );
 
     let life_evs = life_changes_in(&batch);
     assert!(
-        life_evs.iter().any(|lc| lc.player_id == 1 && lc.delta == -2),
+        life_evs
+            .iter()
+            .any(|lc| lc.player_id == 1 && lc.delta == -2),
         "defending player takes 2 trample damage: {life_evs:?}"
     );
     assert_eq!(e.state.players[1].life, p1_life_before - 2);
@@ -6122,14 +6151,21 @@ fn trample_multi_blocked_rejects_less_than_lethal_to_first_blocker() {
     let b1 = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     let b2 = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
 
-    e.apply_command(0, &declare_attackers(vec![attacker])).expect("declare");
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("declare");
     e.apply_command(0, &pass()).expect("pass");
     e.apply_command(1, &pass()).expect("pass");
     e.apply_command(
         1,
         &declare_blockers(vec![
-            BlockPair { attacker_id: attacker, blocker_id: b1 },
-            BlockPair { attacker_id: attacker, blocker_id: b2 },
+            BlockPair {
+                attacker_id: attacker,
+                blocker_id: b1,
+            },
+            BlockPair {
+                attacker_id: attacker,
+                blocker_id: b2,
+            },
         ]),
     )
     .expect("declare two blockers");
@@ -6144,5 +6180,344 @@ fn trample_multi_blocked_rejects_less_than_lethal_to_first_blocker() {
         )
         .is_err(),
         "must reject when first blocker receives less than lethal"
+    );
+}
+
+// CR 510.5 + 702.7 + 702.4: first strike / double strike — these tests verify the engine
+// splits combat damage into a first-strike substep when applicable, and that participation
+// follows the CR 510.5 rule (FirstStrike/DoubleStrike in first step; remainder + DoubleStrike
+// in regular step). The pass-priority button label change is verified separately in the C++
+// prompt-widget code path (the engine emits `first_strike_step_pending` via zone view).
+
+/// CR 702.7 (first strike) + CR 510.5: a first-strike attacker kills a vanilla blocker in
+/// the first-strike step (CR 510.2 SBAs run between steps) and takes no return damage in the
+/// regular step. Goblin Striker (1/1 FS+Haste) attacks; defender blocks with Walking Corpse
+/// (2/2). Walking Corpse has only 2 toughness — but the attacker only has power 1, so the
+/// corpse survives if there's no first strike. With first strike: Goblin Striker deals 1 in
+/// first-strike step (corpse marked but not lethal — toughness 2), then in the regular step
+/// the corpse deals 2 back. The corpse survives at 1 toughness, goblin dies. This documents
+/// the *order* and shows the first-strike step ran (corpse remained alive without taking
+/// return damage from goblin a second time).
+#[test]
+fn first_strike_attacker_against_vanilla_blocker_survives_or_dies_per_pt() {
+    let mut e = GameEngine::new(11_001, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+
+    let goblin = inject_creature_with_stats(&mut e, 0, "goblin_striker", 1, 1);
+    let corpse = inject_creature_with_stats(&mut e, 1, "walking_corpse", 2, 2);
+
+    e.apply_command(0, &declare_attackers(vec![goblin]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass()).expect("ap pass dec atk");
+    e.apply_command(1, &pass()).expect("def pass dec atk");
+    e.apply_command(
+        1,
+        &declare_blockers(vec![BlockPair {
+            attacker_id: goblin,
+            blocker_id: corpse,
+        }]),
+    )
+    .expect("declare blocker");
+
+    // Both players pass priority in declare blockers → engine enters first-strike substep.
+    e.apply_command(0, &pass()).expect("ap pass dec blk");
+    e.apply_command(1, &pass()).expect("def pass dec blk");
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::FirstStrikeDamage,
+        "engine must enter FirstStrikeDamage substep when an attacker has First Strike"
+    );
+
+    // Goblin is alive (corpse hasn't dealt damage yet); corpse has 1 marked damage.
+    assert!(
+        e.state
+            .objects
+            .get(&goblin)
+            .is_some_and(|o| o.zone == tricerules_core::Zone::Battlefield),
+        "goblin must be alive entering the regular damage step"
+    );
+    assert_eq!(
+        e.state.objects.get(&corpse).map(|o| o.damage),
+        Some(1),
+        "corpse must have 1 marked damage from first-strike"
+    );
+
+    // Pass priority in first-strike step → engine runs regular combat damage step.
+    e.apply_command(0, &pass()).expect("ap pass fs damage");
+    e.apply_command(1, &pass()).expect("def pass fs damage");
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::CombatDamage,
+        "engine must reach CombatDamage after the regular damage step resolves"
+    );
+    // Corpse deals 2 to goblin in regular step → goblin dies. Corpse keeps its 1 damage.
+    assert!(
+        !e.state
+            .objects
+            .get(&goblin)
+            .is_some_and(|o| o.zone == tricerules_core::Zone::Battlefield),
+        "goblin must die to corpse's 2 return damage in the regular step"
+    );
+    assert!(
+        e.state
+            .objects
+            .get(&corpse)
+            .is_some_and(|o| o.zone == tricerules_core::Zone::Battlefield),
+        "corpse must survive with 1 marked damage (toughness 2)"
+    );
+}
+
+/// CR 702.4 (double strike): a double-strike attacker deals damage in both steps. Fencing Ace
+/// (1/1 double strike) attacks → Grizzly Bears (2/2 vanilla) blocks. First-strike step: Ace
+/// deals 1, Bears marked. Bears die not yet (toughness 2). Regular step: both deal damage —
+/// Ace deals another 1 (Bears now at 2 → dies), Bears deal 2 (Ace dies). Both die.
+#[test]
+fn double_strike_attacker_against_vanilla_blocker_both_die() {
+    let mut e = GameEngine::new(11_002, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+
+    let ace = inject_creature_with_stats(&mut e, 0, "fencing_ace", 1, 1);
+    let bears = inject_creature_with_stats(&mut e, 1, "grizzly_bears", 2, 2);
+
+    e.apply_command(0, &declare_attackers(vec![ace]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass()).expect("ap pass dec atk");
+    e.apply_command(1, &pass()).expect("def pass dec atk");
+    e.apply_command(
+        1,
+        &declare_blockers(vec![BlockPair {
+            attacker_id: ace,
+            blocker_id: bears,
+        }]),
+    )
+    .expect("declare blocker");
+    e.apply_command(0, &pass()).expect("ap pass dec blk");
+    e.apply_command(1, &pass()).expect("def pass dec blk");
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::FirstStrikeDamage,
+        "double strike triggers the first-strike substep"
+    );
+    // After first strike: bears at 1 damage, ace alive (bears haven't swung yet).
+    assert_eq!(e.state.objects.get(&bears).map(|o| o.damage), Some(1));
+    assert!(e
+        .state
+        .objects
+        .get(&ace)
+        .is_some_and(|o| o.zone == tricerules_core::Zone::Battlefield));
+
+    e.apply_command(0, &pass()).expect("ap pass fs damage");
+    e.apply_command(1, &pass()).expect("def pass fs damage");
+    // Regular step: ace deals another 1 (bears die at 2 damage = toughness), bears deal 2 (ace dies).
+    assert!(
+        !e.state
+            .objects
+            .get(&ace)
+            .is_some_and(|o| o.zone == tricerules_core::Zone::Battlefield),
+        "ace must die to bears' return damage"
+    );
+    assert!(
+        !e.state
+            .objects
+            .get(&bears)
+            .is_some_and(|o| o.zone == tricerules_core::Zone::Battlefield),
+        "bears must die to ace's two damage instances"
+    );
+}
+
+/// CR 510.5: when no attacker or blocker has FirstStrike/DoubleStrike, the engine skips the
+/// first-strike substep — DeclareBlockers transitions directly to CombatDamage, just like
+/// vanilla combat before this change.
+#[test]
+fn vanilla_combat_skips_first_strike_step() {
+    let mut e = GameEngine::new(11_003, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let bears = inject_creature_with_stats(&mut e, 0, "grizzly_bears", 2, 2);
+    let corpse = inject_creature_with_stats(&mut e, 1, "walking_corpse", 2, 2);
+    e.apply_command(0, &declare_attackers(vec![bears]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass()).expect("ap pass dec atk");
+    e.apply_command(1, &pass()).expect("def pass dec atk");
+    e.apply_command(
+        1,
+        &declare_blockers(vec![BlockPair {
+            attacker_id: bears,
+            blocker_id: corpse,
+        }]),
+    )
+    .expect("declare blocker");
+    e.apply_command(0, &pass()).expect("ap pass dec blk");
+    e.apply_command(1, &pass()).expect("def pass dec blk");
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::CombatDamage,
+        "vanilla combat must skip FirstStrikeDamage and go straight to CombatDamage"
+    );
+    // Both 2/2s trade as before.
+    assert!(!e
+        .state
+        .objects
+        .get(&bears)
+        .is_some_and(|o| o.zone == tricerules_core::Zone::Battlefield));
+    assert!(!e
+        .state
+        .objects
+        .get(&corpse)
+        .is_some_and(|o| o.zone == tricerules_core::Zone::Battlefield));
+}
+
+/// CR 510.5: when a first-strike attacker is unblocked, the defending player takes damage in
+/// the first-strike step. Verified via the LifeChanged event and player life total.
+#[test]
+fn first_strike_unblocked_deals_damage_in_first_strike_step() {
+    let mut e = GameEngine::new(11_004, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let goblin = inject_creature_with_stats(&mut e, 0, "goblin_striker", 1, 1);
+    e.apply_command(0, &declare_attackers(vec![goblin]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass()).expect("ap pass dec atk");
+    e.apply_command(1, &pass()).expect("def pass dec atk");
+    // No blockers: engine auto-declares empty blockers then awaits passes.
+    e.apply_command(0, &pass()).expect("ap pass dec blk");
+    e.apply_command(1, &pass()).expect("def pass dec blk");
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::FirstStrikeDamage,
+        "first-strike substep must run for an unblocked FS attacker"
+    );
+    let life_after_fs = e.state.players[1].life;
+    assert_eq!(
+        life_after_fs, 19,
+        "defender should take 1 damage in first-strike step"
+    );
+    e.apply_command(0, &pass()).expect("ap pass fs damage");
+    e.apply_command(1, &pass()).expect("def pass fs damage");
+    assert_eq!(
+        e.state.players[1].life, 19,
+        "regular step deals no extra damage for first strike"
+    );
+}
+
+/// CR 702.4 double strike unblocked: deals damage in BOTH steps. Fencing Ace unblocked hits
+/// the defender for 1 in first-strike step, then 1 more in the regular step → 2 total.
+#[test]
+fn double_strike_unblocked_deals_damage_in_both_steps() {
+    let mut e = GameEngine::new(11_005, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let ace = inject_creature_with_stats(&mut e, 0, "fencing_ace", 1, 1);
+    e.apply_command(0, &declare_attackers(vec![ace]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass()).expect("ap pass dec atk");
+    e.apply_command(1, &pass()).expect("def pass dec atk");
+    e.apply_command(0, &pass()).expect("ap pass dec blk");
+    e.apply_command(1, &pass()).expect("def pass dec blk");
+    assert_eq!(e.state.players[1].life, 19, "first-strike step deals 1");
+    e.apply_command(0, &pass()).expect("ap pass fs damage");
+    e.apply_command(1, &pass()).expect("def pass fs damage");
+    assert_eq!(
+        e.state.players[1].life, 18,
+        "double strike deals damage again in the regular step (total 2)"
+    );
+}
+
+/// CR 510.5: the per-player zone view exposes `first_strike_step_pending=true` between
+/// declare-attackers and the end of the first-strike step, so the client can show the
+/// "First Strike Damage" pass-priority button label.
+#[test]
+fn zone_view_signals_first_strike_step_pending() {
+    let mut e = GameEngine::new(11_006, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let goblin = inject_creature_with_stats(&mut e, 0, "goblin_striker", 1, 1);
+
+    let b = e
+        .apply_command(0, &declare_attackers(vec![goblin]))
+        .expect("declare attacker");
+    let zv = b
+        .events
+        .iter()
+        .find_map(|ev| match &ev.ev {
+            Some(Ev::ZoneView(zv)) => Some(zv.clone()),
+            _ => None,
+        })
+        .expect("zone view present");
+    assert!(
+        zv.per_player.iter().all(|p| p.first_strike_step_pending),
+        "first_strike_step_pending must be true while a FS attacker is in combat"
+    );
+}
+
+/// CR 510.5: `first_strike_step_pending` must remain true after blockers are declared (still
+/// pre-resolution), so the declare-blockers pass-priority button stays labeled
+/// "First Strike Damage" up until the substep actually resolves.
+#[test]
+fn zone_view_signals_pending_after_blockers_declared() {
+    let mut e = GameEngine::new(11_007, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let goblin = inject_creature_with_stats(&mut e, 0, "goblin_striker", 1, 1);
+    let corpse = inject_creature_with_stats(&mut e, 1, "walking_corpse", 2, 2);
+
+    e.apply_command(0, &declare_attackers(vec![goblin]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass()).expect("ap pass dec atk");
+    e.apply_command(1, &pass()).expect("def pass dec atk");
+    let b = e
+        .apply_command(
+            1,
+            &declare_blockers(vec![BlockPair {
+                attacker_id: goblin,
+                blocker_id: corpse,
+            }]),
+        )
+        .expect("declare blockers");
+    let zv = b
+        .events
+        .iter()
+        .find_map(|ev| match &ev.ev {
+            Some(Ev::ZoneView(zv)) => Some(zv.clone()),
+            _ => None,
+        })
+        .expect("zone view present");
+    assert!(
+        zv.per_player.iter().all(|p| p.first_strike_step_pending),
+        "pending must stay true after blockers declared (mixed FS attacker + vanilla blocker)"
+    );
+
+    // And it must flip to false once the FS substep resolves.
+    e.apply_command(0, &pass()).expect("ap pass dec blk");
+    let b2 = e.apply_command(1, &pass()).expect("def pass dec blk");
+    let zv2 = b2
+        .events
+        .iter()
+        .find_map(|ev| match &ev.ev {
+            Some(Ev::ZoneView(zv)) => Some(zv.clone()),
+            _ => None,
+        })
+        .expect("zone view present");
+    assert!(
+        zv2.per_player.iter().all(|p| !p.first_strike_step_pending),
+        "pending must flip false once the first-strike substep has resolved"
+    );
+}
+
+/// CR 510.5: when no FS/DS creature is in combat, `first_strike_step_pending` is never true.
+#[test]
+fn zone_view_does_not_signal_pending_for_vanilla_combat() {
+    let mut e = GameEngine::new(11_008, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let bears = inject_creature_with_stats(&mut e, 0, "grizzly_bears", 2, 2);
+    let b = e
+        .apply_command(0, &declare_attackers(vec![bears]))
+        .expect("declare attacker");
+    let zv = b
+        .events
+        .iter()
+        .find_map(|ev| match &ev.ev {
+            Some(Ev::ZoneView(zv)) => Some(zv.clone()),
+            _ => None,
+        })
+        .expect("zone view present");
+    assert!(
+        zv.per_player.iter().all(|p| !p.first_strike_step_pending),
+        "pending must stay false in vanilla combat (no FS/DS combatants)"
     );
 }

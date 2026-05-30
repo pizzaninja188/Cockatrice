@@ -727,7 +727,9 @@ impl GameEngine {
                     .unwrap_or(false);
                 if has_menace {
                     // Need at least one other defender that can also block this attacker.
-                    defenders.iter().any(|&other| other != cid && self.can_block(aid, other))
+                    defenders
+                        .iter()
+                        .any(|&other| other != cid && self.can_block(aid, other))
                 } else {
                     true
                 }
@@ -812,6 +814,9 @@ impl GameEngine {
             c.assign_combat_damage_phase = false;
             c.attackers_declared = true;
             c.blockers_declared = false;
+            c.first_strike_attackers.clear();
+            c.first_strike_blockers.clear();
+            c.first_strike_damage_done = false;
         } else {
             self.state.combat = Some(CombatState {
                 attacking: list,
@@ -822,6 +827,9 @@ impl GameEngine {
                 attackers_declared: true,
                 blockers_declared: false,
                 assign_combat_damage_phase: false,
+                first_strike_attackers: Vec::new(),
+                first_strike_blockers: HashMap::new(),
+                first_strike_damage_done: false,
             });
         }
         self.clear_all_mana_pools();
@@ -1055,12 +1063,7 @@ impl GameEngine {
                     .get(&blk)
                     .and_then(|o| o.toughness)
                     .unwrap_or(1);
-                let marked = self
-                    .state
-                    .objects
-                    .get(&blk)
-                    .map(|o| o.damage)
-                    .unwrap_or(0);
+                let marked = self.state.objects.get(&blk).map(|o| o.damage).unwrap_or(0);
                 let lethal = blk_toughness.saturating_sub(marked).max(1);
                 let assigned = assignments
                     .iter()
@@ -1151,24 +1154,7 @@ impl GameEngine {
             .push(ev_log(format!("Combat damage assigned for {att_name}.")));
 
         if !self.state.combat.as_ref().unwrap().damage_assignment_needed {
-            let c_now = self
-                .state
-                .combat
-                .clone()
-                .ok_or(EngineError::Illegal("combat?"))?;
-            self.resolve_combat_damage(&c_now, &mut b.events)?;
-            self.state.combat = None;
-            self.clear_all_mana_pools();
-            self.state.turn_step = TurnStep::CombatDamage;
-            if let Some(i) = self.state.player_idx(self.state.active_player_id()) {
-                self.state.priority_idx = i;
-            }
-            self.state.passes_since_stack_change = 0;
-            let legend_events = self.apply_legend_sbas()?;
-            b.events.extend(legend_events);
-            b.events.push(ev_log("Combat damage dealt.".to_string()));
-            b.events.push(ev_phase_labeled(self, "combat_damage"));
-            b.events.push(ev_priority_changed(self));
+            self.resolve_combat_damage_step(&mut b.events)?;
         } else {
             b.events.push(ev_priority_changed(self));
         }
@@ -1176,9 +1162,102 @@ impl GameEngine {
         Ok(b)
     }
 
+    /// Resolve the current combat damage step (CR 510). Routes through the first-strike
+    /// substep when any combatant has FirstStrike/DoubleStrike, then through the regular
+    /// damage step. Emits phase labels, applies SBAs, and updates priority. Both call sites
+    /// (the post-`assign_combat_damage` path and the `DeclareBlockers → CombatDamage` pass)
+    /// go through this helper so the logic stays in one place.
+    fn resolve_combat_damage_step(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        use tricerules_cards::Keyword;
+        let ap = self.state.active_player_id();
+        let c_init = self
+            .state
+            .combat
+            .clone()
+            .ok_or(EngineError::Illegal("combat?"))?;
+        let needs_first_strike = !c_init.first_strike_damage_done
+            && combat_needs_first_strike_step(&self.state, &self.registry, &c_init);
+
+        if needs_first_strike {
+            // Snapshot which creatures had FS/DS at the start of the first-strike step. This is
+            // the canonical CR 510.5 "participation list" used to exclude them from the regular
+            // step (unless they have DoubleStrike).
+            let registry = &self.registry;
+            let objects = &self.state.objects;
+            let is_fs_or_ds = |id: ObjectId| {
+                objects.get(&id).is_some_and(|o| {
+                    o.has_keyword(registry, Keyword::FirstStrike)
+                        || o.has_keyword(registry, Keyword::DoubleStrike)
+                })
+            };
+            let fs_attackers: Vec<ObjectId> = c_init
+                .attacking
+                .iter()
+                .copied()
+                .filter(|&id| is_fs_or_ds(id))
+                .collect();
+            let fs_blockers: HashMap<ObjectId, Vec<ObjectId>> = c_init
+                .blockers
+                .iter()
+                .map(|(att, bs)| {
+                    (
+                        *att,
+                        bs.iter().copied().filter(|&id| is_fs_or_ds(id)).collect(),
+                    )
+                })
+                .collect();
+            if let Some(cc) = self.state.combat.as_mut() {
+                cc.first_strike_attackers = fs_attackers;
+                cc.first_strike_blockers = fs_blockers;
+            }
+            let c2 = self
+                .state
+                .combat
+                .clone()
+                .ok_or(EngineError::Illegal("combat?"))?;
+            self.resolve_combat_damage(&c2, DamagePass::FirstStrike, events)?;
+            // CR 510.2 + 704: SBAs run between damage steps so creatures with lethal damage are
+            // moved to graveyards before the regular step decides who deals damage.
+            self.apply_sbas(events)?;
+            let legend_events = self.apply_legend_sbas()?;
+            events.extend(legend_events);
+            if let Some(cc) = self.state.combat.as_mut() {
+                cc.first_strike_damage_done = true;
+            }
+            self.clear_all_mana_pools();
+            self.state.turn_step = TurnStep::FirstStrikeDamage;
+            if let Some(i) = self.state.player_idx(ap) {
+                self.state.priority_idx = i;
+            }
+            self.state.passes_since_stack_change = 0;
+            events.push(ev_log("First strike combat damage dealt.".to_string()));
+            events.push(ev_phase_labeled(self, "first_strike_damage"));
+            events.push(ev_priority_changed(self));
+        } else {
+            self.resolve_combat_damage(&c_init, DamagePass::Normal, events)?;
+            self.state.combat = None;
+            self.clear_all_mana_pools();
+            self.state.turn_step = TurnStep::CombatDamage;
+            if let Some(i) = self.state.player_idx(ap) {
+                self.state.priority_idx = i;
+            }
+            self.state.passes_since_stack_change = 0;
+            let legend_events = self.apply_legend_sbas()?;
+            events.extend(legend_events);
+            events.push(ev_log("Combat damage dealt.".to_string()));
+            events.push(ev_phase_labeled(self, "combat_damage"));
+            events.push(ev_priority_changed(self));
+        }
+        Ok(())
+    }
+
     fn resolve_combat_damage(
         &mut self,
         c: &CombatState,
+        pass: DamagePass,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
         use tricerules_cards::Keyword;
@@ -1188,10 +1267,24 @@ impl GameEngine {
         // (controller_id, amount) pairs — collected during damage assignment, applied after.
         let mut lifelink_gains: Vec<(PlayerId, u32)> = Vec::new();
 
+        // CR 510.5 ASSIGNMENT rule: in the first-strike pass, only creatures with FirstStrike
+        // or DoubleStrike assign damage; in the regular pass, creatures that did NOT assign
+        // in the first-strike pass do, plus those that have DoubleStrike. Crucially, creatures
+        // RECEIVE damage normally regardless of *their own* participation — a vanilla blocker
+        // can be killed by a first-strike attacker before it ever swings, and a vanilla blocker
+        // still deals damage back to a first-strike attacker in the regular step. We therefore
+        // iterate over ALL attackers and gate each damage direction independently:
+        //   - "attacker deals damage" -> attacker's participation
+        //   - "blocker deals damage" -> blocker's participation
+        // When no first-strike step occurred (`c.first_strike_attackers` empty), every creature
+        // participates in the regular pass (vanilla combat).
+
         for &att in &c.attacking {
             if self.state.objects.get(&att).map(|a| a.zone) != Some(Zone::Battlefield) {
                 continue;
             }
+            let attacker_participates =
+                object_participates_in_pass(&self.state, &self.registry, c, pass, att, true);
             // Capture attacker properties before any mutation.
             let att_power = self
                 .state
@@ -1211,12 +1304,7 @@ impl GameEngine {
                 .get(&att)
                 .map(|o| o.has_keyword(&self.registry, Keyword::Deathtouch))
                 .unwrap_or(false);
-            let att_owner = self
-                .state
-                .objects
-                .get(&att)
-                .map(|o| o.owner)
-                .unwrap_or(ap);
+            let att_owner = self.state.objects.get(&att).map(|o| o.owner).unwrap_or(ap);
             let att_has_trample = self
                 .state
                 .objects
@@ -1227,19 +1315,27 @@ impl GameEngine {
             let blockers = c.blockers.get(&att).map(|v| v.as_slice()).unwrap_or(&[]);
 
             if blockers.is_empty() {
-                // Unblocked: deal full power to defending player.
-                let p = att_power as i32;
-                if let Some(di) = self.state.player_idx(dfd) {
-                    self.state.players[di].life -= p;
-                    total_life_lost += p;
-                }
-                // CR 702.15a: attacker with lifelink causes its controller to gain that much life.
-                if att_has_lifelink && att_power > 0 {
-                    lifelink_gains.push((att_owner, att_power));
+                // Unblocked: deal full power to defending player — only if the attacker assigns
+                // damage this pass (CR 510.5).
+                if attacker_participates {
+                    let p = att_power as i32;
+                    if let Some(di) = self.state.player_idx(dfd) {
+                        self.state.players[di].life -= p;
+                        total_life_lost += p;
+                    }
+                    // CR 702.15a: attacker with lifelink causes its controller to gain that much life.
+                    if att_has_lifelink && att_power > 0 {
+                        lifelink_gains.push((att_owner, att_power));
+                    }
                 }
             } else if blockers.len() == 1 && !att_has_trample {
-                // Single blocker, no trample: exchange full power (unchanged from M2).
+                // Single blocker, no trample: exchange power. The attacker always deals damage to
+                // its sole blocker (since we're in the attacker's participation loop), but the
+                // blocker only deals damage back if it participates in this pass (CR 510.5).
                 let blk = blockers[0];
+                let blocker_participates =
+                    object_participates_in_pass(&self.state, &self.registry, c, pass, blk, false)
+                        && self.state.objects.get(&blk).map(|o| o.zone) == Some(Zone::Battlefield);
                 let bpw = self
                     .state
                     .objects
@@ -1258,41 +1354,40 @@ impl GameEngine {
                     .get(&blk)
                     .map(|o| o.has_keyword(&self.registry, Keyword::Deathtouch))
                     .unwrap_or(false);
-                let blk_owner = self
-                    .state
-                    .objects
-                    .get(&blk)
-                    .map(|o| o.owner)
-                    .unwrap_or(dfd);
-                if let Some(af) = self.state.objects.get_mut(&att) {
-                    af.damage += bpw;
-                    // CR 702.2b / CR 704.5h: any damage from a deathtouch source is lethal.
-                    if blk_has_deathtouch && bpw > 0 {
-                        af.deathtouch_damage = true;
+                let blk_owner = self.state.objects.get(&blk).map(|o| o.owner).unwrap_or(dfd);
+                if blocker_participates {
+                    if let Some(af) = self.state.objects.get_mut(&att) {
+                        af.damage += bpw;
+                        // CR 702.2b / CR 704.5h: any damage from a deathtouch source is lethal.
+                        if blk_has_deathtouch && bpw > 0 {
+                            af.deathtouch_damage = true;
+                        }
                     }
                 }
-                if let Some(bf) = self.state.objects.get_mut(&blk) {
-                    bf.damage += att_power;
-                    // CR 702.2b: any damage from attacker with deathtouch is lethal.
-                    if att_has_deathtouch && att_power > 0 {
-                        bf.deathtouch_damage = true;
+                if attacker_participates {
+                    if let Some(bf) = self.state.objects.get_mut(&blk) {
+                        bf.damage += att_power;
+                        // CR 702.2b: any damage from attacker with deathtouch is lethal.
+                        if att_has_deathtouch && att_power > 0 {
+                            bf.deathtouch_damage = true;
+                        }
                     }
-                }
-                // CR 702.15a: attacker with lifelink gains life = damage dealt to blocker.
-                if att_has_lifelink && att_power > 0 {
-                    lifelink_gains.push((att_owner, att_power));
+                    // CR 702.15a: attacker with lifelink gains life = damage dealt to blocker.
+                    if att_has_lifelink && att_power > 0 {
+                        lifelink_gains.push((att_owner, att_power));
+                    }
                 }
                 // CR 702.15a: blocker with lifelink gains life = damage dealt to attacker.
-                if blk_has_lifelink && bpw > 0 {
+                if blocker_participates && blk_has_lifelink && bpw > 0 {
                     lifelink_gains.push((blk_owner, bpw));
                 }
             } else {
                 // Multiple blockers OR single-blocker with trample: all blockers deal their power
                 // to the attacker simultaneously; active player assigns how the attacker's combat
                 // damage is divided among blockers (and, for trample, the defending player).
-                // Capture per-blocker properties before any mutation.
-                // Tuple: (id, power, has_lifelink, has_deathtouch, owner)
-                let blocker_info: Vec<(ObjectId, u32, bool, bool, PlayerId)> = blockers
+                // CR 510.5: in a given damage step, only participating blockers deal damage back.
+                // Tuple: (id, power, has_lifelink, has_deathtouch, owner, participates)
+                let blocker_info: Vec<(ObjectId, u32, bool, bool, PlayerId, bool)> = blockers
                     .iter()
                     .map(|&blk| {
                         let pw = self
@@ -1313,54 +1408,68 @@ impl GameEngine {
                             .get(&blk)
                             .map(|o| o.has_keyword(&self.registry, Keyword::Deathtouch))
                             .unwrap_or(false);
-                        let owner = self
-                            .state
-                            .objects
-                            .get(&blk)
-                            .map(|o| o.owner)
-                            .unwrap_or(dfd);
-                        (blk, pw, has_ll, has_dt, owner)
+                        let owner = self.state.objects.get(&blk).map(|o| o.owner).unwrap_or(dfd);
+                        let participates = object_participates_in_pass(
+                            &self.state,
+                            &self.registry,
+                            c,
+                            pass,
+                            blk,
+                            false,
+                        ) && self.state.objects.get(&blk).map(|o| o.zone)
+                            == Some(Zone::Battlefield);
+                        (blk, pw, has_ll, has_dt, owner, participates)
                     })
                     .collect();
-                let total_blocker_power: u32 =
-                    blocker_info.iter().map(|(_, pw, _, _, _)| pw).sum();
-                // CR 702.2b: if any blocker has deathtouch and dealt damage, mark the attacker.
+                let total_blocker_power: u32 = blocker_info
+                    .iter()
+                    .filter(|(_, _, _, _, _, p)| *p)
+                    .map(|(_, pw, _, _, _, _)| pw)
+                    .sum();
+                // CR 702.2b: if any participating blocker has deathtouch and dealt damage,
+                // mark the attacker.
                 let any_blocker_deathtouch_hit = blocker_info
                     .iter()
-                    .any(|(_, pw, _, has_dt, _)| *has_dt && *pw > 0);
+                    .any(|(_, pw, _, has_dt, _, p)| *p && *has_dt && *pw > 0);
                 if let Some(af) = self.state.objects.get_mut(&att) {
                     af.damage += total_blocker_power;
                     if any_blocker_deathtouch_hit {
                         af.deathtouch_damage = true;
                     }
                 }
-                let pairs = c.damage_assignments.get(&att).ok_or(EngineError::Illegal(
-                    "combat damage assignments missing for multiply-blocked attacker",
-                ))?;
-                for &(blk, dmg) in pairs {
-                    if let Some(bf) = self.state.objects.get_mut(&blk) {
-                        bf.damage += dmg;
-                        // CR 702.2b: any damage from attacker with deathtouch is lethal.
-                        if att_has_deathtouch && dmg > 0 {
-                            bf.deathtouch_damage = true;
+                // The attacker assigns damage to its blockers only on a pass it participates in
+                // (CR 510.5). On the off pass, blockers still deal damage back (handled above).
+                if attacker_participates {
+                    let pairs = c.damage_assignments.get(&att).ok_or(EngineError::Illegal(
+                        "combat damage assignments missing for multiply-blocked attacker",
+                    ))?;
+                    for &(blk, dmg) in pairs {
+                        if let Some(bf) = self.state.objects.get_mut(&blk) {
+                            bf.damage += dmg;
+                            // CR 702.2b: any damage from attacker with deathtouch is lethal.
+                            if att_has_deathtouch && dmg > 0 {
+                                bf.deathtouch_damage = true;
+                            }
                         }
                     }
-                }
-                // CR 702.19: deal trample excess damage to the defending player.
-                let player_trample_dmg = c.trample_player_damage.get(&att).copied().unwrap_or(0);
-                if player_trample_dmg > 0 {
-                    if let Some(di) = self.state.player_idx(dfd) {
-                        self.state.players[di].life -= player_trample_dmg as i32;
-                        total_life_lost += player_trample_dmg as i32;
+                    // CR 702.19: deal trample excess damage to the defending player.
+                    let player_trample_dmg =
+                        c.trample_player_damage.get(&att).copied().unwrap_or(0);
+                    if player_trample_dmg > 0 {
+                        if let Some(di) = self.state.player_idx(dfd) {
+                            self.state.players[di].life -= player_trample_dmg as i32;
+                            total_life_lost += player_trample_dmg as i32;
+                        }
+                    }
+                    // CR 702.15a: attacker with lifelink gains life = damage dealt to all blockers.
+                    if att_has_lifelink && att_power > 0 {
+                        lifelink_gains.push((att_owner, att_power));
                     }
                 }
-                // CR 702.15a: attacker with lifelink gains life = total damage dealt to all blockers.
-                if att_has_lifelink && att_power > 0 {
-                    lifelink_gains.push((att_owner, att_power));
-                }
-                // CR 702.15a: each blocker with lifelink gains life = damage it dealt to the attacker.
-                for (_, blk_pw, blk_has_ll, _, blk_owner) in blocker_info {
-                    if blk_has_ll && blk_pw > 0 {
+                // CR 702.15a: each participating blocker with lifelink gains life = damage it dealt
+                // to the attacker.
+                for (_, blk_pw, blk_has_ll, _, blk_owner, blk_participates) in blocker_info {
+                    if blk_participates && blk_has_ll && blk_pw > 0 {
                         lifelink_gains.push((blk_owner, blk_pw));
                     }
                 }
@@ -1625,6 +1734,9 @@ impl GameEngine {
                         attackers_declared: false,
                         blockers_declared: false,
                         assign_combat_damage_phase: false,
+                        first_strike_attackers: Vec::new(),
+                        first_strike_blockers: HashMap::new(),
+                        first_strike_damage_done: false,
                     });
                     ev.push(ev_phase_labeled(self, "declare_attackers"));
                     ev.push(ev_priority_changed(self));
@@ -1725,20 +1837,13 @@ impl GameEngine {
                             "must assign combat damage before combat damage resolves",
                         ));
                     }
-                    self.resolve_combat_damage(&c, ev)?;
-                    self.state.combat = None;
-                    self.clear_all_mana_pools();
-                    self.state.turn_step = CombatDamage;
-                    if let Some(i) = self.state.player_idx(ap) {
-                        self.state.priority_idx = i;
-                    }
-                    self.state.passes_since_stack_change = 0;
-                    let legend_events = self.apply_legend_sbas()?;
-                    ev.extend(legend_events);
-                    ev.push(ev_log("Combat damage dealt.".to_string()));
-                    ev.push(ev_phase_labeled(self, "combat_damage"));
-                    ev.push(ev_priority_changed(self));
+                    self.resolve_combat_damage_step(ev)?;
                 }
+            }
+            FirstStrikeDamage => {
+                // CR 510.5: after first-strike damage and priority, the regular combat damage
+                // step deals damage from remaining attackers/blockers (and double-strikers).
+                self.resolve_combat_damage_step(ev)?;
             }
             CombatDamage => {
                 self.clear_all_mana_pools();
@@ -2750,7 +2855,9 @@ impl GameEngine {
                         self.state
                             .objects
                             .get(&oid)
-                            .map(|o| o.has_keyword(&self.registry, tricerules_cards::Keyword::Haste))
+                            .map(|o| {
+                                o.has_keyword(&self.registry, tricerules_cards::Keyword::Haste)
+                            })
                             .unwrap_or(false)
                     })
                     .collect(),
@@ -2768,6 +2875,51 @@ impl GameEngine {
                             .unwrap_or(false)
                     })
                     .collect(),
+                // CR 702.7: informational flag for the client UI (independent of pending state).
+                battlefield_first_strike: p
+                    .battlefield
+                    .iter()
+                    .map(|&oid| {
+                        self.state
+                            .objects
+                            .get(&oid)
+                            .map(|o| {
+                                o.has_keyword(
+                                    &self.registry,
+                                    tricerules_cards::Keyword::FirstStrike,
+                                )
+                            })
+                            .unwrap_or(false)
+                    })
+                    .collect(),
+                // CR 702.4: informational flag for the client UI.
+                battlefield_double_strike: p
+                    .battlefield
+                    .iter()
+                    .map(|&oid| {
+                        self.state
+                            .objects
+                            .get(&oid)
+                            .map(|o| {
+                                o.has_keyword(
+                                    &self.registry,
+                                    tricerules_cards::Keyword::DoubleStrike,
+                                )
+                            })
+                            .unwrap_or(false)
+                    })
+                    .collect(),
+                // CR 510.5: true while combat is set up with at least one attacker or blocker
+                // having FirstStrike/DoubleStrike and the first-strike step has not yet resolved.
+                first_strike_step_pending: self
+                    .state
+                    .combat
+                    .as_ref()
+                    .map(|c| {
+                        !c.first_strike_damage_done
+                            && combat_needs_first_strike_step(&self.state, &self.registry, c)
+                    })
+                    .unwrap_or(false),
             })
             .collect();
         RuledEvent {
@@ -2970,6 +3122,65 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
         }
     }
     v
+}
+
+/// Which combat damage step is being resolved (CR 510.5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DamagePass {
+    FirstStrike,
+    Normal,
+}
+
+/// CR 510.5 participation rule. In the first-strike pass, only creatures with FirstStrike or
+/// DoubleStrike assign damage. In the regular pass, creatures that did not assign during the
+/// first-strike step (or weren't in it) assign damage, plus creatures that currently have
+/// DoubleStrike. When no first-strike step occurred, every creature participates in the
+/// regular pass (vanilla combat).
+fn object_participates_in_pass(
+    state: &GameState,
+    registry: &tricerules_cards::CardRegistry,
+    c: &CombatState,
+    pass: DamagePass,
+    obj_id: ObjectId,
+    is_attacker: bool,
+) -> bool {
+    use tricerules_cards::Keyword;
+    let Some(obj) = state.objects.get(&obj_id) else {
+        return false;
+    };
+    let has_fs = obj.has_keyword(registry, Keyword::FirstStrike);
+    let has_ds = obj.has_keyword(registry, Keyword::DoubleStrike);
+    match pass {
+        DamagePass::FirstStrike => has_fs || has_ds,
+        DamagePass::Normal => {
+            let was_in_first_strike = if is_attacker {
+                c.first_strike_attackers.contains(&obj_id)
+            } else {
+                c.first_strike_blockers
+                    .values()
+                    .any(|bs| bs.contains(&obj_id))
+            };
+            !was_in_first_strike || has_ds
+        }
+    }
+}
+
+/// True iff any current attacker or blocker has FirstStrike or DoubleStrike — used to decide
+/// whether the combat phase needs a first-strike damage substep (CR 510.5).
+fn combat_needs_first_strike_step(
+    state: &GameState,
+    registry: &tricerules_cards::CardRegistry,
+    c: &CombatState,
+) -> bool {
+    use tricerules_cards::Keyword;
+    let has_fs_or_ds = |id: ObjectId| {
+        state.objects.get(&id).is_some_and(|o| {
+            o.has_keyword(registry, Keyword::FirstStrike)
+                || o.has_keyword(registry, Keyword::DoubleStrike)
+        })
+    };
+    c.attacking.iter().copied().any(has_fs_or_ds)
+        || c.blockers.values().flatten().copied().any(has_fs_or_ds)
 }
 
 fn ev_phase_labeled(eng: &GameEngine, name: &str) -> RuledEvent {

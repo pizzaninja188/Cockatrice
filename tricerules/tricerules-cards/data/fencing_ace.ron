@@ -1,0 +1,10 @@
+(
+  id: "fencing_ace",
+  name: "Fencing Ace",
+  mana_cost: "1W",
+  types: ["Creature", "Human", "Soldier"],
+  is_creature: true,
+  power: 1,
+  toughness: 1,
+  keywords: [DoubleStrike],
+)

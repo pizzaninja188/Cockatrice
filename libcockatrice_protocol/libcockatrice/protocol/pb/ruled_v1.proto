@@ -252,6 +252,17 @@ message RuledPerPlayerView {
   // Parallel array to `battlefield`, true if that permanent has the Trample keyword
   // (CR 702.19). Used by clients to enable trample damage assignment UI.
   repeated bool battlefield_trample = 15;
+  // Parallel array to `battlefield`, true if that permanent has the First Strike keyword
+  // (CR 702.7). Informational for UI; combat-step routing uses `first_strike_step_pending`.
+  repeated bool battlefield_first_strike = 16;
+  // Parallel array to `battlefield`, true if that permanent has the Double Strike keyword
+  // (CR 702.4). Informational for UI; combat-step routing uses `first_strike_step_pending`.
+  repeated bool battlefield_double_strike = 17;
+  // True while the current combat will (or did) include a first-strike damage substep
+  // (CR 510.5): set whenever any attacker or blocker has First Strike or Double Strike and
+  // the first-strike step has not yet resolved for the current combat. Drives the
+  // "First Strike Damage" pass-priority button label.
+  bool first_strike_step_pending = 18;
 }
 
 message ZoneViewSync {

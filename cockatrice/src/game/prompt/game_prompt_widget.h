@@ -32,6 +32,14 @@ public slots:
     void setCombatMode(CombatMode mode, bool localPlayerHasButtons);
     void setTargetingMode(bool enabled, const QString &cardName = {});
     void setRuledStackHasItems(bool hasItems);
+    /// CR 510.5: true while the engine reports a pending first-strike damage substep.
+    /// Drives the "First Strike Damage" vs "Combat Damage" pass-priority button label
+    /// while the local player is in the declare-blockers (or first-strike-damage) phase.
+    void setFirstStrikeStepPending(bool pending);
+    /// CR 510.5: true once the engine has entered the first-strike damage substep — the
+    /// pass-priority button leads into the regular combat damage step from here, so it
+    /// reads "Combat Damage" rather than "End of Combat".
+    void setFirstStrikeDamageStepActive(bool active);
     void setCleanupDiscardMode(bool active, int cardsRequired, int cardsSelected);
     /// `kind`: 0 none, 1 choose first seat, 2 mulligan choice, 3 bottom cards (hand clicks).
     void setRuledOpeningUi(int kind, QVector<int> pickSeatIds, int mulliganCount = 0);
@@ -92,6 +100,8 @@ private:
     bool localPlayerHasCombatButtons = false;
     bool targetingModeEnabled = false;
     bool ruledStackHasItems = false;
+    bool firstStrikeStepPending = false;
+    bool firstStrikeDamageStepActive = false;
     bool cleanupDiscardMode = false;
     QString activePlayerName;
     QString priorityPlayerName;

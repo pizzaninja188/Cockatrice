@@ -197,16 +197,23 @@ void stripRuledZoneViewForBroadcast(ruled::v1::IpcResponse *resp)
     if (!resp || !resp->has_batch()) {
         return;
     }
-    const ruled::v1::RuledEventBatch *batch = &resp->batch();
-    ruled::v1::RuledEventBatch out;
-    out.mutable_legal_by_player()->insert(batch->legal_by_player().begin(), batch->legal_by_player().end());
+    // Keep zone_view events in the broadcast but clear private per-player fields
+    // (hand cards, library order) that must not be revealed to opponents.
+    // Public combat state — first_strike_step_pending, battlefield data — is preserved
+    // so all players update the "First Strike Damage" pass-priority button correctly.
+    auto *batch = resp->mutable_batch();
     for (int i = 0; i < batch->events_size(); ++i) {
-        if (batch->events(i).has_zone_view()) {
+        if (!batch->events(i).has_zone_view()) {
             continue;
         }
-        *out.add_events() = batch->events(i);
+        auto *zv = batch->mutable_events(i)->mutable_zone_view();
+        for (int j = 0; j < zv->per_player_size(); ++j) {
+            auto *pp = zv->mutable_per_player(j);
+            pp->clear_hand();
+            pp->clear_lib_ids_csv();
+            pp->clear_hand_object_id();
+        }
     }
-    resp->mutable_batch()->CopyFrom(out);
 }
 
 void clearRuledManaPoolsOnServer(Server_Game *game)
@@ -1762,7 +1769,7 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
             *toSend.mutable_batch()->add_events() = mapEvent;
         }
     }
-    // Clients never receive stripped zone_view; publish engine hand index <-> Server_Card.id for ruled UI intents.
+    // zone_view hand/lib fields are cleared before broadcast; publish hand index <-> Server_Card.id separately for ruled UI intents.
     {
         ruled::v1::RuledEvent handEv;
         auto *hm = handEv.mutable_hand_slot_map();

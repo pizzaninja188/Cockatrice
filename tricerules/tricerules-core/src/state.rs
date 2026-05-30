@@ -13,6 +13,11 @@ pub enum TurnStep {
     BeginCombat,
     DeclareAttackers,
     DeclareBlockers,
+    /// CR 510.5 first combat damage step. Only entered when an attacker or blocker has first
+    /// strike or double strike at the moment the combat damage step would begin. Both passes
+    /// of combat damage live in their own step; the engine never lingers here if no first/double
+    /// strike creature is involved.
+    FirstStrikeDamage,
     CombatDamage,
     EndCombat,
     Main2,
@@ -30,7 +35,7 @@ impl TurnStep {
             Upkeep | Draw => Some(Main1),
             Main1 => Some(BeginCombat),
             BeginCombat => None, // moves to declare substeps on pass, see engine
-            DeclareAttackers | DeclareBlockers | CombatDamage => None,
+            DeclareAttackers | DeclareBlockers | FirstStrikeDamage | CombatDamage => None,
             EndCombat => Some(Main2),
             Main2 => Some(EndStep),
             EndStep => Some(Cleanup),
@@ -184,6 +189,18 @@ pub struct CombatState {
     /// True only after both players have passed priority in declare blockers while assignment
     /// is still required — then the active player may submit `AssignCombatDamage`.
     pub assign_combat_damage_phase: bool,
+    /// Snapshot of attackers that participated in the first-strike damage step (CR 510.5).
+    /// Captured immediately before first-strike damage resolves; empty if no first-strike
+    /// step occurred (no attacker or blocker had FirstStrike/DoubleStrike).
+    pub first_strike_attackers: Vec<ObjectId>,
+    /// Snapshot of per-attacker blockers that participated in the first-strike damage step.
+    /// Mirrors the layout of `blockers`. Used during the regular step to exclude creatures that
+    /// already dealt damage (CR 510.5) unless they have DoubleStrike.
+    pub first_strike_blockers: HashMap<ObjectId, Vec<ObjectId>>,
+    /// True once the first-strike damage step has resolved for the current combat. Stays true
+    /// for the rest of combat; the engine uses it to gate the regular-step participation rule
+    /// and the `first_strike_step_pending` per-player-view flag.
+    pub first_strike_damage_done: bool,
 }
 
 #[derive(Debug)]

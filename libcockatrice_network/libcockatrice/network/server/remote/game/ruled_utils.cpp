@@ -40,7 +40,10 @@ int ruledPhaseLabelToCockatricePhase(const std::string &phase)
     if (phase == "declare_blockers") {
         return 6;
     }
-    if (phase == "combat_damage") {
+    if (phase == "combat_damage" || phase == "first_strike_damage") {
+        // CR 510.5: the first-strike substep shares the "Combat Damage Step" slot in the
+        // Cockatrice phases toolbar; the prompt widget distinguishes them via the
+        // `first_strike_step_pending` flag on the per-player view.
         return 7;
     }
     if (phase == "end_combat") {

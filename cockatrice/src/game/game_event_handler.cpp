@@ -94,6 +94,9 @@ GameEventHandler::RuledCombatPhase mapRuledPhaseSlugToCombatPhase(const QString 
     if (slug == QLatin1String("assign_combat_damage")) {
         return GameEventHandler::RuledCombatPhase::AssignCombatDamage;
     }
+    if (slug == QLatin1String("first_strike_damage")) {
+        return GameEventHandler::RuledCombatPhase::FirstStrikeDamage;
+    }
     if (slug == QLatin1String("combat_damage")) {
         return GameEventHandler::RuledCombatPhase::CombatDamage;
     }
@@ -1122,7 +1125,17 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             }
                             if (e.has_phase_changed()) {
                                 const auto &pc = e.phase_changed();
+                                const QString prevSlug = lastRuledEnginePhaseSlug;
                                 lastRuledEnginePhaseSlug = QString::fromStdString(pc.phase());
+                                // CR 510.5: when entering or leaving the first-strike damage
+                                // substep, notify the prompt widget so it can label the pass
+                                // button "Combat Damage" while inside the FS step (next step
+                                // is regular combat damage).
+                                const bool wasFsStep = prevSlug == QLatin1String("first_strike_damage");
+                                const bool isFsStep = lastRuledEnginePhaseSlug == QLatin1String("first_strike_damage");
+                                if (wasFsStep != isFsStep) {
+                                    emit ruledFirstStrikeDamageStepActiveChanged(isFsStep);
+                                }
                                 // Phase is already reflected by Event_SetActivePhase from the server
                                 // (toolbar highlight + logSetActivePhase); do not duplicate here.
                                 // Reaching a new phase guarantees the previous stack emptied.
@@ -1156,6 +1169,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                         return phase == RuledCombatPhase::DeclareAttackers ||
                                                phase == RuledCombatPhase::DeclareBlockers ||
                                                phase == RuledCombatPhase::AssignCombatDamage ||
+                                               phase == RuledCombatPhase::FirstStrikeDamage ||
                                                phase == RuledCombatPhase::CombatDamage;
                                     };
                                     if (!isCombatPhase(previousCombatPhase) || !isCombatPhase(combatPhase)) {
@@ -1275,7 +1289,11 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 engineOidMarkedDamage.clear();
                                 engineOidBattlefieldPower.clear();
                                 engineOidBattlefieldToughness.clear();
+                                bool anyFirstStrikePending = false;
                                 for (const auto &p : e.zone_view().per_player()) {
+                                    if (p.first_strike_step_pending()) {
+                                        anyFirstStrikePending = true;
+                                    }
                                     const int count = std::min(p.battlefield_object_id_size(), p.battlefield_damage_size());
                                     for (int zdi = 0; zdi < count; ++zdi) {
                                         const quint32 oid = p.battlefield_object_id(zdi);
@@ -1301,6 +1319,10 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                                 oid, static_cast<int>(p.battlefield_toughness(ti)));
                                         }
                                     }
+                                }
+                                if (anyFirstStrikePending != ruledFirstStrikeStepPending) {
+                                    ruledFirstStrikeStepPending = anyFirstStrikePending;
+                                    emit ruledFirstStrikeStepPendingChanged(ruledFirstStrikeStepPending);
                                 }
                                 battlefieldMapDirty = true;
                             }

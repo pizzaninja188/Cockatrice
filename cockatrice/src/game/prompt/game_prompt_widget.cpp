@@ -277,6 +277,7 @@ void GamePromptWidget::setCombatMode(CombatMode mode, bool localPlayerHasButtons
     currentCombatMode = mode;
     localPlayerHasCombatButtons = localPlayerHasButtons;
     updateCombatButtonsVisibility();
+    updatePassPriorityButtonText();
     refreshPromptLabel();
 }
 
@@ -301,6 +302,25 @@ void GamePromptWidget::setRuledStackHasItems(bool hasItems)
         return;
     }
     ruledStackHasItems = hasItems;
+    updatePassPriorityButtonText();
+    refreshPromptLabel();
+}
+
+void GamePromptWidget::setFirstStrikeStepPending(bool pending)
+{
+    if (firstStrikeStepPending == pending) {
+        return;
+    }
+    firstStrikeStepPending = pending;
+    updatePassPriorityButtonText();
+}
+
+void GamePromptWidget::setFirstStrikeDamageStepActive(bool active)
+{
+    if (firstStrikeDamageStepActive == active) {
+        return;
+    }
+    firstStrikeDamageStepActive = active;
     updatePassPriorityButtonText();
     refreshPromptLabel();
 }
@@ -471,6 +491,20 @@ void GamePromptWidget::updatePassPriorityButtonText()
         passPriorityButton->setText(tr("No Response"));
         return;
     }
+    // CR 510.5: the button is always a forward-label (the step we are passing *into*).
+    // Inside the first-strike damage substep, pressing passes into the regular combat-damage
+    // step, so the label is "Combat Damage".
+    // While a first-strike substep is still pending (declare-blockers phase with a FS/DS
+    // combatant already in combat), pressing will lead into the first-strike step, so
+    // "First Strike Damage".
+    if (firstStrikeDamageStepActive) {
+        passPriorityButton->setText(tr("Combat Damage"));
+        return;
+    }
+    if (firstStrikeStepPending && currentCombatMode == CombatMode::DeclareBlockers) {
+        passPriorityButton->setText(tr("First Strike Damage"));
+        return;
+    }
     passPriorityButton->setText(nextStepButtonTextForPhase(currentActivePhase));
 }
 
@@ -539,7 +573,12 @@ void GamePromptWidget::refreshPromptLabel()
         return;
     }
 
-    const QString phaseName = currentPhaseDisplayName(currentActivePhase);
+    // CR 510.5: phase 7 hosts both the first-strike and regular combat damage substeps; use a
+    // distinct label while inside the first-strike substep so the prompt doesn't read like a
+    // generic "Combat Damage Step".
+    const QString phaseName = firstStrikeDamageStepActive
+        ? tr("First Strike Damage Step")
+        : currentPhaseDisplayName(currentActivePhase);
     if (phaseName.isEmpty()) {
         return;
     }
