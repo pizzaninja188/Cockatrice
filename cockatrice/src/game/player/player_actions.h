@@ -87,6 +87,11 @@ public:
     void cancelPendingRuledSpellCast();
     /// Returns the mana-payment prompt text if a spell is pending and still needs mana, otherwise empty.
     [[nodiscard]] QString pendingRuledSpellPromptText() const;
+    /// Show context menu for activated abilities on a battlefield permanent. Returns true if menu was shown.
+    bool tryRuledActivateAbilityMenu(CardItem *card);
+    /// Handle a target click for a pending activated ability activation or trigger target selection.
+    bool tryHandleRuledAbilityTargetClick(CardItem *card);
+    bool tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer);
     bool tryToggleRuledCleanupDiscard(CardItem *card);
     bool tryRuledOpeningBottomCard(CardItem *card);
     bool sendRuledCleanupDiscardBatchIfComplete();
@@ -198,6 +203,16 @@ public slots:
     void cardMenuAction();
 
 private:
+    struct PendingActivatedAbility
+    {
+        bool valid = false;
+        quint32 permanentOid = 0;
+        int abilityIndex = -1;
+        QString abilityText;
+        bool waitingForTarget = false;
+        quint32 selectedTargetOid = 0;
+    };
+
     struct PendingRuledSpellCast
     {
         int handIndex = -1;
@@ -240,6 +255,7 @@ private:
     int movingCardsUntilCounter = 0;
     MoveTopCardsUntilOptions movingCardsUntilOptions;
     PendingRuledSpellCast pendingRuledSpellCast;
+    PendingActivatedAbility pendingActivatedAbility;
     QVector<LandTapUndoEntry> landTapUndoStack;
     QVector<LandTapUndoEntry> midCastLandTapStack;
     QVector<int> manaPaymentCounterIds;

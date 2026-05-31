@@ -1016,6 +1016,17 @@ CardZoneLogic *TabGame::findVisibleStackZone() const
             best = zs;
         }
     }
+    // Ruled mode: activated/triggered abilities use virtual engine stack items with no physical card.
+    // Show the local player's stack zone even when empty so the window stays visible while the
+    // ability is on the stack and the player can pass priority.
+    if (!best && game && game->getGameMetaInfo()->proto().ruled_game()) {
+        const auto *handler = game->getGameEventHandler();
+        if (handler && handler->hasRuledStackItems()) {
+            if (localPlayer && localPlayer->getStackZone()) {
+                return localPlayer->getStackZone();
+            }
+        }
+    }
     return best;
 }
 

@@ -31,9 +31,18 @@ impl CardRegistry {
         let mut reg = CardRegistry::default();
         for chunk in EMBEDDED_RON_CHUNKS {
             let card: CardDefinition = RON_OPTS.from_str(chunk)?;
-            // Validate effect/target-spec compatibility at startup (hybrid model).
+            // Validate spell effect target-spec compatibility at startup.
             if let Some(effect) = &card.spell_effect {
                 effect
+                    .validate()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
+            }
+            // Validate activated ability effects.
+            for aa in &card.activated_abilities {
+                aa.effect
                     .validate()
                     .map_err(|reason| RegistryError::InvalidCard {
                         id: card.id.clone(),
@@ -98,6 +107,18 @@ const EMBEDDED_RON_CHUNKS: &[&str] = &[
     include_str!("../data/colossal_dreadmaw.ron"),
     include_str!("../data/goblin_striker.ron"),
     include_str!("../data/fencing_ace.ron"),
+    // Activated ability cards
+    include_str!("../data/prodigal_sorcerer.ron"),
+    include_str!("../data/prodigal_pyromancer.ron"),
+    include_str!("../data/royal_assassin.ron"),
+    include_str!("../data/jayemdae_tome.ron"),
+    include_str!("../data/icy_manipulator.ron"),
+    include_str!("../data/bottle_gnomes.ron"),
+    // Triggered ability cards
+    include_str!("../data/elvish_visionary.ron"),
+    include_str!("../data/flametongue_kavu.ron"),
+    include_str!("../data/scroll_thief.ron"),
+    include_str!("../data/thieving_magpie.ron"),
 ];
 
 #[cfg(test)]

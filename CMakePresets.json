@@ -17,7 +17,10 @@
       "hidden": true,
       "inherits": ["windows-vcpkg"],
       "generator": "Visual Studio 17 2022",
-      "architecture": { "value": "x64", "strategy": "set" }
+      "architecture": { "value": "x64", "strategy": "set" },
+      "cacheVariables": {
+        "QTDIR": "${sourceDir}/6.6.3/msvc2019_64"
+      }
     },
     {
       "name": "windows-msvc-release",
@@ -131,6 +134,13 @@
       "description": "Builds full Windows solution (client, servatrice, tests, and tricerules sidecar) in Release.",
       "configurePreset": "windows-msvc-all",
       "configuration": "Release"
+    },
+    {
+      "name": "windows-msvc-all-debug",
+      "displayName": "All: Build Debug",
+      "description": "Builds full Windows solution (client, servatrice, tests, and tricerules sidecar) in Debug.",
+      "configurePreset": "windows-msvc-all",
+      "configuration": "Debug"
     },
     {
       "name": "unix-ninja-release",

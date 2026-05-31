@@ -215,10 +215,15 @@ void PlayerTarget::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
         auto *playerManager = owner->getGame()->getPlayerManager();
         if (playerManager) {
             Player *localPlayer = playerManager->getPlayers().value(playerManager->getLocalPlayerId(), nullptr);
-            if (localPlayer && localPlayer->getPlayerActions() &&
-                localPlayer->getPlayerActions()->tryHandleRuledSpellTargetPlayerClick(owner)) {
-                event->accept();
-                return;
+            if (localPlayer && localPlayer->getPlayerActions()) {
+                if (localPlayer->getPlayerActions()->tryHandleRuledAbilityTargetPlayerClick(owner)) {
+                    event->accept();
+                    return;
+                }
+                if (localPlayer->getPlayerActions()->tryHandleRuledSpellTargetPlayerClick(owner)) {
+                    event->accept();
+                    return;
+                }
             }
         }
     }

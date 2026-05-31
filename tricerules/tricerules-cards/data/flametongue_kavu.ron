@@ -1,0 +1,16 @@
+(
+  id: "flametongue_kavu",
+  name: "Flametongue Kavu",
+  mana_cost: "3R",
+  types: ["Creature", "Kavu"],
+  is_creature: true,
+  power: 4,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: Effect(DamageTarget(amount: 4, target: Creature)),
+      text: "When this creature enters, it deals 4 damage to target creature.",
+    ),
+  ],
+)

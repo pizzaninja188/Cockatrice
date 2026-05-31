@@ -1,4 +1,4 @@
-use crate::primitives::{Color, Keyword, SpellEffectKind};
+use crate::primitives::{ActivatedAbilityDef, Color, Keyword, SpellEffectKind, TriggeredAbilityDef};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,6 +37,12 @@ pub struct CardDefinition {
     /// Legendary supertype (for SBA: legend rule)
     #[serde(default)]
     pub is_legendary: bool,
+    /// Activated abilities (cost + effect pairs). Omit or leave empty for cards with none.
+    #[serde(default)]
+    pub activated_abilities: Vec<ActivatedAbilityDef>,
+    /// Triggered abilities (trigger condition + effect pairs). Omit or leave empty for cards with none.
+    #[serde(default)]
+    pub triggered_abilities: Vec<TriggeredAbilityDef>,
     /// Implementation tracking only (ignored by the engine):
     /// `Some("what's missing")` = partially implemented; `None` = fully implemented.
     #[serde(default)]

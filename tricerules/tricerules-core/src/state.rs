@@ -142,12 +142,31 @@ impl ManaPool {
     }
 }
 
+/// A triggered ability that has fired but is waiting for the controller to choose a target
+/// before being placed on the stack (CR 603.3d). Only one pending trigger at a time.
+#[derive(Debug, Clone)]
+pub struct PendingTrigger {
+    pub source_permanent_id: ObjectId,
+    pub ability_index: usize,
+    pub ability_text: String,
+    pub card_id: String,
+    pub controller: PlayerId,
+}
+
 #[derive(Debug, Clone)]
 pub struct StackItem {
     pub id: ObjectId,
     pub controller: PlayerId,
     pub card_id: String,
     pub targets: Vec<ObjectId>,
+    /// `None` = spell; `Some(text)` = activated or triggered ability annotation shown on stack card.
+    pub ability_text: Option<String>,
+    /// For activated/triggered abilities: the permanent that sourced this ability (stays in its zone).
+    pub source_permanent_id: Option<ObjectId>,
+    /// Index into the card's `activated_abilities` or `triggered_abilities` list. `None` for spells.
+    pub ability_index: Option<usize>,
+    /// `true` = this is a triggered ability; `false` = activated ability or spell.
+    pub is_triggered: bool,
 }
 
 /// Pre-game: choose first player, then London-style mulligans (redraw to 7, then put N on bottom).
@@ -230,6 +249,8 @@ pub struct GameState {
     pub opening: Option<OpeningSequence>,
     /// Seat index of the player who takes the first turn (CR 103.8: only they skip their first draw step).
     pub starting_player_idx: usize,
+    /// A triggered ability that has fired and requires target selection before going on the stack (CR 603.3d).
+    pub pending_trigger: Option<PendingTrigger>,
 }
 
 impl GameState {

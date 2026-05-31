@@ -13,6 +13,7 @@
 #include <QLoggingCategory>
 #include <QList>
 #include <QObject>
+#include <QPointer>
 #include <QMultiHash>
 #include <QPair>
 #include <QSet>
@@ -142,6 +143,21 @@ private:
     bool ruledFirstStrikeStepPending = false;
     // Stack spell engine ObjectId -> target object ids (or PlayerId for player-targeted damage).
     QHash<quint32, QVector<quint32>> ruledStackTargetsByStackOid;
+    // Stack ability engine ObjectId -> ability annotation text (empty string for spells).
+    QHash<quint32, QString> ruledStackAnnotationByOid;
+    // Synthetic CardItems inserted into the local stack zone to represent ability stack items.
+    // QPointer auto-nullifies if the CardItem is deleted outside our cleanup path, preventing crashes.
+    QHash<quint32, QPointer<CardItem>> syntheticAbilityStackCards;
+    // Virtual engine ObjectId -> fake server card ID used for the synthetic card's OID mapping.
+    // Re-registered after every BattlefieldObjectMap clear so the italic annotation stays visible.
+    QHash<quint32, int> syntheticAbilityFakeIds;
+    // Engine ObjectId (battlefield permanent) -> pipe-delimited activated ability texts.
+    QHash<quint32, QStringList> engineOidToActivatedAbilityTexts;
+    // Pending trigger: set when engine emits TriggerNeedsTarget, cleared on ChooseTriggerTarget.
+    quint32 pendingTriggerSourceOid = 0;
+    quint32 pendingTriggerAbilityIndex = 0;
+    QString pendingTriggerAbilityText;
+    bool hasPendingTrigger = false;
     QList<QPair<Player *, int>> ruledSpellTargetSyntheticArrows;
     int nextRuledSpellTargetArrowId = -2;
     // Defender's currently selected blockers waiting to be paired to an attacker.
@@ -280,6 +296,17 @@ public:
     {
         return !ruledStackObjectIds.isEmpty();
     }
+    [[nodiscard]] QString ruledStackAnnotation(quint32 oid) const
+    {
+        return ruledStackAnnotationByOid.value(oid);
+    }
+    [[nodiscard]] QStringList activatedAbilitiesForOid(quint32 oid) const
+    {
+        return engineOidToActivatedAbilityTexts.value(oid);
+    }
+    [[nodiscard]] bool hasPendingTriggerTarget() const { return hasPendingTrigger; }
+    [[nodiscard]] QString pendingTriggerText() const { return pendingTriggerAbilityText; }
+    [[nodiscard]] quint32 pendingTriggerSource() const { return pendingTriggerSourceOid; }
     [[nodiscard]] bool isRuledFirstStrikeStepPending() const
     {
         return ruledFirstStrikeStepPending;
@@ -319,6 +346,9 @@ public:
 
     /// Rebuild ruled spell→target arrows (stack window layout / map updates may require a refresh).
     void refreshRuledSpellTargetArrows();
+
+    void createSyntheticAbilityStackCard(quint32 virtualOid, const QString &cardName);
+    void removeSyntheticAbilityStackCard(quint32 virtualOid);
 
     void togglePendingAttacker(quint32 engineOid);
     void clearPendingAttackers();
@@ -438,6 +468,8 @@ signals:
     void ruledCombatDamageUiChanged();
     void ruledBattlefieldMapUpdated();
     void ruledStackHasItemsChanged(bool hasItems);
+    /// Emitted when a triggered ability fires and needs the local player to choose a target.
+    void ruledTriggerNeedsTarget(QString abilityText);
     /// Emitted when the engine's `first_strike_step_pending` flag flips. Drives the
     /// "First Strike Damage" vs "Combat Damage" pass-priority button label on the prompt widget.
     void ruledFirstStrikeStepPendingChanged(bool pending);

@@ -1,0 +1,16 @@
+(
+  id: "elvish_visionary",
+  name: "Elvish Visionary",
+  mana_cost: "1G",
+  types: ["Creature", "Elf", "Shaman"],
+  is_creature: true,
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: Effect(Draw(count: 1)),
+      text: "When this creature enters, draw a card.",
+    ),
+  ],
+)

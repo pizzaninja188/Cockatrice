@@ -129,9 +129,22 @@ void Player::processPlayerInfo(const ServerInfo_Player &info)
     clearCounters();
     clearArrows();
 
+    // In ruled mode the stack zone is authoritative from Event_MoveCard events and the
+    // engine's synthetic ability system. Clearing and repopulating it from the game-state
+    // snapshot (sent on hand/battlefield-order changes) causes visual duplicates: the old
+    // card is still alive (deleteLater) while the repopulated card is immediately added.
+    const bool ruledMode = game && game->getGameMetaInfo()->proto().ruled_game();
+
     QMutableMapIterator<QString, CardZoneLogic *> zoneIt(zones);
     while (zoneIt.hasNext()) {
-        zoneIt.next().value()->clearContents();
+        zoneIt.next();
+        if (ruledMode && zoneIt.key() == QLatin1String(ZoneNames::STACK)) {
+            if (!builtinZones.contains(zoneIt.key())) {
+                zoneIt.remove();
+            }
+            continue;
+        }
+        zoneIt.value()->clearContents();
 
         if (!builtinZones.contains(zoneIt.key())) {
             zoneIt.remove();
@@ -145,6 +158,9 @@ void Player::processPlayerInfo(const ServerInfo_Player &info)
         const ServerInfo_Zone &zoneInfo = info.zone_list(i);
 
         QString zoneName = QString::fromStdString(zoneInfo.name());
+        if (ruledMode && zoneName == QLatin1String(ZoneNames::STACK)) {
+            continue;
+        }
         CardZoneLogic *zone = zones.value(zoneName, 0);
         if (!zone) {
             // Create a new CardZone if it doesn't exist

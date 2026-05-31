@@ -37,6 +37,8 @@
 #include <libcockatrice/utility/trice_limits.h>
 #include <libcockatrice/utility/zone_names.h>
 
+#include <QMenu>
+
 // milliseconds in between triggers of the move top cards until action
 static constexpr int MOVE_TOP_CARD_UNTIL_INTERVAL = 100;
 
@@ -2893,6 +2895,192 @@ PendingCommand *PlayerActions::prepareGameCommand(const QList<const ::google::pr
     } else {
         return player->getGame()->getGameEventHandler()->prepareGameCommand(cmdList);
     }
+}
+
+bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card)
+{
+    if (!card || !card->getZone()) {
+        return false;
+    }
+    if (card->getZone()->getName() != ZoneNames::TABLE) {
+        return false;
+    }
+    if (!player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+        return false;
+    }
+    auto *handler = player->getGame()->getGameEventHandler();
+    if (!handler) {
+        return false;
+    }
+
+    // Determine engine ObjectId for this card.
+    const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
+    const quint32 oid = handler->engineOidForCardId(ownerPlayerId, card->getId());
+    if (oid == 0) {
+        return false;
+    }
+
+    const QStringList abilityTexts = handler->activatedAbilitiesForOid(oid);
+    if (abilityTexts.isEmpty()) {
+        return false;
+    }
+
+    // Build and show the context menu.
+    QMenu menu;
+    menu.setTitle(card->getName());
+    for (int i = 0; i < abilityTexts.size(); ++i) {
+        menu.addAction(abilityTexts[i]);
+    }
+    QAction *chosen = menu.exec(QCursor::pos());
+    if (!chosen) {
+        return true; // menu was shown, player cancelled
+    }
+
+    const int abilityIndex = abilityTexts.indexOf(chosen->text());
+    if (abilityIndex < 0) {
+        return true;
+    }
+
+    // Determine if this ability needs a target (contains "target" in text, case-insensitive).
+    const bool needsTarget = chosen->text().contains(QStringLiteral("target"), Qt::CaseInsensitive);
+
+    pendingActivatedAbility.valid = true;
+    pendingActivatedAbility.permanentOid = oid;
+    pendingActivatedAbility.abilityIndex = abilityIndex;
+    pendingActivatedAbility.abilityText = chosen->text();
+    pendingActivatedAbility.waitingForTarget = needsTarget;
+    pendingActivatedAbility.selectedTargetOid = 0;
+
+    if (needsTarget) {
+        handler->emitLocalRuledLog(
+            tr("Choose a target for: %1").arg(chosen->text()));
+    } else {
+        // No target needed — send immediately.
+        ruled::v1::RuledCommand cmd;
+        auto *aa = cmd.mutable_activate_ability();
+        aa->set_permanent_id(oid);
+        aa->set_ability_index(static_cast<uint32_t>(abilityIndex));
+        std::string payload;
+        if (cmd.SerializeToString(&payload)) {
+            Command_RuledPayload ruledPayload;
+            ruledPayload.set_payload(payload);
+            sendGameCommand(ruledPayload);
+        }
+        pendingActivatedAbility = {};
+    }
+    return true;
+}
+
+bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
+{
+    // Check pending trigger first (higher priority).
+    auto *handler = player->getGame()->getGameEventHandler();
+    if (handler && handler->hasPendingTriggerTarget()) {
+        if (!card || !card->getZone()) {
+            return false;
+        }
+        const QString zoneName = card->getZone()->getName();
+        if (zoneName != ZoneNames::TABLE && zoneName != ZoneNames::STACK) {
+            return false;
+        }
+        const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
+        const quint32 targetOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
+        if (targetOid == 0) {
+            return false;
+        }
+        ruled::v1::RuledCommand cmd;
+        cmd.mutable_choose_trigger_target()->set_target_object_id(targetOid);
+        std::string payload;
+        if (cmd.SerializeToString(&payload)) {
+            Command_RuledPayload ruledPayload;
+            ruledPayload.set_payload(payload);
+            sendGameCommand(ruledPayload);
+        }
+        return true;
+    }
+
+    // Check pending activated ability target.
+    if (!pendingActivatedAbility.valid || !pendingActivatedAbility.waitingForTarget) {
+        return false;
+    }
+    if (!card || !card->getZone()) {
+        return false;
+    }
+    const QString zoneName = card->getZone()->getName();
+    if (zoneName != ZoneNames::TABLE && zoneName != ZoneNames::STACK) {
+        handler->emitLocalRuledLog(
+            tr("Select a target on the battlefield (or stack), or press Cancel."));
+        return true;
+    }
+    const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
+    const quint32 targetOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
+    if (targetOid == 0) {
+        handler->emitLocalRuledLog(tr("That target is not selectable yet."));
+        return true;
+    }
+
+    pendingActivatedAbility.selectedTargetOid = targetOid;
+    pendingActivatedAbility.waitingForTarget = false;
+
+    ruled::v1::RuledCommand cmd;
+    auto *aa = cmd.mutable_activate_ability();
+    aa->set_permanent_id(pendingActivatedAbility.permanentOid);
+    aa->set_ability_index(static_cast<uint32_t>(pendingActivatedAbility.abilityIndex));
+    auto *tref = aa->add_targets();
+    tref->set_object_id(targetOid);
+    std::string payload;
+    if (cmd.SerializeToString(&payload)) {
+        Command_RuledPayload ruledPayload;
+        ruledPayload.set_payload(payload);
+        sendGameCommand(ruledPayload);
+    }
+    pendingActivatedAbility = {};
+    return true;
+}
+
+bool PlayerActions::tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer)
+{
+    auto *handler = player->getGame()->getGameEventHandler();
+    if (handler && handler->hasPendingTriggerTarget()) {
+        if (!targetPlayer) {
+            return false;
+        }
+        const quint32 targetOid = static_cast<quint32>(targetPlayer->getPlayerInfo()->getId());
+        ruled::v1::RuledCommand cmd;
+        cmd.mutable_choose_trigger_target()->set_target_object_id(targetOid);
+        std::string payload;
+        if (cmd.SerializeToString(&payload)) {
+            Command_RuledPayload ruledPayload;
+            ruledPayload.set_payload(payload);
+            sendGameCommand(ruledPayload);
+        }
+        return true;
+    }
+
+    if (!pendingActivatedAbility.valid || !pendingActivatedAbility.waitingForTarget) {
+        return false;
+    }
+    if (!targetPlayer) {
+        return false;
+    }
+    const quint32 targetOid = static_cast<quint32>(targetPlayer->getPlayerInfo()->getId());
+    pendingActivatedAbility.selectedTargetOid = targetOid;
+    pendingActivatedAbility.waitingForTarget = false;
+
+    ruled::v1::RuledCommand cmd;
+    auto *aa = cmd.mutable_activate_ability();
+    aa->set_permanent_id(pendingActivatedAbility.permanentOid);
+    aa->set_ability_index(static_cast<uint32_t>(pendingActivatedAbility.abilityIndex));
+    auto *tref = aa->add_targets();
+    tref->set_object_id(targetOid);
+    std::string payload;
+    if (cmd.SerializeToString(&payload)) {
+        Command_RuledPayload ruledPayload;
+        ruledPayload.set_payload(payload);
+        sendGameCommand(ruledPayload);
+    }
+    pendingActivatedAbility = {};
+    return true;
 }
 
 void PlayerActions::sendGameCommand(const google::protobuf::Message &command)

@@ -1,0 +1,17 @@
+(
+  id: "thieving_magpie",
+  name: "Thieving Magpie",
+  mana_cost: "2UU",
+  types: ["Creature", "Bird"],
+  is_creature: true,
+  power: 1,
+  toughness: 3,
+  keywords: [Flying],
+  triggered_abilities: [
+    (
+      trigger: WheneverSelfDealsDamageToOpponent,
+      effect: Effect(Draw(count: 1)),
+      text: "Whenever this creature deals damage to an opponent, draw a card.",
+    ),
+  ],
+)

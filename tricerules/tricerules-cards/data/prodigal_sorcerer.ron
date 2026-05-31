@@ -1,0 +1,16 @@
+(
+  id: "prodigal_sorcerer",
+  name: "Prodigal Sorcerer",
+  mana_cost: "2U",
+  types: ["Creature", "Human", "Wizard", "Sorcerer"],
+  is_creature: true,
+  power: 1,
+  toughness: 1,
+  activated_abilities: [
+    (
+      cost: Tap,
+      effect: DamageTarget(amount: 1, target: AnyTarget),
+      text: "{T}: This creature deals 1 damage to any target.",
+    ),
+  ],
+)

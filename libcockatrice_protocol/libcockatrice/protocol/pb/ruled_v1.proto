@@ -35,6 +35,10 @@ message RuledCommand {
     // Active player assigns combat damage among blockers for one multiply-blocked attacker.
     // assignments must list each blocker exactly once; sum of damage must equal attacker power.
     AssignCombatDamage assign_combat_damage = 16;
+    // Activate an activated ability on a battlefield permanent (non-mana abilities only).
+    ActivateAbility activate_ability = 17;
+    // Choose a target for a triggered ability that is waiting to be placed on the stack (CR 603.3d).
+    ChooseTriggerTarget choose_trigger_target = 18;
   }
 }
 
@@ -176,6 +180,9 @@ message RuledEvent {
     AttackersPreview attackers_preview = 17;
     // Engine-emitted after active player assigns combat damage for a multiply-blocked attacker.
     CombatDamageAssigned combat_damage_assigned = 19;
+    // Engine-emitted when a triggered ability fires and needs the controller to choose a target
+    // before the ability is placed on the stack (CR 603.3d).
+    TriggerNeedsTarget trigger_needs_target = 20;
   }
 }
 
@@ -196,9 +203,28 @@ message PriorityChanged {
 message StackPushed {
   uint32 object_id = 1;
   string description = 2;
-  // Chosen targets for this spell while it is on the stack (object ids; player targets use
-  // the engine's PlayerId as object_id, same as CastSpell.targets).
+  // Chosen targets for this spell/ability while it is on the stack (object ids; player targets
+  // use the engine's PlayerId as object_id, same as CastSpell.targets).
   repeated TargetRef targets = 3;
+  // Present for activated/triggered abilities; absent (empty string) for spells.
+  // The client overlays this text on the stack card as an annotation.
+  string ability_annotation = 4;
+}
+
+message ActivateAbility {
+  uint32 permanent_id = 1;     // ObjectId of the source permanent on the battlefield
+  uint32 ability_index = 2;    // Index into card's activated_abilities list
+  repeated TargetRef targets = 3;
+}
+
+message ChooseTriggerTarget {
+  uint32 target_object_id = 1; // ObjectId of the chosen target (permanent) or PlayerId (player)
+}
+
+message TriggerNeedsTarget {
+  uint32 source_permanent_id = 1;
+  uint32 ability_index = 2;
+  string ability_text = 3;     // Oracle text of the triggered ability (shown in prompt widget)
 }
 
 // Where the resolved spell object ends up (Servatrice maps this to TABLE vs GRAVE).
@@ -263,6 +289,10 @@ message RuledPerPlayerView {
   // the first-strike step has not yet resolved for the current combat. Drives the
   // "First Strike Damage" pass-priority button label.
   bool first_strike_step_pending = 18;
+  // Parallel array to `battlefield`: pipe-delimited ("|") activated ability texts for each permanent.
+  // Empty string for permanents with no activated abilities. Indexed by battlefield position.
+  // Used by clients to build the activation context menu.
+  repeated string battlefield_activated_ability_texts = 19;
 }
 
 message ZoneViewSync {
@@ -328,6 +358,10 @@ message BattlefieldObjectMap {
     // True if this permanent has the Trample keyword (CR 702.19). A trample
     // attacker may assign excess combat damage to the defending player.
     bool trample = 8;
+    // Oracle-style texts for each activated ability on this permanent, in index order.
+    // Empty for permanents with no activated abilities. Used by clients to build the
+    // activation context menu.
+    repeated string activated_ability_texts = 9;
   }
   repeated Entry entries = 1;
 }

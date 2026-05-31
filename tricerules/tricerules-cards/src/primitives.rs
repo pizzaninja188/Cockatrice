@@ -68,6 +68,8 @@ pub enum TargetSpec {
     AnyPlayer,
     /// Any player still in the game except the caster.
     OpponentPlayer,
+    /// Any permanent on the battlefield (artifact, creature, or land — e.g. Icy Manipulator).
+    AnyPermanent,
 }
 
 impl TargetSpec {
@@ -82,7 +84,11 @@ pub enum SpellEffectKind {
     DamageTarget { amount: u32, target: TargetSpec },
     Draw { count: u32 },
     DestroyTarget,
+    /// Destroy target tapped creature (e.g. Royal Assassin activated ability).
+    DestroyTargetTapped,
     PumpTarget { power: i32, toughness: i32 },
+    /// Tap target permanent (artifact, creature, or land — e.g. Icy Manipulator).
+    TapTarget { target: TargetSpec },
     CounterTargetSpell,
     GainLife { amount: u32 },
     TargetPlayerGainsLife { amount: u32, target: TargetSpec },
@@ -113,9 +119,86 @@ impl SpellEffectKind {
                     ))
                 }
             }
+            SpellEffectKind::TapTarget { target } => {
+                if matches!(target, TargetSpec::AnyPermanent) {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "TapTarget requires AnyPermanent, got {target:?}"
+                    ))
+                }
+            }
             _ => Ok(()),
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Activated abilities
+// ---------------------------------------------------------------------------
+
+/// Cost to activate an activated ability (CR 602).
+/// Mana abilities that only produce mana (CR 605.3) are intentionally excluded —
+/// they don't use the stack and are handled separately.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AbilityCost {
+    /// {T}: tap the source permanent.
+    Tap,
+    /// Pay mana (e.g. "4", "2R"). Uses the same minimal mana string as `CardDefinition.mana_cost`.
+    Mana(String),
+    /// {T} plus mana (e.g. Jayemdae Tome: "4" + tap).
+    TapAndMana(String),
+    /// Sacrifice the source permanent as cost (e.g. Bottle Gnomes).
+    Sacrifice,
+}
+
+/// One activated ability on a permanent (RON data tier). Cost + effect compose freely.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ActivatedAbilityDef {
+    pub cost: AbilityCost,
+    pub effect: SpellEffectKind,
+    /// Oracle-style ability text shown as annotation on the stack card.
+    pub text: String,
+}
+
+// ---------------------------------------------------------------------------
+// Triggered abilities
+// ---------------------------------------------------------------------------
+
+/// Condition that causes a triggered ability to fire (CR 603).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TriggerCondition {
+    /// When this permanent enters the battlefield.
+    WhenSelfEntersBattlefield,
+    /// When this permanent is put into a graveyard from the battlefield.
+    WhenSelfDies,
+    /// Whenever this creature attacks.
+    WheneverSelfAttacks,
+    /// Whenever this creature deals combat damage to a player (e.g. Scroll Thief).
+    WheneverSelfDealsCombatDamageToPlayer,
+    /// Whenever this creature deals damage to an opponent, combat or non-combat (e.g. Thieving Magpie).
+    WheneverSelfDealsDamageToOpponent,
+    /// At the beginning of this permanent's controller's upkeep.
+    AtBeginningOfControllerUpkeep,
+}
+
+/// Effect of a triggered ability. Wraps `SpellEffectKind` for the common case, plus
+/// self-referential effects that don't map to a targeted spell effect.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TriggeredEffect {
+    /// Delegate to the existing spell-effect resolution path.
+    Effect(SpellEffectKind),
+    /// Source permanent gets +power/+toughness until end of turn.
+    PumpSelf { power: i32, toughness: i32 },
+}
+
+/// One triggered ability on a permanent (RON data tier).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TriggeredAbilityDef {
+    pub trigger: TriggerCondition,
+    pub effect: TriggeredEffect,
+    /// Oracle-style ability text shown as annotation on the stack card.
+    pub text: String,
 }
 
 #[cfg(test)]

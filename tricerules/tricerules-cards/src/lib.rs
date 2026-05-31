@@ -5,5 +5,8 @@ pub mod primitives;
 pub mod registry;
 
 pub use card_def::CardDefinition;
-pub use primitives::{Color, Keyword};
+pub use primitives::{
+    AbilityCost, ActivatedAbilityDef, Color, Keyword, TriggeredAbilityDef, TriggeredEffect,
+    TriggerCondition,
+};
 pub use registry::CardRegistry;

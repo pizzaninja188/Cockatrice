@@ -118,7 +118,11 @@ if(WIN32)
   elseif(DEFINED ENV{QTDIR})
     list(APPEND _servatrice_qt_bin_hints "$ENV{QTDIR}/bin")
   endif()
-  find_program(SERVATRICE_WINDEPLOYQT_EXECUTABLE NAMES windeployqt HINTS ${_servatrice_qt_bin_hints})
+  if(_servatrice_qt_bin_hints)
+    find_program(SERVATRICE_WINDEPLOYQT_EXECUTABLE NAMES windeployqt HINTS ${_servatrice_qt_bin_hints} NO_DEFAULT_PATH)
+  else()
+    find_program(SERVATRICE_WINDEPLOYQT_EXECUTABLE NAMES windeployqt)
+  endif()
   if(SERVATRICE_WINDEPLOYQT_EXECUTABLE)
     add_custom_command(
       TARGET servatrice

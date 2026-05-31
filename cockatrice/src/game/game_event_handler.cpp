@@ -39,6 +39,7 @@
 #include <libcockatrice/protocol/pb/game_event_container.pb.h>
 #include <libcockatrice/protocol/pending_command.h>
 #include <libcockatrice/utility/zone_names.h>
+#include "zones/logic/stack_zone_logic.h"
 #include <QColor>
 #include <QRegularExpression>
 #include <QTimer>
@@ -1209,6 +1210,14 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                     tlist.append(static_cast<quint32>(sp.targets(ti).object_id()));
                                 }
                                 ruledStackTargetsByStackOid.insert(sp.object_id(), tlist);
+                                if (!sp.ability_annotation().empty()) {
+                                    ruledStackAnnotationByOid.insert(
+                                        sp.object_id(),
+                                        QString::fromStdString(sp.ability_annotation()));
+                                    createSyntheticAbilityStackCard(
+                                        sp.object_id(),
+                                        QString::fromStdString(sp.description()));
+                                }
                                 ruledStackTrackingDirty = true;
                             }
                             if (e.has_stack_resolved()) {
@@ -1219,10 +1228,21 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 const QVector<quint32> spellTargets = ruledStackTargetsByStackOid.value(rid);
                                 ruledStackObjectIds.remove(rid);
                                 ruledStackTargetsByStackOid.remove(rid);
+                                ruledStackAnnotationByOid.remove(rid);
+                                removeSyntheticAbilityStackCard(rid);
                                 for (quint32 t : spellTargets) {
                                     ruledStackObjectIds.remove(t);
                                 }
                                 ruledStackTrackingDirty = true;
+                            }
+                            if (e.has_trigger_needs_target()) {
+                                const auto &tnt = e.trigger_needs_target();
+                                pendingTriggerSourceOid = tnt.source_permanent_id();
+                                pendingTriggerAbilityIndex = tnt.ability_index();
+                                pendingTriggerAbilityText = QString::fromStdString(tnt.ability_text());
+                                hasPendingTrigger = true;
+                                promptFeed += QStringLiteral("Choose a target for: %1\n").arg(pendingTriggerAbilityText);
+                                emit ruledTriggerNeedsTarget(pendingTriggerAbilityText);
                             }
                             if (e.has_battlefield_object_map()) {
                                 ownerCardIdToEngineOid.clear();
@@ -1274,6 +1294,15 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                         ++it;
                                     }
                                 }
+                                // Re-register synthetic ability stack card OID mappings cleared above.
+                                if (!syntheticAbilityFakeIds.isEmpty() && game) {
+                                    const int localPid = game->getPlayerManager()->getLocalPlayerId();
+                                    for (auto sit = syntheticAbilityFakeIds.constBegin();
+                                         sit != syntheticAbilityFakeIds.constEnd(); ++sit) {
+                                        ownerCardIdToEngineOid.insert(
+                                            makeOwnedCardKey(localPid, sit.value()), sit.key());
+                                    }
+                                }
                                 battlefieldMapDirty = true;
                                 combatStateDirty = true;
                             }
@@ -1289,6 +1318,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 engineOidMarkedDamage.clear();
                                 engineOidBattlefieldPower.clear();
                                 engineOidBattlefieldToughness.clear();
+                                engineOidToActivatedAbilityTexts.clear();
                                 bool anyFirstStrikePending = false;
                                 for (const auto &p : e.zone_view().per_player()) {
                                     if (p.first_strike_step_pending()) {
@@ -1300,6 +1330,18 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                         const int damage = static_cast<int>(p.battlefield_damage(zdi));
                                         if (oid != 0 && damage > 0) {
                                             engineOidMarkedDamage.insert(oid, damage);
+                                        }
+                                    }
+                                    // Parse activated ability texts (pipe-delimited per permanent).
+                                    const int nAbil = std::min(p.battlefield_object_id_size(),
+                                                               p.battlefield_activated_ability_texts_size());
+                                    for (int ai = 0; ai < nAbil; ++ai) {
+                                        const quint32 oid = p.battlefield_object_id(ai);
+                                        const QString textsStr =
+                                            QString::fromStdString(p.battlefield_activated_ability_texts(ai));
+                                        if (oid != 0 && !textsStr.isEmpty()) {
+                                            engineOidToActivatedAbilityTexts.insert(
+                                                oid, textsStr.split(QChar('|'), Qt::SkipEmptyParts));
                                         }
                                     }
                                     const int nPow = std::min(p.battlefield_object_id_size(), p.battlefield_power_size());
@@ -2142,6 +2184,67 @@ void GameEventHandler::clearRuledSpellTargetArrows()
     ruledSpellTargetSyntheticArrows.clear();
 }
 
+void GameEventHandler::createSyntheticAbilityStackCard(quint32 virtualOid, const QString &cardName)
+{
+    // Idempotent: StackPushed may be rebroadcast; a second card for the same OID would corrupt the zone.
+    if (syntheticAbilityStackCards.contains(virtualOid)) {
+        return;
+    }
+    if (!game) {
+        return;
+    }
+    const int localPlayerId = game->getPlayerManager()->getLocalPlayerId();
+    Player *localPlayer = game->getPlayerManager()->getPlayers().value(localPlayerId, nullptr);
+    if (!localPlayer) {
+        return;
+    }
+    CardZoneLogic *stackZone = localPlayer->getStackZone();
+    if (!stackZone) {
+        return;
+    }
+    // Assign a fake card ID well outside the range Servatrice assigns (small positive ints).
+    const int fakeId = static_cast<int>(0x70000000u | (virtualOid & 0x0FFFFFFFu));
+    CardRef ref{cardName, QString()};
+    auto *card = new CardItem(localPlayer, nullptr, ref, fakeId);
+    // Register the OID mapping so card_item.cpp paint() can show the italic ability annotation.
+    // BattlefieldObjectMap clears ownerCardIdToEngineOid on every priority change, so we keep
+    // the fakeId in syntheticAbilityFakeIds and re-register after each clear.
+    syntheticAbilityFakeIds.insert(virtualOid, fakeId);
+    ownerCardIdToEngineOid.insert(makeOwnedCardKey(localPlayerId, fakeId), virtualOid);
+    stackZone->addCard(card, true, stackZone->getCards().size());
+    // QPointer: auto-nullifies if the card is deleted outside our cleanup path.
+    syntheticAbilityStackCards.insert(virtualOid, QPointer<CardItem>(card));
+}
+
+void GameEventHandler::removeSyntheticAbilityStackCard(quint32 virtualOid)
+{
+    QPointer<CardItem> cardPtr = syntheticAbilityStackCards.take(virtualOid);
+    syntheticAbilityFakeIds.remove(virtualOid);
+    CardItem *card = cardPtr.data();
+    if (!card) {
+        return;
+    }
+    if (auto *zone = card->getZone()) {
+        // Find by pointer so we never remove the wrong card by fake ID.
+        const CardList &zoneCards = zone->getCards();
+        int pos = -1;
+        for (int i = 0; i < zoneCards.size(); ++i) {
+            if (zoneCards[i] == card) {
+                pos = i;
+                break;
+            }
+        }
+        if (pos >= 0) {
+            zone->takeCard(pos, card->getId(), false);
+        }
+    }
+    if (game) {
+        const int localPlayerId = game->getPlayerManager()->getLocalPlayerId();
+        ownerCardIdToEngineOid.remove(makeOwnedCardKey(localPlayerId, card->getId()));
+    }
+    card->deleteLater();
+}
+
 void GameEventHandler::syncRuledSpellTargetingArrows()
 {
     if (!game || !game->getGameMetaInfo()->proto().ruled_game()) {
@@ -2158,13 +2261,17 @@ void GameEventHandler::syncRuledSpellTargetingArrows()
         if (!ruledStackObjectIds.contains(stackOid)) {
             continue;
         }
-        const int spellServerId = cardIdForEngineOid(stackOid);
         TabGame *tab = game->getTab();
-        CardItem *startCard = tab ? tab->findVisibleStackSpellCardItem(spellServerId) : nullptr;
+        // QPointer::data() returns null if the card was deleted outside our cleanup path.
+        CardItem *startCard = syntheticAbilityStackCards.value(stackOid).data();
         if (!startCard) {
-            startCard = findStackCardByServerId(game, spellServerId);
+            const int spellServerId = cardIdForEngineOid(stackOid);
+            startCard = tab ? tab->findVisibleStackSpellCardItem(spellServerId) : nullptr;
+            if (!startCard) {
+                startCard = findStackCardByServerId(game, spellServerId);
+            }
         }
-        if (!startCard) {
+        if (!startCard || !startCard->getZone()) {
             continue;
         }
         Player *arrowOwner = startCard->getZone()->getPlayer();

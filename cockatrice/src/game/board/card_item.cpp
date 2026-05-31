@@ -150,8 +150,11 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
 
     QString renderedAnnotation = annotation;
     // CR 702.10a: a creature with Haste is unaffected by summoning sickness — don't
-    // show the "summoning sick" tag if the creature has Haste.
-    if (ruledHandler && ruledOid != 0 && ruledHandler->isEngineOidSummoningSick(ruledOid)
+    // show the "summoning sick" tag if the creature has Haste. Only show it for
+    // battlefield cards (TABLE zone); a lingering spell/ability card in the stack zone
+    // may share an OID with a summoning-sick permanent but must never show the label there.
+    const bool inTableZone = zone && zone->getName() == QLatin1String(ZoneNames::TABLE);
+    if (ruledHandler && ruledOid != 0 && inTableZone && ruledHandler->isEngineOidSummoningSick(ruledOid)
         && !ruledHandler->isEngineOidHaste(ruledOid)) {
         if (!renderedAnnotation.contains(QStringLiteral("summoning sick"), Qt::CaseInsensitive)) {
             if (!renderedAnnotation.isEmpty()) {
@@ -173,6 +176,28 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
                                  translatedSize.height() - 8 * scaleFactor),
                           Qt::AlignCenter | Qt::TextWrapAnywhere, renderedAnnotation);
         painter->restore();
+    }
+
+    // Ability annotation: draw italic text at the bottom of the card for abilities on the stack.
+    if (ruledHandler && ruledOid != 0) {
+        const QString abilityAnnotation = ruledHandler->ruledStackAnnotation(ruledOid);
+        if (!abilityAnnotation.isEmpty()) {
+            painter->save();
+            transformPainter(painter, translatedSize, tapAngle);
+            painter->setBackground(QColor(0, 0, 0, 160));
+            painter->setBackgroundMode(Qt::OpaqueMode);
+            painter->setPen(QColor(220, 220, 255));
+            QFont abilityFont = painter->font();
+            abilityFont.setItalic(true);
+            abilityFont.setPointSizeF(abilityFont.pointSizeF() * 0.75);
+            painter->setFont(abilityFont);
+            painter->drawText(
+                QRectF(4 * scaleFactor, translatedSize.height() * 0.65,
+                       translatedSize.width() - 8 * scaleFactor, translatedSize.height() * 0.33),
+                Qt::AlignCenter | Qt::TextWrapAnywhere,
+                abilityAnnotation);
+            painter->restore();
+        }
     }
 
     if (getBeingPointedAt()) {
@@ -776,6 +801,17 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
             AbstractCardItem::mouseReleaseEvent(event);
             return;
         }
+        // Activated ability menu on right-click (battlefield permanents with abilities).
+        if (owner != nullptr) {
+            auto *game = owner->getGame();
+            auto *playerManager = game ? game->getPlayerManager() : nullptr;
+            auto *localPlayer = playerManager ? playerManager->getPlayers().value(playerManager->getLocalPlayerId()) : nullptr;
+            auto *actions = localPlayer ? localPlayer->getPlayerActions() : nullptr;
+            if (owner->getPlayerInfo()->getLocal() && actions && actions->tryRuledActivateAbilityMenu(this)) {
+                AbstractCardItem::mouseReleaseEvent(event);
+                return;
+            }
+        }
         if (owner != nullptr) {
             owner->getGame()->setActiveCard(this);
             if (QMenu *cardMenu = owner->getPlayerMenu()->updateCardMenu(this)) {
@@ -802,7 +838,20 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
                 AbstractCardItem::mouseReleaseEvent(event);
                 return;
             }
+            // Ability target click (handles pending activation or trigger target selection).
+            if (stationaryLeft && actions && actions->tryHandleRuledAbilityTargetClick(this)) {
+                setCursor(Qt::OpenHandCursor);
+                AbstractCardItem::mouseReleaseEvent(event);
+                return;
+            }
             if (stationaryLeft && actions && actions->tryHandleRuledSpellTargetClick(this)) {
+                setCursor(Qt::OpenHandCursor);
+                AbstractCardItem::mouseReleaseEvent(event);
+                return;
+            }
+            // Left-click on a permanent with activated abilities — show activation menu.
+            if (stationaryLeft && owner->getPlayerInfo()->getLocal() && actions && zone &&
+                zone->getName() == ZoneNames::TABLE && actions->tryRuledActivateAbilityMenu(this)) {
                 setCursor(Qt::OpenHandCursor);
                 AbstractCardItem::mouseReleaseEvent(event);
                 return;

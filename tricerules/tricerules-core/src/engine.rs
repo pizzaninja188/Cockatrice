@@ -1,8 +1,8 @@
 //! Core rules processing (vanilla core ΓÇö simplified combat & mana).
 
 use crate::state::{
-    CombatState, GameObject, GameState, ObjectId, OpeningSequence, PlayerId, PlayerState,
-    StackItem, TurnStep, Zone,
+    CombatState, GameObject, GameState, ObjectId, OpeningSequence, PendingTrigger, PlayerId,
+    PlayerState, StackItem, TurnStep, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -10,7 +10,9 @@ use rand::seq::SliceRandom;
 use rand::SeedableRng;
 use std::collections::{HashMap, HashSet};
 use thiserror::Error;
-use tricerules_cards::primitives::{SpellEffectKind, TargetSpec};
+use tricerules_cards::primitives::{
+    AbilityCost, SpellEffectKind, TargetSpec, TriggerCondition, TriggeredEffect,
+};
 use tricerules_cards::CardRegistry;
 use tricerules_proto::ruled::v1 as rv1;
 use tricerules_proto::ruled::v1::{
@@ -210,6 +212,7 @@ impl GameEngine {
             cleanup_discard_player: None,
             opening,
             starting_player_idx: 0,
+            pending_trigger: None,
         };
         let mut eng = GameEngine { state, registry };
         let mut e = vec![];
@@ -573,6 +576,12 @@ impl GameEngine {
             Some(Cmd::CastSpell(cs)) => {
                 self.cast_spell(player, cs.hand_card_index as usize, &cs.targets)
             }
+            Some(Cmd::ActivateAbility(aa)) => {
+                self.activate_ability(player, aa.permanent_id, aa.ability_index as usize, &aa.targets)
+            }
+            Some(Cmd::ChooseTriggerTarget(ctt)) => {
+                self.choose_trigger_target(player, ctt.target_object_id)
+            }
             Some(Cmd::PlayLand(pl)) => self.play_land(player, pl.hand_card_index as usize),
             Some(Cmd::AddManaToPool(m)) => self.add_mana_to_pool(player, m),
             Some(Cmd::DiscardToHandSize(d)) => self.discard_to_hand_size(player, d),
@@ -858,6 +867,7 @@ impl GameEngine {
             ap,
             atk_names.join(", ")
         )));
+        self.fire_attack_triggers(&attackers_for_event, &mut b.events);
         b.events.push(ev_priority_changed(self));
         Ok(b)
     }
@@ -1266,6 +1276,8 @@ impl GameEngine {
         let mut total_life_lost: i32 = 0;
         // (controller_id, amount) pairs — collected during damage assignment, applied after.
         let mut lifelink_gains: Vec<(PlayerId, u32)> = Vec::new();
+        // (attacker_id, defending_player_id) — collected for combat-damage-to-player triggers.
+        let mut combat_dmg_to_player: Vec<(ObjectId, PlayerId)> = Vec::new();
 
         // CR 510.5 ASSIGNMENT rule: in the first-strike pass, only creatures with FirstStrike
         // or DoubleStrike assign damage; in the regular pass, creatures that did NOT assign
@@ -1322,6 +1334,9 @@ impl GameEngine {
                     if let Some(di) = self.state.player_idx(dfd) {
                         self.state.players[di].life -= p;
                         total_life_lost += p;
+                    }
+                    if att_power > 0 {
+                        combat_dmg_to_player.push((att, dfd));
                     }
                     // CR 702.15a: attacker with lifelink causes its controller to gain that much life.
                     if att_has_lifelink && att_power > 0 {
@@ -1502,6 +1517,9 @@ impl GameEngine {
                 events.push(ev_log(format!("P{pid} gains {amount} life (lifelink).")));
             }
         }
+        for (att_id, def_id) in combat_dmg_to_player {
+            self.fire_combat_damage_to_player_triggers(att_id, def_id, events);
+        }
         Ok(())
     }
 
@@ -1654,6 +1672,7 @@ impl GameEngine {
                 }
                 self.state.passes_since_stack_change = 0;
                 ev.push(ev_phase_labeled(self, "upkeep"));
+                self.fire_upkeep_triggers(ev);
                 ev.push(ev_priority_changed(self));
             }
             Upkeep => {
@@ -2117,43 +2136,94 @@ impl GameEngine {
         let card_id = top.card_id.clone();
         let targets = top.targets.clone();
 
-        let resolves_to_battlefield = self
-            .registry
-            .get(&card_id)
-            .map(|d| !d.is_instant && !d.is_sorcery)
-            .unwrap_or(false);
-        let destination = if resolves_to_battlefield {
-            rv1::StackResolveDestination::Battlefield as i32
+        // Abilities leave no object behind when they resolve — only spells move to a zone.
+        let is_ability = top.ability_text.is_some();
+        if is_ability {
+            events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
+                    object_id: top.id,
+                    destination: rv1::StackResolveDestination::Unspecified as i32,
+                })),
+            });
         } else {
-            rv1::StackResolveDestination::Graveyard as i32
-        };
-        events.push(rv1::RuledEvent {
-            ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
-                object_id: top.id,
-                destination,
-            })),
-        });
-        move_object_to_zone(
-            &mut self.state,
-            top.id,
-            if resolves_to_battlefield {
-                Zone::Battlefield
+            let resolves_to_battlefield = self
+                .registry
+                .get(&card_id)
+                .map(|d| !d.is_instant && !d.is_sorcery)
+                .unwrap_or(false);
+            let destination = if resolves_to_battlefield {
+                rv1::StackResolveDestination::Battlefield as i32
             } else {
-                Zone::Graveyard
-            },
-        )?;
+                rv1::StackResolveDestination::Graveyard as i32
+            };
+            events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
+                    object_id: top.id,
+                    destination,
+                })),
+            });
+            move_object_to_zone(
+                &mut self.state,
+                top.id,
+                if resolves_to_battlefield {
+                    Zone::Battlefield
+                } else {
+                    Zone::Graveyard
+                },
+            )?;
+            if resolves_to_battlefield {
+                self.fire_etb_triggers(top.id, events);
+            }
+        }
 
-        let effect = self
-            .registry
-            .get(&card_id)
-            .and_then(|c| c.spell_effect.clone())
-            .unwrap_or(SpellEffectKind::None);
+        // Determine effect: for spells use spell_effect; for abilities look up the ability def.
+        let (effect, spell_label, pump_self_params) = if is_ability {
+            let ability_index = top.ability_index.unwrap_or(0);
+            let def = self.registry.get(&card_id);
+            let name = def.map(|d| d.name.clone()).unwrap_or_else(|| "Ability".into());
+            if top.is_triggered {
+                let triggered_effect = def
+                    .and_then(|d| d.triggered_abilities.get(ability_index))
+                    .map(|a| a.effect.clone());
+                match triggered_effect {
+                    Some(TriggeredEffect::Effect(kind)) => (kind, name, None),
+                    Some(TriggeredEffect::PumpSelf { power, toughness }) => {
+                        (SpellEffectKind::None, name, Some((power, toughness)))
+                    }
+                    None => (SpellEffectKind::None, name, None),
+                }
+            } else {
+                let activated_effect = def
+                    .and_then(|d| d.activated_abilities.get(ability_index))
+                    .map(|a| a.effect.clone())
+                    .unwrap_or(SpellEffectKind::None);
+                (activated_effect, name, None)
+            }
+        } else {
+            let def = self.registry.get(&card_id);
+            let effect = def
+                .and_then(|c| c.spell_effect.clone())
+                .unwrap_or(SpellEffectKind::None);
+            let name = def.map(|d| d.name.clone()).unwrap_or_else(|| "Spell".into());
+            (effect, name, None)
+        };
 
-        let spell_label = self
-            .registry
-            .get(&card_id)
-            .map(|d| d.name.clone())
-            .unwrap_or_else(|| "Spell".into());
+        // PumpSelf: source permanent gets +power/+toughness until end of turn.
+        if let Some((power, toughness)) = pump_self_params {
+            if let Some(src_id) = top.source_permanent_id {
+                if let Some(o) = self.state.objects.get_mut(&src_id) {
+                    if o.zone == Zone::Battlefield {
+                        let p = o.power.unwrap_or(0) as i32 + power;
+                        let tt = o.toughness.unwrap_or(0) as i32 + toughness;
+                        o.power = Some(p.max(0) as u32);
+                        o.toughness = Some(tt.max(0) as u32);
+                        events.push(ev_log(format!("{spell_label} gets +{power}/+{toughness}.")));
+                    }
+                }
+            }
+            events.push(ev_log(format!("{spell_label} resolves.")));
+            return Ok(());
+        }
 
         let fizzle = spell_has_no_legal_targets_at_resolution(
             &self.state,
@@ -2227,6 +2297,7 @@ impl GameEngine {
                     let tgt = object_display_name(&self.state, &self.registry, tid);
                     events.push(ev_log(format!("{spell_label} destroys {tgt}")));
                     let owner = self.state.objects.get(&tid).map(|o| o.owner);
+                    let card_id_t = self.state.objects.get(&tid).map(|o| o.card_id.clone());
                     destroy_permanent(&mut self.state, tid)?;
                     if let Some(owner_id) = owner {
                         events.push(permanent_moved_event(
@@ -2235,6 +2306,9 @@ impl GameEngine {
                             owner_id,
                             rv1::permanent_moved::Destination::Graveyard,
                         ));
+                    }
+                    if let (Some(cid), Some(ctrl)) = (card_id_t, owner) {
+                        self.fire_dies_triggers(tid, &cid, ctrl, events);
                     }
                 }
             }
@@ -2451,6 +2525,47 @@ impl GameEngine {
                     }
                 }
             }
+            SpellEffectKind::DestroyTargetTapped => {
+                if let Some(&tid) = targets.first() {
+                    let tgt = object_display_name(&self.state, &self.registry, tid);
+                    if self
+                        .state
+                        .objects
+                        .get(&tid)
+                        .map(|o| o.zone == Zone::Battlefield && o.tapped)
+                        .unwrap_or(false)
+                    {
+                        let owner = self.state.objects.get(&tid).map(|o| o.owner);
+                        let card_id_t = self.state.objects.get(&tid).map(|o| o.card_id.clone());
+                        events.push(ev_log(format!("{spell_label} destroys {tgt}")));
+                        destroy_permanent(&mut self.state, tid)?;
+                        if let Some(owner_id) = owner {
+                            events.push(permanent_moved_event(
+                                &self.state,
+                                tid,
+                                owner_id,
+                                rv1::permanent_moved::Destination::Graveyard,
+                            ));
+                        }
+                        if let (Some(cid), Some(ctrl)) = (card_id_t, owner) {
+                            self.fire_dies_triggers(tid, &cid, ctrl, events);
+                        }
+                    } else {
+                        events.push(ev_log(format!("{spell_label} fizzles: {tgt} is not tapped.")));
+                    }
+                }
+            }
+            SpellEffectKind::TapTarget { .. } => {
+                if let Some(&tid) = targets.first() {
+                    let tgt = object_display_name(&self.state, &self.registry, tid);
+                    if let Some(o) = self.state.objects.get_mut(&tid) {
+                        if o.zone == Zone::Battlefield && !o.tapped {
+                            o.tapped = true;
+                            events.push(ev_log(format!("{spell_label} taps {tgt}")));
+                        }
+                    }
+                }
+            }
             SpellEffectKind::None => {}
         }
         events.push(ev_log(format!("{spell_label} resolves.")));
@@ -2515,6 +2630,10 @@ impl GameEngine {
             controller: player,
             card_id: card_id.clone(),
             targets: trefs,
+            ability_text: None,
+            source_permanent_id: None,
+            ability_index: None,
+            is_triggered: false,
         });
         if let Some(o) = self.state.objects.get_mut(&oid) {
             o.zone = Zone::Stack;
@@ -2535,6 +2654,213 @@ impl GameEngine {
                 object_id: oid,
                 description: def_name,
                 targets: targets.to_vec(),
+                ability_annotation: String::new(),
+            })),
+        });
+        batch.events.push(ev_priority_changed(self));
+        fill_legal(&mut batch, self);
+        Ok(batch)
+    }
+
+    fn activate_ability(
+        &mut self,
+        player: PlayerId,
+        permanent_id: u32,
+        ability_index: usize,
+        targets: &[rv1::TargetRef],
+    ) -> Result<RuledEventBatch, EngineError> {
+        if self.state.priority_player_id() != player {
+            return Err(EngineError::Illegal("not your priority"));
+        }
+        if self.state.turn_step == TurnStep::Cleanup {
+            return Err(EngineError::Illegal("no abilities during cleanup"));
+        }
+        if priority_locked_for_combat_declaration(&self.state) {
+            return Err(EngineError::Illegal(
+                "cannot activate until attack or block declaration is complete",
+            ));
+        }
+        let idx = self
+            .state
+            .player_idx(player)
+            .ok_or(EngineError::UnknownPlayer(player))?;
+
+        // Validate the permanent exists on the battlefield and is controlled by this player.
+        let card_id = self
+            .state
+            .objects
+            .get(&permanent_id)
+            .filter(|o| o.zone == Zone::Battlefield)
+            .map(|o| o.card_id.clone())
+            .ok_or(EngineError::Illegal("permanent not on battlefield"))?;
+        if !self.state.players[idx].battlefield.contains(&permanent_id) {
+            return Err(EngineError::Illegal("not your permanent"));
+        }
+
+        let def = self
+            .registry
+            .get(&card_id)
+            .ok_or_else(|| EngineError::MissingCard(card_id.clone()))?;
+
+        let ability = def
+            .activated_abilities
+            .get(ability_index)
+            .ok_or(EngineError::Illegal("no such activated ability"))?
+            .clone();
+
+        // CR 602.2: validate targets BEFORE paying cost.
+        validate_effect_targets(&self.state, &self.registry, player, &ability.effect, targets)?;
+
+        // Pay the cost.
+        match &ability.cost {
+            AbilityCost::Tap => {
+                let o = self
+                    .state
+                    .objects
+                    .get_mut(&permanent_id)
+                    .ok_or(EngineError::Illegal("permanent missing"))?;
+                if o.tapped {
+                    return Err(EngineError::Illegal("permanent is already tapped"));
+                }
+                if o.summoning_sick && self.registry.get(&card_id).map(|d| !d.keywords.contains(&tricerules_cards::Keyword::Haste)).unwrap_or(true) {
+                    return Err(EngineError::Illegal("cannot use tap ability due to summoning sickness"));
+                }
+                o.tapped = true;
+            }
+            AbilityCost::Mana(cost_str) => {
+                pay_mana_simple(&mut self.state, &self.registry, idx, cost_str)?;
+            }
+            AbilityCost::TapAndMana(cost_str) => {
+                let o = self
+                    .state
+                    .objects
+                    .get_mut(&permanent_id)
+                    .ok_or(EngineError::Illegal("permanent missing"))?;
+                if o.tapped {
+                    return Err(EngineError::Illegal("permanent is already tapped"));
+                }
+                if o.summoning_sick && self.registry.get(&card_id).map(|d| !d.keywords.contains(&tricerules_cards::Keyword::Haste)).unwrap_or(true) {
+                    return Err(EngineError::Illegal("cannot use tap ability due to summoning sickness"));
+                }
+                o.tapped = true;
+                pay_mana_simple(&mut self.state, &self.registry, idx, cost_str)?;
+            }
+            AbilityCost::Sacrifice => {
+                destroy_permanent(&mut self.state, permanent_id)?;
+            }
+        }
+
+        let trefs: Vec<ObjectId> = targets.iter().map(|t| t.object_id).collect();
+        let ability_text = ability.text.clone();
+        let card_name = self
+            .registry
+            .get(&card_id)
+            .map(|d| d.name.clone())
+            .unwrap_or_else(|| card_id.clone());
+
+        // Allocate a virtual ObjectId for the ability on the stack (not added to state.objects).
+        let virtual_id = self.state.next_object_id;
+        self.state.next_object_id += 1;
+
+        self.state.stack.push(StackItem {
+            id: virtual_id,
+            controller: player,
+            card_id: card_id.clone(),
+            targets: trefs.clone(),
+            ability_text: Some(ability_text.clone()),
+            source_permanent_id: Some(permanent_id),
+            ability_index: Some(ability_index),
+            is_triggered: false,
+        });
+        self.state.passes_since_stack_change = 0;
+        self.state.priority_idx = idx;
+
+        let tgt_line = format_spell_targets_log(&self.state, &self.registry, &trefs);
+        let mut batch = RuledEventBatch::default();
+        batch.events.push(ev_log(format!(
+            "P{player} activates {card_name}: {ability_text}{tgt_line}"
+        )));
+        batch.events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
+                object_id: virtual_id,
+                description: card_name,
+                targets: targets.to_vec(),
+                ability_annotation: ability_text,
+            })),
+        });
+        batch.events.push(ev_priority_changed(self));
+        fill_legal(&mut batch, self);
+        Ok(batch)
+    }
+
+    fn choose_trigger_target(
+        &mut self,
+        player: PlayerId,
+        target_object_id: u32,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let pending = self
+            .state
+            .pending_trigger
+            .take()
+            .ok_or(EngineError::Illegal("no pending trigger awaiting target"))?;
+
+        if pending.controller != player {
+            // Put it back
+            self.state.pending_trigger = Some(pending);
+            return Err(EngineError::Illegal("not your trigger to target"));
+        }
+
+        let def = self
+            .registry
+            .get(&pending.card_id)
+            .ok_or_else(|| EngineError::MissingCard(pending.card_id.clone()))?;
+
+        let effect = def
+            .triggered_abilities
+            .get(pending.ability_index)
+            .map(|a| &a.effect);
+
+        // Validate the chosen target against the effect's target spec.
+        let target_ref = &[rv1::TargetRef { object_id: target_object_id }];
+        if let Some(TriggeredEffect::Effect(kind)) = effect {
+            validate_effect_targets(&self.state, &self.registry, player, kind, target_ref)?;
+        }
+
+        let virtual_id = self.state.next_object_id;
+        self.state.next_object_id += 1;
+
+        let ability_text = pending.ability_text.clone();
+        let card_name = def.name.clone();
+        let card_id = pending.card_id.clone();
+        let source_id = pending.source_permanent_id;
+        let ability_index = pending.ability_index;
+        let controller = pending.controller;
+
+        let trefs = vec![target_object_id];
+        let tgt_line = format_spell_targets_log(&self.state, &self.registry, &trefs);
+
+        self.state.stack.push(StackItem {
+            id: virtual_id,
+            controller,
+            card_id: card_id.clone(),
+            targets: trefs,
+            ability_text: Some(ability_text.clone()),
+            source_permanent_id: Some(source_id),
+            ability_index: Some(ability_index),
+            is_triggered: true,
+        });
+        self.state.passes_since_stack_change = 0;
+
+        let mut batch = RuledEventBatch::default();
+        batch.events.push(ev_log(format!(
+            "P{controller} {card_name} trigger targets{tgt_line}"
+        )));
+        batch.events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
+                object_id: virtual_id,
+                description: card_name,
+                targets: vec![rv1::TargetRef { object_id: target_object_id }],
+                ability_annotation: ability_text,
             })),
         });
         batch.events.push(ev_priority_changed(self));
@@ -2577,9 +2903,11 @@ impl GameEngine {
         }
         self.state.passes_since_stack_change = 0;
         let mut batch = RuledEventBatch::default();
+        let land_name = def.name.clone();
         batch
             .events
-            .push(ev_log(format!("P{} played {}", player, def.name)));
+            .push(ev_log(format!("P{} played {}", player, land_name)));
+        self.fire_etb_triggers(oid, &mut batch.events);
         fill_legal(&mut batch, self);
         Ok(batch)
     }
@@ -2627,6 +2955,7 @@ impl GameEngine {
         }
         for id in to_destroy {
             let owner = self.state.objects.get(&id).map(|o| o.owner);
+            let card_id_for_trigger = self.state.objects.get(&id).map(|o| o.card_id.clone());
             if destroy_permanent(&mut self.state, id).is_ok() {
                 if let Some(owner_id) = owner {
                     out.push(permanent_moved_event(
@@ -2635,6 +2964,9 @@ impl GameEngine {
                         owner_id,
                         rv1::permanent_moved::Destination::Graveyard,
                     ));
+                }
+                if let (Some(cid), Some(ctrl)) = (card_id_for_trigger, owner) {
+                    self.fire_dies_triggers(id, &cid, ctrl, out);
                 }
             }
         }
@@ -2920,6 +3252,25 @@ impl GameEngine {
                             && combat_needs_first_strike_step(&self.state, &self.registry, c)
                     })
                     .unwrap_or(false),
+                // Pipe-delimited activated ability texts per battlefield permanent (empty if none).
+                battlefield_activated_ability_texts: p
+                    .battlefield
+                    .iter()
+                    .map(|&oid| {
+                        self.state
+                            .objects
+                            .get(&oid)
+                            .and_then(|o| self.registry.get(&o.card_id))
+                            .map(|def| {
+                                def.activated_abilities
+                                    .iter()
+                                    .map(|a| a.text.as_str())
+                                    .collect::<Vec<_>>()
+                                    .join("|")
+                            })
+                            .unwrap_or_default()
+                    })
+                    .collect(),
             })
             .collect();
         RuledEvent {
@@ -2937,6 +3288,192 @@ impl GameEngine {
             })),
         });
         b
+    }
+
+    // -----------------------------------------------------------------------
+    // Trigger detection helpers
+    // -----------------------------------------------------------------------
+
+    /// Fire all `WhenSelfEntersBattlefield` triggers for `oid` (just entered the battlefield).
+    fn fire_etb_triggers(&mut self, oid: ObjectId, events: &mut Vec<rv1::RuledEvent>) {
+        let Some(obj) = self.state.objects.get(&oid) else { return };
+        let card_id = obj.card_id.clone();
+        // Controller = owner for newly entered permanents (no change-of-control effects yet).
+        let controller = obj.owner;
+        let def = match self.registry.get(&card_id) {
+            Some(d) => d.clone(),
+            None => return,
+        };
+        for (idx, ta) in def.triggered_abilities.iter().enumerate() {
+            if ta.trigger != TriggerCondition::WhenSelfEntersBattlefield {
+                continue;
+            }
+            self.push_trigger(oid, &card_id, controller, idx, ta.text.clone(), events);
+        }
+    }
+
+    /// Fire all `WhenSelfDies` triggers for `oid` (just moved to graveyard from battlefield).
+    /// `card_id` and `controller` must be captured BEFORE the zone move.
+    fn fire_dies_triggers(
+        &mut self,
+        oid: ObjectId,
+        card_id: &str,
+        controller: PlayerId,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) {
+        let def = match self.registry.get(card_id) {
+            Some(d) => d.clone(),
+            None => return,
+        };
+        for (idx, ta) in def.triggered_abilities.iter().enumerate() {
+            if ta.trigger != TriggerCondition::WhenSelfDies {
+                continue;
+            }
+            self.push_trigger(oid, card_id, controller, idx, ta.text.clone(), events);
+        }
+    }
+
+    /// Fire all `WheneverSelfAttacks` triggers for each attacker in `attacker_ids`.
+    fn fire_attack_triggers(&mut self, attacker_ids: &[ObjectId], events: &mut Vec<rv1::RuledEvent>) {
+        let attacker_ids = attacker_ids.to_vec();
+        for &att in &attacker_ids {
+            let Some(obj) = self.state.objects.get(&att) else { continue };
+            let card_id = obj.card_id.clone();
+            let controller = obj.owner;
+            let def = match self.registry.get(&card_id) {
+                Some(d) => d.clone(),
+                None => continue,
+            };
+            for (idx, ta) in def.triggered_abilities.iter().enumerate() {
+                if ta.trigger != TriggerCondition::WheneverSelfAttacks {
+                    continue;
+                }
+                self.push_trigger(att, &card_id, controller, idx, ta.text.clone(), events);
+            }
+        }
+    }
+
+    /// Fire combat-damage-to-player triggers for `attacker_id` dealing `amount` to `defender_id`.
+    fn fire_combat_damage_to_player_triggers(
+        &mut self,
+        attacker_id: ObjectId,
+        defender_id: PlayerId,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) {
+        let Some(obj) = self.state.objects.get(&attacker_id) else { return };
+        let card_id = obj.card_id.clone();
+        let controller = obj.owner;
+        let def = match self.registry.get(&card_id) {
+            Some(d) => d.clone(),
+            None => return,
+        };
+        for (idx, ta) in def.triggered_abilities.iter().enumerate() {
+            let fires = match ta.trigger {
+                TriggerCondition::WheneverSelfDealsCombatDamageToPlayer => true,
+                TriggerCondition::WheneverSelfDealsDamageToOpponent => {
+                    // Opponent check: the defender is not the controller.
+                    defender_id != controller
+                }
+                _ => false,
+            };
+            if fires {
+                self.push_trigger(attacker_id, &card_id, controller, idx, ta.text.clone(), events);
+            }
+        }
+    }
+
+    /// Fire `AtBeginningOfControllerUpkeep` triggers for the active player's permanents.
+    fn fire_upkeep_triggers(&mut self, events: &mut Vec<rv1::RuledEvent>) {
+        let ap = self.state.active_player_id();
+        let ap_idx = self.state.player_idx(ap).unwrap_or(0);
+        let bf: Vec<ObjectId> = self.state.players[ap_idx].battlefield.clone();
+        for oid in bf {
+            let Some(obj) = self.state.objects.get(&oid) else { continue };
+            let card_id = obj.card_id.clone();
+            let controller = obj.owner;
+            let def = match self.registry.get(&card_id) {
+                Some(d) => d.clone(),
+                None => continue,
+            };
+            for (idx, ta) in def.triggered_abilities.iter().enumerate() {
+                if ta.trigger != TriggerCondition::AtBeginningOfControllerUpkeep {
+                    continue;
+                }
+                self.push_trigger(oid, &card_id, controller, idx, ta.text.clone(), events);
+            }
+        }
+    }
+
+    /// Core helper: either push a non-targeted trigger to the stack immediately, or set
+    /// `pending_trigger` and emit `TriggerNeedsTarget` for targeted ones.
+    fn push_trigger(
+        &mut self,
+        source_id: ObjectId,
+        card_id: &str,
+        controller: PlayerId,
+        ability_index: usize,
+        ability_text: String,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) {
+        let def = match self.registry.get(card_id) {
+            Some(d) => d.clone(),
+            None => return,
+        };
+        let needs_target = def
+            .triggered_abilities
+            .get(ability_index)
+            .map(|ta| triggered_effect_needs_target(&ta.effect))
+            .unwrap_or(false);
+
+        let card_name = def.name.clone();
+        let virtual_id = self.state.next_object_id;
+        self.state.next_object_id += 1;
+
+        if needs_target {
+            // Store for player to choose a target; only one pending trigger supported at a time.
+            self.state.pending_trigger = Some(PendingTrigger {
+                source_permanent_id: source_id,
+                ability_index,
+                ability_text: ability_text.clone(),
+                card_id: card_id.to_string(),
+                controller,
+            });
+            events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::TriggerNeedsTarget(
+                    rv1::TriggerNeedsTarget {
+                        source_permanent_id: source_id,
+                        ability_index: ability_index as u32,
+                        ability_text: ability_text.clone(),
+                    },
+                )),
+            });
+            events.push(ev_log(format!(
+                "Triggered: {card_name} — choose a target for: {ability_text}"
+            )));
+        } else {
+            self.state.stack.push(StackItem {
+                id: virtual_id,
+                controller,
+                card_id: card_id.to_string(),
+                targets: vec![],
+                ability_text: Some(ability_text.clone()),
+                source_permanent_id: Some(source_id),
+                ability_index: Some(ability_index),
+                is_triggered: true,
+            });
+            self.state.passes_since_stack_change = 0;
+            events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
+                    object_id: virtual_id,
+                    description: card_name.clone(),
+                    targets: vec![],
+                    ability_annotation: ability_text.clone(),
+                })),
+            });
+            events.push(ev_log(format!(
+                "Triggered: {card_name} — {ability_text}"
+            )));
+        }
     }
 }
 
@@ -3482,6 +4019,7 @@ fn target_spec_legal(
         TargetSpec::Creature => destroy_spell_target_legal(state, registry, tid),
         TargetSpec::AnyPlayer => player_target_legal(state, tid),
         TargetSpec::OpponentPlayer => player_target_legal(state, tid) && tid as i32 != caster,
+        TargetSpec::AnyPermanent => any_battlefield_permanent_target_legal(state, tid),
     }
 }
 
@@ -3508,18 +4046,158 @@ fn spell_has_no_legal_targets_at_resolution(
             .first()
             .is_some_and(|&tid| pump_spell_target_legal(state, registry, tid)),
         SpellEffectKind::DestroyTarget
+        | SpellEffectKind::DestroyTargetTapped
         | SpellEffectKind::ExileTarget
         | SpellEffectKind::ExileTargetGainLifeEqualToPower
         | SpellEffectKind::ReturnTargetCreatureToHand => !targets
             .first()
             .is_some_and(|&tid| destroy_spell_target_legal(state, registry, tid)),
-        SpellEffectKind::ReturnTargetPermanentToHand => !targets
+        SpellEffectKind::ReturnTargetPermanentToHand
+        | SpellEffectKind::TapTarget { .. } => !targets
             .first()
             .is_some_and(|&tid| any_battlefield_permanent_target_legal(state, tid)),
         SpellEffectKind::CounterTargetSpell => !targets
             .first()
             .is_some_and(|&tid| state.stack.iter().any(|s| s.id == tid)),
     }
+}
+
+fn triggered_effect_needs_target(effect: &TriggeredEffect) -> bool {
+    match effect {
+        TriggeredEffect::Effect(kind) => matches!(
+            kind,
+            SpellEffectKind::DamageTarget { .. }
+                | SpellEffectKind::DestroyTarget
+                | SpellEffectKind::DestroyTargetTapped
+                | SpellEffectKind::PumpTarget { .. }
+                | SpellEffectKind::ExileTarget
+                | SpellEffectKind::ExileTargetGainLifeEqualToPower
+                | SpellEffectKind::ReturnTargetCreatureToHand
+                | SpellEffectKind::ReturnTargetPermanentToHand
+                | SpellEffectKind::TargetPlayerGainsLife { .. }
+                | SpellEffectKind::TargetPlayerLosesLife { .. }
+                | SpellEffectKind::MillTargetPlayer { .. }
+                | SpellEffectKind::TapTarget { .. }
+        ),
+        TriggeredEffect::PumpSelf { .. } => false,
+    }
+}
+
+/// Validate targets for a `SpellEffectKind` directly (used by ability activation/trigger target selection).
+fn validate_effect_targets(
+    state: &GameState,
+    registry: &CardRegistry,
+    caster: PlayerId,
+    effect: &SpellEffectKind,
+    targets: &[rv1::TargetRef],
+) -> Result<(), EngineError> {
+    // Build a temporary card_id lookup by checking what effect this looks like.
+    // We reuse validate_spell_targets logic by constructing a dummy check.
+    // Rather than duplicating, delegate to the match logic directly.
+    match effect {
+        SpellEffectKind::DestroyTarget => {
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal("requires exactly one target"));
+            }
+            if !destroy_spell_target_legal(state, registry, targets[0].object_id) {
+                return Err(EngineError::Illegal(
+                    "target must be a creature on the battlefield",
+                ));
+            }
+        }
+        SpellEffectKind::DestroyTargetTapped => {
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal("requires exactly one target"));
+            }
+            if !destroy_spell_target_legal(state, registry, targets[0].object_id) {
+                return Err(EngineError::Illegal(
+                    "target must be a creature on the battlefield",
+                ));
+            }
+            if !state
+                .objects
+                .get(&targets[0].object_id)
+                .map(|o| o.tapped)
+                .unwrap_or(false)
+            {
+                return Err(EngineError::Illegal("target must be tapped"));
+            }
+        }
+        SpellEffectKind::TapTarget { .. } => {
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal("requires exactly one target"));
+            }
+            if !any_battlefield_permanent_target_legal(state, targets[0].object_id) {
+                return Err(EngineError::Illegal(
+                    "target must be a permanent on the battlefield",
+                ));
+            }
+        }
+        SpellEffectKind::DamageTarget { target: spec, .. } => {
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal("requires exactly one target"));
+            }
+            if !target_spec_legal(state, registry, spec, targets[0].object_id, caster) {
+                return Err(EngineError::Illegal("illegal target for damage effect"));
+            }
+        }
+        SpellEffectKind::PumpTarget { .. } => {
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal("requires exactly one target"));
+            }
+            if !pump_spell_target_legal(state, registry, targets[0].object_id) {
+                return Err(EngineError::Illegal(
+                    "target must be a creature on the battlefield",
+                ));
+            }
+        }
+        SpellEffectKind::ExileTarget
+        | SpellEffectKind::ExileTargetGainLifeEqualToPower
+        | SpellEffectKind::ReturnTargetCreatureToHand => {
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal("requires exactly one creature target"));
+            }
+            if !destroy_spell_target_legal(state, registry, targets[0].object_id) {
+                return Err(EngineError::Illegal(
+                    "target must be a creature on the battlefield",
+                ));
+            }
+        }
+        SpellEffectKind::ReturnTargetPermanentToHand => {
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal("requires exactly one permanent target"));
+            }
+            if !any_battlefield_permanent_target_legal(state, targets[0].object_id) {
+                return Err(EngineError::Illegal(
+                    "target must be a permanent on the battlefield",
+                ));
+            }
+        }
+        SpellEffectKind::TargetPlayerGainsLife { target: spec, .. }
+        | SpellEffectKind::TargetPlayerLosesLife { target: spec, .. }
+        | SpellEffectKind::MillTargetPlayer { target: spec, .. } => {
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal("requires exactly one player target"));
+            }
+            if !player_target_legal(state, targets[0].object_id) {
+                return Err(EngineError::Illegal("target must be a player in the game"));
+            }
+            if matches!(spec, TargetSpec::OpponentPlayer) && targets[0].object_id as i32 == caster {
+                return Err(EngineError::Illegal("cannot target yourself"));
+            }
+        }
+        // Non-targeted effects require no targets.
+        SpellEffectKind::Draw { .. }
+        | SpellEffectKind::GainLife { .. }
+        | SpellEffectKind::EachOpponentLosesLifeYouGainEqual { .. }
+        | SpellEffectKind::CounterTargetSpell
+        | SpellEffectKind::None => {
+            if !targets.is_empty() {
+                return Err(EngineError::Illegal("this effect takes no targets"));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn validate_spell_targets(
@@ -3555,8 +4233,15 @@ fn validate_spell_targets(
                 ));
             }
             let target = targets[0].object_id;
-            if !state.stack.iter().any(|s| s.id == target) {
-                return Err(EngineError::Illegal("counter target must be on stack"));
+            // CR 115.2c: counterspells target spells, not activated/triggered abilities.
+            if !state
+                .stack
+                .iter()
+                .any(|s| s.id == target && s.ability_text.is_none())
+            {
+                return Err(EngineError::Illegal(
+                    "counter target must be a spell on the stack",
+                ));
             }
         }
         SpellEffectKind::DamageTarget { target: spec, .. } => {
@@ -3582,6 +4267,40 @@ fn validate_spell_targets(
             if !pump_spell_target_legal(state, registry, target) {
                 return Err(EngineError::Illegal(
                     "pump target must be a creature on the battlefield",
+                ));
+            }
+        }
+        SpellEffectKind::DestroyTargetTapped => {
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal(
+                    "destroy-tapped requires exactly one target",
+                ));
+            }
+            let target = targets[0].object_id;
+            if !destroy_spell_target_legal(state, registry, target) {
+                return Err(EngineError::Illegal(
+                    "target must be a creature on the battlefield",
+                ));
+            }
+            if !state
+                .objects
+                .get(&target)
+                .map(|o| o.tapped)
+                .unwrap_or(false)
+            {
+                return Err(EngineError::Illegal("target must be tapped"));
+            }
+        }
+        SpellEffectKind::TapTarget { .. } => {
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal(
+                    "tap-target requires exactly one permanent target",
+                ));
+            }
+            let target = targets[0].object_id;
+            if !any_battlefield_permanent_target_legal(state, target) {
+                return Err(EngineError::Illegal(
+                    "target must be a permanent on the battlefield",
                 ));
             }
         }

@@ -1,0 +1,16 @@
+(
+  id: "royal_assassin",
+  name: "Royal Assassin",
+  mana_cost: "1BB",
+  types: ["Creature", "Human", "Assassin"],
+  is_creature: true,
+  power: 1,
+  toughness: 1,
+  activated_abilities: [
+    (
+      cost: Tap,
+      effect: DestroyTargetTapped,
+      text: "{T}: Destroy target tapped creature.",
+    ),
+  ],
+)
