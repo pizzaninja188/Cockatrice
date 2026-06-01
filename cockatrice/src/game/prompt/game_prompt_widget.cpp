@@ -395,6 +395,16 @@ void GamePromptWidget::setSpellCastPending(bool pending)
     updateCombatButtonsVisibility();
 }
 
+void GamePromptWidget::setTriggerTargetPending(bool pending)
+{
+    if (triggerTargetPending == pending) {
+        return;
+    }
+    triggerTargetPending = pending;
+    updateCombatButtonsVisibility();
+    refreshPromptLabel();
+}
+
 void GamePromptWidget::setCombatDamageStatus(const QString &attackerName, int assigned, int power,
                                               int playerDamage, bool legal)
 {
@@ -464,6 +474,16 @@ void GamePromptWidget::updateCombatButtonsVisibility()
         undoLandTapButton->setVisible(false);
         return;
     }
+    if (triggerTargetPending) {
+        passPriorityButton->setVisible(false);
+        confirmAttackersButton->setVisible(false);
+        confirmBlockersButton->setVisible(false);
+        resetBlockersButton->setVisible(false);
+        confirmCombatDamageButton->setVisible(false);
+        cancelTargetingButton->setVisible(false);
+        undoLandTapButton->setVisible(false);
+        return;
+    }
 
     const bool showAttackers =
         localPlayerHasPriority && currentCombatMode == CombatMode::DeclareAttackers && localPlayerHasCombatButtons;
@@ -528,7 +548,7 @@ void GamePromptWidget::setLocalPlayerIsActive(bool isActive)
 
 void GamePromptWidget::refreshPromptLabel()
 {
-    if (targetingModeEnabled || spellCastPending || cleanupDiscardMode || ruledOpeningUiKind != 0) {
+    if (targetingModeEnabled || spellCastPending || triggerTargetPending || cleanupDiscardMode || ruledOpeningUiKind != 0) {
         return;
     }
     if (currentCombatMode == CombatMode::AssignCombatDamage) {

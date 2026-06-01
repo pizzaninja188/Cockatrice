@@ -84,6 +84,7 @@ private:
     QMultiHash<QString, int> legalRuledLandPlayIndicesByCardName;
     QSet<int> legalRuledSpellCastHandIndices;
     QMultiHash<QString, int> legalRuledSpellCastIndicesByCardName;
+    QSet<int> legalRuledSpellCastNeedsTargetHandIndices;
     QSet<int> legalRuledCleanupDiscardHandIndices;
     QMultiHash<QString, int> legalRuledCleanupDiscardIndicesByCardName;
     QSet<int> cleanupDiscardSelectedIndices;
@@ -157,7 +158,10 @@ private:
     quint32 pendingTriggerSourceOid = 0;
     quint32 pendingTriggerAbilityIndex = 0;
     QString pendingTriggerAbilityText;
+    int pendingTriggerControllerPlayerId = -1;
     bool hasPendingTrigger = false;
+    // Maps trigger stack OID → source permanent OID, for drawing the ability arrow from the source.
+    QHash<quint32, quint32> ruledStackSourceOidByStackOid;
     QList<QPair<Player *, int>> ruledSpellTargetSyntheticArrows;
     int nextRuledSpellTargetArrowId = -2;
     // Defender's currently selected blockers waiting to be paired to an attacker.
@@ -180,6 +184,7 @@ public:
     [[nodiscard]] int getRuledLandPlayHandIndexForCard(const QString &cardName, int preferredHandIndex) const;
     [[nodiscard]] QList<int> getRuledLandPlayHandIndicesForCardName(const QString &cardName) const;
     [[nodiscard]] bool isRuledSpellCastLegalForHandIndex(int handIndex) const;
+    [[nodiscard]] bool isRuledSpellCastNeedsTargetForHandIndex(int handIndex) const;
     [[nodiscard]] int getRuledSpellCastHandIndexForCard(const QString &cardName, int preferredHandIndex) const;
     [[nodiscard]] QList<int> getRuledSpellCastHandIndicesForCardName(const QString &cardName) const;
     /// Maps the clicked hand card to an engine hand index by matching Server_Card ids at legal slots.
@@ -307,6 +312,7 @@ public:
     [[nodiscard]] bool hasPendingTriggerTarget() const { return hasPendingTrigger; }
     [[nodiscard]] QString pendingTriggerText() const { return pendingTriggerAbilityText; }
     [[nodiscard]] quint32 pendingTriggerSource() const { return pendingTriggerSourceOid; }
+    [[nodiscard]] int pendingTriggerController() const { return pendingTriggerControllerPlayerId; }
     [[nodiscard]] bool isRuledFirstStrikeStepPending() const
     {
         return ruledFirstStrikeStepPending;
@@ -428,6 +434,9 @@ signals:
     void localPlayerReadyStateChanged(int playerId, bool ready);
     void gameStopped();
     void gameClosed();
+    /// Emitted when ruled game-session state is cleared (game stopped or new game started).
+    /// Listeners should reset any UI state derived from the previous game's engine events.
+    void ruledSessionReset();
     void playerPropertiesChanged(const ServerInfo_PlayerProperties &prop, int playerId);
     void playerJoined(const ServerInfo_PlayerProperties &playerInfo);
     void playerLeft(int leavingPlayerId);
@@ -490,6 +499,9 @@ private:
     void pruneCleanupDiscardSelectionAndEmitUi();
     void clearRuledSpellTargetArrows();
     void syncRuledSpellTargetingArrows();
+    /// Clears all ruled engine-session tracking state (stack, triggers, legal actions).
+    /// Call on game stop and before a new game starts on the same handler instance.
+    void clearRuledSessionState();
     void syncRuledBlockersPreviewToServer();
     void syncRuledAttackersPreviewToServer();
 };

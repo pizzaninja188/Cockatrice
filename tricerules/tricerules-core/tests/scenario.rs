@@ -728,6 +728,90 @@ fn blockers_to_combat_damage_emits_priority_stop() {
     );
 }
 
+/// Regression test: combat damage triggers must land on the stack and require both players to
+/// pass priority before resolving.  The fix is that PhaseChanged is emitted before StackPushed
+/// so the C++ client doesn't clear ruledStackObjectIds and mistakenly auto-passes.
+#[test]
+fn combat_damage_trigger_lands_on_stack_and_requires_priority() {
+    // 10-card decks: skip_opening draws 7 as opening hand, leaving 3 in library
+    // so the Scroll Thief trigger can draw without hitting an empty library.
+    let p0_deck: Vec<String> = vec![
+        "island".into(), "island".into(), "scroll_thief".into(),
+        "island".into(), "island".into(), "island".into(),
+        "island".into(), "island".into(), "island".into(), "island".into(),
+    ];
+    let p1_deck: Vec<String> = std::iter::repeat_n("mountain".into(), 10).collect();
+    let decks = Some(vec![p0_deck, p1_deck]);
+    let mut e = GameEngine::new(77, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Cheat Scroll Thief onto P0's battlefield without summoning sickness.
+    let thief_hand_idx = hand_index_for_card(&e, 0, "scroll_thief");
+    let thief_oid = e.state.players[0].hand.remove(thief_hand_idx);
+    e.state.players[0].battlefield.push(thief_oid);
+    if let Some(obj) = e.state.objects.get_mut(&thief_oid) {
+        obj.zone = tricerules_core::Zone::Battlefield;
+        obj.summoning_sick = false;
+    }
+
+    let p0_hand_before = e.state.players[0].hand.len();
+
+    // Enter combat and attack with Scroll Thief.
+    e.apply_command(0, &primitive_yield()).expect("main1 to begin combat");
+    e.apply_command(0, &pass()).expect("ap begin combat pass");
+    e.apply_command(1, &pass()).expect("nap begin combat pass");
+    e.apply_command(0, &declare_attackers(vec![thief_oid])).expect("declare attackers");
+    e.apply_command(0, &pass()).expect("ap pass declare attackers");
+    e.apply_command(1, &pass()).expect("nap pass declare attackers");
+    // P1 has no blockers; engine auto-declares empty blockers.
+    e.apply_command(0, &pass()).expect("ap pass declare blockers");
+    let b = e.apply_command(1, &pass()).expect("nap pass declare blockers -> combat damage");
+
+    // After both players pass in DeclareBlockers, combat damage resolves and Scroll Thief's
+    // trigger fires.  The trigger must be on the stack awaiting priority.
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::CombatDamage,
+        "should be in CombatDamage step"
+    );
+    assert_eq!(
+        e.state.stack.len(),
+        1,
+        "combat damage trigger should be on the stack"
+    );
+
+    // Verify that in the returned batch PhaseChanged arrives before StackPushed.
+    // This is the ordering fix: C++ clears its ruledStackObjectIds on PhaseChanged; the
+    // trigger must follow so it is visible when the auto-pass timer fires.
+    let event_order: Vec<&str> = b.events.iter().filter_map(|ev| match &ev.ev {
+        Some(Ev::PhaseChanged(_)) => Some("phase"),
+        Some(Ev::StackPushed(_)) => Some("stack_pushed"),
+        _ => None,
+    }).collect();
+    let phase_pos = event_order.iter().position(|&e| e == "phase");
+    let pushed_pos = event_order.iter().position(|&e| e == "stack_pushed");
+    assert!(
+        phase_pos.is_some() && pushed_pos.is_some(),
+        "batch must contain both PhaseChanged and StackPushed"
+    );
+    assert!(
+        phase_pos.unwrap() < pushed_pos.unwrap(),
+        "PhaseChanged must precede StackPushed in the combat damage batch"
+    );
+
+    // Both players passing resolves the trigger; Scroll Thief draws a card for P0.
+    pass_both_players(&mut e);
+    assert!(
+        e.state.stack.is_empty(),
+        "stack should be empty after trigger resolves"
+    );
+    assert_eq!(
+        e.state.players[0].hand.len(),
+        p0_hand_before + 1,
+        "Scroll Thief trigger should have drawn a card for P0"
+    );
+}
+
 #[test]
 fn cleanup_batch_discard_three_at_once() {
     let mut e = GameEngine::new(1002, &[0, 1], 20, None, true).expect("new");

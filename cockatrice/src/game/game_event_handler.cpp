@@ -56,6 +56,7 @@ struct ParsedRuledCastActions
 {
     QSet<int> handIndices;
     QMultiHash<QString, int> handIndicesByCardName;
+    QSet<int> needsTargetHandIndices;
 };
 
 bool parseCreaturePt(const QString &pt, int *outPower, int *outToughness)
@@ -168,7 +169,9 @@ ParsedRuledLandActions parseRuledLandActions(const ruled::v1::LegalActions &acti
 
 ParsedRuledCastActions parseRuledCastActions(const ruled::v1::LegalActions &actions)
 {
-    static const QRegularExpression labelRegex(QStringLiteral(R"(^Cast (.*) \(hand idx (\d+)\)$)"));
+    // Optional ", target" suffix is emitted by the engine when the spell needs a cast-time target.
+    static const QRegularExpression labelRegex(
+        QStringLiteral(R"(^Cast (.*) \(hand idx (\d+)(, target)?\)$)"));
     ParsedRuledCastActions parsed;
 
     for (const auto &label : actions.labels()) {
@@ -182,6 +185,9 @@ ParsedRuledCastActions parseRuledCastActions(const ruled::v1::LegalActions &acti
         if (ok) {
             parsed.handIndices.insert(handIndex);
             parsed.handIndicesByCardName.insert(match.captured(1), handIndex);
+            if (!match.captured(3).isEmpty()) {
+                parsed.needsTargetHandIndices.insert(handIndex);
+            }
         }
     }
     return parsed;
@@ -381,6 +387,11 @@ QList<int> GameEventHandler::getRuledLandPlayHandIndicesForCardName(const QStrin
 bool GameEventHandler::isRuledSpellCastLegalForHandIndex(int handIndex) const
 {
     return legalRuledSpellCastHandIndices.contains(handIndex);
+}
+
+bool GameEventHandler::isRuledSpellCastNeedsTargetForHandIndex(int handIndex) const
+{
+    return legalRuledSpellCastNeedsTargetHandIndices.contains(handIndex);
 }
 
 int GameEventHandler::getRuledSpellCastHandIndexForCard(const QString &cardName, int preferredHandIndex) const
@@ -1103,6 +1114,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                     legalRuledLandPlayIndicesByCardName.clear();
                     legalRuledSpellCastHandIndices.clear();
                     legalRuledSpellCastIndicesByCardName.clear();
+                    legalRuledSpellCastNeedsTargetHandIndices.clear();
                     legalRuledCleanupDiscardHandIndices.clear();
                     legalRuledCleanupDiscardIndicesByCardName.clear();
                     legalRuledOpeningBottomHandIndices.clear();
@@ -1211,6 +1223,13 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 }
                                 ruledStackTargetsByStackOid.insert(sp.object_id(), tlist);
                                 if (!sp.ability_annotation().empty()) {
+                                    // A triggered ability was just placed on the stack — the pending
+                                    // trigger target has been chosen and is no longer pending.
+                                    hasPendingTrigger = false;
+                                    // Record the source permanent so the targeting arrow starts from it.
+                                    if (pendingTriggerSourceOid != 0) {
+                                        ruledStackSourceOidByStackOid.insert(sp.object_id(), pendingTriggerSourceOid);
+                                    }
                                     ruledStackAnnotationByOid.insert(
                                         sp.object_id(),
                                         QString::fromStdString(sp.ability_annotation()));
@@ -1229,6 +1248,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 ruledStackObjectIds.remove(rid);
                                 ruledStackTargetsByStackOid.remove(rid);
                                 ruledStackAnnotationByOid.remove(rid);
+                                ruledStackSourceOidByStackOid.remove(rid);
                                 removeSyntheticAbilityStackCard(rid);
                                 for (quint32 t : spellTargets) {
                                     ruledStackObjectIds.remove(t);
@@ -1240,8 +1260,14 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 pendingTriggerSourceOid = tnt.source_permanent_id();
                                 pendingTriggerAbilityIndex = tnt.ability_index();
                                 pendingTriggerAbilityText = QString::fromStdString(tnt.ability_text());
-                                hasPendingTrigger = true;
-                                promptFeed += QStringLiteral("Choose a target for: %1\n").arg(pendingTriggerAbilityText);
+                                pendingTriggerControllerPlayerId = tnt.controller_player_id();
+                                // Only the controller sees hasPendingTrigger = true so that only
+                                // they can send ChooseTriggerTarget commands.
+                                const int localId = game->getPlayerManager()->getLocalPlayerId();
+                                hasPendingTrigger = (pendingTriggerControllerPlayerId == localId);
+                                if (hasPendingTrigger) {
+                                    promptFeed += QStringLiteral("Choose a target for: %1\n").arg(pendingTriggerAbilityText);
+                                }
                                 emit ruledTriggerNeedsTarget(pendingTriggerAbilityText);
                             }
                             if (e.has_battlefield_object_map()) {
@@ -1468,6 +1494,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             const ParsedRuledCastActions parsedCast = parseRuledCastActions(lit->second);
                             legalRuledSpellCastHandIndices = parsedCast.handIndices;
                             legalRuledSpellCastIndicesByCardName = parsedCast.handIndicesByCardName;
+                            legalRuledSpellCastNeedsTargetHandIndices = parsedCast.needsTargetHandIndices;
                             const ParsedRuledLandActions parsedCleanup = parseRuledCleanupDiscardActions(lit->second);
                             legalRuledCleanupDiscardHandIndices = parsedCleanup.handIndices;
                             legalRuledCleanupDiscardIndicesByCardName = parsedCleanup.handIndicesByCardName;
@@ -1518,6 +1545,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             legalRuledLandPlayIndicesByCardName.clear();
                             legalRuledSpellCastHandIndices.clear();
                             legalRuledSpellCastIndicesByCardName.clear();
+                            legalRuledSpellCastNeedsTargetHandIndices.clear();
                             legalRuledCleanupDiscardHandIndices.clear();
                             legalRuledCleanupDiscardIndicesByCardName.clear();
                             legalRuledOpeningBottomHandIndices.clear();
@@ -1941,7 +1969,7 @@ void GameEventHandler::eventGameStateChanged(const Event_GameStateChanged &event
     game->getGameState()->setGameTime(event.seconds_elapsed());
 
     if (event.game_started() && !game->getGameMetaInfo()->started()) {
-        ruledOpeningMulliganCount = 0;
+        clearRuledSessionState();
         game->getGameState()->setResuming(!game->getGameState()->isGameStateKnown());
         game->getGameMetaInfo()->setStarted(event.game_started());
         if (game->getGameState()->isGameStateKnown())
@@ -1949,6 +1977,7 @@ void GameEventHandler::eventGameStateChanged(const Event_GameStateChanged &event
         game->getGameState()->setActivePlayer(event.active_player_id());
         game->getGameState()->setCurrentPhase(event.active_phase());
     } else if (!event.game_started() && game->getGameMetaInfo()->started()) {
+        clearRuledSessionState();
         game->getGameState()->setCurrentPhase(-1);
         game->getGameState()->setActivePlayer(-1);
         game->getGameMetaInfo()->setStarted(false);
@@ -2182,6 +2211,46 @@ void GameEventHandler::clearRuledSpellTargetArrows()
         }
     }
     ruledSpellTargetSyntheticArrows.clear();
+}
+
+void GameEventHandler::clearRuledSessionState()
+{
+    // Pending trigger
+    hasPendingTrigger = false;
+    pendingTriggerSourceOid = 0;
+    pendingTriggerAbilityIndex = 0;
+    pendingTriggerAbilityText.clear();
+    pendingTriggerControllerPlayerId = -1;
+
+    // Stack tracking — remove synthetic ability cards from their zones before clearing the maps.
+    const QList<quint32> syntheticOids = syntheticAbilityStackCards.keys();
+    for (const quint32 oid : syntheticOids) {
+        removeSyntheticAbilityStackCard(oid);
+    }
+    ruledStackObjectIds.clear();
+    ruledStackTargetsByStackOid.clear();
+    ruledStackAnnotationByOid.clear();
+    ruledStackSourceOidByStackOid.clear();
+
+    // Legal action sets
+    legalRuledLandPlayHandIndices.clear();
+    legalRuledLandPlayIndicesByCardName.clear();
+    legalRuledSpellCastHandIndices.clear();
+    legalRuledSpellCastIndicesByCardName.clear();
+    legalRuledSpellCastNeedsTargetHandIndices.clear();
+    legalRuledCleanupDiscardHandIndices.clear();
+    legalRuledCleanupDiscardIndicesByCardName.clear();
+    legalRuledOpeningBottomHandIndices.clear();
+
+    // Opening sequence
+    ruledOpeningUiKind = RuledOpeningUiKind::None;
+    ruledOpeningMulliganCount = 0;
+    ruledOpeningPickSeatIds.clear();
+    ruledOpeningBottomSelectedIndices.clear();
+
+    clearRuledSpellTargetArrows();
+
+    emit ruledSessionReset();
 }
 
 void GameEventHandler::createSyntheticAbilityStackCard(quint32 virtualOid, const QString &cardName)

@@ -396,23 +396,6 @@ bool PlayerActions::completePendingRuledSpellCast()
     return true;
 }
 
-bool PlayerActions::ruledSpellNeedsTarget(const CardItem *card)
-{
-    if (!card) {
-        return false;
-    }
-    const QString rulesText = card->getCardInfo().getText();
-    if (rulesText.contains(QStringLiteral("target"), Qt::CaseInsensitive)) {
-        return true;
-    }
-    // Fallback for cards without complete rules text metadata.
-    const QString name = card->getName().trimmed();
-    return name.compare(QStringLiteral("Go for the Throat"), Qt::CaseInsensitive) == 0 ||
-           name.compare(QStringLiteral("Counterspell"), Qt::CaseInsensitive) == 0 ||
-           name.compare(QStringLiteral("Giant Growth"), Qt::CaseInsensitive) == 0 ||
-           name.compare(QStringLiteral("Lightning Bolt"), Qt::CaseInsensitive) == 0;
-}
-
 bool PlayerActions::tryReducePendingSpellRemainingCostOnePip(bool colorlessMana, QChar coloredMana)
 {
     if (!pendingRuledSpellCast.valid || pendingRuledSpellCast.waitingForTarget) {
@@ -726,7 +709,7 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
     pendingRuledSpellCast.cardName = card->getName();
     pendingRuledSpellCast.remainingCost = parseSimpleManaCost(card->getCardInfo().getManaCost());
     pendingRuledSpellCast.selectedTargetOids.clear();
-    pendingRuledSpellCast.waitingForTarget = ruledSpellNeedsTarget(card);
+    pendingRuledSpellCast.waitingForTarget = geh->isRuledSpellCastNeedsTargetForHandIndex(ruledHandIndex);
     emit landTapUndoAvailableChanged(false);
     emit ruledSpellCastPendingChanged(true);
 

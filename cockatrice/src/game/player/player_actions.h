@@ -233,7 +233,6 @@ private:
     Player *player;
     bool tryPlayRuledLand(CardItem *card);
     bool tryStartRuledSpellCast(CardItem *card);
-    static bool ruledSpellNeedsTarget(const CardItem *card);
     static QMap<QChar, int> parseSimpleManaCost(const QString &manaCost);
     static QString formatSimpleManaCost(const QMap<QChar, int> &cost);
     void clearPendingRuledSpellCast();

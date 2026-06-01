@@ -1222,21 +1222,18 @@ impl GameEngine {
             if let Some(cc) = self.state.combat.as_mut() {
                 cc.first_strike_attackers = fs_attackers;
                 cc.first_strike_blockers = fs_blockers;
+                cc.first_strike_damage_done = true;
             }
             let c2 = self
                 .state
                 .combat
                 .clone()
                 .ok_or(EngineError::Illegal("combat?"))?;
-            self.resolve_combat_damage(&c2, DamagePass::FirstStrike, events)?;
-            // CR 510.2 + 704: SBAs run between damage steps so creatures with lethal damage are
-            // moved to graveyards before the regular step decides who deals damage.
-            self.apply_sbas(events)?;
-            let legend_events = self.apply_legend_sbas()?;
-            events.extend(legend_events);
-            if let Some(cc) = self.state.combat.as_mut() {
-                cc.first_strike_damage_done = true;
-            }
+            // Emit PhaseChanged before resolving damage so the C++ client clears its
+            // stack-object set before any combat damage triggers are pushed (StackPushed).
+            // This mirrors adv_on_empty_stack(Untap) which emits PhaseChanged first, then
+            // fires upkeep triggers — ensuring players see the non-empty stack and are not
+            // auto-passed through triggered abilities.
             self.clear_all_mana_pools();
             self.state.turn_step = TurnStep::FirstStrikeDamage;
             if let Some(i) = self.state.player_idx(ap) {
@@ -1245,9 +1242,16 @@ impl GameEngine {
             self.state.passes_since_stack_change = 0;
             events.push(ev_log("First strike combat damage dealt.".to_string()));
             events.push(ev_phase_labeled(self, "first_strike_damage"));
+            self.resolve_combat_damage(&c2, DamagePass::FirstStrike, events)?;
+            // CR 510.2 + 704: SBAs run between damage steps so creatures with lethal damage are
+            // moved to graveyards before the regular step decides who deals damage.
+            self.apply_sbas(events)?;
+            let legend_events = self.apply_legend_sbas()?;
+            events.extend(legend_events);
             events.push(ev_priority_changed(self));
         } else {
-            self.resolve_combat_damage(&c_init, DamagePass::Normal, events)?;
+            // Emit PhaseChanged before resolving damage so the C++ client clears its
+            // stack-object set before any combat damage triggers are pushed (StackPushed).
             self.state.combat = None;
             self.clear_all_mana_pools();
             self.state.turn_step = TurnStep::CombatDamage;
@@ -1255,10 +1259,11 @@ impl GameEngine {
                 self.state.priority_idx = i;
             }
             self.state.passes_since_stack_change = 0;
-            let legend_events = self.apply_legend_sbas()?;
-            events.extend(legend_events);
             events.push(ev_log("Combat damage dealt.".to_string()));
             events.push(ev_phase_labeled(self, "combat_damage"));
+            self.resolve_combat_damage(&c_init, DamagePass::Normal, events)?;
+            let legend_events = self.apply_legend_sbas()?;
+            events.extend(legend_events);
             events.push(ev_priority_changed(self));
         }
         Ok(())
@@ -1591,6 +1596,9 @@ impl GameEngine {
     fn pass_priority(&mut self, player: PlayerId) -> Result<RuledEventBatch, EngineError> {
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("not your priority"));
+        }
+        if self.state.pending_trigger.is_some() {
+            return Err(EngineError::Illegal("must choose trigger target before passing priority"));
         }
         if self.state.stack.is_empty()
             && self.state.turn_step == TurnStep::Cleanup
@@ -2618,6 +2626,9 @@ impl GameEngine {
                 "cannot cast until attack or block declaration is complete",
             ));
         }
+        if self.state.pending_trigger.is_some() {
+            return Err(EngineError::Illegal("must choose trigger target before casting"));
+        }
         validate_spell_targets(&self.state, &self.registry, player, &card_id, targets)?;
         pay_mana_simple(&mut self.state, &self.registry, idx, &def.mana_cost)?;
 
@@ -3444,6 +3455,7 @@ impl GameEngine {
                         source_permanent_id: source_id,
                         ability_index: ability_index as u32,
                         ability_text: ability_text.clone(),
+                        controller_player_id: controller,
                     },
                 )),
             });
@@ -3588,6 +3600,14 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
     if let Some(op) = &eng.state.opening {
         return opening_legal_labels(eng, pid, op);
     }
+    // Triggered ability awaiting a target must be resolved before any other action.
+    if let Some(pt) = &eng.state.pending_trigger {
+        return if pt.controller == pid {
+            vec![format!("Choose target for trigger: {}", pt.ability_text)]
+        } else {
+            vec!["Waiting: opponent choosing trigger target".into()]
+        };
+    }
     // Assign combat damage sub-phase: active player must assign before anything else.
     if let Some(c) = &eng.state.combat {
         if c.blockers_declared && c.damage_assignment_needed && c.assign_combat_damage_phase {
@@ -3651,7 +3671,15 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
             } else if !combat_decl_lock {
                 let cast_ok = (def.is_instant && instant_ok) || (!def.is_instant && sorcery_ok);
                 if cast_ok {
-                    v.push(format!("Cast {name} (hand idx {i})"));
+                    let needs_target = def
+                        .spell_effect
+                        .as_ref()
+                        .is_some_and(spell_effect_kind_needs_target);
+                    if needs_target {
+                        v.push(format!("Cast {name} (hand idx {i}, target)"));
+                    } else {
+                        v.push(format!("Cast {name} (hand idx {i})"));
+                    }
                 }
             }
         } else if !combat_decl_lock && (instant_ok || sorcery_ok) {
@@ -4062,23 +4090,28 @@ fn spell_has_no_legal_targets_at_resolution(
     }
 }
 
+fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
+    matches!(
+        kind,
+        SpellEffectKind::DamageTarget { .. }
+            | SpellEffectKind::DestroyTarget
+            | SpellEffectKind::DestroyTargetTapped
+            | SpellEffectKind::PumpTarget { .. }
+            | SpellEffectKind::ExileTarget
+            | SpellEffectKind::ExileTargetGainLifeEqualToPower
+            | SpellEffectKind::ReturnTargetCreatureToHand
+            | SpellEffectKind::ReturnTargetPermanentToHand
+            | SpellEffectKind::TargetPlayerGainsLife { .. }
+            | SpellEffectKind::TargetPlayerLosesLife { .. }
+            | SpellEffectKind::MillTargetPlayer { .. }
+            | SpellEffectKind::TapTarget { .. }
+            | SpellEffectKind::CounterTargetSpell
+    )
+}
+
 fn triggered_effect_needs_target(effect: &TriggeredEffect) -> bool {
     match effect {
-        TriggeredEffect::Effect(kind) => matches!(
-            kind,
-            SpellEffectKind::DamageTarget { .. }
-                | SpellEffectKind::DestroyTarget
-                | SpellEffectKind::DestroyTargetTapped
-                | SpellEffectKind::PumpTarget { .. }
-                | SpellEffectKind::ExileTarget
-                | SpellEffectKind::ExileTargetGainLifeEqualToPower
-                | SpellEffectKind::ReturnTargetCreatureToHand
-                | SpellEffectKind::ReturnTargetPermanentToHand
-                | SpellEffectKind::TargetPlayerGainsLife { .. }
-                | SpellEffectKind::TargetPlayerLosesLife { .. }
-                | SpellEffectKind::MillTargetPlayer { .. }
-                | SpellEffectKind::TapTarget { .. }
-        ),
+        TriggeredEffect::Effect(kind) => spell_effect_kind_needs_target(kind),
         TriggeredEffect::PumpSelf { .. } => false,
     }
 }

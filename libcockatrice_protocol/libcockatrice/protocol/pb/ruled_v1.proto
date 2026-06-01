@@ -225,6 +225,7 @@ message TriggerNeedsTarget {
   uint32 source_permanent_id = 1;
   uint32 ability_index = 2;
   string ability_text = 3;     // Oracle text of the triggered ability (shown in prompt widget)
+  int32 controller_player_id = 4; // PlayerId of the player who controls the trigger
 }
 
 // Where the resolved spell object ends up (Servatrice maps this to TABLE vs GRAVE).

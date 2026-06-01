@@ -213,6 +213,13 @@ void TabGame::connectToGameEventHandler()
     connect(game->getGameEventHandler(), &GameEventHandler::emitUserEvent, this, &TabGame::emitUserEvent);
     connect(game->getGameEventHandler(), &GameEventHandler::gameStopped, this, &TabGame::stopGame);
     connect(game->getGameEventHandler(), &GameEventHandler::gameStopped, messageLog, &MessageLogWidget::prepareForNewGame);
+    connect(game->getGameEventHandler(), &GameEventHandler::ruledSessionReset, this, [this] {
+        if (gamePromptWidget) {
+            gamePromptWidget->setTriggerTargetPending(false);
+            gamePromptWidget->setRuledStackHasItems(false);
+            gamePromptWidget->setSpellCastPending(false);
+        }
+    });
     connect(game->getGameEventHandler(), &GameEventHandler::gameClosed, this, &TabGame::closeGame);
     connect(game->getGameEventHandler(), &GameEventHandler::localPlayerReadyStateChanged, this,
             &TabGame::processLocalPlayerReadyStateChanged);
@@ -260,6 +267,15 @@ void TabGame::connectToGameEventHandler()
                             gamePromptWidget->setPromptText(spellPrompt);
                             return;
                         }
+                    }
+                    // If a triggered ability is waiting for the local player to choose a target,
+                    // show that prompt and suppress the pass-priority button.
+                    const bool triggerPending = handler && handler->hasPendingTriggerTarget();
+                    gamePromptWidget->setTriggerTargetPending(triggerPending);
+                    if (triggerPending) {
+                        gamePromptWidget->setPromptText(
+                            tr("Choose a target for: %1").arg(handler->pendingTriggerText()));
+                        return;
                     }
                     // Refresh after the full batch has settled (state is complete here).
                     gamePromptWidget->refreshPromptLabel();
