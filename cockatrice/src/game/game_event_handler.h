@@ -152,8 +152,10 @@ private:
     // Virtual engine ObjectId -> fake server card ID used for the synthetic card's OID mapping.
     // Re-registered after every BattlefieldObjectMap clear so the italic annotation stays visible.
     QHash<quint32, int> syntheticAbilityFakeIds;
-    // Engine ObjectId (battlefield permanent) -> pipe-delimited activated ability texts.
+    // Engine ObjectId (battlefield permanent) -> list of activated ability texts.
     QHash<quint32, QStringList> engineOidToActivatedAbilityTexts;
+    // Engine ObjectId (battlefield permanent) -> list of mana cost strings per ability (parallel to above).
+    QHash<quint32, QStringList> engineOidToActivatedAbilityManaCosts;
     // Pending trigger: set when engine emits TriggerNeedsTarget, cleared on ChooseTriggerTarget.
     quint32 pendingTriggerSourceOid = 0;
     quint32 pendingTriggerAbilityIndex = 0;
@@ -297,6 +299,8 @@ public:
     }
     [[nodiscard]] bool localPlayerIsRuledActive() const;
     [[nodiscard]] bool localPlayerIsRuledDefender() const;
+    [[nodiscard]] bool hasAttackersSubmittedThisStep() const { return attackersSubmittedThisStep; }
+    [[nodiscard]] bool hasBlockersSubmittedThisStep() const { return blockersSubmittedThisStep; }
     [[nodiscard]] bool hasRuledStackItems() const
     {
         return !ruledStackObjectIds.isEmpty();
@@ -308,6 +312,12 @@ public:
     [[nodiscard]] QStringList activatedAbilitiesForOid(quint32 oid) const
     {
         return engineOidToActivatedAbilityTexts.value(oid);
+    }
+    /// Returns the mana cost strings for each activated ability on this permanent, in ability-index order.
+    /// Each entry is a raw cost string like "4", "R", or "" (for Tap/Sacrifice costs).
+    [[nodiscard]] QStringList activatedAbilityManaCostsForOid(quint32 oid) const
+    {
+        return engineOidToActivatedAbilityManaCosts.value(oid);
     }
     [[nodiscard]] bool hasPendingTriggerTarget() const { return hasPendingTrigger; }
     [[nodiscard]] QString pendingTriggerText() const { return pendingTriggerAbilityText; }

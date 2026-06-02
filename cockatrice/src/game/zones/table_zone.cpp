@@ -312,6 +312,9 @@ void TableZone::toggleTapped()
     bool spellLandManaConsumed = false;
     bool spellCostFullyPaidAfterLands = false;
     bool spellLandPartialRemain = false;
+    bool abilityLandManaConsumed = false;
+    bool abilityCostFullyPaidAfterLands = false;
+    bool abilityLandPartialRemain = false;
     PlayerActions *const playerActions = getLogic()->getPlayer()->getPlayerActions();
     for (const auto &selectedItem : selectedItems) {
         CardItem *temp = qgraphicsitem_cast<CardItem *>(selectedItem);
@@ -344,17 +347,38 @@ void TableZone::toggleTapped()
                     } else {
                         spellLandPartialRemain = true;
                     }
-                } else if (manaCounterId >= 0 && !spellCostFullyPaidAfterLands) {
-                    auto *counterCmd = new Command_IncCounter;
-                    counterCmd->set_counter_id(manaCounterId);
-                    counterCmd->set_delta(1);
-                    cmdList.append(counterCmd);
+                } else {
+                    // No pending spell — try pending ability.
+                    const QPair<bool, bool> abilityLand =
+                        playerActions->tryConsumeLandManaPipTowardPendingAbility(manaCounterName);
+                    if (abilityLand.first) {
+                        abilityLandManaConsumed = true;
+                        playerActions->recordLandTapUndo(temp->getId(), manaCounterName, -1);
+                        if (ruledGame) {
+                            if (Command_RuledPayload *poolAdd =
+                                    playerActions->newRuledPayloadAddManaToPoolForLandName(manaCounterName)) {
+                                cmdList.append(poolAdd);
+                            }
+                        }
+                        if (abilityLand.second) {
+                            abilityCostFullyPaidAfterLands = true;
+                        } else {
+                            abilityLandPartialRemain = true;
+                        }
+                    } else if (manaCounterId >= 0 && !spellCostFullyPaidAfterLands &&
+                               !abilityCostFullyPaidAfterLands) {
+                        auto *counterCmd = new Command_IncCounter;
+                        counterCmd->set_counter_id(manaCounterId);
+                        counterCmd->set_delta(1);
+                        cmdList.append(counterCmd);
 
-                    if (auto *counter = getLogic()->getPlayer()->getCounters().value(manaCounterId, nullptr)) {
-                        counter->setValue(counter->getValue() + 1);
+                        if (auto *counter =
+                                getLogic()->getPlayer()->getCounters().value(manaCounterId, nullptr)) {
+                            counter->setValue(counter->getValue() + 1);
+                        }
+
+                        playerActions->recordLandTapUndo(temp->getId(), manaCounterName, manaCounterId);
                     }
-
-                    playerActions->recordLandTapUndo(temp->getId(), manaCounterName, manaCounterId);
                 }
             }
         }
@@ -365,6 +389,11 @@ void TableZone::toggleTapped()
     if (spellLandManaConsumed) {
         playerActions->afterRuledLandTapsAppliedForSpellMana(spellCostFullyPaidAfterLands,
                                                                spellLandPartialRemain && !spellCostFullyPaidAfterLands);
+    }
+    if (abilityLandManaConsumed) {
+        playerActions->afterRuledLandTapsAppliedForAbilityMana(
+            abilityCostFullyPaidAfterLands,
+            abilityLandPartialRemain && !abilityCostFullyPaidAfterLands);
     }
 }
 

@@ -49,6 +49,10 @@ signals:
     void ruledSpellCastPendingChanged(bool pending);
     /// Emitted when `remainingCost` changes during ruled spell payment (land or counter).
     void ruledSpellManaPromptChanged();
+    /// Emitted when an activated ability enters or leaves the mana-payment waiting state.
+    void ruledAbilityActivationPendingChanged(bool pending);
+    /// Emitted when `remainingCost` changes during ability mana payment (land or counter).
+    void ruledAbilityManaPromptChanged();
 
 public:
     enum CardsToReveal
@@ -92,6 +96,15 @@ public:
     /// Handle a target click for a pending activated ability activation or trigger target selection.
     bool tryHandleRuledAbilityTargetClick(CardItem *card);
     bool tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer);
+    /// Click a pool mana counter to pay toward a pending activated ability. Returns true if consumed.
+    bool tryPayRuledAbilityWithCounter(const QString &counterName);
+    /// Apply one land mana pip toward pending ability cost (local only). Returns { consumed, costFullyPaid }.
+    [[nodiscard]] QPair<bool, bool> tryConsumeLandManaPipTowardPendingAbility(const QString &manaCounterName);
+    /// Call after tap commands are sent. Completes activation and/or updates prompt.
+    void afterRuledLandTapsAppliedForAbilityMana(bool completeActivation, bool partialCostRemainPrompt);
+    void cancelPendingActivatedAbility();
+    /// Returns the mana-payment prompt text if an ability is pending and still needs mana, otherwise empty.
+    [[nodiscard]] QString pendingRuledAbilityPromptText() const;
     bool tryToggleRuledCleanupDiscard(CardItem *card);
     bool tryRuledOpeningBottomCard(CardItem *card);
     bool sendRuledCleanupDiscardBatchIfComplete();
@@ -209,8 +222,11 @@ private:
         quint32 permanentOid = 0;
         int abilityIndex = -1;
         QString abilityText;
+        QString cardName;
         bool waitingForTarget = false;
         quint32 selectedTargetOid = 0;
+        bool waitingForMana = false;
+        QMap<QChar, int> remainingCost;
     };
 
     struct PendingRuledSpellCast
@@ -239,6 +255,9 @@ private:
     bool completePendingRuledSpellCast();
     bool tryReducePendingSpellRemainingCostOnePip(bool colorlessMana, QChar coloredMana);
     void finishPendingSpellManaPaymentStep();
+    bool completeActivateAbility();
+    bool tryReducePendingAbilityRemainingCostOnePip(bool colorlessMana, QChar coloredMana);
+    void finishPendingAbilityManaPaymentStep();
 
     int defaultNumberTopCards = 1;
     int defaultNumberTopCardsToPlaceBelow = 1;

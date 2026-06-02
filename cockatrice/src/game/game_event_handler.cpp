@@ -1345,6 +1345,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 engineOidBattlefieldPower.clear();
                                 engineOidBattlefieldToughness.clear();
                                 engineOidToActivatedAbilityTexts.clear();
+                                engineOidToActivatedAbilityManaCosts.clear();
                                 bool anyFirstStrikePending = false;
                                 for (const auto &p : e.zone_view().per_player()) {
                                     if (p.first_strike_step_pending()) {
@@ -1358,7 +1359,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                             engineOidMarkedDamage.insert(oid, damage);
                                         }
                                     }
-                                    // Parse activated ability texts (pipe-delimited per permanent).
+                                    // Parse activated ability texts and mana costs (pipe-delimited per permanent).
                                     const int nAbil = std::min(p.battlefield_object_id_size(),
                                                                p.battlefield_activated_ability_texts_size());
                                     for (int ai = 0; ai < nAbil; ++ai) {
@@ -1368,6 +1369,13 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                         if (oid != 0 && !textsStr.isEmpty()) {
                                             engineOidToActivatedAbilityTexts.insert(
                                                 oid, textsStr.split(QChar('|'), Qt::SkipEmptyParts));
+                                        }
+                                        if (oid != 0 && ai < p.battlefield_activated_ability_mana_costs_size()) {
+                                            const QString costsStr =
+                                                QString::fromStdString(p.battlefield_activated_ability_mana_costs(ai));
+                                            // Split on '|'; an empty entry means no mana cost for that ability.
+                                            engineOidToActivatedAbilityManaCosts.insert(
+                                                oid, costsStr.split(QChar('|')));
                                         }
                                     }
                                     const int nPow = std::min(p.battlefield_object_id_size(), p.battlefield_power_size());

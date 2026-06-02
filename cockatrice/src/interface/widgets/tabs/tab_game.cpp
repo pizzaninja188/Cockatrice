@@ -257,7 +257,7 @@ void TabGame::connectToGameEventHandler()
                         return;
                     }
                     gamePromptWidget->setCleanupDiscardMode(false, 0, 0);
-                    // If the local player has a pending spell cast waiting for mana, show
+                    // If the local player has a pending spell or ability waiting for mana, show
                     // the remaining cost.
                     const int localId = game->getPlayerManager()->getLocalPlayerId();
                     Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
@@ -265,6 +265,11 @@ void TabGame::connectToGameEventHandler()
                         const QString spellPrompt = localPlayer->getPlayerActions()->pendingRuledSpellPromptText();
                         if (!spellPrompt.isEmpty()) {
                             gamePromptWidget->setPromptText(spellPrompt);
+                            return;
+                        }
+                        const QString abilityPrompt = localPlayer->getPlayerActions()->pendingRuledAbilityPromptText();
+                        if (!abilityPrompt.isEmpty()) {
+                            gamePromptWidget->setPromptText(abilityPrompt);
                             return;
                         }
                     }
@@ -429,6 +434,7 @@ void TabGame::connectToGameEventHandler()
                 return;
             }
             localPlayer->getPlayerActions()->cancelPendingRuledSpellCast();
+            localPlayer->getPlayerActions()->cancelPendingActivatedAbility();
         });
         connect(game->getGameEventHandler(), &GameEventHandler::ruledStackHasItemsChanged, gamePromptWidget,
                 &GamePromptWidget::setRuledStackHasItems);
@@ -1234,6 +1240,18 @@ void TabGame::addLocalPlayer(Player *newPlayer, int playerId)
                         return;
                     }
                     const QString t = newPlayer->getPlayerActions()->pendingRuledSpellPromptText();
+                    if (!t.isEmpty()) {
+                        gamePromptWidget->setPromptText(t);
+                    }
+                });
+        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledAbilityActivationPendingChanged,
+                gamePromptWidget, &GamePromptWidget::setSpellCastPending);
+        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledAbilityManaPromptChanged, this,
+                [this, newPlayer]() {
+                    if (!gamePromptWidget || !newPlayer->getPlayerInfo()->getLocal()) {
+                        return;
+                    }
+                    const QString t = newPlayer->getPlayerActions()->pendingRuledAbilityPromptText();
                     if (!t.isEmpty()) {
                         gamePromptWidget->setPromptText(t);
                     }

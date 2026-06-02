@@ -2630,7 +2630,7 @@ impl GameEngine {
             return Err(EngineError::Illegal("must choose trigger target before casting"));
         }
         validate_spell_targets(&self.state, &self.registry, player, &card_id, targets)?;
-        pay_mana_simple(&mut self.state, &self.registry, idx, &def.mana_cost)?;
+        pay_mana_simple(&mut self.state, idx, &def.mana_cost)?;
 
         self.state.players[idx].hand.retain(|&x| x != oid);
         let trefs: Vec<ObjectId> = targets.iter().map(|t| t.object_id).collect();
@@ -2722,7 +2722,8 @@ impl GameEngine {
         // CR 602.2: validate targets BEFORE paying cost.
         validate_effect_targets(&self.state, &self.registry, player, &ability.effect, targets)?;
 
-        // Pay the cost.
+        // Pay the cost. Track sacrifice separately so we can emit a PermanentMoved event below.
+        let mut sacrifice_ev: Option<rv1::RuledEvent> = None;
         match &ability.cost {
             AbilityCost::Tap => {
                 let o = self
@@ -2739,9 +2740,12 @@ impl GameEngine {
                 o.tapped = true;
             }
             AbilityCost::Mana(cost_str) => {
-                pay_mana_simple(&mut self.state, &self.registry, idx, cost_str)?;
+                pay_mana_simple(&mut self.state, idx, cost_str)?;
             }
             AbilityCost::TapAndMana(cost_str) => {
+                // Check mana sufficiency BEFORE tapping so a failed payment leaves the
+                // permanent untapped (costs are paid atomically in MTG CR 601.2h).
+                pay_mana_simple(&mut self.state, idx, cost_str)?;
                 let o = self
                     .state
                     .objects
@@ -2754,10 +2758,16 @@ impl GameEngine {
                     return Err(EngineError::Illegal("cannot use tap ability due to summoning sickness"));
                 }
                 o.tapped = true;
-                pay_mana_simple(&mut self.state, &self.registry, idx, cost_str)?;
             }
             AbilityCost::Sacrifice => {
-                destroy_permanent(&mut self.state, permanent_id)?;
+                let owner = self.state.objects.get(&permanent_id).map(|o| o.owner).unwrap_or(player);
+                sacrifice_permanent(&mut self.state, permanent_id)?;
+                sacrifice_ev = Some(permanent_moved_event(
+                    &self.state,
+                    permanent_id,
+                    owner,
+                    rv1::permanent_moved::Destination::Graveyard,
+                ));
             }
         }
 
@@ -2791,6 +2801,9 @@ impl GameEngine {
         batch.events.push(ev_log(format!(
             "P{player} activates {card_name}: {ability_text}{tgt_line}"
         )));
+        if let Some(ev) = sacrifice_ev {
+            batch.events.push(ev);
+        }
         batch.events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
                 object_id: virtual_id,
@@ -3276,6 +3289,30 @@ impl GameEngine {
                                 def.activated_abilities
                                     .iter()
                                     .map(|a| a.text.as_str())
+                                    .collect::<Vec<_>>()
+                                    .join("|")
+                            })
+                            .unwrap_or_default()
+                    })
+                    .collect(),
+                // Parallel to `battlefield_activated_ability_texts`: pipe-delimited mana cost
+                // strings extracted from AbilityCost. Tap/Sacrifice → "", Mana/TapAndMana → "4"/"R"/etc.
+                battlefield_activated_ability_mana_costs: p
+                    .battlefield
+                    .iter()
+                    .map(|&oid| {
+                        self.state
+                            .objects
+                            .get(&oid)
+                            .and_then(|o| self.registry.get(&o.card_id))
+                            .map(|def| {
+                                def.activated_abilities
+                                    .iter()
+                                    .map(|a| match &a.cost {
+                                        tricerules_cards::primitives::AbilityCost::Mana(s) => s.as_str(),
+                                        tricerules_cards::primitives::AbilityCost::TapAndMana(s) => s.as_str(),
+                                        _ => "",
+                                    })
                                     .collect::<Vec<_>>()
                                     .join("|")
                             })
@@ -3851,14 +3888,21 @@ fn destroy_permanent(state: &mut GameState, oid: ObjectId) -> Result<(), EngineE
     move_object_to_zone(state, oid, Zone::Graveyard)
 }
 
+/// Sacrifice a permanent (CR 701.17). Unlike destroy, sacrifice bypasses indestructible and
+/// regeneration — it is always a cost, never a triggered or replacement effect that can be
+/// redirected.
+fn sacrifice_permanent(state: &mut GameState, oid: ObjectId) -> Result<(), EngineError> {
+    move_object_to_zone(state, oid, Zone::Graveyard)
+}
+
 fn pay_mana_simple(
     state: &mut GameState,
-    registry: &CardRegistry,
     player_idx: usize,
     cost: &str,
 ) -> Result<(), EngineError> {
-    // Paying spell costs taps the controller's lands while they have priority — not
-    // restricted to the active player (e.g. responding with Counterspell on NAP's turn).
+    // Mana must already be in the player's pool (added via AddManaToPool / land taps).
+    // The engine never auto-taps lands — the client is responsible for sending AddManaToPool
+    // before casting a spell or activating an ability.
     if player_idx != state.priority_idx {
         return Err(EngineError::Illegal(
             "only priority player can pay mana for spells",
@@ -3881,117 +3925,54 @@ fn pay_mana_simple(
             _ => {}
         }
     }
-    // Floating mana from Cockatrice pool counters (AddManaToPool) pays before auto-tapping.
-    {
-        let pool = &mut state.players[player_idx].mana_pool;
-        let take = |need: &mut u32, avail: &mut u32| {
-            let t = (*need).min(*avail);
-            *avail -= t;
-            *need -= t;
-        };
-        take(&mut need_w, &mut pool.white);
-        take(&mut need_u, &mut pool.blue);
-        take(&mut need_b, &mut pool.black);
-        take(&mut need_r, &mut pool.red);
-        take(&mut need_g, &mut pool.green);
+    let pool = &mut state.players[player_idx].mana_pool;
+    let take = |need: &mut u32, avail: &mut u32| {
+        let t = (*need).min(*avail);
+        *avail -= t;
+        *need -= t;
+    };
+    take(&mut need_w, &mut pool.white);
+    take(&mut need_u, &mut pool.blue);
+    take(&mut need_b, &mut pool.black);
+    take(&mut need_r, &mut pool.red);
+    take(&mut need_g, &mut pool.green);
 
-        let mut generic = need_c;
-        while generic > 0 {
-            if pool.colorless > 0 {
-                pool.colorless -= 1;
-                generic -= 1;
-            } else if pool.white > 0 {
-                pool.white -= 1;
-                generic -= 1;
-            } else if pool.blue > 0 {
-                pool.blue -= 1;
-                generic -= 1;
-            } else if pool.black > 0 {
-                pool.black -= 1;
-                generic -= 1;
-            } else if pool.red > 0 {
-                pool.red -= 1;
-                generic -= 1;
-            } else if pool.green > 0 {
-                pool.green -= 1;
-                generic -= 1;
-            } else {
-                break;
-            }
-        }
-        need_c = generic;
-    }
-
-    let bf = state.players[player_idx].battlefield.clone();
-    for &oid in &bf {
-        let o = state.objects.get_mut(&oid).unwrap();
-        if o.tapped {
-            continue;
-        }
-        let land_color = basic_land_color_from_object(o, registry);
-        if need_w > 0 && land_color == Some('W') {
-            o.tapped = true;
-            need_w -= 1;
-        } else if need_u > 0 && land_color == Some('U') {
-            o.tapped = true;
-            need_u -= 1;
-        } else if need_b > 0 && land_color == Some('B') {
-            o.tapped = true;
-            need_b -= 1;
-        } else if need_r > 0 && land_color == Some('R') {
-            o.tapped = true;
-            need_r -= 1;
-        } else if need_g > 0 && land_color == Some('G') {
-            o.tapped = true;
-            need_g -= 1;
-        }
-    }
-    let mut need = need_c + need_w + need_u + need_b + need_r + need_g;
-    if need == 0 {
-        return Ok(());
-    }
-    let bf = state.players[player_idx].battlefield.clone();
-    for &oid in &bf {
-        if need == 0 {
+    // Generic mana can be paid by any color in the pool.
+    let mut generic = need_c;
+    while generic > 0 {
+        if pool.colorless > 0 {
+            pool.colorless -= 1;
+            generic -= 1;
+        } else if pool.white > 0 {
+            pool.white -= 1;
+            generic -= 1;
+        } else if pool.blue > 0 {
+            pool.blue -= 1;
+            generic -= 1;
+        } else if pool.black > 0 {
+            pool.black -= 1;
+            generic -= 1;
+        } else if pool.red > 0 {
+            pool.red -= 1;
+            generic -= 1;
+        } else if pool.green > 0 {
+            pool.green -= 1;
+            generic -= 1;
+        } else {
             break;
         }
-        let o = state.objects.get_mut(&oid).unwrap();
-        if o.tapped {
-            continue;
-        }
-        if basic_land_color_from_object(o, registry).is_some() {
-            o.tapped = true;
-            need -= 1;
-        }
     }
+    need_c = generic;
+
+    let need = need_c + need_w + need_u + need_b + need_r + need_g;
     if need > 0 {
-        return Err(EngineError::Illegal("cannot pay mana"));
+        return Err(EngineError::Illegal(
+            "not enough mana in pool; tap your lands first",
+        ));
     }
     Ok(())
 }
 
-fn basic_land_color_from_object(obj: &GameObject, registry: &CardRegistry) -> Option<char> {
-    let def = registry.get(&obj.card_id)?;
-    if !def.is_land {
-        return None;
-    }
-    if def.types.iter().any(|t| t == "Plains") {
-        return Some('W');
-    }
-    if def.types.iter().any(|t| t == "Island") {
-        return Some('U');
-    }
-    if def.types.iter().any(|t| t == "Swamp") {
-        return Some('B');
-    }
-    if def.types.iter().any(|t| t == "Mountain") {
-        return Some('R');
-    }
-    if def.types.iter().any(|t| t == "Forest") {
-        return Some('G');
-    }
-    None
-}
 
 /// Player or creature permanent on the battlefield (matches cast validation for `bolt`).
 fn damage_spell_target_legal(state: &GameState, registry: &CardRegistry, tid: ObjectId) -> bool {

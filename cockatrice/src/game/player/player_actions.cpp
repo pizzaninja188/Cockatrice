@@ -297,7 +297,7 @@ void PlayerActions::cancelPendingRuledSpellCast()
 
 void PlayerActions::recordLandTapUndo(int cardId, const QString &counterName, int counterId)
 {
-    if (pendingRuledSpellCast.valid) {
+    if (pendingRuledSpellCast.valid || pendingActivatedAbility.waitingForMana) {
         midCastLandTapStack.append({cardId, counterName, counterId});
         return;
     }
@@ -396,6 +396,84 @@ bool PlayerActions::completePendingRuledSpellCast()
     return true;
 }
 
+
+bool PlayerActions::completeActivateAbility()
+{
+    if (!pendingActivatedAbility.valid || pendingActivatedAbility.waitingForTarget ||
+        pendingActivatedAbility.waitingForMana) {
+        return false;
+    }
+
+    ruled::v1::RuledCommand cmd;
+    auto *aa = cmd.mutable_activate_ability();
+    aa->set_permanent_id(pendingActivatedAbility.permanentOid);
+    aa->set_ability_index(static_cast<uint32_t>(pendingActivatedAbility.abilityIndex));
+    if (pendingActivatedAbility.selectedTargetOid != 0) {
+        auto *tref = aa->add_targets();
+        tref->set_object_id(pendingActivatedAbility.selectedTargetOid);
+    }
+    std::string payload;
+    if (!cmd.SerializeToString(&payload)) {
+        pendingActivatedAbility = {};
+        return false;
+    }
+    Command_RuledPayload ruledPayload;
+    ruledPayload.set_payload(payload);
+    sendGameCommand(ruledPayload);
+
+    manaPaymentCounterIds.clear();
+    midCastLandTapStack.clear();
+    clearLandTapUndoStack();
+    emit ruledAbilityActivationPendingChanged(false);
+    pendingActivatedAbility = {};
+    return true;
+}
+
+bool PlayerActions::tryReducePendingAbilityRemainingCostOnePip(bool colorlessMana, QChar coloredMana)
+{
+    if (!pendingActivatedAbility.valid || !pendingActivatedAbility.waitingForMana) {
+        return false;
+    }
+    if (colorlessMana) {
+        if (pendingActivatedAbility.remainingCost.value('X', 0) > 0) {
+            pendingActivatedAbility.remainingCost['X'] -= 1;
+        } else if (pendingActivatedAbility.remainingCost.value('C', 0) > 0) {
+            pendingActivatedAbility.remainingCost['C'] -= 1;
+        } else {
+            return false;
+        }
+    } else {
+        const QChar sym = coloredMana.toUpper();
+        if (pendingActivatedAbility.remainingCost.value(sym, 0) > 0) {
+            pendingActivatedAbility.remainingCost[sym] -= 1;
+        } else if (pendingActivatedAbility.remainingCost.value('X', 0) > 0) {
+            pendingActivatedAbility.remainingCost['X'] -= 1;
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
+
+void PlayerActions::finishPendingAbilityManaPaymentStep()
+{
+    int totalRemaining = 0;
+    for (auto it = pendingActivatedAbility.remainingCost.constBegin();
+         it != pendingActivatedAbility.remainingCost.constEnd(); ++it) {
+        totalRemaining += it.value();
+    }
+    if (totalRemaining == 0) {
+        pendingActivatedAbility.waitingForMana = false;
+        completeActivateAbility();
+        return;
+    }
+    emit ruledAbilityManaPromptChanged();
+    player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+        tr("Pay mana for %1: %2 remaining (tap your lands).")
+            .arg(pendingActivatedAbility.cardName,
+                 formatSimpleManaCost(pendingActivatedAbility.remainingCost)));
+}
+
 bool PlayerActions::tryReducePendingSpellRemainingCostOnePip(bool colorlessMana, QChar coloredMana)
 {
     if (!pendingRuledSpellCast.valid || pendingRuledSpellCast.waitingForTarget) {
@@ -481,6 +559,177 @@ void PlayerActions::afterRuledLandTapsAppliedForSpellMana(bool completeCast, boo
             tr("Pay mana for %1: %2 remaining (click mana counters).")
                 .arg(pendingRuledSpellCast.cardName, formatSimpleManaCost(pendingRuledSpellCast.remainingCost)));
     }
+}
+
+QPair<bool, bool> PlayerActions::tryConsumeLandManaPipTowardPendingAbility(const QString &manaCounterName)
+{
+    if (manaCounterName.trimmed().isEmpty()) {
+        return {false, false};
+    }
+    const QString rawLower = manaCounterName.trimmed().toLower();
+    const bool colorlessOnly = (rawLower == QLatin1String("x") || rawLower == QLatin1String("c"));
+    QChar sym;
+    if (!colorlessOnly) {
+        if (rawLower.size() != 1) {
+            return {false, false};
+        }
+        const QChar c = rawLower.at(0).toUpper();
+        if (!QStringLiteral("WUBRGC").contains(c)) {
+            return {false, false};
+        }
+        sym = c;
+    } else {
+        sym = QChar();
+    }
+
+    if (!tryReducePendingAbilityRemainingCostOnePip(colorlessOnly, sym)) {
+        return {false, false};
+    }
+    int totalRemaining = 0;
+    for (auto it = pendingActivatedAbility.remainingCost.constBegin();
+         it != pendingActivatedAbility.remainingCost.constEnd(); ++it) {
+        totalRemaining += it.value();
+    }
+    return {true, totalRemaining == 0};
+}
+
+void PlayerActions::afterRuledLandTapsAppliedForAbilityMana(bool completeActivation, bool partialCostRemainPrompt)
+{
+    if (completeActivation) {
+        pendingActivatedAbility.waitingForMana = false;
+        completeActivateAbility();
+    } else if (partialCostRemainPrompt) {
+        emit ruledAbilityManaPromptChanged();
+        player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+            tr("Pay mana for %1: %2 remaining (tap your lands).")
+                .arg(pendingActivatedAbility.cardName,
+                     formatSimpleManaCost(pendingActivatedAbility.remainingCost)));
+    }
+}
+
+bool PlayerActions::tryPayRuledAbilityWithCounter(const QString &counterName)
+{
+    if (!pendingActivatedAbility.valid || !pendingActivatedAbility.waitingForMana) {
+        return false;
+    }
+    const QString rawLower = counterName.trimmed().toLower();
+    const bool colorlessOnly = (rawLower == QLatin1String("x") || rawLower == QLatin1String("c"));
+    QChar sym;
+    if (!colorlessOnly) {
+        const QString n = counterName.trimmed().toUpper();
+        if (n.size() != 1 || !QStringLiteral("WUBRGC").contains(n.at(0))) {
+            return false;
+        }
+        sym = n.at(0);
+    } else {
+        sym = QChar();
+    }
+
+    int counterId = -1;
+    for (auto it = player->getCounters().constBegin(); it != player->getCounters().constEnd(); ++it) {
+        if (it.value() &&
+            it.value()->getName().trimmed().compare(counterName.trimmed(), Qt::CaseInsensitive) == 0) {
+            counterId = it.key();
+            break;
+        }
+    }
+    if (counterId < 0) {
+        return false;
+    }
+
+    if (!tryReducePendingAbilityRemainingCostOnePip(colorlessOnly, sym)) {
+        return false;
+    }
+
+    manaPaymentCounterIds.append(counterId);
+    Command_IncCounter cmd;
+    cmd.set_counter_id(counterId);
+    cmd.set_delta(-1);
+    sendGameCommand(cmd);
+    finishPendingAbilityManaPaymentStep();
+    return true;
+}
+
+void PlayerActions::cancelPendingActivatedAbility()
+{
+    if (!pendingActivatedAbility.valid) {
+        return;
+    }
+    const QString abilityText = pendingActivatedAbility.abilityText;
+    const QString cardName = pendingActivatedAbility.cardName;
+
+    QList<const ::google::protobuf::Message *> cmdList;
+
+    for (int i = manaPaymentCounterIds.size() - 1; i >= 0; --i) {
+        const int cid = manaPaymentCounterIds[i];
+        auto *counterCmd = new Command_IncCounter;
+        counterCmd->set_counter_id(cid);
+        counterCmd->set_delta(1);
+        cmdList.append(counterCmd);
+    }
+    manaPaymentCounterIds.clear();
+
+    for (int i = midCastLandTapStack.size() - 1; i >= 0; --i) {
+        const LandTapUndoEntry &entry = midCastLandTapStack[i];
+        CardItem *card = player->getTableZone()->getCards().findCard(entry.cardId);
+        if (card) {
+            card->setTapped(false, true);
+            auto *attrCmd = new Command_SetCardAttr;
+            attrCmd->set_zone(ZoneNames::TABLE);
+            attrCmd->set_card_id(entry.cardId);
+            attrCmd->set_attribute(AttrTapped);
+            attrCmd->set_attr_value("0");
+            cmdList.append(attrCmd);
+        }
+        if (entry.counterId >= 0) {
+            if (auto *counter = player->getCounters().value(entry.counterId, nullptr)) {
+                counter->setValue(counter->getValue() - 1);
+            }
+            auto *counterCmd = new Command_IncCounter;
+            counterCmd->set_counter_id(entry.counterId);
+            counterCmd->set_delta(-1);
+            cmdList.append(counterCmd);
+            if (player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+                if (Command_RuledPayload *poolCmd = buildManaPoolDecrementPayload(entry.counterName)) {
+                    cmdList.append(poolCmd);
+                }
+            }
+        } else if (player->getGame()->getGameMetaInfo()->proto().ruled_game() &&
+                   !entry.counterName.isEmpty()) {
+            if (Command_RuledPayload *poolCmd = buildManaPoolDecrementPayload(entry.counterName)) {
+                cmdList.append(poolCmd);
+            }
+        }
+    }
+    midCastLandTapStack.clear();
+
+    if (!cmdList.isEmpty()) {
+        sendGameCommand(prepareGameCommand(cmdList));
+    }
+
+    emit ruledAbilityActivationPendingChanged(false);
+    pendingActivatedAbility = {};
+    emit landTapUndoAvailableChanged(!landTapUndoStack.isEmpty());
+    player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+        tr("Canceled activating %1.").arg(cardName.isEmpty() ? abilityText : cardName));
+}
+
+QString PlayerActions::pendingRuledAbilityPromptText() const
+{
+    if (!pendingActivatedAbility.valid || !pendingActivatedAbility.waitingForMana) {
+        return {};
+    }
+    int total = 0;
+    for (auto it = pendingActivatedAbility.remainingCost.constBegin();
+         it != pendingActivatedAbility.remainingCost.constEnd(); ++it) {
+        total += it.value();
+    }
+    if (total == 0) {
+        return {};
+    }
+    return tr("Pay mana for %1: %2 remaining (tap your lands).")
+        .arg(pendingActivatedAbility.cardName,
+             formatSimpleManaCost(pendingActivatedAbility.remainingCost));
 }
 
 Command_RuledPayload *PlayerActions::newRuledPayloadAddManaToPoolForLandName(const QString &manaCounterName)
@@ -2896,6 +3145,26 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card)
         return false;
     }
 
+    // Suppress the menu while the player is actively declaring attackers/blockers or choosing a target.
+    // After submission the step enters a priority window where abilities are legal, so only block
+    // during the live declaration window (before the player hits Done).
+    {
+        using Phase = GameEventHandler::RuledCombatPhase;
+        const auto phase = handler->getRuledCombatPhase();
+        if (phase == Phase::DeclareAttackers && handler->localPlayerIsRuledActive() &&
+            !handler->hasAttackersSubmittedThisStep()) {
+            return false;
+        }
+        if (phase == Phase::DeclareBlockers && handler->localPlayerIsRuledDefender() &&
+            !handler->hasBlockersSubmittedThisStep()) {
+            return false;
+        }
+        if (handler->hasPendingTriggerTarget() || pendingActivatedAbility.waitingForTarget ||
+            pendingActivatedAbility.waitingForMana || pendingRuledSpellCast.waitingForTarget) {
+            return false;
+        }
+    }
+
     // Determine engine ObjectId for this card.
     const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
     const quint32 oid = handler->engineOidForCardId(ownerPlayerId, card->getId());
@@ -2927,29 +3196,43 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card)
     // Determine if this ability needs a target (contains "target" in text, case-insensitive).
     const bool needsTarget = chosen->text().contains(QStringLiteral("target"), Qt::CaseInsensitive);
 
+    // Look up the mana cost from the engine-supplied cost string (e.g. "4", "R", "").
+    // This comes directly from AbilityCost in the tricerules registry — no text parsing.
+    const QStringList manaCostStrings = handler->activatedAbilityManaCostsForOid(oid);
+    const QString manaCostStr = (abilityIndex < manaCostStrings.size())
+                                    ? manaCostStrings.at(abilityIndex)
+                                    : QString{};
+    const QMap<QChar, int> manaCost = parseSimpleManaCost(manaCostStr);
+    int totalManaCost = 0;
+    for (auto it = manaCost.constBegin(); it != manaCost.constEnd(); ++it) {
+        totalManaCost += it.value();
+    }
+    const bool needsMana = totalManaCost > 0;
+
+    manaPaymentCounterIds.clear();
+    midCastLandTapStack.clear();
+
     pendingActivatedAbility.valid = true;
     pendingActivatedAbility.permanentOid = oid;
     pendingActivatedAbility.abilityIndex = abilityIndex;
     pendingActivatedAbility.abilityText = chosen->text();
+    pendingActivatedAbility.cardName = card->getName();
     pendingActivatedAbility.waitingForTarget = needsTarget;
     pendingActivatedAbility.selectedTargetOid = 0;
+    pendingActivatedAbility.waitingForMana = false;
+    pendingActivatedAbility.remainingCost = manaCost;
 
     if (needsTarget) {
-        handler->emitLocalRuledLog(
-            tr("Choose a target for: %1").arg(chosen->text()));
+        // Target first, then mana payment after target is chosen.
+        handler->emitLocalRuledLog(tr("Choose a target for: %1").arg(chosen->text()));
+    } else if (needsMana) {
+        // No target — go straight to mana payment.
+        pendingActivatedAbility.waitingForMana = true;
+        emit ruledAbilityActivationPendingChanged(true);
+        emit ruledAbilityManaPromptChanged();
     } else {
-        // No target needed — send immediately.
-        ruled::v1::RuledCommand cmd;
-        auto *aa = cmd.mutable_activate_ability();
-        aa->set_permanent_id(oid);
-        aa->set_ability_index(static_cast<uint32_t>(abilityIndex));
-        std::string payload;
-        if (cmd.SerializeToString(&payload)) {
-            Command_RuledPayload ruledPayload;
-            ruledPayload.set_payload(payload);
-            sendGameCommand(ruledPayload);
-        }
-        pendingActivatedAbility = {};
+        // No target, no mana cost — send immediately.
+        completeActivateAbility();
     }
     return true;
 }
@@ -3005,19 +3288,18 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
     pendingActivatedAbility.selectedTargetOid = targetOid;
     pendingActivatedAbility.waitingForTarget = false;
 
-    ruled::v1::RuledCommand cmd;
-    auto *aa = cmd.mutable_activate_ability();
-    aa->set_permanent_id(pendingActivatedAbility.permanentOid);
-    aa->set_ability_index(static_cast<uint32_t>(pendingActivatedAbility.abilityIndex));
-    auto *tref = aa->add_targets();
-    tref->set_object_id(targetOid);
-    std::string payload;
-    if (cmd.SerializeToString(&payload)) {
-        Command_RuledPayload ruledPayload;
-        ruledPayload.set_payload(payload);
-        sendGameCommand(ruledPayload);
+    int totalManaCost = 0;
+    for (auto it = pendingActivatedAbility.remainingCost.constBegin();
+         it != pendingActivatedAbility.remainingCost.constEnd(); ++it) {
+        totalManaCost += it.value();
     }
-    pendingActivatedAbility = {};
+    if (totalManaCost > 0) {
+        pendingActivatedAbility.waitingForMana = true;
+        emit ruledAbilityActivationPendingChanged(true);
+        emit ruledAbilityManaPromptChanged();
+    } else {
+        completeActivateAbility();
+    }
     return true;
 }
 
@@ -3050,19 +3332,18 @@ bool PlayerActions::tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer)
     pendingActivatedAbility.selectedTargetOid = targetOid;
     pendingActivatedAbility.waitingForTarget = false;
 
-    ruled::v1::RuledCommand cmd;
-    auto *aa = cmd.mutable_activate_ability();
-    aa->set_permanent_id(pendingActivatedAbility.permanentOid);
-    aa->set_ability_index(static_cast<uint32_t>(pendingActivatedAbility.abilityIndex));
-    auto *tref = aa->add_targets();
-    tref->set_object_id(targetOid);
-    std::string payload;
-    if (cmd.SerializeToString(&payload)) {
-        Command_RuledPayload ruledPayload;
-        ruledPayload.set_payload(payload);
-        sendGameCommand(ruledPayload);
+    int totalManaCost = 0;
+    for (auto it = pendingActivatedAbility.remainingCost.constBegin();
+         it != pendingActivatedAbility.remainingCost.constEnd(); ++it) {
+        totalManaCost += it.value();
     }
-    pendingActivatedAbility = {};
+    if (totalManaCost > 0) {
+        pendingActivatedAbility.waitingForMana = true;
+        emit ruledAbilityActivationPendingChanged(true);
+        emit ruledAbilityManaPromptChanged();
+    } else {
+        completeActivateAbility();
+    }
     return true;
 }
 

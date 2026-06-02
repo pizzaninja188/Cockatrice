@@ -294,6 +294,10 @@ message RuledPerPlayerView {
   // Empty string for permanents with no activated abilities. Indexed by battlefield position.
   // Used by clients to build the activation context menu.
   repeated string battlefield_activated_ability_texts = 19;
+  // Parallel array to `battlefield_activated_ability_texts`: pipe-delimited mana cost strings
+  // for each ability, in the same order. Derived from AbilityCost (Tap/Sacrifice → "", Mana/TapAndMana → "4"/"R"/etc.).
+  // Clients use this for mana payment without re-parsing the display text.
+  repeated string battlefield_activated_ability_mana_costs = 20;
 }
 
 message ZoneViewSync {
