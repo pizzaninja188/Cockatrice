@@ -2288,7 +2288,9 @@ void GameEventHandler::createSyntheticAbilityStackCard(quint32 virtualOid, const
     // the fakeId in syntheticAbilityFakeIds and re-register after each clear.
     syntheticAbilityFakeIds.insert(virtualOid, fakeId);
     ownerCardIdToEngineOid.insert(makeOwnedCardKey(localPlayerId, fakeId), virtualOid);
-    stackZone->addCard(card, true, stackZone->getCards().size());
+    // Insert at front (index 0) so the newest item appears at the top of the visual stack,
+    // matching MTG rules where the most recently added item resolves first.
+    stackZone->addCard(card, true, 0);
     // QPointer: auto-nullifies if the card is deleted outside our cleanup path.
     syntheticAbilityStackCards.insert(virtualOid, QPointer<CardItem>(card));
 }
@@ -2341,6 +2343,14 @@ void GameEventHandler::syncRuledSpellTargetingArrows()
         TabGame *tab = game->getTab();
         // QPointer::data() returns null if the card was deleted outside our cleanup path.
         CardItem *startCard = syntheticAbilityStackCards.value(stackOid).data();
+        if (startCard && tab) {
+            // When the stack window is open, the user sees a copy of the card in the zone
+            // view widget, not the original in the player's hidden stack zone. Prefer the
+            // visible copy so the arrow originates from the card the user can actually see.
+            if (CardItem *vis = tab->findVisibleStackSpellCardItem(startCard->getId())) {
+                startCard = vis;
+            }
+        }
         if (!startCard) {
             const int spellServerId = cardIdForEngineOid(stackOid);
             startCard = tab ? tab->findVisibleStackSpellCardItem(spellServerId) : nullptr;

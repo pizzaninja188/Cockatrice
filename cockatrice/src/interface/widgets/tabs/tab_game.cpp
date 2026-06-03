@@ -1246,6 +1246,8 @@ void TabGame::addLocalPlayer(Player *newPlayer, int playerId)
                 });
         connect(newPlayer->getPlayerActions(), &PlayerActions::ruledAbilityActivationPendingChanged,
                 gamePromptWidget, &GamePromptWidget::setSpellCastPending);
+        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledActivatedAbilityTargetPendingChanged,
+                gamePromptWidget, &GamePromptWidget::setActivatedAbilityTargetPending);
         connect(newPlayer->getPlayerActions(), &PlayerActions::ruledAbilityManaPromptChanged, this,
                 [this, newPlayer]() {
                     if (!gamePromptWidget || !newPlayer->getPlayerInfo()->getLocal()) {

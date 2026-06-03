@@ -372,7 +372,9 @@ void GamePromptWidget::setCleanupDiscardMode(bool active, int cardsRequired, int
                           .arg(cardsSelected)
                           .arg(cardsRequired));
     } else if (!active) {
-        setPromptText({});
+        if (!targetingModeEnabled && !spellCastPending && !activatedAbilityTargetPending && !triggerTargetPending) {
+            setPromptText({});
+        }
     }
     updateCombatButtonsVisibility();
 }
@@ -403,6 +405,18 @@ void GamePromptWidget::setTriggerTargetPending(bool pending)
     triggerTargetPending = pending;
     updateCombatButtonsVisibility();
     refreshPromptLabel();
+}
+
+void GamePromptWidget::setActivatedAbilityTargetPending(bool pending, const QString &abilityText)
+{
+    if (activatedAbilityTargetPending == pending) {
+        return;
+    }
+    activatedAbilityTargetPending = pending;
+    if (pending) {
+        setPromptText(tr("Activate %1: choose a target, or press Cancel.").arg(abilityText));
+    }
+    updateCombatButtonsVisibility();
 }
 
 void GamePromptWidget::setCombatDamageStatus(const QString &attackerName, int assigned, int power,
@@ -464,7 +478,7 @@ void GamePromptWidget::updateCombatButtonsVisibility()
         undoLandTapButton->setVisible(false);
         return;
     }
-    if (targetingModeEnabled || spellCastPending) {
+    if (targetingModeEnabled || spellCastPending || activatedAbilityTargetPending) {
         passPriorityButton->setVisible(false);
         confirmAttackersButton->setVisible(false);
         confirmBlockersButton->setVisible(false);
@@ -548,7 +562,7 @@ void GamePromptWidget::setLocalPlayerIsActive(bool isActive)
 
 void GamePromptWidget::refreshPromptLabel()
 {
-    if (targetingModeEnabled || spellCastPending || triggerTargetPending || cleanupDiscardMode || ruledOpeningUiKind != 0) {
+    if (targetingModeEnabled || spellCastPending || activatedAbilityTargetPending || triggerTargetPending || cleanupDiscardMode || ruledOpeningUiKind != 0) {
         return;
     }
     if (currentCombatMode == CombatMode::AssignCombatDamage) {

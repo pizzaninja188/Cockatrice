@@ -47,6 +47,7 @@ public slots:
     void setLandTapUndoAvailable(bool available);
     void setSpellCastPending(bool pending);
     void setTriggerTargetPending(bool pending);
+    void setActivatedAbilityTargetPending(bool pending, const QString &abilityText);
     /// Active player only: drives assign-combat-damage title, assigned/power line, and OK enable.
     /// `playerDamage` is the implied trample damage to the defending player (0 for non-trample).
     void setCombatDamageStatus(const QString &attackerName, int assigned, int power, int playerDamage, bool legal);
@@ -101,6 +102,7 @@ private:
     CombatMode currentCombatMode = CombatMode::None;
     bool localPlayerHasCombatButtons = false;
     bool targetingModeEnabled = false;
+    bool activatedAbilityTargetPending = false;
     bool ruledStackHasItems = false;
     bool firstStrikeStepPending = false;
     bool firstStrikeDamageStepActive = false;

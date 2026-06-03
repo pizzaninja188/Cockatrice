@@ -707,6 +707,7 @@ void PlayerActions::cancelPendingActivatedAbility()
         sendGameCommand(prepareGameCommand(cmdList));
     }
 
+    emit ruledActivatedAbilityTargetPendingChanged(false, {});
     emit ruledAbilityActivationPendingChanged(false);
     pendingActivatedAbility = {};
     emit landTapUndoAvailableChanged(!landTapUndoStack.isEmpty());
@@ -1090,6 +1091,15 @@ bool PlayerActions::isAwaitingRuledPlayerTargetSelection() const
         return false;
     }
     return spellAcceptsPlayerTarget(pendingRuledSpellCast.cardName);
+}
+
+bool PlayerActions::isAwaitingRuledAbilityOrTriggerPlayerTarget() const
+{
+    if (pendingActivatedAbility.valid && pendingActivatedAbility.waitingForTarget) {
+        return true;
+    }
+    auto *handler = player->getGame()->getGameEventHandler();
+    return handler && handler->hasPendingTriggerTarget();
 }
 
 bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
@@ -3224,6 +3234,7 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card)
 
     if (needsTarget) {
         // Target first, then mana payment after target is chosen.
+        emit ruledActivatedAbilityTargetPendingChanged(true, chosen->text());
         handler->emitLocalRuledLog(tr("Choose a target for: %1").arg(chosen->text()));
     } else if (needsMana) {
         // No target — go straight to mana payment.
@@ -3287,6 +3298,7 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
 
     pendingActivatedAbility.selectedTargetOid = targetOid;
     pendingActivatedAbility.waitingForTarget = false;
+    emit ruledActivatedAbilityTargetPendingChanged(false, {});
 
     int totalManaCost = 0;
     for (auto it = pendingActivatedAbility.remainingCost.constBegin();
@@ -3331,6 +3343,7 @@ bool PlayerActions::tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer)
     const quint32 targetOid = static_cast<quint32>(targetPlayer->getPlayerInfo()->getId());
     pendingActivatedAbility.selectedTargetOid = targetOid;
     pendingActivatedAbility.waitingForTarget = false;
+    emit ruledActivatedAbilityTargetPendingChanged(false, {});
 
     int totalManaCost = 0;
     for (auto it = pendingActivatedAbility.remainingCost.constBegin();

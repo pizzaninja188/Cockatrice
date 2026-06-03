@@ -199,10 +199,13 @@ void PlayerTarget::mousePressEvent(QGraphicsSceneMouseEvent *event)
         auto *playerManager = owner->getGame()->getPlayerManager();
         if (playerManager) {
             Player *localPlayer = playerManager->getPlayers().value(playerManager->getLocalPlayerId(), nullptr);
-            if (localPlayer && localPlayer->getPlayerActions() &&
-                localPlayer->getPlayerActions()->isAwaitingRuledPlayerTargetSelection()) {
-                event->accept();
-                return;
+            if (localPlayer && localPlayer->getPlayerActions()) {
+                PlayerActions *actions = localPlayer->getPlayerActions();
+                if (actions->isAwaitingRuledPlayerTargetSelection() ||
+                    actions->isAwaitingRuledAbilityOrTriggerPlayerTarget()) {
+                    event->accept();
+                    return;
+                }
             }
         }
     }

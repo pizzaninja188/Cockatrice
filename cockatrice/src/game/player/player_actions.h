@@ -53,6 +53,8 @@ signals:
     void ruledAbilityActivationPendingChanged(bool pending);
     /// Emitted when `remainingCost` changes during ability mana payment (land or counter).
     void ruledAbilityManaPromptChanged();
+    /// Emitted when an activated ability enters or leaves the target-selection waiting state.
+    void ruledActivatedAbilityTargetPendingChanged(bool pending, QString abilityText);
 
 public:
     enum CardsToReveal
@@ -88,6 +90,8 @@ public:
     bool tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer);
     /// True when the local player must pick a player (not permanent) for the pending ruled cast.
     [[nodiscard]] bool isAwaitingRuledPlayerTargetSelection() const;
+    /// True when an activated ability or triggered ability is waiting for a target (player click allowed).
+    [[nodiscard]] bool isAwaitingRuledAbilityOrTriggerPlayerTarget() const;
     void cancelPendingRuledSpellCast();
     /// Returns the mana-payment prompt text if a spell is pending and still needs mana, otherwise empty.
     [[nodiscard]] QString pendingRuledSpellPromptText() const;
