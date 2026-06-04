@@ -408,7 +408,7 @@ bool PlayerActions::completeActivateAbility()
     auto *aa = cmd.mutable_activate_ability();
     aa->set_permanent_id(pendingActivatedAbility.permanentOid);
     aa->set_ability_index(static_cast<uint32_t>(pendingActivatedAbility.abilityIndex));
-    if (pendingActivatedAbility.selectedTargetOid != 0) {
+    if (pendingActivatedAbility.needsTarget) {
         auto *tref = aa->add_targets();
         tref->set_object_id(pendingActivatedAbility.selectedTargetOid);
     }
@@ -3150,6 +3150,14 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card)
     if (!player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
         return false;
     }
+    // Only show the ability menu when the local player actually has priority.
+    {
+        const int localId = player->getPlayerInfo()->getId();
+        const int priorityId = player->getGame()->getGameState()->getPriorityPlayer();
+        if (priorityId < 0 || localId != priorityId) {
+            return false;
+        }
+    }
     auto *handler = player->getGame()->getGameEventHandler();
     if (!handler) {
         return false;
@@ -3227,6 +3235,7 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card)
     pendingActivatedAbility.abilityIndex = abilityIndex;
     pendingActivatedAbility.abilityText = chosen->text();
     pendingActivatedAbility.cardName = card->getName();
+    pendingActivatedAbility.needsTarget = needsTarget;
     pendingActivatedAbility.waitingForTarget = needsTarget;
     pendingActivatedAbility.selectedTargetOid = 0;
     pendingActivatedAbility.waitingForMana = false;

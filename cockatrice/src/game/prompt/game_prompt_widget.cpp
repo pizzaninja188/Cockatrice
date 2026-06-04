@@ -415,6 +415,8 @@ void GamePromptWidget::setActivatedAbilityTargetPending(bool pending, const QStr
     activatedAbilityTargetPending = pending;
     if (pending) {
         setPromptText(tr("Activate %1: choose a target, or press Cancel.").arg(abilityText));
+    } else {
+        refreshPromptLabel();
     }
     updateCombatButtonsVisibility();
 }

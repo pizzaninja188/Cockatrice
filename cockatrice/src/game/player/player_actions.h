@@ -227,6 +227,7 @@ private:
         int abilityIndex = -1;
         QString abilityText;
         QString cardName;
+        bool needsTarget = false;
         bool waitingForTarget = false;
         quint32 selectedTargetOid = 0;
         bool waitingForMana = false;
