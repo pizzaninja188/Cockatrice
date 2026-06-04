@@ -5,4 +5,5 @@
   types: ["Instant"],
   is_instant: true,
   spell_effect: DestroyTarget,
+  partial: "doesn't enforce 'can't target artifact creatures'",
 )

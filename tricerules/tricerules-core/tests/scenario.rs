@@ -6699,3 +6699,116 @@ fn zone_view_does_not_signal_pending_for_vanilla_combat() {
         "pending must stay false in vanilla combat (no FS/DS combatants)"
     );
 }
+
+// ---------------------------------------------------------------------------
+// CR 702.12 — Indestructible
+// ---------------------------------------------------------------------------
+
+/// CR 702.12b: A "destroy" spell has no effect on an indestructible permanent.
+/// Darksteel Myr survives Murder (used here because Murder has no targeting restrictions
+/// that will need future enforcement; Go for the Throat can't target artifacts).
+#[test]
+fn indestructible_survives_destroy_spell() {
+    let decks = Some(vec![
+        vec![
+            "swamp".into(),
+            "murder".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+        ],
+        vec![
+            "mountain".into(),
+            "darksteel_myr".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(7001, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let myr = put_creature_on_battlefield(&mut e, 1, "darksteel_myr");
+
+    // Give P0 three black mana for Murder (1BB): seed two swamps and play a third.
+    for _ in 0..2 {
+        let idx = hand_index_for_card(&e, 0, "swamp");
+        let oid = e.state.players[0].hand.remove(idx);
+        e.state.players[0].battlefield.push(oid);
+        e.state.objects.get_mut(&oid).unwrap().zone = tricerules_core::Zone::Battlefield;
+    }
+    let swamp_idx = hand_index_for_card(&e, 0, "swamp");
+    e.apply_command(0, &play_land(swamp_idx)).expect("play swamp");
+    e.apply_command(0, &add_mana_to_pool(AddManaToPool { b: 2, c: 1, ..Default::default() }))
+        .expect("add mana");
+
+    let murder_idx = hand_index_for_card(&e, 0, "murder");
+    e.apply_command(0, &cast_spell(murder_idx, vec![TargetRef { object_id: myr }]))
+        .expect("cast murder");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass()).expect("p1 pass");
+
+    // Myr must still be on the battlefield.
+    assert_eq!(
+        e.state.objects.get(&myr).expect("myr object").zone,
+        tricerules_core::Zone::Battlefield,
+        "CR 702.12b: indestructible Myr must not be destroyed by Go for the Throat"
+    );
+    assert!(
+        !e.state.players[1].graveyard.contains(&myr),
+        "Myr must not be in graveyard"
+    );
+}
+
+/// CR 702.12b: An indestructible creature is not destroyed by lethal combat damage.
+/// Darksteel Myr (0/1 indestructible) blocks a 5/5; it takes lethal damage but stays.
+#[test]
+fn indestructible_survives_lethal_combat_damage() {
+    let mut e = GameEngine::new(7002, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+
+    let attacker = inject_creature_with_stats(&mut e, 0, "colossal_dreadmaw", 6, 6);
+    let myr = inject_creature_with_stats(&mut e, 1, "darksteel_myr", 0, 1);
+
+    e.apply_command(0, &declare_attackers(vec![attacker])).expect("declare attacker");
+    e.apply_command(0, &pass()).expect("p0 pass after attackers");
+    e.apply_command(1, &pass()).expect("p1 pass after attackers");
+    e.apply_command(1, &declare_blockers(vec![BlockPair { attacker_id: attacker, blocker_id: myr }])).expect("declare blocker");
+    e.apply_command(0, &pass()).expect("p0 pass after blockers");
+    e.apply_command(1, &pass()).expect("p1 pass after blockers -> combat damage resolves");
+
+    assert_eq!(
+        e.state.objects.get(&myr).expect("myr object").zone,
+        tricerules_core::Zone::Battlefield,
+        "CR 702.12b: indestructible Myr must survive lethal combat damage"
+    );
+}
+
+/// CR 704.5f + CR 702.12b: indestructible does NOT protect against toughness dropping to 0.
+/// A -0/-1 pump on a 0/1 Darksteel Myr brings toughness to 0; SBA kills it.
+#[test]
+fn indestructible_dies_when_toughness_reaches_zero() {
+    let mut e = GameEngine::new(7003, &[0, 1], 20, None, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Inject Darksteel Myr (0/1) directly onto P1's battlefield.
+    let myr = inject_creature_with_stats(&mut e, 1, "darksteel_myr", 0, 1);
+
+    // Manually set toughness to 0 to simulate a -0/-1 effect, then trigger SBAs via
+    // a pass-priority sequence (SBAs run at the start of each priority check).
+    e.state.objects.get_mut(&myr).unwrap().toughness = Some(0);
+
+    // Pass priority — SBAs fire on the next priority check.
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass()).expect("p1 pass");
+
+    assert_eq!(
+        e.state.objects.get(&myr).expect("myr object").zone,
+        tricerules_core::Zone::Graveyard,
+        "CR 704.5f: indestructible Myr with toughness 0 must still die"
+    );
+}

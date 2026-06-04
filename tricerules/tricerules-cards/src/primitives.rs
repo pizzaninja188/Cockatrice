@@ -52,6 +52,9 @@ pub enum Keyword {
     /// CR 702.4: this creature assigns combat damage in both combat damage steps (CR 510.5):
     /// the first-strike step (like first strike) and the regular step (like a vanilla creature).
     DoubleStrike,
+    /// CR 702.12: this permanent can't be destroyed by lethal damage or "destroy" effects.
+    /// It still dies if its toughness drops to 0 (CR 704.5f).
+    Indestructible,
 }
 
 /// What a single target must be. Deliberately a small, flat enum covering only

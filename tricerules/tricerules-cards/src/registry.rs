@@ -119,6 +119,9 @@ const EMBEDDED_RON_CHUNKS: &[&str] = &[
     include_str!("../data/flametongue_kavu.ron"),
     include_str!("../data/scroll_thief.ron"),
     include_str!("../data/thieving_magpie.ron"),
+    include_str!("../data/murder.ron"),
+    // Indestructible
+    include_str!("../data/darksteel_myr.ron"),
 ];
 
 #[cfg(test)]

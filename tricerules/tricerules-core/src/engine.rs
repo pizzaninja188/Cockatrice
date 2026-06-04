@@ -11,7 +11,7 @@ use rand::SeedableRng;
 use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 use tricerules_cards::primitives::{
-    AbilityCost, SpellEffectKind, TargetSpec, TriggerCondition, TriggeredEffect,
+    AbilityCost, Keyword, SpellEffectKind, TargetSpec, TriggerCondition, TriggeredEffect,
 };
 use tricerules_cards::CardRegistry;
 use tricerules_proto::ruled::v1 as rv1;
@@ -2303,20 +2303,32 @@ impl GameEngine {
             SpellEffectKind::DestroyTarget => {
                 if let Some(&tid) = targets.first() {
                     let tgt = object_display_name(&self.state, &self.registry, tid);
-                    events.push(ev_log(format!("{spell_label} destroys {tgt}")));
-                    let owner = self.state.objects.get(&tid).map(|o| o.owner);
-                    let card_id_t = self.state.objects.get(&tid).map(|o| o.card_id.clone());
-                    destroy_permanent(&mut self.state, tid)?;
-                    if let Some(owner_id) = owner {
-                        events.push(permanent_moved_event(
-                            &self.state,
-                            tid,
-                            owner_id,
-                            rv1::permanent_moved::Destination::Graveyard,
-                        ));
-                    }
-                    if let (Some(cid), Some(ctrl)) = (card_id_t, owner) {
-                        self.fire_dies_triggers(tid, &cid, ctrl, events);
+                    let indestructible = self
+                        .state
+                        .objects
+                        .get(&tid)
+                        .map(|o| o.has_keyword(&self.registry, Keyword::Indestructible))
+                        .unwrap_or(false);
+                    if indestructible {
+                        events.push(ev_log(format!(
+                            "{spell_label} has no effect: {tgt} is indestructible."
+                        )));
+                    } else {
+                        events.push(ev_log(format!("{spell_label} destroys {tgt}")));
+                        let owner = self.state.objects.get(&tid).map(|o| o.owner);
+                        let card_id_t = self.state.objects.get(&tid).map(|o| o.card_id.clone());
+                        destroy_permanent(&mut self.state, tid)?;
+                        if let Some(owner_id) = owner {
+                            events.push(permanent_moved_event(
+                                &self.state,
+                                tid,
+                                owner_id,
+                                rv1::permanent_moved::Destination::Graveyard,
+                            ));
+                        }
+                        if let (Some(cid), Some(ctrl)) = (card_id_t, owner) {
+                            self.fire_dies_triggers(tid, &cid, ctrl, events);
+                        }
                     }
                 }
             }
@@ -2536,13 +2548,25 @@ impl GameEngine {
             SpellEffectKind::DestroyTargetTapped => {
                 if let Some(&tid) = targets.first() {
                     let tgt = object_display_name(&self.state, &self.registry, tid);
-                    if self
+                    let is_tapped = self
                         .state
                         .objects
                         .get(&tid)
                         .map(|o| o.zone == Zone::Battlefield && o.tapped)
-                        .unwrap_or(false)
-                    {
+                        .unwrap_or(false);
+                    let indestructible = self
+                        .state
+                        .objects
+                        .get(&tid)
+                        .map(|o| o.has_keyword(&self.registry, Keyword::Indestructible))
+                        .unwrap_or(false);
+                    if !is_tapped {
+                        events.push(ev_log(format!("{spell_label} fizzles: {tgt} is not tapped.")));
+                    } else if indestructible {
+                        events.push(ev_log(format!(
+                            "{spell_label} has no effect: {tgt} is indestructible."
+                        )));
+                    } else {
                         let owner = self.state.objects.get(&tid).map(|o| o.owner);
                         let card_id_t = self.state.objects.get(&tid).map(|o| o.card_id.clone());
                         events.push(ev_log(format!("{spell_label} destroys {tgt}")));
@@ -2558,8 +2582,6 @@ impl GameEngine {
                         if let (Some(cid), Some(ctrl)) = (card_id_t, owner) {
                             self.fire_dies_triggers(tid, &cid, ctrl, events);
                         }
-                    } else {
-                        events.push(ev_log(format!("{spell_label} fizzles: {tgt} is not tapped.")));
                     }
                 }
             }
@@ -2969,9 +2991,12 @@ impl GameEngine {
         for (&id, o) in &self.state.objects {
             if o.zone == Zone::Battlefield {
                 if let Some(t) = o.toughness {
-                    // CR 704.5g: destroy if damage >= toughness or toughness = 0.
-                    // CR 704.5h: destroy if any damage from a deathtouch source (any amount).
-                    if t == 0 || o.damage >= t || o.deathtouch_damage {
+                    let indestructible = o.has_keyword(&self.registry, Keyword::Indestructible);
+                    // CR 704.5f: toughness 0 — still dies even with indestructible (oracle text).
+                    if t == 0 {
+                        to_destroy.push(id);
+                    // CR 704.5g / 704.5h: lethal damage or deathtouch — blocked by indestructible.
+                    } else if !indestructible && (o.damage >= t || o.deathtouch_damage) {
                         to_destroy.push(id);
                     }
                 }
