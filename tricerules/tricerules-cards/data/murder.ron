@@ -4,5 +4,5 @@
   mana_cost: "1BB",
   types: ["Instant"],
   is_instant: true,
-  spell_effect: DestroyTarget,
+  spell_effect: [DestroyTarget()],
 )

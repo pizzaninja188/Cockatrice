@@ -4,6 +4,6 @@
   mana_cost: "W",
   types: ["Instant"],
   is_instant: true,
-  spell_effect: TargetPlayerGainsLife(amount: 3, target: AnyPlayer),
+  spell_effect: [TargetPlayerGainsLife(amount: 3, target: (kind: AnyPlayer))],
   partial: "only the 'target player gains 3 life' mode; the 'prevent the next 3 damage to any target' mode is not implemented",
 )

@@ -4,5 +4,5 @@
   mana_cost: "B",
   types: ["Sorcery"],
   is_sorcery: true,
-  spell_effect: TargetPlayerLosesLife(amount: 3, target: OpponentPlayer),
+  spell_effect: [TargetPlayerLosesLife(amount: 3, target: (kind: OpponentPlayer))],
 )

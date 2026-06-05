@@ -31,8 +31,8 @@ impl CardRegistry {
         let mut reg = CardRegistry::default();
         for chunk in EMBEDDED_RON_CHUNKS {
             let card: CardDefinition = RON_OPTS.from_str(chunk)?;
-            // Validate spell effect target-spec compatibility at startup.
-            if let Some(effect) = &card.spell_effect {
+            // Validate spell effects at startup.
+            for effect in &card.spell_effect {
                 effect
                     .validate()
                     .map_err(|reason| RegistryError::InvalidCard {
@@ -127,7 +127,7 @@ const EMBEDDED_RON_CHUNKS: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::primitives::{SpellEffectKind, TargetSpec};
+    use crate::primitives::{SpellEffectKind, TargetFilter, TargetKind};
 
     #[test]
     fn embedded_registry_loads() {
@@ -139,26 +139,34 @@ mod tests {
         let reg = CardRegistry::from_embedded().unwrap();
         assert_eq!(
             reg.get("angels_mercy").unwrap().spell_effect,
-            Some(SpellEffectKind::GainLife { amount: 7 })
+            vec![SpellEffectKind::GainLife { amount: 7 }]
         );
         assert_eq!(
             reg.get("lightning_bolt").unwrap().spell_effect,
-            Some(SpellEffectKind::DamageTarget {
+            vec![SpellEffectKind::DamageTarget {
                 amount: 3,
-                target: TargetSpec::AnyTarget,
-            })
+                target: TargetFilter {
+                    kind: TargetKind::AnyTarget,
+                    not_artifact: false,
+                    tapped: None,
+                },
+            }]
         );
         assert_eq!(
             reg.get("mind_sculpt").unwrap().spell_effect,
-            Some(SpellEffectKind::MillTargetPlayer {
+            vec![SpellEffectKind::MillTargetPlayer {
                 count: 7,
-                target: TargetSpec::OpponentPlayer,
-            })
+                target: TargetFilter {
+                    kind: TargetKind::OpponentPlayer,
+                    not_artifact: false,
+                    tapped: None,
+                },
+            }]
         );
     }
 
     #[test]
-    fn startup_validation_rejects_incompatible_target_spec() {
+    fn startup_validation_rejects_incompatible_target_filter() {
         // A player-life effect pointed at a creature is invalid card data.
         let bad = r#"(
             id: "bad_card",
@@ -166,9 +174,9 @@ mod tests {
             mana_cost: "W",
             types: ["Instant"],
             is_instant: true,
-            spell_effect: TargetPlayerGainsLife(amount: 3, target: Creature),
+            spell_effect: [TargetPlayerGainsLife(amount: 3, target: (kind: Creature))],
         )"#;
         let card: CardDefinition = RON_OPTS.from_str(bad).unwrap();
-        assert!(card.spell_effect.unwrap().validate().is_err());
+        assert!(card.spell_effect[0].validate().is_err());
     }
 }

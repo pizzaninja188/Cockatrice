@@ -2757,6 +2757,64 @@ fn go_for_the_throat_destroys_target_creature() {
 }
 
 #[test]
+fn go_for_the_throat_rejects_artifact_creature_target() {
+    // Go for the Throat can't target artifact creatures (not_artifact: true filter).
+    let decks = Some(vec![
+        vec![
+            "swamp".into(),
+            "go_for_the_throat".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+        ],
+        vec![
+            "plains".into(),
+            "ornithopter".into(), // artifact creature
+            "plains".into(),
+            "plains".into(),
+            "plains".into(),
+            "plains".into(),
+            "plains".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(3001, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Seed Ornithopter directly onto P1's battlefield (bypasses priority).
+    let ornithopter_oid = put_creature_on_battlefield(&mut e, 1, "ornithopter");
+
+    // Seed a swamp for P0 and play a land for the second mana.
+    let seeded_swamp_idx = hand_index_for_card(&e, 0, "swamp");
+    let seeded_swamp = e.state.players[0].hand.remove(seeded_swamp_idx);
+    e.state.players[0].battlefield.push(seeded_swamp);
+    e.state.objects.get_mut(&seeded_swamp).expect("seeded swamp").zone =
+        tricerules_core::Zone::Battlefield;
+    let swamp_to_play_idx = hand_index_for_card(&e, 0, "swamp");
+    e.apply_command(0, &play_land(swamp_to_play_idx)).expect("play swamp");
+
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool { b: 1, c: 1, ..Default::default() }),
+    )
+    .expect("add mana for 1B");
+    let gftt_idx = hand_index_for_card(&e, 0, "go_for_the_throat");
+    let err = e
+        .apply_command(
+            0,
+            &cast_spell(gftt_idx, vec![TargetRef { object_id: ornithopter_oid }]),
+        )
+        .expect_err("go for the throat cannot target artifact creature");
+    assert!(
+        err.to_string().contains("creature") || err.to_string().contains("illegal"),
+        "unexpected: {err}"
+    );
+    // Ornithopter must still be on the battlefield.
+    assert!(e.state.players[1].battlefield.contains(&ornithopter_oid));
+}
+
+#[test]
 fn can_cast_new_vanilla_creature_with_swamp() {
     let decks = Some(vec![
         vec![

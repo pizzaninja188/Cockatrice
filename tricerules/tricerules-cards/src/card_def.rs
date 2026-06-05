@@ -23,10 +23,10 @@ pub struct CardDefinition {
     pub power: Option<u32>,
     #[serde(default)]
     pub toughness: Option<u32>,
-    /// Data-driven spell effect (see [`SpellEffectKind`]); deserialized
-    /// directly from RON, e.g. `DamageTarget(amount: 3, target: AnyTarget)`.
+    /// Data-driven spell effects resolved in order from the same target list
+    /// (see [`SpellEffectKind`]). RON: `spell_effect: [DamageTarget(...), Draw(count: 1)]`.
     #[serde(default)]
-    pub spell_effect: Option<SpellEffectKind>,
+    pub spell_effect: Vec<SpellEffectKind>,
     /// Static keyword abilities (Flying, Reach, Intimidate, etc.). Omit or leave empty for keywordless cards.
     #[serde(default)]
     pub keywords: Vec<Keyword>,

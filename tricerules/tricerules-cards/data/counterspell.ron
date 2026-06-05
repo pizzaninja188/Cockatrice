@@ -4,5 +4,5 @@
   mana_cost: "UU",
   types: ["Instant"],
   is_instant: true,
-  spell_effect: CounterTargetSpell,
+  spell_effect: [CounterTargetSpell],
 )

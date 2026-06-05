@@ -4,6 +4,5 @@
   mana_cost: "1B",
   types: ["Instant"],
   is_instant: true,
-  spell_effect: DestroyTarget,
-  partial: "doesn't enforce 'can't target artifact creatures'",
+  spell_effect: [DestroyTarget(target: (kind: Creature, not_artifact: true))],
 )

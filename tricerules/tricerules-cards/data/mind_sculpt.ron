@@ -4,5 +4,5 @@
   mana_cost: "1U",
   types: ["Sorcery"],
   is_sorcery: true,
-  spell_effect: MillTargetPlayer(count: 7, target: OpponentPlayer),
+  spell_effect: [MillTargetPlayer(count: 7, target: (kind: OpponentPlayer))],
 )

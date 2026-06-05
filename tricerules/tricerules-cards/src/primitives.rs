@@ -2,8 +2,8 @@
 //!
 //! These are the generic, data-driven primitives of the hybrid card model: a
 //! card's RON `spell_effect` deserializes straight into [`SpellEffectKind`]
-//! (e.g. `DamageTarget(amount: 3, target: AnyTarget)`), so numeric parameters
-//! and targeting live in card data, not in code.
+//! (e.g. `DamageTarget(amount: 3, target: (kind: AnyTarget))`), so numeric
+//! parameters and targeting live in card data, not in code.
 
 use serde::{Deserialize, Serialize};
 
@@ -57,12 +57,10 @@ pub enum Keyword {
     Indestructible,
 }
 
-/// What a single target must be. Deliberately a small, flat enum covering only
-/// the distinctions the engine makes today; richer characteristic-based filters
-/// (creature type, color, etc.) are deferred to the future Rust scripting tier
-/// rather than modeled here.
+/// Base kind for a [`TargetFilter`] — what category of object is targeted.
+/// The five values correspond to the original TargetSpec variants.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum TargetSpec {
+pub enum TargetKind {
     /// Creature or player (later expands to planeswalker/battle).
     AnyTarget,
     /// A creature on the battlefield.
@@ -71,44 +69,79 @@ pub enum TargetSpec {
     AnyPlayer,
     /// Any player still in the game except the caster.
     OpponentPlayer,
-    /// Any permanent on the battlefield (artifact, creature, or land — e.g. Icy Manipulator).
+    /// Any permanent on the battlefield (artifact, creature, or land).
     AnyPermanent,
 }
 
-impl TargetSpec {
-    /// True for the player-only specs (used by startup validation).
+fn default_creature_filter() -> TargetFilter {
+    TargetFilter {
+        kind: TargetKind::Creature,
+        not_artifact: false,
+        tapped: None,
+    }
+}
+
+/// Composable target predicate: base [`TargetKind`] AND optional characteristic
+/// constraints (AND-combined). Use only `kind` to get the same semantics as the
+/// original five TargetSpec variants; add constraints to narrow further.
+///
+/// Example RON:
+/// - `(kind: AnyTarget)` — any creature or player
+/// - `(kind: Creature, not_artifact: true)` — non-artifact creature
+/// - `(kind: Creature, tapped: true)` — tapped creature (for future use)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TargetFilter {
+    pub kind: TargetKind,
+    /// If true, the target must not be an artifact.
+    #[serde(default)]
+    pub not_artifact: bool,
+    /// If Some(true), target must be tapped; Some(false) must be untapped; None = either.
+    #[serde(default)]
+    pub tapped: Option<bool>,
+}
+
+impl TargetFilter {
+    /// Default: any creature (the most common implicit filter).
+    pub fn default_creature() -> Self {
+        default_creature_filter()
+    }
+
+    /// True for player-only kinds (used by startup validation).
     pub fn is_player(&self) -> bool {
-        matches!(self, TargetSpec::AnyPlayer | TargetSpec::OpponentPlayer)
+        matches!(self.kind, TargetKind::AnyPlayer | TargetKind::OpponentPlayer)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpellEffectKind {
-    DamageTarget { amount: u32, target: TargetSpec },
+    DamageTarget { amount: u32, target: TargetFilter },
     Draw { count: u32 },
-    DestroyTarget,
+    /// Destroy target matching `target` filter (default: any creature on the battlefield).
+    DestroyTarget {
+        #[serde(default = "TargetFilter::default_creature")]
+        target: TargetFilter,
+    },
     /// Destroy target tapped creature (e.g. Royal Assassin activated ability).
     DestroyTargetTapped,
     PumpTarget { power: i32, toughness: i32 },
-    /// Tap target permanent (artifact, creature, or land — e.g. Icy Manipulator).
-    TapTarget { target: TargetSpec },
+    /// Tap target permanent matching `target` filter.
+    TapTarget { target: TargetFilter },
     CounterTargetSpell,
     GainLife { amount: u32 },
-    TargetPlayerGainsLife { amount: u32, target: TargetSpec },
-    TargetPlayerLosesLife { amount: u32, target: TargetSpec },
+    TargetPlayerGainsLife { amount: u32, target: TargetFilter },
+    TargetPlayerLosesLife { amount: u32, target: TargetFilter },
     EachOpponentLosesLifeYouGainEqual { amount: u32 },
     ExileTarget,
     ExileTargetGainLifeEqualToPower,
     ReturnTargetCreatureToHand,
     ReturnTargetPermanentToHand,
-    MillTargetPlayer { count: u32, target: TargetSpec },
+    MillTargetPlayer { count: u32, target: TargetFilter },
     None,
 }
 
 impl SpellEffectKind {
-    /// Startup validation: reject effect/`TargetSpec` combinations the engine
-    /// cannot honor (e.g. a player-life effect pointed at a creature). Returns
-    /// `Err` with a human-readable reason; called from the card registry loader.
+    /// Startup validation: reject effect/filter combinations the engine cannot honor.
+    /// Returns `Err` with a human-readable reason; called from the card registry loader.
     pub fn validate(&self) -> Result<(), String> {
         match self {
             SpellEffectKind::TargetPlayerGainsLife { target, .. }
@@ -118,17 +151,19 @@ impl SpellEffectKind {
                     Ok(())
                 } else {
                     Err(format!(
-                        "player-targeted effect requires AnyPlayer or OpponentPlayer, got {target:?}"
+                        "player-targeted effect requires AnyPlayer or OpponentPlayer kind, got {:?}",
+                        target.kind
                     ))
                 }
             }
             SpellEffectKind::TapTarget { target } => {
-                if matches!(target, TargetSpec::AnyPermanent) {
-                    Ok(())
-                } else {
+                if target.is_player() {
                     Err(format!(
-                        "TapTarget requires AnyPermanent, got {target:?}"
+                        "TapTarget cannot target players, got {:?}",
+                        target.kind
                     ))
+                } else {
+                    Ok(())
                 }
             }
             _ => Ok(()),
@@ -212,7 +247,11 @@ mod tests {
     fn player_effect_accepts_player_spec() {
         assert!(SpellEffectKind::TargetPlayerLosesLife {
             amount: 3,
-            target: TargetSpec::OpponentPlayer,
+            target: TargetFilter {
+                kind: TargetKind::OpponentPlayer,
+                not_artifact: false,
+                tapped: None,
+            },
         }
         .validate()
         .is_ok());
@@ -222,23 +261,31 @@ mod tests {
     fn player_effect_rejects_nonplayer_spec() {
         assert!(SpellEffectKind::TargetPlayerGainsLife {
             amount: 3,
-            target: TargetSpec::Creature,
+            target: TargetFilter {
+                kind: TargetKind::Creature,
+                not_artifact: false,
+                tapped: None,
+            },
         }
         .validate()
         .is_err());
     }
 
     #[test]
-    fn damage_accepts_any_spec() {
-        for spec in [
-            TargetSpec::AnyTarget,
-            TargetSpec::Creature,
-            TargetSpec::AnyPlayer,
-            TargetSpec::OpponentPlayer,
+    fn damage_accepts_any_kind() {
+        for kind in [
+            TargetKind::AnyTarget,
+            TargetKind::Creature,
+            TargetKind::AnyPlayer,
+            TargetKind::OpponentPlayer,
         ] {
             assert!(SpellEffectKind::DamageTarget {
                 amount: 3,
-                target: spec,
+                target: TargetFilter {
+                    kind,
+                    not_artifact: false,
+                    tapped: None
+                },
             }
             .validate()
             .is_ok());

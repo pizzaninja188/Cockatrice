@@ -4,5 +4,5 @@
   mana_cost: "R",
   types: ["Instant"],
   is_instant: true,
-  spell_effect: DamageTarget(amount: 3, target: AnyTarget),
+  spell_effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
 )
