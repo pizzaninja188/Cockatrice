@@ -8,7 +8,7 @@ use prost::Message;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use thiserror::Error;
 use tricerules_cards::primitives::{
     AbilityCost, Keyword, SpellEffectKind, TargetFilter, TargetKind, TriggerCondition,
@@ -86,6 +86,17 @@ pub enum EngineError {
     MissingCard(String),
     #[error("player {0} won")]
     GameOver(PlayerId),
+}
+
+/// Internal game events emitted at state-change sites to drive the unified trigger-collection pass
+/// (CR 603.2). Each variant carries the minimum data needed to identify which triggers match.
+enum GameEvent {
+    EntersBattlefield { object_id: ObjectId },
+    /// `card_id` and `controller` must be captured before the zone move (object may be gone).
+    Dies { object_id: ObjectId, card_id: String, controller: PlayerId },
+    Attacks { attacker_ids: Vec<ObjectId> },
+    CombatDamageToPlayer { attacker_id: ObjectId, defender_id: PlayerId },
+    UpkeepBegin,
 }
 
 pub struct GameEngine {
@@ -213,7 +224,7 @@ impl GameEngine {
             cleanup_discard_player: None,
             opening,
             starting_player_idx: 0,
-            pending_trigger: None,
+            pending_triggers: VecDeque::new(),
         };
         let mut eng = GameEngine { state, registry };
         let mut e = vec![];
@@ -868,7 +879,7 @@ impl GameEngine {
             ap,
             atk_names.join(", ")
         )));
-        self.fire_attack_triggers(&attackers_for_event, &mut b.events);
+        self.fire_triggers(GameEvent::Attacks { attacker_ids: attackers_for_event }, &mut b.events);
         b.events.push(ev_priority_changed(self));
         Ok(b)
     }
@@ -1524,7 +1535,7 @@ impl GameEngine {
             }
         }
         for (att_id, def_id) in combat_dmg_to_player {
-            self.fire_combat_damage_to_player_triggers(att_id, def_id, events);
+            self.fire_triggers(GameEvent::CombatDamageToPlayer { attacker_id: att_id, defender_id: def_id }, events);
         }
         Ok(())
     }
@@ -1598,7 +1609,7 @@ impl GameEngine {
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("not your priority"));
         }
-        if self.state.pending_trigger.is_some() {
+        if !self.state.pending_triggers.is_empty() {
             return Err(EngineError::Illegal("must choose trigger target before passing priority"));
         }
         if self.state.stack.is_empty()
@@ -1681,7 +1692,7 @@ impl GameEngine {
                 }
                 self.state.passes_since_stack_change = 0;
                 ev.push(ev_phase_labeled(self, "upkeep"));
-                self.fire_upkeep_triggers(ev);
+                self.fire_triggers(GameEvent::UpkeepBegin, ev);
                 ev.push(ev_priority_changed(self));
             }
             Upkeep => {
@@ -2181,7 +2192,7 @@ impl GameEngine {
                 },
             )?;
             if resolves_to_battlefield {
-                self.fire_etb_triggers(top.id, events);
+                self.fire_triggers(GameEvent::EntersBattlefield { object_id: top.id }, events);
             }
         }
 
@@ -2327,7 +2338,7 @@ impl GameEngine {
                             ));
                         }
                         if let (Some(cid), Some(ctrl)) = (card_id_t, owner) {
-                            self.fire_dies_triggers(tid, &cid, ctrl, events);
+                            self.fire_triggers(GameEvent::Dies { object_id: tid, card_id: cid, controller: ctrl }, events);
                         }
                     }
                 }
@@ -2580,7 +2591,7 @@ impl GameEngine {
                             ));
                         }
                         if let (Some(cid), Some(ctrl)) = (card_id_t, owner) {
-                            self.fire_dies_triggers(tid, &cid, ctrl, events);
+                            self.fire_triggers(GameEvent::Dies { object_id: tid, card_id: cid, controller: ctrl }, events);
                         }
                     }
                 }
@@ -2649,7 +2660,7 @@ impl GameEngine {
                 "cannot cast until attack or block declaration is complete",
             ));
         }
-        if self.state.pending_trigger.is_some() {
+        if !self.state.pending_triggers.is_empty() {
             return Err(EngineError::Illegal("must choose trigger target before casting"));
         }
         validate_spell_targets(&self.state, &self.registry, player, &card_id, targets)?;
@@ -2847,13 +2858,13 @@ impl GameEngine {
     ) -> Result<RuledEventBatch, EngineError> {
         let pending = self
             .state
-            .pending_trigger
-            .take()
+            .pending_triggers
+            .pop_front()
             .ok_or(EngineError::Illegal("no pending trigger awaiting target"))?;
 
         if pending.controller != player {
-            // Put it back
-            self.state.pending_trigger = Some(pending);
+            // Put it back at the front
+            self.state.pending_triggers.push_front(pending);
             return Err(EngineError::Illegal("not your trigger to target"));
         }
 
@@ -2910,7 +2921,29 @@ impl GameEngine {
                 ability_annotation: ability_text,
             })),
         });
-        batch.events.push(ev_priority_changed(self));
+
+        // If another pending trigger is waiting for target selection, prompt for it now.
+        if let Some(next) = self.state.pending_triggers.front() {
+            let next_name = self
+                .registry
+                .get(&next.card_id)
+                .map(|d| d.name.clone())
+                .unwrap_or_else(|| next.card_id.clone());
+            batch.events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::TriggerNeedsTarget(rv1::TriggerNeedsTarget {
+                    source_permanent_id: next.source_permanent_id,
+                    ability_index: next.ability_index as u32,
+                    ability_text: next.ability_text.clone(),
+                    controller_player_id: next.controller,
+                })),
+            });
+            batch.events.push(ev_log(format!(
+                "Triggered: {next_name} — choose a target for: {}",
+                next.ability_text
+            )));
+        } else {
+            batch.events.push(ev_priority_changed(self));
+        }
         fill_legal(&mut batch, self);
         Ok(batch)
     }
@@ -2954,7 +2987,7 @@ impl GameEngine {
         batch
             .events
             .push(ev_log(format!("P{} played {}", player, land_name)));
-        self.fire_etb_triggers(oid, &mut batch.events);
+        self.fire_triggers(GameEvent::EntersBattlefield { object_id: oid }, &mut batch.events);
         fill_legal(&mut batch, self);
         Ok(batch)
     }
@@ -3016,7 +3049,7 @@ impl GameEngine {
                     ));
                 }
                 if let (Some(cid), Some(ctrl)) = (card_id_for_trigger, owner) {
-                    self.fire_dies_triggers(id, &cid, ctrl, out);
+                    self.fire_triggers(GameEvent::Dies { object_id: id, card_id: cid, controller: ctrl }, out);
                 }
             }
         }
@@ -3365,117 +3398,104 @@ impl GameEngine {
     }
 
     // -----------------------------------------------------------------------
-    // Trigger detection helpers
+    // Trigger detection — unified event-driven pass (CR 603.2)
     // -----------------------------------------------------------------------
 
-    /// Fire all `WhenSelfEntersBattlefield` triggers for `oid` (just entered the battlefield).
-    fn fire_etb_triggers(&mut self, oid: ObjectId, events: &mut Vec<rv1::RuledEvent>) {
-        let Some(obj) = self.state.objects.get(&oid) else { return };
-        let card_id = obj.card_id.clone();
-        // Controller = owner for newly entered permanents (no change-of-control effects yet).
-        let controller = obj.owner;
-        let def = match self.registry.get(&card_id) {
-            Some(d) => d.clone(),
-            None => return,
-        };
-        for (idx, ta) in def.triggered_abilities.iter().enumerate() {
-            if ta.trigger != TriggerCondition::WhenSelfEntersBattlefield {
-                continue;
-            }
-            self.push_trigger(oid, &card_id, controller, idx, ta.text.clone(), events);
+    /// Emit a game event and enqueue all matching triggered abilities (CR 603.3b APNAP order).
+    /// Replaces the old per-condition `fire_*` helpers.
+    fn fire_triggers(&mut self, event: GameEvent, events: &mut Vec<rv1::RuledEvent>) {
+        let triggers = self.collect_triggers(&event);
+        for (source_id, card_id, controller, ability_index, ability_text) in triggers {
+            self.push_trigger(source_id, &card_id, controller, ability_index, ability_text, events);
         }
     }
 
-    /// Fire all `WhenSelfDies` triggers for `oid` (just moved to graveyard from battlefield).
-    /// `card_id` and `controller` must be captured BEFORE the zone move.
-    fn fire_dies_triggers(
-        &mut self,
-        oid: ObjectId,
-        card_id: &str,
-        controller: PlayerId,
-        events: &mut Vec<rv1::RuledEvent>,
-    ) {
-        let def = match self.registry.get(card_id) {
-            Some(d) => d.clone(),
-            None => return,
-        };
-        for (idx, ta) in def.triggered_abilities.iter().enumerate() {
-            if ta.trigger != TriggerCondition::WhenSelfDies {
-                continue;
-            }
-            self.push_trigger(oid, card_id, controller, idx, ta.text.clone(), events);
-        }
-    }
-
-    /// Fire all `WheneverSelfAttacks` triggers for each attacker in `attacker_ids`.
-    fn fire_attack_triggers(&mut self, attacker_ids: &[ObjectId], events: &mut Vec<rv1::RuledEvent>) {
-        let attacker_ids = attacker_ids.to_vec();
-        for &att in &attacker_ids {
-            let Some(obj) = self.state.objects.get(&att) else { continue };
-            let card_id = obj.card_id.clone();
-            let controller = obj.owner;
-            let def = match self.registry.get(&card_id) {
-                Some(d) => d.clone(),
-                None => continue,
-            };
-            for (idx, ta) in def.triggered_abilities.iter().enumerate() {
-                if ta.trigger != TriggerCondition::WheneverSelfAttacks {
-                    continue;
-                }
-                self.push_trigger(att, &card_id, controller, idx, ta.text.clone(), events);
-            }
-        }
-    }
-
-    /// Fire combat-damage-to-player triggers for `attacker_id` dealing `amount` to `defender_id`.
-    fn fire_combat_damage_to_player_triggers(
-        &mut self,
-        attacker_id: ObjectId,
-        defender_id: PlayerId,
-        events: &mut Vec<rv1::RuledEvent>,
-    ) {
-        let Some(obj) = self.state.objects.get(&attacker_id) else { return };
-        let card_id = obj.card_id.clone();
-        let controller = obj.owner;
-        let def = match self.registry.get(&card_id) {
-            Some(d) => d.clone(),
-            None => return,
-        };
-        for (idx, ta) in def.triggered_abilities.iter().enumerate() {
-            let fires = match ta.trigger {
-                TriggerCondition::WheneverSelfDealsCombatDamageToPlayer => true,
-                TriggerCondition::WheneverSelfDealsDamageToOpponent => {
-                    // Opponent check: the defender is not the controller.
-                    defender_id != controller
-                }
-                _ => false,
-            };
-            if fires {
-                self.push_trigger(attacker_id, &card_id, controller, idx, ta.text.clone(), events);
-            }
-        }
-    }
-
-    /// Fire `AtBeginningOfControllerUpkeep` triggers for the active player's permanents.
-    fn fire_upkeep_triggers(&mut self, events: &mut Vec<rv1::RuledEvent>) {
+    /// Collect `(source_id, card_id, controller, ability_index, ability_text)` for every triggered
+    /// ability whose condition matches `event`. Returns owned data so the caller can mutate `self`.
+    /// Results are ordered APNAP: active player's triggers first (CR 603.3b).
+    fn collect_triggers(&self, event: &GameEvent) -> Vec<(ObjectId, String, PlayerId, usize, String)> {
         let ap = self.state.active_player_id();
-        let ap_idx = self.state.player_idx(ap).unwrap_or(0);
-        let bf: Vec<ObjectId> = self.state.players[ap_idx].battlefield.clone();
-        for oid in bf {
-            let Some(obj) = self.state.objects.get(&oid) else { continue };
-            let card_id = obj.card_id.clone();
-            let controller = obj.owner;
-            let def = match self.registry.get(&card_id) {
-                Some(d) => d.clone(),
-                None => continue,
-            };
-            for (idx, ta) in def.triggered_abilities.iter().enumerate() {
-                if ta.trigger != TriggerCondition::AtBeginningOfControllerUpkeep {
-                    continue;
-                }
-                self.push_trigger(oid, &card_id, controller, idx, ta.text.clone(), events);
+        match event {
+            GameEvent::EntersBattlefield { object_id } => {
+                let Some(obj) = self.state.objects.get(object_id) else { return vec![] };
+                let card_id = obj.card_id.clone();
+                let controller = obj.owner;
+                self.matching_triggered_abilities(&card_id, *object_id, controller, |tc| {
+                    *tc == TriggerCondition::WhenSelfEntersBattlefield
+                })
+            }
+            GameEvent::Dies { object_id, card_id, controller } => {
+                self.matching_triggered_abilities(card_id, *object_id, *controller, |tc| {
+                    *tc == TriggerCondition::WhenSelfDies
+                })
+            }
+            GameEvent::Attacks { attacker_ids } => {
+                // APNAP: active player's attackers first, then NAP's
+                let mut sorted = attacker_ids.clone();
+                sorted.sort_by_key(|&oid| {
+                    self.state
+                        .objects
+                        .get(&oid)
+                        .map(|o| (o.owner != ap) as u8)
+                        .unwrap_or(1)
+                });
+                sorted
+                    .iter()
+                    .flat_map(|&att| {
+                        let Some(obj) = self.state.objects.get(&att) else { return vec![] };
+                        let card_id = obj.card_id.clone();
+                        let controller = obj.owner;
+                        self.matching_triggered_abilities(&card_id, att, controller, |tc| {
+                            *tc == TriggerCondition::WheneverSelfAttacks
+                        })
+                    })
+                    .collect()
+            }
+            GameEvent::CombatDamageToPlayer { attacker_id, defender_id } => {
+                let Some(obj) = self.state.objects.get(attacker_id) else { return vec![] };
+                let card_id = obj.card_id.clone();
+                let controller = obj.owner;
+                let defender = *defender_id;
+                self.matching_triggered_abilities(&card_id, *attacker_id, controller, |tc| {
+                    match tc {
+                        TriggerCondition::WheneverSelfDealsCombatDamageToPlayer => true,
+                        TriggerCondition::WheneverSelfDealsDamageToOpponent => defender != controller,
+                        _ => false,
+                    }
+                })
+            }
+            GameEvent::UpkeepBegin => {
+                let ap_idx = self.state.player_idx(ap).unwrap_or(0);
+                let bf: Vec<ObjectId> = self.state.players[ap_idx].battlefield.clone();
+                bf.iter()
+                    .flat_map(|&oid| {
+                        let Some(obj) = self.state.objects.get(&oid) else { return vec![] };
+                        let card_id = obj.card_id.clone();
+                        let controller = obj.owner;
+                        self.matching_triggered_abilities(&card_id, oid, controller, |tc| {
+                            *tc == TriggerCondition::AtBeginningOfControllerUpkeep
+                        })
+                    })
+                    .collect()
             }
         }
+    }
+
+    /// Return all triggered abilities on `card_id` whose condition satisfies `filter`, as owned tuples.
+    fn matching_triggered_abilities(
+        &self,
+        card_id: &str,
+        source_id: ObjectId,
+        controller: PlayerId,
+        filter: impl Fn(&TriggerCondition) -> bool,
+    ) -> Vec<(ObjectId, String, PlayerId, usize, String)> {
+        let Some(def) = self.registry.get(card_id) else { return vec![] };
+        def.triggered_abilities
+            .iter()
+            .enumerate()
+            .filter(|(_, ta)| filter(&ta.trigger))
+            .map(|(idx, ta)| (source_id, card_id.to_string(), controller, idx, ta.text.clone()))
+            .collect()
     }
 
     /// Core helper: either push a non-targeted trigger to the stack immediately, or set
@@ -3504,27 +3524,31 @@ impl GameEngine {
         self.state.next_object_id += 1;
 
         if needs_target {
-            // Store for player to choose a target; only one pending trigger supported at a time.
-            self.state.pending_trigger = Some(PendingTrigger {
+            // Enqueue for target selection; only emit TriggerNeedsTarget for the first in queue
+            // so the client prompts one at a time (CR 603.3d).
+            let was_empty = self.state.pending_triggers.is_empty();
+            self.state.pending_triggers.push_back(PendingTrigger {
                 source_permanent_id: source_id,
                 ability_index,
                 ability_text: ability_text.clone(),
                 card_id: card_id.to_string(),
                 controller,
             });
-            events.push(rv1::RuledEvent {
-                ev: Some(rv1::ruled_event::Ev::TriggerNeedsTarget(
-                    rv1::TriggerNeedsTarget {
-                        source_permanent_id: source_id,
-                        ability_index: ability_index as u32,
-                        ability_text: ability_text.clone(),
-                        controller_player_id: controller,
-                    },
-                )),
-            });
-            events.push(ev_log(format!(
-                "Triggered: {card_name} — choose a target for: {ability_text}"
-            )));
+            if was_empty {
+                events.push(rv1::RuledEvent {
+                    ev: Some(rv1::ruled_event::Ev::TriggerNeedsTarget(
+                        rv1::TriggerNeedsTarget {
+                            source_permanent_id: source_id,
+                            ability_index: ability_index as u32,
+                            ability_text: ability_text.clone(),
+                            controller_player_id: controller,
+                        },
+                    )),
+                });
+                events.push(ev_log(format!(
+                    "Triggered: {card_name} — choose a target for: {ability_text}"
+                )));
+            }
         } else {
             self.state.stack.push(StackItem {
                 id: virtual_id,
@@ -3664,7 +3688,7 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
         return opening_legal_labels(eng, pid, op);
     }
     // Triggered ability awaiting a target must be resolved before any other action.
-    if let Some(pt) = &eng.state.pending_trigger {
+    if let Some(pt) = eng.state.pending_triggers.front() {
         return if pt.controller == pid {
             vec![format!("Choose target for trigger: {}", pt.ability_text)]
         } else {

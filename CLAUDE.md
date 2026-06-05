@@ -1,0 +1,139 @@
+# Cockatrice fork — agent context (condensed from `.cursor/rules`)
+
+## Architecture
+
+- **Freeform** (legacy casual) vs **ruled** (server-authoritative MTG-style engine). Do not break freeform; gate new UI/paths on ruled mode.
+- **Servatrice**: auth, lobby, rooms, chat, replays. **Ruled match state** lives in Rust sidecar **`tricerules`**; C++ **relays** protobuf between clients and engine. Single writer of ruled state; Servatrice **filters** hidden info per player.
+- **Determinism**: seeded RNG; replays → `(seed, command log) → state`.
+- **Card model** (hybrid, ordered by preference): rules logic lives only in **`tricerules-cards`** across three tiers — **(1) Data**: RON in `tricerules-cards/data/`, where `spell_effect` is a `Vec<SpellEffectKind>` resolved in order (e.g. `spell_effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))]`); **(2) Generic primitives**: `SpellEffectKind` variants + `TargetFilter` composable targeting in `primitives.rs` — `TargetFilter { kind, not_artifact, tapped, … }` replaces the old flat `TargetSpec` enum, enabling characteristic-based restrictions without new variants; **(3) Custom Rust**: a `custom/` `CardEffect` for logic data can't express (complex/conditional targeting, unique effects) — *not built yet; add when first needed, trust the tree until then*. Card data is **validated at startup** (`registry.rs`). Prefer the lowest tier that works. **Only source of truth for rules logic.**
+
+### Where to look
+
+| Area | Path |
+|------|------|
+| Rust rules + sidecar | `tricerules/` (`tricerules-core`, `tricerules-cards`, `tricerules-proto`, `tricerules-server`) |
+| Shared protobufs | `libcockatrice_protocol/libcockatrice/protocol/pb/` |
+| Server ruled integration | `libcockatrice_network/.../server/remote/game/` (`server_game`, `rules_relay`) |
+| Desktop | `cockatrice/` |
+| Build | `WITH_RULES_ENGINE` → `cargo` for sidecar; CI: `cargo test`, `clippy -D warnings`, `fmt --check` on Rust touches |
+
+### Ruled work is end-to-end
+
+Unless scoped **backend-only**, ship **engine + proto + Servatrice relay + Cockatrice UI** together for commands, prompts, targets, phases, visible state. Minimal viable UI (button/menu/click) is enough. `.proto` changes must keep **C++ and Rust** buildable.
+
+### Two card databases — never mix them
+
+| Database | Owner | Purpose |
+|----------|-------|---------|
+| `cards.xml` (Oracle/Scryfall) | Cockatrice client + freeform | Display: images, names, type lines, search. Loaded by `CardDatabaseManager`. |
+| `tricerules-cards` (RON `data/` + `primitives.rs`; later `custom/` Rust) | tricerules rules engine | Rules logic: types, costs, abilities, effects. Queried via `CardRegistry::global()`. |
+
+**Rules from tricerules, display from Oracle — never the other way around.**
+- Servatrice must query tricerules (via protobuf or `CardRegistry`) for card type/mechanical info, **not** `CardDatabaseQuerier` / Oracle.
+- `ruledOracleTypeBlobForServerCard()` and similar functions that query Oracle for ruled decisions are wrong; fix them to use tricerules data.
+- Oracle is intentionally absent from `tricerules/` and must stay that way.
+- Future card abilities go in the hybrid model — RON data → generic `SpellEffectKind` primitive → `custom/` Rust when data is insufficient — never in Oracle text parsing.
+
+### After implementing cards — update the checklist
+
+After adding or finishing a card (RON + `registry.rs` include; `primitives.rs` only when adding a new primitive), **regenerate the tracker** so `tricerules/CARDS.md` stays accurate, and commit it with the card change:
+
+```powershell
+./scripts/gen-card-checklist.ps1   # reads the registry + Oracle cards.xml → tricerules/CARDS.md
+```
+
+- **Partial cards:** if a card's mechanics don't fully match Oracle/CR, add `partial: "<what's missing>"` to its RON (e.g. an unimplemented mode or unenforced targeting restriction). Omit the field for fully-implemented cards. The generator renders three tiers: `[x]` full · `[ ] 🟡 partial: <note>` · `[ ]` not implemented.
+- Implemented status comes from `CardRegistry`; set grouping (first/original printing) comes from Oracle — consistent with "rules from tricerules, display from Oracle". The `partial` field is tracking-only and ignored by the engine.
+
+### Editing habits
+
+Small diffs; preserve legacy paths unless migrating is the task.
+
+### Primitives vs. custom Rust — where to draw the line
+
+`SpellEffectKind` is the shared effect type for spells, activated abilities, and triggered abilities — all three use it. The intended future design has the engine resolve everything through a uniform `CardEffect` trait (`HashMap<CardId, Box<dyn CardEffect>>` at startup), with data-driven and custom Rust cards looking identical to the engine. **That trait doesn't exist yet** — currently the engine pattern-matches `SpellEffectKind` directly. The custom tier is intentionally deferred until the primitive layer is mature and a real card forces the design.
+
+**Add a new primitive** when the effect is a parameterized operation fully described by static data — even if it's unusual or affects many objects. Examples that belong as primitives:
+- `DestroyAll { kind: TargetKind }` — Wrath of God, Day of Judgment
+- `DamageAll { amount: u32, kind: TargetKind }` — Pyroclasm, Earthquake
+- `TargetFilter { zone: Some(Graveyard), … }` — graveyard-scoped targeting for Reanimate, Regrowth, etc.
+- `SearchLibrary { filter: CardFilter, destination: Zone, shuffle: bool }` — Demonic Tutor, Entomb
+- Any new `SpellEffectKind` variant where the card's behavior is fully described by `(effect_kind, parameters)`
+
+**Use the custom tier as an escape hatch** only when the resolution algorithm itself is unique — when the effect requires a mid-resolution player choice over live game objects, or multiple players making interdependent choices over the same revealed set. Examples:
+- **Brainstorm**: draw 3, then the player must *choose which 2 cards from their hand* to put back on top *in a chosen order* — multi-step player interaction during resolution
+- **Gifts Ungiven**: search for up to 4 cards, then *opponent* chooses 2 to put in your graveyard — two players making sequential choices over the same revealed set
+
+The custom tier is narrow by design. When in doubt, ask: *can I describe this effect completely with `(effect_kind, parameters)`?* If yes, it's a primitive.
+
+**Before building the custom tier**, clean up `TriggeredEffect::PumpSelf` — it exists only because triggered effects can't reference self as a target. Add `TargetKind::Self_` to `TargetFilter`, express pump-self as a normal `PumpTarget` with a self-filter, and collapse `TriggeredEffect` into plain `SpellEffectKind`. Then a future `SpellEffectKind::Custom(...)` variant serves spells, activated abilities, and triggered abilities uniformly.
+
+---
+
+## Card implementation — look up before you code
+
+**Before implementing any card**, fetch its current Oracle data from Scryfall:
+
+```
+https://api.scryfall.com/cards/named?exact=<Card+Name>
+```
+
+Verify and use the response for:
+- **Mana cost** (`mana_cost`) — including color, generic, hybrid, Phyrexian pips
+- **Power/toughness** (`power` / `toughness`) — exact values; never guess from memory
+- **Oracle text** (`oracle_text`) — the authoritative rules text; CR takes precedence for mechanics not spelled out on the card
+- **Type line** (`type_line`) — supertypes, types, subtypes
+
+If the fetch fails or the card name is ambiguous, surface that before writing any RON or Rust — don’t fall back to memory.
+
+---
+
+## MTG rules (CR + Oracle)
+
+- **Authority**: Comprehensive Rules for mechanics; **Oracle** for card-specific behavior. Look up CR (and rulings when needed); don’t silently ship “almost right.” Intentional simplifications must be explicit.
+- **`tricerules/**/*.rs`**: server-authoritative; `EngineError::Illegal` not panic; reject ambiguous combat; explicit priority/steps; add/update `tricerules-core/tests/scenario.rs` (happy + illegal path, assert steps/priority/zones). Keep `ruled_v1.proto` aligned across consumers.
+
+**Final summary (substantive ruled/proto/relay/UI edits):** End with a short **MTG applicability** block: (1) does CR/Oracle govern this? (2) if yes — concepts + compliance or stated deferral; (3) if no — e.g. “No MTG rules surface area.”
+
+---
+
+## Windows verify build (after repo edits on Windows)
+
+From repo root:
+
+```bash
+cmake --preset windows-msvc-all && cmake --build --preset windows-msvc-all-release
+```
+
+Needs `QTDIR` (Qt 6 MSVC), `cargo`, MSVC. Fix failures; fix warnings you introduced or that are trivial. Pre-existing unrelated warnings — note briefly. Non-Windows: use project’s other CMake presets, not this one. Read-only investigation: no build required.
+
+### Running C++ tests (Windows)
+
+Configure with `-DTEST=ON`, then build and run. Qt DLLs must be on PATH; use `-platform offscreen` for headless execution.
+
+```powershell
+cmake --preset windows-msvc-all -DTEST=ON
+cmake --build --preset windows-msvc-all-release --target game_prompt_widget_test
+
+$env:PATH = "C:\Users\pizza\CodingProjects\Cockatrice\6.6.3\msvc2019_64\bin;$env:PATH"
+.\build\windows-msvc-all\tests\game_prompt\Release\game_prompt_widget_test.exe -platform offscreen
+```
+
+Or run all tests via ctest (same PATH requirement applies):
+
+```powershell
+$env:PATH = "C:\Users\pizza\CodingProjects\Cockatrice\6.6.3\msvc2019_64\bin;$env:PATH"
+ctest --test-dir build/windows-msvc-all -C Release -R game_prompt_widget_test --output-on-failure
+```
+
+Qt module additions for new tests go in `cmake/FindQtRuntime.cmake` (`_TEST_NEEDED`), not per-test CMakeLists. Widget visibility checks use `isHidden()` (not `isVisible()`) since the widget is not shown during tests.
+
+---
+
+## Ruled prompt UI (`game_prompt_widget`, `tab_game`)
+
+- Logic in `cockatrice/src/game/prompt/game_prompt_widget.{h,cpp}`; **TabGame** = placement + signals only.
+- Prompt in right **Messages** dock **above** game log; no extra dock unless asked.
+- Reuse paths: e.g. **Pass Priority** → `GameEventHandler::handleNextTurn()`. Ruled + non-replay only; unchanged freeform/replay.
+- Prefer existing signals (`ruledEnginePromptFeed`, `logActivePhaseChanged`, `logActivePlayer`) over new proto for UI text. Compact, action-first.
+

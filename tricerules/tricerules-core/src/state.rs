@@ -249,8 +249,10 @@ pub struct GameState {
     pub opening: Option<OpeningSequence>,
     /// Seat index of the player who takes the first turn (CR 103.8: only they skip their first draw step).
     pub starting_player_idx: usize,
-    /// A triggered ability that has fired and requires target selection before going on the stack (CR 603.3d).
-    pub pending_trigger: Option<PendingTrigger>,
+    /// Triggered abilities that have fired and are awaiting target selection before going on the
+    /// stack (CR 603.3d). Queue supports simultaneous triggers (CR 603.3b APNAP ordering);
+    /// processed front-to-back, one target choice at a time.
+    pub pending_triggers: VecDeque<PendingTrigger>,
 }
 
 impl GameState {

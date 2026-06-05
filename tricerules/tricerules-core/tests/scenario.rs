@@ -3,9 +3,10 @@
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
 use tricerules_proto::ruled::v1::ruled_event::Ev;
 use tricerules_proto::ruled::v1::{
-    AddManaToPool, AssignCombatDamage, BlockPair, CastSpell, DamagePair, DeclareAttackers,
-    DeclareBlockers, DiscardToHandSize, PassPriority, PlayLand, PreviewDeclareAttackers,
-    PreviewDeclareBlockers, PrimitiveYieldStructured, RuledCommand, TargetRef,
+    AddManaToPool, AssignCombatDamage, BlockPair, CastSpell, ChooseTriggerTarget, DamagePair,
+    DeclareAttackers, DeclareBlockers, DiscardToHandSize, PassPriority, PlayLand,
+    PreviewDeclareAttackers, PreviewDeclareBlockers, PrimitiveYieldStructured, RuledCommand,
+    TargetRef,
 };
 
 use tricerules_core::GameEngine;
@@ -6868,5 +6869,148 @@ fn indestructible_dies_when_toughness_reaches_zero() {
         e.state.objects.get(&myr).expect("myr object").zone,
         tricerules_core::Zone::Graveyard,
         "CR 704.5f: indestructible Myr with toughness 0 must still die"
+    );
+}
+
+/// CR 603.3b: when multiple triggered abilities fire from the same event (simultaneous triggers),
+/// all of them must go on the stack — not just the first one.  Regression test for the old
+/// `Option<PendingTrigger>` design that silently dropped any trigger after the first.
+///
+/// Scenario: two Scroll Thieves (WheneverSelfDealsCombatDamageToPlayer → DrawCards(1)) both
+/// attack an unblocked player. Both triggers must fire, resulting in two cards drawn.
+#[test]
+fn simultaneous_combat_damage_triggers_both_fire() {
+    // 12-card library so drawing 7 opening hand + 2 triggers still has cards remaining.
+    let p0_deck: Vec<String> = vec![
+        "scroll_thief".into(), "scroll_thief".into(),
+        "island".into(), "island".into(), "island".into(), "island".into(),
+        "island".into(), "island".into(), "island".into(), "island".into(),
+        "island".into(), "island".into(),
+    ];
+    let p1_deck: Vec<String> = std::iter::repeat_n("mountain".into(), 12).collect();
+    let decks = Some(vec![p0_deck, p1_deck]);
+    let mut e = GameEngine::new(8001, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Cheat both Scroll Thieves onto P0's battlefield without summoning sickness.
+    let thief1_hand_idx = hand_index_for_card(&e, 0, "scroll_thief");
+    let thief1_oid = e.state.players[0].hand.remove(thief1_hand_idx);
+    e.state.players[0].battlefield.push(thief1_oid);
+    if let Some(obj) = e.state.objects.get_mut(&thief1_oid) {
+        obj.zone = tricerules_core::Zone::Battlefield;
+        obj.summoning_sick = false;
+    }
+
+    let thief2_hand_idx = hand_index_for_card(&e, 0, "scroll_thief");
+    let thief2_oid = e.state.players[0].hand.remove(thief2_hand_idx);
+    e.state.players[0].battlefield.push(thief2_oid);
+    if let Some(obj) = e.state.objects.get_mut(&thief2_oid) {
+        obj.zone = tricerules_core::Zone::Battlefield;
+        obj.summoning_sick = false;
+    }
+
+    let p0_hand_before = e.state.players[0].hand.len();
+
+    // Enter combat and attack with both Scroll Thieves.
+    e.apply_command(0, &primitive_yield()).expect("main1 to begin combat");
+    e.apply_command(0, &pass()).expect("ap begin combat pass");
+    e.apply_command(1, &pass()).expect("nap begin combat pass");
+    e.apply_command(0, &declare_attackers(vec![thief1_oid, thief2_oid])).expect("declare attackers");
+    e.apply_command(0, &pass()).expect("ap pass after attackers");
+    e.apply_command(1, &pass()).expect("nap pass after attackers");
+    // P1 has no creatures; engine auto-declares empty blockers.
+    e.apply_command(0, &pass()).expect("ap pass declare blockers");
+    e.apply_command(1, &pass()).expect("nap pass declare blockers -> combat damage");
+
+    // Both Scroll Thieves dealt combat damage to P1, so both triggers must be on the stack.
+    assert_eq!(
+        e.state.stack.len(),
+        2,
+        "both Scroll Thief triggers must be on the stack simultaneously"
+    );
+
+    // Resolving both triggers draws 2 cards for P0.
+    resolve_entire_stack_two_player(&mut e);
+    assert!(e.state.stack.is_empty(), "stack must be empty after both triggers resolve");
+    assert_eq!(
+        e.state.players[0].hand.len(),
+        p0_hand_before + 2,
+        "two Scroll Thief triggers must draw two cards total"
+    );
+}
+
+/// Regression: trigger queue serializes correctly when a single targeted trigger needs target
+/// selection. After `choose_trigger_target` the queue should be empty and priority returned.
+/// This guards against regressions in the queue-based `choose_trigger_target` path.
+#[test]
+fn targeted_trigger_resolves_after_target_chosen() {
+    // Thieving Magpie: WheneverSelfDealsCombatDamageToPlayer → DrawCards(1) (no target needed).
+    // Use a card whose trigger DOES need a target so choose_trigger_target is exercised.
+    // Flametongue Kavu: WhenSelfEntersBattlefield → DamageTarget(4) — targeted ETB trigger.
+    let p0_deck: Vec<String> = vec![
+        "flametongue_kavu".into(),
+        "mountain".into(), "mountain".into(), "mountain".into(), "mountain".into(),
+        "mountain".into(), "mountain".into(), "mountain".into(), "mountain".into(),
+        "mountain".into(), "mountain".into(),
+    ];
+    let p1_deck: Vec<String> = vec![
+        "grizzly_bears".into(),
+        "forest".into(), "forest".into(), "forest".into(), "forest".into(),
+        "forest".into(), "forest".into(), "forest".into(), "forest".into(),
+        "forest".into(), "forest".into(),
+    ];
+    let decks = Some(vec![p0_deck, p1_deck]);
+    let mut e = GameEngine::new(8003, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Get Grizzly Bears onto P1's battlefield (cheat it in).
+    let bears_oid = {
+        let pos = e.state.players[1]
+            .hand
+            .iter()
+            .position(|oid| e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some("grizzly_bears"))
+            .expect("grizzly_bears in P1 hand");
+        let oid = e.state.players[1].hand.remove(pos);
+        e.state.players[1].battlefield.push(oid);
+        e.state.objects.get_mut(&oid).expect("obj").zone = tricerules_core::Zone::Battlefield;
+        oid
+    };
+
+    // Give P0 enough mana to cast Flametongue Kavu (3R = 3 colorless + 1 red).
+    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, c: 3, ..Default::default() }))
+        .ok();
+
+    // Cast Flametongue Kavu (no target at cast time for its ETB trigger — target chosen later).
+    let ftk_idx = hand_index_for_card(&e, 0, "flametongue_kavu");
+    e.apply_command(0, &cast_spell(ftk_idx, vec![])).expect("cast FTK");
+
+    // Let it resolve (both players pass).
+    pass_both_players(&mut e);
+
+    // ETB trigger fires: DamageTarget(4) needs a target → pending_triggers should have 1 entry.
+    assert_eq!(
+        e.state.pending_triggers.len(),
+        1,
+        "FTK ETB trigger must be queued for target selection"
+    );
+
+    // P0 chooses Grizzly Bears as the target.
+    e.apply_command(0, &RuledCommand {
+        cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget { target_object_id: bears_oid })),
+    }).expect("choose trigger target");
+
+    // Queue must be empty and trigger on the stack.
+    assert!(
+        e.state.pending_triggers.is_empty(),
+        "pending_triggers queue must be empty after target chosen"
+    );
+    assert_eq!(e.state.stack.len(), 1, "trigger must be on the stack");
+
+    // Resolve the trigger: Grizzly Bears (2/2) takes 4 damage → dies.
+    pass_both_players(&mut e);
+    assert_eq!(
+        e.state.objects.get(&bears_oid).expect("bears").zone,
+        tricerules_core::Zone::Graveyard,
+        "Grizzly Bears must die to Flametongue Kavu's ETB trigger"
     );
 }
