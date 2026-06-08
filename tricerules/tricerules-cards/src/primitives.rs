@@ -239,6 +239,26 @@ pub struct TriggeredAbilityDef {
     pub text: String,
 }
 
+// ---------------------------------------------------------------------------
+// Continuous effects (layer system, CR 613)
+// ---------------------------------------------------------------------------
+
+/// How long a continuous effect lasts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EffectDuration {
+    /// Expires at the next cleanup step (CR 514.2).
+    UntilEndOfTurn,
+    // Future: WhileSourceOnBattlefield(ObjectId) — static abilities cleaned up at LTB
+}
+
+/// The kind of modification a continuous effect applies.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ContinuousEffectKind {
+    /// CR 613 layer 7c — modifying effects (+N/+N, -N/-N).
+    PtModify { delta_power: i32, delta_toughness: i32 },
+    // Future: Layer6AddKeyword(Keyword), Layer7bSetPt { power: i32, toughness: i32 }, …
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1505,8 +1505,6 @@ fn inject_creature_on_battlefield(e: &mut GameEngine, player: usize, card_id: &s
             toughness: Some(2),
             damage: 0,
             deathtouch_damage: false,
-            plus_one_plus_one: 0,
-            minus_one_minus_one: 0,
         },
     );
     e.state.players[player].battlefield.push(id);
@@ -2547,19 +2545,73 @@ fn giant_growth_pump_expires_after_active_turn_ends() {
     .expect("cast growth");
     pass_both_players(&mut e);
 
-    let o = e.state.objects.get(&bear).expect("bear");
-    assert_eq!(o.power, Some(5));
-    assert_eq!(o.toughness, Some(5));
+    assert_eq!(e.effective_power(bear), Some(5), "pumped bear should have 5 effective power");
+    assert_eq!(e.effective_toughness(bear), Some(5), "pumped bear should have 5 effective toughness");
 
     end_active_turn(&mut e, 0);
 
-    let o2 = e.state.objects.get(&bear).expect("bear after turn");
     assert_eq!(
-        o2.power,
+        e.effective_power(bear),
         Some(2),
         "Giant Growth should expire at end of turn"
     );
-    assert_eq!(o2.toughness, Some(2));
+    assert_eq!(e.effective_toughness(bear), Some(2));
+}
+
+/// Two Giant Growths on the same creature stack: effective P/T = base + both deltas.
+#[test]
+fn two_giant_growths_stack_correctly() {
+    let decks = Some(vec![
+        vec![
+            "forest".into(),
+            "forest".into(),
+            "giant_growth".into(),
+            "giant_growth".into(),
+            "grizzly_bears".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+        vec!["forest".into(); 7],
+    ]);
+    let mut e = GameEngine::new(9050, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+
+    // Tap two forests and cast both Giant Growths.
+    for _ in 0..2 {
+        let forest_idx = hand_index_for_card(&e, 0, "forest");
+        let foid = e.state.players[0].hand.remove(forest_idx);
+        e.state.players[0].battlefield.push(foid);
+        e.state.objects.get_mut(&foid).expect("forest").zone = tricerules_core::Zone::Battlefield;
+        e.apply_command(0, &add_mana_to_pool(AddManaToPool { g: 1, ..Default::default() }))
+            .expect("add green mana");
+        let growth_idx = hand_index_for_card(&e, 0, "giant_growth");
+        e.apply_command(0, &cast_spell(growth_idx, vec![TargetRef { object_id: bear }]))
+            .expect("cast growth");
+        pass_both_players(&mut e);
+    }
+
+    assert_eq!(
+        e.effective_power(bear),
+        Some(8),
+        "two Giant Growths should give +6/+6 total"
+    );
+    assert_eq!(e.effective_toughness(bear), Some(8));
+    assert_eq!(
+        e.state.continuous_effects.len(),
+        2,
+        "two active ContinuousEffects expected"
+    );
+
+    end_active_turn(&mut e, 0);
+
+    assert_eq!(e.effective_power(bear), Some(2), "pump expires at cleanup");
+    assert_eq!(e.effective_toughness(bear), Some(2));
+    assert!(
+        e.state.continuous_effects.is_empty(),
+        "continuous_effects must be empty after cleanup"
+    );
 }
 
 #[test]
@@ -5013,8 +5065,6 @@ fn tome_scour_mills_five_cards_from_target_player() {
                 toughness: None,
                 damage: 0,
                 deathtouch_damage: false,
-                plus_one_plus_one: 0,
-                minus_one_minus_one: 0,
             },
         );
         e.state.players[0].hand.push(id);
@@ -5089,8 +5139,6 @@ fn tome_scour_caps_at_library_size() {
                 toughness: None,
                 damage: 0,
                 deathtouch_damage: false,
-                plus_one_plus_one: 0,
-                minus_one_minus_one: 0,
             },
         );
         e.state.players[0].hand.push(id);
@@ -5139,8 +5187,6 @@ fn tome_scour_can_target_controller() {
                 toughness: None,
                 damage: 0,
                 deathtouch_damage: false,
-                plus_one_plus_one: 0,
-                minus_one_minus_one: 0,
             },
         );
         e.state.players[0].hand.push(id);
@@ -5192,8 +5238,6 @@ fn mind_sculpt_rejects_self_target() {
                 toughness: None,
                 damage: 0,
                 deathtouch_damage: false,
-                plus_one_plus_one: 0,
-                minus_one_minus_one: 0,
             },
         );
         e.state.players[0].hand.push(id);
@@ -5689,8 +5733,6 @@ fn haste_creature_can_attack_same_turn_it_enters() {
             toughness: Some(1),
             damage: 0,
             deathtouch_damage: false,
-            plus_one_plus_one: 0,
-            minus_one_minus_one: 0,
         },
     );
     e.state.players[0].battlefield.push(goblin);
@@ -5728,8 +5770,6 @@ fn non_haste_summoning_sick_creature_cannot_attack() {
             toughness: Some(2),
             damage: 0,
             deathtouch_damage: false,
-            plus_one_plus_one: 0,
-            minus_one_minus_one: 0,
         },
     );
     e.state.players[0].battlefield.push(bears);
@@ -5770,8 +5810,6 @@ fn inject_creature_with_stats(
             toughness: Some(toughness),
             damage: 0,
             deathtouch_damage: false,
-            plus_one_plus_one: 0,
-            minus_one_minus_one: 0,
         },
     );
     e.state.players[player].battlefield.push(id);

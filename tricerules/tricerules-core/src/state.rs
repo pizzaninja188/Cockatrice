@@ -1,4 +1,5 @@
 use std::collections::{HashMap, VecDeque};
+use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration};
 
 pub type PlayerId = i32;
 pub type ObjectId = u32;
@@ -68,11 +69,6 @@ pub struct GameObject {
     /// True if this permanent has received any amount of damage from a source with deathtouch
     /// this turn (CR 702.2b / CR 704.5h). Cleared during the cleanup step alongside `damage`.
     pub deathtouch_damage: bool,
-    /// Counters: used for SBA +0/+0 annihilation with -1 in future
-    #[allow(dead_code)]
-    pub plus_one_plus_one: u32,
-    #[allow(dead_code)]
-    pub minus_one_minus_one: u32,
 }
 
 impl GameObject {
@@ -186,6 +182,38 @@ pub struct OpeningSequence {
     pub resolved: [bool; 2],
 }
 
+/// What set of permanents a continuous effect applies to (CR 613).
+/// Using a scope enum (rather than a bare ObjectId) means anthem-style effects
+/// ("all creatures get +1/+1") work correctly for permanents that enter after the effect.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AffectedScope {
+    Single(ObjectId),
+    AllCreatures,
+    // Future: CreaturesControlledBy(PlayerId), CreaturesWithPower(u32), …
+}
+
+/// A single active continuous effect (CR 611/613).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContinuousEffect {
+    /// Spell/ability that created this (for display and future targeted removal).
+    pub source_id: Option<ObjectId>,
+    pub affected: AffectedScope,
+    pub kind: ContinuousEffectKind,
+    pub duration: EffectDuration,
+    /// `command_index` at creation; used for layer sublayer timestamp ordering (CR 613.7).
+    pub timestamp: u64,
+}
+
+impl ContinuousEffect {
+    /// True if this effect applies to the permanent with id `oid`.
+    pub fn affects(&self, oid: ObjectId) -> bool {
+        match &self.affected {
+            AffectedScope::Single(id) => *id == oid,
+            AffectedScope::AllCreatures => true,
+        }
+    }
+}
+
 /// During combat, after attack/block declarations.
 #[derive(Debug, Clone)]
 pub struct CombatState {
@@ -253,6 +281,11 @@ pub struct GameState {
     /// stack (CR 603.3d). Queue supports simultaneous triggers (CR 603.3b APNAP ordering);
     /// processed front-to-back, one target choice at a time.
     pub pending_triggers: VecDeque<PendingTrigger>,
+    /// Active continuous effects (CR 611/613). Effects are pushed here at resolution and drained
+    /// at cleanup or when their source leaves the battlefield. P/T and other characteristics are
+    /// recomputed from base + this list on demand — `GameObject.power/toughness` always hold the
+    /// printed base value and are never mutated by effects.
+    pub continuous_effects: Vec<ContinuousEffect>,
 }
 
 impl GameState {

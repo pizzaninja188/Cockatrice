@@ -1,8 +1,8 @@
 //! Core rules processing (vanilla core ΓÇö simplified combat & mana).
 
 use crate::state::{
-    CombatState, GameObject, GameState, ObjectId, OpeningSequence, PendingTrigger, PlayerId,
-    PlayerState, StackItem, TurnStep, Zone,
+    AffectedScope, CombatState, ContinuousEffect, GameObject, GameState, ObjectId,
+    OpeningSequence, PendingTrigger, PlayerId, PlayerState, StackItem, TurnStep, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -11,8 +11,8 @@ use rand::SeedableRng;
 use std::collections::{HashMap, HashSet, VecDeque};
 use thiserror::Error;
 use tricerules_cards::primitives::{
-    AbilityCost, Keyword, SpellEffectKind, TargetFilter, TargetKind, TriggerCondition,
-    TriggeredEffect,
+    AbilityCost, ContinuousEffectKind, EffectDuration, Keyword, SpellEffectKind, TargetFilter,
+    TargetKind, TriggerCondition, TriggeredEffect,
 };
 use tricerules_cards::CardRegistry;
 use tricerules_proto::ruled::v1 as rv1;
@@ -159,8 +159,6 @@ impl GameEngine {
                         toughness: def.toughness,
                         damage: 0,
                         deathtouch_damage: false,
-                        plus_one_plus_one: 0,
-                        minus_one_minus_one: 0,
                     },
                 );
                 p.library.push_back(oid);
@@ -225,6 +223,7 @@ impl GameEngine {
             opening,
             starting_player_idx: 0,
             pending_triggers: VecDeque::new(),
+            continuous_effects: Vec::new(),
         };
         let mut eng = GameEngine { state, registry };
         let mut e = vec![];
@@ -1069,22 +1068,14 @@ impl GameEngine {
         }
 
         let att_power = self
-            .state
-            .objects
-            .get(&attacker_id)
-            .and_then(|o| o.power)
+            .effective_power(attacker_id)
             .ok_or(EngineError::Illegal("attacker missing"))?;
 
         // Phase 4: validate damage amounts per trample rules.
         if att_has_trample {
             // CR 702.19b: must assign >= lethal damage to each blocker before sending excess to player.
             for &blk in &expected_blockers {
-                let blk_toughness = self
-                    .state
-                    .objects
-                    .get(&blk)
-                    .and_then(|o| o.toughness)
-                    .unwrap_or(1);
+                let blk_toughness = self.effective_toughness(blk).unwrap_or(1);
                 let marked = self.state.objects.get(&blk).map(|o| o.damage).unwrap_or(0);
                 let lethal = blk_toughness.saturating_sub(marked).max(1);
                 let assigned = assignments
@@ -1315,12 +1306,7 @@ impl GameEngine {
             let attacker_participates =
                 object_participates_in_pass(&self.state, &self.registry, c, pass, att, true);
             // Capture attacker properties before any mutation.
-            let att_power = self
-                .state
-                .objects
-                .get(&att)
-                .and_then(|o| o.power)
-                .unwrap_or(0);
+            let att_power = self.effective_power(att).unwrap_or(0);
             let att_has_lifelink = self
                 .state
                 .objects
@@ -1368,12 +1354,7 @@ impl GameEngine {
                 let blocker_participates =
                     object_participates_in_pass(&self.state, &self.registry, c, pass, blk, false)
                         && self.state.objects.get(&blk).map(|o| o.zone) == Some(Zone::Battlefield);
-                let bpw = self
-                    .state
-                    .objects
-                    .get(&blk)
-                    .and_then(|o| o.power)
-                    .unwrap_or(0);
+                let bpw = self.effective_power(blk).unwrap_or(0);
                 let blk_has_lifelink = self
                     .state
                     .objects
@@ -1422,12 +1403,7 @@ impl GameEngine {
                 let blocker_info: Vec<(ObjectId, u32, bool, bool, PlayerId, bool)> = blockers
                     .iter()
                     .map(|&blk| {
-                        let pw = self
-                            .state
-                            .objects
-                            .get(&blk)
-                            .and_then(|o| o.power)
-                            .unwrap_or(0);
+                        let pw = self.effective_power(blk).unwrap_or(0);
                         let has_ll = self
                             .state
                             .objects
@@ -1936,27 +1912,46 @@ impl GameEngine {
         Ok(finish_with_events(self, std::mem::take(ev)))
     }
 
-    /// Cleanup-step analogue: until-end-of-turn P/T boosts (e.g. Giant Growth) are modeled by
-    /// mutating `GameObject::power` / `toughness`; restore printed values from the card registry.
-    fn cleanup_until_end_of_turn_creature_pt(&mut self) {
-        let ids: Vec<ObjectId> = self
+    /// Effective (rules-visible) power of `oid`: base from card definition plus all active
+    /// layer-7c modifying effects. Returns `None` for non-creatures (no base power).
+    pub fn effective_power(&self, oid: ObjectId) -> Option<u32> {
+        let obj = self.state.objects.get(&oid)?;
+        let base = obj.power? as i32;
+        let delta: i32 = self
             .state
-            .players
+            .continuous_effects
             .iter()
-            .flat_map(|p| p.battlefield.iter().copied())
-            .collect();
-        for oid in ids {
-            let Some(o) = self.state.objects.get_mut(&oid) else {
-                continue;
-            };
-            if !o.is_creature(&self.registry) {
-                continue;
-            }
-            if let Some(def) = self.registry.get(&o.card_id) {
-                o.power = def.power;
-                o.toughness = def.toughness;
-            }
-        }
+            .filter(|e| e.affects(oid))
+            .map(|e| match &e.kind {
+                ContinuousEffectKind::PtModify { delta_power, .. } => *delta_power,
+            })
+            .sum();
+        Some((base + delta).max(0) as u32)
+    }
+
+    /// Effective (rules-visible) toughness of `oid`: base plus all active layer-7c effects.
+    pub fn effective_toughness(&self, oid: ObjectId) -> Option<u32> {
+        let obj = self.state.objects.get(&oid)?;
+        let base = obj.toughness? as i32;
+        let delta: i32 = self
+            .state
+            .continuous_effects
+            .iter()
+            .filter(|e| e.affects(oid))
+            .map(|e| match &e.kind {
+                ContinuousEffectKind::PtModify { delta_toughness, .. } => *delta_toughness,
+            })
+            .sum();
+        Some((base + delta).max(0) as u32)
+    }
+
+    /// CR 514.2: drain all UntilEndOfTurn continuous effects. Called from
+    /// `finish_cleanup_roll_new_turn`, after CR 514.1 discards have already completed.
+    /// `GameObject.power/toughness` hold printed base values and never need resetting.
+    fn cleanup_until_end_of_turn_creature_pt(&mut self) {
+        self.state
+            .continuous_effects
+            .retain(|e| e.duration != EffectDuration::UntilEndOfTurn);
     }
 
     /// CR 514.2: damage marked on permanents is removed during cleanup.
@@ -2229,14 +2224,24 @@ impl GameEngine {
         // PumpSelf: source permanent gets +power/+toughness until end of turn.
         if let Some((power, toughness)) = pump_self_params {
             if let Some(src_id) = top.source_permanent_id {
-                if let Some(o) = self.state.objects.get_mut(&src_id) {
-                    if o.zone == Zone::Battlefield {
-                        let p = o.power.unwrap_or(0) as i32 + power;
-                        let tt = o.toughness.unwrap_or(0) as i32 + toughness;
-                        o.power = Some(p.max(0) as u32);
-                        o.toughness = Some(tt.max(0) as u32);
-                        events.push(ev_log(format!("{spell_label} gets +{power}/+{toughness}.")));
-                    }
+                if self
+                    .state
+                    .objects
+                    .get(&src_id)
+                    .map(|o| o.zone == Zone::Battlefield)
+                    .unwrap_or(false)
+                {
+                    self.state.continuous_effects.push(ContinuousEffect {
+                        source_id: Some(src_id),
+                        affected: AffectedScope::Single(src_id),
+                        kind: ContinuousEffectKind::PtModify {
+                            delta_power: power,
+                            delta_toughness: toughness,
+                        },
+                        duration: EffectDuration::UntilEndOfTurn,
+                        timestamp: self.state.command_index,
+                    });
+                    events.push(ev_log(format!("{spell_label} gets +{power}/+{toughness}.")));
                 }
             }
             events.push(ev_log(format!("{spell_label} resolves.")));
@@ -2297,17 +2302,27 @@ impl GameEngine {
             }
             SpellEffectKind::PumpTarget { power, toughness } => {
                 if let Some(&tid) = targets.first() {
-                    let tgt = object_display_name(&self.state, &self.registry, tid);
-                    if let Some(t) = self.state.objects.get_mut(&tid) {
-                        if t.zone == Zone::Battlefield && t.is_creature(&self.registry) {
-                            let p = t.power.unwrap_or(0) as i32 + power;
-                            let tt = t.toughness.unwrap_or(0) as i32 + toughness;
-                            t.power = Some(p.max(0) as u32);
-                            t.toughness = Some(tt.max(0) as u32);
-                            events.push(ev_log(format!(
-                                "{spell_label} gives +{power}/+{toughness} to {tgt}"
-                            )));
-                        }
+                    let is_valid_target = self
+                        .state
+                        .objects
+                        .get(&tid)
+                        .map(|t| t.zone == Zone::Battlefield && t.is_creature(&self.registry))
+                        .unwrap_or(false);
+                    if is_valid_target {
+                        let tgt = object_display_name(&self.state, &self.registry, tid);
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            source_id: top.source_permanent_id,
+                            affected: AffectedScope::Single(tid),
+                            kind: ContinuousEffectKind::PtModify {
+                                delta_power: power,
+                                delta_toughness: toughness,
+                            },
+                            duration: EffectDuration::UntilEndOfTurn,
+                            timestamp: self.state.command_index,
+                        });
+                        events.push(ev_log(format!(
+                            "{spell_label} gives +{power}/+{toughness} to {tgt}"
+                        )));
                     }
                 }
             }
@@ -2466,13 +2481,8 @@ impl GameEngine {
             SpellEffectKind::ExileTargetGainLifeEqualToPower => {
                 if let Some(&tid) = targets.first() {
                     let tgt = object_display_name(&self.state, &self.registry, tid);
-                    // CR 608: read power at resolution before the object leaves the battlefield.
-                    let power = self
-                        .state
-                        .objects
-                        .get(&tid)
-                        .and_then(|o| o.power)
-                        .unwrap_or(0);
+                    // CR 608: read effective power at resolution before the object leaves.
+                    let power = self.effective_power(tid).unwrap_or(0);
                     let owner = self.state.objects.get(&tid).map(|o| o.owner);
                     let target_controller = owner.unwrap_or(controller);
                     move_object_to_zone(&mut self.state, tid, Zone::Exile)?;
@@ -2513,8 +2523,8 @@ impl GameEngine {
                         o.summoning_sick = false;
                         o.damage = 0;
                         o.deathtouch_damage = false;
-                        o.power = None;
-                        o.toughness = None;
+                        // power/toughness hold the printed base and are not cleared:
+                        // they remain valid for when the card re-enters the battlefield.
                     }
                     events.push(ev_log(format!(
                         "{spell_label} returns {tgt} to its owner's hand"
@@ -3021,19 +3031,31 @@ impl GameEngine {
     }
 
     fn apply_sbas(&mut self, out: &mut Vec<rv1::RuledEvent>) -> Result<(), EngineError> {
+        // Collect battlefield creature IDs first to avoid borrow conflict when calling
+        // effective_toughness (which borrows self.state while objects iter already borrows it).
+        let candidate_ids: Vec<ObjectId> = self
+            .state
+            .objects
+            .iter()
+            .filter(|(_, o)| o.zone == Zone::Battlefield && o.toughness.is_some())
+            .map(|(id, _)| *id)
+            .collect();
+
         let mut to_destroy = Vec::new();
-        for (&id, o) in &self.state.objects {
-            if o.zone == Zone::Battlefield {
-                if let Some(t) = o.toughness {
-                    let indestructible = o.has_keyword(&self.registry, Keyword::Indestructible);
-                    // CR 704.5f: toughness 0 — still dies even with indestructible (oracle text).
-                    if t == 0 {
-                        to_destroy.push(id);
-                    // CR 704.5g / 704.5h: lethal damage or deathtouch — blocked by indestructible.
-                    } else if !indestructible && (o.damage >= t || o.deathtouch_damage) {
-                        to_destroy.push(id);
-                    }
-                }
+        for id in candidate_ids {
+            let Some(eff_t) = self.effective_toughness(id) else {
+                continue;
+            };
+            let Some(o) = self.state.objects.get(&id) else {
+                continue;
+            };
+            let indestructible = o.has_keyword(&self.registry, Keyword::Indestructible);
+            // CR 704.5f: toughness 0 — still dies even with indestructible (oracle text).
+            if eff_t == 0 {
+                to_destroy.push(id);
+            // CR 704.5g / 704.5h: lethal damage or deathtouch — blocked by indestructible.
+            } else if !indestructible && (o.damage >= eff_t || o.deathtouch_damage) {
+                to_destroy.push(id);
             }
         }
         for id in to_destroy {
@@ -3217,26 +3239,32 @@ impl GameEngine {
                     .battlefield
                     .iter()
                     .map(|&oid| {
-                        self.state.objects.get(&oid).map_or(0, |o| {
-                            if o.is_creature(&self.registry) {
-                                o.power.unwrap_or(0)
-                            } else {
-                                0
-                            }
-                        })
+                        if self
+                            .state
+                            .objects
+                            .get(&oid)
+                            .is_some_and(|o| o.is_creature(&self.registry))
+                        {
+                            self.effective_power(oid).unwrap_or(0)
+                        } else {
+                            0
+                        }
                     })
                     .collect(),
                 battlefield_toughness: p
                     .battlefield
                     .iter()
                     .map(|&oid| {
-                        self.state.objects.get(&oid).map_or(0, |o| {
-                            if o.is_creature(&self.registry) {
-                                o.toughness.unwrap_or(0)
-                            } else {
-                                0
-                            }
-                        })
+                        if self
+                            .state
+                            .objects
+                            .get(&oid)
+                            .is_some_and(|o| o.is_creature(&self.registry))
+                        {
+                            self.effective_toughness(oid).unwrap_or(0)
+                        } else {
+                            0
+                        }
                     })
                     .collect(),
                 battlefield_damage: p
@@ -3913,6 +3941,16 @@ fn move_object_to_zone(state: &mut GameState, oid: ObjectId, z: Zone) -> Result<
         .get(&oid)
         .map(|o| o.owner)
         .ok_or(EngineError::Illegal("no object"))?;
+
+    // CR 400.7: a zone change creates a new game object. Remove any Single-target continuous
+    // effects on this object so they don't apply if the same ObjectId is reused later.
+    let leaving_battlefield = state.objects.get(&oid).map(|o| o.zone) == Some(Zone::Battlefield);
+    if leaving_battlefield && z != Zone::Battlefield {
+        state
+            .continuous_effects
+            .retain(|e| !matches!(&e.affected, AffectedScope::Single(id) if *id == oid));
+    }
+
     let idx = state.player_idx(owner).unwrap();
     let p = &mut state.players[idx];
     p.library.retain(|&x| x != oid);
@@ -4350,12 +4388,12 @@ fn spell_target_legality_error(
     match effect {
         SpellEffectKind::DestroyTarget { target: filter }
         | SpellEffectKind::DamageTarget { target: filter, .. }
-        | SpellEffectKind::TapTarget { target: filter } => {
-            if !target_filter_legal(state, registry, filter, tid, caster) {
-                return Err(EngineError::Illegal(
-                    "target must be a creature or player on the battlefield",
-                ));
-            }
+        | SpellEffectKind::TapTarget { target: filter }
+            if !target_filter_legal(state, registry, filter, tid, caster) =>
+        {
+            return Err(EngineError::Illegal(
+                "target must be a creature or player on the battlefield",
+            ));
         }
         SpellEffectKind::DestroyTargetTapped => {
             if !destroy_spell_target_legal(state, registry, tid) {
@@ -4375,19 +4413,19 @@ fn spell_target_legality_error(
         SpellEffectKind::PumpTarget { .. }
         | SpellEffectKind::ExileTarget
         | SpellEffectKind::ExileTargetGainLifeEqualToPower
-        | SpellEffectKind::ReturnTargetCreatureToHand => {
-            if !destroy_spell_target_legal(state, registry, tid) {
-                return Err(EngineError::Illegal(
-                    "target must be a creature on the battlefield",
-                ));
-            }
+        | SpellEffectKind::ReturnTargetCreatureToHand
+            if !destroy_spell_target_legal(state, registry, tid) =>
+        {
+            return Err(EngineError::Illegal(
+                "target must be a creature on the battlefield",
+            ));
         }
-        SpellEffectKind::ReturnTargetPermanentToHand => {
-            if !any_battlefield_permanent_target_legal(state, tid) {
-                return Err(EngineError::Illegal(
-                    "target must be a permanent on the battlefield",
-                ));
-            }
+        SpellEffectKind::ReturnTargetPermanentToHand
+            if !any_battlefield_permanent_target_legal(state, tid) =>
+        {
+            return Err(EngineError::Illegal(
+                "target must be a permanent on the battlefield",
+            ));
         }
         SpellEffectKind::TargetPlayerGainsLife { target: filter, .. }
         | SpellEffectKind::TargetPlayerLosesLife { target: filter, .. }
@@ -4401,17 +4439,16 @@ fn spell_target_legality_error(
                 ));
             }
         }
-        SpellEffectKind::CounterTargetSpell => {
-            // CR 115.2c: counterspells target spells, not activated/triggered abilities.
+        // CR 115.2c: counterspells target spells, not activated/triggered abilities.
+        SpellEffectKind::CounterTargetSpell
             if !state
                 .stack
                 .iter()
-                .any(|s| s.id == tid && s.ability_text.is_none())
-            {
-                return Err(EngineError::Illegal(
-                    "counter target must be a spell on the stack",
-                ));
-            }
+                .any(|s| s.id == tid && s.ability_text.is_none()) =>
+        {
+            return Err(EngineError::Illegal(
+                "counter target must be a spell on the stack",
+            ));
         }
         _ => {}
     }
