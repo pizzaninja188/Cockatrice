@@ -1,0 +1,17 @@
+(
+  id: "argothian_enchantress",
+  name: "Argothian Enchantress",
+  mana_cost: "1G",
+  types: ["Creature", "Human", "Druid"],
+  is_creature: true,
+  power: 0,
+  toughness: 1,
+  keywords: [Shroud],
+  triggered_abilities: [
+    (
+      trigger: WheneverPlayerCastsSpell(spell_type: Some(Enchantment)),
+      effect: Effect(Draw(count: 1)),
+      text: "Whenever you cast an enchantment spell, draw a card.",
+    ),
+  ],
+)

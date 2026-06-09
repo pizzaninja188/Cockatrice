@@ -55,6 +55,10 @@ pub enum Keyword {
     /// CR 702.12: this permanent can't be destroyed by lethal damage or "destroy" effects.
     /// It still dies if its toughness drops to 0 (CR 704.5f).
     Indestructible,
+    /// CR 702.18: this permanent can't be the target of spells or abilities your opponents control.
+    Hexproof,
+    /// CR 702.16: this permanent can't be the target of any spells or abilities (including yours).
+    Shroud,
 }
 
 /// Base kind for a [`TargetFilter`] — what category of object is targeted.
@@ -218,6 +222,45 @@ pub enum TriggerCondition {
     WheneverSelfDealsDamageToOpponent,
     /// At the beginning of this permanent's controller's upkeep.
     AtBeginningOfControllerUpkeep,
+    /// Whenever a player casts a spell (optionally filtered by type). Parameters control
+    /// whose casts qualify and which spell types count. Covers enchantress triggers
+    /// (Argothian Enchantress), prowess-style draw/damage (Talrand, Young Pyromancer,
+    /// Guttersnipe), and any-spell-cast watchers.
+    WheneverPlayerCastsSpell {
+        /// Whose casts trigger this ability relative to the source permanent's controller.
+        /// Defaults to `Controller` ("whenever you cast").
+        #[serde(default)]
+        caster: CastTriggerPlayer,
+        /// If `Some`, only spells of this type fire the trigger. `None` matches any spell.
+        #[serde(default)]
+        spell_type: Option<SpellTypeFilter>,
+    },
+}
+
+/// Which player's spell casts trigger a `WheneverPlayerCastsSpell` ability.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum CastTriggerPlayer {
+    /// "Whenever you cast" — only the controller of this permanent.
+    #[default]
+    Controller,
+    /// "Whenever an opponent casts" — any player who is not the controller.
+    Opponent,
+    /// "Whenever a player casts" — any player including the controller.
+    AnyPlayer,
+}
+
+/// Spell type filter for `WheneverPlayerCastsSpell`. `None` on the field means any type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SpellTypeFilter {
+    Enchantment,
+    Instant,
+    Sorcery,
+    /// Matches instants and sorceries (the most common pairing — Talrand, Young Pyromancer, etc.).
+    InstantOrSorcery,
+    Creature,
+    Artifact,
+    /// Matches any non-creature spell.
+    Noncreature,
 }
 
 /// Effect of a triggered ability. Wraps `SpellEffectKind` for the common case, plus

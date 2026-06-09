@@ -138,8 +138,28 @@ message RuledEventBatch {
   map<int32, LegalActions> legal_by_player = 2;
 }
 
+// Engine-computed targeting data for one spell or activated ability. Clients use this
+// to prevent invalid target selection before the command is sent. The engine is the
+// sole source of truth; clients must not replicate this logic from Oracle card text.
+message SpellTargets {
+  // Battlefield permanents this player may legally target with this spell/ability.
+  repeated uint32 valid_permanent_ids = 1;
+  // Stack spells this player may legally counter (CounterTargetSpell effects only).
+  repeated uint32 valid_stack_ids = 2;
+  // Whether the local player (caster/activator) is a legal player target.
+  bool can_target_self = 3;
+  // Whether each opponent is a legal player target.
+  bool can_target_opponent = 4;
+}
+
 message LegalActions {
   repeated string labels = 1;
+  // Per-hand-slot valid targets for spells that need a target. Key = engine hand slot index.
+  // Presence of a key means the spell at that slot requires a target.
+  map<uint32, SpellTargets> valid_targets_by_hand_slot = 3;
+  // Per-activated-ability valid targets. Key = (permanent_id << 32 | ability_index).
+  // Presence of a key means the ability at that index requires a target.
+  map<uint64, SpellTargets> valid_targets_by_ability = 4;
 }
 
 // Servatrice-injected each ruled broadcast: engine hand slot index -> Server_Card.id for that player,

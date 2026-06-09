@@ -122,6 +122,11 @@ const EMBEDDED_RON_CHUNKS: &[&str] = &[
     include_str!("../data/murder.ron"),
     // Indestructible
     include_str!("../data/darksteel_myr.ron"),
+    // Hexproof / Shroud
+    include_str!("../data/gladecover_scout.ron"),
+    include_str!("../data/argothian_enchantress.ron"),
+    // Enchantment (used to exercise enchantment-cast triggers)
+    include_str!("../data/exploration.ron"),
 ];
 
 #[cfg(test)]

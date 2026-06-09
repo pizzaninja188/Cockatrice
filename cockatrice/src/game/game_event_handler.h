@@ -107,6 +107,19 @@ private:
     QHash<quint32, bool> engineOidHaste;
     // Engine ObjectId -> trample keyword (CR 702.19) from BattlefieldObjectMap entries.
     QHash<quint32, bool> engineOidTrample;
+
+    // Engine-authoritative targeting data, refreshed from LegalActions each RuledEventBatch.
+    // Replaces all Oracle/card-name-based target filtering in the client.
+    struct SpellTargetData {
+        QSet<quint32> validPermanentIds;
+        QSet<quint32> validStackIds;
+        bool canTargetSelf = false;
+        bool canTargetOpponent = false;
+    };
+    // Key = engine hand slot index. Presence of a key means the spell needs a target.
+    QHash<int, SpellTargetData> ruledValidTargetsByHandSlot;
+    // Key = (permanentOid << 32 | abilityIndex). Presence means the ability needs a target.
+    QHash<quint64, SpellTargetData> ruledValidTargetsByAbility;
     // Engine ObjectId -> marked damage currently shown in ruled ZoneView.
     QHash<quint32, int> engineOidMarkedDamage;
     // From ZoneViewSync battlefield_power / battlefield_toughness (ruled creatures).
@@ -251,6 +264,47 @@ public:
     [[nodiscard]] bool isEngineOidTrample(quint32 engineOid) const
     {
         return engineOidTrample.value(engineOid, false);
+    }
+    // Spell targeting queries (keyed by engine hand slot).
+    [[nodiscard]] bool isValidSpellTarget(int handSlot, quint32 oid) const
+    {
+        const auto it = ruledValidTargetsByHandSlot.constFind(handSlot);
+        return it != ruledValidTargetsByHandSlot.constEnd() && it->validPermanentIds.contains(oid);
+    }
+    [[nodiscard]] bool isValidSpellStackTarget(int handSlot, quint32 oid) const
+    {
+        const auto it = ruledValidTargetsByHandSlot.constFind(handSlot);
+        return it != ruledValidTargetsByHandSlot.constEnd() && it->validStackIds.contains(oid);
+    }
+    [[nodiscard]] bool canSpellTargetSelf(int handSlot) const
+    {
+        return ruledValidTargetsByHandSlot.value(handSlot).canTargetSelf;
+    }
+    [[nodiscard]] bool canSpellTargetOpponent(int handSlot) const
+    {
+        return ruledValidTargetsByHandSlot.value(handSlot).canTargetOpponent;
+    }
+    // Activated ability targeting queries. Key encodes (permanentOid << 32 | abilityIndex).
+    static quint64 abilityTargetKey(quint32 permanentOid, int abilityIndex)
+    {
+        return (static_cast<quint64>(permanentOid) << 32) | static_cast<quint64>(abilityIndex);
+    }
+    [[nodiscard]] bool abilityNeedsTarget(quint32 permanentOid, int abilityIndex) const
+    {
+        return ruledValidTargetsByAbility.contains(abilityTargetKey(permanentOid, abilityIndex));
+    }
+    [[nodiscard]] bool isValidAbilityTarget(quint32 permanentOid, int abilityIndex, quint32 targetOid) const
+    {
+        const auto it = ruledValidTargetsByAbility.constFind(abilityTargetKey(permanentOid, abilityIndex));
+        return it != ruledValidTargetsByAbility.constEnd() && it->validPermanentIds.contains(targetOid);
+    }
+    [[nodiscard]] bool canAbilityTargetSelf(quint32 permanentOid, int abilityIndex) const
+    {
+        return ruledValidTargetsByAbility.value(abilityTargetKey(permanentOid, abilityIndex)).canTargetSelf;
+    }
+    [[nodiscard]] bool canAbilityTargetOpponent(quint32 permanentOid, int abilityIndex) const
+    {
+        return ruledValidTargetsByAbility.value(abilityTargetKey(permanentOid, abilityIndex)).canTargetOpponent;
     }
     [[nodiscard]] int markedDamageForEngineOid(quint32 engineOid) const
     {

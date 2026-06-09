@@ -7052,3 +7052,181 @@ fn targeted_trigger_resolves_after_target_chosen() {
         "Grizzly Bears must die to Flametongue Kavu's ETB trigger"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Hexproof / Shroud (CR 702.18 / CR 702.16)
+// ---------------------------------------------------------------------------
+
+/// CR 702.18: Gladecover Scout has hexproof — an opponent cannot target it with
+/// Lightning Bolt. The cast attempt must be rejected as illegal.
+#[test]
+fn hexproof_opponent_cannot_target_with_spell() {
+    // 14-card decks so library is never empty after the opening hand + draw step.
+    let p0_deck: Vec<String> = std::iter::once("lightning_bolt".into())
+        .chain(std::iter::repeat_n("mountain".into(), 13))
+        .collect();
+    let p1_deck: Vec<String> = std::iter::repeat_n("mountain".into(), 14).collect();
+    let decks = Some(vec![p0_deck, p1_deck]);
+    let mut e = GameEngine::new(9001, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Inject Gladecover Scout (1/1 hexproof) directly onto P1's battlefield.
+    let scout = inject_creature_with_stats(&mut e, 1, "gladecover_scout", 1, 1);
+
+    // Give P0 one red mana (Lightning Bolt costs R) by tapping a Mountain.
+    let mtn_idx = hand_index_for_card(&e, 0, "mountain");
+    e.apply_command(0, &play_land(mtn_idx)).expect("play mountain");
+    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
+        .expect("add mana");
+
+    // Ensure Lightning Bolt is in P0's hand (may be in library depending on seed).
+    if !e.state.players[0].hand.iter().any(|oid| {
+        e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some("lightning_bolt")
+    }) {
+        take_card_from_library_to_hand(&mut e, 0, "lightning_bolt");
+    }
+
+    let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
+    let result = e.apply_command(
+        0,
+        &cast_spell(bolt_idx, vec![TargetRef { object_id: scout }]),
+    );
+    assert!(
+        result.is_err(),
+        "CR 702.18: opponent must not be able to target a hexproof permanent with a spell"
+    );
+}
+
+/// CR 702.18: a player CAN target their own hexproof permanent (hexproof only
+/// protects against opponents). Giant Growth on your own Gladecover Scout is legal.
+#[test]
+fn hexproof_controller_can_target_own_permanent() {
+    let p0_deck: Vec<String> = std::iter::once("giant_growth".into())
+        .chain(std::iter::repeat_n("forest".into(), 13))
+        .collect();
+    let p1_deck: Vec<String> = std::iter::repeat_n("mountain".into(), 14).collect();
+    let decks = Some(vec![p0_deck, p1_deck]);
+    let mut e = GameEngine::new(9002, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Inject Gladecover Scout (1/1 hexproof) directly onto P0's battlefield.
+    let scout = inject_creature_with_stats(&mut e, 0, "gladecover_scout", 1, 1);
+
+    let forest_idx = hand_index_for_card(&e, 0, "forest");
+    e.apply_command(0, &play_land(forest_idx)).expect("play forest");
+    e.apply_command(0, &add_mana_to_pool(AddManaToPool { g: 1, ..Default::default() }))
+        .expect("add mana");
+
+    // Ensure Giant Growth is in P0's hand.
+    if !e.state.players[0].hand.iter().any(|oid| {
+        e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some("giant_growth")
+    }) {
+        take_card_from_library_to_hand(&mut e, 0, "giant_growth");
+    }
+
+    let gg_idx = hand_index_for_card(&e, 0, "giant_growth");
+    e.apply_command(0, &cast_spell(gg_idx, vec![TargetRef { object_id: scout }]))
+        .expect("CR 702.18: controller can target own hexproof creature");
+
+    // Resolve the pump.
+    pass_both_players(&mut e);
+
+    assert_eq!(
+        e.effective_power(scout),
+        Some(4),
+        "Giant Growth (+3/+3) must pump Gladecover Scout from 1 to 4 effective power"
+    );
+}
+
+/// CR 702.16: Argothian Enchantress has shroud — even its controller cannot
+/// target it with a spell. Giant Growth targeting the Enchantress must be rejected.
+#[test]
+fn shroud_controller_cannot_target_own_permanent() {
+    let p0_deck: Vec<String> = std::iter::once("giant_growth".into())
+        .chain(std::iter::repeat_n("forest".into(), 13))
+        .collect();
+    let p1_deck: Vec<String> = std::iter::repeat_n("mountain".into(), 14).collect();
+    let decks = Some(vec![p0_deck, p1_deck]);
+    let mut e = GameEngine::new(9003, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Inject Argothian Enchantress (0/1 shroud) directly onto P0's battlefield.
+    let enchantress = inject_creature_with_stats(&mut e, 0, "argothian_enchantress", 0, 1);
+
+    let forest_idx = hand_index_for_card(&e, 0, "forest");
+    e.apply_command(0, &play_land(forest_idx)).expect("play forest");
+    e.apply_command(0, &add_mana_to_pool(AddManaToPool { g: 1, ..Default::default() }))
+        .expect("add mana");
+
+    // Ensure Giant Growth is in P0's hand.
+    if !e.state.players[0].hand.iter().any(|oid| {
+        e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some("giant_growth")
+    }) {
+        take_card_from_library_to_hand(&mut e, 0, "giant_growth");
+    }
+
+    let gg_idx = hand_index_for_card(&e, 0, "giant_growth");
+    let result = e.apply_command(
+        0,
+        &cast_spell(gg_idx, vec![TargetRef { object_id: enchantress }]),
+    );
+    assert!(
+        result.is_err(),
+        "CR 702.16: controller must not be able to target a shroud permanent with a spell"
+    );
+}
+
+/// CR 603.2 + Argothian Enchantress: casting an enchantment spell triggers a draw.
+/// Scenario: P0 controls an Argothian Enchantress; P0 casts Exploration (a green
+/// enchantment). The trigger fires and puts a Draw(1) on the stack, which resolves
+/// and increases P0's hand size by one.
+#[test]
+fn argothian_enchantress_triggers_on_enchantment_cast() {
+    // 14-card decks so library is never empty after the opening hand + draw step.
+    let p0_deck: Vec<String> = std::iter::once("exploration".into())
+        .chain(std::iter::repeat_n("forest".into(), 13))
+        .collect();
+    let p1_deck: Vec<String> = std::iter::repeat_n("mountain".into(), 14).collect();
+    let decks = Some(vec![p0_deck, p1_deck]);
+    let mut e = GameEngine::new(9004, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Inject Argothian Enchantress onto P0's battlefield (no summoning sickness needed).
+    inject_creature_with_stats(&mut e, 0, "argothian_enchantress", 0, 1);
+
+    // Play a Forest for mana.
+    let forest_idx = hand_index_for_card(&e, 0, "forest");
+    e.apply_command(0, &play_land(forest_idx)).expect("play forest");
+    e.apply_command(0, &add_mana_to_pool(AddManaToPool { g: 1, ..Default::default() }))
+        .expect("add mana");
+
+    // Ensure Exploration is in P0's hand.
+    if !e.state.players[0].hand.iter().any(|oid| {
+        e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some("exploration")
+    }) {
+        take_card_from_library_to_hand(&mut e, 0, "exploration");
+    }
+
+    let hand_before = e.state.players[0].hand.len();
+
+    let expl_idx = hand_index_for_card(&e, 0, "exploration");
+    e.apply_command(0, &cast_spell(expl_idx, vec![])).expect("cast Exploration");
+
+    // Both Exploration and the enchantress draw trigger must be on the stack.
+    assert!(
+        e.state.stack.len() >= 2,
+        "Exploration and its triggered Draw must both be on the stack"
+    );
+
+    // Resolve the draw trigger (top of stack) — P0 draws one card.
+    // Net hand change: -1 for casting Exploration, +1 for trigger draw = 0 vs hand_before.
+    pass_both_players(&mut e);
+    assert_eq!(
+        e.state.players[0].hand.len(),
+        hand_before,
+        "Argothian Enchantress trigger must draw exactly one card on enchantment cast (net hand = hand_before)"
+    );
+
+    // Resolve Exploration itself.
+    pass_both_players(&mut e);
+}

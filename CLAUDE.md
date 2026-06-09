@@ -66,7 +66,23 @@ Small diffs; preserve legacy paths unless migrating is the task.
 
 The custom tier is narrow by design. When in doubt, ask: *can I describe this effect completely with `(effect_kind, parameters)`?* If yes, it's a primitive.
 
+**Design primitives for reuse, not for the card at hand.** When adding a new `SpellEffectKind`, `TriggerCondition`, `AbilityCost`, or `Keyword`, always ask: *what is the most general parameterization that covers the current card AND the next 5–10 similar cards?* A specific single-card variant (e.g. `WheneverControllerCastsEnchantmentSpell`) is a missed opportunity; a parameterized one (e.g. `WheneverPlayerCastsSpell { caster, spell_type }`) serves Argothian Enchantress, Talrand, Young Pyromancer, and Guttersnipe from the same code path. Concrete rule: before committing a new primitive, name at least two real MTG cards it covers; if you can only name one, widen the parameters until you can name two.
+
 **Before building the custom tier**, clean up `TriggeredEffect::PumpSelf` — it exists only because triggered effects can't reference self as a target. Add `TargetKind::Self_` to `TargetFilter`, express pump-self as a normal `PumpTarget` with a self-filter, and collapse `TriggeredEffect` into plain `SpellEffectKind`. Then a future `SpellEffectKind::Custom(...)` variant serves spells, activated abilities, and triggered abilities uniformly.
+
+### Engine functions and data structures — same generality rule
+
+The reuse principle that governs primitives applies equally to engine infrastructure: `engine.rs` helpers, proto fields, `GameState` extensions, and `LegalActions` entries.
+
+**Before adding a new engine function or proto field**, ask: *what is the most general form that covers the current need AND the next 2–3 similar features?* A function scoped to a single mechanic is a missed opportunity. Examples:
+
+- `compute_spell_targets` / `fill_legal` are correct: they iterate all objects and players through the existing legality functions uniformly, so every targeted spell and every targeted activated ability gets coverage from the same code path — not a per-card check.
+- A hypothetical `fill_lightning_bolt_targets` or `non_targetable_permanent_ids` would be wrong: they embed a mechanic-specific view into general infrastructure.
+- A proto field like `hexproof_permanent_ids` in `LegalActions` is wrong; the field `valid_targets_by_hand_slot` (a map from hand slot to full inclusion set) is correct because it scales to any number of targeted spells without a new field per mechanic.
+
+**Concrete rule**: before adding a new field to `LegalActions`, `GameState`, or a shared proto message, name at least two distinct game mechanics that will use it. If only one mechanic would use it, the field is probably too specific — either generalize the key/value type or fold the information into an existing structure.
+
+**Engine helpers follow the same parameterization discipline as primitives.** A helper that takes `effects: &[SpellEffectKind]` and a `caster: PlayerId` can serve spells, activated abilities, and (eventually) triggered abilities. A helper that takes `card_name: &str` and branches on it belongs in neither the engine nor the card layer.
 
 ---
 

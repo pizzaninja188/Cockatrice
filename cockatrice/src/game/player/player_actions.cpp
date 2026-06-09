@@ -43,32 +43,6 @@
 static constexpr int MOVE_TOP_CARD_UNTIL_INTERVAL = 100;
 
 namespace {
-/**
- * Ruled-mode object targeting for the pending spell. Player targets use a separate path
- * (`tryHandleRuledSpellTargetPlayerClick`). Must stay aligned with tricerules `validate_spell_targets`.
- */
-bool ruledObjectTargetLegalForPendingSpell(const QString &spellName, const CardItem *targetCard)
-{
-    if (!targetCard || !targetCard->getZone()) {
-        return false;
-    }
-    const QString zoneName = targetCard->getZone()->getName();
-    const QString typeLine = targetCard->getCardInfo().getCardType();
-    const bool isCreature = typeLine.contains(QStringLiteral("Creature"), Qt::CaseInsensitive);
-
-    const QString sn = spellName.trimmed();
-    if (sn.compare(QStringLiteral("Counterspell"), Qt::CaseInsensitive) == 0) {
-        return zoneName == ZoneNames::STACK;
-    }
-    // Any battlefield permanent (creatures, lands, etc.): broad bounce like Boomerang.
-    if (sn.compare(QStringLiteral("Boomerang"), Qt::CaseInsensitive) == 0) {
-        return zoneName == ZoneNames::TABLE;
-    }
-    // Default for other ruled instants/sorceries that required a target: battlefield creatures only.
-    // (Lightning Bolt, Giant Growth, Go for the Throat, Swords to Plowshares, Eyeblight's Ending,
-    // Unsummon, etc.)
-    return zoneName == ZoneNames::TABLE && isCreature;
-}
 
 // Builds a Command_RuledPayload that decrements the engine's mana pool by 1 for the given counter
 // color. Returns nullptr if the counter name doesn't map to a known mana color (nothing to send).
@@ -1004,15 +978,11 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
     }
 
     const QString zoneName = card->getZone()->getName();
-    if (zoneName != ZoneNames::TABLE && zoneName != ZoneNames::STACK) {
+    const bool isOnBattlefield = (zoneName == ZoneNames::TABLE);
+    const bool isOnStack = (zoneName == ZoneNames::STACK);
+    if (!isOnBattlefield && !isOnStack) {
         player->getGame()->getGameEventHandler()->emitLocalRuledLog(
-            tr("Select a target on the battlefield (or stack), or press Cancel.")
-                .arg(pendingRuledSpellCast.cardName));
-        return true;
-    }
-    if (!ruledObjectTargetLegalForPendingSpell(pendingRuledSpellCast.cardName, card)) {
-        player->getGame()->getGameEventHandler()->emitLocalRuledLog(
-            tr("That is not a legal target for %1.").arg(pendingRuledSpellCast.cardName));
+            tr("Select a target on the battlefield (or stack), or press Cancel."));
         return true;
     }
 
@@ -1023,6 +993,14 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
         player->getGame()->getGameEventHandler()->emitLocalRuledLog(
             tr("That target is not selectable yet. Select another target or cancel %1.")
                 .arg(pendingRuledSpellCast.cardName));
+        return true;
+    }
+    const int slot = pendingRuledSpellCast.handIndex;
+    const bool valid = isOnBattlefield ? handler->isValidSpellTarget(slot, targetOid)
+                                       : handler->isValidSpellStackTarget(slot, targetOid);
+    if (!valid) {
+        player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+            tr("That is not a legal target for %1.").arg(pendingRuledSpellCast.cardName));
         return true;
     }
 
@@ -1047,42 +1025,6 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
 
 namespace
 {
-// Must stay aligned with tricerules `validate_spell_targets`:
-// spells whose sole target is a player (or that accept a player as one of multiple
-// legal target kinds, like Lightning Bolt) are listed here.
-bool spellAcceptsPlayerTarget(const QString &spellName)
-{
-    const QString sn = spellName.trimmed();
-    static const QStringList playerTargetSpells = {
-        QStringLiteral("Lightning Bolt"), QStringLiteral("Bump in the Night"),
-        QStringLiteral("Tome Scour"),     QStringLiteral("Mind Sculpt"),
-        QStringLiteral("Healing Salve"),
-    };
-    for (const QString &name : playerTargetSpells) {
-        if (sn.compare(name, Qt::CaseInsensitive) == 0) {
-            return true;
-        }
-    }
-    return false;
-}
-
-// Subset of player-target spells that may NOT target their controller. Bump in the Night is
-// Oracle "Target opponent"; Mind Sculpt is restricted to opponents in this engine build
-// (Tome Scour stays any-player, matching Oracle "target player").
-bool spellIsOpponentOnly(const QString &spellName)
-{
-    const QString sn = spellName.trimmed();
-    static const QStringList opponentOnlySpells = {
-        QStringLiteral("Bump in the Night"),
-        QStringLiteral("Mind Sculpt"),
-    };
-    for (const QString &name : opponentOnlySpells) {
-        if (sn.compare(name, Qt::CaseInsensitive) == 0) {
-            return true;
-        }
-    }
-    return false;
-}
 } // namespace
 
 bool PlayerActions::isAwaitingRuledPlayerTargetSelection() const
@@ -1090,7 +1032,12 @@ bool PlayerActions::isAwaitingRuledPlayerTargetSelection() const
     if (!pendingRuledSpellCast.valid || !pendingRuledSpellCast.waitingForTarget) {
         return false;
     }
-    return spellAcceptsPlayerTarget(pendingRuledSpellCast.cardName);
+    auto *handler = player->getGame()->getGameEventHandler();
+    if (!handler) {
+        return false;
+    }
+    const int slot = pendingRuledSpellCast.handIndex;
+    return handler->canSpellTargetSelf(slot) || handler->canSpellTargetOpponent(slot);
 }
 
 bool PlayerActions::isAwaitingRuledAbilityOrTriggerPlayerTarget() const
@@ -1123,12 +1070,17 @@ bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
         return true;
     }
 
-    // Mirror tricerules `validate_spell_targets`: opponent-only spells must reject
-    // a click on the caster so we don't begin mana payment for an illegal target.
-    if (spellIsOpponentOnly(pendingRuledSpellCast.cardName) &&
-        targetPlayerId == player->getPlayerInfo()->getId()) {
+    auto *handler = player->getGame()->getGameEventHandler();
+    const int slot = pendingRuledSpellCast.handIndex;
+    const bool isSelf = (targetPlayerId == player->getPlayerInfo()->getId());
+    if (isSelf && !handler->canSpellTargetSelf(slot)) {
         player->getGame()->getGameEventHandler()->emitLocalRuledLog(
             tr("%1 must target an opponent.").arg(pendingRuledSpellCast.cardName));
+        return true;
+    }
+    if (!isSelf && !handler->canSpellTargetOpponent(slot)) {
+        player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+            tr("%1 cannot target opponents.").arg(pendingRuledSpellCast.cardName));
         return true;
     }
 
@@ -3211,8 +3163,8 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card)
         return true;
     }
 
-    // Determine if this ability needs a target (contains "target" in text, case-insensitive).
-    const bool needsTarget = chosen->text().contains(QStringLiteral("target"), Qt::CaseInsensitive);
+    // Engine-authoritative: ability slot key present in valid_targets_by_ability means it needs a target.
+    const bool needsTarget = handler->abilityNeedsTarget(oid, abilityIndex);
 
     // Look up the mana cost from the engine-supplied cost string (e.g. "4", "R", "").
     // This comes directly from AbilityCost in the tricerules registry — no text parsing.
@@ -3304,6 +3256,12 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
         handler->emitLocalRuledLog(tr("That target is not selectable yet."));
         return true;
     }
+    if (!handler->isValidAbilityTarget(pendingActivatedAbility.permanentOid,
+                                       pendingActivatedAbility.abilityIndex, targetOid)) {
+        handler->emitLocalRuledLog(
+            tr("That is not a legal target for: %1").arg(pendingActivatedAbility.abilityText));
+        return true;
+    }
 
     pendingActivatedAbility.selectedTargetOid = targetOid;
     pendingActivatedAbility.waitingForTarget = false;
@@ -3350,6 +3308,20 @@ bool PlayerActions::tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer)
         return false;
     }
     const quint32 targetOid = static_cast<quint32>(targetPlayer->getPlayerInfo()->getId());
+    const quint32 selfOid = static_cast<quint32>(player->getPlayerInfo()->getId());
+    const bool isSelf = (targetOid == selfOid);
+    const quint32 permOid = pendingActivatedAbility.permanentOid;
+    const int abilityIdx = pendingActivatedAbility.abilityIndex;
+    if (isSelf && !handler->canAbilityTargetSelf(permOid, abilityIdx)) {
+        handler->emitLocalRuledLog(
+            tr("You cannot target yourself with: %1").arg(pendingActivatedAbility.abilityText));
+        return true;
+    }
+    if (!isSelf && !handler->canAbilityTargetOpponent(permOid, abilityIdx)) {
+        handler->emitLocalRuledLog(
+            tr("You cannot target that player with: %1").arg(pendingActivatedAbility.abilityText));
+        return true;
+    }
     pendingActivatedAbility.selectedTargetOid = targetOid;
     pendingActivatedAbility.waitingForTarget = false;
     emit ruledActivatedAbilityTargetPendingChanged(false, {});

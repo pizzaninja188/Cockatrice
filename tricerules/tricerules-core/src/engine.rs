@@ -8,11 +8,11 @@ use prost::Message;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use thiserror::Error;
 use tricerules_cards::primitives::{
-    AbilityCost, ContinuousEffectKind, EffectDuration, Keyword, SpellEffectKind, TargetFilter,
-    TargetKind, TriggerCondition, TriggeredEffect,
+    AbilityCost, CastTriggerPlayer, ContinuousEffectKind, EffectDuration, Keyword,
+    SpellEffectKind, SpellTypeFilter, TargetFilter, TargetKind, TriggerCondition, TriggeredEffect,
 };
 use tricerules_cards::CardRegistry;
 use tricerules_proto::ruled::v1 as rv1;
@@ -97,6 +97,8 @@ enum GameEvent {
     Attacks { attacker_ids: Vec<ObjectId> },
     CombatDamageToPlayer { attacker_id: ObjectId, defender_id: PlayerId },
     UpkeepBegin,
+    /// Fired when a spell is put on the stack (CR 601.2; triggers on cast, not resolution).
+    SpellCast { caster: PlayerId, card_id: String },
 }
 
 pub struct GameEngine {
@@ -2701,6 +2703,8 @@ impl GameEngine {
         self.state.priority_idx = idx;
 
         let def_name = def.name.clone();
+        // Clone card_id before the mutable batch; def was already dropped at pay_mana_simple.
+        let cast_card_id = card_id.clone();
         let mut batch = RuledEventBatch::default();
         batch.events.push(ev_log(format!(
             "P{} casts {}{}",
@@ -2714,6 +2718,7 @@ impl GameEngine {
                 ability_annotation: String::new(),
             })),
         });
+        self.fire_triggers(GameEvent::SpellCast { caster: player, card_id: cast_card_id }, &mut batch.events);
         batch.events.push(ev_priority_changed(self));
         fill_legal(&mut batch, self);
         Ok(batch)
@@ -3508,6 +3513,52 @@ impl GameEngine {
                     })
                     .collect()
             }
+            GameEvent::SpellCast { caster, card_id: cast_card_id } => {
+                let cast_def = self.registry.get(cast_card_id);
+                let is_enchantment = cast_def.map(|d| d.is_enchantment).unwrap_or(false);
+                let is_instant = cast_def.map(|d| d.is_instant).unwrap_or(false);
+                let is_sorcery = cast_def.map(|d| d.is_sorcery).unwrap_or(false);
+                let is_creature = cast_def.map(|d| d.is_creature).unwrap_or(false);
+                let is_artifact = cast_def.map(|d| d.is_artifact).unwrap_or(false);
+
+                let all_oids: Vec<ObjectId> = self.state.objects.keys().copied().collect();
+                all_oids
+                    .iter()
+                    .flat_map(|&oid| {
+                        let Some(obj) = self.state.objects.get(&oid) else { return vec![] };
+                        if obj.zone != Zone::Battlefield {
+                            return vec![];
+                        }
+                        let source_controller = obj.owner;
+                        let card_id = obj.card_id.clone();
+                        self.matching_triggered_abilities(&card_id, oid, source_controller, |tc| {
+                            let TriggerCondition::WheneverPlayerCastsSpell { caster: caster_filter, spell_type } = tc else {
+                                return false;
+                            };
+                            // Check caster matches.
+                            let caster_ok = match caster_filter {
+                                CastTriggerPlayer::Controller => *caster == source_controller,
+                                CastTriggerPlayer::Opponent => *caster != source_controller,
+                                CastTriggerPlayer::AnyPlayer => true,
+                            };
+                            if !caster_ok {
+                                return false;
+                            }
+                            // Check spell type matches.
+                            match spell_type {
+                                None => true,
+                                Some(SpellTypeFilter::Enchantment) => is_enchantment,
+                                Some(SpellTypeFilter::Instant) => is_instant,
+                                Some(SpellTypeFilter::Sorcery) => is_sorcery,
+                                Some(SpellTypeFilter::InstantOrSorcery) => is_instant || is_sorcery,
+                                Some(SpellTypeFilter::Creature) => is_creature,
+                                Some(SpellTypeFilter::Artifact) => is_artifact,
+                                Some(SpellTypeFilter::Noncreature) => !is_creature,
+                            }
+                        })
+                    })
+                    .collect()
+            }
         }
     }
 
@@ -3655,10 +3706,104 @@ fn default_deck_list(player_index: usize) -> Vec<String> {
     }
 }
 
+/// Compute `SpellTargets` for a spell or activated ability — which objects/players `caster`
+/// can legally send this set of effects at, given the current game state. Only effects that
+/// need a target are considered; non-targeted effects in the same spell are ignored.
+fn compute_spell_targets(
+    state: &GameState,
+    registry: &CardRegistry,
+    caster: PlayerId,
+    effects: &[SpellEffectKind],
+) -> rv1::SpellTargets {
+    let mut valid_permanent_ids = Vec::new();
+    let mut valid_stack_ids = Vec::new();
+    let mut can_target_self = false;
+    let mut can_target_opponent = false;
+
+    for obj in state.objects.values() {
+        let legal = effects
+            .iter()
+            .filter(|e| spell_effect_kind_needs_target(e))
+            .all(|e| spell_target_legality_error(state, registry, e, obj.id, caster).is_ok());
+        if legal {
+            match obj.zone {
+                Zone::Battlefield => valid_permanent_ids.push(obj.id),
+                Zone::Stack => valid_stack_ids.push(obj.id),
+                _ => {}
+            }
+        }
+    }
+
+    for p in &state.players {
+        if p.has_lost {
+            continue;
+        }
+        let tid = p.id as ObjectId;
+        let legal = effects
+            .iter()
+            .filter(|e| spell_effect_kind_needs_target(e))
+            .all(|e| spell_target_legality_error(state, registry, e, tid, caster).is_ok());
+        if legal {
+            if p.id == caster {
+                can_target_self = true;
+            } else {
+                can_target_opponent = true;
+            }
+        }
+    }
+
+    rv1::SpellTargets { valid_permanent_ids, valid_stack_ids, can_target_self, can_target_opponent }
+}
+
 fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
     for p in &eng.state.players {
         let labels = legal_labels(eng, p.id);
-        batch.legal_by_player.insert(p.id, LegalActions { labels });
+        let mut valid_targets_by_hand_slot = BTreeMap::new();
+        let mut valid_targets_by_ability = BTreeMap::new();
+
+        if let Some(idx) = eng.state.player_idx(p.id) {
+            // Spell targets: one entry per hand slot whose spell needs a target.
+            for (slot, &oid) in eng.state.players[idx].hand.iter().enumerate() {
+                let Some(obj) = eng.state.objects.get(&oid) else { continue };
+                let Some(def) = eng.registry.get(&obj.card_id) else { continue };
+                if def.is_land {
+                    continue;
+                }
+                if def.spell_effect.iter().any(spell_effect_kind_needs_target) {
+                    let targets = compute_spell_targets(
+                        &eng.state,
+                        &eng.registry,
+                        p.id,
+                        &def.spell_effect,
+                    );
+                    valid_targets_by_hand_slot.insert(slot as u32, targets);
+                }
+            }
+
+            // Ability targets: one entry per (permanent, ability_index) pair where the
+            // ability needs a target. Key encodes (permanent_oid << 32 | ability_index).
+            for &poid in &eng.state.players[idx].battlefield {
+                let Some(pobj) = eng.state.objects.get(&poid) else { continue };
+                let Some(pdef) = eng.registry.get(&pobj.card_id) else { continue };
+                for (ai, ability) in pdef.activated_abilities.iter().enumerate() {
+                    if spell_effect_kind_needs_target(&ability.effect) {
+                        let targets = compute_spell_targets(
+                            &eng.state,
+                            &eng.registry,
+                            p.id,
+                            std::slice::from_ref(&ability.effect),
+                        );
+                        let key = (poid as u64) << 32 | ai as u64;
+                        valid_targets_by_ability.insert(key, targets);
+                    }
+                }
+            }
+        }
+
+        batch.legal_by_player.insert(
+            p.id,
+            LegalActions { labels, valid_targets_by_hand_slot, valid_targets_by_ability },
+        );
     }
 }
 
@@ -4104,6 +4249,29 @@ fn any_battlefield_permanent_target_legal(state: &GameState, tid: ObjectId) -> b
         .is_some_and(|o| o.zone == Zone::Battlefield)
 }
 
+/// CR 702.16 / CR 702.18: returns false when `tid` is a permanent that the `caster` cannot
+/// legally target due to Shroud or Hexproof. Players are never shielded by these keywords.
+fn object_targetable_by(
+    state: &GameState,
+    registry: &CardRegistry,
+    tid: ObjectId,
+    caster: PlayerId,
+) -> bool {
+    let Some(obj) = state.objects.get(&tid) else {
+        return true; // object gone — legality checked elsewhere
+    };
+    let Some(def) = registry.get(&obj.card_id) else {
+        return true;
+    };
+    if def.keywords.contains(&Keyword::Shroud) {
+        return false;
+    }
+    if def.keywords.contains(&Keyword::Hexproof) && obj.owner != caster {
+        return false;
+    }
+    true
+}
+
 /// Legality of a single target against a [`TargetFilter`].
 /// `caster` is needed only to enforce the opponent-only restriction.
 fn target_filter_legal(
@@ -4125,6 +4293,9 @@ fn target_filter_legal(
     }
     // Characteristic filters — only apply to non-player targets.
     if !filter.is_player() {
+        if !object_targetable_by(state, registry, tid, caster) {
+            return false;
+        }
         if filter.not_artifact {
             if let Some(obj) = state.objects.get(&tid) {
                 if registry
@@ -4189,15 +4360,21 @@ fn effect_target_legal_at_resolution(
         SpellEffectKind::DestroyTargetTapped => {
             destroy_spell_target_legal(state, registry, tid)
                 && state.objects.get(&tid).map(|o| o.tapped).unwrap_or(false)
+                && object_targetable_by(state, registry, tid, caster)
         }
-        SpellEffectKind::PumpTarget { .. } => pump_spell_target_legal(state, registry, tid),
+        SpellEffectKind::PumpTarget { .. } => {
+            pump_spell_target_legal(state, registry, tid)
+                && object_targetable_by(state, registry, tid, caster)
+        }
         SpellEffectKind::ExileTarget
         | SpellEffectKind::ExileTargetGainLifeEqualToPower
         | SpellEffectKind::ReturnTargetCreatureToHand => {
             destroy_spell_target_legal(state, registry, tid)
+                && object_targetable_by(state, registry, tid, caster)
         }
         SpellEffectKind::ReturnTargetPermanentToHand => {
             any_battlefield_permanent_target_legal(state, tid)
+                && object_targetable_by(state, registry, tid, caster)
         }
         // CR 115.2c: counterspells target spells, not activated/triggered abilities.
         SpellEffectKind::CounterTargetSpell => {
@@ -4269,6 +4446,9 @@ fn validate_effect_targets(
             {
                 return Err(EngineError::Illegal("target must be tapped"));
             }
+            if !object_targetable_by(state, registry, targets[0].object_id, caster) {
+                return Err(EngineError::Illegal("target has hexproof or shroud"));
+            }
         }
         SpellEffectKind::TapTarget { target: filter } => {
             if targets.len() != 1 {
@@ -4297,6 +4477,9 @@ fn validate_effect_targets(
                     "target must be a creature on the battlefield",
                 ));
             }
+            if !object_targetable_by(state, registry, targets[0].object_id, caster) {
+                return Err(EngineError::Illegal("target has hexproof or shroud"));
+            }
         }
         SpellEffectKind::ExileTarget
         | SpellEffectKind::ExileTargetGainLifeEqualToPower
@@ -4309,6 +4492,9 @@ fn validate_effect_targets(
                     "target must be a creature on the battlefield",
                 ));
             }
+            if !object_targetable_by(state, registry, targets[0].object_id, caster) {
+                return Err(EngineError::Illegal("target has hexproof or shroud"));
+            }
         }
         SpellEffectKind::ReturnTargetPermanentToHand => {
             if targets.len() != 1 {
@@ -4318,6 +4504,9 @@ fn validate_effect_targets(
                 return Err(EngineError::Illegal(
                     "target must be a permanent on the battlefield",
                 ));
+            }
+            if !object_targetable_by(state, registry, targets[0].object_id, caster) {
+                return Err(EngineError::Illegal("target has hexproof or shroud"));
             }
         }
         SpellEffectKind::TargetPlayerGainsLife { target: filter, .. }
@@ -4411,6 +4600,9 @@ fn spell_target_legality_error(
             {
                 return Err(EngineError::Illegal("target must be tapped"));
             }
+            if !object_targetable_by(state, registry, tid, caster) {
+                return Err(EngineError::Illegal("target has hexproof or shroud"));
+            }
         }
         SpellEffectKind::PumpTarget { .. }
         | SpellEffectKind::ExileTarget
@@ -4422,12 +4614,25 @@ fn spell_target_legality_error(
                 "target must be a creature on the battlefield",
             ));
         }
+        SpellEffectKind::PumpTarget { .. }
+        | SpellEffectKind::ExileTarget
+        | SpellEffectKind::ExileTargetGainLifeEqualToPower
+        | SpellEffectKind::ReturnTargetCreatureToHand
+            if !object_targetable_by(state, registry, tid, caster) =>
+        {
+            return Err(EngineError::Illegal("target has hexproof or shroud"));
+        }
         SpellEffectKind::ReturnTargetPermanentToHand
             if !any_battlefield_permanent_target_legal(state, tid) =>
         {
             return Err(EngineError::Illegal(
                 "target must be a permanent on the battlefield",
             ));
+        }
+        SpellEffectKind::ReturnTargetPermanentToHand
+            if !object_targetable_by(state, registry, tid, caster) =>
+        {
+            return Err(EngineError::Illegal("target has hexproof or shroud"));
         }
         SpellEffectKind::TargetPlayerGainsLife { target: filter, .. }
         | SpellEffectKind::TargetPlayerLosesLife { target: filter, .. }

@@ -1542,6 +1542,33 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             legalRuledSpellCastHandIndices = parsedCast.handIndices;
                             legalRuledSpellCastIndicesByCardName = parsedCast.handIndicesByCardName;
                             legalRuledSpellCastNeedsTargetHandIndices = parsedCast.needsTargetHandIndices;
+                            ruledValidTargetsByHandSlot.clear();
+                            for (const auto &entry : lit->second.valid_targets_by_hand_slot()) {
+                                const int slot = static_cast<int>(entry.first);
+                                const auto &src = entry.second;
+                                SpellTargetData data;
+                                for (const quint32 oid : src.valid_permanent_ids()) {
+                                    data.validPermanentIds.insert(oid);
+                                }
+                                for (const quint32 oid : src.valid_stack_ids()) {
+                                    data.validStackIds.insert(oid);
+                                }
+                                data.canTargetSelf = src.can_target_self();
+                                data.canTargetOpponent = src.can_target_opponent();
+                                ruledValidTargetsByHandSlot.insert(slot, std::move(data));
+                            }
+                            ruledValidTargetsByAbility.clear();
+                            for (const auto &entry : lit->second.valid_targets_by_ability()) {
+                                const quint64 key = static_cast<quint64>(entry.first);
+                                const auto &src = entry.second;
+                                SpellTargetData data;
+                                for (const quint32 oid : src.valid_permanent_ids()) {
+                                    data.validPermanentIds.insert(oid);
+                                }
+                                data.canTargetSelf = src.can_target_self();
+                                data.canTargetOpponent = src.can_target_opponent();
+                                ruledValidTargetsByAbility.insert(key, std::move(data));
+                            }
                             const ParsedRuledLandActions parsedCleanup = parseRuledCleanupDiscardActions(lit->second);
                             legalRuledCleanupDiscardHandIndices = parsedCleanup.handIndices;
                             legalRuledCleanupDiscardIndicesByCardName = parsedCleanup.handIndicesByCardName;

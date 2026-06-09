@@ -34,6 +34,9 @@ pub struct CardDefinition {
     /// Artifact creatures can block creatures with Intimidate regardless of color.
     #[serde(default)]
     pub is_artifact: bool,
+    /// True for enchantment cards (used to fire enchantment-cast triggers).
+    #[serde(default)]
+    pub is_enchantment: bool,
     /// Legendary supertype (for SBA: legend rule)
     #[serde(default)]
     pub is_legendary: bool,
