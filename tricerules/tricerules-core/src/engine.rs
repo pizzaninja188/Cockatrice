@@ -2157,7 +2157,9 @@ impl GameEngine {
             events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
                     object_id: top.id,
-                    destination: rv1::StackResolveDestination::Unspecified as i32,
+                    // Abilities cease to exist on resolution; graveyard tells the C++ server not to
+                    // invoke the Oracle-lookup fallback and not to expect a permanent to land.
+                    destination: rv1::StackResolveDestination::Graveyard as i32,
                 })),
             });
         } else {

@@ -32,6 +32,24 @@
 #include <libcockatrice/protocol/pb/event_set_counter.pb.h>
 #include <libcockatrice/protocol/pb/event_shuffle.pb.h>
 #include <libcockatrice/utility/zone_names.h>
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QTextStream>
+
+// ---------------------------------------------------------------------------
+// Diagnostic logger — mirrors the one in game_event_handler.cpp.
+// Remove after the spell-on-stack visibility bug is resolved.
+// ---------------------------------------------------------------------------
+static void pehDbgLog(const QString &msg)
+{
+    static const QString kPath = QDir::homePath() + QStringLiteral("/cockatrice_stack_debug.log");
+    QFile f(kPath);
+    if (f.open(QIODevice::Append | QIODevice::Text)) {
+        QTextStream ts(&f);
+        ts << QDateTime::currentDateTime().toString(Qt::ISODateWithMs) << " [PEH] " << msg << "\n";
+    }
+}
 
 namespace {
 /// Matches `isRuledModeManaPoolCounterName` in servatrice (ruled floating mana).
@@ -297,8 +315,34 @@ void PlayerEventHandler::eventMoveCard(const Event_MoveCard &event, const GameEv
             }
         }
     }
+    // --- DIAG H1/H3/H4: log every move to the stack so both clients' behaviour is visible. ---
+    const bool movingToStack = (targetZone->getName() == QLatin1String(ZoneNames::STACK));
+    if (movingToStack) {
+        const bool knownHand = startZone->getCards().getContentsKnown();
+        pehDbgLog(QStringLiteral("MoveCard→Stack startPlayer=%1 targetPlayer=%2 startZone='%3' "
+                                 "handKnown=%4 eventPos=%5 resolvedPos=%6 eventCardId=%7 newCardId=%8 "
+                                 "startZoneSize=%9 cardName='%10'")
+                      .arg(event.start_player_id())
+                      .arg(event.target_player_id())
+                      .arg(startZone->getName())
+                      .arg(knownHand)
+                      .arg(event.position())
+                      .arg(position)
+                      .arg(event.card_id())
+                      .arg(event.new_card_id())
+                      .arg(startZone->getCards().size())
+                      .arg(event.has_card_name() ? QString::fromStdString(event.card_name())
+                                                 : QStringLiteral("<none>")));
+    }
+
     CardItem *card = startZone->takeCard(position, event.card_id(), startZone != targetZone);
     if (card == nullptr) {
+        if (movingToStack) {
+            pehDbgLog(QStringLiteral("MoveCard→Stack takeCard RETURNED NULL startZone='%1' pos=%2 cardId=%3")
+                          .arg(startZone->getName())
+                          .arg(position)
+                          .arg(event.card_id()));
+        }
         return;
     }
     if (startZone != targetZone) {
@@ -344,6 +388,27 @@ void PlayerEventHandler::eventMoveCard(const Event_MoveCard &event, const GameEv
     }
 
     targetZone->addCard(card, true, x, y);
+
+    if (movingToStack) {
+        pehDbgLog(QStringLiteral("MoveCard→Stack SUCCESS card='%1' newId=%2 targetZone='%3' x=%4 stackSize=%5")
+                      .arg(card->getName())
+                      .arg(card->getId())
+                      .arg(targetZone->getName())
+                      .arg(x)
+                      .arg(targetZone->getCards().size()));
+    }
+
+    // When a spell moves INTO the stack in a ruled game, the RuledEventBatch (StackPushed)
+    // and Event_MoveCard arrive as separate messages. The QTimer scheduled by the batch may
+    // fire before this MoveCard is processed, leaving the card absent from the stack zone and
+    // the targeting arrow un-drawn. Re-sync arrows now so the arrow appears regardless of order.
+    if (startZone != targetZone &&
+        targetZone->getName() == QLatin1String(ZoneNames::STACK) &&
+        player->getGame() && player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+        if (GameEventHandler *geh = player->getGame()->getGameEventHandler()) {
+            geh->refreshRuledSpellTargetArrows();
+        }
+    }
 
     // Look at all arrows from and to the card.
     // If the card was moved to another zone, delete the arrows, otherwise update them.

@@ -29,16 +29,34 @@
 
 #include <QAction>
 #include <QCompleter>
+#include <QDateTime>
 #include <QDebug>
+#include <QDir>
 #include <QDockWidget>
+#include <QFile>
 #include <QGraphicsSceneMouseEvent>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMenu>
 #include <QMessageBox>
 #include <QStackedWidget>
+#include <QTextStream>
 #include <QTimer>
 #include <QWidget>
+
+// ---------------------------------------------------------------------------
+// Diagnostic logger — same log file as game_event_handler.cpp / player_event_handler.cpp.
+// Remove after the spell-on-stack visibility bug is resolved.
+// ---------------------------------------------------------------------------
+static void tgDbgLog(const QString &msg)
+{
+    static const QString kPath = QDir::homePath() + QStringLiteral("/cockatrice_stack_debug.log");
+    QFile f(kPath);
+    if (f.open(QIODevice::Append | QIODevice::Text)) {
+        QTextStream ts(&f);
+        ts << QDateTime::currentDateTime().toString(Qt::ISODateWithMs) << " [TG] " << msg << "\n";
+    }
+}
 #include <libcockatrice/card/database/card_database.h>
 #include <libcockatrice/card/database/card_database_manager.h>
 #include <libcockatrice/network/client/abstract/abstract_client.h>
@@ -239,6 +257,18 @@ void TabGame::connectToGameEventHandler()
             [this](bool /*hasItems*/) {
                 if (game && game->getGameMetaInfo()->proto().ruled_game()) {
                     syncStackWindowVisibility();
+                }
+            });
+    connect(game->getGameEventHandler(), &GameEventHandler::ruledStackOrderChanged, this,
+            [this](const QList<quint32> &) {
+                // Re-sort the open stack window. Event_MoveCard (which adds the physical card and
+                // fires reorganizeCards) arrives before Event_RuledPayload (which updates
+                // ruledStackOidOrder), so the first reorganize runs before the OID is registered.
+                // This signal fires after all OID updates and triggers the corrective re-sort.
+                if (stackView) {
+                    if (ZoneViewZone *zv = stackView->getZone()) {
+                        zv->reorganizeCards();
+                    }
                 }
             });
     if (gamePromptWidget) {
@@ -1022,6 +1052,21 @@ CardZoneLogic *TabGame::findVisibleStackZone() const
     CardZoneLogic *best = nullptr;
     int bestCount = -1;
     Player *localPlayer = pm->isSpectator() ? nullptr : pm->getPlayer(pm->getLocalPlayerId());
+    // --- DIAG H2/H3: log all zones and their sizes to see which one gets picked. ---
+    {
+        QString zoneInfo;
+        for (Player *p : players) {
+            if (!p || !p->getStackZone()) continue;
+            if (!zoneInfo.isEmpty()) zoneInfo += QLatin1Char(';');
+            zoneInfo += QStringLiteral("pid=%1 n=%2 isLocal=%3")
+                .arg(p->getPlayerInfo()->getId())
+                .arg(p->getStackZone()->getCards().size())
+                .arg(localPlayer == p);
+        }
+        tgDbgLog(QStringLiteral("findVisibleStackZone localPid=%1 zones=[%2]")
+                     .arg(pm->getLocalPlayerId())
+                     .arg(zoneInfo));
+    }
     for (Player *player : players) {
         if (!player || !player->getStackZone()) {
             continue;
@@ -1049,12 +1094,22 @@ CardZoneLogic *TabGame::findVisibleStackZone() const
             }
         }
     }
+    // --- DIAG H2/H3: log which zone was chosen. ---
+    {
+        const int chosenPid = (best && best->getPlayer()) ? best->getPlayer()->getPlayerInfo()->getId() : -1;
+        tgDbgLog(QStringLiteral("findVisibleStackZone → chosenPid=%1 count=%2")
+                     .arg(chosenPid)
+                     .arg(bestCount));
+    }
     return best;
 }
 
 CardItem *TabGame::findVisibleStackSpellCardItem(int serverCardId) const
 {
     if (serverCardId < 0 || !stackView) {
+        // --- DIAG H4: log when the stack window is absent or ID is invalid. ---
+        tgDbgLog(QStringLiteral("findVisibleStackSpellCardItem sid=%1 stackViewNull=%2 MISS (no window)")
+                     .arg(serverCardId).arg(stackView == nullptr));
         return nullptr;
     }
     ZoneViewZone *zv = stackView->getZone();
@@ -1065,11 +1120,18 @@ CardItem *TabGame::findVisibleStackSpellCardItem(int serverCardId) const
     if (!logic || logic->getName().compare(QStringLiteral("stack"), Qt::CaseInsensitive) != 0) {
         return nullptr;
     }
+    // --- DIAG H4: log which zone the stack window is showing and whether the card is found. ---
+    const int windowPid = logic->getPlayer() ? logic->getPlayer()->getPlayerInfo()->getId() : -1;
     for (CardItem *c : logic->getCards()) {
         if (c && c->getId() == serverCardId) {
+            tgDbgLog(QStringLiteral("findVisibleStackSpellCardItem sid=%1 windowPid=%2 HIT scenePos=(%3,%4)")
+                         .arg(serverCardId).arg(windowPid)
+                         .arg(c->scenePos().x()).arg(c->scenePos().y()));
             return c;
         }
     }
+    tgDbgLog(QStringLiteral("findVisibleStackSpellCardItem sid=%1 windowPid=%2 MISS (not in window zone)")
+                 .arg(serverCardId).arg(windowPid));
     return nullptr;
 }
 
@@ -1104,6 +1166,15 @@ void TabGame::ensureStackWindow()
     CardZoneLogic *visibleStackZone = findVisibleStackZone();
     if (!visibleStackZone) {
         return;
+    }
+
+    // --- DIAG H3: log whether we're reusing an existing window or creating a new one. ---
+    {
+        const int newPid = visibleStackZone->getPlayer() ? visibleStackZone->getPlayer()->getPlayerInfo()->getId() : -1;
+        const int oldPid = (stackViewZone && stackViewZone->getPlayer()) ? stackViewZone->getPlayer()->getPlayerInfo()->getId() : -1;
+        const bool reusing = stackView && stackViewZone == visibleStackZone;
+        tgDbgLog(QStringLiteral("ensureStackWindow reusing=%1 oldPid=%2 newPid=%3 stackViewNull=%4")
+                     .arg(reusing).arg(oldPid).arg(newPid).arg(stackView == nullptr));
     }
 
     if (stackView && stackViewZone == visibleStackZone) {

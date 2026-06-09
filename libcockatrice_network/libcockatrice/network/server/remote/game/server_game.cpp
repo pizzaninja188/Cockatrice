@@ -68,6 +68,7 @@
 #include <libcockatrice/utility/zone_names.h>
 
 namespace {
+
 /** Oracle split: full type line vs main type (Instant/Sorcery often live in maintype only). */
 static QString ruledOracleTypeBlobForServerCard(const Server_Card *card)
 {
@@ -75,6 +76,9 @@ static QString ruledOracleTypeBlobForServerCard(const Server_Card *card)
         return {};
     }
     const CardDatabaseQuerier *q = CardDatabaseManager::query();
+    if (!q) {
+        return {};
+    }
     const ExactCard exact = q->guessCard(card->getCardRef());
     if (exact) {
         const CardInfo &info = exact.getInfo();
@@ -156,16 +160,14 @@ static Server_CardZone *ruledCanonicalStackZone(Server_Game *game)
 
 /// Bind `StackPushed` to the cockatrice `Server_Card` that actually sits on the shared stack.
 /// Walk from the end of the zone list toward the bottom so the most recently moved spell wins
-/// when multiple copies share a name; if nothing matches, use the last card (expected cast).
+/// when multiple copies share a name. Returns nullptr when no name match is found — callers
+/// must not fall back to an unrelated card, since abilities have no physical card on the stack.
 static Server_Card *ruledPhysicalSpellOnCanonicalStack(Server_CardZone *stackZone, const QString &normalizedPushedName)
 {
     if (!stackZone) {
         return nullptr;
     }
     const QList<Server_Card *> &cards = stackZone->getCards();
-    if (cards.isEmpty()) {
-        return nullptr;
-    }
     for (int i = cards.size() - 1; i >= 0; --i) {
         Server_Card *c = cards.at(i);
         if (!c) {
@@ -175,7 +177,7 @@ static Server_Card *ruledPhysicalSpellOnCanonicalStack(Server_CardZone *stackZon
             return c;
         }
     }
-    return cards.last();
+    return nullptr;
 }
 
 int countCsvEntries(const std::string &csv)
@@ -1144,20 +1146,11 @@ Response::ResponseCode Server_Game::processRuledPayload(int playerId, const Comm
                     }
                 }
             } else if (ruledCmd.has_cast_spell()) {
-                // Cockatrice gives each player a stack zone, but MTG has one shared stack. Route every
-                // ruled cast onto a single canonical zone so all clients see one growing pile (and stack
-                // resolution can still find cards via ruledStackObjectIdToServerCardId).
-                Server_AbstractPlayer *canonicalStackOwner = nullptr;
-                for (Server_AbstractPlayer *ab : getPlayers().values()) {
-                    if (!ab) {
-                        continue;
-                    }
-                    if (!canonicalStackOwner || ab->getPlayerId() < canonicalStackOwner->getPlayerId()) {
-                        canonicalStackOwner = ab;
-                    }
-                }
-                Server_CardZone *stackZone =
-                    canonicalStackOwner ? canonicalStackOwner->getZones().value(ZoneNames::STACK) : nullptr;
+                // Route all spells to the canonical (lowest player-id) stack zone so every
+                // client's stack window shows the complete stack without a split view.
+                // Resolution uses ruledStackObjectIdToCasterPlayerId to send the card to the
+                // correct destination zone regardless of which physical zone it sat in.
+                Server_CardZone *stackZone = ruledCanonicalStackZone(this);
                 const int handIndex = static_cast<int>(ruledCmd.cast_spell().hand_card_index());
                 if (handZone && stackZone && handIndex >= 0 && handIndex < handZone->getCards().size()) {
                     Server_Card *card = handZone->getCards().at(handIndex);
@@ -1299,6 +1292,8 @@ void Server_Game::applyRuledStackResolvedEvent(const ruled::v1::StackResolved &s
     }
 
     // Fallback when no cast mapping exists (tokens / older batches): top of first non-empty stack.
+    // Only fires when the top card's name matches the engine description — abilities that have no
+    // physical card on the stack must not accidentally resolve an unrelated card here.
     for (Server_AbstractPlayer *ab : getPlayers().values()) {
         if (!ab) {
             continue;
@@ -1310,6 +1305,10 @@ void Server_Game::applyRuledStackResolvedEvent(const ruled::v1::StackResolved &s
         Server_Card *card = stackZone->getCards().last();
         if (!card) {
             continue;
+        }
+        if (!engineStackDescription.isEmpty() &&
+            normalizeRuledCardName(card->getName()) != normalizeRuledCardName(engineStackDescription)) {
+            break;
         }
         if (tryResolveCardOnStack(ab, stackZone, card)) {
             return;
@@ -1518,11 +1517,14 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
                         ruledStackTargetsByObjectId.insert(pushedOid, tlist);
                     }
                 }
-                // Authoritative: map engine stack oid to whichever cockatrice card is actually on the
-                // canonical stack (fixes wrong FIFO / pending ids so `findStackCardByServerId` works).
-                if (Server_CardZone *stackZone = ruledCanonicalStackZone(this)) {
-                    if (Server_Card *phys = ruledPhysicalSpellOnCanonicalStack(stackZone, normalizedPushedName)) {
-                        ruledStackObjectIdToServerCardId.insert(pushedOid, phys->getId());
+                // Authoritative: map engine stack oid to the physical card.
+                // All spells now go into the canonical zone so always look there.
+                {
+                    Server_CardZone *spellZone = ruledCanonicalStackZone(this);
+                    if (spellZone) {
+                        if (Server_Card *phys = ruledPhysicalSpellOnCanonicalStack(spellZone, normalizedPushedName)) {
+                            ruledStackObjectIdToServerCardId.insert(pushedOid, phys->getId());
+                        }
                     }
                 }
             }

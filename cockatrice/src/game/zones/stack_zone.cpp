@@ -2,14 +2,18 @@
 
 #include "../../client/settings/cache_settings.h"
 #include "../../interface/theme_manager.h"
+#include "../abstract_game.h"
 #include "../board/arrow_item.h"
 #include "../board/card_drag_item.h"
 #include "../board/card_item.h"
+#include "../game_event_handler.h"
 #include "../player/player.h"
 #include "../player/player_actions.h"
 #include "logic/stack_zone_logic.h"
 
 #include <QPainter>
+#include <algorithm>
+#include <climits>
 #include <libcockatrice/protocol/pb/command_move_card.pb.h>
 
 StackZone::StackZone(StackZoneLogic *_logic, int _zoneHeight, QGraphicsItem *parent)
@@ -91,19 +95,42 @@ void StackZone::handleDropEvent(const QList<CardDragItem *> &dragItems,
 
 void StackZone::reorganizeCards()
 {
-    if (!getLogic()->getCards().isEmpty()) {
-        const auto cardCount = static_cast<int>(getLogic()->getCards().size());
+    const CardList &rawCards = getLogic()->getCards();
+    if (!rawCards.isEmpty()) {
+        // Build a display list and sort by engine push order when in a ruled game.
+        // Index 0 = most recently pushed = resolves first. The underlying rawCards list
+        // is not reordered so that takeCard(position, id) continues to work correctly.
+        QList<CardItem *> display(rawCards.begin(), rawCards.end());
+        if (auto *ag = getLogic()->getPlayer()->getGame()) {
+            if (ag->getGameMetaInfo()->proto().ruled_game()) {
+                if (auto *geh = ag->getGameEventHandler()) {
+                    const QList<quint32> &oidOrder = geh->getRuledStackOidOrder();
+                    const int pid = getLogic()->getPlayer()->getPlayerInfo()->getId();
+                    std::sort(display.begin(), display.end(), [&](CardItem *a, CardItem *b) {
+                        int ia = static_cast<int>(oidOrder.indexOf(
+                            geh->engineOidForCardId(pid, a->getId())));
+                        int ib = static_cast<int>(oidOrder.indexOf(
+                            geh->engineOidForCardId(pid, b->getId())));
+                        if (ia < 0) ia = INT_MAX;
+                        if (ib < 0) ib = INT_MAX;
+                        return ia < ib;
+                    });
+                }
+            }
+        }
+
+        const auto cardCount = static_cast<int>(display.size());
         qreal totalWidth = boundingRect().width();
-        qreal cardWidth = getLogic()->getCards().at(0)->boundingRect().width();
+        qreal cardWidth = display.at(0)->boundingRect().width();
         qreal xspace = 5;
         qreal x1 = xspace;
         qreal x2 = totalWidth - xspace - cardWidth;
 
         for (int i = 0; i < cardCount; i++) {
-            CardItem *card = getLogic()->getCards().at(i);
+            CardItem *card = display.at(i);
             qreal x = (i % 2) ? x2 : x1;
             qreal y = divideCardSpaceInZone(i, cardCount, boundingRect().height(),
-                                            getLogic()->getCards().at(0)->boundingRect().height());
+                                            display.at(0)->boundingRect().height());
             card->setPos(x, y);
             card->setRealZValue(i);
         }

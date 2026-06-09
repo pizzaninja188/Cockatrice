@@ -136,8 +136,8 @@ private:
     QHash<quint32, quint32> committedBlocks;
     // Opponent's in-progress pairs from BlockersPreview (Servatrice); cleared on declare / phase reset.
     QHash<quint32, quint32> remoteBlockPreviewPairs;
-    // Rule-engine stack object ids currently waiting to resolve.
-    QSet<quint32> ruledStackObjectIds;
+    // Rule-engine stack object ids in push order: front = most recently pushed = resolves first (LIFO).
+    QList<quint32> ruledStackOidOrder;
     // CR 510.5: true while the engine reports a pending first-strike damage substep — i.e.
     // any attacker or blocker has First Strike / Double Strike and the substep hasn't resolved.
     // Sourced from `RuledPerPlayerView.first_strike_step_pending` on each zone-view sync.
@@ -146,12 +146,15 @@ private:
     QHash<quint32, QVector<quint32>> ruledStackTargetsByStackOid;
     // Stack ability engine ObjectId -> ability annotation text (empty string for spells).
     QHash<quint32, QString> ruledStackAnnotationByOid;
-    // Synthetic CardItems inserted into the local stack zone to represent ability stack items.
+    // Synthetic CardItems inserted into the ability controller's stack zone to represent ability stack items.
     // QPointer auto-nullifies if the CardItem is deleted outside our cleanup path, preventing crashes.
     QHash<quint32, QPointer<CardItem>> syntheticAbilityStackCards;
     // Virtual engine ObjectId -> fake server card ID used for the synthetic card's OID mapping.
     // Re-registered after every BattlefieldObjectMap clear so the italic annotation stays visible.
     QHash<quint32, int> syntheticAbilityFakeIds;
+    // Virtual engine ObjectId -> controller player ID for the synthetic ability card.
+    // The controller's zone is where the card lives; needed for OID-map registration and removal.
+    QHash<quint32, int> syntheticAbilityControllerPid;
     // Engine ObjectId (battlefield permanent) -> list of activated ability texts.
     QHash<quint32, QStringList> engineOidToActivatedAbilityTexts;
     // Engine ObjectId (battlefield permanent) -> list of mana cost strings per ability (parallel to above).
@@ -303,7 +306,11 @@ public:
     [[nodiscard]] bool hasBlockersSubmittedThisStep() const { return blockersSubmittedThisStep; }
     [[nodiscard]] bool hasRuledStackItems() const
     {
-        return !ruledStackObjectIds.isEmpty();
+        return !ruledStackOidOrder.isEmpty();
+    }
+    [[nodiscard]] const QList<quint32> &getRuledStackOidOrder() const
+    {
+        return ruledStackOidOrder;
     }
     [[nodiscard]] QString ruledStackAnnotation(quint32 oid) const
     {
@@ -363,7 +370,7 @@ public:
     /// Rebuild ruled spell→target arrows (stack window layout / map updates may require a refresh).
     void refreshRuledSpellTargetArrows();
 
-    void createSyntheticAbilityStackCard(quint32 virtualOid, const QString &cardName);
+    void createSyntheticAbilityStackCard(quint32 virtualOid, const QString &cardName, int controllerPlayerId = -1);
     void removeSyntheticAbilityStackCard(quint32 virtualOid);
 
     void togglePendingAttacker(quint32 engineOid);
@@ -487,6 +494,10 @@ signals:
     void ruledCombatDamageUiChanged();
     void ruledBattlefieldMapUpdated();
     void ruledStackHasItemsChanged(bool hasItems);
+    /// Emitted at the end of each ruled event batch when the stack OID order changes.
+    /// Front of list = most recently pushed = resolves first. Triggers a visual re-sort
+    /// of the stack window, which may have received Event_MoveCard before stack_pushed.
+    void ruledStackOrderChanged(const QList<quint32> &orderedOids);
     /// Emitted when a triggered ability fires and needs the local player to choose a target.
     void ruledTriggerNeedsTarget(QString abilityText);
     /// Emitted when the engine's `first_strike_step_pending` flag flips. Drives the
