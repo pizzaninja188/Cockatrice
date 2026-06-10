@@ -1,7 +1,7 @@
 (
   id: "goblin_trailblazer",
   name: "Goblin Trailblazer",
-  mana_cost: "1R",
+  mana_cost: "{1}{R}",
   types: ["Creature", "Goblin", "Pirate"],
   is_creature: true,
   power: 2,

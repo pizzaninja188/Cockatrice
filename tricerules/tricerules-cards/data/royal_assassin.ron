@@ -1,7 +1,7 @@
 (
   id: "royal_assassin",
   name: "Royal Assassin",
-  mana_cost: "1BB",
+  mana_cost: "{1}{B}{B}",
   types: ["Creature", "Human", "Assassin"],
   is_creature: true,
   power: 1,

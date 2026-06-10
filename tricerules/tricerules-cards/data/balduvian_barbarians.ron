@@ -1,7 +1,7 @@
 (
   id: "balduvian_barbarians",
   name: "Balduvian Barbarians",
-  mana_cost: "2R",
+  mana_cost: "{2}{R}",
   types: ["Creature", "Barbarian"],
   is_creature: true,
   power: 3,

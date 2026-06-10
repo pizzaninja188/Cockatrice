@@ -1,7 +1,7 @@
 (
   id: "raging_goblin",
   name: "Raging Goblin",
-  mana_cost: "R",
+  mana_cost: "{R}",
   types: ["Creature", "Goblin"],
   is_creature: true,
   power: 1,

@@ -1,3 +1,4 @@
+use crate::mana::ManaCost;
 use crate::primitives::{
     ActivatedAbilityDef, Color, Keyword, SpellEffectKind, TriggeredAbilityDef,
 };
@@ -7,8 +8,9 @@ use serde::{Deserialize, Serialize};
 pub struct CardDefinition {
     pub id: String,
     pub name: String,
-    /// e.g. "R" or "1R" — minimal parser in engine
-    pub mana_cost: String,
+    /// Scryfall brace syntax, copied verbatim (e.g. `"{1}{R}"`, `""` for lands). See [`ManaCost`].
+    #[serde(default)]
+    pub mana_cost: ManaCost,
     #[serde(default)]
     pub types: Vec<String>,
     #[serde(default)]
@@ -63,22 +65,8 @@ impl CardDefinition {
     }
 
     /// Derive the card's colors from its mana cost (CR 202.2a).
-    /// A card is colorless if its mana cost contains no color symbols (e.g. lands, "0", generic-only).
+    /// A card is colorless if its mana cost contains no color symbols (e.g. lands, `{0}`, generic-only).
     pub fn colors(&self) -> Vec<Color> {
-        let mut out = Vec::new();
-        for ch in self.mana_cost.chars() {
-            let c = match ch {
-                'W' => Color::White,
-                'U' => Color::Blue,
-                'B' => Color::Black,
-                'R' => Color::Red,
-                'G' => Color::Green,
-                _ => continue,
-            };
-            if !out.contains(&c) {
-                out.push(c);
-            }
-        }
-        out
+        self.mana_cost.colors()
     }
 }

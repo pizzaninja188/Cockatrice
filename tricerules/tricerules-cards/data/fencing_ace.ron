@@ -1,7 +1,7 @@
 (
   id: "fencing_ace",
   name: "Fencing Ace",
-  mana_cost: "1W",
+  mana_cost: "{1}{W}",
   types: ["Creature", "Human", "Soldier"],
   is_creature: true,
   power: 1,

@@ -1,7 +1,7 @@
 (
   id: "giant_spider",
   name: "Giant Spider",
-  mana_cost: "3G",
+  mana_cost: "{3}{G}",
   types: ["Creature", "Spider"],
   is_creature: true,
   power: 2,

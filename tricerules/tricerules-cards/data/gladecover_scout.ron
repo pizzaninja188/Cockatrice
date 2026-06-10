@@ -1,7 +1,7 @@
 (
   id: "gladecover_scout",
   name: "Gladecover Scout",
-  mana_cost: "G",
+  mana_cost: "{G}",
   types: ["Creature", "Elf", "Scout"],
   is_creature: true,
   power: 1,

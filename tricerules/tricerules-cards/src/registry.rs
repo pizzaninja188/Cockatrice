@@ -164,7 +164,7 @@ mod tests {
         let bad = r#"(
             id: "bad_card",
             name: "Bad Card",
-            mana_cost: "W",
+            mana_cost: "{W}",
             types: ["Instant"],
             is_instant: true,
             spell_effect: [TargetPlayerGainsLife(amount: 3, target: (kind: Creature))],
@@ -178,7 +178,7 @@ mod tests {
         let bad = r#"(
             id: "bad_trigger",
             name: "Bad Trigger",
-            mana_cost: "G",
+            mana_cost: "{G}",
             types: ["Creature"],
             is_creature: true,
             power: 1,

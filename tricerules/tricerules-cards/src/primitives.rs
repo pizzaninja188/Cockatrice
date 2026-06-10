@@ -5,6 +5,7 @@
 //! (e.g. `DamageTarget(amount: 3, target: (kind: AnyTarget))`), so numeric
 //! parameters and targeting live in card data, not in code.
 
+use crate::mana::ManaCost;
 use serde::{Deserialize, Serialize};
 
 /// The five MTG colors. Used for characteristic-based blocking checks (Intimidate, Protection)
@@ -212,10 +213,10 @@ impl SpellEffectKind {
 pub enum AbilityCost {
     /// {T}: tap the source permanent.
     Tap,
-    /// Pay mana (e.g. "4", "2R"). Uses the same minimal mana string as `CardDefinition.mana_cost`.
-    Mana(String),
-    /// {T} plus mana (e.g. Jayemdae Tome: "4" + tap).
-    TapAndMana(String),
+    /// Pay mana (e.g. `"{4}"`, `"{2}{R}"`). Same brace syntax as `CardDefinition.mana_cost`.
+    Mana(ManaCost),
+    /// {T} plus mana (e.g. Jayemdae Tome: `"{4}"` + tap).
+    TapAndMana(ManaCost),
     /// Sacrifice the source permanent as cost (e.g. Bottle Gnomes).
     Sacrifice,
 }

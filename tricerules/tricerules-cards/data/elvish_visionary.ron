@@ -1,7 +1,7 @@
 (
   id: "elvish_visionary",
   name: "Elvish Visionary",
-  mana_cost: "1G",
+  mana_cost: "{1}{G}",
   types: ["Creature", "Elf", "Shaman"],
   is_creature: true,
   power: 1,

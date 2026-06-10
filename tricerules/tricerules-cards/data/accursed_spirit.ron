@@ -1,7 +1,7 @@
 (
   id: "accursed_spirit",
   name: "Accursed Spirit",
-  mana_cost: "3B",
+  mana_cost: "{3}{B}",
   types: ["Creature", "Spirit"],
   is_creature: true,
   power: 3,

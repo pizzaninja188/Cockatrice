@@ -1,7 +1,7 @@
 (
   id: "prodigal_pyromancer",
   name: "Prodigal Pyromancer",
-  mana_cost: "2R",
+  mana_cost: "{2}{R}",
   types: ["Creature", "Human", "Wizard"],
   is_creature: true,
   power: 1,

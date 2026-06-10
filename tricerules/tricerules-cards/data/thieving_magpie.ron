@@ -1,7 +1,7 @@
 (
   id: "thieving_magpie",
   name: "Thieving Magpie",
-  mana_cost: "2UU",
+  mana_cost: "{2}{U}{U}",
   types: ["Creature", "Bird"],
   is_creature: true,
   power: 1,

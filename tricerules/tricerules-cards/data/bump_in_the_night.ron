@@ -1,7 +1,7 @@
 (
   id: "bump_in_the_night",
   name: "Bump in the Night",
-  mana_cost: "B",
+  mana_cost: "{B}",
   types: ["Sorcery"],
   is_sorcery: true,
   spell_effect: [TargetPlayerLosesLife(amount: 3, target: (kind: OpponentPlayer))],

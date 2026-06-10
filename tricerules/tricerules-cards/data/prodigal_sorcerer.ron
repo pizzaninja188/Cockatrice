@@ -1,7 +1,7 @@
 (
   id: "prodigal_sorcerer",
   name: "Prodigal Sorcerer",
-  mana_cost: "2U",
+  mana_cost: "{2}{U}",
   types: ["Creature", "Human", "Wizard", "Sorcerer"],
   is_creature: true,
   power: 1,

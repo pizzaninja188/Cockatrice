@@ -1,7 +1,7 @@
 (
   id: "angels_mercy",
   name: "Angel's Mercy",
-  mana_cost: "3WW",
+  mana_cost: "{3}{W}{W}",
   types: ["Sorcery"],
   is_sorcery: true,
   spell_effect: [GainLife(amount: 7)],

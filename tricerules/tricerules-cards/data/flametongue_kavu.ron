@@ -1,7 +1,7 @@
 (
   id: "flametongue_kavu",
   name: "Flametongue Kavu",
-  mana_cost: "3R",
+  mana_cost: "{3}{R}",
   types: ["Creature", "Kavu"],
   is_creature: true,
   power: 4,

@@ -1,12 +1,12 @@
 (
   id: "jayemdae_tome",
   name: "Jayemdae Tome",
-  mana_cost: "4",
+  mana_cost: "{4}",
   types: ["Artifact", "Book"],
   is_artifact: true,
   activated_abilities: [
     (
-      cost: TapAndMana("4"),
+      cost: TapAndMana("{4}"),
       effect: Draw(count: 1),
       text: "{4}, {T}: Draw a card.",
     ),

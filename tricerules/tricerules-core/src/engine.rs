@@ -10,6 +10,7 @@ use rand::seq::SliceRandom;
 use rand::SeedableRng;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use thiserror::Error;
+use tricerules_cards::mana::{ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
     AbilityCost, CastTriggerPlayer, ContinuousEffectKind, EffectDuration, Keyword, SpellEffectKind,
     SpellTypeFilter, TargetFilter, TargetKind, TriggerCondition, TriggeredEffect,
@@ -2737,7 +2738,7 @@ impl GameEngine {
             ));
         }
         validate_spell_targets(&self.state, self.registry, player, &card_id, targets)?;
-        pay_mana_simple(&mut self.state, idx, &def.mana_cost)?;
+        pay_mana(&mut self.state, idx, &def.mana_cost)?;
 
         self.state.players[idx].hand.retain(|&x| x != oid);
         let trefs: Vec<ObjectId> = targets.iter().map(|t| t.object_id).collect();
@@ -2864,13 +2865,13 @@ impl GameEngine {
                 }
                 o.tapped = true;
             }
-            AbilityCost::Mana(cost_str) => {
-                pay_mana_simple(&mut self.state, idx, cost_str)?;
+            AbilityCost::Mana(cost) => {
+                pay_mana(&mut self.state, idx, cost)?;
             }
-            AbilityCost::TapAndMana(cost_str) => {
+            AbilityCost::TapAndMana(cost) => {
                 // Check mana sufficiency BEFORE tapping so a failed payment leaves the
                 // permanent untapped (costs are paid atomically in MTG CR 601.2h).
-                pay_mana_simple(&mut self.state, idx, cost_str)?;
+                pay_mana(&mut self.state, idx, cost)?;
                 let o = self
                     .state
                     .objects
@@ -3524,7 +3525,9 @@ impl GameEngine {
                     })
                     .collect(),
                 // Parallel to `battlefield_activated_ability_texts`: pipe-delimited mana cost
-                // strings extracted from AbilityCost. Tap/Sacrifice → "", Mana/TapAndMana → "4"/"R"/etc.
+                // strings extracted from AbilityCost in canonical Scryfall brace form. Tap/Sacrifice
+                // → "", Mana/TapAndMana → "{4}"/"{R}"/etc. The client parses both braces and the
+                // legacy compact form (see PlayerActions::parseSimpleManaCost).
                 battlefield_activated_ability_mana_costs: p
                     .battlefield
                     .iter()
@@ -3537,13 +3540,10 @@ impl GameEngine {
                                 def.activated_abilities
                                     .iter()
                                     .map(|a| match &a.cost {
-                                        tricerules_cards::primitives::AbilityCost::Mana(s) => {
-                                            s.as_str()
+                                        AbilityCost::Mana(c) | AbilityCost::TapAndMana(c) => {
+                                            c.to_string()
                                         }
-                                        tricerules_cards::primitives::AbilityCost::TapAndMana(
-                                            s,
-                                        ) => s.as_str(),
-                                        _ => "",
+                                        _ => String::new(),
                                     })
                                     .collect::<Vec<_>>()
                                     .join("|")
@@ -4318,11 +4318,7 @@ fn sacrifice_permanent(state: &mut GameState, oid: ObjectId) -> Result<(), Engin
     move_object_to_zone(state, oid, Zone::Graveyard)
 }
 
-fn pay_mana_simple(
-    state: &mut GameState,
-    player_idx: usize,
-    cost: &str,
-) -> Result<(), EngineError> {
+fn pay_mana(state: &mut GameState, player_idx: usize, cost: &ManaCost) -> Result<(), EngineError> {
     // Mana must already be in the player's pool (added via AddManaToPool / land taps).
     // The engine never auto-taps lands — the client is responsible for sending AddManaToPool
     // before casting a spell or activating an ability.
@@ -4336,16 +4332,19 @@ fn pay_mana_simple(
     let mut need_b = 0u32;
     let mut need_r = 0u32;
     let mut need_g = 0u32;
-    let mut need_c = 0u32;
-    for ch in cost.chars() {
-        match ch {
-            'W' => need_w += 1,
-            'B' => need_b += 1,
-            'R' => need_r += 1,
-            'G' => need_g += 1,
-            'U' => need_u += 1,
-            '1'..='9' => need_c += ch.to_digit(10).unwrap(),
-            _ => {}
+    let mut need_colorless = 0u32; // {C}: must be paid with colorless mana specifically
+    let mut need_generic = 0u32; // {N}: payable by any mana
+    for pip in &cost.pips {
+        match pip {
+            ManaSymbol::W => need_w += 1,
+            ManaSymbol::U => need_u += 1,
+            ManaSymbol::B => need_b += 1,
+            ManaSymbol::R => need_r += 1,
+            ManaSymbol::G => need_g += 1,
+            ManaSymbol::C => need_colorless += 1,
+            ManaSymbol::Generic(n) => need_generic += n,
+            // CR 107.3: X is chosen as the spell is cast; the engine has no X-choice path yet.
+            ManaSymbol::X => return Err(EngineError::Illegal("X costs not yet supported")),
         }
     }
     let pool = &mut state.players[player_idx].mana_pool;
@@ -4359,9 +4358,10 @@ fn pay_mana_simple(
     take(&mut need_b, &mut pool.black);
     take(&mut need_r, &mut pool.red);
     take(&mut need_g, &mut pool.green);
+    take(&mut need_colorless, &mut pool.colorless);
 
-    // Generic mana can be paid by any color in the pool.
-    let mut generic = need_c;
+    // Generic mana can be paid by any mana in the pool (colorless first).
+    let mut generic = need_generic;
     while generic > 0 {
         if pool.colorless > 0 {
             pool.colorless -= 1;
@@ -4385,9 +4385,9 @@ fn pay_mana_simple(
             break;
         }
     }
-    need_c = generic;
+    need_generic = generic;
 
-    let need = need_c + need_w + need_u + need_b + need_r + need_g;
+    let need = need_generic + need_colorless + need_w + need_u + need_b + need_r + need_g;
     if need > 0 {
         return Err(EngineError::Illegal(
             "not enough mana in pool; tap your lands first",
@@ -4845,4 +4845,71 @@ fn spell_target_legality_error(
         _ => {}
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod mana_payment_tests {
+    use super::*;
+
+    /// Build a 2-player engine and hand priority to player 0 so `pay_mana`'s priority gate passes.
+    fn engine_with_priority() -> GameEngine {
+        let mut e = GameEngine::new_with_default_decks(1, &[0, 1], 20).expect("new");
+        e.state.priority_idx = 0;
+        e
+    }
+
+    #[test]
+    fn multi_digit_generic_paid_from_pool() {
+        // Regression for the old per-char parser: "{15}" must consume 15, not 6.
+        let mut e = engine_with_priority();
+        e.state.players[0].mana_pool.colorless = 15;
+        let cost = ManaCost {
+            pips: vec![ManaSymbol::Generic(15)],
+        };
+        assert!(pay_mana(&mut e.state, 0, &cost).is_ok());
+        assert_eq!(e.state.players[0].mana_pool.colorless, 0);
+    }
+
+    #[test]
+    fn insufficient_generic_mana_rejected() {
+        let mut e = engine_with_priority();
+        e.state.players[0].mana_pool.colorless = 14;
+        let cost = ManaCost {
+            pips: vec![ManaSymbol::Generic(15)],
+        };
+        assert!(matches!(
+            pay_mana(&mut e.state, 0, &cost),
+            Err(EngineError::Illegal(_))
+        ));
+    }
+
+    #[test]
+    fn colorless_pip_requires_colorless_mana() {
+        // {C} cannot be paid with colored mana (unlike generic).
+        let mut e = engine_with_priority();
+        e.state.players[0].mana_pool.red = 5;
+        let cost = ManaCost {
+            pips: vec![ManaSymbol::C],
+        };
+        assert!(matches!(
+            pay_mana(&mut e.state, 0, &cost),
+            Err(EngineError::Illegal(_))
+        ));
+        e.state.players[0].mana_pool.colorless = 1;
+        assert!(pay_mana(&mut e.state, 0, &cost).is_ok());
+    }
+
+    #[test]
+    fn x_cost_payment_rejected_cleanly() {
+        // X is representable but not castable yet: payment errors instead of mis-paying.
+        let mut e = engine_with_priority();
+        e.state.players[0].mana_pool.colorless = 99;
+        let cost = ManaCost {
+            pips: vec![ManaSymbol::X, ManaSymbol::R],
+        };
+        assert!(matches!(
+            pay_mana(&mut e.state, 0, &cost),
+            Err(EngineError::Illegal("X costs not yet supported"))
+        ));
+    }
 }

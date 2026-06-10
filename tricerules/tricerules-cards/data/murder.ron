@@ -1,7 +1,7 @@
 (
   id: "murder",
   name: "Murder",
-  mana_cost: "1BB",
+  mana_cost: "{1}{B}{B}",
   types: ["Instant"],
   is_instant: true,
   spell_effect: [DestroyTarget()],

@@ -1,7 +1,7 @@
 (
   id: "bottle_gnomes",
   name: "Bottle Gnomes",
-  mana_cost: "3",
+  mana_cost: "{3}",
   types: ["Artifact", "Creature", "Gnome"],
   is_artifact: true,
   is_creature: true,

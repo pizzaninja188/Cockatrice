@@ -103,7 +103,7 @@ https://api.scryfall.com/cards/named?exact=<Card+Name>
 ```
 
 Verify and use the response for:
-- **Mana cost** (`mana_cost`) — including color, generic, hybrid, Phyrexian pips
+- **Mana cost** (`mana_cost`) — copy the Scryfall brace string **verbatim** into RON (`mana_cost: "{1}{R}"`, `""` for lands). Parsed by `ManaCost`/`ManaSymbol` (`tricerules-cards/src/mana.rs`); `AbilityCost::Mana`/`TapAndMana` use the same syntax. Supported pips are `W U B R G C X` and generic integers; hybrid/Phyrexian/snow are representable but **reject at registry load** until the engine supports them, and `{X}` loads but errors at cast (CR 107.3, deferred). Never hand-write the old flat `"1R"` form.
 - **Power/toughness** (`power` / `toughness`) — exact values; never guess from memory
 - **Oracle text** (`oracle_text`) — the authoritative rules text; CR takes precedence for mechanics not spelled out on the card
 - **Type line** (`type_line`) — supertypes, types, subtypes

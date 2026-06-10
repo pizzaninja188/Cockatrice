@@ -1,7 +1,7 @@
 (
   id: "exploration",
   name: "Exploration",
-  mana_cost: "G",
+  mana_cost: "{G}",
   types: ["Enchantment"],
   is_enchantment: true,
   partial: "layer-5 continuous effect (extra land per turn) not yet implemented",

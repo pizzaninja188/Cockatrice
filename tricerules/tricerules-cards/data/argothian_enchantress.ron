@@ -1,7 +1,7 @@
 (
   id: "argothian_enchantress",
   name: "Argothian Enchantress",
-  mana_cost: "1G",
+  mana_cost: "{1}{G}",
   types: ["Creature", "Human", "Druid"],
   is_creature: true,
   power: 0,

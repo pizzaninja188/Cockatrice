@@ -194,7 +194,9 @@ Both items landed and verified: `cargo test` (164) / `clippy --all-targets -D wa
 
 ---
 
-## Phase 3 — Structured mana costs (Scryfall brace syntax)
+## Phase 3 — Structured mana costs (Scryfall brace syntax) — ✅ DONE 2026-06-10
+
+All three items landed and verified: `cargo test` (178) / `clippy --all-targets -D warnings` / `fmt --check` green; Linux incremental build green (no-op — no C++/proto touched). Implementation notes vs. the plan: **no `.proto` change was required** — the `battlefield_activated_ability_mana_costs` field is already `repeated string`; only its *content* moves to canonical brace `Display` (`"{4}"`). **No C++ change was required either** — the client's `PlayerActions::parseSimpleManaCost` already parses both brace and the legacy compact form, and produces identical results for every existing ability cost (`"4"`→`{4}`, `"1"`→`{1}`), so the wire switch is transparent to the client (and fixes multi-digit on that side too). `pay_mana_simple(&str)` → `pay_mana(&ManaCost)`, iterating pips; `{X}` → `EngineError::Illegal("X costs not yet supported")` at payment; `{C}` now pays from colorless mana specifically (was conflated with generic). 52 RON files converted mechanically (47 changed; 5 basic lands keep `""`). `CARDS.md` **not regenerated**: the generator reads implemented-status/`partial` only, never `mana_cost`, so the corpus conversion produces zero checklist diff (and cards.xml isn't on this Linux box). Tests: `mana.rs` unit tests (parse/multi-digit/X/unsupported/colors/Display/serde) + `engine.rs` `mana_payment_tests` (multi-digit paid, insufficient rejected, `{C}` requires colorless, X rejected cleanly). Remaining: client E2E — activate Jayemdae Tome / Icy Manipulator and confirm the mana prompt still computes the cost from the brace string (folded into the combined Phase 1/2/3 client session).
 
 **Why (B4):** `"15"` parses as 6; X/hybrid/Phyrexian are unrepresentable; every RON written meanwhile is migration debt. Brace syntax means hand-authoring and Phase 6 codegen copy `mana_cost` **verbatim from Scryfall**.
 

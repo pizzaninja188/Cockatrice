@@ -1,7 +1,7 @@
 (
   id: "scroll_thief",
   name: "Scroll Thief",
-  mana_cost: "2U",
+  mana_cost: "{2}{U}",
   types: ["Creature", "Merfolk", "Rogue"],
   is_creature: true,
   power: 1,

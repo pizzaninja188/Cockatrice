@@ -1,7 +1,7 @@
 (
   id: "colossal_dreadmaw",
   name: "Colossal Dreadmaw",
-  mana_cost: "4GG",
+  mana_cost: "{4}{G}{G}",
   types: ["Creature", "Dinosaur"],
   is_creature: true,
   power: 6,

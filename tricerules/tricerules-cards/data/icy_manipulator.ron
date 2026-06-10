@@ -1,12 +1,12 @@
 (
   id: "icy_manipulator",
   name: "Icy Manipulator",
-  mana_cost: "4",
+  mana_cost: "{4}",
   types: ["Artifact"],
   is_artifact: true,
   activated_abilities: [
     (
-      cost: TapAndMana("1"),
+      cost: TapAndMana("{1}"),
       effect: TapTarget(target: (kind: AnyPermanent)),
       text: "{1}, {T}: Tap target artifact, creature, or land.",
     ),

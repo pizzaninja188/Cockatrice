@@ -1,7 +1,7 @@
 (
   id: "child_of_night",
   name: "Child of Night",
-  mana_cost: "1B",
+  mana_cost: "{1}{B}",
   types: ["Creature", "Vampire"],
   is_creature: true,
   power: 2,

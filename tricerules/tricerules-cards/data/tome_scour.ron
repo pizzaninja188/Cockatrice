@@ -1,7 +1,7 @@
 (
   id: "tome_scour",
   name: "Tome Scour",
-  mana_cost: "U",
+  mana_cost: "{U}",
   types: ["Sorcery"],
   is_sorcery: true,
   spell_effect: [MillTargetPlayer(count: 5, target: (kind: AnyPlayer))],

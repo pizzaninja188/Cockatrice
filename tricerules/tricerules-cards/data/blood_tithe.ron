@@ -1,7 +1,7 @@
 (
   id: "blood_tithe",
   name: "Blood Tithe",
-  mana_cost: "2B",
+  mana_cost: "{2}{B}",
   types: ["Sorcery"],
   is_sorcery: true,
   spell_effect: [EachOpponentLosesLifeYouGainEqual(amount: 3)],

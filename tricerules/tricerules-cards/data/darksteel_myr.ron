@@ -1,7 +1,7 @@
 (
   id: "darksteel_myr",
   name: "Darksteel Myr",
-  mana_cost: "3",
+  mana_cost: "{3}",
   types: ["Artifact", "Creature", "Myr"],
   is_creature: true,
   is_artifact: true,
