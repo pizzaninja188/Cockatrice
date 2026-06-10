@@ -42,7 +42,6 @@
 #include <QTimer>
 #include <google/protobuf/descriptor.h>
 #include <libcockatrice/card/database/card_database_manager.h>
-#include <libcockatrice/utility/card_ref.h>
 #include <libcockatrice/deck_list/deck_list.h>
 #include <libcockatrice/deck_list/tree/deck_list_card_node.h>
 #include <libcockatrice/protocol/pb/context_connection_state_changed.pb.h>
@@ -68,72 +67,6 @@
 #include <libcockatrice/utility/zone_names.h>
 
 namespace {
-
-/** Oracle split: full type line vs main type (Instant/Sorcery often live in maintype only). */
-static QString ruledOracleTypeBlobForServerCard(const Server_Card *card)
-{
-    if (!card) {
-        return {};
-    }
-    const CardDatabaseQuerier *q = CardDatabaseManager::query();
-    if (!q) {
-        return {};
-    }
-    const ExactCard exact = q->guessCard(card->getCardRef());
-    if (exact) {
-        const CardInfo &info = exact.getInfo();
-        return (info.getCardType() + QLatin1Char(' ') + info.getMainCardType()).trimmed();
-    }
-    const CardInfoPtr info = q->getCardInfo(card->getName());
-    if (info) {
-        return (info->getCardType() + QLatin1Char(' ') + info->getMainCardType()).trimmed();
-    }
-    return {};
-}
-
-/** StackPushed.description is the rules engine card name (often same as Oracle; may be snake_case id). */
-static QString ruledOracleTypeBlobFromEngineStackDescription(const CardDatabaseQuerier *q, const QString &desc)
-{
-    const QString trimmed = desc.trimmed();
-    if (trimmed.isEmpty()) {
-        return {};
-    }
-    auto blobForInfo = [](const CardInfoPtr &info) -> QString {
-        if (!info) {
-            return {};
-        }
-        return (info->getCardType() + QLatin1Char(' ') + info->getMainCardType()).trimmed();
-    };
-
-    if (const CardInfoPtr direct = q->getCardInfo(trimmed)) {
-        return blobForInfo(direct);
-    }
-    if (trimmed.contains(QLatin1Char('_'))) {
-        QString human = trimmed;
-        human.replace(QLatin1Char('_'), QLatin1Char(' '));
-        if (const CardInfoPtr byHuman = q->getCardInfo(human)) {
-            return blobForInfo(byHuman);
-        }
-        const ExactCard guessed = q->guessCard(CardRef{human, QString()});
-        if (guessed) {
-            return blobForInfo(guessed.getCardPtr());
-        }
-    }
-    return {};
-}
-
-static bool ruledResolvedStackSpellGoesToBattlefield(const Server_Card *card, const QString &engineStackDescription)
-{
-    const CardDatabaseQuerier *q = CardDatabaseManager::query();
-    const QString blobPhysical = ruledOracleTypeBlobForServerCard(card);
-    const QString blobEngine = ruledOracleTypeBlobFromEngineStackDescription(q, engineStackDescription);
-    const QString merged = (blobPhysical + QLatin1Char(' ') + blobEngine).trimmed();
-    if (merged.contains(QLatin1String("Instant"), Qt::CaseInsensitive) ||
-        merged.contains(QLatin1String("Sorcery"), Qt::CaseInsensitive)) {
-        return false;
-    }
-    return true;
-}
 
 QString normalizeRuledCardName(const QString &name)
 {
@@ -1220,21 +1153,21 @@ void Server_Game::applyRuledStackResolvedEvent(const ruled::v1::StackResolved &s
     const quint32 resolvedOid = static_cast<quint32>(stackResolved.object_id());
     const QString engineStackDescription = ruledEngineStackPushDescriptionsByObjectId.value(resolvedOid);
 
-    auto tryResolveCardOnStack = [this, &stackResolved, &engineStackDescription](Server_AbstractPlayer *ab,
-                                                                                 Server_CardZone *stackZone,
-                                                                                 Server_Card *card) -> bool {
+    auto tryResolveCardOnStack = [this, &stackResolved](Server_AbstractPlayer *ab, Server_CardZone *stackZone,
+                                                        Server_Card *card) -> bool {
         if (!ab || !stackZone || !card) {
             return false;
         }
-        bool goesToBattlefield = false;
+        // The engine sets a destination on every resolve; an unspecified value means
+        // engine/server skew. Default to graveyard (CR 608.3: only permanent spells
+        // go to the battlefield).
         const ruled::v1::StackResolveDestination dest = stackResolved.destination();
-        if (dest == ruled::v1::STACK_RESOLVE_DESTINATION_BATTLEFIELD) {
-            goesToBattlefield = true;
-        } else if (dest == ruled::v1::STACK_RESOLVE_DESTINATION_GRAVEYARD) {
-            goesToBattlefield = false;
-        } else {
-            goesToBattlefield = ruledResolvedStackSpellGoesToBattlefield(card, engineStackDescription);
+        if (dest != ruled::v1::STACK_RESOLVE_DESTINATION_BATTLEFIELD &&
+            dest != ruled::v1::STACK_RESOLVE_DESTINATION_GRAVEYARD) {
+            qWarning() << "Ruled: StackResolved for object" << stackResolved.object_id()
+                       << "has no destination; defaulting to graveyard";
         }
+        const bool goesToBattlefield = (dest == ruled::v1::STACK_RESOLVE_DESTINATION_BATTLEFIELD);
         const quint32 resolvedOidLocal = static_cast<quint32>(stackResolved.object_id());
         const int casterPid = ruledStackObjectIdToCasterPlayerId.value(resolvedOidLocal, -1);
         Server_AbstractPlayer *destPlayer = ab;

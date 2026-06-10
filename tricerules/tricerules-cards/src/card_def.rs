@@ -1,4 +1,6 @@
-use crate::primitives::{ActivatedAbilityDef, Color, Keyword, SpellEffectKind, TriggeredAbilityDef};
+use crate::primitives::{
+    ActivatedAbilityDef, Color, Keyword, SpellEffectKind, TriggeredAbilityDef,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

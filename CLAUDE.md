@@ -36,7 +36,7 @@ Unless scoped **backend-only**, ship **engine + proto + Servatrice relay + Cocka
 
 ### After implementing cards — update the checklist
 
-After adding or finishing a card (RON + `registry.rs` include; `primitives.rs` only when adding a new primitive), **regenerate the tracker** so `tricerules/CARDS.md` stays accurate, and commit it with the card change:
+After adding or finishing a card (drop a RON file anywhere under `tricerules-cards/data/` — `build.rs` embeds it automatically, no `registry.rs` edit; `primitives.rs` only when adding a new primitive), **regenerate the tracker** so `tricerules/CARDS.md` stays accurate, and commit it with the card change:
 
 ```powershell
 ./scripts/gen-card-checklist.ps1   # reads the registry + Oracle cards.xml → tricerules/CARDS.md

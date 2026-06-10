@@ -7,6 +7,6 @@ pub mod registry;
 pub use card_def::CardDefinition;
 pub use primitives::{
     AbilityCost, ActivatedAbilityDef, Color, ContinuousEffectKind, EffectDuration, Keyword,
-    TriggeredAbilityDef, TriggeredEffect, TriggerCondition,
+    TriggerCondition, TriggeredAbilityDef, TriggeredEffect,
 };
 pub use registry::CardRegistry;

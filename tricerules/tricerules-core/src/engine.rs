@@ -1,8 +1,8 @@
 //! Core rules processing (vanilla core ΓÇö simplified combat & mana).
 
 use crate::state::{
-    AffectedScope, CombatState, ContinuousEffect, GameObject, GameState, ObjectId,
-    OpeningSequence, PendingTrigger, PlayerId, PlayerState, StackItem, TurnStep, Zone,
+    AffectedScope, CombatState, ContinuousEffect, GameObject, GameState, ObjectId, OpeningSequence,
+    PendingTrigger, PlayerId, PlayerState, StackItem, TurnStep, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -11,8 +11,8 @@ use rand::SeedableRng;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use thiserror::Error;
 use tricerules_cards::primitives::{
-    AbilityCost, CastTriggerPlayer, ContinuousEffectKind, EffectDuration, Keyword,
-    SpellEffectKind, SpellTypeFilter, TargetFilter, TargetKind, TriggerCondition, TriggeredEffect,
+    AbilityCost, CastTriggerPlayer, ContinuousEffectKind, EffectDuration, Keyword, SpellEffectKind,
+    SpellTypeFilter, TargetFilter, TargetKind, TriggerCondition, TriggeredEffect,
 };
 use tricerules_cards::CardRegistry;
 use tricerules_proto::ruled::v1 as rv1;
@@ -91,19 +91,34 @@ pub enum EngineError {
 /// Internal game events emitted at state-change sites to drive the unified trigger-collection pass
 /// (CR 603.2). Each variant carries the minimum data needed to identify which triggers match.
 enum GameEvent {
-    EntersBattlefield { object_id: ObjectId },
+    EntersBattlefield {
+        object_id: ObjectId,
+    },
     /// `card_id` and `controller` must be captured before the zone move (object may be gone).
-    Dies { object_id: ObjectId, card_id: String, controller: PlayerId },
-    Attacks { attacker_ids: Vec<ObjectId> },
-    CombatDamageToPlayer { attacker_id: ObjectId, defender_id: PlayerId },
+    Dies {
+        object_id: ObjectId,
+        card_id: String,
+        controller: PlayerId,
+    },
+    Attacks {
+        attacker_ids: Vec<ObjectId>,
+    },
+    CombatDamageToPlayer {
+        attacker_id: ObjectId,
+        defender_id: PlayerId,
+    },
     UpkeepBegin,
     /// Fired when a spell is put on the stack (CR 601.2; triggers on cast, not resolution).
-    SpellCast { caster: PlayerId, card_id: String },
+    SpellCast {
+        caster: PlayerId,
+        card_id: String,
+    },
 }
 
 pub struct GameEngine {
     pub state: GameState,
-    registry: CardRegistry,
+    /// Shared process-wide registry (`CardRegistry::global()`); read-only.
+    registry: &'static CardRegistry,
 }
 
 impl GameEngine {
@@ -127,8 +142,7 @@ impl GameEngine {
         if player_ids.len() != 2 {
             return Err(EngineError::Illegal("M2: exactly 2 players"));
         }
-        let registry =
-            CardRegistry::from_embedded().map_err(|_| EngineError::Illegal("bad registry"))?;
+        let registry = CardRegistry::global();
         let mut objects = HashMap::new();
         // Player targets in commands use raw `PlayerId` values as `TargetRef.object_id`. Game
         // objects must use disjoint ids so e.g. P1 (id 1) is never confused with object id 1.
@@ -589,9 +603,12 @@ impl GameEngine {
             Some(Cmd::CastSpell(cs)) => {
                 self.cast_spell(player, cs.hand_card_index as usize, &cs.targets)
             }
-            Some(Cmd::ActivateAbility(aa)) => {
-                self.activate_ability(player, aa.permanent_id, aa.ability_index as usize, &aa.targets)
-            }
+            Some(Cmd::ActivateAbility(aa)) => self.activate_ability(
+                player,
+                aa.permanent_id,
+                aa.ability_index as usize,
+                &aa.targets,
+            ),
             Some(Cmd::ChooseTriggerTarget(ctt)) => {
                 self.choose_trigger_target(player, ctt.target_object_id)
             }
@@ -650,16 +667,16 @@ impl GameEngine {
         };
 
         // CR 702.9b — flying: can only be blocked by creatures with flying or reach.
-        if att.has_keyword(&self.registry, Keyword::Flying)
-            && !blk.has_keyword(&self.registry, Keyword::Flying)
-            && !blk.has_keyword(&self.registry, Keyword::Reach)
+        if att.has_keyword(self.registry, Keyword::Flying)
+            && !blk.has_keyword(self.registry, Keyword::Flying)
+            && !blk.has_keyword(self.registry, Keyword::Reach)
         {
             return false;
         }
 
         // CR 702.13b — intimidate: can only be blocked by artifact creatures and/or
         // creatures that share a color with the intimidate creature.
-        if att.has_keyword(&self.registry, Keyword::Intimidate) {
+        if att.has_keyword(self.registry, Keyword::Intimidate) {
             let blk_def = self.registry.get(&blk.card_id);
             let blk_is_artifact = blk_def.map(|d| d.is_artifact).unwrap_or(false);
             if !blk_is_artifact {
@@ -689,10 +706,10 @@ impl GameEngine {
                 // CR 702.10a: Haste lets a creature attack (and use {T} abilities) even if it
                 // just entered the battlefield this turn (i.e. ignore summoning sickness).
                 let effectively_sick = o.summoning_sick
-                    && !o.has_keyword(&self.registry, tricerules_cards::Keyword::Haste);
+                    && !o.has_keyword(self.registry, tricerules_cards::Keyword::Haste);
                 o.zone == Zone::Battlefield
                     && o.owner == ap
-                    && o.is_creature(&self.registry)
+                    && o.is_creature(self.registry)
                     && !effectively_sick
                     && !o.tapped
             })
@@ -726,7 +743,7 @@ impl GameEngine {
                 self.state.objects.get(&oid).is_some_and(|o| {
                     o.zone == Zone::Battlefield
                         && o.owner == dp
-                        && o.is_creature(&self.registry)
+                        && o.is_creature(self.registry)
                         && !o.tapped
                 })
             })
@@ -745,7 +762,7 @@ impl GameEngine {
                     .state
                     .objects
                     .get(&aid)
-                    .map(|o| o.has_keyword(&self.registry, Keyword::Menace))
+                    .map(|o| o.has_keyword(self.registry, Keyword::Menace))
                     .unwrap_or(false);
                 if has_menace {
                     // Need at least one other defender that can also block this attacker.
@@ -798,12 +815,12 @@ impl GameEngine {
             if o.owner != ap || o.zone != Zone::Battlefield {
                 return Err(EngineError::Illegal("illegal attacker"));
             }
-            if !o.is_creature(&self.registry) {
+            if !o.is_creature(self.registry) {
                 return Err(EngineError::Illegal("not creature"));
             }
             // CR 702.10a: Haste bypasses summoning sickness — the creature may attack even
             // if it entered the battlefield this turn.
-            let has_haste = o.has_keyword(&self.registry, tricerules_cards::Keyword::Haste);
+            let has_haste = o.has_keyword(self.registry, tricerules_cards::Keyword::Haste);
             if o.summoning_sick && !has_haste {
                 return Err(EngineError::Illegal("summoning sick"));
             }
@@ -818,7 +835,7 @@ impl GameEngine {
                 .state
                 .objects
                 .get(&oid)
-                .map(|o| o.has_keyword(&self.registry, tricerules_cards::Keyword::Vigilance))
+                .map(|o| o.has_keyword(self.registry, tricerules_cards::Keyword::Vigilance))
                 .unwrap_or(false);
             if !has_vigilance {
                 if let Some(c) = self.state.objects.get_mut(&oid) {
@@ -873,14 +890,19 @@ impl GameEngine {
         });
         let atk_names: Vec<String> = attackers_for_event
             .iter()
-            .map(|&oid| object_display_name(&self.state, &self.registry, oid))
+            .map(|&oid| object_display_name(&self.state, self.registry, oid))
             .collect();
         b.events.push(ev_log(format!(
             "P{} attacks with {}",
             ap,
             atk_names.join(", ")
         )));
-        self.fire_triggers(GameEvent::Attacks { attacker_ids: attackers_for_event }, &mut b.events);
+        self.fire_triggers(
+            GameEvent::Attacks {
+                attacker_ids: attackers_for_event,
+            },
+            &mut b.events,
+        );
         b.events.push(ev_priority_changed(self));
         Ok(b)
     }
@@ -918,7 +940,7 @@ impl GameEngine {
             if bobj.owner != defending_player {
                 return Err(EngineError::Illegal("not your blocker"));
             }
-            if !bobj.is_creature(&self.registry) {
+            if !bobj.is_creature(self.registry) {
                 return Err(EngineError::Illegal("blocker not creature"));
             }
             if bobj.tapped {
@@ -944,7 +966,7 @@ impl GameEngine {
                     .state
                     .objects
                     .get(&att_id)
-                    .map(|o| o.has_keyword(&self.registry, tricerules_cards::Keyword::Menace))
+                    .map(|o| o.has_keyword(self.registry, tricerules_cards::Keyword::Menace))
                     .unwrap_or(false);
                 if has_menace {
                     return Err(EngineError::Illegal("Illegal blocks."));
@@ -978,8 +1000,8 @@ impl GameEngine {
             pairs
                 .iter()
                 .map(|p| {
-                    let att = object_display_name(&self.state, &self.registry, p.attacker_id);
-                    let blk = object_display_name(&self.state, &self.registry, p.blocker_id);
+                    let att = object_display_name(&self.state, self.registry, p.attacker_id);
+                    let blk = object_display_name(&self.state, self.registry, p.blocker_id);
                     format!("{blk} blocks {att}")
                 })
                 .collect::<Vec<_>>()
@@ -1033,7 +1055,7 @@ impl GameEngine {
             .state
             .objects
             .get(&attacker_id)
-            .map(|o| o.has_keyword(&self.registry, tricerules_cards::Keyword::Trample))
+            .map(|o| o.has_keyword(self.registry, tricerules_cards::Keyword::Trample))
             .unwrap_or(false);
 
         // Clone expected blockers to free the immutable borrow on combat before the mutable one.
@@ -1164,7 +1186,7 @@ impl GameEngine {
                 },
             )),
         });
-        let att_name = object_display_name(&self.state, &self.registry, attacker_id);
+        let att_name = object_display_name(&self.state, self.registry, attacker_id);
         b.events
             .push(ev_log(format!("Combat damage assigned for {att_name}.")));
 
@@ -1194,7 +1216,7 @@ impl GameEngine {
             .clone()
             .ok_or(EngineError::Illegal("combat?"))?;
         let needs_first_strike = !c_init.first_strike_damage_done
-            && combat_needs_first_strike_step(&self.state, &self.registry, &c_init);
+            && combat_needs_first_strike_step(&self.state, self.registry, &c_init);
 
         if needs_first_strike {
             // Snapshot which creatures had FS/DS at the start of the first-strike step. This is
@@ -1306,27 +1328,27 @@ impl GameEngine {
                 continue;
             }
             let attacker_participates =
-                object_participates_in_pass(&self.state, &self.registry, c, pass, att, true);
+                object_participates_in_pass(&self.state, self.registry, c, pass, att, true);
             // Capture attacker properties before any mutation.
             let att_power = self.effective_power(att).unwrap_or(0);
             let att_has_lifelink = self
                 .state
                 .objects
                 .get(&att)
-                .map(|o| o.has_keyword(&self.registry, Keyword::Lifelink))
+                .map(|o| o.has_keyword(self.registry, Keyword::Lifelink))
                 .unwrap_or(false);
             let att_has_deathtouch = self
                 .state
                 .objects
                 .get(&att)
-                .map(|o| o.has_keyword(&self.registry, Keyword::Deathtouch))
+                .map(|o| o.has_keyword(self.registry, Keyword::Deathtouch))
                 .unwrap_or(false);
             let att_owner = self.state.objects.get(&att).map(|o| o.owner).unwrap_or(ap);
             let att_has_trample = self
                 .state
                 .objects
                 .get(&att)
-                .map(|o| o.has_keyword(&self.registry, Keyword::Trample))
+                .map(|o| o.has_keyword(self.registry, Keyword::Trample))
                 .unwrap_or(false);
 
             let blockers = c.blockers.get(&att).map(|v| v.as_slice()).unwrap_or(&[]);
@@ -1354,20 +1376,20 @@ impl GameEngine {
                 // blocker only deals damage back if it participates in this pass (CR 510.5).
                 let blk = blockers[0];
                 let blocker_participates =
-                    object_participates_in_pass(&self.state, &self.registry, c, pass, blk, false)
+                    object_participates_in_pass(&self.state, self.registry, c, pass, blk, false)
                         && self.state.objects.get(&blk).map(|o| o.zone) == Some(Zone::Battlefield);
                 let bpw = self.effective_power(blk).unwrap_or(0);
                 let blk_has_lifelink = self
                     .state
                     .objects
                     .get(&blk)
-                    .map(|o| o.has_keyword(&self.registry, Keyword::Lifelink))
+                    .map(|o| o.has_keyword(self.registry, Keyword::Lifelink))
                     .unwrap_or(false);
                 let blk_has_deathtouch = self
                     .state
                     .objects
                     .get(&blk)
-                    .map(|o| o.has_keyword(&self.registry, Keyword::Deathtouch))
+                    .map(|o| o.has_keyword(self.registry, Keyword::Deathtouch))
                     .unwrap_or(false);
                 let blk_owner = self.state.objects.get(&blk).map(|o| o.owner).unwrap_or(dfd);
                 if blocker_participates {
@@ -1410,18 +1432,18 @@ impl GameEngine {
                             .state
                             .objects
                             .get(&blk)
-                            .map(|o| o.has_keyword(&self.registry, Keyword::Lifelink))
+                            .map(|o| o.has_keyword(self.registry, Keyword::Lifelink))
                             .unwrap_or(false);
                         let has_dt = self
                             .state
                             .objects
                             .get(&blk)
-                            .map(|o| o.has_keyword(&self.registry, Keyword::Deathtouch))
+                            .map(|o| o.has_keyword(self.registry, Keyword::Deathtouch))
                             .unwrap_or(false);
                         let owner = self.state.objects.get(&blk).map(|o| o.owner).unwrap_or(dfd);
                         let participates = object_participates_in_pass(
                             &self.state,
-                            &self.registry,
+                            self.registry,
                             c,
                             pass,
                             blk,
@@ -1513,7 +1535,13 @@ impl GameEngine {
             }
         }
         for (att_id, def_id) in combat_dmg_to_player {
-            self.fire_triggers(GameEvent::CombatDamageToPlayer { attacker_id: att_id, defender_id: def_id }, events);
+            self.fire_triggers(
+                GameEvent::CombatDamageToPlayer {
+                    attacker_id: att_id,
+                    defender_id: def_id,
+                },
+                events,
+            );
         }
         Ok(())
     }
@@ -1588,7 +1616,9 @@ impl GameEngine {
             return Err(EngineError::Illegal("not your priority"));
         }
         if !self.state.pending_triggers.is_empty() {
-            return Err(EngineError::Illegal("must choose trigger target before passing priority"));
+            return Err(EngineError::Illegal(
+                "must choose trigger target before passing priority",
+            ));
         }
         if self.state.stack.is_empty()
             && self.state.turn_step == TurnStep::Cleanup
@@ -1941,7 +1971,9 @@ impl GameEngine {
             .iter()
             .filter(|e| e.affects(oid))
             .map(|e| match &e.kind {
-                ContinuousEffectKind::PtModify { delta_toughness, .. } => *delta_toughness,
+                ContinuousEffectKind::PtModify {
+                    delta_toughness, ..
+                } => *delta_toughness,
             })
             .sum();
         Some((base + delta).max(0) as u32)
@@ -2159,8 +2191,8 @@ impl GameEngine {
             events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
                     object_id: top.id,
-                    // Abilities cease to exist on resolution; graveyard tells the C++ server not to
-                    // invoke the Oracle-lookup fallback and not to expect a permanent to land.
+                    // Abilities cease to exist on resolution; graveyard tells the C++ server
+                    // not to expect a permanent to land.
                     destination: rv1::StackResolveDestination::Graveyard as i32,
                 })),
             });
@@ -2196,10 +2228,16 @@ impl GameEngine {
         }
 
         // Determine effects: for spells use spell_effect (Vec); for abilities wrap single effect.
-        let (effects, spell_label, pump_self_params): (Vec<SpellEffectKind>, String, Option<(i32, i32)>) = if is_ability {
+        let (effects, spell_label, pump_self_params): (
+            Vec<SpellEffectKind>,
+            String,
+            Option<(i32, i32)>,
+        ) = if is_ability {
             let ability_index = top.ability_index.unwrap_or(0);
             let def = self.registry.get(&card_id);
-            let name = def.map(|d| d.name.clone()).unwrap_or_else(|| "Ability".into());
+            let name = def
+                .map(|d| d.name.clone())
+                .unwrap_or_else(|| "Ability".into());
             if top.is_triggered {
                 let triggered_effect = def
                     .and_then(|d| d.triggered_abilities.get(ability_index))
@@ -2221,7 +2259,9 @@ impl GameEngine {
         } else {
             let def = self.registry.get(&card_id);
             let effects = def.map(|c| c.spell_effect.clone()).unwrap_or_default();
-            let name = def.map(|d| d.name.clone()).unwrap_or_else(|| "Spell".into());
+            let name = def
+                .map(|d| d.name.clone())
+                .unwrap_or_else(|| "Spell".into());
             (effects, name, None)
         };
 
@@ -2254,7 +2294,7 @@ impl GameEngine {
 
         let fizzle = spell_has_no_legal_targets_at_resolution(
             &self.state,
-            &self.registry,
+            self.registry,
             &effects,
             &targets,
             controller,
@@ -2265,154 +2305,187 @@ impl GameEngine {
         }
 
         for effect in effects {
-          match effect {
-            SpellEffectKind::DamageTarget { amount, .. } => {
-                if let Some(&tid) = targets.first() {
-                    if let Some(pi) = self.state.player_idx(tid as i32) {
-                        let pid = self.state.players[pi].id;
-                        self.state.players[pi].life -= amount as i32;
-                        events.push(rv1::RuledEvent {
-                            ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
-                                player_id: self.state.players[pi].id,
-                                new_total: self.state.players[pi].life,
-                                delta: -(amount as i32),
-                            })),
-                        });
-                        events.push(ev_log(format!(
-                            "{spell_label} deals {amount} damage to P{pid}"
-                        )));
-                    } else {
-                        let tgt = object_display_name(&self.state, &self.registry, tid);
-                        if let Some(t) = self.state.objects.get_mut(&tid) {
-                            if t.zone == Zone::Battlefield && t.is_creature(&self.registry) {
-                                t.damage += amount;
-                                events.push(ev_log(format!(
-                                    "{spell_label} deals {amount} damage to {tgt}"
-                                )));
+            match effect {
+                SpellEffectKind::DamageTarget { amount, .. } => {
+                    if let Some(&tid) = targets.first() {
+                        if let Some(pi) = self.state.player_idx(tid as i32) {
+                            let pid = self.state.players[pi].id;
+                            self.state.players[pi].life -= amount as i32;
+                            events.push(rv1::RuledEvent {
+                                ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                                    player_id: self.state.players[pi].id,
+                                    new_total: self.state.players[pi].life,
+                                    delta: -(amount as i32),
+                                })),
+                            });
+                            events.push(ev_log(format!(
+                                "{spell_label} deals {amount} damage to P{pid}"
+                            )));
+                        } else {
+                            let tgt = object_display_name(&self.state, self.registry, tid);
+                            if let Some(t) = self.state.objects.get_mut(&tid) {
+                                if t.zone == Zone::Battlefield && t.is_creature(self.registry) {
+                                    t.damage += amount;
+                                    events.push(ev_log(format!(
+                                        "{spell_label} deals {amount} damage to {tgt}"
+                                    )));
+                                }
                             }
                         }
                     }
                 }
-            }
-            SpellEffectKind::Draw { count } => {
-                let idx = self.state.player_idx(controller).unwrap();
-                for _ in 0..count {
-                    draw_card(&mut self.state.players[idx], &mut self.state.objects)?;
-                }
-                let noun = if count == 1 { "card" } else { "cards" };
-                events.push(ev_log(format!(
-                    "P{controller} draws {count} {noun} ({spell_label})."
-                )));
-            }
-            SpellEffectKind::PumpTarget { power, toughness } => {
-                if let Some(&tid) = targets.first() {
-                    let is_valid_target = self
-                        .state
-                        .objects
-                        .get(&tid)
-                        .map(|t| t.zone == Zone::Battlefield && t.is_creature(&self.registry))
-                        .unwrap_or(false);
-                    if is_valid_target {
-                        let tgt = object_display_name(&self.state, &self.registry, tid);
-                        self.state.continuous_effects.push(ContinuousEffect {
-                            source_id: top.source_permanent_id,
-                            affected: AffectedScope::Single(tid),
-                            kind: ContinuousEffectKind::PtModify {
-                                delta_power: power,
-                                delta_toughness: toughness,
-                            },
-                            duration: EffectDuration::UntilEndOfTurn,
-                            timestamp: self.state.command_index,
-                        });
-                        events.push(ev_log(format!(
-                            "{spell_label} gives +{power}/+{toughness} to {tgt}"
-                        )));
+                SpellEffectKind::Draw { count } => {
+                    let idx = self.state.player_idx(controller).unwrap();
+                    for _ in 0..count {
+                        draw_card(&mut self.state.players[idx], &mut self.state.objects)?;
                     }
+                    let noun = if count == 1 { "card" } else { "cards" };
+                    events.push(ev_log(format!(
+                        "P{controller} draws {count} {noun} ({spell_label})."
+                    )));
                 }
-            }
-            SpellEffectKind::DestroyTarget { .. } => {
-                if let Some(&tid) = targets.first() {
-                    let tgt = object_display_name(&self.state, &self.registry, tid);
-                    let indestructible = self
-                        .state
-                        .objects
-                        .get(&tid)
-                        .map(|o| o.has_keyword(&self.registry, Keyword::Indestructible))
-                        .unwrap_or(false);
-                    if indestructible {
-                        events.push(ev_log(format!(
-                            "{spell_label} has no effect: {tgt} is indestructible."
-                        )));
-                    } else {
-                        events.push(ev_log(format!("{spell_label} destroys {tgt}")));
-                        let owner = self.state.objects.get(&tid).map(|o| o.owner);
-                        let card_id_t = self.state.objects.get(&tid).map(|o| o.card_id.clone());
-                        destroy_permanent(&mut self.state, tid)?;
-                        if let Some(owner_id) = owner {
-                            events.push(permanent_moved_event(
-                                &self.state,
-                                tid,
-                                owner_id,
-                                rv1::permanent_moved::Destination::Graveyard,
-                            ));
-                        }
-                        if let (Some(cid), Some(ctrl)) = (card_id_t, owner) {
-                            self.fire_triggers(GameEvent::Dies { object_id: tid, card_id: cid, controller: ctrl }, events);
+                SpellEffectKind::PumpTarget { power, toughness } => {
+                    if let Some(&tid) = targets.first() {
+                        let is_valid_target = self
+                            .state
+                            .objects
+                            .get(&tid)
+                            .map(|t| t.zone == Zone::Battlefield && t.is_creature(self.registry))
+                            .unwrap_or(false);
+                        if is_valid_target {
+                            let tgt = object_display_name(&self.state, self.registry, tid);
+                            self.state.continuous_effects.push(ContinuousEffect {
+                                source_id: top.source_permanent_id,
+                                affected: AffectedScope::Single(tid),
+                                kind: ContinuousEffectKind::PtModify {
+                                    delta_power: power,
+                                    delta_toughness: toughness,
+                                },
+                                duration: EffectDuration::UntilEndOfTurn,
+                                timestamp: self.state.command_index,
+                            });
+                            events.push(ev_log(format!(
+                                "{spell_label} gives +{power}/+{toughness} to {tgt}"
+                            )));
                         }
                     }
                 }
-            }
-            SpellEffectKind::CounterTargetSpell => {
-                if let Some(&tid) = targets.first() {
-                    if let Some(pos) = self.state.stack.iter().position(|s| s.id == tid) {
-                        let st = self.state.stack.remove(pos);
-                        let tgt = self
-                            .registry
-                            .get(&st.card_id)
-                            .map(|d| d.name.as_str())
-                            .unwrap_or("spell");
-                        move_object_to_zone(&mut self.state, st.id, Zone::Graveyard)?;
-                        events.push(ev_log(format!("{spell_label} counters {tgt}")));
+                SpellEffectKind::DestroyTarget { .. } => {
+                    if let Some(&tid) = targets.first() {
+                        let tgt = object_display_name(&self.state, self.registry, tid);
+                        let indestructible = self
+                            .state
+                            .objects
+                            .get(&tid)
+                            .map(|o| o.has_keyword(self.registry, Keyword::Indestructible))
+                            .unwrap_or(false);
+                        if indestructible {
+                            events.push(ev_log(format!(
+                                "{spell_label} has no effect: {tgt} is indestructible."
+                            )));
+                        } else {
+                            events.push(ev_log(format!("{spell_label} destroys {tgt}")));
+                            let owner = self.state.objects.get(&tid).map(|o| o.owner);
+                            let card_id_t = self.state.objects.get(&tid).map(|o| o.card_id.clone());
+                            destroy_permanent(&mut self.state, tid)?;
+                            if let Some(owner_id) = owner {
+                                events.push(permanent_moved_event(
+                                    &self.state,
+                                    tid,
+                                    owner_id,
+                                    rv1::permanent_moved::Destination::Graveyard,
+                                ));
+                            }
+                            if let (Some(cid), Some(ctrl)) = (card_id_t, owner) {
+                                self.fire_triggers(
+                                    GameEvent::Dies {
+                                        object_id: tid,
+                                        card_id: cid,
+                                        controller: ctrl,
+                                    },
+                                    events,
+                                );
+                            }
+                        }
                     }
                 }
-            }
-            SpellEffectKind::GainLife { amount } => {
-                let pi = self.state.player_idx(controller).unwrap();
-                self.state.players[pi].life += amount as i32;
-                events.push(rv1::RuledEvent {
-                    ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
-                        player_id: controller,
-                        new_total: self.state.players[pi].life,
-                        delta: amount as i32,
-                    })),
-                });
-                events.push(ev_log(format!(
-                    "P{controller} gains {amount} life ({spell_label})."
-                )));
-            }
-            SpellEffectKind::TargetPlayerGainsLife { amount, .. } => {
-                if let Some(&tid) = targets.first() {
-                    if let Some(pi) = self.state.player_idx(tid as i32) {
-                        let pid = self.state.players[pi].id;
-                        self.state.players[pi].life += amount as i32;
-                        events.push(rv1::RuledEvent {
-                            ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
-                                player_id: pid,
-                                new_total: self.state.players[pi].life,
-                                delta: amount as i32,
-                            })),
-                        });
-                        events.push(ev_log(format!(
-                            "P{pid} gains {amount} life ({spell_label})."
-                        )));
+                SpellEffectKind::CounterTargetSpell => {
+                    if let Some(&tid) = targets.first() {
+                        if let Some(pos) = self.state.stack.iter().position(|s| s.id == tid) {
+                            let st = self.state.stack.remove(pos);
+                            let tgt = self
+                                .registry
+                                .get(&st.card_id)
+                                .map(|d| d.name.as_str())
+                                .unwrap_or("spell");
+                            move_object_to_zone(&mut self.state, st.id, Zone::Graveyard)?;
+                            events.push(ev_log(format!("{spell_label} counters {tgt}")));
+                        }
                     }
                 }
-            }
-            SpellEffectKind::TargetPlayerLosesLife { amount, .. } => {
-                if let Some(&tid) = targets.first() {
-                    if let Some(pi) = self.state.player_idx(tid as i32) {
-                        let pid = self.state.players[pi].id;
+                SpellEffectKind::GainLife { amount } => {
+                    let pi = self.state.player_idx(controller).unwrap();
+                    self.state.players[pi].life += amount as i32;
+                    events.push(rv1::RuledEvent {
+                        ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                            player_id: controller,
+                            new_total: self.state.players[pi].life,
+                            delta: amount as i32,
+                        })),
+                    });
+                    events.push(ev_log(format!(
+                        "P{controller} gains {amount} life ({spell_label})."
+                    )));
+                }
+                SpellEffectKind::TargetPlayerGainsLife { amount, .. } => {
+                    if let Some(&tid) = targets.first() {
+                        if let Some(pi) = self.state.player_idx(tid as i32) {
+                            let pid = self.state.players[pi].id;
+                            self.state.players[pi].life += amount as i32;
+                            events.push(rv1::RuledEvent {
+                                ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                                    player_id: pid,
+                                    new_total: self.state.players[pi].life,
+                                    delta: amount as i32,
+                                })),
+                            });
+                            events.push(ev_log(format!(
+                                "P{pid} gains {amount} life ({spell_label})."
+                            )));
+                        }
+                    }
+                }
+                SpellEffectKind::TargetPlayerLosesLife { amount, .. } => {
+                    if let Some(&tid) = targets.first() {
+                        if let Some(pi) = self.state.player_idx(tid as i32) {
+                            let pid = self.state.players[pi].id;
+                            self.state.players[pi].life -= amount as i32;
+                            events.push(rv1::RuledEvent {
+                                ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                                    player_id: pid,
+                                    new_total: self.state.players[pi].life,
+                                    delta: -(amount as i32),
+                                })),
+                            });
+                            events.push(ev_log(format!(
+                                "P{pid} loses {amount} life ({spell_label})."
+                            )));
+                        }
+                    }
+                }
+                SpellEffectKind::EachOpponentLosesLifeYouGainEqual { amount } => {
+                    let opps: Vec<(usize, PlayerId)> = self
+                        .state
+                        .players
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, p)| p.id != controller && !p.has_lost)
+                        .map(|(i, p)| (i, p.id))
+                        .collect();
+                    let mut total_lost: u32 = 0;
+                    for (pi, pid) in opps {
                         self.state.players[pi].life -= amount as i32;
+                        total_lost += amount;
                         events.push(rv1::RuledEvent {
                             ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
                                 player_id: pid,
@@ -2424,205 +2497,189 @@ impl GameEngine {
                             "P{pid} loses {amount} life ({spell_label})."
                         )));
                     }
-                }
-            }
-            SpellEffectKind::EachOpponentLosesLifeYouGainEqual { amount } => {
-                let opps: Vec<(usize, PlayerId)> = self
-                    .state
-                    .players
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, p)| p.id != controller && !p.has_lost)
-                    .map(|(i, p)| (i, p.id))
-                    .collect();
-                let mut total_lost: u32 = 0;
-                for (pi, pid) in opps {
-                    self.state.players[pi].life -= amount as i32;
-                    total_lost += amount;
-                    events.push(rv1::RuledEvent {
-                        ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
-                            player_id: pid,
-                            new_total: self.state.players[pi].life,
-                            delta: -(amount as i32),
-                        })),
-                    });
-                    events.push(ev_log(format!(
-                        "P{pid} loses {amount} life ({spell_label})."
-                    )));
-                }
-                if total_lost > 0 {
-                    if let Some(ci) = self.state.player_idx(controller) {
-                        self.state.players[ci].life += total_lost as i32;
-                        events.push(rv1::RuledEvent {
-                            ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
-                                player_id: controller,
-                                new_total: self.state.players[ci].life,
-                                delta: total_lost as i32,
-                            })),
-                        });
-                        events.push(ev_log(format!(
-                            "P{controller} gains {total_lost} life ({spell_label})."
-                        )));
-                    }
-                }
-            }
-            SpellEffectKind::ExileTarget => {
-                if let Some(&tid) = targets.first() {
-                    let tgt = object_display_name(&self.state, &self.registry, tid);
-                    let owner = self.state.objects.get(&tid).map(|o| o.owner);
-                    move_object_to_zone(&mut self.state, tid, Zone::Exile)?;
-                    events.push(ev_log(format!("{spell_label} exiles {tgt}")));
-                    if let Some(owner_id) = owner {
-                        events.push(permanent_moved_event(
-                            &self.state,
-                            tid,
-                            owner_id,
-                            rv1::permanent_moved::Destination::Exile,
-                        ));
-                    }
-                }
-            }
-            SpellEffectKind::ExileTargetGainLifeEqualToPower => {
-                if let Some(&tid) = targets.first() {
-                    let tgt = object_display_name(&self.state, &self.registry, tid);
-                    // CR 608: read effective power at resolution before the object leaves.
-                    let power = self.effective_power(tid).unwrap_or(0);
-                    let owner = self.state.objects.get(&tid).map(|o| o.owner);
-                    let target_controller = owner.unwrap_or(controller);
-                    move_object_to_zone(&mut self.state, tid, Zone::Exile)?;
-                    events.push(ev_log(format!("{spell_label} exiles {tgt}")));
-                    if let Some(owner_id) = owner {
-                        events.push(permanent_moved_event(
-                            &self.state,
-                            tid,
-                            owner_id,
-                            rv1::permanent_moved::Destination::Exile,
-                        ));
-                    }
-                    if power > 0 {
-                        if let Some(pi) = self.state.player_idx(target_controller) {
-                            self.state.players[pi].life += power as i32;
+                    if total_lost > 0 {
+                        if let Some(ci) = self.state.player_idx(controller) {
+                            self.state.players[ci].life += total_lost as i32;
                             events.push(rv1::RuledEvent {
                                 ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
-                                    player_id: target_controller,
-                                    new_total: self.state.players[pi].life,
-                                    delta: power as i32,
+                                    player_id: controller,
+                                    new_total: self.state.players[ci].life,
+                                    delta: total_lost as i32,
                                 })),
                             });
-                            events
-                                .push(ev_log(format!("P{target_controller} gains {power} life.")));
+                            events.push(ev_log(format!(
+                                "P{controller} gains {total_lost} life ({spell_label})."
+                            )));
                         }
                     }
                 }
-            }
-            SpellEffectKind::ReturnTargetCreatureToHand
-            | SpellEffectKind::ReturnTargetPermanentToHand => {
-                if let Some(&tid) = targets.first() {
-                    let tgt = object_display_name(&self.state, &self.registry, tid);
-                    let owner = self.state.objects.get(&tid).map(|o| o.owner);
-                    move_object_to_zone(&mut self.state, tid, Zone::Hand)?;
-                    // Reset transient permanent state when leaving the battlefield.
-                    if let Some(o) = self.state.objects.get_mut(&tid) {
-                        o.tapped = false;
-                        o.summoning_sick = false;
-                        o.damage = 0;
-                        o.deathtouch_damage = false;
-                        // power/toughness hold the printed base and are not cleared:
-                        // they remain valid for when the card re-enters the battlefield.
-                    }
-                    events.push(ev_log(format!(
-                        "{spell_label} returns {tgt} to its owner's hand"
-                    )));
-                    if let Some(owner_id) = owner {
-                        events.push(permanent_moved_event(
-                            &self.state,
-                            tid,
-                            owner_id,
-                            rv1::permanent_moved::Destination::Hand,
-                        ));
-                    }
-                }
-            }
-            SpellEffectKind::MillTargetPlayer { count, .. } => {
-                if let Some(&tid) = targets.first() {
-                    if let Some(pi) = self.state.player_idx(tid as i32) {
-                        let pid = self.state.players[pi].id;
-                        let mut milled = 0u32;
-                        for _ in 0..count {
-                            let Some(oid) = self.state.players[pi].library.pop_front() else {
-                                break;
-                            };
-                            self.state.players[pi].graveyard.push(oid);
-                            if let Some(o) = self.state.objects.get_mut(&oid) {
-                                o.zone = Zone::Graveyard;
-                            }
-                            events.push(permanent_moved_event(
-                                &self.state,
-                                oid,
-                                pid,
-                                rv1::permanent_moved::Destination::Graveyard,
-                            ));
-                            milled += 1;
-                        }
-                        events.push(ev_log(format!(
-                            "{spell_label} mills {milled} card(s) from P{pid}"
-                        )));
-                    }
-                }
-            }
-            SpellEffectKind::DestroyTargetTapped => {
-                if let Some(&tid) = targets.first() {
-                    let tgt = object_display_name(&self.state, &self.registry, tid);
-                    let is_tapped = self
-                        .state
-                        .objects
-                        .get(&tid)
-                        .map(|o| o.zone == Zone::Battlefield && o.tapped)
-                        .unwrap_or(false);
-                    let indestructible = self
-                        .state
-                        .objects
-                        .get(&tid)
-                        .map(|o| o.has_keyword(&self.registry, Keyword::Indestructible))
-                        .unwrap_or(false);
-                    if !is_tapped {
-                        events.push(ev_log(format!("{spell_label} fizzles: {tgt} is not tapped.")));
-                    } else if indestructible {
-                        events.push(ev_log(format!(
-                            "{spell_label} has no effect: {tgt} is indestructible."
-                        )));
-                    } else {
+                SpellEffectKind::ExileTarget => {
+                    if let Some(&tid) = targets.first() {
+                        let tgt = object_display_name(&self.state, self.registry, tid);
                         let owner = self.state.objects.get(&tid).map(|o| o.owner);
-                        let card_id_t = self.state.objects.get(&tid).map(|o| o.card_id.clone());
-                        events.push(ev_log(format!("{spell_label} destroys {tgt}")));
-                        destroy_permanent(&mut self.state, tid)?;
+                        move_object_to_zone(&mut self.state, tid, Zone::Exile)?;
+                        events.push(ev_log(format!("{spell_label} exiles {tgt}")));
                         if let Some(owner_id) = owner {
                             events.push(permanent_moved_event(
                                 &self.state,
                                 tid,
                                 owner_id,
-                                rv1::permanent_moved::Destination::Graveyard,
+                                rv1::permanent_moved::Destination::Exile,
                             ));
                         }
-                        if let (Some(cid), Some(ctrl)) = (card_id_t, owner) {
-                            self.fire_triggers(GameEvent::Dies { object_id: tid, card_id: cid, controller: ctrl }, events);
+                    }
+                }
+                SpellEffectKind::ExileTargetGainLifeEqualToPower => {
+                    if let Some(&tid) = targets.first() {
+                        let tgt = object_display_name(&self.state, self.registry, tid);
+                        // CR 608: read effective power at resolution before the object leaves.
+                        let power = self.effective_power(tid).unwrap_or(0);
+                        let owner = self.state.objects.get(&tid).map(|o| o.owner);
+                        let target_controller = owner.unwrap_or(controller);
+                        move_object_to_zone(&mut self.state, tid, Zone::Exile)?;
+                        events.push(ev_log(format!("{spell_label} exiles {tgt}")));
+                        if let Some(owner_id) = owner {
+                            events.push(permanent_moved_event(
+                                &self.state,
+                                tid,
+                                owner_id,
+                                rv1::permanent_moved::Destination::Exile,
+                            ));
+                        }
+                        if power > 0 {
+                            if let Some(pi) = self.state.player_idx(target_controller) {
+                                self.state.players[pi].life += power as i32;
+                                events.push(rv1::RuledEvent {
+                                    ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                                        player_id: target_controller,
+                                        new_total: self.state.players[pi].life,
+                                        delta: power as i32,
+                                    })),
+                                });
+                                events.push(ev_log(format!(
+                                    "P{target_controller} gains {power} life."
+                                )));
+                            }
                         }
                     }
                 }
-            }
-            SpellEffectKind::TapTarget { .. } => {
-                if let Some(&tid) = targets.first() {
-                    let tgt = object_display_name(&self.state, &self.registry, tid);
-                    if let Some(o) = self.state.objects.get_mut(&tid) {
-                        if o.zone == Zone::Battlefield && !o.tapped {
-                            o.tapped = true;
-                            events.push(ev_log(format!("{spell_label} taps {tgt}")));
+                SpellEffectKind::ReturnTargetCreatureToHand
+                | SpellEffectKind::ReturnTargetPermanentToHand => {
+                    if let Some(&tid) = targets.first() {
+                        let tgt = object_display_name(&self.state, self.registry, tid);
+                        let owner = self.state.objects.get(&tid).map(|o| o.owner);
+                        move_object_to_zone(&mut self.state, tid, Zone::Hand)?;
+                        // Reset transient permanent state when leaving the battlefield.
+                        if let Some(o) = self.state.objects.get_mut(&tid) {
+                            o.tapped = false;
+                            o.summoning_sick = false;
+                            o.damage = 0;
+                            o.deathtouch_damage = false;
+                            // power/toughness hold the printed base and are not cleared:
+                            // they remain valid for when the card re-enters the battlefield.
+                        }
+                        events.push(ev_log(format!(
+                            "{spell_label} returns {tgt} to its owner's hand"
+                        )));
+                        if let Some(owner_id) = owner {
+                            events.push(permanent_moved_event(
+                                &self.state,
+                                tid,
+                                owner_id,
+                                rv1::permanent_moved::Destination::Hand,
+                            ));
                         }
                     }
                 }
+                SpellEffectKind::MillTargetPlayer { count, .. } => {
+                    if let Some(&tid) = targets.first() {
+                        if let Some(pi) = self.state.player_idx(tid as i32) {
+                            let pid = self.state.players[pi].id;
+                            let mut milled = 0u32;
+                            for _ in 0..count {
+                                let Some(oid) = self.state.players[pi].library.pop_front() else {
+                                    break;
+                                };
+                                self.state.players[pi].graveyard.push(oid);
+                                if let Some(o) = self.state.objects.get_mut(&oid) {
+                                    o.zone = Zone::Graveyard;
+                                }
+                                events.push(permanent_moved_event(
+                                    &self.state,
+                                    oid,
+                                    pid,
+                                    rv1::permanent_moved::Destination::Graveyard,
+                                ));
+                                milled += 1;
+                            }
+                            events.push(ev_log(format!(
+                                "{spell_label} mills {milled} card(s) from P{pid}"
+                            )));
+                        }
+                    }
+                }
+                SpellEffectKind::DestroyTargetTapped => {
+                    if let Some(&tid) = targets.first() {
+                        let tgt = object_display_name(&self.state, self.registry, tid);
+                        let is_tapped = self
+                            .state
+                            .objects
+                            .get(&tid)
+                            .map(|o| o.zone == Zone::Battlefield && o.tapped)
+                            .unwrap_or(false);
+                        let indestructible = self
+                            .state
+                            .objects
+                            .get(&tid)
+                            .map(|o| o.has_keyword(self.registry, Keyword::Indestructible))
+                            .unwrap_or(false);
+                        if !is_tapped {
+                            events.push(ev_log(format!(
+                                "{spell_label} fizzles: {tgt} is not tapped."
+                            )));
+                        } else if indestructible {
+                            events.push(ev_log(format!(
+                                "{spell_label} has no effect: {tgt} is indestructible."
+                            )));
+                        } else {
+                            let owner = self.state.objects.get(&tid).map(|o| o.owner);
+                            let card_id_t = self.state.objects.get(&tid).map(|o| o.card_id.clone());
+                            events.push(ev_log(format!("{spell_label} destroys {tgt}")));
+                            destroy_permanent(&mut self.state, tid)?;
+                            if let Some(owner_id) = owner {
+                                events.push(permanent_moved_event(
+                                    &self.state,
+                                    tid,
+                                    owner_id,
+                                    rv1::permanent_moved::Destination::Graveyard,
+                                ));
+                            }
+                            if let (Some(cid), Some(ctrl)) = (card_id_t, owner) {
+                                self.fire_triggers(
+                                    GameEvent::Dies {
+                                        object_id: tid,
+                                        card_id: cid,
+                                        controller: ctrl,
+                                    },
+                                    events,
+                                );
+                            }
+                        }
+                    }
+                }
+                SpellEffectKind::TapTarget { .. } => {
+                    if let Some(&tid) = targets.first() {
+                        let tgt = object_display_name(&self.state, self.registry, tid);
+                        if let Some(o) = self.state.objects.get_mut(&tid) {
+                            if o.zone == Zone::Battlefield && !o.tapped {
+                                o.tapped = true;
+                                events.push(ev_log(format!("{spell_label} taps {tgt}")));
+                            }
+                        }
+                    }
+                }
+                SpellEffectKind::None => {}
             }
-            SpellEffectKind::None => {}
-          }
         }
         events.push(ev_log(format!("{spell_label} resolves.")));
         Ok(())
@@ -2675,14 +2732,16 @@ impl GameEngine {
             ));
         }
         if !self.state.pending_triggers.is_empty() {
-            return Err(EngineError::Illegal("must choose trigger target before casting"));
+            return Err(EngineError::Illegal(
+                "must choose trigger target before casting",
+            ));
         }
-        validate_spell_targets(&self.state, &self.registry, player, &card_id, targets)?;
+        validate_spell_targets(&self.state, self.registry, player, &card_id, targets)?;
         pay_mana_simple(&mut self.state, idx, &def.mana_cost)?;
 
         self.state.players[idx].hand.retain(|&x| x != oid);
         let trefs: Vec<ObjectId> = targets.iter().map(|t| t.object_id).collect();
-        let tgt_line = format_spell_targets_log(&self.state, &self.registry, &trefs);
+        let tgt_line = format_spell_targets_log(&self.state, self.registry, &trefs);
 
         self.state.stack.push(StackItem {
             id: oid,
@@ -2718,7 +2777,13 @@ impl GameEngine {
                 ability_annotation: String::new(),
             })),
         });
-        self.fire_triggers(GameEvent::SpellCast { caster: player, card_id: cast_card_id }, &mut batch.events);
+        self.fire_triggers(
+            GameEvent::SpellCast {
+                caster: player,
+                card_id: cast_card_id,
+            },
+            &mut batch.events,
+        );
         batch.events.push(ev_priority_changed(self));
         fill_legal(&mut batch, self);
         Ok(batch)
@@ -2771,7 +2836,7 @@ impl GameEngine {
             .clone();
 
         // CR 602.2: validate targets BEFORE paying cost.
-        validate_effect_targets(&self.state, &self.registry, player, &ability.effect, targets)?;
+        validate_effect_targets(&self.state, self.registry, player, &ability.effect, targets)?;
 
         // Pay the cost. Track sacrifice separately so we can emit a PermanentMoved event below.
         let mut sacrifice_ev: Option<rv1::RuledEvent> = None;
@@ -2785,8 +2850,16 @@ impl GameEngine {
                 if o.tapped {
                     return Err(EngineError::Illegal("permanent is already tapped"));
                 }
-                if o.summoning_sick && self.registry.get(&card_id).map(|d| !d.keywords.contains(&tricerules_cards::Keyword::Haste)).unwrap_or(true) {
-                    return Err(EngineError::Illegal("cannot use tap ability due to summoning sickness"));
+                if o.summoning_sick
+                    && self
+                        .registry
+                        .get(&card_id)
+                        .map(|d| !d.keywords.contains(&tricerules_cards::Keyword::Haste))
+                        .unwrap_or(true)
+                {
+                    return Err(EngineError::Illegal(
+                        "cannot use tap ability due to summoning sickness",
+                    ));
                 }
                 o.tapped = true;
             }
@@ -2805,13 +2878,26 @@ impl GameEngine {
                 if o.tapped {
                     return Err(EngineError::Illegal("permanent is already tapped"));
                 }
-                if o.summoning_sick && self.registry.get(&card_id).map(|d| !d.keywords.contains(&tricerules_cards::Keyword::Haste)).unwrap_or(true) {
-                    return Err(EngineError::Illegal("cannot use tap ability due to summoning sickness"));
+                if o.summoning_sick
+                    && self
+                        .registry
+                        .get(&card_id)
+                        .map(|d| !d.keywords.contains(&tricerules_cards::Keyword::Haste))
+                        .unwrap_or(true)
+                {
+                    return Err(EngineError::Illegal(
+                        "cannot use tap ability due to summoning sickness",
+                    ));
                 }
                 o.tapped = true;
             }
             AbilityCost::Sacrifice => {
-                let owner = self.state.objects.get(&permanent_id).map(|o| o.owner).unwrap_or(player);
+                let owner = self
+                    .state
+                    .objects
+                    .get(&permanent_id)
+                    .map(|o| o.owner)
+                    .unwrap_or(player);
                 sacrifice_permanent(&mut self.state, permanent_id)?;
                 sacrifice_ev = Some(permanent_moved_event(
                     &self.state,
@@ -2847,7 +2933,7 @@ impl GameEngine {
         self.state.passes_since_stack_change = 0;
         self.state.priority_idx = idx;
 
-        let tgt_line = format_spell_targets_log(&self.state, &self.registry, &trefs);
+        let tgt_line = format_spell_targets_log(&self.state, self.registry, &trefs);
         let mut batch = RuledEventBatch::default();
         batch.events.push(ev_log(format!(
             "P{player} activates {card_name}: {ability_text}{tgt_line}"
@@ -2896,9 +2982,11 @@ impl GameEngine {
             .map(|a| &a.effect);
 
         // Validate the chosen target against the effect's target spec.
-        let target_ref = &[rv1::TargetRef { object_id: target_object_id }];
+        let target_ref = &[rv1::TargetRef {
+            object_id: target_object_id,
+        }];
         if let Some(TriggeredEffect::Effect(kind)) = effect {
-            validate_effect_targets(&self.state, &self.registry, player, kind, target_ref)?;
+            validate_effect_targets(&self.state, self.registry, player, kind, target_ref)?;
         }
 
         let virtual_id = self.state.next_object_id;
@@ -2912,7 +3000,7 @@ impl GameEngine {
         let controller = pending.controller;
 
         let trefs = vec![target_object_id];
-        let tgt_line = format_spell_targets_log(&self.state, &self.registry, &trefs);
+        let tgt_line = format_spell_targets_log(&self.state, self.registry, &trefs);
 
         self.state.stack.push(StackItem {
             id: virtual_id,
@@ -2934,7 +3022,9 @@ impl GameEngine {
             ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
                 object_id: virtual_id,
                 description: card_name,
-                targets: vec![rv1::TargetRef { object_id: target_object_id }],
+                targets: vec![rv1::TargetRef {
+                    object_id: target_object_id,
+                }],
                 ability_annotation: ability_text,
             })),
         });
@@ -2947,12 +3037,14 @@ impl GameEngine {
                 .map(|d| d.name.clone())
                 .unwrap_or_else(|| next.card_id.clone());
             batch.events.push(rv1::RuledEvent {
-                ev: Some(rv1::ruled_event::Ev::TriggerNeedsTarget(rv1::TriggerNeedsTarget {
-                    source_permanent_id: next.source_permanent_id,
-                    ability_index: next.ability_index as u32,
-                    ability_text: next.ability_text.clone(),
-                    controller_player_id: next.controller,
-                })),
+                ev: Some(rv1::ruled_event::Ev::TriggerNeedsTarget(
+                    rv1::TriggerNeedsTarget {
+                        source_permanent_id: next.source_permanent_id,
+                        ability_index: next.ability_index as u32,
+                        ability_text: next.ability_text.clone(),
+                        controller_player_id: next.controller,
+                    },
+                )),
             });
             batch.events.push(ev_log(format!(
                 "Triggered: {next_name} — choose a target for: {}",
@@ -3004,7 +3096,10 @@ impl GameEngine {
         batch
             .events
             .push(ev_log(format!("P{} played {}", player, land_name)));
-        self.fire_triggers(GameEvent::EntersBattlefield { object_id: oid }, &mut batch.events);
+        self.fire_triggers(
+            GameEvent::EntersBattlefield { object_id: oid },
+            &mut batch.events,
+        );
         fill_legal(&mut batch, self);
         Ok(batch)
     }
@@ -3056,7 +3151,7 @@ impl GameEngine {
             let Some(o) = self.state.objects.get(&id) else {
                 continue;
             };
-            let indestructible = o.has_keyword(&self.registry, Keyword::Indestructible);
+            let indestructible = o.has_keyword(self.registry, Keyword::Indestructible);
             // CR 704.5f: toughness 0 — still dies even with indestructible (oracle text).
             if eff_t == 0 {
                 to_destroy.push(id);
@@ -3078,7 +3173,14 @@ impl GameEngine {
                     ));
                 }
                 if let (Some(cid), Some(ctrl)) = (card_id_for_trigger, owner) {
-                    self.fire_triggers(GameEvent::Dies { object_id: id, card_id: cid, controller: ctrl }, out);
+                    self.fire_triggers(
+                        GameEvent::Dies {
+                            object_id: id,
+                            card_id: cid,
+                            controller: ctrl,
+                        },
+                        out,
+                    );
                 }
             }
         }
@@ -3250,7 +3352,7 @@ impl GameEngine {
                             .state
                             .objects
                             .get(&oid)
-                            .is_some_and(|o| o.is_creature(&self.registry))
+                            .is_some_and(|o| o.is_creature(self.registry))
                         {
                             self.effective_power(oid).unwrap_or(0)
                         } else {
@@ -3266,7 +3368,7 @@ impl GameEngine {
                             .state
                             .objects
                             .get(&oid)
-                            .is_some_and(|o| o.is_creature(&self.registry))
+                            .is_some_and(|o| o.is_creature(self.registry))
                         {
                             self.effective_toughness(oid).unwrap_or(0)
                         } else {
@@ -3281,7 +3383,7 @@ impl GameEngine {
                         self.state
                             .objects
                             .get(&oid)
-                            .filter(|o| o.is_creature(&self.registry))
+                            .filter(|o| o.is_creature(self.registry))
                             .map_or(0, |o| o.damage)
                     })
                     .collect(),
@@ -3292,7 +3394,7 @@ impl GameEngine {
                         self.state
                             .objects
                             .get(&oid)
-                            .map(|o| o.is_creature(&self.registry))
+                            .map(|o| o.is_creature(self.registry))
                             .unwrap_or(false)
                     })
                     .collect(),
@@ -3305,9 +3407,7 @@ impl GameEngine {
                         self.state
                             .objects
                             .get(&oid)
-                            .map(|o| {
-                                o.has_keyword(&self.registry, tricerules_cards::Keyword::Haste)
-                            })
+                            .map(|o| o.has_keyword(self.registry, tricerules_cards::Keyword::Haste))
                             .unwrap_or(false)
                     })
                     .collect(),
@@ -3320,7 +3420,7 @@ impl GameEngine {
                             .objects
                             .get(&oid)
                             .map(|o| {
-                                o.has_keyword(&self.registry, tricerules_cards::Keyword::Trample)
+                                o.has_keyword(self.registry, tricerules_cards::Keyword::Trample)
                             })
                             .unwrap_or(false)
                     })
@@ -3334,10 +3434,7 @@ impl GameEngine {
                             .objects
                             .get(&oid)
                             .map(|o| {
-                                o.has_keyword(
-                                    &self.registry,
-                                    tricerules_cards::Keyword::FirstStrike,
-                                )
+                                o.has_keyword(self.registry, tricerules_cards::Keyword::FirstStrike)
                             })
                             .unwrap_or(false)
                     })
@@ -3352,7 +3449,7 @@ impl GameEngine {
                             .get(&oid)
                             .map(|o| {
                                 o.has_keyword(
-                                    &self.registry,
+                                    self.registry,
                                     tricerules_cards::Keyword::DoubleStrike,
                                 )
                             })
@@ -3367,7 +3464,7 @@ impl GameEngine {
                     .as_ref()
                     .map(|c| {
                         !c.first_strike_damage_done
-                            && combat_needs_first_strike_step(&self.state, &self.registry, c)
+                            && combat_needs_first_strike_step(&self.state, self.registry, c)
                     })
                     .unwrap_or(false),
                 // Pipe-delimited activated ability texts per battlefield permanent (empty if none).
@@ -3403,8 +3500,12 @@ impl GameEngine {
                                 def.activated_abilities
                                     .iter()
                                     .map(|a| match &a.cost {
-                                        tricerules_cards::primitives::AbilityCost::Mana(s) => s.as_str(),
-                                        tricerules_cards::primitives::AbilityCost::TapAndMana(s) => s.as_str(),
+                                        tricerules_cards::primitives::AbilityCost::Mana(s) => {
+                                            s.as_str()
+                                        }
+                                        tricerules_cards::primitives::AbilityCost::TapAndMana(
+                                            s,
+                                        ) => s.as_str(),
                                         _ => "",
                                     })
                                     .collect::<Vec<_>>()
@@ -3441,29 +3542,43 @@ impl GameEngine {
     fn fire_triggers(&mut self, event: GameEvent, events: &mut Vec<rv1::RuledEvent>) {
         let triggers = self.collect_triggers(&event);
         for (source_id, card_id, controller, ability_index, ability_text) in triggers {
-            self.push_trigger(source_id, &card_id, controller, ability_index, ability_text, events);
+            self.push_trigger(
+                source_id,
+                &card_id,
+                controller,
+                ability_index,
+                ability_text,
+                events,
+            );
         }
     }
 
     /// Collect `(source_id, card_id, controller, ability_index, ability_text)` for every triggered
     /// ability whose condition matches `event`. Returns owned data so the caller can mutate `self`.
     /// Results are ordered APNAP: active player's triggers first (CR 603.3b).
-    fn collect_triggers(&self, event: &GameEvent) -> Vec<(ObjectId, String, PlayerId, usize, String)> {
+    fn collect_triggers(
+        &self,
+        event: &GameEvent,
+    ) -> Vec<(ObjectId, String, PlayerId, usize, String)> {
         let ap = self.state.active_player_id();
         match event {
             GameEvent::EntersBattlefield { object_id } => {
-                let Some(obj) = self.state.objects.get(object_id) else { return vec![] };
+                let Some(obj) = self.state.objects.get(object_id) else {
+                    return vec![];
+                };
                 let card_id = obj.card_id.clone();
                 let controller = obj.owner;
                 self.matching_triggered_abilities(&card_id, *object_id, controller, |tc| {
                     *tc == TriggerCondition::WhenSelfEntersBattlefield
                 })
             }
-            GameEvent::Dies { object_id, card_id, controller } => {
-                self.matching_triggered_abilities(card_id, *object_id, *controller, |tc| {
-                    *tc == TriggerCondition::WhenSelfDies
-                })
-            }
+            GameEvent::Dies {
+                object_id,
+                card_id,
+                controller,
+            } => self.matching_triggered_abilities(card_id, *object_id, *controller, |tc| {
+                *tc == TriggerCondition::WhenSelfDies
+            }),
             GameEvent::Attacks { attacker_ids } => {
                 // APNAP: active player's attackers first, then NAP's
                 let mut sorted = attacker_ids.clone();
@@ -3477,7 +3592,9 @@ impl GameEngine {
                 sorted
                     .iter()
                     .flat_map(|&att| {
-                        let Some(obj) = self.state.objects.get(&att) else { return vec![] };
+                        let Some(obj) = self.state.objects.get(&att) else {
+                            return vec![];
+                        };
                         let card_id = obj.card_id.clone();
                         let controller = obj.owner;
                         self.matching_triggered_abilities(&card_id, att, controller, |tc| {
@@ -3486,17 +3603,21 @@ impl GameEngine {
                     })
                     .collect()
             }
-            GameEvent::CombatDamageToPlayer { attacker_id, defender_id } => {
-                let Some(obj) = self.state.objects.get(attacker_id) else { return vec![] };
+            GameEvent::CombatDamageToPlayer {
+                attacker_id,
+                defender_id,
+            } => {
+                let Some(obj) = self.state.objects.get(attacker_id) else {
+                    return vec![];
+                };
                 let card_id = obj.card_id.clone();
                 let controller = obj.owner;
                 let defender = *defender_id;
-                self.matching_triggered_abilities(&card_id, *attacker_id, controller, |tc| {
-                    match tc {
-                        TriggerCondition::WheneverSelfDealsCombatDamageToPlayer => true,
-                        TriggerCondition::WheneverSelfDealsDamageToOpponent => defender != controller,
-                        _ => false,
-                    }
+                self.matching_triggered_abilities(&card_id, *attacker_id, controller, |tc| match tc
+                {
+                    TriggerCondition::WheneverSelfDealsCombatDamageToPlayer => true,
+                    TriggerCondition::WheneverSelfDealsDamageToOpponent => defender != controller,
+                    _ => false,
                 })
             }
             GameEvent::UpkeepBegin => {
@@ -3504,7 +3625,9 @@ impl GameEngine {
                 let bf: Vec<ObjectId> = self.state.players[ap_idx].battlefield.clone();
                 bf.iter()
                     .flat_map(|&oid| {
-                        let Some(obj) = self.state.objects.get(&oid) else { return vec![] };
+                        let Some(obj) = self.state.objects.get(&oid) else {
+                            return vec![];
+                        };
                         let card_id = obj.card_id.clone();
                         let controller = obj.owner;
                         self.matching_triggered_abilities(&card_id, oid, controller, |tc| {
@@ -3513,7 +3636,10 @@ impl GameEngine {
                     })
                     .collect()
             }
-            GameEvent::SpellCast { caster, card_id: cast_card_id } => {
+            GameEvent::SpellCast {
+                caster,
+                card_id: cast_card_id,
+            } => {
                 let cast_def = self.registry.get(cast_card_id);
                 let is_enchantment = cast_def.map(|d| d.is_enchantment).unwrap_or(false);
                 let is_instant = cast_def.map(|d| d.is_instant).unwrap_or(false);
@@ -3525,14 +3651,20 @@ impl GameEngine {
                 all_oids
                     .iter()
                     .flat_map(|&oid| {
-                        let Some(obj) = self.state.objects.get(&oid) else { return vec![] };
+                        let Some(obj) = self.state.objects.get(&oid) else {
+                            return vec![];
+                        };
                         if obj.zone != Zone::Battlefield {
                             return vec![];
                         }
                         let source_controller = obj.owner;
                         let card_id = obj.card_id.clone();
                         self.matching_triggered_abilities(&card_id, oid, source_controller, |tc| {
-                            let TriggerCondition::WheneverPlayerCastsSpell { caster: caster_filter, spell_type } = tc else {
+                            let TriggerCondition::WheneverPlayerCastsSpell {
+                                caster: caster_filter,
+                                spell_type,
+                            } = tc
+                            else {
                                 return false;
                             };
                             // Check caster matches.
@@ -3570,12 +3702,22 @@ impl GameEngine {
         controller: PlayerId,
         filter: impl Fn(&TriggerCondition) -> bool,
     ) -> Vec<(ObjectId, String, PlayerId, usize, String)> {
-        let Some(def) = self.registry.get(card_id) else { return vec![] };
+        let Some(def) = self.registry.get(card_id) else {
+            return vec![];
+        };
         def.triggered_abilities
             .iter()
             .enumerate()
             .filter(|(_, ta)| filter(&ta.trigger))
-            .map(|(idx, ta)| (source_id, card_id.to_string(), controller, idx, ta.text.clone()))
+            .map(|(idx, ta)| {
+                (
+                    source_id,
+                    card_id.to_string(),
+                    controller,
+                    idx,
+                    ta.text.clone(),
+                )
+            })
             .collect()
     }
 
@@ -3650,9 +3792,7 @@ impl GameEngine {
                     ability_annotation: ability_text.clone(),
                 })),
             });
-            events.push(ev_log(format!(
-                "Triggered: {card_name} — {ability_text}"
-            )));
+            events.push(ev_log(format!("Triggered: {card_name} — {ability_text}")));
         }
     }
 }
@@ -3752,7 +3892,12 @@ fn compute_spell_targets(
         }
     }
 
-    rv1::SpellTargets { valid_permanent_ids, valid_stack_ids, can_target_self, can_target_opponent }
+    rv1::SpellTargets {
+        valid_permanent_ids,
+        valid_stack_ids,
+        can_target_self,
+        can_target_opponent,
+    }
 }
 
 fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
@@ -3764,18 +3909,18 @@ fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
         if let Some(idx) = eng.state.player_idx(p.id) {
             // Spell targets: one entry per hand slot whose spell needs a target.
             for (slot, &oid) in eng.state.players[idx].hand.iter().enumerate() {
-                let Some(obj) = eng.state.objects.get(&oid) else { continue };
-                let Some(def) = eng.registry.get(&obj.card_id) else { continue };
+                let Some(obj) = eng.state.objects.get(&oid) else {
+                    continue;
+                };
+                let Some(def) = eng.registry.get(&obj.card_id) else {
+                    continue;
+                };
                 if def.is_land {
                     continue;
                 }
                 if def.spell_effect.iter().any(spell_effect_kind_needs_target) {
-                    let targets = compute_spell_targets(
-                        &eng.state,
-                        &eng.registry,
-                        p.id,
-                        &def.spell_effect,
-                    );
+                    let targets =
+                        compute_spell_targets(&eng.state, eng.registry, p.id, &def.spell_effect);
                     valid_targets_by_hand_slot.insert(slot as u32, targets);
                 }
             }
@@ -3783,13 +3928,17 @@ fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
             // Ability targets: one entry per (permanent, ability_index) pair where the
             // ability needs a target. Key encodes (permanent_oid << 32 | ability_index).
             for &poid in &eng.state.players[idx].battlefield {
-                let Some(pobj) = eng.state.objects.get(&poid) else { continue };
-                let Some(pdef) = eng.registry.get(&pobj.card_id) else { continue };
+                let Some(pobj) = eng.state.objects.get(&poid) else {
+                    continue;
+                };
+                let Some(pdef) = eng.registry.get(&pobj.card_id) else {
+                    continue;
+                };
                 for (ai, ability) in pdef.activated_abilities.iter().enumerate() {
                     if spell_effect_kind_needs_target(&ability.effect) {
                         let targets = compute_spell_targets(
                             &eng.state,
-                            &eng.registry,
+                            eng.registry,
                             p.id,
                             std::slice::from_ref(&ability.effect),
                         );
@@ -3802,7 +3951,11 @@ fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
 
         batch.legal_by_player.insert(
             p.id,
-            LegalActions { labels, valid_targets_by_hand_slot, valid_targets_by_ability },
+            LegalActions {
+                labels,
+                valid_targets_by_hand_slot,
+                valid_targets_by_ability,
+            },
         );
     }
 }
@@ -3877,7 +4030,7 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
                 let mut out = Vec::new();
                 for (&att, blks) in &c.blockers {
                     if blks.len() > 1 && !c.damage_assignments.contains_key(&att) {
-                        let name = object_display_name(&eng.state, &eng.registry, att);
+                        let name = object_display_name(&eng.state, eng.registry, att);
                         out.push(format!("Assign combat damage for {name}"));
                     }
                 }
@@ -3933,10 +4086,7 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
             } else if !combat_decl_lock {
                 let cast_ok = (def.is_instant && instant_ok) || (!def.is_instant && sorcery_ok);
                 if cast_ok {
-                    let needs_target = def
-                        .spell_effect
-                        .iter()
-                        .any(spell_effect_kind_needs_target);
+                    let needs_target = def.spell_effect.iter().any(spell_effect_kind_needs_target);
                     if needs_target {
                         v.push(format!("Cast {name} (hand idx {i}, target)"));
                     } else {
@@ -4208,7 +4358,6 @@ fn pay_mana_simple(
     Ok(())
 }
 
-
 /// Player or creature permanent on the battlefield (matches cast validation for `bolt`).
 fn damage_spell_target_legal(state: &GameState, registry: &CardRegistry, tid: ObjectId) -> bool {
     if state.player_idx(tid as i32).is_some() {
@@ -4377,9 +4526,10 @@ fn effect_target_legal_at_resolution(
                 && object_targetable_by(state, registry, tid, caster)
         }
         // CR 115.2c: counterspells target spells, not activated/triggered abilities.
-        SpellEffectKind::CounterTargetSpell => {
-            state.stack.iter().any(|s| s.id == tid && s.ability_text.is_none())
-        }
+        SpellEffectKind::CounterTargetSpell => state
+            .stack
+            .iter()
+            .any(|s| s.id == tid && s.ability_text.is_none()),
         _ => true,
     }
 }
@@ -4498,7 +4648,9 @@ fn validate_effect_targets(
         }
         SpellEffectKind::ReturnTargetPermanentToHand => {
             if targets.len() != 1 {
-                return Err(EngineError::Illegal("requires exactly one permanent target"));
+                return Err(EngineError::Illegal(
+                    "requires exactly one permanent target",
+                ));
             }
             if !any_battlefield_permanent_target_legal(state, targets[0].object_id) {
                 return Err(EngineError::Illegal(
@@ -4592,12 +4744,7 @@ fn spell_target_legality_error(
                     "target must be a creature on the battlefield",
                 ));
             }
-            if !state
-                .objects
-                .get(&tid)
-                .map(|o| o.tapped)
-                .unwrap_or(false)
-            {
+            if !state.objects.get(&tid).map(|o| o.tapped).unwrap_or(false) {
                 return Err(EngineError::Illegal("target must be tapped"));
             }
             if !object_targetable_by(state, registry, tid, caster) {

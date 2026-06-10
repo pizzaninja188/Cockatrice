@@ -112,14 +112,22 @@ impl TargetFilter {
 
     /// True for player-only kinds (used by startup validation).
     pub fn is_player(&self) -> bool {
-        matches!(self.kind, TargetKind::AnyPlayer | TargetKind::OpponentPlayer)
+        matches!(
+            self.kind,
+            TargetKind::AnyPlayer | TargetKind::OpponentPlayer
+        )
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpellEffectKind {
-    DamageTarget { amount: u32, target: TargetFilter },
-    Draw { count: u32 },
+    DamageTarget {
+        amount: u32,
+        target: TargetFilter,
+    },
+    Draw {
+        count: u32,
+    },
     /// Destroy target matching `target` filter (default: any creature on the battlefield).
     DestroyTarget {
         #[serde(default = "TargetFilter::default_creature")]
@@ -127,19 +135,37 @@ pub enum SpellEffectKind {
     },
     /// Destroy target tapped creature (e.g. Royal Assassin activated ability).
     DestroyTargetTapped,
-    PumpTarget { power: i32, toughness: i32 },
+    PumpTarget {
+        power: i32,
+        toughness: i32,
+    },
     /// Tap target permanent matching `target` filter.
-    TapTarget { target: TargetFilter },
+    TapTarget {
+        target: TargetFilter,
+    },
     CounterTargetSpell,
-    GainLife { amount: u32 },
-    TargetPlayerGainsLife { amount: u32, target: TargetFilter },
-    TargetPlayerLosesLife { amount: u32, target: TargetFilter },
-    EachOpponentLosesLifeYouGainEqual { amount: u32 },
+    GainLife {
+        amount: u32,
+    },
+    TargetPlayerGainsLife {
+        amount: u32,
+        target: TargetFilter,
+    },
+    TargetPlayerLosesLife {
+        amount: u32,
+        target: TargetFilter,
+    },
+    EachOpponentLosesLifeYouGainEqual {
+        amount: u32,
+    },
     ExileTarget,
     ExileTargetGainLifeEqualToPower,
     ReturnTargetCreatureToHand,
     ReturnTargetPermanentToHand,
-    MillTargetPlayer { count: u32, target: TargetFilter },
+    MillTargetPlayer {
+        count: u32,
+        target: TargetFilter,
+    },
     None,
 }
 
@@ -298,7 +324,10 @@ pub enum EffectDuration {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ContinuousEffectKind {
     /// CR 613 layer 7c — modifying effects (+N/+N, -N/-N).
-    PtModify { delta_power: i32, delta_toughness: i32 },
+    PtModify {
+        delta_power: i32,
+        delta_toughness: i32,
+    },
     // Future: Layer6AddKeyword(Keyword), Layer7bSetPt { power: i32, toughness: i32 }, …
 }
 

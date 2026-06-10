@@ -1,17 +1,19 @@
 use crate::card_def::CardDefinition;
+use crate::primitives::TriggeredEffect;
 use once_cell::sync::Lazy;
 use ron::extensions::Extensions;
 use ron::Options;
 use std::collections::HashMap;
-use std::sync::RwLock;
 use thiserror::Error;
 
 /// `Option` fields need `IMPLICIT_SOME` so bare values (e.g. `2` for `Option<u32>`) deserialize.
 static RON_OPTS: Lazy<Options> =
     Lazy::new(|| Options::default().with_default_extension(Extensions::IMPLICIT_SOME));
 
-static GLOBAL: Lazy<RwLock<CardRegistry>> =
-    Lazy::new(|| RwLock::new(CardRegistry::from_embedded().expect("embedded card data")));
+/// Parsed once per process and shared by every game (read-only after init).
+/// Panics on invalid embedded data: fail-fast at sidecar startup is the validation point.
+static GLOBAL: Lazy<CardRegistry> =
+    Lazy::new(|| CardRegistry::from_embedded().expect("embedded card data"));
 
 #[derive(Debug, Error)]
 pub enum RegistryError {
@@ -28,8 +30,12 @@ pub struct CardRegistry {
 
 impl CardRegistry {
     pub fn from_embedded() -> Result<Self, RegistryError> {
+        Self::from_chunks(EMBEDDED_RON_CHUNKS)
+    }
+
+    fn from_chunks(chunks: &[&str]) -> Result<Self, RegistryError> {
         let mut reg = CardRegistry::default();
-        for chunk in EMBEDDED_RON_CHUNKS {
+        for chunk in chunks {
             let card: CardDefinition = RON_OPTS.from_str(chunk)?;
             // Validate spell effects at startup.
             for effect in &card.spell_effect {
@@ -49,7 +55,24 @@ impl CardRegistry {
                         reason,
                     })?;
             }
-            reg.by_id.insert(card.id.clone(), card);
+            // Validate triggered ability effects (PumpSelf carries no target filter to check).
+            for ta in &card.triggered_abilities {
+                if let TriggeredEffect::Effect(inner) = &ta.effect {
+                    inner
+                        .validate()
+                        .map_err(|reason| RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason,
+                        })?;
+                }
+            }
+            let id = card.id.clone();
+            if reg.by_id.insert(id.clone(), card).is_some() {
+                return Err(RegistryError::InvalidCard {
+                    id,
+                    reason: "duplicate id".into(),
+                });
+            }
         }
         Ok(reg)
     }
@@ -63,71 +86,13 @@ impl CardRegistry {
         self.by_id.values()
     }
 
-    pub fn global() -> &'static RwLock<CardRegistry> {
+    pub fn global() -> &'static CardRegistry {
         &GLOBAL
     }
 }
 
-/// Ron snippets compiled into the binary (hybrid model: data-first).
-const EMBEDDED_RON_CHUNKS: &[&str] = &[
-    include_str!("../data/plains.ron"),
-    include_str!("../data/mountain.ron"),
-    include_str!("../data/island.ron"),
-    include_str!("../data/forest.ron"),
-    include_str!("../data/swamp.ron"),
-    include_str!("../data/grizzly_bears.ron"),
-    include_str!("../data/savannah_lions.ron"),
-    include_str!("../data/walking_corpse.ron"),
-    include_str!("../data/balduvian_barbarians.ron"),
-    include_str!("../data/coral_merfolk.ron"),
-    include_str!("../data/lightning_bolt.ron"),
-    include_str!("../data/giant_growth.ron"),
-    include_str!("../data/divination.ron"),
-    include_str!("../data/go_for_the_throat.ron"),
-    include_str!("../data/counterspell.ron"),
-    include_str!("../data/healing_salve.ron"),
-    include_str!("../data/angels_mercy.ron"),
-    include_str!("../data/bump_in_the_night.ron"),
-    include_str!("../data/blood_tithe.ron"),
-    include_str!("../data/swords_to_plowshares.ron"),
-    include_str!("../data/eyeblights_ending.ron"),
-    include_str!("../data/unsummon.ron"),
-    include_str!("../data/boomerang.ron"),
-    include_str!("../data/tome_scour.ron"),
-    include_str!("../data/mind_sculpt.ron"),
-    include_str!("../data/storm_crow.ron"),
-    include_str!("../data/giant_spider.ron"),
-    include_str!("../data/accursed_spirit.ron"),
-    include_str!("../data/ornithopter.ron"),
-    include_str!("../data/alpine_watchdog.ron"),
-    include_str!("../data/child_of_night.ron"),
-    include_str!("../data/raging_goblin.ron"),
-    include_str!("../data/pharikas_chosen.ron"),
-    include_str!("../data/goblin_trailblazer.ron"),
-    include_str!("../data/colossal_dreadmaw.ron"),
-    include_str!("../data/goblin_striker.ron"),
-    include_str!("../data/fencing_ace.ron"),
-    // Activated ability cards
-    include_str!("../data/prodigal_sorcerer.ron"),
-    include_str!("../data/prodigal_pyromancer.ron"),
-    include_str!("../data/royal_assassin.ron"),
-    include_str!("../data/jayemdae_tome.ron"),
-    include_str!("../data/icy_manipulator.ron"),
-    include_str!("../data/bottle_gnomes.ron"),
-    // Triggered ability cards
-    include_str!("../data/elvish_visionary.ron"),
-    include_str!("../data/flametongue_kavu.ron"),
-    include_str!("../data/scroll_thief.ron"),
-    include_str!("../data/thieving_magpie.ron"),
-    include_str!("../data/murder.ron"),
-    // Indestructible
-    include_str!("../data/darksteel_myr.ron"),
-    // Hexproof / Shroud
-    include_str!("../data/gladecover_scout.ron"),
-    include_str!("../data/argothian_enchantress.ron"),
-    // Enchantment (used to exercise enchantment-cast triggers)
-    include_str!("../data/exploration.ron"),
-];
+// `EMBEDDED_RON_CHUNKS`, generated by build.rs from `data/**/*.ron`.
+include!(concat!(env!("OUT_DIR"), "/embedded_cards.rs"));
 
 #[cfg(test)]
 mod tests {
@@ -183,5 +148,46 @@ mod tests {
         )"#;
         let card: CardDefinition = RON_OPTS.from_str(bad).unwrap();
         assert!(card.spell_effect[0].validate().is_err());
+    }
+
+    #[test]
+    fn load_rejects_invalid_triggered_ability_effect() {
+        let bad = r#"(
+            id: "bad_trigger",
+            name: "Bad Trigger",
+            mana_cost: "G",
+            types: ["Creature"],
+            is_creature: true,
+            power: 1,
+            toughness: 1,
+            triggered_abilities: [
+                (
+                    trigger: WhenSelfEntersBattlefield,
+                    effect: Effect(TargetPlayerGainsLife(amount: 3, target: (kind: Creature))),
+                    text: "bad",
+                ),
+            ],
+        )"#;
+        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        assert!(matches!(err, RegistryError::InvalidCard { ref id, .. } if id == "bad_trigger"));
+    }
+
+    #[test]
+    fn load_rejects_duplicate_id() {
+        let card = r#"(
+            id: "dupe",
+            name: "Dupe",
+            mana_cost: "",
+            types: ["Land"],
+            is_land: true,
+        )"#;
+        let err = CardRegistry::from_chunks(&[card, card]).unwrap_err();
+        match err {
+            RegistryError::InvalidCard { id, reason } => {
+                assert_eq!(id, "dupe");
+                assert!(reason.contains("duplicate"));
+            }
+            other => panic!("expected InvalidCard, got {other:?}"),
+        }
     }
 }

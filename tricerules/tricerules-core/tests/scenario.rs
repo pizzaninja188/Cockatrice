@@ -317,8 +317,14 @@ fn cast_lightning_bolt_resolves_to_graveyard_after_double_pass() {
     e.apply_command(0, &play_land(mountain_idx))
         .expect("play mountain");
 
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana");
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     let pushed = e
         .apply_command(0, &cast_spell(bolt_idx, target_player(1)))
@@ -500,8 +506,14 @@ fn casting_spell_keeps_priority_with_caster() {
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
     e.apply_command(0, &play_land(mountain_idx))
         .expect("play mountain");
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana");
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     let pushed = e
         .apply_command(0, &cast_spell(bolt_idx, target_player(1)))
@@ -539,8 +551,14 @@ fn stack_resolution_emits_priority_to_active_player() {
     let mountain_idx = hand_index_for_card(&e, 0, "mountain");
     e.apply_command(0, &play_land(mountain_idx))
         .expect("play mountain");
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana");
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("cast bolt");
@@ -743,9 +761,16 @@ fn combat_damage_trigger_lands_on_stack_and_requires_priority() {
     // 10-card decks: skip_opening draws 7 as opening hand, leaving 3 in library
     // so the Scroll Thief trigger can draw without hitting an empty library.
     let p0_deck: Vec<String> = vec![
-        "island".into(), "island".into(), "scroll_thief".into(),
-        "island".into(), "island".into(), "island".into(),
-        "island".into(), "island".into(), "island".into(), "island".into(),
+        "island".into(),
+        "island".into(),
+        "scroll_thief".into(),
+        "island".into(),
+        "island".into(),
+        "island".into(),
+        "island".into(),
+        "island".into(),
+        "island".into(),
+        "island".into(),
     ];
     let p1_deck: Vec<String> = std::iter::repeat_n("mountain".into(), 10).collect();
     let decks = Some(vec![p0_deck, p1_deck]);
@@ -764,15 +789,22 @@ fn combat_damage_trigger_lands_on_stack_and_requires_priority() {
     let p0_hand_before = e.state.players[0].hand.len();
 
     // Enter combat and attack with Scroll Thief.
-    e.apply_command(0, &primitive_yield()).expect("main1 to begin combat");
+    e.apply_command(0, &primitive_yield())
+        .expect("main1 to begin combat");
     e.apply_command(0, &pass()).expect("ap begin combat pass");
     e.apply_command(1, &pass()).expect("nap begin combat pass");
-    e.apply_command(0, &declare_attackers(vec![thief_oid])).expect("declare attackers");
-    e.apply_command(0, &pass()).expect("ap pass declare attackers");
-    e.apply_command(1, &pass()).expect("nap pass declare attackers");
+    e.apply_command(0, &declare_attackers(vec![thief_oid]))
+        .expect("declare attackers");
+    e.apply_command(0, &pass())
+        .expect("ap pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("nap pass declare attackers");
     // P1 has no blockers; engine auto-declares empty blockers.
-    e.apply_command(0, &pass()).expect("ap pass declare blockers");
-    let b = e.apply_command(1, &pass()).expect("nap pass declare blockers -> combat damage");
+    e.apply_command(0, &pass())
+        .expect("ap pass declare blockers");
+    let b = e
+        .apply_command(1, &pass())
+        .expect("nap pass declare blockers -> combat damage");
 
     // After both players pass in DeclareBlockers, combat damage resolves and Scroll Thief's
     // trigger fires.  The trigger must be on the stack awaiting priority.
@@ -790,11 +822,15 @@ fn combat_damage_trigger_lands_on_stack_and_requires_priority() {
     // Verify that in the returned batch PhaseChanged arrives before StackPushed.
     // This is the ordering fix: C++ clears its ruledStackObjectIds on PhaseChanged; the
     // trigger must follow so it is visible when the auto-pass timer fires.
-    let event_order: Vec<&str> = b.events.iter().filter_map(|ev| match &ev.ev {
-        Some(Ev::PhaseChanged(_)) => Some("phase"),
-        Some(Ev::StackPushed(_)) => Some("stack_pushed"),
-        _ => None,
-    }).collect();
+    let event_order: Vec<&str> = b
+        .events
+        .iter()
+        .filter_map(|ev| match &ev.ev {
+            Some(Ev::PhaseChanged(_)) => Some("phase"),
+            Some(Ev::StackPushed(_)) => Some("stack_pushed"),
+            _ => None,
+        })
+        .collect();
     let phase_pos = event_order.iter().position(|&e| e == "phase");
     let pushed_pos = event_order.iter().position(|&e| e == "stack_pushed");
     assert!(
@@ -1069,8 +1105,15 @@ fn cast_grizzly_bears_resolves_to_battlefield_and_taps_two_forests() {
             e.state.objects.get_mut(&oid).expect("forest").tapped = true;
         }
     }
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { g: 1, c: 1, ..Default::default() }))
-        .expect("add mana for 1G");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            g: 1,
+            c: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add mana for 1G");
     let bears_idx = hand_index_for_card(&e, 0, "grizzly_bears");
     e.apply_command(0, &cast_spell(bears_idx, vec![]))
         .expect("cast bears");
@@ -1136,8 +1179,14 @@ fn caster_can_cast_second_spell_before_passing_priority() {
         .expect("second mountain")
         .zone = tricerules_core::Zone::Battlefield;
 
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana for first bolt");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana for first bolt");
     let bolt_one = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(0, &cast_spell(bolt_one, target_player(1)))
         .expect("cast first bolt");
@@ -1147,8 +1196,14 @@ fn caster_can_cast_second_spell_before_passing_priority() {
         "caster should keep priority after casting first spell"
     );
 
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana for second bolt");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana for second bolt");
     let bolt_two = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(0, &cast_spell(bolt_two, target_player(1)))
         .expect("cast second bolt while holding priority");
@@ -1202,8 +1257,14 @@ fn non_active_player_with_priority_pays_mana_for_counterspell() {
     let p1_island_a = battlefield_object_for_card(&e, 1, "island");
     assert!(!e.state.objects.get(&p1_island_a).expect("p1 island").tapped);
 
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana for bolt");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana for bolt");
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("p0 cast bolt");
@@ -1212,9 +1273,19 @@ fn non_active_player_with_priority_pays_mana_for_counterspell() {
         .expect("p0 pass to give p1 priority");
 
     // Manually tap an island (simulates client-side land tap for mana).
-    e.state.objects.get_mut(&p1_island_a).expect("p1 island").tapped = true;
-    e.apply_command(1, &add_mana_to_pool(AddManaToPool { u: 2, ..Default::default() }))
-        .expect("add UU for counterspell");
+    e.state
+        .objects
+        .get_mut(&p1_island_a)
+        .expect("p1 island")
+        .tapped = true;
+    e.apply_command(
+        1,
+        &add_mana_to_pool(AddManaToPool {
+            u: 2,
+            ..Default::default()
+        }),
+    )
+    .expect("add UU for counterspell");
     let counter_idx = hand_index_for_card(&e, 1, "counterspell");
     e.apply_command(
         1,
@@ -1285,9 +1356,19 @@ fn untap_and_draw_happen_in_new_turn_sequence() {
 
     let mountain_oid = battlefield_object_for_card(&e, 0, "mountain");
     // Tap the mountain to produce mana (simulating the client tapping land before casting).
-    e.state.objects.get_mut(&mountain_oid).expect("mountain object").tapped = true;
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana");
+    e.state
+        .objects
+        .get_mut(&mountain_oid)
+        .expect("mountain object")
+        .tapped = true;
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana");
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("cast lightning bolt");
@@ -2025,8 +2106,15 @@ fn cast_divination_draws_two_cards() {
         .expect("play third island");
 
     let hand_before_cast = e.state.players[0].hand.len();
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { u: 1, c: 2, ..Default::default() }))
-        .expect("add mana for 2U");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            u: 1,
+            c: 2,
+            ..Default::default()
+        }),
+    )
+    .expect("add mana for 2U");
     let div_idx = hand_index_for_card(&e, 0, "divination");
     e.apply_command(0, &cast_spell(div_idx, vec![]))
         .expect("cast divination");
@@ -2135,8 +2223,14 @@ fn giant_growth_changes_combat_outcome() {
     e.state.players[0].battlefield.push(forest_oid);
     e.state.objects.get_mut(&forest_oid).expect("forest").zone = tricerules_core::Zone::Battlefield;
 
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { g: 1, ..Default::default() }))
-        .expect("add green mana for giant growth");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            g: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add green mana for giant growth");
     let growth_idx = hand_index_for_card(&e, 0, "giant_growth");
     let growth_batch = e
         .apply_command(
@@ -2226,8 +2320,14 @@ fn giant_growth_fizzles_if_creature_target_dies_before_resolution() {
         .expect("mountain")
         .zone = tricerules_core::Zone::Battlefield;
 
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { g: 1, ..Default::default() }))
-        .expect("add green mana for giant growth");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            g: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add green mana for giant growth");
     let growth_idx = hand_index_for_card(&e, 0, "giant_growth");
     e.apply_command(
         0,
@@ -2235,8 +2335,14 @@ fn giant_growth_fizzles_if_creature_target_dies_before_resolution() {
     )
     .expect("cast growth");
 
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana for lightning bolt");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana for lightning bolt");
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(
         0,
@@ -2304,13 +2410,25 @@ fn lightning_bolt_fizzles_when_creature_target_left_battlefield() {
         e.state.objects.get_mut(&oid).expect("mountain").zone = tricerules_core::Zone::Battlefield;
     }
 
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana for first bolt");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana for first bolt");
     let bolt_a = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(0, &cast_spell(bolt_a, vec![TargetRef { object_id: bear }]))
         .expect("first bolt");
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana for second bolt");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana for second bolt");
     let bolt_b = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(0, &cast_spell(bolt_b, vec![TargetRef { object_id: bear }]))
         .expect("second bolt on top");
@@ -2361,8 +2479,15 @@ fn go_for_the_throat_fizzles_when_creature_target_left_battlefield() {
         e.state.objects.get_mut(&oid).expect("swamp").zone = tricerules_core::Zone::Battlefield;
     }
 
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { b: 1, c: 1, ..Default::default() }))
-        .expect("add mana for 1B");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            b: 1,
+            c: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add mana for 1B");
     let gfth_idx = hand_index_for_card(&e, 0, "go_for_the_throat");
     e.apply_command(
         0,
@@ -2370,8 +2495,14 @@ fn go_for_the_throat_fizzles_when_creature_target_left_battlefield() {
     )
     .expect("go for the throat");
 
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana for bolt");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana for bolt");
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(
         0,
@@ -2438,8 +2569,14 @@ fn counterspell_fizzles_when_original_target_already_left_stack() {
     let m0 = hand_index_for_card(&e, 0, "mountain");
     e.apply_command(0, &play_land(m0)).expect("mountain");
 
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana for bolt");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana for bolt");
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("bolt");
@@ -2461,8 +2598,14 @@ fn counterspell_fizzles_when_original_target_already_left_stack() {
         e.state.objects.get_mut(&oid).expect("island").zone = tricerules_core::Zone::Battlefield;
     }
 
-    e.apply_command(1, &add_mana_to_pool(AddManaToPool { u: 2, ..Default::default() }))
-        .expect("add UU for first counterspell");
+    e.apply_command(
+        1,
+        &add_mana_to_pool(AddManaToPool {
+            u: 2,
+            ..Default::default()
+        }),
+    )
+    .expect("add UU for first counterspell");
     let cs1 = hand_index_for_card(&e, 1, "counterspell");
     e.apply_command(
         1,
@@ -2475,8 +2618,14 @@ fn counterspell_fizzles_when_original_target_already_left_stack() {
     )
     .expect("counter 1");
 
-    e.apply_command(1, &add_mana_to_pool(AddManaToPool { u: 2, ..Default::default() }))
-        .expect("add UU for second counterspell");
+    e.apply_command(
+        1,
+        &add_mana_to_pool(AddManaToPool {
+            u: 2,
+            ..Default::default()
+        }),
+    )
+    .expect("add UU for second counterspell");
     let cs2 = hand_index_for_card(&e, 1, "counterspell");
     e.apply_command(
         1,
@@ -2535,8 +2684,14 @@ fn giant_growth_pump_expires_after_active_turn_ends() {
     e.state.players[0].battlefield.push(forest_oid);
     e.state.objects.get_mut(&forest_oid).expect("forest").zone = tricerules_core::Zone::Battlefield;
 
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { g: 1, ..Default::default() }))
-        .expect("add green mana for giant growth");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            g: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add green mana for giant growth");
     let growth_idx = hand_index_for_card(&e, 0, "giant_growth");
     e.apply_command(
         0,
@@ -2545,8 +2700,16 @@ fn giant_growth_pump_expires_after_active_turn_ends() {
     .expect("cast growth");
     pass_both_players(&mut e);
 
-    assert_eq!(e.effective_power(bear), Some(5), "pumped bear should have 5 effective power");
-    assert_eq!(e.effective_toughness(bear), Some(5), "pumped bear should have 5 effective toughness");
+    assert_eq!(
+        e.effective_power(bear),
+        Some(5),
+        "pumped bear should have 5 effective power"
+    );
+    assert_eq!(
+        e.effective_toughness(bear),
+        Some(5),
+        "pumped bear should have 5 effective toughness"
+    );
 
     end_active_turn(&mut e, 0);
 
@@ -2584,11 +2747,20 @@ fn two_giant_growths_stack_correctly() {
         let foid = e.state.players[0].hand.remove(forest_idx);
         e.state.players[0].battlefield.push(foid);
         e.state.objects.get_mut(&foid).expect("forest").zone = tricerules_core::Zone::Battlefield;
-        e.apply_command(0, &add_mana_to_pool(AddManaToPool { g: 1, ..Default::default() }))
-            .expect("add green mana");
+        e.apply_command(
+            0,
+            &add_mana_to_pool(AddManaToPool {
+                g: 1,
+                ..Default::default()
+            }),
+        )
+        .expect("add green mana");
         let growth_idx = hand_index_for_card(&e, 0, "giant_growth");
-        e.apply_command(0, &cast_spell(growth_idx, vec![TargetRef { object_id: bear }]))
-            .expect("cast growth");
+        e.apply_command(
+            0,
+            &cast_spell(growth_idx, vec![TargetRef { object_id: bear }]),
+        )
+        .expect("cast growth");
         pass_both_players(&mut e);
     }
 
@@ -2637,8 +2809,14 @@ fn marked_damage_clears_at_cleanup() {
     e.state.players[0].battlefield.push(forest_oid);
     e.state.objects.get_mut(&forest_oid).expect("forest").zone = tricerules_core::Zone::Battlefield;
 
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { g: 1, ..Default::default() }))
-        .expect("add green mana for giant growth");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            g: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add green mana for giant growth");
     let growth_idx = hand_index_for_card(&e, 0, "giant_growth");
     e.apply_command(
         0,
@@ -2707,15 +2885,27 @@ fn counterspell_counters_a_spell_on_stack() {
             .zone = tricerules_core::Zone::Battlefield;
     }
 
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana for bolt");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana for bolt");
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("cast bolt");
     let bolt_oid = e.state.stack.last().expect("bolt on stack").id;
 
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { u: 2, ..Default::default() }))
-        .expect("add UU for counterspell");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            u: 2,
+            ..Default::default()
+        }),
+    )
+    .expect("add UU for counterspell");
     let cs_idx = hand_index_for_card(&e, 0, "counterspell");
     let cs_batch = e
         .apply_command(
@@ -2788,8 +2978,15 @@ fn go_for_the_throat_destroys_target_creature() {
     e.apply_command(0, &play_land(swamp_to_play_idx))
         .expect("play second swamp");
 
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { b: 1, c: 1, ..Default::default() }))
-        .expect("add mana for 1B");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            b: 1,
+            c: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add mana for 1B");
     let gftt_idx = hand_index_for_card(&e, 0, "go_for_the_throat");
     e.apply_command(
         0,
@@ -2842,21 +3039,34 @@ fn go_for_the_throat_rejects_artifact_creature_target() {
     let seeded_swamp_idx = hand_index_for_card(&e, 0, "swamp");
     let seeded_swamp = e.state.players[0].hand.remove(seeded_swamp_idx);
     e.state.players[0].battlefield.push(seeded_swamp);
-    e.state.objects.get_mut(&seeded_swamp).expect("seeded swamp").zone =
-        tricerules_core::Zone::Battlefield;
+    e.state
+        .objects
+        .get_mut(&seeded_swamp)
+        .expect("seeded swamp")
+        .zone = tricerules_core::Zone::Battlefield;
     let swamp_to_play_idx = hand_index_for_card(&e, 0, "swamp");
-    e.apply_command(0, &play_land(swamp_to_play_idx)).expect("play swamp");
+    e.apply_command(0, &play_land(swamp_to_play_idx))
+        .expect("play swamp");
 
     e.apply_command(
         0,
-        &add_mana_to_pool(AddManaToPool { b: 1, c: 1, ..Default::default() }),
+        &add_mana_to_pool(AddManaToPool {
+            b: 1,
+            c: 1,
+            ..Default::default()
+        }),
     )
     .expect("add mana for 1B");
     let gftt_idx = hand_index_for_card(&e, 0, "go_for_the_throat");
     let err = e
         .apply_command(
             0,
-            &cast_spell(gftt_idx, vec![TargetRef { object_id: ornithopter_oid }]),
+            &cast_spell(
+                gftt_idx,
+                vec![TargetRef {
+                    object_id: ornithopter_oid,
+                }],
+            ),
         )
         .expect_err("go for the throat cannot target artifact creature");
     assert!(
@@ -2905,8 +3115,15 @@ fn can_cast_new_vanilla_creature_with_swamp() {
     e.apply_command(0, &play_land(swamp_to_play_idx))
         .expect("play second swamp");
 
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { b: 1, c: 1, ..Default::default() }))
-        .expect("add mana for 1B");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            b: 1,
+            c: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add mana for 1B");
     let corpse_idx = hand_index_for_card(&e, 0, "walking_corpse");
     e.apply_command(0, &cast_spell(corpse_idx, vec![]))
         .expect("cast walking corpse");
@@ -2958,8 +3175,14 @@ fn cannot_cast_spell_until_attackers_declared() {
     o.summoning_sick = false;
     o.tapped = false;
 
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana for bolt");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana for bolt");
     let bolt_idx2 = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(0, &cast_spell(bolt_idx2, target_player(1)))
         .expect("instant legal after attackers committed");
@@ -3024,8 +3247,14 @@ fn cannot_cast_spell_until_blockers_declared() {
         .expect("declare no blockers");
     e.apply_command(0, &pass())
         .expect("ap pass declare blockers");
-    e.apply_command(1, &add_mana_to_pool(AddManaToPool { g: 1, ..Default::default() }))
-        .expect("add green mana for giant growth");
+    e.apply_command(
+        1,
+        &add_mana_to_pool(AddManaToPool {
+            g: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add green mana for giant growth");
     let growth_idx2 = hand_index_for_card(&e, 1, "giant_growth");
     e.apply_command(
         1,
@@ -3079,13 +3308,25 @@ fn three_bolts_stack_lifo_active_sequential_then_non_active_response() {
         .expect("p0 second mountain")
         .zone = tricerules_core::Zone::Battlefield;
 
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana for p0 first bolt");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana for p0 first bolt");
     let bolt_p0_first = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(0, &cast_spell(bolt_p0_first, target_player(1)))
         .expect("p0 first bolt");
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana for p0 second bolt");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana for p0 second bolt");
     let bolt_p0_second = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(0, &cast_spell(bolt_p0_second, target_player(1)))
         .expect("p0 second bolt while holding priority");
@@ -3112,8 +3353,14 @@ fn three_bolts_stack_lifo_active_sequential_then_non_active_response() {
     }
     let bolt_p1 = hand_index_for_card(&e, 1, "lightning_bolt");
     e.apply_command(0, &pass()).expect("p0 pass to NAP");
-    e.apply_command(1, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana for p1 bolt");
+    e.apply_command(
+        1,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana for p1 bolt");
     e.apply_command(1, &cast_spell(bolt_p1, target_player(0)))
         .expect("p1 bolt on top of stack");
 
@@ -3187,18 +3434,36 @@ fn five_lightning_bolts_combined_stack_resolves_lifo_two_players() {
             .zone = tricerules_core::Zone::Battlefield;
     }
 
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana for p0 first bolt");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana for p0 first bolt");
     let b0 = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(0, &cast_spell(b0, target_player(1)))
         .expect("p0 first bolt");
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana for p0 second bolt");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana for p0 second bolt");
     let b1 = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(0, &cast_spell(b1, target_player(1)))
         .expect("p0 second bolt");
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana for p0 third bolt");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana for p0 third bolt");
     let b2 = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(0, &cast_spell(b2, target_player(1)))
         .expect("p0 third bolt");
@@ -3222,13 +3487,25 @@ fn five_lightning_bolts_combined_stack_resolves_lifo_two_players() {
             .expect("p1 seeded mountain")
             .zone = tricerules_core::Zone::Battlefield;
     }
-    e.apply_command(1, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana for p1 first bolt");
+    e.apply_command(
+        1,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana for p1 first bolt");
     let b3 = hand_index_for_card(&e, 1, "lightning_bolt");
     e.apply_command(1, &cast_spell(b3, target_player(0)))
         .expect("p1 first bolt");
-    e.apply_command(1, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana for p1 second bolt");
+    e.apply_command(
+        1,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana for p1 second bolt");
     let b4 = hand_index_for_card(&e, 1, "lightning_bolt");
     e.apply_command(1, &cast_spell(b4, target_player(0)))
         .expect("p1 second bolt while holding priority");
@@ -3306,8 +3583,14 @@ fn non_active_holds_priority_two_bolts_on_stack_above_active_bolt() {
     let m0 = hand_index_for_card(&e, 0, "mountain");
     e.apply_command(0, &play_land(m0))
         .expect("p0 play mountain");
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana for AP bolt");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana for AP bolt");
     let bolt_ap = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(0, &cast_spell(bolt_ap, target_player(1)))
         .expect("AP bolt targeting P1");
@@ -3325,14 +3608,26 @@ fn non_active_holds_priority_two_bolts_on_stack_above_active_bolt() {
             .zone = tricerules_core::Zone::Battlefield;
     }
 
-    e.apply_command(1, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana for NAP first bolt");
+    e.apply_command(
+        1,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana for NAP first bolt");
     let b1 = hand_index_for_card(&e, 1, "lightning_bolt");
     e.apply_command(1, &cast_spell(b1, target_player(0)))
         .expect("NAP first bolt");
     assert_eq!(e.state.priority_player_id(), 1);
-    e.apply_command(1, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana for NAP second bolt");
+    e.apply_command(
+        1,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana for NAP second bolt");
     let b2 = hand_index_for_card(&e, 1, "lightning_bolt");
     e.apply_command(1, &cast_spell(b2, target_player(0)))
         .expect("NAP second bolt while holding priority");
@@ -3386,13 +3681,25 @@ fn counterspell_on_top_bolt_fizzles_second_leaves_bottom_bolt() {
         .expect("p0 second mountain")
         .zone = tricerules_core::Zone::Battlefield;
 
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana for first bolt");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana for first bolt");
     let bolt_bottom = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(0, &cast_spell(bolt_bottom, target_player(1)))
         .expect("first bolt (stack bottom)");
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add red mana for second bolt");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana for second bolt");
     let bolt_top = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(0, &cast_spell(bolt_top, target_player(1)))
         .expect("second bolt while holding priority (stack top before counter)");
@@ -3405,8 +3712,14 @@ fn counterspell_on_top_bolt_fizzles_second_leaves_bottom_bolt() {
         e.state.players[1].battlefield.push(oid);
         e.state.objects.get_mut(&oid).expect("p1 island").zone = tricerules_core::Zone::Battlefield;
     }
-    e.apply_command(1, &add_mana_to_pool(AddManaToPool { u: 2, ..Default::default() }))
-        .expect("add UU for counterspell");
+    e.apply_command(
+        1,
+        &add_mana_to_pool(AddManaToPool {
+            u: 2,
+            ..Default::default()
+        }),
+    )
+    .expect("add UU for counterspell");
     let cs_idx = hand_index_for_card(&e, 1, "counterspell");
     e.apply_command(
         1,
@@ -6839,13 +7152,24 @@ fn indestructible_survives_destroy_spell() {
         e.state.objects.get_mut(&oid).unwrap().zone = tricerules_core::Zone::Battlefield;
     }
     let swamp_idx = hand_index_for_card(&e, 0, "swamp");
-    e.apply_command(0, &play_land(swamp_idx)).expect("play swamp");
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { b: 2, c: 1, ..Default::default() }))
-        .expect("add mana");
+    e.apply_command(0, &play_land(swamp_idx))
+        .expect("play swamp");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            b: 2,
+            c: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add mana");
 
     let murder_idx = hand_index_for_card(&e, 0, "murder");
-    e.apply_command(0, &cast_spell(murder_idx, vec![TargetRef { object_id: myr }]))
-        .expect("cast murder");
+    e.apply_command(
+        0,
+        &cast_spell(murder_idx, vec![TargetRef { object_id: myr }]),
+    )
+    .expect("cast murder");
     e.apply_command(0, &pass()).expect("p0 pass");
     e.apply_command(1, &pass()).expect("p1 pass");
 
@@ -6871,12 +7195,23 @@ fn indestructible_survives_lethal_combat_damage() {
     let attacker = inject_creature_with_stats(&mut e, 0, "colossal_dreadmaw", 6, 6);
     let myr = inject_creature_with_stats(&mut e, 1, "darksteel_myr", 0, 1);
 
-    e.apply_command(0, &declare_attackers(vec![attacker])).expect("declare attacker");
-    e.apply_command(0, &pass()).expect("p0 pass after attackers");
-    e.apply_command(1, &pass()).expect("p1 pass after attackers");
-    e.apply_command(1, &declare_blockers(vec![BlockPair { attacker_id: attacker, blocker_id: myr }])).expect("declare blocker");
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass())
+        .expect("p0 pass after attackers");
+    e.apply_command(1, &pass())
+        .expect("p1 pass after attackers");
+    e.apply_command(
+        1,
+        &declare_blockers(vec![BlockPair {
+            attacker_id: attacker,
+            blocker_id: myr,
+        }]),
+    )
+    .expect("declare blocker");
     e.apply_command(0, &pass()).expect("p0 pass after blockers");
-    e.apply_command(1, &pass()).expect("p1 pass after blockers -> combat damage resolves");
+    e.apply_command(1, &pass())
+        .expect("p1 pass after blockers -> combat damage resolves");
 
     assert_eq!(
         e.state.objects.get(&myr).expect("myr object").zone,
@@ -6920,10 +7255,18 @@ fn indestructible_dies_when_toughness_reaches_zero() {
 fn simultaneous_combat_damage_triggers_both_fire() {
     // 12-card library so drawing 7 opening hand + 2 triggers still has cards remaining.
     let p0_deck: Vec<String> = vec![
-        "scroll_thief".into(), "scroll_thief".into(),
-        "island".into(), "island".into(), "island".into(), "island".into(),
-        "island".into(), "island".into(), "island".into(), "island".into(),
-        "island".into(), "island".into(),
+        "scroll_thief".into(),
+        "scroll_thief".into(),
+        "island".into(),
+        "island".into(),
+        "island".into(),
+        "island".into(),
+        "island".into(),
+        "island".into(),
+        "island".into(),
+        "island".into(),
+        "island".into(),
+        "island".into(),
     ];
     let p1_deck: Vec<String> = std::iter::repeat_n("mountain".into(), 12).collect();
     let decks = Some(vec![p0_deck, p1_deck]);
@@ -6950,15 +7293,21 @@ fn simultaneous_combat_damage_triggers_both_fire() {
     let p0_hand_before = e.state.players[0].hand.len();
 
     // Enter combat and attack with both Scroll Thieves.
-    e.apply_command(0, &primitive_yield()).expect("main1 to begin combat");
+    e.apply_command(0, &primitive_yield())
+        .expect("main1 to begin combat");
     e.apply_command(0, &pass()).expect("ap begin combat pass");
     e.apply_command(1, &pass()).expect("nap begin combat pass");
-    e.apply_command(0, &declare_attackers(vec![thief1_oid, thief2_oid])).expect("declare attackers");
-    e.apply_command(0, &pass()).expect("ap pass after attackers");
-    e.apply_command(1, &pass()).expect("nap pass after attackers");
+    e.apply_command(0, &declare_attackers(vec![thief1_oid, thief2_oid]))
+        .expect("declare attackers");
+    e.apply_command(0, &pass())
+        .expect("ap pass after attackers");
+    e.apply_command(1, &pass())
+        .expect("nap pass after attackers");
     // P1 has no creatures; engine auto-declares empty blockers.
-    e.apply_command(0, &pass()).expect("ap pass declare blockers");
-    e.apply_command(1, &pass()).expect("nap pass declare blockers -> combat damage");
+    e.apply_command(0, &pass())
+        .expect("ap pass declare blockers");
+    e.apply_command(1, &pass())
+        .expect("nap pass declare blockers -> combat damage");
 
     // Both Scroll Thieves dealt combat damage to P1, so both triggers must be on the stack.
     assert_eq!(
@@ -6969,7 +7318,10 @@ fn simultaneous_combat_damage_triggers_both_fire() {
 
     // Resolving both triggers draws 2 cards for P0.
     resolve_entire_stack_two_player(&mut e);
-    assert!(e.state.stack.is_empty(), "stack must be empty after both triggers resolve");
+    assert!(
+        e.state.stack.is_empty(),
+        "stack must be empty after both triggers resolve"
+    );
     assert_eq!(
         e.state.players[0].hand.len(),
         p0_hand_before + 2,
@@ -6987,15 +7339,29 @@ fn targeted_trigger_resolves_after_target_chosen() {
     // Flametongue Kavu: WhenSelfEntersBattlefield → DamageTarget(4) — targeted ETB trigger.
     let p0_deck: Vec<String> = vec![
         "flametongue_kavu".into(),
-        "mountain".into(), "mountain".into(), "mountain".into(), "mountain".into(),
-        "mountain".into(), "mountain".into(), "mountain".into(), "mountain".into(),
-        "mountain".into(), "mountain".into(),
+        "mountain".into(),
+        "mountain".into(),
+        "mountain".into(),
+        "mountain".into(),
+        "mountain".into(),
+        "mountain".into(),
+        "mountain".into(),
+        "mountain".into(),
+        "mountain".into(),
+        "mountain".into(),
     ];
     let p1_deck: Vec<String> = vec![
         "grizzly_bears".into(),
-        "forest".into(), "forest".into(), "forest".into(), "forest".into(),
-        "forest".into(), "forest".into(), "forest".into(), "forest".into(),
-        "forest".into(), "forest".into(),
+        "forest".into(),
+        "forest".into(),
+        "forest".into(),
+        "forest".into(),
+        "forest".into(),
+        "forest".into(),
+        "forest".into(),
+        "forest".into(),
+        "forest".into(),
+        "forest".into(),
     ];
     let decks = Some(vec![p0_deck, p1_deck]);
     let mut e = GameEngine::new(8003, &[0, 1], 20, decks, true).expect("new");
@@ -7006,7 +7372,9 @@ fn targeted_trigger_resolves_after_target_chosen() {
         let pos = e.state.players[1]
             .hand
             .iter()
-            .position(|oid| e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some("grizzly_bears"))
+            .position(|oid| {
+                e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some("grizzly_bears")
+            })
             .expect("grizzly_bears in P1 hand");
         let oid = e.state.players[1].hand.remove(pos);
         e.state.players[1].battlefield.push(oid);
@@ -7015,12 +7383,20 @@ fn targeted_trigger_resolves_after_target_chosen() {
     };
 
     // Give P0 enough mana to cast Flametongue Kavu (3R = 3 colorless + 1 red).
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, c: 3, ..Default::default() }))
-        .ok();
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            c: 3,
+            ..Default::default()
+        }),
+    )
+    .ok();
 
     // Cast Flametongue Kavu (no target at cast time for its ETB trigger — target chosen later).
     let ftk_idx = hand_index_for_card(&e, 0, "flametongue_kavu");
-    e.apply_command(0, &cast_spell(ftk_idx, vec![])).expect("cast FTK");
+    e.apply_command(0, &cast_spell(ftk_idx, vec![]))
+        .expect("cast FTK");
 
     // Let it resolve (both players pass).
     pass_both_players(&mut e);
@@ -7033,9 +7409,15 @@ fn targeted_trigger_resolves_after_target_chosen() {
     );
 
     // P0 chooses Grizzly Bears as the target.
-    e.apply_command(0, &RuledCommand {
-        cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget { target_object_id: bears_oid })),
-    }).expect("choose trigger target");
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                target_object_id: bears_oid,
+            })),
+        },
+    )
+    .expect("choose trigger target");
 
     // Queue must be empty and trigger on the stack.
     assert!(
@@ -7075,14 +7457,23 @@ fn hexproof_opponent_cannot_target_with_spell() {
 
     // Give P0 one red mana (Lightning Bolt costs R) by tapping a Mountain.
     let mtn_idx = hand_index_for_card(&e, 0, "mountain");
-    e.apply_command(0, &play_land(mtn_idx)).expect("play mountain");
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { r: 1, ..Default::default() }))
-        .expect("add mana");
+    e.apply_command(0, &play_land(mtn_idx))
+        .expect("play mountain");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add mana");
 
     // Ensure Lightning Bolt is in P0's hand (may be in library depending on seed).
-    if !e.state.players[0].hand.iter().any(|oid| {
-        e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some("lightning_bolt")
-    }) {
+    if !e.state.players[0]
+        .hand
+        .iter()
+        .any(|oid| e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some("lightning_bolt"))
+    {
         take_card_from_library_to_hand(&mut e, 0, "lightning_bolt");
     }
 
@@ -7113,14 +7504,23 @@ fn hexproof_controller_can_target_own_permanent() {
     let scout = inject_creature_with_stats(&mut e, 0, "gladecover_scout", 1, 1);
 
     let forest_idx = hand_index_for_card(&e, 0, "forest");
-    e.apply_command(0, &play_land(forest_idx)).expect("play forest");
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { g: 1, ..Default::default() }))
-        .expect("add mana");
+    e.apply_command(0, &play_land(forest_idx))
+        .expect("play forest");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            g: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add mana");
 
     // Ensure Giant Growth is in P0's hand.
-    if !e.state.players[0].hand.iter().any(|oid| {
-        e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some("giant_growth")
-    }) {
+    if !e.state.players[0]
+        .hand
+        .iter()
+        .any(|oid| e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some("giant_growth"))
+    {
         take_card_from_library_to_hand(&mut e, 0, "giant_growth");
     }
 
@@ -7154,21 +7554,35 @@ fn shroud_controller_cannot_target_own_permanent() {
     let enchantress = inject_creature_with_stats(&mut e, 0, "argothian_enchantress", 0, 1);
 
     let forest_idx = hand_index_for_card(&e, 0, "forest");
-    e.apply_command(0, &play_land(forest_idx)).expect("play forest");
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { g: 1, ..Default::default() }))
-        .expect("add mana");
+    e.apply_command(0, &play_land(forest_idx))
+        .expect("play forest");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            g: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add mana");
 
     // Ensure Giant Growth is in P0's hand.
-    if !e.state.players[0].hand.iter().any(|oid| {
-        e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some("giant_growth")
-    }) {
+    if !e.state.players[0]
+        .hand
+        .iter()
+        .any(|oid| e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some("giant_growth"))
+    {
         take_card_from_library_to_hand(&mut e, 0, "giant_growth");
     }
 
     let gg_idx = hand_index_for_card(&e, 0, "giant_growth");
     let result = e.apply_command(
         0,
-        &cast_spell(gg_idx, vec![TargetRef { object_id: enchantress }]),
+        &cast_spell(
+            gg_idx,
+            vec![TargetRef {
+                object_id: enchantress,
+            }],
+        ),
     );
     assert!(
         result.is_err(),
@@ -7196,21 +7610,31 @@ fn argothian_enchantress_triggers_on_enchantment_cast() {
 
     // Play a Forest for mana.
     let forest_idx = hand_index_for_card(&e, 0, "forest");
-    e.apply_command(0, &play_land(forest_idx)).expect("play forest");
-    e.apply_command(0, &add_mana_to_pool(AddManaToPool { g: 1, ..Default::default() }))
-        .expect("add mana");
+    e.apply_command(0, &play_land(forest_idx))
+        .expect("play forest");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            g: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add mana");
 
     // Ensure Exploration is in P0's hand.
-    if !e.state.players[0].hand.iter().any(|oid| {
-        e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some("exploration")
-    }) {
+    if !e.state.players[0]
+        .hand
+        .iter()
+        .any(|oid| e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some("exploration"))
+    {
         take_card_from_library_to_hand(&mut e, 0, "exploration");
     }
 
     let hand_before = e.state.players[0].hand.len();
 
     let expl_idx = hand_index_for_card(&e, 0, "exploration");
-    e.apply_command(0, &cast_spell(expl_idx, vec![])).expect("cast Exploration");
+    e.apply_command(0, &cast_spell(expl_idx, vec![]))
+        .expect("cast Exploration");
 
     // Both Exploration and the enchantress draw trigger must be on the stack.
     assert!(
