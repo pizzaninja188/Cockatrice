@@ -93,7 +93,7 @@ All four items landed and verified: `cargo test` (153) / `clippy -D warnings` / 
 
 ## Phase 1 — Engine-owned card identity — ✅ DONE 2026-06-10
 
-All five items landed and verified: `cargo test` (160) / `clippy --all-targets -D warnings` / `fmt --check` green; Linux build + full ctest green (`ruled_batch_test` updated to seed the session catalog the way `applyRuledStartupBatch` does); `rg cardNameToTricerulesId` returns nothing; `--check` verified on synthetic Oracle XML (exit 0 all-matched / exit 1 on a missing name). Live sidecar IPC smoke on Linux: SessionStart with Oracle names → `ok=true` + CardCatalog (id+name) in the batch; deck containing "Black Lotus"/"Brainstorm" → `ok=false, error="unimplemented cards: Black Lotus, Brainstorm"` (deduped, sorted — the Phase 2 input). Remaining: the Windows launch-script client E2E from the Verification section has not been re-run on this Linux box — run it before/with the Phase 2 work that builds on this wire format.
+All five items landed and verified: `cargo test` (160) / `clippy --all-targets -D warnings` / `fmt --check` green; Linux build + full ctest green (`ruled_batch_test` updated to seed the session catalog the way `applyRuledStartupBatch` does); `rg cardNameToTricerulesId` returns nothing; `--check` verified on synthetic Oracle XML (exit 0 all-matched / exit 1 on a missing name). Live sidecar IPC smoke on Linux: SessionStart with Oracle names → `ok=true` + CardCatalog (id+name) in the batch; deck containing "Black Lotus"/"Brainstorm" → `ok=false, error="unimplemented cards: Black Lotus, Brainstorm"` (deduped, sorted — the Phase 2 input). Remaining: the Windows launch-script client E2E from the Verification section has not been re-run on this Linux box — folded into the combined client E2E recorded under Phase 2 (one session covers this wire format and the Phase 2 gate).
 
 ### ✅ 1.1 Rust `slugify` + transitional id test
 
@@ -157,11 +157,11 @@ Relay (Servatrice):
 
 ---
 
-## Phase 2 — Block ruled game start on unimplemented cards
+## Phase 2 — Block ruled game start on unimplemented cards — ✅ DONE 2026-06-10
 
-**Why (B3 + user decision):** No silent fallback. A ruled game must not start while any player's mainboard contains cards the engine doesn't implement; players get a popup naming the cards and the pregame continues so they can fix decks.
+Both items landed and verified: `cargo test` (164) / `clippy --all-targets -D warnings` / `fmt --check` green; Linux build + ctest green. Implementation notes vs. the plan: the gate runs in `doStartGameIfReady` right after the ready checks (before `setupZones`/`gameStarted`), using a transient stack `RulesRelay` for the stateless call; the popup goes to **every** player (content lists missing cards per player with `xN` copy counts, alphabetical) via `Event_NotifyUser CUSTOM` through `getUserInterface()->sendProtocolItem` — reachable from `Server_Game`, no `GameEventContainer` fallback needed; the SessionStart belt-and-braces path makes `startRuledSidecarSession` return `bool` (false = blocked on missing cards → `gameStarted` unwound; replay bookkeeping from the aborted start is accepted for this rare race); sidecar-unreachable keeps the casual fallback but posts a loud `Event_GameSay` at validation time. Optional 2.2.5 (deck-select-time warning) was **not** implemented. Remaining: client E2E (launch scripts) covering both the Phase 1 wire format and this gate — ready-up with an unimplemented card must show popup + log and not start; deck swap then starts ruled.
 
-### 2.1 Stateless `ValidateDeck` IPC
+### ✅ 2.1 Stateless `ValidateDeck` IPC
 
 **Files:** `ruled_v1.proto`, `tricerules/tricerules-server/src/main.rs`, `rules_relay.{h,cpp}`.
 
@@ -177,7 +177,7 @@ Relay (Servatrice):
 3. `RulesRelay::validateDeck(const QStringList &names, ruled::v1::IpcResponse &out)` — same framing as existing calls.
 4. This IPC is the extension point for the **deferred** deck-editor coverage feature (a future `ListImplementedCards` sibling).
 
-### 2.2 Gate game start; popup + game log
+### ✅ 2.2 Gate game start; popup + game log
 
 **Files:** `server_game.cpp` (`doStartGameIfReady`, `server_game.cpp:534`), client popup handling.
 

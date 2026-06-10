@@ -30,6 +30,10 @@ public:
     bool sessionStart(quint64 gameId, quint64 seed, const QList<int> &playerIds,
                       const QList<QPair<int, QStringList>> *playerDecks, ruled::v1::IpcResponse &out);
     bool playerCommand(int playerId, const QByteArray &ruledCommandBytes, ruled::v1::IpcResponse &out);
+    /// Stateless implemented-card check (no engine session): out.ok() iff every Oracle
+    /// name resolves; otherwise out.missing_card_names() lists them sorted, deduplicated.
+    /// Returns false only on transport failure (sidecar unreachable / bad frame).
+    bool validateDeck(const QStringList &cardNames, ruled::v1::IpcResponse &out);
     bool sessionEnd();
 
 private:

@@ -20,6 +20,7 @@
 #include "server_game.h"
 
 #include "../server.h"
+#include "../server_abstractuserinterface.h"
 #include "../server_database_interface.h"
 #include "../server_protocolhandler.h"
 #include "../server_response_containers.h"
@@ -55,6 +56,7 @@
 #include <libcockatrice/protocol/pb/event_join.pb.h>
 #include <libcockatrice/protocol/pb/event_kicked.pb.h>
 #include <libcockatrice/protocol/pb/event_leave.pb.h>
+#include <libcockatrice/protocol/pb/event_notify_user.pb.h>
 #include <libcockatrice/protocol/pb/event_set_card_attr.pb.h>
 #include <libcockatrice/protocol/pb/event_set_counter.pb.h>
 #include <libcockatrice/protocol/pb/event_player_properties_changed.pb.h>
@@ -64,6 +66,7 @@
 #include <libcockatrice/protocol/pb/event_set_active_player.pb.h>
 #include <libcockatrice/protocol/pb/game_replay.pb.h>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
+#include <libcockatrice/protocol/pb/session_event.pb.h>
 #include <libcockatrice/utility/zone_names.h>
 
 namespace {
@@ -495,6 +498,41 @@ void Server_Game::doStartGameIfReady(bool forceStartGame)
     }
 
     players = getPlayers(); // players could have been kicked, get new list of players
+
+    if (ruledGame) {
+        // A ruled game must not start while any mainboard contains cards the rules engine
+        // doesn't implement — no silent casual fallback. Validation is stateless (no engine
+        // session); on failure the pregame continues so players can swap decks.
+        const QList<QPair<int, QStringList>> deckByPlayer = ruledMainboardNamesByPlayer();
+        QStringList allNames;
+        for (const QPair<int, QStringList> &row : deckByPlayer) {
+            allNames += row.second;
+        }
+        if (!allNames.isEmpty()) {
+            RulesRelay validationRelay;
+            ruled::v1::IpcResponse validateResp;
+            if (!validationRelay.validateDeck(allNames, validateResp)) {
+                // Sidecar unreachable is an infrastructure outage, not an unimplemented
+                // card: keep the legacy casual fallback, but say so in the game log.
+                Event_GameSay say;
+                say.set_message("Rules engine unreachable — deck validation skipped; "
+                                "the game will fall back to casual (freeform) play.");
+                sendGameEventContainer(prepareGameEvent(say, -1));
+            } else if (!validateResp.missing_card_names().empty()) {
+                QStringList missing;
+                for (const std::string &name : validateResp.missing_card_names()) {
+                    missing.append(QString::fromStdString(name));
+                }
+                notifyRuledUnimplementedCards(deckByPlayer, missing);
+                for (auto *player : players.values()) {
+                    player->setReadyStart(false);
+                }
+                sendGameStateToPlayers();
+                return;
+            }
+        }
+    }
+
     for (Server_AbstractPlayer *player : players.values()) {
         player->setupZones();
     }
@@ -533,8 +571,12 @@ void Server_Game::doStartGameIfReady(bool forceStartGame)
     } else
         firstGameStarted = true;
 
-    if (ruledGame) {
-        startRuledSidecarSession();
+    if (ruledGame && !startRuledSidecarSession()) {
+        // SessionStart refused on unimplemented cards (a deck changed after the pregame
+        // validation above): unwind the start; players were notified and un-readied.
+        gameStarted = false;
+        sendGameStateToPlayers();
+        return;
     }
     sendGameStateToPlayers();
 
@@ -1767,18 +1809,8 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
     }
 }
 
-void Server_Game::startRuledSidecarSession()
+QList<QPair<int, QStringList>> Server_Game::ruledMainboardNamesByPlayer() const
 {
-    if (!ruledGame) {
-        return;
-    }
-    rulesRelay = std::make_unique<RulesRelay>(this);
-    ruledSeed = QRandomGenerator::global()->generate64();
-    QList<int> ids;
-    for (auto *p : getPlayers().values()) {
-        ids.append(p->getPlayerId());
-    }
-    ruled::v1::IpcResponse resp;
     QList<QPair<int, QStringList>> deckByPlayer;
     for (Server_AbstractPlayer *pl : getPlayers().values()) {
         QStringList mainboardNames;
@@ -1797,6 +1829,78 @@ void Server_Game::startRuledSidecarSession()
         }
         deckByPlayer.append(qMakePair(pl->getPlayerId(), mainboardNames));
     }
+    return deckByPlayer;
+}
+
+void Server_Game::notifyRuledUnimplementedCards(const QList<QPair<int, QStringList>> &deckByPlayer,
+                                                const QStringList &missingNames)
+{
+    QSet<QString> missingLower;
+    for (const QString &name : missingNames) {
+        missingLower.insert(name.trimmed().toLower());
+    }
+
+    QStringList perPlayerParts;
+    for (const QPair<int, QStringList> &row : deckByPlayer) {
+        QMap<QString, int> copiesByName; // QMap: alphabetical card order in the message
+        for (const QString &name : row.second) {
+            const QString trimmed = name.trimmed();
+            if (missingLower.contains(trimmed.toLower())) {
+                ++copiesByName[trimmed];
+            }
+        }
+        if (copiesByName.isEmpty()) {
+            continue;
+        }
+        Server_AbstractPlayer *pl = getPlayer(row.first);
+        const QString playerName =
+            pl ? QString::fromStdString(pl->getUserInfo()->name()) : QString::number(row.first);
+        QStringList cardParts;
+        for (auto it = copiesByName.constBegin(); it != copiesByName.constEnd(); ++it) {
+            cardParts.append(it.value() > 1 ? QStringLiteral("%1 x%2").arg(it.key()).arg(it.value()) : it.key());
+        }
+        perPlayerParts.append(QStringLiteral("%1 (%2)").arg(cardParts.join(QStringLiteral(", ")), playerName));
+    }
+    if (perPlayerParts.isEmpty()) {
+        // The engine reported names that match no gathered mainboard (shouldn't happen);
+        // still surface them rather than blocking silently.
+        perPlayerParts.append(missingNames.join(QStringLiteral(", ")));
+    }
+
+    const QString summary = QStringLiteral("Cannot start ruled game — unimplemented cards: %1. "
+                                           "Swap to a fully implemented deck and ready up again.")
+                                .arg(perPlayerParts.join(QStringLiteral("; ")));
+
+    Event_GameSay say;
+    say.set_message(summary.toStdString());
+    sendGameEventContainer(prepareGameEvent(say, -1));
+
+    Event_NotifyUser notify;
+    notify.set_type(Event_NotifyUser::CUSTOM);
+    notify.set_custom_title("Cannot start ruled game");
+    notify.set_custom_content(summary.toStdString());
+    for (Server_AbstractPlayer *pl : getPlayers().values()) {
+        if (Server_AbstractUserInterface *ui = pl->getUserInterface()) {
+            SessionEvent *se = Server_AbstractUserInterface::prepareSessionEvent(notify);
+            ui->sendProtocolItem(*se);
+            delete se;
+        }
+    }
+}
+
+bool Server_Game::startRuledSidecarSession()
+{
+    if (!ruledGame) {
+        return true;
+    }
+    rulesRelay = std::make_unique<RulesRelay>(this);
+    ruledSeed = QRandomGenerator::global()->generate64();
+    QList<int> ids;
+    for (auto *p : getPlayers().values()) {
+        ids.append(p->getPlayerId());
+    }
+    ruled::v1::IpcResponse resp;
+    const QList<QPair<int, QStringList>> deckByPlayer = ruledMainboardNamesByPlayer();
     bool anyMainboard = false;
     for (const QPair<int, QStringList> &row : deckByPlayer) {
         if (!row.second.isEmpty()) {
@@ -1812,24 +1916,36 @@ void Server_Game::startRuledSidecarSession()
             static_cast<Server_Player *>(p)->shuffleMainDeckForRuledFallback();
         }
         rulesRelay.reset();
-        return;
+        return true;
     }
     if (!resp.ok()) {
         qWarning() << "startRuledSidecarSession: tricerules:" << QString::fromStdString(resp.error());
+        if (!resp.missing_card_names().empty()) {
+            // A deck changed between pregame validation and SessionStart: same block
+            // path as the gate — never a silent casual fallback for unimplemented cards.
+            QStringList missing;
+            for (const std::string &name : resp.missing_card_names()) {
+                missing.append(QString::fromStdString(name));
+            }
+            notifyRuledUnimplementedCards(deckByPlayer, missing);
+            rulesRelay.reset();
+            return false;
+        }
         for (Server_AbstractPlayer *p : getPlayers().values()) {
             static_cast<Server_Player *>(p)->shuffleMainDeckForRuledFallback();
         }
         rulesRelay.reset();
-        return;
+        return true;
     }
     applyRuledStartupBatch(resp, deckByPlayer);
     if (!rulesRelay) {
-        return;
+        return true;
     }
     if (currentReplay) {
         currentReplay->set_ruled_seed(ruledSeed);
     }
     broadcastRuledResponse(resp);
+    return true;
 }
 
 QString Server_Game::ruledCardIdForName(const QString &cardName) const

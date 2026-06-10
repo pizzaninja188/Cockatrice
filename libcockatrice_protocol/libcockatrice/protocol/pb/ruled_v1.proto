@@ -440,7 +440,17 @@ message IpcEnvelope {
     SessionStart session_start = 1;
     PlayerCommand player_command = 2;
     SessionEnd session_end = 3;
+    ValidateDeck validate_deck = 4;
   }
+}
+
+// Stateless implemented-card check (no engine, no session): the sidecar answers with
+// ok = true and an empty missing_card_names iff every name resolves in the registry.
+// Servatrice gates ruled game start on this so an unimplemented card never silently
+// falls back to casual play. Also the extension point for future deck-editor coverage
+// queries (e.g. a ListImplementedCards sibling).
+message ValidateDeck {
+  repeated string card_names = 1; // Oracle card names, duplicates allowed
 }
 
 // Deck lists cross IPC as Oracle card names; the engine resolves names to card ids
@@ -472,4 +482,7 @@ message IpcResponse {
   bool ok = 1;
   string error = 2;
   optional RuledEventBatch batch = 3;
+  // Oracle names the registry does not implement, sorted and deduplicated. Filled by
+  // ValidateDeck and by a SessionStart that fails name resolution; empty otherwise.
+  repeated string missing_card_names = 4;
 }

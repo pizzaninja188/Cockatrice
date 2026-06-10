@@ -36,6 +36,8 @@ Unless scoped **backend-only**, ship **engine + proto + Servatrice relay + Cocka
 
 **Card identity is engine-owned.** Decks cross IPC as Oracle *names* (`PlayerDeck.mainboard_card_name`); the engine resolves them via `CardRegistry::id_for_name` and answers with a server-only `CardCatalog` event (engine `card_id` ↔ Oracle name + types). Servatrice maps through `Server_Game::ruledCardIdForName/ruledCardNameForId` and **never derives ids from names** (the old C++ slug function is gone; don't reintroduce one). RON authoring convention: `id == slugify(name)` (`tricerules-cards/src/slug.rs`, enforced by a registry test). The catalog enumerates deck contents — keep it stripped from client broadcasts (`stripRuledServerOnlyEventsForBroadcast`).
 
+**Ruled game start is gated on deck validation.** `doStartGameIfReady` calls the stateless `ValidateDeck` IPC (pure registry lookups, no engine session) before starting; any unimplemented mainboard card **blocks** the start — game-log message + `Event_NotifyUser CUSTOM` popup naming the cards per player, players un-readied, pregame continues. Never reintroduce a silent casual fallback for unimplemented cards (sidecar-*unreachable* still falls back to casual, but loudly via game log). The same `IpcResponse.missing_card_names` field is filled by a failing `SessionStart`; `ValidateDeck` is also the extension point for future deck-editor coverage queries.
+
 ### After implementing cards — update the checklist
 
 After adding or finishing a card (drop a RON file anywhere under `tricerules-cards/data/` — `build.rs` embeds it automatically, no `registry.rs` edit; `primitives.rs` only when adding a new primitive), **regenerate the tracker** so `tricerules/CARDS.md` stays accurate, and commit it with the card change:

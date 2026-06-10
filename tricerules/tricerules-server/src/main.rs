@@ -11,6 +11,38 @@ use tricerules_core::{GameEngine, PlayerId};
 use tricerules_proto::ruled::v1::ipc_envelope::Msg;
 use tricerules_proto::ruled::v1::{IpcEnvelope, IpcResponse, PlayerDeck};
 
+/// Failure response shared by ValidateDeck and SessionStart name resolution:
+/// `missing` must be the sorted, deduplicated unimplemented Oracle names.
+fn missing_cards_response(missing: Vec<String>) -> IpcResponse {
+    IpcResponse {
+        ok: false,
+        error: format!("unimplemented cards: {}", missing.join(", ")),
+        batch: None,
+        missing_card_names: missing,
+    }
+}
+
+/// Stateless ValidateDeck: no engine, no session — pure registry lookups.
+/// ok iff every name resolves to an implemented card id.
+fn validate_deck_response(card_names: &[String]) -> IpcResponse {
+    let registry = CardRegistry::global();
+    let missing: BTreeSet<String> = card_names
+        .iter()
+        .filter(|name| registry.id_for_name(name).is_none())
+        .map(|name| name.trim().to_string())
+        .collect();
+    if missing.is_empty() {
+        IpcResponse {
+            ok: true,
+            error: String::new(),
+            batch: None,
+            missing_card_names: vec![],
+        }
+    } else {
+        missing_cards_response(missing.into_iter().collect())
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let port: u16 = env::var("TRICERULES_PORT")
@@ -40,11 +72,7 @@ async fn handle_connection(
             Some(Msg::SessionStart(s)) => {
                 let pids: Vec<PlayerId> = s.player_ids;
                 match resolve_deck_names(&pids, &s.player_decks) {
-                    Err(missing) => IpcResponse {
-                        ok: false,
-                        error: format!("unimplemented cards: {}", missing.join(", ")),
-                        batch: None,
-                    },
+                    Err(missing) => missing_cards_response(missing),
                     Ok(decks) => match GameEngine::new(s.seed, &pids, 20, decks, false) {
                         Ok(e) => {
                             let batch = e.initial_response_batch();
@@ -53,16 +81,19 @@ async fn handle_connection(
                                 ok: true,
                                 error: String::new(),
                                 batch: Some(batch),
+                                missing_card_names: vec![],
                             }
                         }
                         Err(err) => IpcResponse {
                             ok: false,
                             error: err.to_string(),
                             batch: None,
+                            missing_card_names: vec![],
                         },
                     },
                 }
             }
+            Some(Msg::ValidateDeck(v)) => validate_deck_response(&v.card_names),
             Some(Msg::PlayerCommand(pc)) => {
                 if let Some(ref mut eng) = engine {
                     eng.player_command_ipc(pc.player_id, &pc.ruled_command)
@@ -71,6 +102,7 @@ async fn handle_connection(
                         ok: false,
                         error: "no session".into(),
                         batch: None,
+                        missing_card_names: vec![],
                     }
                 }
             }
@@ -187,5 +219,58 @@ mod tests {
     #[test]
     fn resolve_deck_names_empty_means_engine_default_decks() {
         assert!(matches!(resolve_deck_names(&[0, 1], &[]), Ok(None)));
+    }
+
+    fn names(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn validate_deck_all_implemented_is_ok() {
+        let resp = validate_deck_response(&names(&["Lightning Bolt", " mountain ", "Forest"]));
+        assert!(resp.ok);
+        assert!(resp.error.is_empty());
+        assert!(resp.missing_card_names.is_empty());
+        assert!(resp.batch.is_none());
+    }
+
+    #[test]
+    fn validate_deck_reports_missing_sorted_deduped() {
+        let resp = validate_deck_response(&names(&[
+            "Black Lotus",
+            "Mountain",
+            "Brainstorm",
+            "Brainstorm",
+            " black lotus ",
+        ]));
+        assert!(!resp.ok);
+        // Reported strings are the trimmed raw spellings, so the case-variant
+        // " black lotus " stays a distinct entry alongside "Black Lotus".
+        assert_eq!(
+            resp.missing_card_names,
+            vec!["Black Lotus", "Brainstorm", "black lotus"]
+        );
+        assert_eq!(
+            resp.error,
+            "unimplemented cards: Black Lotus, Brainstorm, black lotus"
+        );
+        assert!(resp.batch.is_none());
+    }
+
+    #[test]
+    fn validate_deck_empty_list_is_ok() {
+        let resp = validate_deck_response(&[]);
+        assert!(resp.ok);
+        assert!(resp.missing_card_names.is_empty());
+    }
+
+    #[test]
+    fn session_start_missing_fills_missing_card_names() {
+        let missing = resolve_deck_names(&[0], &[deck(0, &["Black Lotus", "Mountain"])])
+            .expect_err("Black Lotus is not implemented");
+        let resp = missing_cards_response(missing);
+        assert!(!resp.ok);
+        assert_eq!(resp.missing_card_names, vec!["Black Lotus"]);
+        assert_eq!(resp.error, "unimplemented cards: Black Lotus");
     }
 }

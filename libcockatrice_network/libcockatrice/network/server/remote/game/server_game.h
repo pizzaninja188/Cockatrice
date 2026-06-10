@@ -128,6 +128,14 @@ private:
                                      bool omniscient,
                                      bool withUserInfo);
     void storeGameInformation();
+    /// Mainboard Oracle card names per player id, one entry per copy (the format both
+    /// deck validation and the sidecar SessionStart consume).
+    QList<QPair<int, QStringList>> ruledMainboardNamesByPlayer() const;
+    /// Tells everyone a ruled game cannot start because of unimplemented cards: a game-log
+    /// message plus a popup (Event_NotifyUser CUSTOM) to every player, naming the cards
+    /// per player with copy counts.
+    void notifyRuledUnimplementedCards(const QList<QPair<int, QStringList>> &deckByPlayer,
+                                       const QStringList &missingNames);
     void applyRuledStartupBatch(const ruled::v1::IpcResponse &resp,
                                 const QList<QPair<int, QStringList>> &deckByPlayer);
     RuledBatchApplyResult applyRuledBatch(const ruled::v1::IpcResponse &resp);
@@ -277,7 +285,10 @@ public:
 
     Response::ResponseCode processRuledPayload(int playerId, const Command_RuledPayload &cmd, GameEventStorage &ges);
     void broadcastRuledResponse(const ruled::v1::IpcResponse &resp);
-    void startRuledSidecarSession();
+    /// Returns false when the session was refused because a deck contains unimplemented
+    /// cards (the game must not start; players were already notified). Infrastructure
+    /// failures keep the legacy casual fallback and return true.
+    bool startRuledSidecarSession();
     /// Engine card id for an Oracle card name via the session catalog; empty when unknown
     /// (no catalog yet / card not in this game's decks).
     QString ruledCardIdForName(const QString &cardName) const;

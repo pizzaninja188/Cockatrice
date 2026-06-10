@@ -3263,22 +3263,26 @@ impl GameEngine {
                     ok: true,
                     error: String::new(),
                     batch: Some(batch),
+                    missing_card_names: vec![],
                 },
                 Err(EngineError::GameOver(w)) => IpcResponse {
                     ok: true,
                     error: String::new(),
                     batch: Some(self.game_over_batch_winner(w)),
+                    missing_card_names: vec![],
                 },
                 Err(e) => IpcResponse {
                     ok: false,
                     error: e.to_string(),
                     batch: None,
+                    missing_card_names: vec![],
                 },
             },
             Err(e) => IpcResponse {
                 ok: false,
                 error: format!("decode: {e}"),
                 batch: None,
+                missing_card_names: vec![],
             },
         }
     }
