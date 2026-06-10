@@ -39,7 +39,10 @@ Unless scoped **backend-only**, ship **engine + proto + Servatrice relay + Cocka
 After adding or finishing a card (drop a RON file anywhere under `tricerules-cards/data/` — `build.rs` embeds it automatically, no `registry.rs` edit; `primitives.rs` only when adding a new primitive), **regenerate the tracker** so `tricerules/CARDS.md` stays accurate, and commit it with the card change:
 
 ```powershell
-./scripts/gen-card-checklist.ps1   # reads the registry + Oracle cards.xml → tricerules/CARDS.md
+./scripts/gen-card-checklist.ps1   # Windows: reads the registry + Oracle cards.xml → tricerules/CARDS.md
+```
+```bash
+./scripts/gen-card-checklist.sh    # Linux/macOS: same, defaults to ~/.local/share/Cockatrice/Cockatrice/cards.xml
 ```
 
 - **Partial cards:** if a card's mechanics don't fully match Oracle/CR, add `partial: "<what's missing>"` to its RON (e.g. an unimplemented mode or unenforced targeting restriction). Omit the field for fully-implemented cards. The generator renders three tiers: `[x]` full · `[ ] 🟡 partial: <note>` · `[ ]` not implemented.
@@ -110,6 +113,59 @@ If the fetch fails or the card name is ambiguous, surface that before writing an
 - **`tricerules/**/*.rs`**: server-authoritative; `EngineError::Illegal` not panic; reject ambiguous combat; explicit priority/steps; add/update `tricerules-core/tests/scenario.rs` (happy + illegal path, assert steps/priority/zones). Keep `ruled_v1.proto` aligned across consumers.
 
 **Final summary (substantive ruled/proto/relay/UI edits):** End with a short **MTG applicability** block: (1) does CR/Oracle govern this? (2) if yes — concepts + compliance or stated deferral; (3) if no — e.g. “No MTG rules surface area.”
+
+---
+
+## Linux build and test (after repo edits on Linux)
+
+### Prerequisites (Ubuntu/Debian, one-time)
+
+```bash
+sudo apt install -y cmake ninja-build \
+  qtbase5-dev qtbase5-dev-tools libqt5svg5-dev libqt5concurrent5 \
+  libqt5websockets5-dev qtmultimedia5-dev \
+  protobuf-compiler libprotobuf-dev libssl-dev ccache pkg-config
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source "$HOME/.cargo/env"   # or add to ~/.bashrc
+```
+
+### Build (from repo root)
+
+```bash
+# Full build — client + server + oracle + tests:
+cmake --preset unix-ninja-debug -DWITH_CLIENT=ON -DWITH_SERVER=ON -DWITH_ORACLE=ON -DTEST=ON
+cmake --build build/unix-ninja-debug -j$(nproc)
+
+# Or release:
+cmake --preset unix-ninja-release -DWITH_CLIENT=ON -DWITH_SERVER=ON -DWITH_ORACLE=ON
+cmake --build build/unix-ninja-release -j$(nproc)
+```
+
+### Running C++ tests
+
+```bash
+QT_QPA_PLATFORM=offscreen ctest --test-dir build/unix-ninja-debug --output-on-failure
+```
+
+`QT_QPA_PLATFORM=offscreen` replaces Windows `-platform offscreen` — required for headless Qt widget tests.
+
+### Running Rust (tricerules) tests
+
+```bash
+cd tricerules && cargo test
+```
+
+### CI checks (run before pushing Rust changes)
+
+```bash
+source "$HOME/.cargo/env"
+cd tricerules
+cargo test
+cargo clippy -- -D warnings
+cargo fmt --check
+```
+
+Qt module additions for new tests go in `cmake/FindQtRuntime.cmake` (`_TEST_NEEDED`), not per-test CMakeLists. Widget visibility checks use `isHidden()` (not `isVisible()`) since the widget is not shown during tests.
 
 ---
 

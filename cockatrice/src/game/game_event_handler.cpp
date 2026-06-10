@@ -2331,6 +2331,7 @@ void GameEventHandler::clearRuledSessionState()
 
 void GameEventHandler::createSyntheticAbilityStackCard(quint32 virtualOid, const QString &cardName, int controllerPlayerId)
 {
+    (void)controllerPlayerId;
     // Idempotent: StackPushed may be rebroadcast; a second card for the same OID would corrupt the zone.
     if (syntheticAbilityStackCards.contains(virtualOid)) {
         return;
