@@ -26,6 +26,13 @@ pub enum RegistryError {
 #[derive(Debug, Default)]
 pub struct CardRegistry {
     by_id: HashMap<String, CardDefinition>,
+    /// Trimmed, lowercased Oracle name -> card id (see [`Self::id_for_name`]).
+    by_name: HashMap<String, String>,
+}
+
+/// Name-index key normalization, applied to both stored names and lookup queries.
+fn normalize_name(name: &str) -> String {
+    name.trim().to_lowercase()
 }
 
 impl CardRegistry {
@@ -67,6 +74,16 @@ impl CardRegistry {
                 }
             }
             let id = card.id.clone();
+            if reg
+                .by_name
+                .insert(normalize_name(&card.name), id.clone())
+                .is_some()
+            {
+                return Err(RegistryError::InvalidCard {
+                    id,
+                    reason: format!("duplicate name '{}'", card.name),
+                });
+            }
             if reg.by_id.insert(id.clone(), card).is_some() {
                 return Err(RegistryError::InvalidCard {
                     id,
@@ -79,6 +96,12 @@ impl CardRegistry {
 
     pub fn get(&self, id: &str) -> Option<&CardDefinition> {
         self.by_id.get(id)
+    }
+
+    /// Resolves an Oracle card name (trimmed, case-insensitive) to a card id.
+    /// This is the only supported name->id path; deck lists cross IPC as names.
+    pub fn id_for_name(&self, name: &str) -> Option<&str> {
+        self.by_name.get(&normalize_name(name)).map(String::as_str)
     }
 
     /// Iterate over every loaded card definition (order is unspecified).
@@ -170,6 +193,56 @@ mod tests {
         )"#;
         let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
         assert!(matches!(err, RegistryError::InvalidCard { ref id, .. } if id == "bad_trigger"));
+    }
+
+    /// Authoring convention (not a wire contract): every card's id is the slug of its name.
+    /// Catches id/name typos in current and future RON; Phase 6 codegen reuses `slugify`.
+    #[test]
+    fn card_ids_follow_slug_convention() {
+        let reg = CardRegistry::from_embedded().unwrap();
+        for def in reg.definitions() {
+            assert_eq!(
+                def.id,
+                crate::slug::slugify(&def.name),
+                "card '{}': id does not match slugify(name)",
+                def.name
+            );
+        }
+    }
+
+    #[test]
+    fn id_for_name_normalizes_trim_and_case() {
+        let reg = CardRegistry::from_embedded().unwrap();
+        assert_eq!(reg.id_for_name("Lightning Bolt"), Some("lightning_bolt"));
+        assert_eq!(reg.id_for_name("  lightning BOLT "), Some("lightning_bolt"));
+        assert_eq!(reg.id_for_name("Pharika's Chosen"), Some("pharikas_chosen"));
+        assert_eq!(reg.id_for_name("Black Lotus"), None);
+    }
+
+    #[test]
+    fn load_rejects_duplicate_name() {
+        let a = r#"(
+            id: "dupe_a",
+            name: "Dupe",
+            mana_cost: "",
+            types: ["Land"],
+            is_land: true,
+        )"#;
+        let b = r#"(
+            id: "dupe_b",
+            name: " DUPE ",
+            mana_cost: "",
+            types: ["Land"],
+            is_land: true,
+        )"#;
+        let err = CardRegistry::from_chunks(&[a, b]).unwrap_err();
+        match err {
+            RegistryError::InvalidCard { id, reason } => {
+                assert_eq!(id, "dupe_b");
+                assert!(reason.contains("duplicate name"));
+            }
+            other => panic!("expected InvalidCard, got {other:?}"),
+        }
     }
 
     #[test]

@@ -91,25 +91,25 @@ All four items landed and verified: `cargo test` (153) / `clippy -D warnings` / 
 
 ---
 
-## Phase 1 — Engine-owned card identity
+## Phase 1 — Engine-owned card identity — ✅ DONE 2026-06-10
 
-**Why (B2):** Today *two* languages independently derive the same slug, synced by a comment. After this phase, only the engine ever derives or resolves card identity; Servatrice deals in Oracle names outward and opaque `card_id` strings inward, mapped through an engine-provided catalog.
+All five items landed and verified: `cargo test` (160) / `clippy --all-targets -D warnings` / `fmt --check` green; Linux build + full ctest green (`ruled_batch_test` updated to seed the session catalog the way `applyRuledStartupBatch` does); `rg cardNameToTricerulesId` returns nothing; `--check` verified on synthetic Oracle XML (exit 0 all-matched / exit 1 on a missing name). Live sidecar IPC smoke on Linux: SessionStart with Oracle names → `ok=true` + CardCatalog (id+name) in the batch; deck containing "Black Lotus"/"Brainstorm" → `ok=false, error="unimplemented cards: Black Lotus, Brainstorm"` (deduped, sorted — the Phase 2 input). Remaining: the Windows launch-script client E2E from the Verification section has not been re-run on this Linux box — run it before/with the Phase 2 work that builds on this wire format.
 
-### 1.1 Rust `slugify` + transitional id test
+### ✅ 1.1 Rust `slugify` + transitional id test
 
 **Files:** new `tricerules/tricerules-cards/src/slug.rs` (export from `lib.rs`), test in `registry.rs`.
 
 1. `pub fn slugify(name: &str) -> String` — exact mirror of today's C++ (`lowercase, strip ASCII ', spaces→_`). Document: this is an id-*derivation convention* for file authoring, not a wire contract (the wire contract dies in 1.3/1.4).
 2. Registry test: `for def in registry: assert_eq!(def.id, slugify(&def.name))`. This immediately catches id/name typos in all current and future RON, and Phase 6's generator reuses the function.
 
-### 1.2 Registry name index
+### ✅ 1.2 Registry name index
 
 **Files:** `tricerules/tricerules-cards/src/registry.rs`.
 
 1. Add `by_name: HashMap<String, String>` (key: trimmed, lowercased name → id), built during `from_embedded`; duplicate name → load error.
 2. `pub fn id_for_name(&self, name: &str) -> Option<&str>` (normalizes the query the same way).
 
-### 1.3 Proto: names in, catalog out
+### ✅ 1.3 Proto: names in, catalog out
 
 **Files:** `libcockatrice_protocol/libcockatrice/protocol/pb/ruled_v1.proto` (keep C++ and Rust buildable together).
 
@@ -130,7 +130,7 @@ All four items landed and verified: `cargo test` (153) / `clippy -D warnings` / 
 3. `StackPushed`: add `string card_id = 5;` (empty for abilities). Ends the snake_case→name guessing for stack binding.
 4. **Hidden information:** the catalog enumerates deck contents. It is **server-only**: strip it in the broadcast scrubber alongside `zone_view` (`stripRuledZoneViewForBroadcast`, near `server_game.cpp:1685`) — consider renaming the function to reflect "server-only events".
 
-### 1.4 Engine: resolve names; Relay: match via catalog
+### ✅ 1.4 Engine: resolve names; Relay: match via catalog
 
 **Files:** `tricerules/tricerules-server/src/main.rs`, `tricerules/tricerules-core/src/engine.rs`, `server_game.cpp`, `server_player.cpp`, `rules_relay.{h,cpp}`, `ruled_utils.{h,cpp}`.
 
@@ -146,7 +146,7 @@ Relay (Servatrice):
 7. Stack binding: prefer `StackPushed.card_id` + catalog id→name over `normalizeRuledCardName` heuristics (`server_game.cpp:138-141, 165-181`); retain name normalization only where a display string is genuinely the input.
 8. Delete `cardNameToTricerulesId` from `ruled_utils.{h,cpp}` (and its "must stay in sync" contract).
 
-### 1.5 Make the checklist's name check enforceable
+### ✅ 1.5 Make the checklist's name check enforceable
 
 **Files:** `tricerules/tricerules-cards/src/bin/gen_checklist.rs`, `scripts/gen-card-checklist.ps1`, CLAUDE.md note.
 

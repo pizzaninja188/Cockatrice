@@ -10,11 +10,14 @@
         --sets ZNR,DOM        only emit those sets
         --ignore-online-only  skip online-only printings when picking the first printing
         --include-tokens      include token cards
+        --check               exit nonzero if any implemented card name has no Oracle match
         --cards-xml <path>    use a specific cards.xml (default: %LOCALAPPDATA%\Cockatrice\Cockatrice\cards.xml)
 .EXAMPLE
     ./scripts/gen-card-checklist.ps1
 .EXAMPLE
     ./scripts/gen-card-checklist.ps1 --sets ZNR,DOM
+.EXAMPLE
+    ./scripts/gen-card-checklist.ps1 --check
 #>
 
 $repoRoot = Split-Path -Parent $PSScriptRoot

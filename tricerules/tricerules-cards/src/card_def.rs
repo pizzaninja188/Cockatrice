@@ -55,6 +55,13 @@ pub struct CardDefinition {
 }
 
 impl CardDefinition {
+    /// True for permanent cards (CR 110.4): the spell resolves to the battlefield rather
+    /// than the graveyard. With validated data this is exactly "not instant, not sorcery"
+    /// (land/creature/artifact/enchantment are the only other types in the schema).
+    pub fn is_permanent(&self) -> bool {
+        !self.is_instant && !self.is_sorcery
+    }
+
     /// Derive the card's colors from its mana cost (CR 202.2a).
     /// A card is colorless if its mana cost contains no color symbols (e.g. lands, "0", generic-only).
     pub fn colors(&self) -> Vec<Color> {

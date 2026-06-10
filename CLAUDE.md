@@ -30,9 +30,11 @@ Unless scoped **backend-only**, ship **engine + proto + Servatrice relay + Cocka
 
 **Rules from tricerules, display from Oracle — never the other way around.**
 - Servatrice must query tricerules (via protobuf or `CardRegistry`) for card type/mechanical info, **not** `CardDatabaseQuerier` / Oracle.
-- `ruledOracleTypeBlobForServerCard()` and similar functions that query Oracle for ruled decisions are wrong; fix them to use tricerules data.
+- Functions that query Oracle for ruled decisions are wrong; fix them to use tricerules data.
 - Oracle is intentionally absent from `tricerules/` and must stay that way.
 - Future card abilities go in the hybrid model — RON data → generic `SpellEffectKind` primitive → `custom/` Rust when data is insufficient — never in Oracle text parsing.
+
+**Card identity is engine-owned.** Decks cross IPC as Oracle *names* (`PlayerDeck.mainboard_card_name`); the engine resolves them via `CardRegistry::id_for_name` and answers with a server-only `CardCatalog` event (engine `card_id` ↔ Oracle name + types). Servatrice maps through `Server_Game::ruledCardIdForName/ruledCardNameForId` and **never derives ids from names** (the old C++ slug function is gone; don't reintroduce one). RON authoring convention: `id == slugify(name)` (`tricerules-cards/src/slug.rs`, enforced by a registry test). The catalog enumerates deck contents — keep it stripped from client broadcasts (`stripRuledServerOnlyEventsForBroadcast`).
 
 ### After implementing cards — update the checklist
 
@@ -47,6 +49,7 @@ After adding or finishing a card (drop a RON file anywhere under `tricerules-car
 
 - **Partial cards:** if a card's mechanics don't fully match Oracle/CR, add `partial: "<what's missing>"` to its RON (e.g. an unimplemented mode or unenforced targeting restriction). Omit the field for fully-implemented cards. The generator renders three tiers: `[x]` full · `[ ] 🟡 partial: <note>` · `[ ]` not implemented.
 - Implemented status comes from `CardRegistry`; set grouping (first/original printing) comes from Oracle — consistent with "rules from tricerules, display from Oracle". The `partial` field is tracking-only and ignored by the engine.
+- **Name gate:** run with `--check` before committing card additions — exits nonzero if any registry card name has no Oracle match. Deck resolution is by name at session start, so an unmatched name means an uncastable card. (Local/pre-commit gate; CI can't host `cards.xml` — the CI-side guarantee is the registry `id == slugify(name)` test.)
 
 ### Editing habits
 

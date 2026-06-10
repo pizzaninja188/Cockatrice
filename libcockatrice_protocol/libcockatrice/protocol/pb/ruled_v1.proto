@@ -203,7 +203,24 @@ message RuledEvent {
     // Engine-emitted when a triggered ability fires and needs the controller to choose a target
     // before the ability is placed on the stack (CR 603.3d).
     TriggerNeedsTarget trigger_needs_target = 20;
+    // Engine-provided card identity map for the session's decks; emitted once in the
+    // SessionStart response batch. Server-only (enumerates deck contents): Servatrice
+    // strips it from client broadcasts alongside zone_view private fields.
+    CardCatalog card_catalog = 21;
   }
+}
+
+// The single source of card identity for a ruled session: Servatrice sends Oracle names
+// into the engine and maps every engine card_id (zone views, stack pushes, object maps)
+// back to a name through this catalog — no name->id derivation happens in C++.
+message CardCatalog {
+  message Entry {
+    string card_id = 1;        // engine id, e.g. "lightning_bolt"
+    string name = 2;           // Oracle name, e.g. "Lightning Bolt"
+    repeated string types = 3; // from CardDefinition.types
+    bool is_permanent = 4;     // CR 110.4: resolves to the battlefield, not the graveyard
+  }
+  repeated Entry entries = 1;
 }
 
 message CombatDamageAssigned {
@@ -229,6 +246,9 @@ message StackPushed {
   // Present for activated/triggered abilities; absent (empty string) for spells.
   // The client overlays this text on the stack card as an annotation.
   string ability_annotation = 4;
+  // Engine card id of the pushed spell (e.g. "lightning_bolt"); empty for abilities,
+  // which have no physical card on the stack. Resolve to an Oracle name via CardCatalog.
+  string card_id = 5;
 }
 
 message ActivateAbility {
@@ -265,7 +285,7 @@ message SbasApplied {
 }
 
 // Authoritative hand + library from the rules engine, for server to sync physical zones
-// (tricRules ids: lowercase_underscore, matching deck conversion).
+// (engine card ids, lowercase_underscore; resolve to Oracle names via CardCatalog).
 // Library: comma-separated, top of library (next draw) first. TricRules ids never contain commas.
 // Field 3 is reserved: older tricerules emitted repeated string there; same tag as singular string
 // on the C++ side merged 53 submessages into one wrong value. Use 4+ only for the CSV.
@@ -423,10 +443,15 @@ message IpcEnvelope {
   }
 }
 
-// Card ids for tricerules (lowercase_underscore, e.g. "lightning_bolt") — empty = engine default test deck
+// Deck lists cross IPC as Oracle card names; the engine resolves names to card ids
+// (CardRegistry::id_for_name) and reports the mapping back via CardCatalog.
 message PlayerDeck {
   int32 player_id = 1;
-  repeated string mainboard_card_id = 2;
+  // Was mainboard_card_id (C++-derived tricerules ids); the engine owns identity now.
+  reserved 2;
+  reserved "mainboard_card_id";
+  // Oracle card names (e.g. "Lightning Bolt"), one entry per copy — empty = engine default test deck.
+  repeated string mainboard_card_name = 3;
 }
 
 message SessionStart {

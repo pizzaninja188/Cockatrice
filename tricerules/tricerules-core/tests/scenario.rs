@@ -340,6 +340,9 @@ fn cast_lightning_bolt_resolves_to_graveyard_after_double_pass() {
         .expect("stack pushed");
     assert_eq!(stack_push.targets.len(), 1);
     assert_eq!(stack_push.targets[0].object_id, 1);
+    // Spells carry their engine card id so the relay can bind the physical stack card
+    // through the CardCatalog instead of guessing from the display description.
+    assert_eq!(stack_push.card_id, "lightning_bolt");
 
     e.apply_command(0, &pass()).expect("caster pass");
     let resolved = e.apply_command(1, &pass()).expect("opponent pass");
@@ -841,6 +844,18 @@ fn combat_damage_trigger_lands_on_stack_and_requires_priority() {
         phase_pos.unwrap() < pushed_pos.unwrap(),
         "PhaseChanged must precede StackPushed in the combat damage batch"
     );
+
+    // Abilities have no physical card on the stack: StackPushed.card_id stays empty
+    // (spells carry their engine card id for catalog-based relay binding).
+    let trigger_push = b
+        .events
+        .iter()
+        .find_map(|ev| match &ev.ev {
+            Some(Ev::StackPushed(s)) => Some(s),
+            _ => None,
+        })
+        .expect("trigger StackPushed");
+    assert!(trigger_push.card_id.is_empty());
 
     // Both players passing resolves the trigger; Scroll Thief draws a card for P0.
     pass_both_players(&mut e);

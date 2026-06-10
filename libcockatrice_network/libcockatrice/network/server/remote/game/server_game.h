@@ -92,6 +92,11 @@ private:
     quint64 ruledSeed;
     int ruledPriorityPlayer;
     std::unique_ptr<RulesRelay> rulesRelay;
+    /// Engine-provided card identity catalog for this session (CardCatalog event, server-only):
+    /// the single name<->id mapping — Servatrice never derives engine card ids itself.
+    QHash<QString, ruled::v1::CardCatalog_Entry> ruledCardCatalogById;
+    /// Trimmed, lowercased Oracle name -> engine card id (mirrors the engine's own normalization).
+    QHash<QString, QString> ruledCardIdByLowerName;
     /// StackPushed.object_id -> engine card name; push and resolve may arrive in different ruled IPC batches.
     QHash<quint32, QString> ruledEngineStackPushDescriptionsByObjectId;
     // Stack object id -> Server_Card.id currently in the Cockatrice STACK zone.
@@ -273,6 +278,11 @@ public:
     Response::ResponseCode processRuledPayload(int playerId, const Command_RuledPayload &cmd, GameEventStorage &ges);
     void broadcastRuledResponse(const ruled::v1::IpcResponse &resp);
     void startRuledSidecarSession();
+    /// Engine card id for an Oracle card name via the session catalog; empty when unknown
+    /// (no catalog yet / card not in this game's decks).
+    QString ruledCardIdForName(const QString &cardName) const;
+    /// Oracle card name for an engine card id via the session catalog; empty when unknown.
+    QString ruledCardNameForId(const QString &cardId) const;
 
     void sendGameStateToPlayers();
     void sendGameEventContainer(GameEventContainer *cont,

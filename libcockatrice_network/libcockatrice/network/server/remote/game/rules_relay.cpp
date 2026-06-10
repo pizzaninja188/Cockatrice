@@ -132,8 +132,8 @@ bool RulesRelay::sessionStart(quint64 gameId, quint64 seed, const QList<int> &pl
         for (const QPair<int, QStringList> &row : *playerDecks) {
             ruled::v1::PlayerDeck *pd = ss->add_player_decks();
             pd->set_player_id(row.first);
-            for (const QString &cid : row.second) {
-                pd->add_mainboard_card_id(cid.toStdString());
+            for (const QString &name : row.second) {
+                pd->add_mainboard_card_name(name.toStdString());
             }
         }
     }

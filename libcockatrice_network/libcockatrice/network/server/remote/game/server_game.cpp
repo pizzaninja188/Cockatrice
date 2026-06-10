@@ -127,16 +127,24 @@ int countCsvEntries(const std::string &csv)
     return count;
 }
 
-void stripRuledZoneViewForBroadcast(ruled::v1::IpcResponse *resp)
+/// Removes or redacts server-only engine output before a batch is broadcast to clients.
+void stripRuledServerOnlyEventsForBroadcast(ruled::v1::IpcResponse *resp)
 {
     if (!resp || !resp->has_batch()) {
         return;
+    }
+    auto *batch = resp->mutable_batch();
+    // CardCatalog enumerates every deck's contents — server-only, drop it entirely.
+    auto *events = batch->mutable_events();
+    for (int i = events->size() - 1; i >= 0; --i) {
+        if (events->Get(i).has_card_catalog()) {
+            events->DeleteSubrange(i, 1);
+        }
     }
     // Keep zone_view events in the broadcast but clear private per-player fields
     // (hand cards, library order) that must not be revealed to opponents.
     // Public combat state — first_strike_step_pending, battlefield data — is preserved
     // so all players update the "First Strike Damage" pass-priority button correctly.
-    auto *batch = resp->mutable_batch();
     for (int i = 0; i < batch->events_size(); ++i) {
         if (!batch->events(i).has_zone_view()) {
             continue;
@@ -1324,7 +1332,7 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
             if (!wantCardId.isEmpty()) {
                 if (Server_CardZone *deck = owner->getZones().value(ZoneNames::DECK)) {
                     for (Server_Card *c : deck->getCards()) {
-                        if (cardNameToTricerulesId(c->getName()) == wantCardId) {
+                        if (ruledCardIdForName(c->getName()) == wantCardId) {
                             card = c;
                             break;
                         }
@@ -1415,7 +1423,16 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
             if (e.has_stack_pushed()) {
                 const auto &sp = e.stack_pushed();
                 const quint32 pushedOid = static_cast<quint32>(sp.object_id());
-                const QString pushedName = QString::fromStdString(sp.description());
+                // Physical binding matches on display names. For spells, resolve the engine
+                // card id through the catalog (authoritative Oracle name) rather than trusting
+                // the free-form description; abilities carry no card_id and keep the description.
+                QString pushedName = QString::fromStdString(sp.description());
+                if (!sp.card_id().empty()) {
+                    const QString catalogName = ruledCardNameForId(QString::fromStdString(sp.card_id()));
+                    if (!catalogName.isEmpty()) {
+                        pushedName = catalogName;
+                    }
+                }
                 ruledEngineStackPushDescriptionsByObjectId.insert(pushedOid, pushedName);
                 const QString normalizedPushedName = normalizeRuledCardName(pushedName);
                 QList<PendingRuledCastVisual>::iterator bindIt = ruledPendingCastVisualQueue.end();
@@ -1615,7 +1632,7 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
     toSend.set_ok(resp.ok());
     toSend.set_error(resp.error());
     toSend.mutable_batch()->CopyFrom(resp.batch());
-    stripRuledZoneViewForBroadcast(&toSend);
+    stripRuledServerOnlyEventsForBroadcast(&toSend);
     if (!toSend.has_batch()) {
         return;
     }
@@ -1640,7 +1657,7 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
                     if (!card) {
                         continue;
                     }
-                    QString tr = cardNameToTricerulesId(card->getName());
+                    QString tr = ruledCardIdForName(card->getName());
                     quint32 engineOid = 0;
                     bool found = false;
                     for (auto it = oidMap.constBegin(); it != oidMap.constEnd(); ++it) {
@@ -1687,7 +1704,7 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
                         ++stackOrdinal;
                         continue;
                     }
-                    QString tr = cardNameToTricerulesId(stackCard->getName());
+                    QString tr = ruledCardIdForName(stackCard->getName());
                     auto *entry = map->add_entries();
                     entry->set_player_id(pl->getPlayerId());
                     entry->set_engine_object_id(stackOid);
@@ -1764,20 +1781,21 @@ void Server_Game::startRuledSidecarSession()
     ruled::v1::IpcResponse resp;
     QList<QPair<int, QStringList>> deckByPlayer;
     for (Server_AbstractPlayer *pl : getPlayers().values()) {
-        QStringList tricerulesIds;
+        QStringList mainboardNames;
         if (const DeckList *dl = pl->getDeckList()) {
             const QSet<QString> mainOnly = QSet<QString>() << QStringLiteral("main");
             for (const DecklistCardNode *node : dl->getCardNodes(mainOnly)) {
                 if (!node) {
                     continue;
                 }
-                const QString t = cardNameToTricerulesId(node->getName());
+                // Oracle names cross the IPC boundary; the engine owns name->id resolution.
+                const QString name = node->getName().trimmed();
                 for (int k = 0; k < node->getNumber(); ++k) {
-                    tricerulesIds.append(t);
+                    mainboardNames.append(name);
                 }
             }
         }
-        deckByPlayer.append(qMakePair(pl->getPlayerId(), tricerulesIds));
+        deckByPlayer.append(qMakePair(pl->getPlayerId(), mainboardNames));
     }
     bool anyMainboard = false;
     for (const QPair<int, QStringList> &row : deckByPlayer) {
@@ -1814,11 +1832,42 @@ void Server_Game::startRuledSidecarSession()
     broadcastRuledResponse(resp);
 }
 
+QString Server_Game::ruledCardIdForName(const QString &cardName) const
+{
+    return ruledCardIdByLowerName.value(cardName.trimmed().toLower());
+}
+
+QString Server_Game::ruledCardNameForId(const QString &cardId) const
+{
+    const auto it = ruledCardCatalogById.constFind(cardId);
+    return it == ruledCardCatalogById.constEnd() ? QString() : QString::fromStdString(it->name());
+}
+
 void Server_Game::applyRuledStartupBatch(const ruled::v1::IpcResponse &resp,
                                          const QList<QPair<int, QStringList>> &deckByPlayer)
 {
     if (!resp.has_batch()) {
         return;
+    }
+
+    // The catalog must be indexed before any zone-view application below: syncing
+    // physical zones resolves card names through it.
+    ruledCardCatalogById.clear();
+    ruledCardIdByLowerName.clear();
+    for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
+        const auto &e = resp.batch().events(ei);
+        if (!e.has_card_catalog()) {
+            continue;
+        }
+        for (const auto &entry : e.card_catalog().entries()) {
+            const QString cardId = QString::fromStdString(entry.card_id());
+            ruledCardCatalogById.insert(cardId, entry);
+            ruledCardIdByLowerName.insert(QString::fromStdString(entry.name()).trimmed().toLower(), cardId);
+        }
+    }
+    if (ruledCardCatalogById.isEmpty()) {
+        qWarning() << "applyRuledStartupBatch: no CardCatalog in startup batch — "
+                      "is tricerules-server rebuilt from this tree? Zone sync will not resolve names.";
     }
 
     int startupActivePlayer = -1;

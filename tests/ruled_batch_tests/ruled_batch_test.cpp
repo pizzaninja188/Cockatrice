@@ -72,6 +72,11 @@ protected:
 
         setupPlayerZonesAndCounters(p1);
         setupPlayerZonesAndCounters(p2);
+
+        // Mid-game batches assume the session card catalog (parsed from the SessionStart
+        // CardCatalog event in production) is already populated; seed it for the names
+        // these tests use.
+        seedCardCatalog({"Grizzly Bears", "Timber Wolves", "Hill Giant"});
     }
 
     void TearDown() override
@@ -84,6 +89,22 @@ protected:
     void insertParticipant(int id, Server_AbstractParticipant *p)
     {
         game->participants.insert(id, p);
+    }
+
+    // Fills the per-game catalog maps the way applyRuledStartupBatch would from a
+    // CardCatalog event. Ids mirror the engine's slug convention for these names.
+    void seedCardCatalog(const QStringList &names)
+    {
+        for (const QString &name : names) {
+            QString id = name.toLower();
+            id.remove(QLatin1Char('\''));
+            id.replace(QLatin1Char(' '), QLatin1Char('_'));
+            ruled::v1::CardCatalog_Entry entry;
+            entry.set_card_id(id.toStdString());
+            entry.set_name(name.toStdString());
+            game->ruledCardCatalogById.insert(id, entry);
+            game->ruledCardIdByLowerName.insert(name.trimmed().toLower(), id);
+        }
     }
 
     BatchOutcome callBatchApply(const ruled::v1::IpcResponse &resp)

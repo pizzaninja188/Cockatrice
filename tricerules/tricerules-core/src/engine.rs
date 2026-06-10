@@ -8,7 +8,7 @@ use prost::Message;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
-use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use thiserror::Error;
 use tricerules_cards::primitives::{
     AbilityCost, CastTriggerPlayer, ContinuousEffectKind, EffectDuration, Keyword, SpellEffectKind,
@@ -2200,7 +2200,7 @@ impl GameEngine {
             let resolves_to_battlefield = self
                 .registry
                 .get(&card_id)
-                .map(|d| !d.is_instant && !d.is_sorcery)
+                .map(|d| d.is_permanent())
                 .unwrap_or(false);
             let destination = if resolves_to_battlefield {
                 rv1::StackResolveDestination::Battlefield as i32
@@ -2775,6 +2775,7 @@ impl GameEngine {
                 description: def_name,
                 targets: targets.to_vec(),
                 ability_annotation: String::new(),
+                card_id: cast_card_id.clone(),
             })),
         });
         self.fire_triggers(
@@ -2947,6 +2948,7 @@ impl GameEngine {
                 description: card_name,
                 targets: targets.to_vec(),
                 ability_annotation: ability_text,
+                card_id: String::new(),
             })),
         });
         batch.events.push(ev_priority_changed(self));
@@ -3026,6 +3028,7 @@ impl GameEngine {
                     object_id: target_object_id,
                 }],
                 ability_annotation: ability_text,
+                card_id: String::new(),
             })),
         });
 
@@ -3228,6 +3231,8 @@ impl GameEngine {
 
     pub fn initial_response_batch(&self) -> RuledEventBatch {
         let mut batch = RuledEventBatch::default();
+        // Catalog first: Servatrice resolves the zone-view card ids below through it.
+        batch.events.push(self.ev_card_catalog());
         batch.events.push(self.ev_zone_view_sync());
         if let Some(op) = &self.state.opening {
             batch
@@ -3275,6 +3280,34 @@ impl GameEngine {
                 error: format!("decode: {e}"),
                 batch: None,
             },
+        }
+    }
+
+    /// Engine-owned card identity for the session: the union of all deck card ids mapped
+    /// to Oracle names plus the mechanical info Servatrice needs without querying Oracle.
+    /// Server-only — Servatrice strips it from client broadcasts (it enumerates decks).
+    fn ev_card_catalog(&self) -> RuledEvent {
+        // BTreeSet: dedupe + deterministic entry order for replays.
+        let ids: BTreeSet<&str> = self
+            .state
+            .objects
+            .values()
+            .map(|o| o.card_id.as_str())
+            .collect();
+        let entries = ids
+            .into_iter()
+            .filter_map(|id| self.registry.get(id))
+            .map(|def| rv1::card_catalog::Entry {
+                card_id: def.id.clone(),
+                name: def.name.clone(),
+                types: def.types.clone(),
+                is_permanent: def.is_permanent(),
+            })
+            .collect();
+        RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::CardCatalog(rv1::CardCatalog {
+                entries,
+            })),
         }
     }
 
@@ -3790,6 +3823,7 @@ impl GameEngine {
                     description: card_name.clone(),
                     targets: vec![],
                     ability_annotation: ability_text.clone(),
+                    card_id: String::new(),
                 })),
             });
             events.push(ev_log(format!("Triggered: {card_name} — {ability_text}")));

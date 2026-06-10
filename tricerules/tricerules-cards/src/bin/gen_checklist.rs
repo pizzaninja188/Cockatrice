@@ -28,6 +28,7 @@ struct Args {
     sets_filter: Option<HashSet<String>>,
     include_tokens: bool,
     ignore_online_only: bool,
+    check: bool,
 }
 
 fn print_usage() {
@@ -39,6 +40,7 @@ fn print_usage() {
          --sets CODE,CODE     Only emit these set codes (default: all)\n  \
          --include-tokens     Include token cards (default: skip)\n  \
          --ignore-online-only Ignore online-only printings when choosing the first printing\n  \
+         --check              Exit nonzero if any implemented card name has no Oracle match\n  \
          -h, --help           Show this help"
     );
 }
@@ -49,6 +51,7 @@ fn parse_args() -> Result<Args, String> {
     let mut sets_filter: Option<HashSet<String>> = None;
     let mut include_tokens = false;
     let mut ignore_online_only = false;
+    let mut check = false;
 
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -70,6 +73,7 @@ fn parse_args() -> Result<Args, String> {
             }
             "--include-tokens" => include_tokens = true,
             "--ignore-online-only" => ignore_online_only = true,
+            "--check" => check = true,
             "-h" | "--help" => {
                 print_usage();
                 std::process::exit(0);
@@ -88,6 +92,7 @@ fn parse_args() -> Result<Args, String> {
         sets_filter,
         include_tokens,
         ignore_online_only,
+        check,
     })
 }
 
@@ -310,14 +315,20 @@ fn main() -> ExitCode {
             ordered.len()
         );
         eprintln!(
-            "WARNING: {} implemented card(s) did not match any Oracle card name (check for typos \
+            "{}: {} implemented card(s) did not match any Oracle card name (check for typos \
              or set filtering):",
+            if args.check { "error" } else { "WARNING" },
             unmatched.len()
         );
         let mut u: Vec<&String> = unmatched;
         u.sort();
         for name in u {
             eprintln!("  - {name}");
+        }
+        // --check: registry names must all resolve against Oracle (pre-commit gate for
+        // card additions; the engine resolves decks by these names at session start).
+        if args.check {
+            return ExitCode::FAILURE;
         }
     }
 

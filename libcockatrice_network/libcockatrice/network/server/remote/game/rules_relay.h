@@ -25,7 +25,8 @@ public:
     bool connectIfNeeded();
     void disconnectRelay();
 
-    /// @param playerDecks optional: one entry per player id with tricerules mainboard card ids; nullptr = use engine default
+    /// @param playerDecks optional: one entry per player id with mainboard Oracle card names
+    /// (the engine resolves names to its card ids); nullptr = use engine default
     bool sessionStart(quint64 gameId, quint64 seed, const QList<int> &playerIds,
                       const QList<QPair<int, QStringList>> *playerDecks, ruled::v1::IpcResponse &out);
     bool playerCommand(int playerId, const QByteArray &ruledCommandBytes, ruled::v1::IpcResponse &out);

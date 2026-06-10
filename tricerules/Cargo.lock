@@ -724,6 +724,7 @@ dependencies = [
  "bytes",
  "prost",
  "tokio",
+ "tricerules-cards",
  "tricerules-core",
  "tricerules-proto",
 ]
