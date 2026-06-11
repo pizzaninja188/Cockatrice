@@ -92,6 +92,10 @@ private:
     quint64 ruledSeed;
     int ruledPriorityPlayer;
     std::unique_ptr<RulesRelay> rulesRelay;
+    /// Set once the rules engine connection drops during an active ruled game. The engine state
+    /// is unrecoverable (a restarted sidecar is a fresh process with no session), so we notify
+    /// the players exactly once and stop relaying further commands to a dead socket.
+    bool ruledEngineConnectionLost = false;
     /// Engine-provided card identity catalog for this session (CardCatalog event, server-only):
     /// the single name<->id mapping — Servatrice never derives engine card ids itself.
     QHash<QString, ruled::v1::CardCatalog_Entry> ruledCardCatalogById;
@@ -136,6 +140,18 @@ private:
     /// per player with copy counts.
     void notifyRuledUnimplementedCards(const QList<QPair<int, QStringList>> &deckByPlayer,
                                        const QStringList &missingNames);
+    /// Sends a rules-engine notice to every player: a game-log message plus a popup
+    /// (Event_NotifyUser CUSTOM) with the given title. Shared by the pregame-unreachable and
+    /// mid-game-disconnect paths.
+    void sendRuledEngineNotice(const QString &title, const QString &message);
+    /// Tells everyone a ruled game cannot start because the rules engine (tricerules sidecar)
+    /// is unreachable. The client commits to ruled-vs-freeform at join time, so a started game
+    /// cannot be downgraded to casual mid-life — we block the start instead of half-starting.
+    void notifyRuledEngineUnreachable();
+    /// Handles the rules engine connection dropping during an active ruled game: notifies the
+    /// players once (the game is unrecoverable) and tears down the dead relay so subsequent
+    /// commands fail fast instead of re-timing-out and re-notifying. Idempotent.
+    void handleRuledEngineConnectionLost();
     void applyRuledStartupBatch(const ruled::v1::IpcResponse &resp,
                                 const QList<QPair<int, QStringList>> &deckByPlayer);
     RuledBatchApplyResult applyRuledBatch(const ruled::v1::IpcResponse &resp);

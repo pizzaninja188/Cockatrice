@@ -512,12 +512,17 @@ void Server_Game::doStartGameIfReady(bool forceStartGame)
             RulesRelay validationRelay;
             ruled::v1::IpcResponse validateResp;
             if (!validationRelay.validateDeck(allNames, validateResp)) {
-                // Sidecar unreachable is an infrastructure outage, not an unimplemented
-                // card: keep the legacy casual fallback, but say so in the game log.
-                Event_GameSay say;
-                say.set_message("Rules engine unreachable — deck validation skipped; "
-                                "the game will fall back to casual (freeform) play.");
-                sendGameEventContainer(prepareGameEvent(say, -1));
+                // Sidecar unreachable (or validation failed): we cannot start a ruled game
+                // without the engine, and the client has already committed to ruled UI at join
+                // time, so we cannot silently downgrade to casual mid-life. Block the start the
+                // same way unimplemented cards do — notify, un-ready, keep the pregame open so
+                // players can retry once the engine is back.
+                notifyRuledEngineUnreachable();
+                for (auto *player : players.values()) {
+                    player->setReadyStart(false);
+                }
+                sendGameStateToPlayers();
+                return;
             } else if (!validateResp.missing_card_names().empty()) {
                 QStringList missing;
                 for (const std::string &name : validateResp.missing_card_names()) {
@@ -1104,6 +1109,9 @@ Response::ResponseCode Server_Game::processRuledPayload(int playerId, const Comm
     ruled::v1::IpcResponse resp;
     QByteArray payload = QByteArray::fromStdString(cmd.payload());
     if (!rulesRelay->playerCommand(playerId, payload, resp)) {
+        // Relay (not the engine) failed: the sidecar connection dropped mid-game. Tell the
+        // players why the game has frozen rather than returning a silent internal error.
+        handleRuledEngineConnectionLost();
         return Response::RespInternalError;
     }
     if (!resp.ok()) {
@@ -1180,7 +1188,12 @@ void Server_Game::relayRuledPayloadAndBroadcast(int playerId, const QByteArray &
         return;
     }
     ruled::v1::IpcResponse resp;
-    if (!rulesRelay->playerCommand(playerId, ruledCmdBytes, resp) || !resp.ok()) {
+    if (!rulesRelay->playerCommand(playerId, ruledCmdBytes, resp)) {
+        // Relay (not the engine) failed: the sidecar connection dropped mid-game.
+        handleRuledEngineConnectionLost();
+        return;
+    }
+    if (!resp.ok()) {
         return;
     }
     const RuledBatchApplyResult batchResult = applyRuledBatch(resp);
@@ -1885,6 +1898,50 @@ void Server_Game::notifyRuledUnimplementedCards(const QList<QPair<int, QStringLi
     }
 }
 
+void Server_Game::sendRuledEngineNotice(const QString &title, const QString &message)
+{
+    Event_GameSay say;
+    say.set_message(message.toStdString());
+    sendGameEventContainer(prepareGameEvent(say, -1));
+
+    Event_NotifyUser notify;
+    notify.set_type(Event_NotifyUser::CUSTOM);
+    notify.set_custom_title(title.toStdString());
+    notify.set_custom_content(message.toStdString());
+    for (Server_AbstractPlayer *pl : getPlayers().values()) {
+        if (Server_AbstractUserInterface *ui = pl->getUserInterface()) {
+            SessionEvent *se = Server_AbstractUserInterface::prepareSessionEvent(notify);
+            ui->sendProtocolItem(*se);
+            delete se;
+        }
+    }
+}
+
+void Server_Game::notifyRuledEngineUnreachable()
+{
+    sendRuledEngineNotice(
+        QStringLiteral("Cannot start ruled game"),
+        QStringLiteral("Cannot start ruled game — the rules engine is unreachable. "
+                       "Make sure the rules engine (tricerules) is running, then ready up again."));
+}
+
+void Server_Game::handleRuledEngineConnectionLost()
+{
+    if (ruledEngineConnectionLost) {
+        return;
+    }
+    ruledEngineConnectionLost = true;
+    sendRuledEngineNotice(
+        QStringLiteral("Rules engine disconnected"),
+        QStringLiteral("The connection to the rules engine was lost — this ruled game can no longer "
+                       "continue. The engine state cannot be recovered; please concede or leave the game."));
+    // Drop the dead relay so further ruled commands fail fast (the !rulesRelay guards) instead of
+    // re-timing-out on every command and re-notifying. A restarted sidecar is a fresh session.
+    if (rulesRelay) {
+        rulesRelay.reset();
+    }
+}
+
 bool Server_Game::startRuledSidecarSession()
 {
     if (!ruledGame) {
@@ -1909,11 +1966,12 @@ bool Server_Game::startRuledSidecarSession()
     if (!rulesRelay->sessionStart(
             static_cast<quint64>(gameId), ruledSeed, ids, deckPtr, resp)) {
         qWarning() << "startRuledSidecarSession: tricerules connection failed";
-        for (Server_AbstractPlayer *p : getPlayers().values()) {
-            static_cast<Server_Player *>(p)->shuffleMainDeckForRuledFallback();
-        }
+        // The sidecar went away between pregame validation and SessionStart. We cannot run a
+        // ruled game without it and cannot downgrade the already-ruled clients to casual, so
+        // block the start (returning false unwinds it) and notify, matching the pregame gate.
+        notifyRuledEngineUnreachable();
         rulesRelay.reset();
-        return true;
+        return false;
     }
     if (!resp.ok()) {
         qWarning() << "startRuledSidecarSession: tricerules:" << QString::fromStdString(resp.error());
