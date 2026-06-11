@@ -117,7 +117,7 @@ message BlockPair {
 }
 
 // Defending player assigns blockers; multiple BlockPairs may share an attacker_id
-// (multiple creatures blocking one attacker — CR 509.2).
+// (multiple creatures blocking one attacker — CR 509.1h).
 message DeclareBlockers {
   repeated BlockPair block_pairs = 1;
 }
@@ -326,7 +326,7 @@ message RuledPerPlayerView {
   // (CR 702.4). Informational for UI; combat-step routing uses `first_strike_step_pending`.
   repeated bool battlefield_double_strike = 17;
   // True while the current combat will (or did) include a first-strike damage substep
-  // (CR 510.5): set whenever any attacker or blocker has First Strike or Double Strike and
+  // (CR 510.4): set whenever any attacker or blocker has First Strike or Double Strike and
   // the first-strike step has not yet resolved for the current combat. Drives the
   // "First Strike Damage" pass-priority button label.
   bool first_strike_step_pending = 18;

@@ -527,7 +527,7 @@ void GamePromptWidget::updatePassPriorityButtonText()
         passPriorityButton->setText(tr("No Response"));
         return;
     }
-    // CR 510.5: the button is always a forward-label (the step we are passing *into*).
+    // CR 510.4: the button is always a forward-label (the step we are passing *into*).
     // Inside the first-strike damage substep, pressing passes into the regular combat-damage
     // step, so the label is "Combat Damage".
     // While a first-strike substep is still pending (declare-blockers phase with a FS/DS
@@ -609,7 +609,7 @@ void GamePromptWidget::refreshPromptLabel()
         return;
     }
 
-    // CR 510.5: phase 7 hosts both the first-strike and regular combat damage substeps; use a
+    // CR 510.4: phase 7 hosts both the first-strike and regular combat damage substeps; use a
     // distinct label while inside the first-strike substep so the prompt doesn't read like a
     // generic "Combat Damage Step".
     const QString phaseName = firstStrikeDamageStepActive

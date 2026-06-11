@@ -14,7 +14,7 @@ pub enum TurnStep {
     BeginCombat,
     DeclareAttackers,
     DeclareBlockers,
-    /// CR 510.5 first combat damage step. Only entered when an attacker or blocker has first
+    /// CR 510.4 first combat damage step. Only entered when an attacker or blocker has first
     /// strike or double strike at the moment the combat damage step would begin. Both passes
     /// of combat damage live in their own step; the engine never lingers here if no first/double
     /// strike creature is involved.
@@ -218,7 +218,7 @@ impl ContinuousEffect {
 #[derive(Debug, Clone)]
 pub struct CombatState {
     pub attacking: Vec<ObjectId>,
-    /// Maps each attacker to all creatures blocking it (may be multiple — CR 509.2).
+    /// Maps each attacker to all creatures blocking it (may be multiple — CR 509.1h).
     pub blockers: HashMap<ObjectId, Vec<ObjectId>>,
     /// Explicit combat damage from each multiply-blocked (or trample) attacker to its blockers;
     /// populated when the active player submits `AssignCombatDamage` for that attacker.
@@ -236,13 +236,13 @@ pub struct CombatState {
     /// True only after both players have passed priority in declare blockers while assignment
     /// is still required — then the active player may submit `AssignCombatDamage`.
     pub assign_combat_damage_phase: bool,
-    /// Snapshot of attackers that participated in the first-strike damage step (CR 510.5).
+    /// Snapshot of attackers that participated in the first-strike damage step (CR 510.4).
     /// Captured immediately before first-strike damage resolves; empty if no first-strike
     /// step occurred (no attacker or blocker had FirstStrike/DoubleStrike).
     pub first_strike_attackers: Vec<ObjectId>,
     /// Snapshot of per-attacker blockers that participated in the first-strike damage step.
     /// Mirrors the layout of `blockers`. Used during the regular step to exclude creatures that
-    /// already dealt damage (CR 510.5) unless they have DoubleStrike.
+    /// already dealt damage (CR 510.4) unless they have DoubleStrike.
     pub first_strike_blockers: HashMap<ObjectId, Vec<ObjectId>>,
     /// True once the first-strike damage step has resolved for the current combat. Stays true
     /// for the rest of combat; the engine uses it to gate the regular-step participation rule

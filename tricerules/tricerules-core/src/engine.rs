@@ -704,7 +704,7 @@ impl GameEngine {
         };
         self.state.players[ap_idx].battlefield.iter().any(|oid| {
             self.state.objects.get(oid).is_some_and(|o| {
-                // CR 702.10a: Haste lets a creature attack (and use {T} abilities) even if it
+                // CR 702.10b: Haste lets a creature attack (and use {T} abilities) even if it
                 // just entered the battlefield this turn (i.e. ignore summoning sickness).
                 let effectively_sick = o.summoning_sick
                     && !o.has_keyword(self.registry, tricerules_cards::Keyword::Haste);
@@ -751,7 +751,7 @@ impl GameEngine {
             .copied()
             .collect();
         // A legal non-empty blocking assignment exists only when at least one defender
-        // creature can participate in a valid block. For menace attackers (CR 702.110),
+        // creature can participate in a valid block. For menace attackers (CR 702.111),
         // participation requires at least one OTHER defender that can block the same
         // attacker — otherwise the only achievable result is an illegal single-blocker.
         defenders.iter().any(|&cid| {
@@ -819,7 +819,7 @@ impl GameEngine {
             if !o.is_creature(self.registry) {
                 return Err(EngineError::Illegal("not creature"));
             }
-            // CR 702.10a: Haste bypasses summoning sickness — the creature may attack even
+            // CR 702.10b: Haste bypasses summoning sickness — the creature may attack even
             // if it entered the battlefield this turn.
             let has_haste = o.has_keyword(self.registry, tricerules_cards::Keyword::Haste);
             if o.summoning_sick && !has_haste {
@@ -831,7 +831,7 @@ impl GameEngine {
             list.push(oid);
         }
         for &oid in &list {
-            // CR 702.20a — Vigilance: attacking doesn't cause this creature to tap.
+            // CR 702.20b — Vigilance: attacking doesn't cause this creature to tap.
             let has_vigilance = self
                 .state
                 .objects
@@ -913,7 +913,7 @@ impl GameEngine {
             .state
             .defending_player_id_1v1()
             .ok_or(EngineError::Illegal("defender missing"))?;
-        // A blocker may appear at most once: CR 509.2 — a creature can only block one attacker.
+        // A blocker may appear at most once: CR 509.1a — a creature can only block one attacker.
         let mut seen_blockers = HashSet::new();
         // Build attacker → [blockers] map while validating.
         let mut attacker_to_blockers: HashMap<ObjectId, Vec<ObjectId>> = HashMap::new();
@@ -958,7 +958,7 @@ impl GameEngine {
                 .or_default()
                 .push(p.blocker_id);
         }
-        // CR 702.110: menace — a creature with menace can't be blocked except by two or more
+        // CR 702.111: menace — a creature with menace can't be blocked except by two or more
         // creatures. A menace creature with zero blockers is fine (it's unblocked); one blocker
         // is the illegal case. Return a prompt-friendly message so the UI can surface it.
         for (&att_id, blk_ids) in &attacker_to_blockers {
@@ -1221,7 +1221,7 @@ impl GameEngine {
 
         if needs_first_strike {
             // Snapshot which creatures had FS/DS at the start of the first-strike step. This is
-            // the canonical CR 510.5 "participation list" used to exclude them from the regular
+            // the canonical CR 510.4 "participation list" used to exclude them from the regular
             // step (unless they have DoubleStrike).
             let registry = &self.registry;
             let objects = &self.state.objects;
@@ -1312,7 +1312,7 @@ impl GameEngine {
         // (attacker_id, defending_player_id) — collected for combat-damage-to-player triggers.
         let mut combat_dmg_to_player: Vec<(ObjectId, PlayerId)> = Vec::new();
 
-        // CR 510.5 ASSIGNMENT rule: in the first-strike pass, only creatures with FirstStrike
+        // CR 510.4 ASSIGNMENT rule: in the first-strike pass, only creatures with FirstStrike
         // or DoubleStrike assign damage; in the regular pass, creatures that did NOT assign
         // in the first-strike pass do, plus those that have DoubleStrike. Crucially, creatures
         // RECEIVE damage normally regardless of *their own* participation — a vanilla blocker
@@ -1356,7 +1356,7 @@ impl GameEngine {
 
             if blockers.is_empty() {
                 // Unblocked: deal full power to defending player — only if the attacker assigns
-                // damage this pass (CR 510.5).
+                // damage this pass (CR 510.4).
                 if attacker_participates {
                     let p = att_power as i32;
                     if let Some(di) = self.state.player_idx(dfd) {
@@ -1366,7 +1366,7 @@ impl GameEngine {
                     if att_power > 0 {
                         combat_dmg_to_player.push((att, dfd));
                     }
-                    // CR 702.15a: attacker with lifelink causes its controller to gain that much life.
+                    // CR 702.15b: attacker with lifelink causes its controller to gain that much life.
                     if att_has_lifelink && att_power > 0 {
                         lifelink_gains.push((att_owner, att_power));
                     }
@@ -1374,7 +1374,7 @@ impl GameEngine {
             } else if blockers.len() == 1 && !att_has_trample {
                 // Single blocker, no trample: exchange power. The attacker always deals damage to
                 // its sole blocker (since we're in the attacker's participation loop), but the
-                // blocker only deals damage back if it participates in this pass (CR 510.5).
+                // blocker only deals damage back if it participates in this pass (CR 510.4).
                 let blk = blockers[0];
                 let blocker_participates =
                     object_participates_in_pass(&self.state, self.registry, c, pass, blk, false)
@@ -1410,12 +1410,12 @@ impl GameEngine {
                             bf.deathtouch_damage = true;
                         }
                     }
-                    // CR 702.15a: attacker with lifelink gains life = damage dealt to blocker.
+                    // CR 702.15b: attacker with lifelink gains life = damage dealt to blocker.
                     if att_has_lifelink && att_power > 0 {
                         lifelink_gains.push((att_owner, att_power));
                     }
                 }
-                // CR 702.15a: blocker with lifelink gains life = damage dealt to attacker.
+                // CR 702.15b: blocker with lifelink gains life = damage dealt to attacker.
                 if blocker_participates && blk_has_lifelink && bpw > 0 {
                     lifelink_gains.push((blk_owner, bpw));
                 }
@@ -1423,7 +1423,7 @@ impl GameEngine {
                 // Multiple blockers OR single-blocker with trample: all blockers deal their power
                 // to the attacker simultaneously; active player assigns how the attacker's combat
                 // damage is divided among blockers (and, for trample, the defending player).
-                // CR 510.5: in a given damage step, only participating blockers deal damage back.
+                // CR 510.4: in a given damage step, only participating blockers deal damage back.
                 // Tuple: (id, power, has_lifelink, has_deathtouch, owner, participates)
                 let blocker_info: Vec<(ObjectId, u32, bool, bool, PlayerId, bool)> = blockers
                     .iter()
@@ -1471,7 +1471,7 @@ impl GameEngine {
                     }
                 }
                 // The attacker assigns damage to its blockers only on a pass it participates in
-                // (CR 510.5). On the off pass, blockers still deal damage back (handled above).
+                // (CR 510.4). On the off pass, blockers still deal damage back (handled above).
                 if attacker_participates {
                     let pairs = c.damage_assignments.get(&att).ok_or(EngineError::Illegal(
                         "combat damage assignments missing for multiply-blocked attacker",
@@ -1494,12 +1494,12 @@ impl GameEngine {
                             total_life_lost += player_trample_dmg as i32;
                         }
                     }
-                    // CR 702.15a: attacker with lifelink gains life = damage dealt to all blockers.
+                    // CR 702.15b: attacker with lifelink gains life = damage dealt to all blockers.
                     if att_has_lifelink && att_power > 0 {
                         lifelink_gains.push((att_owner, att_power));
                     }
                 }
-                // CR 702.15a: each participating blocker with lifelink gains life = damage it dealt
+                // CR 702.15b: each participating blocker with lifelink gains life = damage it dealt
                 // to the attacker.
                 for (_, blk_pw, blk_has_ll, _, blk_owner, blk_participates) in blocker_info {
                     if blk_participates && blk_has_ll && blk_pw > 0 {
@@ -1889,7 +1889,7 @@ impl GameEngine {
                 }
             }
             FirstStrikeDamage => {
-                // CR 510.5: after first-strike damage and priority, the regular combat damage
+                // CR 510.4: after first-strike damage and priority, the regular combat damage
                 // step deals damage from remaining attackers/blockers (and double-strikers).
                 self.resolve_combat_damage_step(ev)?;
             }
@@ -2392,7 +2392,7 @@ impl GameEngine {
                                 .get(&st.card_id)
                                 .map(|d| d.name.as_str())
                                 .unwrap_or("spell");
-                            // CR 701.5e: a countered spell goes to its OWNER's graveyard. Emit an
+                            // CR 701.6a: a countered spell goes to its OWNER's graveyard. Emit an
                             // explicit PermanentMoved so the C++ relay routes the physical card off
                             // the shared stack to the owner's graveyard — no per-card special-case.
                             let owner = self.state.objects.get(&st.id).map(|o| o.owner);
@@ -2662,7 +2662,7 @@ impl GameEngine {
             return Err(EngineError::Illegal("sorcery speed only"));
         }
         // CR 508.1 / 508.2: attackers are declared before any player gets priority in the
-        // declare-attackers step. CR 509.1 / 509.3: same for blockers in declare blockers.
+        // declare-attackers step. CR 509.1 / 509.2: same for blockers in declare blockers.
         if priority_locked_for_combat_declaration(&self.state) {
             return Err(EngineError::Illegal(
                 "cannot cast until attack or block declaration is complete",
@@ -3430,7 +3430,7 @@ impl GameEngine {
                             .unwrap_or(false)
                     })
                     .collect(),
-                // CR 510.5: true while combat is set up with at least one attacker or blocker
+                // CR 510.4: true while combat is set up with at least one attacker or blocker
                 // having FirstStrike/DoubleStrike and the first-strike step has not yet resolved.
                 first_strike_step_pending: self
                     .state
@@ -4075,14 +4075,14 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
     v
 }
 
-/// Which combat damage step is being resolved (CR 510.5).
+/// Which combat damage step is being resolved (CR 510.4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DamagePass {
     FirstStrike,
     Normal,
 }
 
-/// CR 510.5 participation rule. In the first-strike pass, only creatures with FirstStrike or
+/// CR 510.4 participation rule. In the first-strike pass, only creatures with FirstStrike or
 /// DoubleStrike assign damage. In the regular pass, creatures that did not assign during the
 /// first-strike step (or weren't in it) assign damage, plus creatures that currently have
 /// DoubleStrike. When no first-strike step occurred, every creature participates in the
@@ -4117,7 +4117,7 @@ fn object_participates_in_pass(
 }
 
 /// True iff any current attacker or blocker has FirstStrike or DoubleStrike — used to decide
-/// whether the combat phase needs a first-strike damage substep (CR 510.5).
+/// whether the combat phase needs a first-strike damage substep (CR 510.4).
 fn combat_needs_first_strike_step(
     state: &GameState,
     registry: &tricerules_cards::CardRegistry,
@@ -4486,7 +4486,7 @@ fn effect_target_legal_at_resolution(
             any_battlefield_permanent_target_legal(state, tid)
                 && object_targetable_by(state, registry, tid, caster)
         }
-        // CR 115.2c: counterspells target spells, not activated/triggered abilities.
+        // CR 115.2: counterspells target spells, not activated/triggered abilities.
         SpellEffectKind::CounterTargetSpell => state
             .stack
             .iter()
@@ -4719,7 +4719,7 @@ fn spell_target_legality_error(
                 ));
             }
         }
-        // CR 115.2c: counterspells target spells, not activated/triggered abilities.
+        // CR 115.2: counterspells target spells, not activated/triggered abilities.
         SpellEffectKind::CounterTargetSpell
             if !state
                 .stack

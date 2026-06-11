@@ -62,7 +62,7 @@ public:
         DeclareAttackers,
         DeclareBlockers,
         AssignCombatDamage,
-        /// CR 510.5: first-strike damage substep; present only when at least one attacker or
+        /// CR 510.4: first-strike damage substep; present only when at least one attacker or
         /// blocker has FirstStrike or DoubleStrike.  Combat state (attackers, blocks) persists
         /// through this substep so arrows remain visible.
         FirstStrikeDamage,
@@ -151,7 +151,7 @@ private:
     QHash<quint32, quint32> remoteBlockPreviewPairs;
     // Rule-engine stack object ids in push order: front = most recently pushed = resolves first (LIFO).
     QList<quint32> ruledStackOidOrder;
-    // CR 510.5: true while the engine reports a pending first-strike damage substep — i.e.
+    // CR 510.4: true while the engine reports a pending first-strike damage substep — i.e.
     // any attacker or blocker has First Strike / Double Strike and the substep hasn't resolved.
     // Sourced from `RuledPerPlayerView.first_strike_step_pending` on each zone-view sync.
     bool ruledFirstStrikeStepPending = false;
@@ -392,7 +392,7 @@ public:
     {
         return lastRuledEnginePhaseSlug.startsWith(QLatin1String("opening_"));
     }
-    /// CR 510.5: true while the engine has us in the first-strike combat damage substep.
+    /// CR 510.4: true while the engine has us in the first-strike combat damage substep.
     /// Used to suppress the phase-toolbar auto-advance that would otherwise auto-pass
     /// through this step (since it shares the "Combat Damage" toolbar slot), and to label
     /// the pass-priority button correctly while inside the step.
@@ -557,7 +557,7 @@ signals:
     /// Emitted when the engine's `first_strike_step_pending` flag flips. Drives the
     /// "First Strike Damage" vs "Combat Damage" pass-priority button label on the prompt widget.
     void ruledFirstStrikeStepPendingChanged(bool pending);
-    /// Emitted on transitions into or out of the engine's `first_strike_damage` step (CR 510.5).
+    /// Emitted on transitions into or out of the engine's `first_strike_damage` step (CR 510.4).
     /// While inside the step, the prompt widget labels the pass button "Combat Damage" (next
     /// step is the regular damage step) and the phase-toolbar auto-advance is suppressed.
     void ruledFirstStrikeDamageStepActiveChanged(bool active);

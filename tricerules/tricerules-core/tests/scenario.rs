@@ -1370,7 +1370,7 @@ fn non_active_player_with_priority_pays_mana_for_counterspell() {
     );
 }
 
-// Regression: a spell countered by the *opponent* must go to its OWNER's graveyard (CR 701.5e),
+// Regression: a spell countered by the *opponent* must go to its OWNER's graveyard (CR 701.6a),
 // not the counterer's. The engine emits a PermanentMoved stamped with the countered spell's owner
 // so the relay can route the physical card off the shared stack to the right player — without any
 // per-card name special-case. Here P0 owns the bolt and P1 counters it.
@@ -5737,7 +5737,7 @@ fn mind_sculpt_rejects_self_target() {
 
 // ── Flying & Reach Keyword Tests ─────────────────────────────────────────────
 //
-// Tests for CR 702.9b (flying) and CR 702.17a (reach) blocking restrictions.
+// Tests for CR 702.9b (flying) and CR 702.17b (reach) blocking restrictions.
 
 /// A ground creature (no flying, no reach) attempting to block a flying attacker
 /// must be rejected by set_blockers with an Illegal error mentioning "flying".
@@ -5798,7 +5798,7 @@ fn flying_creature_can_be_blocked_by_flying_creature() {
     .expect("flying creature must be able to block another flying creature");
 }
 
-/// A creature with reach can block a creature with flying (CR 702.17a).
+/// A creature with reach can block a creature with flying (CR 702.17b).
 #[test]
 fn flying_creature_can_be_blocked_by_reach_creature() {
     let mut e = GameEngine::new(9003, &[0, 1], 20, None, true).expect("new");
@@ -5971,7 +5971,7 @@ fn intimidate_blocked_by_artifact_creature_is_legal() {
 
 // ── Vigilance Keyword Tests ───────────────────────────────────────────────────
 //
-// Tests for CR 702.20a: a creature with vigilance doesn't tap when it attacks.
+// Tests for CR 702.20b: a creature with vigilance doesn't tap when it attacks.
 
 /// A creature with Vigilance remains untapped after being declared as an attacker.
 /// Alpine Watchdog attacks — it should still be untapped after declaration.
@@ -5985,7 +5985,7 @@ fn vigilance_attacker_does_not_tap() {
     let obj = e.state.objects.get(&watchdog).expect("watchdog object");
     assert!(
         !obj.tapped,
-        "CR 702.20a: Alpine Watchdog (Vigilance) must NOT be tapped after attacking"
+        "CR 702.20b: Alpine Watchdog (Vigilance) must NOT be tapped after attacking"
     );
 }
 
@@ -6009,11 +6009,11 @@ fn non_vigilance_attacker_still_taps() {
 
 // ── Lifelink Keyword Tests ────────────────────────────────────────────────────
 //
-// Tests for CR 702.15a: damage dealt by a lifelink permanent also causes its
+// Tests for CR 702.15b: damage dealt by a lifelink permanent also causes its
 // controller to gain that much life.
 
 /// An unblocked lifelink attacker deals damage to the defending player AND its
-/// controller gains that much life simultaneously (CR 702.15a).
+/// controller gains that much life simultaneously (CR 702.15b).
 /// Child of Night (2/1 Lifelink) attacks unblocked — P1 loses 2 life, P0 gains 2.
 #[test]
 fn lifelink_unblocked_attacker_gains_life() {
@@ -6043,16 +6043,16 @@ fn lifelink_unblocked_attacker_gains_life() {
         .iter()
         .find(|lc| lc.player_id == 0)
         .expect("attacker controller LifeChanged (lifelink)");
-    assert_eq!(defender_ev.delta, -2, "CR 702.15a: defender takes 2 damage");
+    assert_eq!(defender_ev.delta, -2, "CR 702.15b: defender takes 2 damage");
     assert_eq!(defender_ev.new_total, 18);
-    assert_eq!(attacker_ev.delta, 2, "CR 702.15a: lifelink gains 2 life");
+    assert_eq!(attacker_ev.delta, 2, "CR 702.15b: lifelink gains 2 life");
     assert_eq!(attacker_ev.new_total, 22);
     assert_eq!(e.state.players[0].life, 22);
     assert_eq!(e.state.players[1].life, 18);
 }
 
 /// A lifelink creature gains its controller life when blocked — it deals damage to
-/// the blocker (not the player), but lifelink still triggers (CR 702.15a).
+/// the blocker (not the player), but lifelink still triggers (CR 702.15b).
 #[test]
 fn lifelink_blocked_attacker_still_gains_life() {
     let mut e = GameEngine::new(9031, &[0, 1], 20, None, true).expect("new");
@@ -6092,13 +6092,13 @@ fn lifelink_blocked_attacker_still_gains_life() {
         .expect("attacker controller LifeChanged (lifelink)");
     assert_eq!(
         attacker_ev.delta, 2,
-        "CR 702.15a: lifelink gains life even when blocked"
+        "CR 702.15b: lifelink gains life even when blocked"
     );
     assert_eq!(e.state.players[0].life, 22);
 }
 
 /// A lifelink blocker gains its controller life for the damage it deals to the
-/// attacker (CR 702.15a).
+/// attacker (CR 702.15b).
 #[test]
 fn lifelink_blocker_gains_life() {
     let mut e = GameEngine::new(9032, &[0, 1], 20, None, true).expect("new");
@@ -6139,7 +6139,7 @@ fn lifelink_blocker_gains_life() {
         .expect("blocker controller LifeChanged (lifelink)");
     assert_eq!(
         blocker_ev.delta, 2,
-        "CR 702.15a: lifelink blocker gains life equal to damage it dealt"
+        "CR 702.15b: lifelink blocker gains life equal to damage it dealt"
     );
     assert_eq!(e.state.players[1].life, 22);
 }
@@ -6184,7 +6184,7 @@ fn intimidate_auto_skips_blockers_when_no_eligible_creatures() {
 // Haste (CR 702.10)
 // ---------------------------------------------------------------------------
 
-/// CR 702.10a: A creature with Haste can attack the same turn it enters the battlefield,
+/// CR 702.10b: A creature with Haste can attack the same turn it enters the battlefield,
 /// ignoring summoning sickness. Happy path: Raging Goblin is injected with summoning_sick=true
 /// but is allowed to be declared as an attacker.
 #[test]
@@ -6450,11 +6450,11 @@ fn non_deathtouch_one_power_does_not_kill_two_toughness_blocker() {
 
 // ── Menace Keyword Tests ──────────────────────────────────────────────────────
 //
-// Tests for CR 702.110: a creature with menace can't be blocked except by two
+// Tests for CR 702.111: a creature with menace can't be blocked except by two
 // or more creatures. A single blocker is illegal; zero blockers (unblocked) is
 // always fine; two or more blockers is legal.
 
-/// CR 702.110 illegal path: attempting to block a menace creature with exactly
+/// CR 702.111 illegal path: attempting to block a menace creature with exactly
 /// one blocker must be rejected with "Illegal blocks."
 /// Goblin Trailblazer (2/1 Menace) is attacked; P1 tries to block with a single
 /// Grizzly Bears — the engine must reject the declaration, leaving game state in
@@ -6504,7 +6504,7 @@ fn menace_single_blocker_is_illegal() {
     );
 }
 
-/// CR 702.110 happy path: a menace creature may be blocked by two or more creatures.
+/// CR 702.111 happy path: a menace creature may be blocked by two or more creatures.
 /// Goblin Trailblazer blocked by two Grizzly Bears — must succeed.
 #[test]
 fn menace_two_blockers_is_legal() {
@@ -6543,7 +6543,7 @@ fn menace_two_blockers_is_legal() {
     );
 }
 
-/// CR 702.110 unblocked case: a menace creature that is not blocked at all is
+/// CR 702.111 unblocked case: a menace creature that is not blocked at all is
 /// perfectly legal — menace only restricts how it *can* be blocked, not whether
 /// the defending player is forced to block it.
 /// Two defender creatures are needed here so that `defending_player_has_eligible_blockers`
@@ -6576,7 +6576,7 @@ fn menace_unblocked_is_legal() {
     );
 }
 
-/// CR 702.110 auto-skip: when every attacker has menace and the defender has only one
+/// CR 702.111 auto-skip: when every attacker has menace and the defender has only one
 /// creature, no legal non-empty blocking assignment exists (a single creature can't
 /// satisfy the 2-blocker minimum alone). The engine must auto-declare empty blockers
 /// and skip the manual declare-blockers step, exactly as it does for flying evasion.
@@ -6935,13 +6935,13 @@ fn trample_multi_blocked_rejects_less_than_lethal_to_first_blocker() {
     );
 }
 
-// CR 510.5 + 702.7 + 702.4: first strike / double strike — these tests verify the engine
+// CR 510.4 + 702.7 + 702.4: first strike / double strike — these tests verify the engine
 // splits combat damage into a first-strike substep when applicable, and that participation
-// follows the CR 510.5 rule (FirstStrike/DoubleStrike in first step; remainder + DoubleStrike
+// follows the CR 510.4 rule (FirstStrike/DoubleStrike in first step; remainder + DoubleStrike
 // in regular step). The pass-priority button label change is verified separately in the C++
 // prompt-widget code path (the engine emits `first_strike_step_pending` via zone view).
 
-/// CR 702.7 (first strike) + CR 510.5: a first-strike attacker kills a vanilla blocker in
+/// CR 702.7 (first strike) + CR 510.4: a first-strike attacker kills a vanilla blocker in
 /// the first-strike step (CR 510.2 SBAs run between steps) and takes no return damage in the
 /// regular step. Goblin Striker (1/1 FS+Haste) attacks; defender blocks with Walking Corpse
 /// (2/2). Walking Corpse has only 2 toughness — but the attacker only has power 1, so the
@@ -7077,7 +7077,7 @@ fn double_strike_attacker_against_vanilla_blocker_both_die() {
     );
 }
 
-/// CR 510.5: when no attacker or blocker has FirstStrike/DoubleStrike, the engine skips the
+/// CR 510.4: when no attacker or blocker has FirstStrike/DoubleStrike, the engine skips the
 /// first-strike substep — DeclareBlockers transitions directly to CombatDamage, just like
 /// vanilla combat before this change.
 #[test]
@@ -7118,7 +7118,7 @@ fn vanilla_combat_skips_first_strike_step() {
         .is_some_and(|o| o.zone == tricerules_core::Zone::Battlefield));
 }
 
-/// CR 510.5: when a first-strike attacker is unblocked, the defending player takes damage in
+/// CR 510.4: when a first-strike attacker is unblocked, the defending player takes damage in
 /// the first-strike step. Verified via the LifeChanged event and player life total.
 #[test]
 fn first_strike_unblocked_deals_damage_in_first_strike_step() {
@@ -7172,7 +7172,7 @@ fn double_strike_unblocked_deals_damage_in_both_steps() {
     );
 }
 
-/// CR 510.5: the per-player zone view exposes `first_strike_step_pending=true` between
+/// CR 510.4: the per-player zone view exposes `first_strike_step_pending=true` between
 /// declare-attackers and the end of the first-strike step, so the client can show the
 /// "First Strike Damage" pass-priority button label.
 #[test]
@@ -7198,7 +7198,7 @@ fn zone_view_signals_first_strike_step_pending() {
     );
 }
 
-/// CR 510.5: `first_strike_step_pending` must remain true after blockers are declared (still
+/// CR 510.4: `first_strike_step_pending` must remain true after blockers are declared (still
 /// pre-resolution), so the declare-blockers pass-priority button stays labeled
 /// "First Strike Damage" up until the substep actually resolves.
 #[test]
@@ -7251,7 +7251,7 @@ fn zone_view_signals_pending_after_blockers_declared() {
     );
 }
 
-/// CR 510.5: when no FS/DS creature is in combat, `first_strike_step_pending` is never true.
+/// CR 510.4: when no FS/DS creature is in combat, `first_strike_step_pending` is never true.
 #[test]
 fn zone_view_does_not_signal_pending_for_vanilla_combat() {
     let mut e = GameEngine::new(11_008, &[0, 1], 20, None, true).expect("new");

@@ -1159,7 +1159,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 const auto &pc = e.phase_changed();
                                 const QString prevSlug = lastRuledEnginePhaseSlug;
                                 lastRuledEnginePhaseSlug = QString::fromStdString(pc.phase());
-                                // CR 510.5: when entering or leaving the first-strike damage
+                                // CR 510.4: when entering or leaving the first-strike damage
                                 // substep, notify the prompt widget so it can label the pass
                                 // button "Combat Damage" while inside the FS step (next step
                                 // is regular combat damage).

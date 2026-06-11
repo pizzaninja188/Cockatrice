@@ -249,7 +249,7 @@ All three items landed and verified: `cargo test` (178) / `clippy --all-targets 
 
 **Files:** `engine.rs` (CounterTargetSpell resolution), `server_game.cpp:1630-1668`.
 
-1. Engine: when `CounterTargetSpell` resolves, additionally emit `StackResolved { object_id: <countered_oid>, destination: GRAVEYARD }` for the countered object (CR 701.5a — a countered spell goes to its owner's graveyard). Reusing `StackResolved` keeps the relay path uniform; no new event type.
+1. Engine: when `CounterTargetSpell` resolves, additionally emit `StackResolved { object_id: <countered_oid>, destination: GRAVEYARD }` for the countered object (CR 701.6a — a countered spell goes to its owner's graveyard). Reusing `StackResolved` keeps the relay path uniform; no new event type.
 2. Relay: confirm `applyRuledStackResolvedEvent` correctly moves a stack card that never resolved (it performs the same stack→grave physical move); then delete the name branch. The generic per-oid map cleanup (`server_game.cpp:1665-1667`) already runs per event.
 3. Scenario: counter a spell → both stack objects leave; countered card in graveyard; relay E2E shows the physical card move without the special case.
 
@@ -307,4 +307,4 @@ All three items landed and verified: `cargo test` (178) / `clippy --all-targets 
 
 ## MTG applicability
 
-CR/Oracle govern several items: spell permanence on resolution (CR 608.3 — Phase 0.4 makes the engine sole authority); mana symbols and costs (CR 107.4, 202.2a, 202.3 — Phase 3; X per CR 107.3 deferred explicitly); countered spells to graveyard (CR 701.5a — Phase 4.3); self-referencing ability effects are not "targeting" (CR 115 distinction — Phase 4.1). Identity, registration, validation, versioning, and codegen phases have no MTG rules surface beyond fidelity to Oracle names/costs.
+CR/Oracle govern several items: spell permanence on resolution (CR 608.3 — Phase 0.4 makes the engine sole authority); mana symbols and costs (CR 107.4, 202.2a, 202.3 — Phase 3; X per CR 107.3 deferred explicitly); countered spells to graveyard (CR 701.6a — Phase 4.3); self-referencing ability effects are not "targeting" (CR 115 distinction — Phase 4.1). Identity, registration, validation, versioning, and codegen phases have no MTG rules surface beyond fidelity to Oracle names/costs.

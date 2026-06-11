@@ -12,7 +12,7 @@ TEST(RuledUtilsTest, MapsKnownPhaseLabels)
     EXPECT_EQ(5, ruledPhaseLabelToCockatricePhase("declare_attackers"));
     EXPECT_EQ(6, ruledPhaseLabelToCockatricePhase("declare_blockers"));
     EXPECT_EQ(7, ruledPhaseLabelToCockatricePhase("combat_damage"));
-    // CR 510.5: first-strike substep shares the combat damage toolbar slot; the prompt
+    // CR 510.4: first-strike substep shares the combat damage toolbar slot; the prompt
     // widget differentiates via `first_strike_step_pending` on the per-player view.
     EXPECT_EQ(7, ruledPhaseLabelToCockatricePhase("first_strike_damage"));
     EXPECT_EQ(8, ruledPhaseLabelToCockatricePhase("end_combat"));

@@ -1558,7 +1558,7 @@ Player *TabGame::setPriorityPlayer(int id)
                 const bool cleanupDiscard = game->getGameEventHandler()->localPlayerMustCleanupDiscard();
                 const bool openingPhase = game->getGameEventHandler()->ruledEngineOpeningPhaseActive();
                 const bool mustDeclare = gamePromptWidget && gamePromptWidget->localPlayerMustDeclareCombat();
-                // CR 510.5: the first-strike damage step shares the "Combat Damage" toolbar
+                // CR 510.4: the first-strike damage step shares the "Combat Damage" toolbar
                 // slot (phase 7) with regular damage, matching MTGO — both substeps obey the
                 // same Combat Damage stop. If the player has that stop enabled, they get a
                 // priority window for both FS damage and regular damage; if disabled, auto-pass

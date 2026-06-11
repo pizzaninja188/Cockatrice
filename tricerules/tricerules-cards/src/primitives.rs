@@ -42,15 +42,15 @@ pub enum Keyword {
     /// CR 702.2: any amount of damage this creature deals to another creature is enough to
     /// destroy it (as a state-based action; CR 704.5h).
     Deathtouch,
-    /// CR 702.110: this creature can't be blocked except by two or more creatures.
+    /// CR 702.111: this creature can't be blocked except by two or more creatures.
     Menace,
     /// CR 702.19: if this creature is blocked, excess combat damage (above lethal for all blockers)
     /// is assigned to the defending player rather than being lost.
     Trample,
     /// CR 702.7: this creature assigns its combat damage in the first combat damage step
-    /// (CR 510.5); creatures without first strike or double strike wait until the regular step.
+    /// (CR 510.4); creatures without first strike or double strike wait until the regular step.
     FirstStrike,
-    /// CR 702.4: this creature assigns combat damage in both combat damage steps (CR 510.5):
+    /// CR 702.4: this creature assigns combat damage in both combat damage steps (CR 510.4):
     /// the first-strike step (like first strike) and the regular step (like a vanilla creature).
     DoubleStrike,
     /// CR 702.12: this permanent can't be destroyed by lethal damage or "destroy" effects.

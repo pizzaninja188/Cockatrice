@@ -149,7 +149,7 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
     }
 
     QString renderedAnnotation = annotation;
-    // CR 702.10a: a creature with Haste is unaffected by summoning sickness — don't
+    // CR 702.10b: a creature with Haste is unaffected by summoning sickness — don't
     // show the "summoning sick" tag if the creature has Haste. Only show it for
     // battlefield cards (TABLE zone); a lingering spell/ability card in the stack zone
     // may share an OID with a summoning-sick permanent but must never show the label there.
@@ -732,7 +732,7 @@ bool handleRuledCombatClick(CardItem *card)
         if (card->getTapped()) {
             return false;
         }
-        // CR 702.10a: Haste bypasses summoning sickness — a creature with Haste
+        // CR 702.10b: Haste bypasses summoning sickness — a creature with Haste
         // may be selected as an attacker even on the turn it entered the battlefield.
         if (handler->isEngineOidSummoningSick(oid) && !handler->isEngineOidHaste(oid)) {
             return false;

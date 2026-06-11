@@ -32,11 +32,11 @@ public slots:
     void setCombatMode(CombatMode mode, bool localPlayerHasButtons);
     void setTargetingMode(bool enabled, const QString &cardName = {});
     void setRuledStackHasItems(bool hasItems);
-    /// CR 510.5: true while the engine reports a pending first-strike damage substep.
+    /// CR 510.4: true while the engine reports a pending first-strike damage substep.
     /// Drives the "First Strike Damage" vs "Combat Damage" pass-priority button label
     /// while the local player is in the declare-blockers (or first-strike-damage) phase.
     void setFirstStrikeStepPending(bool pending);
-    /// CR 510.5: true once the engine has entered the first-strike damage substep — the
+    /// CR 510.4: true once the engine has entered the first-strike damage substep — the
     /// pass-priority button leads into the regular combat damage step from here, so it
     /// reads "Combat Damage" rather than "End of Combat".
     void setFirstStrikeDamageStepActive(bool active);
