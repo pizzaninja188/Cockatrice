@@ -135,14 +135,17 @@ QMap<QChar, int> PlayerActions::parseSimpleManaCost(const QString &manaCost)
         }
         if (c == '}') {
             inBraces = false;
-            if (token.size() == 1) {
-                addSymbol(token.at(0));
-            } else {
-                bool ok = false;
-                const int generic = token.toInt(&ok);
-                if (ok && generic > 0) {
+            // Numeric tokens are generic mana of any length ({1}, {4}, {10}); only fall back
+            // to single-symbol parsing for non-numeric tokens ({G}, {C}, {X}). The previous
+            // size()==1 check routed single digits to addSymbol, which silently dropped them.
+            bool ok = false;
+            const int generic = token.toInt(&ok);
+            if (ok) {
+                if (generic > 0) {
                     parsed['X'] += generic;
                 }
+            } else if (token.size() == 1) {
+                addSymbol(token.at(0));
             }
             token.clear();
             continue;
@@ -162,18 +165,20 @@ QMap<QChar, int> PlayerActions::parseSimpleManaCost(const QString &manaCost)
 
 QString PlayerActions::formatSimpleManaCost(const QMap<QChar, int> &cost)
 {
-    QStringList parts;
+    // Render in canonical Scryfall brace form ({4}{G}{G}). The brackets double as a
+    // placeholder for real mana symbols later, so they are kept rather than stripped.
+    QString out;
     const int generic = cost.value('X', 0);
     if (generic > 0) {
-        parts << QString::number(generic);
+        out += QStringLiteral("{%1}").arg(generic);
     }
     for (QChar c : QStringLiteral("WUBRGC")) {
         const int count = cost.value(c, 0);
         for (int i = 0; i < count; ++i) {
-            parts << QString(c);
+            out += QStringLiteral("{%1}").arg(c);
         }
     }
-    return parts.join(' ');
+    return out;
 }
 
 QString PlayerActions::pendingRuledSpellPromptText() const
