@@ -9,7 +9,7 @@
   activated_abilities: [
     (
       cost: Tap,
-      effect: DestroyTargetTapped,
+      effect: DestroyTarget(target: (kind: Creature, tapped: true)),
       text: "{T}: Destroy target tapped creature.",
     ),
   ],

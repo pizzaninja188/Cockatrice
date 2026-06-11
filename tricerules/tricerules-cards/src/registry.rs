@@ -1,5 +1,5 @@
 use crate::card_def::CardDefinition;
-use crate::primitives::TriggeredEffect;
+use crate::primitives::EffectContext;
 use once_cell::sync::Lazy;
 use ron::extensions::Extensions;
 use ron::Options;
@@ -44,34 +44,33 @@ impl CardRegistry {
         let mut reg = CardRegistry::default();
         for chunk in chunks {
             let card: CardDefinition = RON_OPTS.from_str(chunk)?;
-            // Validate spell effects at startup.
+            // Validate spell effects at startup. Spells have no source permanent, so `Self_`
+            // target filters are rejected here (EffectContext::Spell).
             for effect in &card.spell_effect {
-                effect
-                    .validate()
-                    .map_err(|reason| RegistryError::InvalidCard {
+                effect.validate(EffectContext::Spell).map_err(|reason| {
+                    RegistryError::InvalidCard {
                         id: card.id.clone(),
                         reason,
-                    })?;
+                    }
+                })?;
             }
-            // Validate activated ability effects.
+            // Validate activated ability effects (bound to a source permanent → Ability context).
             for aa in &card.activated_abilities {
                 aa.effect
-                    .validate()
+                    .validate(EffectContext::Ability)
                     .map_err(|reason| RegistryError::InvalidCard {
                         id: card.id.clone(),
                         reason,
                     })?;
             }
-            // Validate triggered ability effects (PumpSelf carries no target filter to check).
+            // Validate triggered ability effects (also Ability context — `Self_` is allowed).
             for ta in &card.triggered_abilities {
-                if let TriggeredEffect::Effect(inner) = &ta.effect {
-                    inner
-                        .validate()
-                        .map_err(|reason| RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason,
-                        })?;
-                }
+                ta.effect
+                    .validate(EffectContext::Ability)
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
             }
             let id = card.id.clone();
             if reg
@@ -170,7 +169,9 @@ mod tests {
             spell_effect: [TargetPlayerGainsLife(amount: 3, target: (kind: Creature))],
         )"#;
         let card: CardDefinition = RON_OPTS.from_str(bad).unwrap();
-        assert!(card.spell_effect[0].validate().is_err());
+        assert!(card.spell_effect[0]
+            .validate(crate::primitives::EffectContext::Spell)
+            .is_err());
     }
 
     #[test]
@@ -186,13 +187,47 @@ mod tests {
             triggered_abilities: [
                 (
                     trigger: WhenSelfEntersBattlefield,
-                    effect: Effect(TargetPlayerGainsLife(amount: 3, target: (kind: Creature))),
+                    effect: TargetPlayerGainsLife(amount: 3, target: (kind: Creature)),
                     text: "bad",
                 ),
             ],
         )"#;
         let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
         assert!(matches!(err, RegistryError::InvalidCard { ref id, .. } if id == "bad_trigger"));
+    }
+
+    /// A self-pump trigger (the replacement for the old `TriggeredEffect::PumpSelf`) loads,
+    /// while the same `Self_` filter in a spell's effect list is rejected at load.
+    #[test]
+    fn self_pump_trigger_loads_but_self_in_spell_rejected() {
+        let good = r#"(
+            id: "self_pumper",
+            name: "Self Pumper",
+            mana_cost: "{G}",
+            types: ["Creature"],
+            is_creature: true,
+            power: 1,
+            toughness: 1,
+            triggered_abilities: [
+                (
+                    trigger: AtBeginningOfControllerUpkeep,
+                    effect: PumpTarget(power: 1, toughness: 1, target: (kind: Self_)),
+                    text: "At the beginning of your upkeep, this gets +1/+1.",
+                ),
+            ],
+        )"#;
+        assert!(CardRegistry::from_chunks(&[good]).is_ok());
+
+        let bad = r#"(
+            id: "self_spell",
+            name: "Self Spell",
+            mana_cost: "{G}",
+            types: ["Instant"],
+            is_instant: true,
+            spell_effect: [PumpTarget(power: 1, toughness: 1, target: (kind: Self_))],
+        )"#;
+        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        assert!(matches!(err, RegistryError::InvalidCard { ref id, .. } if id == "self_spell"));
     }
 
     /// Authoring convention (not a wire contract): every card's id is the slug of its name.

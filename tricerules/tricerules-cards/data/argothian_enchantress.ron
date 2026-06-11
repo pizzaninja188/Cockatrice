@@ -10,7 +10,7 @@
   triggered_abilities: [
     (
       trigger: WheneverPlayerCastsSpell(spell_type: Some(Enchantment)),
-      effect: Effect(Draw(count: 1)),
+      effect: Draw(count: 1),
       text: "Whenever you cast an enchantment spell, draw a card.",
     ),
   ],

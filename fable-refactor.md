@@ -235,26 +235,15 @@ All three items landed and verified: `cargo test` (178) / `clippy --all-targets 
 
 ## Phase 4 — Primitive & relay hygiene
 
-### 4.1 `TargetKind::Self_`; collapse `TriggeredEffect` into `SpellEffectKind`
+**Status:** 4.1, 4.2, 4.4 ✅ DONE 2026-06-11 (Rust-only, fully verified by CI-equivalent checks — no client-test debt). 4.3 (counterspell relay generalization) deferred: it touches `server_game.cpp` and has a relay E2E acceptance, so it joins the combined client session alongside Phases 1/2/3. Verification for the landed items: `cargo test` (147 core scenario+conformance, 24 cards-lib, all suites green) / `cargo clippy --all-targets -D warnings` / `cargo fmt --check` all green. No proto/C++/RON-schema-shape changes; the only RON edits were mechanical (`royal_assassin.ron` filter + unwrapping `Effect(...)` on five trigger cards), and `CARDS.md` needs no regen (the generator reads implemented-status/`partial` only, and no card's status changed).
 
-**Why:** CLAUDE.md prescribes this cleanup before any custom tier: `PumpSelf` exists only because triggered effects can't reference their source. Verified: **no RON file uses `PumpSelf`** — the change is engine/schema-only, zero data migration.
+### ✅ 4.1 `TargetKind::Self_`; collapse `TriggeredEffect` into `SpellEffectKind`
 
-**Files:** `primitives.rs`, `engine.rs` (`engine.rs:2209, 2228, 4409` + trigger placement), `registry.rs` validation.
+**Landed.** Added `TargetKind::Self_` (auto-bound to source, not "targeting" per CR 115; `target_filter_legal` returns false for it since it's never *picked*, and the engine binds it directly at resolution). `PumpTarget` gained `target: TargetFilter` with `#[serde(default = "TargetFilter::default_creature")]` — `giant_growth.ron` unchanged. Deleted the `TriggeredEffect` wrapper: `TriggeredAbilityDef.effect` is now a plain `SpellEffectKind`, so triggered and activated abilities resolve through one path (the `pump_self_params` special case in `resolve` is gone). Added an `EffectContext { Spell, Ability }` arg to `SpellEffectKind::validate` so `Self_` is rejected in `spell_effect` but allowed on abilities; `spell_effect_kind_needs_target` returns false for `PumpTarget { Self_ }` (no prompt, auto-resolves). `triggered_effect_needs_target` removed (callers use `spell_effect_kind_needs_target`). Five RON trigger cards (`argothian_enchantress`, `elvish_visionary`, `thieving_magpie`, `scroll_thief`, `flametongue_kavu`) had their `effect: Effect(X)` unwrapped to `effect: X`. Tests: `primitives.rs` (Self_ rejected in spell / allowed in ability), `registry.rs` (`self_pump_trigger_loads_but_self_in_spell_rejected`). No RON uses `Self_` yet — it's the representation for the next self-pump card; the resolution path is covered by the existing `PumpTarget` (Giant Growth) machinery plus the registry load test.
 
-1. Add `Self_` to `TargetKind`. Semantics: **auto-bound to the source permanent, never a player choice, and not "targeting"** in the CR sense (no hexproof/shroud interaction, no target prompt) — mirror today's `PumpSelf` behavior. Validation: `Self_` is legal only in activated/triggered ability effects, never in `spell_effect` (pass a context flag into `validate()` from the registry loader).
-2. `PumpTarget` gains `target: TargetFilter` with `#[serde(default = "TargetFilter::default_creature")]` — existing `giant_growth.ron` unchanged.
-3. `TriggeredAbilityDef.effect: SpellEffectKind` (delete the `TriggeredEffect` wrapper). Engine: pump-self becomes `PumpTarget { …, target: (kind: Self_) }` resolution; the needs-target check (`engine.rs:4409`) returns false for `Self_`-filtered effects.
-4. Re-export cleanup in `lib.rs`; scenario tests for an upkeep pump trigger keep passing.
+**Landed.** `royal_assassin.ron` → `DestroyTarget(target: (kind: Creature, tapped: true))`. Deleted the `DestroyTargetTapped` variant and all four engine arms (resolution, `effect_target_legal_at_resolution`, `validate_effect_targets`, `spell_target_legality_error`); `DestroyTarget`/`DamageTarget`/`TapTarget`/`PumpTarget` now share one filter-based legality path through `target_filter_legal`, which already honors `tapped` (and `not_artifact`, hexproof/shroud). The now-unused `pump_spell_target_legal` helper was removed. Resolution-time fizzle is generic: if the target untaps before resolution, `spell_has_no_legal_targets_at_resolution` fizzles it (replacing the old hand-written "not tapped" branch). Scenario tests (`scenario.rs`): `royal_assassin_destroys_tapped_creature` (happy) and `royal_assassin_cannot_target_untapped_creature` (illegal path — rejected at validation before any cost is paid), using a new `deploy_to_battlefield` helper.
 
-### 4.2 Remove `DestroyTargetTapped`
-
-**Files:** `primitives.rs`, `engine.rs`, `data/royal_assassin.ron`.
-
-1. `royal_assassin.ron` → `DestroyTarget(target: (kind: Creature, tapped: true))`.
-2. Fold the engine's `DestroyTargetTapped` arms into `DestroyTarget`, confirming target-legality applies `TargetFilter.tapped` (the field exists; verify the legality path honors it for this effect).
-3. Scenario: Royal Assassin can destroy tapped, cannot target untapped (illegal path).
-
-### 4.3 Generalize the counterspell relay hack
+### 4.3 Generalize the counterspell relay hack — ⏸ DEFERRED (needs client E2E)
 
 **Why (B7):** `server_game.cpp:1636` branches on `resolvedName == "counterspell"` to move the countered card to the graveyard — a per-card check in general infrastructure; every future counter effect would need another branch.
 
@@ -264,10 +253,10 @@ All three items landed and verified: `cargo test` (178) / `clippy --all-targets 
 2. Relay: confirm `applyRuledStackResolvedEvent` correctly moves a stack card that never resolved (it performs the same stack→grave physical move); then delete the name branch. The generic per-oid map cleanup (`server_game.cpp:1665-1667`) already runs per event.
 3. Scenario: counter a spell → both stack objects leave; countered card in graveyard; relay E2E shows the physical card move without the special case.
 
-### 4.4 Test scaling (optional, anytime)
+### 4.4 Test scaling
 
-1. **Registry conformance test** (new `tricerules-core/tests/conformance.rs`): for every `CardRegistry` definition, build a minimal 2-player game with the card in hand plus ample mana, perform its primary action (play land / cast with the first legal target / activate each ability), assert no panic and a sane zone outcome. Scales automatically with the corpus — this is the safety net that makes Phase 6's bulk import trustworthy.
-2. Split `scenario.rs` (6,748 lines) into `tests/scenario/` modules by area (combat, spells, abilities, triggers, opening) — mechanical move.
+1. ✅ **Registry conformance test** (`tricerules-core/tests/conformance.rs`): `every_registered_card_resolves_without_panic` iterates **every** `CardRegistry::global()` definition in sorted order, builds a minimal 2-player game, puts the card under P0's control with ample mana and a vanilla creature on each battlefield, and performs its primary action — `play_land` for lands; for spells, the first target set the engine accepts from `{none, opp, self, enemy creature, own creature}` then drains the stack; for permanents, each activated ability with the same candidate sweep. Contract is deliberately weak so it scales with the corpus: `Illegal` is acceptable, only **panics** fail, and a zone-integrity invariant asserts every object is in exactly one place with none conjured/lost (no token primitive yet). This is the safety net that makes Phase 6's bulk import trustworthy.
+2. **Deferred (optional):** split `scenario.rs` (now ~7.7K lines) into `tests/scenario/` modules by area — purely mechanical, skipped here to keep this diff reviewable.
 
 ---
 

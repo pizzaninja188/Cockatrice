@@ -63,7 +63,6 @@ pub enum Keyword {
 }
 
 /// Base kind for a [`TargetFilter`] — what category of object is targeted.
-/// The five values correspond to the original TargetSpec variants.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TargetKind {
     /// Creature or player (later expands to planeswalker/battle).
@@ -76,6 +75,21 @@ pub enum TargetKind {
     OpponentPlayer,
     /// Any permanent on the battlefield (artifact, creature, or land).
     AnyPermanent,
+    /// The source permanent itself. **Not "targeting" in the CR sense** (CR 115): it is
+    /// auto-bound to the ability's source, never a player choice, and ignores hexproof/shroud.
+    /// Legal only inside an activated or triggered ability effect, never in `spell_effect`
+    /// (enforced by [`SpellEffectKind::validate`]). Replaces the old `TriggeredEffect::PumpSelf`.
+    Self_,
+}
+
+/// Where an effect is being resolved from. Controls validation that depends on context —
+/// e.g. [`TargetKind::Self_`] is only meaningful for an ability bound to a source permanent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EffectContext {
+    /// A spell's `spell_effect` list (no source permanent to self-reference).
+    Spell,
+    /// An activated or triggered ability bound to a source permanent.
+    Ability,
 }
 
 fn default_creature_filter() -> TargetFilter {
@@ -130,15 +144,19 @@ pub enum SpellEffectKind {
         count: u32,
     },
     /// Destroy target matching `target` filter (default: any creature on the battlefield).
+    /// Characteristic restrictions (e.g. `tapped: true` for Royal Assassin) live in the filter.
     DestroyTarget {
         #[serde(default = "TargetFilter::default_creature")]
         target: TargetFilter,
     },
-    /// Destroy target tapped creature (e.g. Royal Assassin activated ability).
-    DestroyTargetTapped,
+    /// Give +power/+toughness until end of turn to a creature matching `target`
+    /// (default: any creature, for Giant Growth). Use `(kind: Self_)` for an ability that
+    /// pumps its own source permanent (e.g. an upkeep self-pump) — auto-bound, untargeted.
     PumpTarget {
         power: i32,
         toughness: i32,
+        #[serde(default = "TargetFilter::default_creature")]
+        target: TargetFilter,
     },
     /// Tap target permanent matching `target` filter.
     TapTarget {
@@ -171,9 +189,40 @@ pub enum SpellEffectKind {
 }
 
 impl SpellEffectKind {
+    /// The target filter(s) this effect selects against, if any. Used by validation and by
+    /// the engine's generic legality/targeting paths (one place to enumerate target-bearing
+    /// variants instead of repeating the list).
+    pub fn target_filters(&self) -> Vec<&TargetFilter> {
+        match self {
+            SpellEffectKind::DamageTarget { target, .. }
+            | SpellEffectKind::DestroyTarget { target }
+            | SpellEffectKind::PumpTarget { target, .. }
+            | SpellEffectKind::TapTarget { target }
+            | SpellEffectKind::TargetPlayerGainsLife { target, .. }
+            | SpellEffectKind::TargetPlayerLosesLife { target, .. }
+            | SpellEffectKind::MillTargetPlayer { target, .. } => vec![target],
+            _ => vec![],
+        }
+    }
+
     /// Startup validation: reject effect/filter combinations the engine cannot honor.
     /// Returns `Err` with a human-readable reason; called from the card registry loader.
-    pub fn validate(&self) -> Result<(), String> {
+    /// `context` distinguishes spells from abilities so context-only filters (`Self_`) are
+    /// rejected where they make no sense.
+    pub fn validate(&self, context: EffectContext) -> Result<(), String> {
+        // CR 115: a self-referencing ability effect is not "targeting" and only exists where
+        // there is a source permanent — never in a spell's effect list.
+        if context == EffectContext::Spell
+            && self
+                .target_filters()
+                .iter()
+                .any(|f| f.kind == TargetKind::Self_)
+        {
+            return Err(
+                "Self_ target is only valid on an activated or triggered ability, not a spell"
+                    .into(),
+            );
+        }
         match self {
             SpellEffectKind::TargetPlayerGainsLife { target, .. }
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
@@ -290,21 +339,14 @@ pub enum SpellTypeFilter {
     Noncreature,
 }
 
-/// Effect of a triggered ability. Wraps `SpellEffectKind` for the common case, plus
-/// self-referential effects that don't map to a targeted spell effect.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum TriggeredEffect {
-    /// Delegate to the existing spell-effect resolution path.
-    Effect(SpellEffectKind),
-    /// Source permanent gets +power/+toughness until end of turn.
-    PumpSelf { power: i32, toughness: i32 },
-}
-
-/// One triggered ability on a permanent (RON data tier).
+/// One triggered ability on a permanent (RON data tier). The effect is a plain
+/// [`SpellEffectKind`] — the same effect type spells and activated abilities use. A
+/// self-referencing effect (e.g. an upkeep self-pump) uses a `Self_` target filter rather
+/// than a dedicated variant.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TriggeredAbilityDef {
     pub trigger: TriggerCondition,
-    pub effect: TriggeredEffect,
+    pub effect: SpellEffectKind,
     /// Oracle-style ability text shown as annotation on the stack card.
     pub text: String,
 }
@@ -346,7 +388,7 @@ mod tests {
                 tapped: None,
             },
         }
-        .validate()
+        .validate(EffectContext::Spell)
         .is_ok());
     }
 
@@ -360,7 +402,7 @@ mod tests {
                 tapped: None,
             },
         }
-        .validate()
+        .validate(EffectContext::Spell)
         .is_err());
     }
 
@@ -380,8 +422,23 @@ mod tests {
                     tapped: None
                 },
             }
-            .validate()
+            .validate(EffectContext::Spell)
             .is_ok());
         }
+    }
+
+    #[test]
+    fn self_target_rejected_in_spell_context_allowed_in_ability() {
+        let pump_self = SpellEffectKind::PumpTarget {
+            power: 1,
+            toughness: 1,
+            target: TargetFilter {
+                kind: TargetKind::Self_,
+                not_artifact: false,
+                tapped: None,
+            },
+        };
+        assert!(pump_self.validate(EffectContext::Spell).is_err());
+        assert!(pump_self.validate(EffectContext::Ability).is_ok());
     }
 }

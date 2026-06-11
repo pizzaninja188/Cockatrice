@@ -3,8 +3,8 @@
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
 use tricerules_proto::ruled::v1::ruled_event::Ev;
 use tricerules_proto::ruled::v1::{
-    AddManaToPool, AssignCombatDamage, BlockPair, CastSpell, ChooseTriggerTarget, DamagePair,
-    DeclareAttackers, DeclareBlockers, DiscardToHandSize, PassPriority, PlayLand,
+    ActivateAbility, AddManaToPool, AssignCombatDamage, BlockPair, CastSpell, ChooseTriggerTarget,
+    DamagePair, DeclareAttackers, DeclareBlockers, DiscardToHandSize, PassPriority, PlayLand,
     PreviewDeclareAttackers, PreviewDeclareBlockers, PrimitiveYieldStructured, RuledCommand,
     TargetRef,
 };
@@ -78,6 +78,41 @@ fn add_mana_to_pool(m: AddManaToPool) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::AddManaToPool(m)),
     }
+}
+
+fn activate_ability(
+    permanent_id: u32,
+    ability_index: u32,
+    targets: Vec<TargetRef>,
+) -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+            permanent_id,
+            ability_index,
+            targets,
+        })),
+    }
+}
+
+/// Place a card from `player`'s library directly onto the battlefield (untapped, not
+/// summoning-sick unless `tapped`), returning its object id. Used to set up board states that
+/// would otherwise take many turns of legal play to reach.
+fn deploy_to_battlefield(e: &mut GameEngine, player: usize, card_id: &str, tapped: bool) -> u32 {
+    let pos = e.state.players[player]
+        .library
+        .iter()
+        .position(|oid| e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some(card_id))
+        .unwrap_or_else(|| panic!("missing card {card_id} in P{player} library"));
+    let oid = e.state.players[player]
+        .library
+        .remove(pos)
+        .expect("index from position()");
+    e.state.players[player].battlefield.push(oid);
+    let obj = e.state.objects.get_mut(&oid).expect("object");
+    obj.zone = tricerules_core::Zone::Battlefield;
+    obj.tapped = tapped;
+    obj.summoning_sick = false;
+    oid
 }
 
 /// Player targets for `DamageTarget` spells use `TargetRef.object_id == player_id` (see engine).
@@ -7668,4 +7703,62 @@ fn argothian_enchantress_triggers_on_enchantment_cast() {
 
     // Resolve Exploration itself.
     pass_both_players(&mut e);
+}
+
+/// Royal Assassin's `{T}: Destroy target tapped creature.` — now a `DestroyTarget` with a
+/// `tapped: true` filter (the old single-card `DestroyTargetTapped` primitive was removed).
+/// Happy path: a tapped enemy creature is a legal target and is destroyed on resolution.
+#[test]
+fn royal_assassin_destroys_tapped_creature() {
+    let decks = Some(vec![
+        vec!["royal_assassin".into(); 20],
+        vec!["grizzly_bears".into(); 20],
+    ]);
+    let mut e = GameEngine::new(4201, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let assassin = deploy_to_battlefield(&mut e, 0, "royal_assassin", false);
+    let bears = deploy_to_battlefield(&mut e, 1, "grizzly_bears", /* tapped */ true);
+
+    e.apply_command(
+        0,
+        &activate_ability(assassin, 0, vec![TargetRef { object_id: bears }]),
+    )
+    .expect("activate Royal Assassin on tapped creature");
+
+    // Source taps to pay the cost; ability is on the stack.
+    assert!(e.state.objects.get(&assassin).expect("assassin").tapped);
+    assert_eq!(e.state.stack.len(), 1);
+
+    // Both players pass → ability resolves, destroying the tapped creature.
+    pass_both_players(&mut e);
+    assert!(e.state.stack.is_empty());
+    assert!(
+        e.state.players[1].graveyard.contains(&bears),
+        "tapped creature should be destroyed to its owner's graveyard"
+    );
+}
+
+/// Illegal path: an untapped creature fails the `tapped: true` filter, so activation is
+/// rejected at target validation (CR 602.2) before any cost is paid.
+#[test]
+fn royal_assassin_cannot_target_untapped_creature() {
+    let decks = Some(vec![
+        vec!["royal_assassin".into(); 20],
+        vec!["grizzly_bears".into(); 20],
+    ]);
+    let mut e = GameEngine::new(4202, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let assassin = deploy_to_battlefield(&mut e, 0, "royal_assassin", false);
+    let bears = deploy_to_battlefield(&mut e, 1, "grizzly_bears", /* tapped */ false);
+
+    let err = e.apply_command(
+        0,
+        &activate_ability(assassin, 0, vec![TargetRef { object_id: bears }]),
+    );
+    assert!(err.is_err(), "untapped creature is not a legal target");
+    // Cost untouched: source stays untapped, nothing on the stack.
+    assert!(!e.state.objects.get(&assassin).expect("assassin").tapped);
+    assert!(e.state.stack.is_empty());
 }

@@ -13,7 +13,7 @@ use thiserror::Error;
 use tricerules_cards::mana::{ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
     AbilityCost, CastTriggerPlayer, ContinuousEffectKind, EffectDuration, Keyword, SpellEffectKind,
-    SpellTypeFilter, TargetFilter, TargetKind, TriggerCondition, TriggeredEffect,
+    SpellTypeFilter, TargetFilter, TargetKind, TriggerCondition,
 };
 use tricerules_cards::CardRegistry;
 use tricerules_proto::ruled::v1 as rv1;
@@ -2228,70 +2228,32 @@ impl GameEngine {
             }
         }
 
-        // Determine effects: for spells use spell_effect (Vec); for abilities wrap single effect.
-        let (effects, spell_label, pump_self_params): (
-            Vec<SpellEffectKind>,
-            String,
-            Option<(i32, i32)>,
-        ) = if is_ability {
+        // Determine effects: for spells use spell_effect (Vec); for abilities wrap the single
+        // effect. Triggered and activated abilities are now uniform — both carry a plain
+        // `SpellEffectKind` (self-referencing effects use a `Self_` target filter, bound below).
+        let (effects, spell_label): (Vec<SpellEffectKind>, String) = if is_ability {
             let ability_index = top.ability_index.unwrap_or(0);
             let def = self.registry.get(&card_id);
             let name = def
                 .map(|d| d.name.clone())
                 .unwrap_or_else(|| "Ability".into());
-            if top.is_triggered {
-                let triggered_effect = def
-                    .and_then(|d| d.triggered_abilities.get(ability_index))
-                    .map(|a| a.effect.clone());
-                match triggered_effect {
-                    Some(TriggeredEffect::Effect(kind)) => (vec![kind], name, None),
-                    Some(TriggeredEffect::PumpSelf { power, toughness }) => {
-                        (vec![], name, Some((power, toughness)))
-                    }
-                    None => (vec![], name, None),
-                }
-            } else {
-                let activated_effect = def
-                    .and_then(|d| d.activated_abilities.get(ability_index))
+            let abilities = if top.is_triggered {
+                def.map(|d| &d.triggered_abilities[..])
+                    .and_then(|a| a.get(ability_index))
                     .map(|a| a.effect.clone())
-                    .unwrap_or(SpellEffectKind::None);
-                (vec![activated_effect], name, None)
-            }
+            } else {
+                def.and_then(|d| d.activated_abilities.get(ability_index))
+                    .map(|a| a.effect.clone())
+            };
+            (vec![abilities.unwrap_or(SpellEffectKind::None)], name)
         } else {
             let def = self.registry.get(&card_id);
             let effects = def.map(|c| c.spell_effect.clone()).unwrap_or_default();
             let name = def
                 .map(|d| d.name.clone())
                 .unwrap_or_else(|| "Spell".into());
-            (effects, name, None)
+            (effects, name)
         };
-
-        // PumpSelf: source permanent gets +power/+toughness until end of turn.
-        if let Some((power, toughness)) = pump_self_params {
-            if let Some(src_id) = top.source_permanent_id {
-                if self
-                    .state
-                    .objects
-                    .get(&src_id)
-                    .map(|o| o.zone == Zone::Battlefield)
-                    .unwrap_or(false)
-                {
-                    self.state.continuous_effects.push(ContinuousEffect {
-                        source_id: Some(src_id),
-                        affected: AffectedScope::Single(src_id),
-                        kind: ContinuousEffectKind::PtModify {
-                            delta_power: power,
-                            delta_toughness: toughness,
-                        },
-                        duration: EffectDuration::UntilEndOfTurn,
-                        timestamp: self.state.command_index,
-                    });
-                    events.push(ev_log(format!("{spell_label} gets +{power}/+{toughness}.")));
-                }
-            }
-            events.push(ev_log(format!("{spell_label} resolves.")));
-            return Ok(());
-        }
 
         let fizzle = spell_has_no_legal_targets_at_resolution(
             &self.state,
@@ -2345,8 +2307,19 @@ impl GameEngine {
                         "P{controller} draws {count} {noun} ({spell_label})."
                     )));
                 }
-                SpellEffectKind::PumpTarget { power, toughness } => {
-                    if let Some(&tid) = targets.first() {
+                SpellEffectKind::PumpTarget {
+                    power,
+                    toughness,
+                    target,
+                } => {
+                    // `Self_` is auto-bound to the source permanent (CR 115 — not a chosen target);
+                    // every other filter uses the player's selected target.
+                    let tid = if matches!(target.kind, TargetKind::Self_) {
+                        top.source_permanent_id
+                    } else {
+                        targets.first().copied()
+                    };
+                    if let Some(tid) = tid {
                         let is_valid_target = self
                             .state
                             .objects
@@ -2616,55 +2589,6 @@ impl GameEngine {
                             events.push(ev_log(format!(
                                 "{spell_label} mills {milled} card(s) from P{pid}"
                             )));
-                        }
-                    }
-                }
-                SpellEffectKind::DestroyTargetTapped => {
-                    if let Some(&tid) = targets.first() {
-                        let tgt = object_display_name(&self.state, self.registry, tid);
-                        let is_tapped = self
-                            .state
-                            .objects
-                            .get(&tid)
-                            .map(|o| o.zone == Zone::Battlefield && o.tapped)
-                            .unwrap_or(false);
-                        let indestructible = self
-                            .state
-                            .objects
-                            .get(&tid)
-                            .map(|o| o.has_keyword(self.registry, Keyword::Indestructible))
-                            .unwrap_or(false);
-                        if !is_tapped {
-                            events.push(ev_log(format!(
-                                "{spell_label} fizzles: {tgt} is not tapped."
-                            )));
-                        } else if indestructible {
-                            events.push(ev_log(format!(
-                                "{spell_label} has no effect: {tgt} is indestructible."
-                            )));
-                        } else {
-                            let owner = self.state.objects.get(&tid).map(|o| o.owner);
-                            let card_id_t = self.state.objects.get(&tid).map(|o| o.card_id.clone());
-                            events.push(ev_log(format!("{spell_label} destroys {tgt}")));
-                            destroy_permanent(&mut self.state, tid)?;
-                            if let Some(owner_id) = owner {
-                                events.push(permanent_moved_event(
-                                    &self.state,
-                                    tid,
-                                    owner_id,
-                                    rv1::permanent_moved::Destination::Graveyard,
-                                ));
-                            }
-                            if let (Some(cid), Some(ctrl)) = (card_id_t, owner) {
-                                self.fire_triggers(
-                                    GameEvent::Dies {
-                                        object_id: tid,
-                                        card_id: cid,
-                                        controller: ctrl,
-                                    },
-                                    events,
-                                );
-                            }
                         }
                     }
                 }
@@ -2988,7 +2912,7 @@ impl GameEngine {
         let target_ref = &[rv1::TargetRef {
             object_id: target_object_id,
         }];
-        if let Some(TriggeredEffect::Effect(kind)) = effect {
+        if let Some(kind) = effect {
             validate_effect_targets(&self.state, self.registry, player, kind, target_ref)?;
         }
 
@@ -3776,7 +3700,7 @@ impl GameEngine {
         let needs_target = def
             .triggered_abilities
             .get(ability_index)
-            .map(|ta| triggered_effect_needs_target(&ta.effect))
+            .map(|ta| spell_effect_kind_needs_target(&ta.effect))
             .unwrap_or(false);
 
         let card_name = def.name.clone();
@@ -4407,13 +4331,6 @@ fn damage_spell_target_legal(state: &GameState, registry: &CardRegistry, tid: Ob
         .is_some_and(|o| o.zone == Zone::Battlefield && o.is_creature(registry))
 }
 
-fn pump_spell_target_legal(state: &GameState, registry: &CardRegistry, tid: ObjectId) -> bool {
-    state
-        .objects
-        .get(&tid)
-        .is_some_and(|o| o.zone == Zone::Battlefield && o.is_creature(registry))
-}
-
 fn destroy_spell_target_legal(state: &GameState, registry: &CardRegistry, tid: ObjectId) -> bool {
     state
         .objects
@@ -4474,6 +4391,9 @@ fn target_filter_legal(
         TargetKind::AnyPlayer => player_target_legal(state, tid),
         TargetKind::OpponentPlayer => player_target_legal(state, tid) && tid as i32 != caster,
         TargetKind::AnyPermanent => any_battlefield_permanent_target_legal(state, tid),
+        // `Self_` is auto-bound to the ability's source, never a chosen target (CR 115), so it
+        // is never legal to *pick*. The engine binds it directly at resolution.
+        TargetKind::Self_ => false,
     };
     if !kind_ok {
         return false;
@@ -4541,17 +4461,8 @@ fn effect_target_legal_at_resolution(
         | SpellEffectKind::TapTarget { target } => {
             target_filter_legal(state, registry, target, tid, caster)
         }
-        SpellEffectKind::DestroyTarget { target } => {
+        SpellEffectKind::DestroyTarget { target } | SpellEffectKind::PumpTarget { target, .. } => {
             target_filter_legal(state, registry, target, tid, caster)
-        }
-        SpellEffectKind::DestroyTargetTapped => {
-            destroy_spell_target_legal(state, registry, tid)
-                && state.objects.get(&tid).map(|o| o.tapped).unwrap_or(false)
-                && object_targetable_by(state, registry, tid, caster)
-        }
-        SpellEffectKind::PumpTarget { .. } => {
-            pump_spell_target_legal(state, registry, tid)
-                && object_targetable_by(state, registry, tid, caster)
         }
         SpellEffectKind::ExileTarget
         | SpellEffectKind::ExileTargetGainLifeEqualToPower
@@ -4573,28 +4484,22 @@ fn effect_target_legal_at_resolution(
 }
 
 fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
-    matches!(
-        kind,
+    match kind {
+        // A `Self_`-filtered pump is auto-bound to its source (CR 115) — it takes no chosen
+        // target and prompts nobody; any other filter requires a selected target.
+        SpellEffectKind::PumpTarget { target, .. } => !matches!(target.kind, TargetKind::Self_),
         SpellEffectKind::DamageTarget { .. }
-            | SpellEffectKind::DestroyTarget { .. }
-            | SpellEffectKind::DestroyTargetTapped
-            | SpellEffectKind::PumpTarget { .. }
-            | SpellEffectKind::ExileTarget
-            | SpellEffectKind::ExileTargetGainLifeEqualToPower
-            | SpellEffectKind::ReturnTargetCreatureToHand
-            | SpellEffectKind::ReturnTargetPermanentToHand
-            | SpellEffectKind::TargetPlayerGainsLife { .. }
-            | SpellEffectKind::TargetPlayerLosesLife { .. }
-            | SpellEffectKind::MillTargetPlayer { .. }
-            | SpellEffectKind::TapTarget { .. }
-            | SpellEffectKind::CounterTargetSpell
-    )
-}
-
-fn triggered_effect_needs_target(effect: &TriggeredEffect) -> bool {
-    match effect {
-        TriggeredEffect::Effect(kind) => spell_effect_kind_needs_target(kind),
-        TriggeredEffect::PumpSelf { .. } => false,
+        | SpellEffectKind::DestroyTarget { .. }
+        | SpellEffectKind::ExileTarget
+        | SpellEffectKind::ExileTargetGainLifeEqualToPower
+        | SpellEffectKind::ReturnTargetCreatureToHand
+        | SpellEffectKind::ReturnTargetPermanentToHand
+        | SpellEffectKind::TargetPlayerGainsLife { .. }
+        | SpellEffectKind::TargetPlayerLosesLife { .. }
+        | SpellEffectKind::MillTargetPlayer { .. }
+        | SpellEffectKind::TapTarget { .. }
+        | SpellEffectKind::CounterTargetSpell => true,
+        _ => false,
     }
 }
 
@@ -4617,27 +4522,6 @@ fn validate_effect_targets(
                 ));
             }
         }
-        SpellEffectKind::DestroyTargetTapped => {
-            if targets.len() != 1 {
-                return Err(EngineError::Illegal("requires exactly one target"));
-            }
-            if !destroy_spell_target_legal(state, registry, targets[0].object_id) {
-                return Err(EngineError::Illegal(
-                    "target must be a creature on the battlefield",
-                ));
-            }
-            if !state
-                .objects
-                .get(&targets[0].object_id)
-                .map(|o| o.tapped)
-                .unwrap_or(false)
-            {
-                return Err(EngineError::Illegal("target must be tapped"));
-            }
-            if !object_targetable_by(state, registry, targets[0].object_id, caster) {
-                return Err(EngineError::Illegal("target has hexproof or shroud"));
-            }
-        }
         SpellEffectKind::TapTarget { target: filter } => {
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one target"));
@@ -4656,17 +4540,21 @@ fn validate_effect_targets(
                 return Err(EngineError::Illegal("illegal target for damage effect"));
             }
         }
-        SpellEffectKind::PumpTarget { .. } => {
-            if targets.len() != 1 {
-                return Err(EngineError::Illegal("requires exactly one target"));
-            }
-            if !pump_spell_target_legal(state, registry, targets[0].object_id) {
-                return Err(EngineError::Illegal(
-                    "target must be a creature on the battlefield",
-                ));
-            }
-            if !object_targetable_by(state, registry, targets[0].object_id, caster) {
-                return Err(EngineError::Illegal("target has hexproof or shroud"));
+        SpellEffectKind::PumpTarget { target: filter, .. } => {
+            // `Self_` pumps are auto-bound and take no chosen target.
+            if matches!(filter.kind, TargetKind::Self_) {
+                if !targets.is_empty() {
+                    return Err(EngineError::Illegal("this effect takes no targets"));
+                }
+            } else {
+                if targets.len() != 1 {
+                    return Err(EngineError::Illegal("requires exactly one target"));
+                }
+                if !target_filter_legal(state, registry, filter, targets[0].object_id, caster) {
+                    return Err(EngineError::Illegal(
+                        "target must be a creature on the battlefield",
+                    ));
+                }
             }
         }
         SpellEffectKind::ExileTarget
@@ -4767,30 +4655,19 @@ fn spell_target_legality_error(
     caster: PlayerId,
 ) -> Result<(), EngineError> {
     match effect {
+        // Filter-based targeted effects share one legality path; the filter carries any
+        // characteristic restriction (creature/player, `tapped`, `not_artifact`, hexproof/shroud).
         SpellEffectKind::DestroyTarget { target: filter }
         | SpellEffectKind::DamageTarget { target: filter, .. }
         | SpellEffectKind::TapTarget { target: filter }
+        | SpellEffectKind::PumpTarget { target: filter, .. }
             if !target_filter_legal(state, registry, filter, tid, caster) =>
         {
             return Err(EngineError::Illegal(
                 "target must be a creature or player on the battlefield",
             ));
         }
-        SpellEffectKind::DestroyTargetTapped => {
-            if !destroy_spell_target_legal(state, registry, tid) {
-                return Err(EngineError::Illegal(
-                    "target must be a creature on the battlefield",
-                ));
-            }
-            if !state.objects.get(&tid).map(|o| o.tapped).unwrap_or(false) {
-                return Err(EngineError::Illegal("target must be tapped"));
-            }
-            if !object_targetable_by(state, registry, tid, caster) {
-                return Err(EngineError::Illegal("target has hexproof or shroud"));
-            }
-        }
-        SpellEffectKind::PumpTarget { .. }
-        | SpellEffectKind::ExileTarget
+        SpellEffectKind::ExileTarget
         | SpellEffectKind::ExileTargetGainLifeEqualToPower
         | SpellEffectKind::ReturnTargetCreatureToHand
             if !destroy_spell_target_legal(state, registry, tid) =>
@@ -4799,8 +4676,7 @@ fn spell_target_legality_error(
                 "target must be a creature on the battlefield",
             ));
         }
-        SpellEffectKind::PumpTarget { .. }
-        | SpellEffectKind::ExileTarget
+        SpellEffectKind::ExileTarget
         | SpellEffectKind::ExileTargetGainLifeEqualToPower
         | SpellEffectKind::ReturnTargetCreatureToHand
             if !object_targetable_by(state, registry, tid, caster) =>
