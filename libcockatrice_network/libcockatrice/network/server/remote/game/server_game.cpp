@@ -1992,12 +1992,27 @@ bool Server_Game::startRuledSidecarSession()
         rulesRelay.reset();
         return true;
     }
+    // Version handshake (Phase 5): log the sidecar's build + card-data hash, and warn if the
+    // sidecar predates the handshake (empty fields) so build skew is visible. No refusal —
+    // same-tree deploys are the norm and a mismatch is advisory.
+    const QString engineBuild = QString::fromStdString(resp.engine_build());
+    const QString cardDataHash = QString::fromStdString(resp.card_data_hash());
+    if (engineBuild.isEmpty()) {
+        qWarning() << "startRuledSidecarSession: sidecar reported no engine build / card-data hash"
+                   << "— it predates the version handshake; rebuild servatrice and tricerules from the same tree";
+    } else {
+        qInfo() << "startRuledSidecarSession: tricerules engine" << engineBuild << "card data" << cardDataHash;
+    }
     applyRuledStartupBatch(resp, deckByPlayer);
     if (!rulesRelay) {
         return true;
     }
     if (currentReplay) {
         currentReplay->set_ruled_seed(ruledSeed);
+        // Stamp the card-data hash beside the seed so (seed, command log, hash) reproduces the replay.
+        if (!cardDataHash.isEmpty()) {
+            currentReplay->set_ruled_card_data_hash(cardDataHash.toStdString());
+        }
     }
     broadcastRuledResponse(resp);
     return true;

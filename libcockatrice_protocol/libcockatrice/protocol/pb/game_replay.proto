@@ -10,4 +10,7 @@ message GameReplay {
     // Ruled game: deterministic replay (seed + concatenated ruled command blobs)
     optional uint64 ruled_seed = 5;
     optional bytes ruled_command_log = 6;
+    // Stable hash of the engine's embedded card data at game start. With ruled_seed and
+    // ruled_command_log this fully determines a ruled replay's reconstruction.
+    optional string ruled_card_data_hash = 7;
 }

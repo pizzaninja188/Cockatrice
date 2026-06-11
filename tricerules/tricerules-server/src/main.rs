@@ -11,6 +11,9 @@ use tricerules_core::{GameEngine, PlayerId};
 use tricerules_proto::ruled::v1::ipc_envelope::Msg;
 use tricerules_proto::ruled::v1::{IpcEnvelope, IpcResponse, PlayerDeck};
 
+/// This sidecar's build id, reported to Servatrice in the SessionStart handshake.
+const ENGINE_BUILD: &str = env!("CARGO_PKG_VERSION");
+
 /// Failure response shared by ValidateDeck and SessionStart name resolution:
 /// `missing` must be the sorted, deduplicated unimplemented Oracle names.
 fn missing_cards_response(missing: Vec<String>) -> IpcResponse {
@@ -19,6 +22,8 @@ fn missing_cards_response(missing: Vec<String>) -> IpcResponse {
         error: format!("unimplemented cards: {}", missing.join(", ")),
         batch: None,
         missing_card_names: missing,
+        engine_build: String::new(),
+        card_data_hash: String::new(),
     }
 }
 
@@ -37,6 +42,8 @@ fn validate_deck_response(card_names: &[String]) -> IpcResponse {
             error: String::new(),
             batch: None,
             missing_card_names: vec![],
+            engine_build: String::new(),
+            card_data_hash: String::new(),
         }
     } else {
         missing_cards_response(missing.into_iter().collect())
@@ -70,6 +77,12 @@ async fn handle_connection(
         let env = read_proto::<IpcEnvelope>(&mut sock).await?;
         let resp = match env.msg {
             Some(Msg::SessionStart(s)) => {
+                if !s.servatrice_build.is_empty() {
+                    eprintln!(
+                        "tricerules: session from servatrice build {}",
+                        s.servatrice_build
+                    );
+                }
                 let pids: Vec<PlayerId> = s.player_ids;
                 match resolve_deck_names(&pids, &s.player_decks) {
                     Err(missing) => missing_cards_response(missing),
@@ -77,11 +90,15 @@ async fn handle_connection(
                         Ok(e) => {
                             let batch = e.initial_response_batch();
                             engine = Some(e);
+                            // Version handshake: stamp the sidecar build + card-data hash so
+                            // Servatrice can log skew and record the hash in the replay.
                             IpcResponse {
                                 ok: true,
                                 error: String::new(),
                                 batch: Some(batch),
                                 missing_card_names: vec![],
+                                engine_build: ENGINE_BUILD.to_string(),
+                                card_data_hash: CardRegistry::content_hash(),
                             }
                         }
                         Err(err) => IpcResponse {
@@ -89,6 +106,8 @@ async fn handle_connection(
                             error: err.to_string(),
                             batch: None,
                             missing_card_names: vec![],
+                            engine_build: String::new(),
+                            card_data_hash: String::new(),
                         },
                     },
                 }
@@ -103,6 +122,8 @@ async fn handle_connection(
                         error: "no session".into(),
                         batch: None,
                         missing_card_names: vec![],
+                        engine_build: String::new(),
+                        card_data_hash: String::new(),
                     }
                 }
             }
@@ -165,12 +186,6 @@ async fn write_proto<M: Message>(
     msg: &M,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let buf = msg.encode_to_vec();
-    if buf.len() > 2000 {
-        eprintln!(
-            "tricerules: IpcResponse {} bytes (SessionStart; ensure servatrice and this sidecar are rebuilt from the same tree)",
-            buf.len()
-        );
-    }
     let len = (buf.len() as u32).to_be_bytes();
     sock.write_all(&len).await?;
     sock.write_all(&buf).await?;

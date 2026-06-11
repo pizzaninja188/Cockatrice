@@ -1,5 +1,7 @@
 #include "rules_relay.h"
 
+#include "version_string.h"
+
 #include <QDebug>
 #include <QHostAddress>
 #include <QtEndian>
@@ -125,6 +127,7 @@ bool RulesRelay::sessionStart(quint64 gameId, quint64 seed, const QList<int> &pl
     ruled::v1::SessionStart *ss = env.mutable_session_start();
     ss->set_game_id(gameId);
     ss->set_seed(seed);
+    ss->set_servatrice_build(VERSION_STRING); // version handshake (logged by the sidecar)
     for (int pid : playerIds) {
         ss->add_player_ids(pid);
     }

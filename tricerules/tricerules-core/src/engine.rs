@@ -3194,6 +3194,8 @@ impl GameEngine {
     }
 
     pub fn player_command_ipc(&mut self, player: PlayerId, bytes: &[u8]) -> IpcResponse {
+        // Per-command responses: the version handshake fields are SessionStart-only, so
+        // leave them at their defaults here.
         match RuledCommand::decode(bytes) {
             Ok(cmd) => match self.apply_command(player, &cmd) {
                 Ok(batch) => IpcResponse {
@@ -3201,18 +3203,21 @@ impl GameEngine {
                     error: String::new(),
                     batch: Some(batch),
                     missing_card_names: vec![],
+                    ..Default::default()
                 },
                 Err(EngineError::GameOver(w)) => IpcResponse {
                     ok: true,
                     error: String::new(),
                     batch: Some(self.game_over_batch_winner(w)),
                     missing_card_names: vec![],
+                    ..Default::default()
                 },
                 Err(e) => IpcResponse {
                     ok: false,
                     error: e.to_string(),
                     batch: None,
                     missing_card_names: vec![],
+                    ..Default::default()
                 },
             },
             Err(e) => IpcResponse {
@@ -3220,6 +3225,7 @@ impl GameEngine {
                 error: format!("decode: {e}"),
                 batch: None,
                 missing_card_names: vec![],
+                ..Default::default()
             },
         }
     }
