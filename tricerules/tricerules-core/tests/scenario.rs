@@ -1370,6 +1370,120 @@ fn non_active_player_with_priority_pays_mana_for_counterspell() {
     );
 }
 
+// Regression: a spell countered by the *opponent* must go to its OWNER's graveyard (CR 701.5e),
+// not the counterer's. The engine emits a PermanentMoved stamped with the countered spell's owner
+// so the relay can route the physical card off the shared stack to the right player — without any
+// per-card name special-case. Here P0 owns the bolt and P1 counters it.
+#[test]
+fn countered_spell_moves_to_its_owners_graveyard() {
+    let decks = Some(vec![
+        vec![
+            "mountain".into(),
+            "lightning_bolt".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec![
+            "island".into(),
+            "counterspell".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(144, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let mountain_idx = hand_index_for_card(&e, 0, "mountain");
+    e.apply_command(0, &play_land(mountain_idx))
+        .expect("p0 play mountain");
+
+    for _ in 0..2 {
+        let island_idx = hand_index_for_card(&e, 1, "island");
+        let island_oid = e.state.players[1].hand.remove(island_idx);
+        e.state.players[1].battlefield.push(island_oid);
+        e.state
+            .objects
+            .get_mut(&island_oid)
+            .expect("seeded island")
+            .zone = tricerules_core::Zone::Battlefield;
+    }
+
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana for bolt");
+    let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+        .expect("p0 cast bolt");
+    let bolt_oid = e.state.stack.last().expect("bolt on stack").id;
+    e.apply_command(0, &pass())
+        .expect("p0 pass to give p1 priority");
+
+    e.apply_command(
+        1,
+        &add_mana_to_pool(AddManaToPool {
+            u: 2,
+            ..Default::default()
+        }),
+    )
+    .expect("add UU for counterspell");
+    let counter_idx = hand_index_for_card(&e, 1, "counterspell");
+    e.apply_command(
+        1,
+        &cast_spell(
+            counter_idx,
+            vec![TargetRef {
+                object_id: bolt_oid,
+            }],
+        ),
+    )
+    .expect("p1 cast counterspell at bolt");
+    let counterspell_oid = e.state.stack.last().expect("counterspell on stack").id;
+
+    e.apply_command(1, &pass()).expect("p1 pass");
+    let resolve_batch = e
+        .apply_command(0, &pass())
+        .expect("p0 pass resolves counter");
+
+    // The decisive assertion: the engine routes the countered bolt to its OWNER (P0).
+    let bolt_move = permanents_moved_in(&resolve_batch)
+        .into_iter()
+        .find(|pm| pm.object_id == bolt_oid)
+        .expect("counter must emit a PermanentMoved for the bolt");
+    assert_eq!(
+        bolt_move.owner_player_id, 0,
+        "countered bolt must route to its owner P0, not the counterer P1"
+    );
+    assert_eq!(
+        bolt_move.destination,
+        tricerules_proto::ruled::v1::permanent_moved::Destination::Graveyard as i32
+    );
+
+    assert!(e.state.stack.is_empty(), "counter clears the stack");
+    assert!(
+        e.state.players[0].graveyard.contains(&bolt_oid),
+        "bolt in its owner P0's graveyard"
+    );
+    assert!(
+        !e.state.players[1].graveyard.contains(&bolt_oid),
+        "bolt must NOT be in counterer P1's graveyard"
+    );
+    assert!(
+        e.state.players[1].graveyard.contains(&counterspell_oid),
+        "counterspell in its owner P1's graveyard"
+    );
+}
+
 #[test]
 fn untap_and_draw_happen_in_new_turn_sequence() {
     let decks = Some(vec![

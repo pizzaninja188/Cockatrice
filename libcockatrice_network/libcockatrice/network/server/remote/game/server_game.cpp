@@ -1364,6 +1364,32 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
             }
         }
         if (!card) {
+            // A spell leaving the stack (e.g. countered) physically lives on the single shared
+            // canonical stack zone (owned by the lowest player-id), not in this owner's own zones,
+            // and stack cards are never in the per-player engine-oid map (only battlefield + hand
+            // are — see Server_Player::applyRuledEngineZoneView). Resolve it through the global
+            // stack-object map and search every player's stack zone; the move below routes it to
+            // the owner's destination. This makes countered spells generic — no name special-case.
+            //
+            // MUST run before the mill fallback: a countered spell's card_id (e.g. "lightning_bolt")
+            // would otherwise name-match a *different* copy sitting in the owner's library, moving
+            // that to the graveyard and leaving the real stacked card stranded as a ghost.
+            const auto stackCardIdIt = ruledStackObjectIdToServerCardId.constFind(oid);
+            if (stackCardIdIt != ruledStackObjectIdToServerCardId.constEnd()) {
+                for (Server_AbstractPlayer *ab : getPlayers().values()) {
+                    if (!ab) {
+                        continue;
+                    }
+                    if (Server_CardZone *stackZone = ab->getZones().value(ZoneNames::STACK)) {
+                        if (Server_Card *c = stackZone->getCard(*stackCardIdIt, nullptr, false)) {
+                            card = c;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        if (!card) {
             // Library cards (mill: library -> graveyard) are never registered in the engine-oid
             // map (the library is synced by name list, not object ids), so the lookup above
             // misses. Resolve by tricerules card_id within the owner's deck instead; physical
@@ -1621,39 +1647,10 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
         }
         if (e.has_stack_resolved()) {
             const quint32 resolvedOid = static_cast<quint32>(e.stack_resolved().object_id());
-            const QString resolvedName = normalizeRuledCardName(
-                ruledEngineStackPushDescriptionsByObjectId.value(resolvedOid));
-            const QVector<quint32> targets = ruledStackTargetsByObjectId.take(resolvedOid);
-
-            if (resolvedName == QStringLiteral("counterspell")) {
-                if (!targets.isEmpty()) {
-                    const quint32 targetStackOid = targets.first();
-                    const auto targetCardIdIt = ruledStackObjectIdToServerCardId.constFind(targetStackOid);
-                    if (targetCardIdIt != ruledStackObjectIdToServerCardId.constEnd()) {
-                        for (Server_AbstractPlayer *ab : getPlayers().values()) {
-                            if (!ab) {
-                                continue;
-                            }
-                            Server_CardZone *stackZone = ab->getZones().value(ZoneNames::STACK);
-                            Server_CardZone *graveZone = ab->getZones().value(ZoneNames::GRAVE);
-                            if (!stackZone || !graveZone) {
-                                continue;
-                            }
-                            Server_Card *targetStackCard = stackZone->getCard(*targetCardIdIt, nullptr, false);
-                            if (!targetStackCard) {
-                                continue;
-                            }
-                            CardToMove cardToMove;
-                            cardToMove.set_card_id(targetStackCard->getId());
-                            if (ab->moveCard(combatGes, stackZone, QList<const CardToMove *>() << &cardToMove, graveZone,
-                                             -1, 0, true) == Response::RespOk) {
-                                combatGesHasEvents = true;
-                            }
-                            break;
-                        }
-                    }
-                }
-            }
+            // A countered spell leaves the stack for its owner's graveyard via a PermanentMoved
+            // event the engine emits (handled generically in the first pass, above) — no per-card
+            // special-case here. Just retire this stack object's bookkeeping.
+            ruledStackTargetsByObjectId.remove(resolvedOid);
             ruledStackObjectIdToServerCardId.remove(resolvedOid);
             ruledStackObjectIdToCasterPlayerId.remove(resolvedOid);
             ruledEngineStackPushDescriptionsByObjectId.remove(resolvedOid);

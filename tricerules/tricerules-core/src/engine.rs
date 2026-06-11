@@ -2392,7 +2392,19 @@ impl GameEngine {
                                 .get(&st.card_id)
                                 .map(|d| d.name.as_str())
                                 .unwrap_or("spell");
+                            // CR 701.5e: a countered spell goes to its OWNER's graveyard. Emit an
+                            // explicit PermanentMoved so the C++ relay routes the physical card off
+                            // the shared stack to the owner's graveyard — no per-card special-case.
+                            let owner = self.state.objects.get(&st.id).map(|o| o.owner);
                             move_object_to_zone(&mut self.state, st.id, Zone::Graveyard)?;
+                            if let Some(owner) = owner {
+                                events.push(permanent_moved_event(
+                                    &self.state,
+                                    st.id,
+                                    owner,
+                                    rv1::permanent_moved::Destination::Graveyard,
+                                ));
+                            }
                             events.push(ev_log(format!("{spell_label} counters {tgt}")));
                         }
                     }
