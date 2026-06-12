@@ -3,7 +3,6 @@
   name: "Jayemdae Tome",
   mana_cost: "{4}",
   types: ["Artifact", "Book"],
-  is_artifact: true,
   activated_abilities: [
     (
       cost: TapAndMana("{4}"),

@@ -3,7 +3,6 @@
   name: "Coral Merfolk",
   mana_cost: "{1}{U}",
   types: ["Creature", "Merfolk"],
-  is_creature: true,
   power: 2,
   toughness: 1,
 )

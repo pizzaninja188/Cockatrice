@@ -3,5 +3,4 @@
   name: "Island",
   mana_cost: "",
   types: ["Land", "Island"],
-  is_land: true,
 )

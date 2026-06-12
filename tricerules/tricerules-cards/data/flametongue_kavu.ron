@@ -3,7 +3,6 @@
   name: "Flametongue Kavu",
   mana_cost: "{3}{R}",
   types: ["Creature", "Kavu"],
-  is_creature: true,
   power: 4,
   toughness: 2,
   triggered_abilities: [

@@ -3,7 +3,6 @@
   name: "Prodigal Pyromancer",
   mana_cost: "{2}{R}",
   types: ["Creature", "Human", "Wizard"],
-  is_creature: true,
   power: 1,
   toughness: 1,
   activated_abilities: [

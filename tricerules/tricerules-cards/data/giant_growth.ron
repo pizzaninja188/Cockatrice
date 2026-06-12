@@ -3,6 +3,5 @@
   name: "Giant Growth",
   mana_cost: "{G}",
   types: ["Instant"],
-  is_instant: true,
   spell_effect: [PumpTarget(power: 3, toughness: 3)],
 )

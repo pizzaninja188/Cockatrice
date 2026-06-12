@@ -43,7 +43,9 @@ impl CardRegistry {
     fn from_chunks(chunks: &[&str]) -> Result<Self, RegistryError> {
         let mut reg = CardRegistry::default();
         for chunk in chunks {
-            let card: CardDefinition = RON_OPTS.from_str(chunk)?;
+            let mut card: CardDefinition = RON_OPTS.from_str(chunk)?;
+            // Type flags are derived from `types`/`supertypes`, not authored in RON.
+            card.derive_type_flags();
             // Validate spell effects at startup. Spells have no source permanent, so `Self_`
             // target filters are rejected here (EffectContext::Spell).
             for effect in &card.spell_effect {
@@ -184,7 +186,6 @@ mod tests {
             name: "Bad Card",
             mana_cost: "{W}",
             types: ["Instant"],
-            is_instant: true,
             spell_effect: [TargetPlayerGainsLife(amount: 3, target: (kind: Creature))],
         )"#;
         let card: CardDefinition = RON_OPTS.from_str(bad).unwrap();
@@ -200,7 +201,6 @@ mod tests {
             name: "Bad Trigger",
             mana_cost: "{G}",
             types: ["Creature"],
-            is_creature: true,
             power: 1,
             toughness: 1,
             triggered_abilities: [
@@ -224,7 +224,6 @@ mod tests {
             name: "Self Pumper",
             mana_cost: "{G}",
             types: ["Creature"],
-            is_creature: true,
             power: 1,
             toughness: 1,
             triggered_abilities: [
@@ -242,7 +241,6 @@ mod tests {
             name: "Self Spell",
             mana_cost: "{G}",
             types: ["Instant"],
-            is_instant: true,
             spell_effect: [PumpTarget(power: 1, toughness: 1, target: (kind: Self_))],
         )"#;
         let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
@@ -280,14 +278,12 @@ mod tests {
             name: "Dupe",
             mana_cost: "",
             types: ["Land"],
-            is_land: true,
         )"#;
         let b = r#"(
             id: "dupe_b",
             name: " DUPE ",
             mana_cost: "",
             types: ["Land"],
-            is_land: true,
         )"#;
         let err = CardRegistry::from_chunks(&[a, b]).unwrap_err();
         match err {
@@ -306,7 +302,6 @@ mod tests {
             name: "Dupe",
             mana_cost: "",
             types: ["Land"],
-            is_land: true,
         )"#;
         let err = CardRegistry::from_chunks(&[card, card]).unwrap_err();
         match err {

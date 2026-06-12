@@ -3,7 +3,6 @@
   name: "Argothian Enchantress",
   mana_cost: "{1}{G}",
   types: ["Creature", "Human", "Druid"],
-  is_creature: true,
   power: 0,
   toughness: 1,
   keywords: [Shroud],

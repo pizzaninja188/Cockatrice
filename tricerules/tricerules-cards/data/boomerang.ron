@@ -3,6 +3,5 @@
   name: "Boomerang",
   mana_cost: "{U}{U}",
   types: ["Instant"],
-  is_instant: true,
   spell_effect: [ReturnTargetPermanentToHand],
 )

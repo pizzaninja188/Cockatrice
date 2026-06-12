@@ -3,8 +3,6 @@
   name: "Bottle Gnomes",
   mana_cost: "{3}",
   types: ["Artifact", "Creature", "Gnome"],
-  is_artifact: true,
-  is_creature: true,
   power: 1,
   toughness: 3,
   activated_abilities: [

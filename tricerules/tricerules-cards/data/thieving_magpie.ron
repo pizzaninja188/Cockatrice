@@ -3,7 +3,6 @@
   name: "Thieving Magpie",
   mana_cost: "{2}{U}{U}",
   types: ["Creature", "Bird"],
-  is_creature: true,
   power: 1,
   toughness: 3,
   keywords: [Flying],

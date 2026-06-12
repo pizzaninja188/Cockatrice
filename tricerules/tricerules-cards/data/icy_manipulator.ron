@@ -3,7 +3,6 @@
   name: "Icy Manipulator",
   mana_cost: "{4}",
   types: ["Artifact"],
-  is_artifact: true,
   activated_abilities: [
     (
       cost: TapAndMana("{1}"),

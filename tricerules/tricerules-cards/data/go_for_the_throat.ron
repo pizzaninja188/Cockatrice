@@ -3,6 +3,5 @@
   name: "Go for the Throat",
   mana_cost: "{1}{B}",
   types: ["Instant"],
-  is_instant: true,
   spell_effect: [DestroyTarget(target: (kind: Creature, not_artifact: true))],
 )

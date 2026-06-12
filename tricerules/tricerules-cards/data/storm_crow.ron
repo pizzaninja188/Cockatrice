@@ -3,7 +3,6 @@
   name: "Storm Crow",
   mana_cost: "{1}{U}",
   types: ["Creature", "Bird"],
-  is_creature: true,
   power: 1,
   toughness: 2,
   keywords: [Flying],

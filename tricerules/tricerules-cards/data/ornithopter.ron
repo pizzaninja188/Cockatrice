@@ -3,8 +3,6 @@
   name: "Ornithopter",
   mana_cost: "{0}",
   types: ["Artifact", "Creature", "Thopter"],
-  is_creature: true,
-  is_artifact: true,
   power: 0,
   toughness: 2,
   keywords: [Flying],

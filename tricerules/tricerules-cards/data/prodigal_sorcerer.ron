@@ -3,7 +3,6 @@
   name: "Prodigal Sorcerer",
   mana_cost: "{2}{U}",
   types: ["Creature", "Human", "Wizard", "Sorcerer"],
-  is_creature: true,
   power: 1,
   toughness: 1,
   activated_abilities: [

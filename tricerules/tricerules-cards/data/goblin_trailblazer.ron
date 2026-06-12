@@ -3,7 +3,6 @@
   name: "Goblin Trailblazer",
   mana_cost: "{1}{R}",
   types: ["Creature", "Goblin", "Pirate"],
-  is_creature: true,
   power: 2,
   toughness: 1,
   keywords: [Menace],

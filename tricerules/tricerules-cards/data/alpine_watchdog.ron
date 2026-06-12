@@ -3,7 +3,6 @@
   name: "Alpine Watchdog",
   mana_cost: "{1}{W}",
   types: ["Creature", "Dog"],
-  is_creature: true,
   power: 2,
   toughness: 2,
   keywords: [Vigilance],

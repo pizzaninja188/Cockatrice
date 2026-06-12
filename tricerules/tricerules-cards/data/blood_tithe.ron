@@ -3,6 +3,5 @@
   name: "Blood Tithe",
   mana_cost: "{2}{B}",
   types: ["Sorcery"],
-  is_sorcery: true,
   spell_effect: [EachOpponentLosesLifeYouGainEqual(amount: 3)],
 )

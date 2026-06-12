@@ -3,6 +3,5 @@
   name: "Divination",
   mana_cost: "{2}{U}",
   types: ["Sorcery"],
-  is_sorcery: true,
   spell_effect: [Draw(count: 2)],
 )

@@ -3,7 +3,6 @@
   name: "Gladecover Scout",
   mana_cost: "{G}",
   types: ["Creature", "Elf", "Scout"],
-  is_creature: true,
   power: 1,
   toughness: 1,
   keywords: [Hexproof],

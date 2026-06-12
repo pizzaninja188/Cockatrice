@@ -3,7 +3,6 @@
   name: "Child of Night",
   mana_cost: "{1}{B}",
   types: ["Creature", "Vampire"],
-  is_creature: true,
   power: 2,
   toughness: 1,
   keywords: [Lifelink],

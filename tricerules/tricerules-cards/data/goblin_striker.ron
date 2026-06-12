@@ -3,7 +3,6 @@
   name: "Goblin Striker",
   mana_cost: "{1}{R}",
   types: ["Creature", "Goblin", "Berserker"],
-  is_creature: true,
   power: 1,
   toughness: 1,
   keywords: [FirstStrike, Haste],

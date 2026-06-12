@@ -3,7 +3,6 @@
   name: "Elvish Visionary",
   mana_cost: "{1}{G}",
   types: ["Creature", "Elf", "Shaman"],
-  is_creature: true,
   power: 1,
   toughness: 1,
   triggered_abilities: [

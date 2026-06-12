@@ -3,8 +3,6 @@
   name: "Darksteel Myr",
   mana_cost: "{3}",
   types: ["Artifact", "Creature", "Myr"],
-  is_creature: true,
-  is_artifact: true,
   power: 0,
   toughness: 1,
   keywords: [Indestructible],

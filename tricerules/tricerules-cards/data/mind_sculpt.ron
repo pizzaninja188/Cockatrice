@@ -3,6 +3,5 @@
   name: "Mind Sculpt",
   mana_cost: "{1}{U}",
   types: ["Sorcery"],
-  is_sorcery: true,
   spell_effect: [MillTargetPlayer(count: 7, target: (kind: OpponentPlayer))],
 )

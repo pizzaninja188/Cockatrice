@@ -181,12 +181,8 @@ struct GenCard {
     mana_cost: String,
     supertypes: Vec<String>,
     /// Card types followed by subtypes, the on-disk `types` convention (e.g. ["Creature","Bear"]).
+    /// Type flags (`is_creature`, …) are derived from this at registry load, not emitted here.
     types: Vec<String>,
-    is_creature: bool,
-    is_artifact: bool,
-    is_enchantment: bool,
-    is_land: bool,
-    is_legendary: bool,
     power: u32,
     toughness: u32,
     keywords: Vec<&'static str>,
@@ -215,21 +211,6 @@ impl GenCard {
                 .collect::<Vec<_>>()
                 .join(", ");
             s.push_str(&format!("  supertypes: [{st}],\n"));
-        }
-        if self.is_creature {
-            s.push_str("  is_creature: true,\n");
-        }
-        if self.is_artifact {
-            s.push_str("  is_artifact: true,\n");
-        }
-        if self.is_enchantment {
-            s.push_str("  is_enchantment: true,\n");
-        }
-        if self.is_land {
-            s.push_str("  is_land: true,\n");
-        }
-        if self.is_legendary {
-            s.push_str("  is_legendary: true,\n");
         }
         s.push_str(&format!("  power: {},\n", self.power));
         s.push_str(&format!("  toughness: {},\n", self.toughness));
@@ -329,16 +310,10 @@ fn evaluate(
     }
 
     let (supertypes, card_types, subtypes) = parse_type_line(type_line);
-    let has = |t: &str| card_types.iter().any(|x| x == t);
-    let mut types = card_types.clone();
+    let mut types = card_types;
     types.extend(subtypes);
 
     Ok(GenCard {
-        is_creature: has("Creature"),
-        is_artifact: has("Artifact"),
-        is_enchantment: has("Enchantment"),
-        is_land: has("Land"),
-        is_legendary: supertypes.iter().any(|s| s == "Legendary"),
         id,
         name,
         mana_cost,

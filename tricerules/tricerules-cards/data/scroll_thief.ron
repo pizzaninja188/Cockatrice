@@ -3,7 +3,6 @@
   name: "Scroll Thief",
   mana_cost: "{2}{U}",
   types: ["Creature", "Merfolk", "Rogue"],
-  is_creature: true,
   power: 1,
   toughness: 3,
   triggered_abilities: [
