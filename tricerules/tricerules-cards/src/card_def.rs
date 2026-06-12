@@ -1,6 +1,6 @@
 use crate::mana::ManaCost;
 use crate::primitives::{
-    ActivatedAbilityDef, Color, Keyword, SpellEffectKind, TriggeredAbilityDef,
+    ActivatedAbilityDef, Color, Keyword, PermanentTypeFilter, SpellEffectKind, TriggeredAbilityDef,
 };
 use serde::{Deserialize, Serialize};
 
@@ -84,6 +84,17 @@ impl CardDefinition {
     /// (land/creature/artifact/enchantment are the only other types in the schema).
     pub fn is_permanent(&self) -> bool {
         !self.is_instant && !self.is_sorcery
+    }
+
+    /// True if this card's types satisfy a [`PermanentTypeFilter`] (used by ETB-watcher
+    /// triggers like Soul Warden / landfall / constellation). Reads the derived type flags.
+    pub fn is_permanent_type(&self, filter: PermanentTypeFilter) -> bool {
+        match filter {
+            PermanentTypeFilter::Creature => self.is_creature,
+            PermanentTypeFilter::Artifact => self.is_artifact,
+            PermanentTypeFilter::Enchantment => self.is_enchantment,
+            PermanentTypeFilter::Land => self.is_land,
+        }
     }
 
     /// Derive the card's colors from its mana cost (CR 202.2a).

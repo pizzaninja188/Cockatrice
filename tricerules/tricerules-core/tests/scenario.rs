@@ -7876,3 +7876,289 @@ fn royal_assassin_cannot_target_untapped_creature() {
     assert!(!e.state.objects.get(&assassin).expect("assassin").tapped);
     assert!(e.state.stack.is_empty());
 }
+
+/// Build a 20-card deck: `specials` (once each) plus enough `basic` lands to fill out.
+fn deck_with(basic: &str, specials: &[&str]) -> Vec<String> {
+    let mut d: Vec<String> = specials.iter().map(|s| s.to_string()).collect();
+    while d.len() < 20 {
+        d.push(basic.to_string());
+    }
+    d
+}
+
+/// Remove the first object of `card_id` from `player`'s library or hand (wherever it landed
+/// after the random opening draw) and return its id. Lets a test place specific cards without
+/// depending on shuffle order.
+fn take_oid_from_library_or_hand(e: &mut GameEngine, player: usize, card_id: &str) -> u32 {
+    if let Some(pos) = e.state.players[player]
+        .library
+        .iter()
+        .position(|oid| e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some(card_id))
+    {
+        return e.state.players[player]
+            .library
+            .remove(pos)
+            .expect("library idx");
+    }
+    if let Some(pos) = e.state.players[player]
+        .hand
+        .iter()
+        .position(|oid| e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some(card_id))
+    {
+        return e.state.players[player].hand.remove(pos);
+    }
+    panic!("missing card {card_id} for P{player}");
+}
+
+fn relocate_to_battlefield(e: &mut GameEngine, player: usize, card_id: &str, tapped: bool) -> u32 {
+    let oid = take_oid_from_library_or_hand(e, player, card_id);
+    e.state.players[player].battlefield.push(oid);
+    let o = e.state.objects.get_mut(&oid).expect("object");
+    o.zone = tricerules_core::Zone::Battlefield;
+    o.tapped = tapped;
+    o.summoning_sick = false;
+    oid
+}
+
+fn relocate_to_hand(e: &mut GameEngine, player: usize, card_id: &str) -> u32 {
+    let oid = take_oid_from_library_or_hand(e, player, card_id);
+    e.state.players[player].hand.push(oid);
+    e.state.objects.get_mut(&oid).expect("object").zone = tricerules_core::Zone::Hand;
+    oid
+}
+
+#[test]
+fn defender_creature_cannot_be_declared_as_attacker() {
+    let decks = Some(vec![
+        deck_with("mountain", &["wall_of_stone", "grizzly_bears"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(7001, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let wall = relocate_to_battlefield(&mut e, 0, "wall_of_stone", false);
+    let bears = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
+
+    // Main1 -> BeginCombat -> DeclareAttackers (an eligible non-defender attacker exists).
+    e.apply_command(0, &primitive_yield())
+        .expect("main1 -> begin combat");
+    e.apply_command(0, &primitive_yield())
+        .expect("begin combat -> declare attackers");
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareAttackers
+    );
+
+    // CR 702.3b: a creature with defender can't attack.
+    let err = e.apply_command(0, &declare_attackers(vec![wall]));
+    assert!(
+        err.is_err(),
+        "defender creature must be rejected as an attacker"
+    );
+    // The rejected declaration mutates nothing: the bears can still be declared.
+    e.apply_command(0, &declare_attackers(vec![bears]))
+        .expect("non-defender attacks");
+    assert_eq!(
+        e.state.combat.as_ref().expect("combat").attacking,
+        vec![bears]
+    );
+}
+
+#[test]
+fn lone_defender_provides_no_eligible_attackers() {
+    let decks = Some(vec![
+        deck_with("mountain", &["wall_of_stone"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(7002, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    relocate_to_battlefield(&mut e, 0, "wall_of_stone", false);
+
+    e.apply_command(0, &primitive_yield())
+        .expect("main1 -> begin combat");
+    e.apply_command(0, &primitive_yield())
+        .expect("begin combat advance");
+    // With only a defender out, combat never enters the declare-attackers step.
+    assert_ne!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareAttackers,
+        "a lone defender is not an eligible attacker"
+    );
+}
+
+#[test]
+fn flash_creature_castable_at_instant_speed_unlike_flashless() {
+    // 7-card opening hand holds both creatures; we cast during P0's own upkeep, which is
+    // instant timing (CR 503) but NOT sorcery speed.
+    let decks = Some(vec![
+        deck_with("forest", &["ambush_viper", "grizzly_bears"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(7100, &[0, 1], 20, decks, true).expect("new");
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
+    relocate_to_hand(&mut e, 0, "ambush_viper");
+    relocate_to_hand(&mut e, 0, "grizzly_bears");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            g: 4,
+            ..Default::default()
+        }),
+    )
+    .expect("add green mana");
+
+    // A flashless creature can't be cast at instant speed (CR 601.3a).
+    let bears_idx = hand_index_for_card(&e, 0, "grizzly_bears");
+    let err = e.apply_command(0, &cast_spell(bears_idx, vec![]));
+    assert!(
+        err.is_err(),
+        "flashless creature must be sorcery-speed only"
+    );
+
+    // The flash creature casts in the same window (CR 702.8b).
+    let viper_idx = hand_index_for_card(&e, 0, "ambush_viper");
+    e.apply_command(0, &cast_spell(viper_idx, vec![]))
+        .expect("flash creature casts at instant speed");
+    assert_eq!(
+        e.state.stack.last().expect("viper on stack").card_id,
+        "ambush_viper"
+    );
+}
+
+#[test]
+fn wrath_of_god_destroys_all_creatures_except_indestructible() {
+    let decks = Some(vec![
+        deck_with(
+            "plains",
+            &["grizzly_bears", "darksteel_myr", "wrath_of_god"],
+        ),
+        deck_with("plains", &["savannah_lions"]),
+    ]);
+    let mut e = GameEngine::new(7200, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let bears = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
+    let myr = relocate_to_battlefield(&mut e, 0, "darksteel_myr", false);
+    let lions = relocate_to_battlefield(&mut e, 1, "savannah_lions", false);
+    relocate_to_hand(&mut e, 0, "wrath_of_god");
+
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            w: 4,
+            ..Default::default()
+        }),
+    )
+    .expect("add white mana");
+    let wrath_idx = hand_index_for_card(&e, 0, "wrath_of_god");
+    e.apply_command(0, &cast_spell(wrath_idx, vec![]))
+        .expect("cast wrath of god");
+    resolve_entire_stack_two_player(&mut e);
+
+    assert!(
+        e.state.players[0].graveyard.contains(&bears),
+        "grizzly bears destroyed"
+    );
+    assert!(
+        e.state.players[1].graveyard.contains(&lions),
+        "savannah lions destroyed"
+    );
+    // CR 702.12b: an indestructible creature survives "destroy all creatures".
+    assert!(
+        e.state.players[0].battlefield.contains(&myr),
+        "indestructible Darksteel Myr survives"
+    );
+}
+
+#[test]
+fn pyroclasm_deals_two_damage_to_each_creature() {
+    let decks = Some(vec![
+        deck_with("mountain", &["grizzly_bears", "giant_spider", "pyroclasm"]),
+        deck_with("mountain", &["savannah_lions"]),
+    ]);
+    let mut e = GameEngine::new(7300, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let bears = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false); // 2/2 -> dies
+    let spider = relocate_to_battlefield(&mut e, 0, "giant_spider", false); // 2/4 -> survives
+    let lions = relocate_to_battlefield(&mut e, 1, "savannah_lions", false); // 2/1 -> dies
+    relocate_to_hand(&mut e, 0, "pyroclasm");
+
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 2,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana");
+    let idx = hand_index_for_card(&e, 0, "pyroclasm");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast pyroclasm");
+    resolve_entire_stack_two_player(&mut e);
+
+    // State-based actions destroy creatures with lethal damage (CR 704.5g).
+    assert!(
+        e.state.players[0].graveyard.contains(&bears),
+        "2-toughness creature dies"
+    );
+    assert!(
+        e.state.players[1].graveyard.contains(&lions),
+        "1-toughness creature dies"
+    );
+    // Giant Spider (toughness 4) survives, marked with 2 damage until cleanup.
+    assert!(
+        e.state.players[0].battlefield.contains(&spider),
+        "4-toughness creature survives"
+    );
+    assert_eq!(e.state.objects.get(&spider).expect("spider").damage, 2);
+}
+
+#[test]
+fn soul_warden_gains_life_when_another_creature_enters() {
+    let decks = Some(vec![
+        deck_with("forest", &["soul_warden", "grizzly_bears"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(7400, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    relocate_to_hand(&mut e, 0, "soul_warden");
+    relocate_to_hand(&mut e, 0, "grizzly_bears");
+    assert_eq!(e.state.players[0].life, 20);
+
+    // Casting Soul Warden itself does NOT gain life (the "another creature" / exclude_self clause).
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            w: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add white mana");
+    let warden_idx = hand_index_for_card(&e, 0, "soul_warden");
+    e.apply_command(0, &cast_spell(warden_idx, vec![]))
+        .expect("cast soul warden");
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(
+        e.state.players[0].life, 20,
+        "Soul Warden's own ETB must not trigger itself"
+    );
+
+    // Another creature entering the battlefield triggers Soul Warden: +1 life.
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            g: 2,
+            ..Default::default()
+        }),
+    )
+    .expect("add green mana");
+    let bears_idx = hand_index_for_card(&e, 0, "grizzly_bears");
+    e.apply_command(0, &cast_spell(bears_idx, vec![]))
+        .expect("cast grizzly bears");
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(
+        e.state.players[0].life, 21,
+        "another creature entering gains Soul Warden's controller 1 life"
+    );
+}

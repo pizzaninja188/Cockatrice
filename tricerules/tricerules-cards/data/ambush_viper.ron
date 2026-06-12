@@ -1,0 +1,9 @@
+(
+  id: "ambush_viper",
+  name: "Ambush Viper",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Snake"],
+  power: 2,
+  toughness: 1,
+  keywords: [Flash, Deathtouch],
+)

@@ -48,6 +48,12 @@ fn instant_timing_step_allowed(step: TurnStep) -> bool {
     )
 }
 
+/// CR 702.8b: a card may be cast at instant speed if it is an instant or has flash. Sorceries
+/// and flashless permanents remain sorcery-speed only.
+fn castable_at_instant_speed(def: &tricerules_cards::CardDefinition) -> bool {
+    def.is_instant || def.keywords.contains(&tricerules_cards::Keyword::Flash)
+}
+
 fn shuffle_player_library(state: &mut GameState, player_idx: usize, mix: u64) {
     let mut rng = StdRng::seed_from_u64(mix);
     let mut v: Vec<ObjectId> = state.players[player_idx].library.iter().copied().collect();
@@ -708,11 +714,15 @@ impl GameEngine {
                 // just entered the battlefield this turn (i.e. ignore summoning sickness).
                 let effectively_sick = o.summoning_sick
                     && !o.has_keyword(self.registry, tricerules_cards::Keyword::Haste);
+                // CR 702.3b: defenders can't attack, so they don't count as eligible attackers.
+                let has_defender =
+                    o.has_keyword(self.registry, tricerules_cards::Keyword::Defender);
                 o.zone == Zone::Battlefield
                     && o.owner == ap
                     && o.is_creature(self.registry)
                     && !effectively_sick
                     && !o.tapped
+                    && !has_defender
             })
         })
     }
@@ -818,6 +828,10 @@ impl GameEngine {
             }
             if !o.is_creature(self.registry) {
                 return Err(EngineError::Illegal("not creature"));
+            }
+            // CR 702.3b: a creature with defender can't attack.
+            if o.has_keyword(self.registry, tricerules_cards::Keyword::Defender) {
+                return Err(EngineError::Illegal("creature has defender"));
             }
             // CR 702.10b: Haste bypasses summoning sickness — the creature may attack even
             // if it entered the battlefield this turn.
@@ -2615,6 +2629,68 @@ impl GameEngine {
                         }
                     }
                 }
+                SpellEffectKind::DestroyAll { kind } => {
+                    // CR 701.7 / 704.4: all matching permanents are destroyed simultaneously,
+                    // then their "dies" triggers fire together. Indestructible permanents survive
+                    // (CR 702.12b). Untargeted, so hexproof/shroud are irrelevant.
+                    let victims = battlefield_objects_matching(&self.state, self.registry, &kind);
+                    let mut destroyed: Vec<(ObjectId, String, PlayerId)> = Vec::new();
+                    for tid in victims {
+                        let indestructible = self
+                            .state
+                            .objects
+                            .get(&tid)
+                            .map(|o| o.has_keyword(self.registry, Keyword::Indestructible))
+                            .unwrap_or(false);
+                        let tgt = object_display_name(&self.state, self.registry, tid);
+                        if indestructible {
+                            events.push(ev_log(format!(
+                                "{tgt} is indestructible and survives {spell_label}."
+                            )));
+                            continue;
+                        }
+                        let owner = self.state.objects.get(&tid).map(|o| o.owner);
+                        let card_id_t = self.state.objects.get(&tid).map(|o| o.card_id.clone());
+                        destroy_permanent(&mut self.state, tid)?;
+                        events.push(ev_log(format!("{spell_label} destroys {tgt}")));
+                        if let Some(owner_id) = owner {
+                            events.push(permanent_moved_event(
+                                &self.state,
+                                tid,
+                                owner_id,
+                                rv1::permanent_moved::Destination::Graveyard,
+                            ));
+                        }
+                        if let (Some(cid), Some(ctrl)) = (card_id_t, owner) {
+                            destroyed.push((tid, cid, ctrl));
+                        }
+                    }
+                    for (tid, cid, ctrl) in destroyed {
+                        self.fire_triggers(
+                            GameEvent::Dies {
+                                object_id: tid,
+                                card_id: cid,
+                                controller: ctrl,
+                            },
+                            events,
+                        );
+                    }
+                }
+                SpellEffectKind::DamageAll { amount, kind } => {
+                    // CR 119: deal damage to each matching permanent. Marking damage mirrors
+                    // DamageTarget; lethal-damage destruction is left to state-based actions
+                    // (CR 704.5g), which run immediately after this spell resolves.
+                    let affected = battlefield_objects_matching(&self.state, self.registry, &kind);
+                    for tid in &affected {
+                        let tgt = object_display_name(&self.state, self.registry, *tid);
+                        if let Some(o) = self.state.objects.get_mut(tid) {
+                            o.damage += amount;
+                        }
+                        events.push(ev_log(format!(
+                            "{spell_label} deals {amount} damage to {tgt}"
+                        )));
+                    }
+                }
                 SpellEffectKind::None => {}
             }
         }
@@ -2652,13 +2728,17 @@ impl GameEngine {
         }
         let sorcery_ok = sorcery_speed_available(&self.state, player);
         let instant_ok = instant_timing_step_allowed(self.state.turn_step);
-        if def.is_sorcery && !sorcery_ok {
-            return Err(EngineError::Illegal("sorcery speed only"));
-        }
-        if def.is_instant && !instant_ok {
-            return Err(EngineError::Illegal("instant timing"));
-        }
-        if !def.is_sorcery && !def.is_instant && !sorcery_ok {
+        // CR 601.3a: sorceries are sorcery-speed only; instants and flash cards (CR 702.8b)
+        // use instant timing; every other permanent is sorcery-speed only.
+        if def.is_sorcery {
+            if !sorcery_ok {
+                return Err(EngineError::Illegal("sorcery speed only"));
+            }
+        } else if castable_at_instant_speed(def) {
+            if !instant_ok {
+                return Err(EngineError::Illegal("instant timing"));
+            }
+        } else if !sorcery_ok {
             return Err(EngineError::Illegal("sorcery speed only"));
         }
         // CR 508.1 / 508.2: attackers are declared before any player gets priority in the
@@ -3545,11 +3625,74 @@ impl GameEngine {
                 let Some(obj) = self.state.objects.get(object_id) else {
                     return vec![];
                 };
-                let card_id = obj.card_id.clone();
-                let controller = obj.owner;
-                self.matching_triggered_abilities(&card_id, *object_id, controller, |tc| {
-                    *tc == TriggerCondition::WhenSelfEntersBattlefield
-                })
+                let entering_id = *object_id;
+                let entering_card_id = obj.card_id.clone();
+                let entering_controller = obj.owner;
+                // Cloned once for type matching by ETB-watchers below (cheap, once per ETB).
+                let entering_def = self.registry.get(&entering_card_id).cloned();
+
+                let mut out = Vec::new();
+                // (1) The entering permanent's own ETB triggers (Elvish Visionary, Flametongue …).
+                out.extend(self.matching_triggered_abilities(
+                    &entering_card_id,
+                    entering_id,
+                    entering_controller,
+                    |tc| *tc == TriggerCondition::WhenSelfEntersBattlefield,
+                ));
+
+                // (2) Other permanents watching for permanents entering — Soul Warden,
+                // landfall, constellation. Deterministic APNAP order: active player first.
+                let mut ordered: Vec<usize> = (0..self.state.players.len()).collect();
+                ordered.sort_by_key(|&i| (self.state.players[i].id != ap) as u8);
+                let mut sources: Vec<(ObjectId, String, PlayerId)> = Vec::new();
+                for pi in ordered {
+                    for &sid in &self.state.players[pi].battlefield {
+                        if let Some(o) = self.state.objects.get(&sid) {
+                            sources.push((sid, o.card_id.clone(), o.owner));
+                        }
+                    }
+                }
+                let entering_def_ref = entering_def.as_ref();
+                for (src_id, src_card, src_ctrl) in sources {
+                    out.extend(self.matching_triggered_abilities(
+                        &src_card,
+                        src_id,
+                        src_ctrl,
+                        |tc| {
+                            let TriggerCondition::WheneverPermanentEntersBattlefield {
+                                controller,
+                                permanent_type,
+                                exclude_self,
+                            } = tc
+                            else {
+                                return false;
+                            };
+                            // CR "another": the source's own entry doesn't trigger it.
+                            if *exclude_self && src_id == entering_id {
+                                return false;
+                            }
+                            let rel_ok = match controller {
+                                tricerules_cards::CastTriggerPlayer::Controller => {
+                                    entering_controller == src_ctrl
+                                }
+                                tricerules_cards::CastTriggerPlayer::Opponent => {
+                                    entering_controller != src_ctrl
+                                }
+                                tricerules_cards::CastTriggerPlayer::AnyPlayer => true,
+                            };
+                            if !rel_ok {
+                                return false;
+                            }
+                            match permanent_type {
+                                Some(pt) => entering_def_ref
+                                    .map(|d| d.is_permanent_type(*pt))
+                                    .unwrap_or(false),
+                                None => true,
+                            }
+                        },
+                    ));
+                }
+                out
             }
             GameEvent::Dies {
                 object_id,
@@ -4064,7 +4207,13 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
                     v.push(format!("Play land {name} (hand idx {i})"));
                 }
             } else if !combat_decl_lock {
-                let cast_ok = (def.is_instant && instant_ok) || (!def.is_instant && sorcery_ok);
+                // CR 601.3a / 702.8b: instants and flash cards use instant timing; everything
+                // else is sorcery-speed only.
+                let cast_ok = if castable_at_instant_speed(def) {
+                    instant_ok
+                } else {
+                    sorcery_ok
+                };
                 if cast_ok {
                     let needs_target = def.spell_effect.iter().any(spell_effect_kind_needs_target);
                     if needs_target {
@@ -4396,6 +4545,65 @@ fn object_targetable_by(
 
 /// Legality of a single target against a [`TargetFilter`].
 /// `caster` is needed only to enforce the opponent-only restriction.
+/// True if `oid` is a battlefield permanent selected by a mass effect's `kind` filter
+/// (DestroyAll / DamageAll). Unlike [`target_filter_legal`] this is **not** targeting: it
+/// ignores hexproof/shroud (CR 702.11e — untargeted effects affect them normally) and only
+/// honors the object kinds and characteristic constraints the filter carries.
+fn object_matches_mass_filter(
+    state: &GameState,
+    registry: &CardRegistry,
+    oid: ObjectId,
+    filter: &TargetFilter,
+) -> bool {
+    let Some(o) = state.objects.get(&oid) else {
+        return false;
+    };
+    if o.zone != Zone::Battlefield {
+        return false;
+    }
+    let kind_ok = match filter.kind {
+        TargetKind::Creature => o.is_creature(registry),
+        TargetKind::AnyPermanent => true,
+        // Player / AnyTarget / Self_ kinds are rejected at registry load for mass effects.
+        _ => false,
+    };
+    if !kind_ok {
+        return false;
+    }
+    if filter.not_artifact
+        && registry
+            .get(&o.card_id)
+            .map(|d| d.is_artifact)
+            .unwrap_or(false)
+    {
+        return false;
+    }
+    if let Some(tapped_req) = filter.tapped {
+        if o.tapped != tapped_req {
+            return false;
+        }
+    }
+    true
+}
+
+/// Collect every battlefield permanent matching a mass-effect filter, in deterministic
+/// player-then-battlefield order (no HashMap iteration, so replays stay reproducible).
+fn battlefield_objects_matching(
+    state: &GameState,
+    registry: &CardRegistry,
+    filter: &TargetFilter,
+) -> Vec<ObjectId> {
+    let mut out = Vec::new();
+    for p in &state.players {
+        for &oid in &p.battlefield {
+            if object_matches_mass_filter(state, registry, oid, filter) {
+                out.push(oid);
+            }
+        }
+    }
+    out
+}
+
 fn target_filter_legal(
     state: &GameState,
     registry: &CardRegistry,
@@ -4625,6 +4833,8 @@ fn validate_effect_targets(
         | SpellEffectKind::GainLife { .. }
         | SpellEffectKind::EachOpponentLosesLifeYouGainEqual { .. }
         | SpellEffectKind::CounterTargetSpell
+        | SpellEffectKind::DestroyAll { .. }
+        | SpellEffectKind::DamageAll { .. }
         | SpellEffectKind::None => {
             if !targets.is_empty() {
                 return Err(EngineError::Illegal("this effect takes no targets"));

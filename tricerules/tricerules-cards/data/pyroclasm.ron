@@ -1,0 +1,7 @@
+(
+  id: "pyroclasm",
+  name: "Pyroclasm",
+  mana_cost: "{1}{R}",
+  types: ["Sorcery"],
+  spell_effect: [DamageAll(amount: 2, kind: (kind: Creature))],
+)

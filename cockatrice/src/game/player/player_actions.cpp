@@ -920,15 +920,11 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
         return true;
     }
 
-    const bool isInstant = card->getCardInfo().getCardType().contains("Instant", Qt::CaseInsensitive);
-    const int currentPhase = player->getGame()->getGameState()->getCurrentPhase();
-    const int localPlayerId = player->getPlayerInfo()->getId();
-    const bool isMainPhase = currentPhase == 3 || currentPhase == 9;
-    const bool isActivePlayer = player->getGame()->getGameState()->getActivePlayer() == localPlayerId;
-    const bool hasPriority = player->getGame()->getGameState()->getPriorityPlayer() == localPlayerId;
-    if (!isInstant && (!isMainPhase || !isActivePlayer || !hasPriority)) {
-        return false;
-    }
+    // Timing legality (sorcery vs. instant speed, flash, combat-declaration locks, priority) is
+    // decided by the engine and surfaced via isRuledSpellCastLegalForHandIndex above — the single
+    // source of truth. We deliberately do NOT re-gate by card type here: doing so would block
+    // flash creatures (CR 702.8b) and any future card that grants instant speed to a non-instant
+    // spell. If the engine offered this hand index as castable, the click is allowed.
 
     manaPaymentCounterIds.clear();
     midCastLandTapStack.clear();

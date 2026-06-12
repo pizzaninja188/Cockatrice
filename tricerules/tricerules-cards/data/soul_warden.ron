@@ -1,0 +1,19 @@
+(
+  id: "soul_warden",
+  name: "Soul Warden",
+  mana_cost: "{W}",
+  types: ["Creature", "Human", "Cleric"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      trigger: WheneverPermanentEntersBattlefield(
+        controller: AnyPlayer,
+        permanent_type: Some(Creature),
+        exclude_self: true,
+      ),
+      effect: GainLife(amount: 1),
+      text: "Whenever another creature enters, you gain 1 life.",
+    ),
+  ],
+)

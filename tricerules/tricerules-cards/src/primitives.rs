@@ -60,6 +60,11 @@ pub enum Keyword {
     Hexproof,
     /// CR 702.16: this permanent can't be the target of any spells or abilities (including yours).
     Shroud,
+    /// CR 702.3: this creature can't attack. (Walls and other defensive creatures.)
+    Defender,
+    /// CR 702.8: this card may be cast any time its controller could cast an instant
+    /// (CR 601 + 702.8b), overriding the normal sorcery-speed restriction on permanents.
+    Flash,
 }
 
 /// Base kind for a [`TargetFilter`] — what category of object is targeted.
@@ -185,6 +190,22 @@ pub enum SpellEffectKind {
         count: u32,
         target: TargetFilter,
     },
+    /// Destroy every battlefield permanent matching `kind` (CR 701.7). Untargeted, so it
+    /// ignores hexproof/shroud and never fizzles. `kind` selects the affected set — `Creature`
+    /// for Wrath of God / Day of Judgment, `AnyPermanent` for "destroy all permanents". Only
+    /// object kinds are legal (validated at load); player kinds make no sense here.
+    DestroyAll {
+        #[serde(default = "TargetFilter::default_creature")]
+        kind: TargetFilter,
+    },
+    /// Deal `amount` damage to every battlefield permanent matching `kind` (CR 119). Untargeted.
+    /// `Creature` covers Pyroclasm / Pestilence-style sweeps; `AnyPermanent` is reserved for
+    /// future "damage to each permanent" effects. Only object kinds are legal (validated at load).
+    DamageAll {
+        amount: u32,
+        #[serde(default = "TargetFilter::default_creature")]
+        kind: TargetFilter,
+    },
     None,
 }
 
@@ -244,6 +265,18 @@ impl SpellEffectKind {
                     ))
                 } else {
                     Ok(())
+                }
+            }
+            // Mass effects select objects, not players, and never use Self_/AnyTarget (which
+            // include players). Only Creature / AnyPermanent are honored by the engine.
+            SpellEffectKind::DestroyAll { kind } | SpellEffectKind::DamageAll { kind, .. } => {
+                if matches!(kind.kind, TargetKind::Creature | TargetKind::AnyPermanent) {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "mass effect kind must be Creature or AnyPermanent, got {:?}",
+                        kind.kind
+                    ))
                 }
             }
             _ => Ok(()),
@@ -311,6 +344,38 @@ pub enum TriggerCondition {
         #[serde(default)]
         spell_type: Option<SpellTypeFilter>,
     },
+    /// Whenever a permanent enters the battlefield (CR 603.6). The ETB-watcher analog of
+    /// [`Self::WheneverPlayerCastsSpell`]: parameters control whose permanents and which type
+    /// qualify. Covers Soul Warden (`controller: AnyPlayer`, `Creature`, `exclude_self`),
+    /// landfall (`Controller`, `Land`), and constellation (`Controller`, `Enchantment`).
+    WheneverPermanentEntersBattlefield {
+        /// Whose permanents trigger this, relative to the source's controller. Defaults to
+        /// `AnyPlayer` (the Soul Warden "whenever a creature enters" reading).
+        #[serde(default = "any_player_trigger")]
+        controller: CastTriggerPlayer,
+        /// If `Some`, only permanents of this type fire the trigger. `None` matches any permanent.
+        #[serde(default)]
+        permanent_type: Option<PermanentTypeFilter>,
+        /// If true, the source permanent's own entry does not trigger it (the "another" clause,
+        /// e.g. Soul Warden). If false, the source can trigger off itself entering.
+        #[serde(default)]
+        exclude_self: bool,
+    },
+}
+
+fn any_player_trigger() -> CastTriggerPlayer {
+    CastTriggerPlayer::AnyPlayer
+}
+
+/// Permanent card-type filter for [`TriggerCondition::WheneverPermanentEntersBattlefield`].
+/// Only types that can exist on the battlefield (CR 110.4) — instants/sorceries are excluded
+/// by construction, unlike [`SpellTypeFilter`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PermanentTypeFilter {
+    Creature,
+    Artifact,
+    Enchantment,
+    Land,
 }
 
 /// Which player's spell casts trigger a `WheneverPlayerCastsSpell` ability.
