@@ -29,3 +29,6 @@ server.log
 6.6.3/
 Tools/
 aqtinstall.log
+
+# Scryfall bulk dump downloaded by scripts/fetch-scryfall-bulk (gen-cards input)
+oracle-cards.json
