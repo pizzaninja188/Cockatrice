@@ -285,7 +285,18 @@ Implementation notes vs. the plan:
 
 ---
 
-## Phase 6 — Batch vanilla/french-vanilla card generation
+## Phase 6 — Batch vanilla/french-vanilla card generation — ✅ DONE 2026-06-11
+
+Tooling landed and verified on Linux (bash + PowerShell scripts both created): `cargo test` (registry + `conformance` resolved 4 synthetic generated cards embedded under `data/generated/`, then removed) / `cargo clippy --features gencards --bin gen-cards -D warnings` + `--all-targets -D warnings` / `cargo fmt --check` all green. No corpus was imported in this change — the bulk dump and `cards.xml` aren't on this box, and the full 1–3K import is a separate reviewed sweep; this phase delivers the generator + scripts that make that sweep a mechanical, test-gated operation.
+
+Implementation notes vs. the plan:
+- **`src/bin/gen_cards.rs`** (feature `gencards` → optional `serde_json`, mirrors the `gen-checklist`/`checklist` gating). Reads the Scryfall bulk array via `serde_json::from_reader`; the existing corpus (to skip) comes from `CardRegistry::from_embedded()` (ids **and** names), not a fresh `data/` walk — the registry is already embedded from `data/` at build time. Emits RON by hand-formatting to match the authored style exactly (key order, two-space indent, omitted-when-false flags, omitted-when-empty `keywords`/`supertypes`), not via `ron::to_string`.
+- **Filter** as specified: `layout == "normal"`; type line contains `Creature`; integer power/toughness; `mana_cost` parses with the supported `ManaSymbol` set **and rejects `{X}`** (representable but not castable, so it wouldn't be a usable card); text empty or solely supported keywords (parenthetical reminder text stripped; split on newline/comma/semicolon; `first strike`/`double strike` matched as whole tokens). Digital-only/funny/silver-border and tokens (non-normal layout) are filtered. Dry-run tallies skip reasons by category.
+- **Provenance date** without a `chrono` dep: a tiny civil-date function over `SOURCE_DATE_EPOCH`-or-clock seconds (verified to print today's `2026-06-11`).
+- **CLAUDE.md** gained a "Batch-generating vanilla / french-vanilla creatures" subsection under "Implementing a card."
+- Scripts: `scripts/fetch-scryfall-bulk.{sh,ps1}` (bulk-data index → `oracle_cards` `download_uri`, descriptive User-Agent) and `scripts/gen-cards.{sh,ps1}` (default `--input oracle-cards.json`, pass-through args, run from the workspace manifest).
+
+### Original plan (for reference)
 
 **Gate: Phases 1 and 3 must be landed first** — otherwise thousands of generated files bake in the slug contract and the old mana format.
 

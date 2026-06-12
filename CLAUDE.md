@@ -100,6 +100,23 @@ If the fetch fails or the name is ambiguous, **surface that before writing any R
 - **Partial cards:** add `partial: "<what's missing>"` to the RON (unimplemented mode, unenforced targeting restriction, …). Omit for fully-implemented cards. Tracking-only; ignored by the engine. Renders as `[x]` full · `[ ] 🟡 partial: <note>` · `[ ]` not implemented.
 - **Name gate:** run with `--check` before committing — exits nonzero if any registry card name has no Oracle match (an unmatched name is an uncastable card). Local/pre-commit gate; the CI-side guarantee is the `id == slugify(name)` registry test.
 
+### Batch-generating vanilla / french-vanilla creatures
+
+For creatures with no rules text, or text that is **only** supported keyword abilities, don't hand-author — generate from the Scryfall bulk dump (`gen-cards`, feature-gated like `gen-checklist`):
+
+```bash
+./scripts/fetch-scryfall-bulk.sh         # Linux/macOS — downloads oracle-cards.json
+./scripts/gen-cards.sh --dry-run         # preview qualifying count + skip reasons
+./scripts/gen-cards.sh                    # write RON into data/generated/<letter>/
+```
+```powershell
+./scripts/fetch-scryfall-bulk.ps1        # Windows
+./scripts/gen-cards.ps1 --dry-run
+./scripts/gen-cards.ps1
+```
+
+Filter: `layout == "normal"`, type line contains `Creature`, integer power/toughness, `mana_cost` parses with the supported `ManaSymbol` set (no `{X}`), text empty or solely supported keywords. Cards already in `data/` (by id or name) and slug collisions are skipped and reported. `mana_cost` is copied verbatim from Scryfall. After generating, **always** `cd tricerules && cargo test` (the registry load + `conformance` test validate and resolve every generated card) then run the checklist `--check`, before reviewing and committing. Re-running after a new set release is the incremental ingestion path (skip-existing handles overlap).
+
 ---
 
 ## MTG rules (CR + Oracle)

@@ -694,6 +694,7 @@ dependencies = [
  "ron",
  "roxmltree",
  "serde",
+ "serde_json",
  "thiserror",
 ]
 
