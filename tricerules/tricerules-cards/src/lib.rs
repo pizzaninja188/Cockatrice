@@ -10,7 +10,7 @@ pub mod token_def;
 pub use card_def::CardDefinition;
 pub use mana::{ManaCost, ManaSymbol};
 pub use primitives::{
-    AbilityCost, ActivatedAbilityDef, CastTriggerPlayer, Color, ContinuousEffectKind,
+    AbilityCost, ActivatedAbilityDef, CastTriggerPlayer, Color, ContinuousEffectKind, CounterKind,
     EffectContext, EffectDuration, Keyword, PermanentTypeFilter, TokenController, TriggerCondition,
     TriggeredAbilityDef,
 };

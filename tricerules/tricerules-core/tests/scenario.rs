@@ -1750,9 +1750,36 @@ fn inject_creature_on_battlefield(e: &mut GameEngine, player: usize, card_id: &s
             toughness: Some(2),
             damage: 0,
             deathtouch_damage: false,
+            counters: std::collections::BTreeMap::new(),
         },
     );
     e.state.players[player].battlefield.push(id);
+    id
+}
+
+/// Inject a card directly onto the bottom of a player's library (so e.g. a draw effect has
+/// something to draw when the opening hand consumed the whole deck). Returns its object id.
+fn inject_library_card(e: &mut GameEngine, player: usize, card_id: &str) -> u32 {
+    let id = e.state.next_object_id;
+    e.state.next_object_id += 1;
+    let player_id = e.state.players[player].id;
+    e.state.objects.insert(
+        id,
+        tricerules_core::state::GameObject {
+            id,
+            owner: player_id,
+            card_id: card_id.to_string(),
+            zone: tricerules_core::Zone::Library,
+            tapped: false,
+            summoning_sick: false,
+            power: None,
+            toughness: None,
+            damage: 0,
+            deathtouch_damage: false,
+            counters: std::collections::BTreeMap::new(),
+        },
+    );
+    e.state.players[player].library.push_back(id);
     id
 }
 
@@ -2947,6 +2974,185 @@ fn two_giant_growths_stack_correctly() {
     assert!(
         e.state.continuous_effects.is_empty(),
         "continuous_effects must be empty after cleanup"
+    );
+}
+
+/// CR 122 + CR 613.4 layer 7d: a +1/+1 counter from Battlegrowth raises a creature's P/T, and
+/// unlike a Giant Growth pump it persists past the end of the turn (counters are not
+/// until-end-of-turn continuous effects).
+#[test]
+fn battlegrowth_counter_raises_pt_and_persists() {
+    use tricerules_cards::CounterKind;
+    let decks = Some(vec![
+        vec![
+            "battlegrowth".into(),
+            "grizzly_bears".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+        vec!["forest".into(); 7],
+    ]);
+    let mut e = GameEngine::new(1221, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            g: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add green mana");
+    let idx = hand_index_for_card(&e, 0, "battlegrowth");
+    e.apply_command(0, &cast_spell(idx, vec![TargetRef { object_id: bear }]))
+        .expect("cast battlegrowth");
+    pass_both_players(&mut e);
+
+    assert_eq!(e.effective_power(bear), Some(3), "2/2 + one +1/+1 counter");
+    assert_eq!(e.effective_toughness(bear), Some(3));
+    assert_eq!(
+        e.state
+            .objects
+            .get(&bear)
+            .unwrap()
+            .counter_count(CounterKind::PlusOnePlusOne),
+        1
+    );
+
+    end_active_turn(&mut e, 0);
+
+    assert_eq!(
+        e.effective_power(bear),
+        Some(3),
+        "counter persists past end of turn (not a continuous effect)"
+    );
+    assert_eq!(e.effective_toughness(bear), Some(3));
+    assert_eq!(
+        e.state
+            .objects
+            .get(&bear)
+            .unwrap()
+            .counter_count(CounterKind::PlusOnePlusOne),
+        1,
+        "counter survives cleanup"
+    );
+}
+
+/// CR 122.3: when a creature has both +1/+1 and -1/-1 counters, equal numbers annihilate as a
+/// state-based action. Battlegrowth (+1/+1) then Instill Infection (-1/-1) net back to base P/T.
+#[test]
+fn plus_and_minus_counters_annihilate() {
+    let decks = Some(vec![
+        vec![
+            "battlegrowth".into(),
+            "instill_infection".into(),
+            "grizzly_bears".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+        vec!["forest".into(); 7],
+    ]);
+    let mut e = GameEngine::new(1222, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+
+    // Battlegrowth: +1/+1 counter -> 3/3.
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            g: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("green mana");
+    let bg = hand_index_for_card(&e, 0, "battlegrowth");
+    e.apply_command(0, &cast_spell(bg, vec![TargetRef { object_id: bear }]))
+        .expect("cast battlegrowth");
+    pass_both_players(&mut e);
+    assert_eq!(e.effective_toughness(bear), Some(3));
+
+    // Instill Infection also draws a card; give the (opening-hand-emptied) library something.
+    inject_library_card(&mut e, 0, "forest");
+    // Instill Infection: -1/-1 counter; the SBA annihilates the +1/+1/-1/-1 pair -> back to 2/2.
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            b: 1,
+            c: 3,
+            ..Default::default()
+        }),
+    )
+    .expect("black + generic mana");
+    let ii = hand_index_for_card(&e, 0, "instill_infection");
+    e.apply_command(0, &cast_spell(ii, vec![TargetRef { object_id: bear }]))
+        .expect("cast instill infection");
+    pass_both_players(&mut e);
+
+    assert_eq!(
+        e.effective_power(bear),
+        Some(2),
+        "counters annihilated to net 0"
+    );
+    assert_eq!(e.effective_toughness(bear), Some(2));
+    assert!(
+        e.state.objects.get(&bear).unwrap().counters.is_empty(),
+        "no counters remain after annihilation"
+    );
+}
+
+/// CR 704.5f via CR 122: a -1/-1 counter dropping a 1/1's toughness to 0 kills it as an SBA.
+#[test]
+fn minus_counter_to_zero_toughness_kills_via_sba() {
+    let decks = Some(vec![
+        vec![
+            "prodigal_sorcerer".into(),
+            "instill_infection".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+        ],
+        vec!["forest".into(); 7],
+    ]);
+    let mut e = GameEngine::new(1223, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Prodigal Sorcerer is a 1/1.
+    let sorc = put_creature_on_battlefield(&mut e, 0, "prodigal_sorcerer");
+    assert_eq!(e.effective_toughness(sorc), Some(1));
+
+    // Instill Infection also draws a card; give the (opening-hand-emptied) library something.
+    inject_library_card(&mut e, 0, "swamp");
+
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            b: 1,
+            c: 3,
+            ..Default::default()
+        }),
+    )
+    .expect("black + generic mana");
+    let ii = hand_index_for_card(&e, 0, "instill_infection");
+    e.apply_command(0, &cast_spell(ii, vec![TargetRef { object_id: sorc }]))
+        .expect("cast instill infection");
+    pass_both_players(&mut e);
+
+    assert!(
+        !e.state.players[0].battlefield.contains(&sorc),
+        "0-toughness creature left the battlefield"
+    );
+    assert!(
+        e.state.players[0].graveyard.contains(&sorc),
+        "dead creature is in its owner's graveyard"
     );
 }
 
@@ -5542,6 +5748,7 @@ fn tome_scour_mills_five_cards_from_target_player() {
                 toughness: None,
                 damage: 0,
                 deathtouch_damage: false,
+                counters: std::collections::BTreeMap::new(),
             },
         );
         e.state.players[0].hand.push(id);
@@ -5616,6 +5823,7 @@ fn tome_scour_caps_at_library_size() {
                 toughness: None,
                 damage: 0,
                 deathtouch_damage: false,
+                counters: std::collections::BTreeMap::new(),
             },
         );
         e.state.players[0].hand.push(id);
@@ -5664,6 +5872,7 @@ fn tome_scour_can_target_controller() {
                 toughness: None,
                 damage: 0,
                 deathtouch_damage: false,
+                counters: std::collections::BTreeMap::new(),
             },
         );
         e.state.players[0].hand.push(id);
@@ -5715,6 +5924,7 @@ fn mind_sculpt_rejects_self_target() {
                 toughness: None,
                 damage: 0,
                 deathtouch_damage: false,
+                counters: std::collections::BTreeMap::new(),
             },
         );
         e.state.players[0].hand.push(id);
@@ -6210,6 +6420,7 @@ fn haste_creature_can_attack_same_turn_it_enters() {
             toughness: Some(1),
             damage: 0,
             deathtouch_damage: false,
+            counters: std::collections::BTreeMap::new(),
         },
     );
     e.state.players[0].battlefield.push(goblin);
@@ -6247,6 +6458,7 @@ fn non_haste_summoning_sick_creature_cannot_attack() {
             toughness: Some(2),
             damage: 0,
             deathtouch_damage: false,
+            counters: std::collections::BTreeMap::new(),
         },
     );
     e.state.players[0].battlefield.push(bears);
@@ -6287,6 +6499,7 @@ fn inject_creature_with_stats(
             toughness: Some(toughness),
             damage: 0,
             deathtouch_damage: false,
+            counters: std::collections::BTreeMap::new(),
         },
     );
     e.state.players[player].battlefield.push(id);

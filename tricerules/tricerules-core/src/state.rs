@@ -1,5 +1,5 @@
-use std::collections::{HashMap, VecDeque};
-use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration};
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use tricerules_cards::primitives::{ContinuousEffectKind, CounterKind, EffectDuration};
 
 pub type PlayerId = i32;
 pub type ObjectId = u32;
@@ -69,6 +69,11 @@ pub struct GameObject {
     /// True if this permanent has received any amount of damage from a source with deathtouch
     /// this turn (CR 702.2b / CR 704.5h). Cleared during the cleanup step alongside `damage`.
     pub deathtouch_damage: bool,
+    /// Counters on this permanent (CR 122). `BTreeMap` for deterministic iteration/serialization.
+    /// +1/+1 and -1/-1 counters here feed CR 613.4 layer 7d in the P/T computation and annihilate
+    /// in pairs as a state-based action (CR 122.3). Unlike continuous effects, counters persist
+    /// across cleanup — they are not until-end-of-turn effects.
+    pub counters: BTreeMap<CounterKind, u32>,
 }
 
 impl GameObject {
@@ -83,6 +88,29 @@ impl GameObject {
     /// Tokens cease to exist as a state-based action once they leave the battlefield (CR 111.7).
     pub fn is_token(&self, registry: &tricerules_cards::CardRegistry) -> bool {
         registry.is_token(&self.card_id)
+    }
+
+    /// Number of counters of `kind` currently on this permanent (0 if none).
+    pub fn counter_count(&self, kind: CounterKind) -> u32 {
+        self.counters.get(&kind).copied().unwrap_or(0)
+    }
+
+    /// Set the number of `kind` counters, dropping the map entry when `n` is 0 so an emptied
+    /// counter kind never lingers (keeps the map minimal and iteration deterministic).
+    pub fn set_counter(&mut self, kind: CounterKind, n: u32) {
+        if n == 0 {
+            self.counters.remove(&kind);
+        } else {
+            self.counters.insert(kind, n);
+        }
+    }
+
+    /// Net power/toughness delta from +1/+1 and -1/-1 counters (CR 613.4 layer 7d). Each pair of
+    /// counters annihilates as an SBA (CR 122.3), so on a settled board only one kind remains,
+    /// but this stays correct even before that SBA has run.
+    pub fn counter_pt_delta(&self) -> i32 {
+        self.counter_count(CounterKind::PlusOnePlusOne) as i32
+            - self.counter_count(CounterKind::MinusOneMinusOne) as i32
     }
 
     /// Returns true if this permanent's card definition includes the given keyword ability.

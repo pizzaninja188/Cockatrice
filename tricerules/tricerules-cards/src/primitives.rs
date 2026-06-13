@@ -67,6 +67,20 @@ pub enum Keyword {
     Flash,
 }
 
+/// A kind of counter that can sit on a permanent (CR 122.1). Only the two counter kinds
+/// with engine rules interactions exist so far: the +1/+1 / -1/-1 pair, which modify P/T in
+/// CR 613.4 layer 7d and annihilate as a state-based action (CR 122.3). Loyalty, charge, and
+/// keyword counters are added by their dependent plans (planeswalkers, Chalice-style chargers)
+/// when the first card needs them. `Ord` is required so [`crate`] consumers can store counters
+/// in a `BTreeMap` for deterministic iteration/serialization.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum CounterKind {
+    /// CR 122 +1/+1 counter — adds 1 to power and toughness each (layer 7d).
+    PlusOnePlusOne,
+    /// CR 122 -1/-1 counter — subtracts 1 from power and toughness each (layer 7d).
+    MinusOneMinusOne,
+}
+
 /// Base kind for a [`TargetFilter`] — what category of object is targeted.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TargetKind {
@@ -218,6 +232,18 @@ pub enum SpellEffectKind {
         #[serde(default)]
         controller: TokenController,
     },
+    /// CR 122/121.6: put `count` counters of `counter` on a creature matching `target`
+    /// (default: any creature). The `counter` kind covers both +1/+1 counter spells
+    /// (Battlegrowth, Common Bond) and -1/-1 counter spells (Instill Infection) without a new
+    /// variant. Use `(kind: Self_)` for an ability that puts counters on its own source
+    /// (modular/graft/outlast self-buffs). Counter *removal* spells are deferred — counter
+    /// removal in MTG is almost always an ability cost (see the plan's `AbilityCost` phase).
+    PutCounters {
+        counter: CounterKind,
+        count: u32,
+        #[serde(default = "TargetFilter::default_creature")]
+        target: TargetFilter,
+    },
     None,
 }
 
@@ -243,7 +269,8 @@ impl SpellEffectKind {
             | SpellEffectKind::TapTarget { target }
             | SpellEffectKind::TargetPlayerGainsLife { target, .. }
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
-            | SpellEffectKind::MillTargetPlayer { target, .. } => vec![target],
+            | SpellEffectKind::MillTargetPlayer { target, .. }
+            | SpellEffectKind::PutCounters { target, .. } => vec![target],
             _ => vec![],
         }
     }
@@ -283,6 +310,17 @@ impl SpellEffectKind {
                 if target.is_player() {
                     Err(format!(
                         "TapTarget cannot target players, got {:?}",
+                        target.kind
+                    ))
+                } else {
+                    Ok(())
+                }
+            }
+            // CR 122: counters go on permanents, never players.
+            SpellEffectKind::PutCounters { target, .. } => {
+                if target.is_player() {
+                    Err(format!(
+                        "PutCounters cannot target players, got {:?}",
                         target.kind
                     ))
                 } else {

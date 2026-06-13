@@ -12,8 +12,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use thiserror::Error;
 use tricerules_cards::mana::{ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
-    AbilityCost, CastTriggerPlayer, Color, ContinuousEffectKind, EffectDuration, Keyword,
-    SpellEffectKind, SpellTypeFilter, TargetFilter, TargetKind, TokenController, TriggerCondition,
+    AbilityCost, CastTriggerPlayer, Color, ContinuousEffectKind, CounterKind, EffectDuration,
+    Keyword, SpellEffectKind, SpellTypeFilter, TargetFilter, TargetKind, TokenController,
+    TriggerCondition,
 };
 use tricerules_cards::CardRegistry;
 use tricerules_proto::ruled::v1 as rv1;
@@ -182,6 +183,7 @@ impl GameEngine {
                         toughness: def.toughness,
                         damage: 0,
                         deathtouch_damage: false,
+                        counters: BTreeMap::new(),
                     },
                 );
                 p.library.push_back(oid);
@@ -1959,8 +1961,9 @@ impl GameEngine {
         Ok(finish_with_events(self, std::mem::take(ev)))
     }
 
-    /// Effective (rules-visible) power of `oid`: base from card definition plus all active
-    /// layer-7c modifying effects. Returns `None` for non-creatures (no base power).
+    /// Effective (rules-visible) power of `oid`: base from card definition, then CR 613.4
+    /// layer 7c modifying continuous effects, then layer 7d +1/+1 / -1/-1 counters. Returns
+    /// `None` for non-creatures (no base power).
     pub fn effective_power(&self, oid: ObjectId) -> Option<u32> {
         let obj = self.state.objects.get(&oid)?;
         let base = obj.power? as i32;
@@ -1973,10 +1976,12 @@ impl GameEngine {
                 ContinuousEffectKind::PtModify { delta_power, .. } => *delta_power,
             })
             .sum();
-        Some((base + delta).max(0) as u32)
+        // Layer 7d: counters apply after all layer-7c modifying effects (CR 613.4d).
+        Some((base + delta + obj.counter_pt_delta()).max(0) as u32)
     }
 
-    /// Effective (rules-visible) toughness of `oid`: base plus all active layer-7c effects.
+    /// Effective (rules-visible) toughness of `oid`: base, then layer-7c continuous effects,
+    /// then layer-7d counters (CR 613.4).
     pub fn effective_toughness(&self, oid: ObjectId) -> Option<u32> {
         let obj = self.state.objects.get(&oid)?;
         let base = obj.toughness? as i32;
@@ -1991,7 +1996,8 @@ impl GameEngine {
                 } => *delta_toughness,
             })
             .sum();
-        Some((base + delta).max(0) as u32)
+        // Layer 7d: counters apply after all layer-7c modifying effects (CR 613.4d).
+        Some((base + delta + obj.counter_pt_delta()).max(0) as u32)
     }
 
     /// CR 514.2: drain all UntilEndOfTurn continuous effects. Called from
@@ -2355,6 +2361,40 @@ impl GameEngine {
                             events.push(ev_log(format!(
                                 "{spell_label} gives +{power}/+{toughness} to {tgt}"
                             )));
+                        }
+                    }
+                }
+                SpellEffectKind::PutCounters {
+                    counter,
+                    count,
+                    target,
+                } => {
+                    // `Self_` is auto-bound to the source permanent (CR 115); any other filter
+                    // uses the chosen target. Counters go on a permanent on the battlefield.
+                    let tid = if matches!(target.kind, TargetKind::Self_) {
+                        top.source_permanent_id
+                    } else {
+                        targets.first().copied()
+                    };
+                    if let Some(tid) = tid {
+                        let is_valid_target = self
+                            .state
+                            .objects
+                            .get(&tid)
+                            .map(|t| t.zone == Zone::Battlefield && t.is_creature(self.registry))
+                            .unwrap_or(false);
+                        if is_valid_target {
+                            let tgt = object_display_name(&self.state, self.registry, tid);
+                            if let Some(t) = self.state.objects.get_mut(&tid) {
+                                *t.counters.entry(counter).or_insert(0) += count;
+                            }
+                            events.push(ev_log(format!(
+                                "{spell_label} puts {count} {} counter{} on {tgt}",
+                                counter_label(counter),
+                                if count == 1 { "" } else { "s" },
+                            )));
+                            // Annihilation / toughness-0 death are checked by the SBA pass that
+                            // runs after this resolution (CR 122.3, CR 704.5f).
                         }
                     }
                 }
@@ -2774,6 +2814,7 @@ impl GameEngine {
                         toughness,
                         damage: 0,
                         deathtouch_damage: false,
+                        counters: BTreeMap::new(),
                     },
                 );
                 self.state.players[pidx].battlefield.push(oid);
@@ -3256,6 +3297,22 @@ impl GameEngine {
     }
 
     fn apply_sbas(&mut self, out: &mut Vec<rv1::RuledEvent>) -> Result<(), EngineError> {
+        // CR 122.3: if a permanent has both +1/+1 and -1/-1 counters, N of each are removed as a
+        // state-based action, where N is the smaller count. Done before the toughness/lethal-damage
+        // death check below so a net-zero creature is evaluated on its true (post-annihilation) P/T.
+        for o in self.state.objects.values_mut() {
+            if o.zone != Zone::Battlefield {
+                continue;
+            }
+            let plus = o.counter_count(CounterKind::PlusOnePlusOne);
+            let minus = o.counter_count(CounterKind::MinusOneMinusOne);
+            let pairs = plus.min(minus);
+            if pairs > 0 {
+                o.set_counter(CounterKind::PlusOnePlusOne, plus - pairs);
+                o.set_counter(CounterKind::MinusOneMinusOne, minus - pairs);
+            }
+        }
+
         // Collect battlefield creature IDs first to avoid borrow conflict when calling
         // effective_toughness (which borrows self.state while objects iter already borrows it).
         let candidate_ids: Vec<ObjectId> = self
@@ -4795,6 +4852,14 @@ fn target_filter_legal(
     true
 }
 
+/// Human-readable counter name for game-log messages (CR 122.1).
+fn counter_label(kind: CounterKind) -> &'static str {
+    match kind {
+        CounterKind::PlusOnePlusOne => "+1/+1",
+        CounterKind::MinusOneMinusOne => "-1/-1",
+    }
+}
+
 /// CR 608.2b-style: if any targeted effect has no legal target, the whole spell fizzles.
 /// (With a shared single-target list this is equivalent to "all targets illegal".)
 fn spell_has_no_legal_targets_at_resolution(
@@ -4831,7 +4896,9 @@ fn effect_target_legal_at_resolution(
         | SpellEffectKind::TapTarget { target } => {
             target_filter_legal(state, registry, target, tid, caster)
         }
-        SpellEffectKind::DestroyTarget { target } | SpellEffectKind::PumpTarget { target, .. } => {
+        SpellEffectKind::DestroyTarget { target }
+        | SpellEffectKind::PumpTarget { target, .. }
+        | SpellEffectKind::PutCounters { target, .. } => {
             target_filter_legal(state, registry, target, tid, caster)
         }
         SpellEffectKind::ExileTarget
@@ -4855,9 +4922,10 @@ fn effect_target_legal_at_resolution(
 
 fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
     match kind {
-        // A `Self_`-filtered pump is auto-bound to its source (CR 115) — it takes no chosen
-        // target and prompts nobody; any other filter requires a selected target.
-        SpellEffectKind::PumpTarget { target, .. } => !matches!(target.kind, TargetKind::Self_),
+        // A `Self_`-filtered pump or counter-placement is auto-bound to its source (CR 115) — it
+        // takes no chosen target and prompts nobody; any other filter requires a selected target.
+        SpellEffectKind::PumpTarget { target, .. }
+        | SpellEffectKind::PutCounters { target, .. } => !matches!(target.kind, TargetKind::Self_),
         SpellEffectKind::DamageTarget { .. }
         | SpellEffectKind::DestroyTarget { .. }
         | SpellEffectKind::ExileTarget
@@ -4910,8 +4978,9 @@ fn validate_effect_targets(
                 return Err(EngineError::Illegal("illegal target for damage effect"));
             }
         }
-        SpellEffectKind::PumpTarget { target: filter, .. } => {
-            // `Self_` pumps are auto-bound and take no chosen target.
+        SpellEffectKind::PumpTarget { target: filter, .. }
+        | SpellEffectKind::PutCounters { target: filter, .. } => {
+            // `Self_` pumps / counter placements are auto-bound and take no chosen target.
             if matches!(filter.kind, TargetKind::Self_) {
                 if !targets.is_empty() {
                     return Err(EngineError::Illegal("this effect takes no targets"));
@@ -5034,6 +5103,7 @@ fn spell_target_legality_error(
         | SpellEffectKind::DamageTarget { target: filter, .. }
         | SpellEffectKind::TapTarget { target: filter }
         | SpellEffectKind::PumpTarget { target: filter, .. }
+        | SpellEffectKind::PutCounters { target: filter, .. }
             if !target_filter_legal(state, registry, filter, tid, caster) =>
         {
             return Err(EngineError::Illegal(
