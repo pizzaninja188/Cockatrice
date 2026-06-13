@@ -242,6 +242,9 @@ private:
         QVector<quint32> selectedTargetOids;
         bool waitingForTarget = false;
         bool valid = false;
+        // CR 107.3: value chosen for {X} when the cost has an {X} pip; 0 otherwise. Chosen up
+        // front (before targets/mana, CR 601.2b) and sent on the CastSpell command.
+        int xValue = 0;
     };
 
     struct LandTapUndoEntry

@@ -194,7 +194,7 @@ include!(concat!(env!("OUT_DIR"), "/embedded_cards.rs"));
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::primitives::{SpellEffectKind, TargetFilter, TargetKind};
+    use crate::primitives::{Amount, SpellEffectKind, TargetFilter, TargetKind};
 
     #[test]
     fn embedded_registry_loads() {
@@ -206,12 +206,14 @@ mod tests {
         let reg = CardRegistry::from_embedded().unwrap();
         assert_eq!(
             reg.get("angels_mercy").unwrap().spell_effect,
-            vec![SpellEffectKind::GainLife { amount: 7 }]
+            vec![SpellEffectKind::GainLife {
+                amount: Amount::Fixed(7)
+            }]
         );
         assert_eq!(
             reg.get("lightning_bolt").unwrap().spell_effect,
             vec![SpellEffectKind::DamageTarget {
-                amount: 3,
+                amount: Amount::Fixed(3),
                 target: TargetFilter {
                     kind: TargetKind::AnyTarget,
                     not_artifact: false,

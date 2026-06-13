@@ -1,0 +1,11 @@
+(
+  id: "fireball",
+  name: "Fireball",
+  mana_cost: "{X}{R}",
+  types: ["Sorcery"],
+  // Real Fireball divides X among any number of targets (CR 601.2d) and costs {1} more per
+  // extra target. Divided-X and the per-target cost bump are out of scope for the X-spell phase;
+  // shipped as single-target X damage so the {X} machinery has its canonical card.
+  spell_effect: [DamageTarget(amount: "X", target: (kind: AnyTarget))],
+  partial: "single target only; no damage division or per-target cost increase",
+)

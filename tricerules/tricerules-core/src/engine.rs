@@ -610,7 +610,7 @@ impl GameEngine {
             }
             Some(Cmd::PrimitiveYieldStructured(_)) => self.primitive_yield_structured(player),
             Some(Cmd::CastSpell(cs)) => {
-                self.cast_spell(player, cs.hand_card_index as usize, &cs.targets)
+                self.cast_spell(player, cs.hand_card_index as usize, &cs.targets, cs.x_value)
             }
             Some(Cmd::ActivateAbility(aa)) => self.activate_ability(
                 player,
@@ -2290,6 +2290,8 @@ impl GameEngine {
         for effect in effects {
             match effect {
                 SpellEffectKind::DamageTarget { amount, .. } => {
+                    // CR 107.3: `amount` may be the cast-time X (Fireball) or a literal (Bolt).
+                    let amount = amount.resolve(top.chosen_x);
                     if let Some(&tid) = targets.first() {
                         if let Some(pi) = self.state.player_idx(tid as i32) {
                             let pid = self.state.players[pi].id;
@@ -2318,6 +2320,8 @@ impl GameEngine {
                     }
                 }
                 SpellEffectKind::Draw { count } => {
+                    // Blue Sun's Zenith / Braingeyser: `count` may be the cast-time X.
+                    let count = count.resolve(top.chosen_x);
                     let idx = self.state.player_idx(controller).unwrap();
                     for _ in 0..count {
                         draw_card(&mut self.state.players[idx], &mut self.state.objects)?;
@@ -2464,6 +2468,7 @@ impl GameEngine {
                     }
                 }
                 SpellEffectKind::GainLife { amount } => {
+                    let amount = amount.resolve(top.chosen_x);
                     let pi = self.state.player_idx(controller).unwrap();
                     self.state.players[pi].life += amount as i32;
                     events.push(rv1::RuledEvent {
@@ -2847,6 +2852,7 @@ impl GameEngine {
         player: PlayerId,
         hand_idx: usize,
         targets: &[rv1::TargetRef],
+        x_value: u32,
     ) -> Result<RuledEventBatch, EngineError> {
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("not your priority"));
@@ -2898,7 +2904,14 @@ impl GameEngine {
             ));
         }
         validate_spell_targets(&self.state, self.registry, player, &card_id, targets)?;
-        pay_mana(&mut self.state, idx, &def.mana_cost)?;
+        // CR 107.3: a chosen X is required iff the cost has an {X} pip; reject a stray x_value on a
+        // non-X spell (strictness) and a missing one on an X spell. X=0 is a legal choice.
+        let has_x = def.mana_cost.has_x();
+        if x_value != 0 && !has_x {
+            return Err(EngineError::Illegal("x_value given but cost has no {X}"));
+        }
+        let chosen_x = if has_x { x_value } else { 0 };
+        pay_mana(&mut self.state, idx, &def.mana_cost, chosen_x)?;
 
         self.state.players[idx].hand.retain(|&x| x != oid);
         let trefs: Vec<ObjectId> = targets.iter().map(|t| t.object_id).collect();
@@ -2913,6 +2926,7 @@ impl GameEngine {
             source_permanent_id: None,
             ability_index: None,
             is_triggered: false,
+            chosen_x,
         });
         if let Some(o) = self.state.objects.get_mut(&oid) {
             o.zone = Zone::Stack;
@@ -2926,9 +2940,14 @@ impl GameEngine {
         // Clone card_id before the mutable batch; def was already dropped at pay_mana_simple.
         let cast_card_id = card_id.clone();
         let mut batch = RuledEventBatch::default();
+        let x_line = if has_x {
+            format!(" (X={chosen_x})")
+        } else {
+            String::new()
+        };
         batch.events.push(ev_log(format!(
-            "P{} casts {}{}",
-            player, def.name, tgt_line
+            "P{} casts {}{}{}",
+            player, def.name, x_line, tgt_line
         )));
         batch.events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
@@ -3026,12 +3045,13 @@ impl GameEngine {
                 o.tapped = true;
             }
             AbilityCost::Mana(cost) => {
-                pay_mana(&mut self.state, idx, cost)?;
+                // X in activated-ability costs is deferred; abilities always pass X=0.
+                pay_mana(&mut self.state, idx, cost, 0)?;
             }
             AbilityCost::TapAndMana(cost) => {
                 // Check mana sufficiency BEFORE tapping so a failed payment leaves the
                 // permanent untapped (costs are paid atomically in MTG CR 601.2h).
-                pay_mana(&mut self.state, idx, cost)?;
+                pay_mana(&mut self.state, idx, cost, 0)?;
                 let o = self
                     .state
                     .objects
@@ -3091,6 +3111,8 @@ impl GameEngine {
             source_permanent_id: Some(permanent_id),
             ability_index: Some(ability_index),
             is_triggered: false,
+            // Abilities don't have an {X} cast value (X in activated-ability costs is deferred).
+            chosen_x: 0,
         });
         self.state.passes_since_stack_change = 0;
         self.state.priority_idx = idx;
@@ -3174,6 +3196,7 @@ impl GameEngine {
             source_permanent_id: Some(source_id),
             ability_index: Some(ability_index),
             is_triggered: true,
+            chosen_x: 0,
         });
         self.state.passes_since_stack_change = 0;
 
@@ -4088,6 +4111,7 @@ impl GameEngine {
                 source_permanent_id: Some(source_id),
                 ability_index: Some(ability_index),
                 is_triggered: true,
+                chosen_x: 0,
             });
             self.state.passes_since_stack_change = 0;
             events.push(rv1::RuledEvent {
@@ -4610,7 +4634,14 @@ fn sacrifice_permanent(state: &mut GameState, oid: ObjectId) -> Result<(), Engin
     move_object_to_zone(state, oid, Zone::Graveyard)
 }
 
-fn pay_mana(state: &mut GameState, player_idx: usize, cost: &ManaCost) -> Result<(), EngineError> {
+/// Pay `cost` from `player_idx`'s mana pool. `x_value` is the chosen value for any `{X}` pip
+/// (CR 107.3); each `{X}` is paid as that many generic mana. Pass `0` for costs without `{X}`.
+fn pay_mana(
+    state: &mut GameState,
+    player_idx: usize,
+    cost: &ManaCost,
+    x_value: u32,
+) -> Result<(), EngineError> {
     // Mana must already be in the player's pool (added via AddManaToPool / land taps).
     // The engine never auto-taps lands — the client is responsible for sending AddManaToPool
     // before casting a spell or activating an ability.
@@ -4635,8 +4666,9 @@ fn pay_mana(state: &mut GameState, player_idx: usize, cost: &ManaCost) -> Result
             ManaSymbol::G => need_g += 1,
             ManaSymbol::C => need_colorless += 1,
             ManaSymbol::Generic(n) => need_generic += n,
-            // CR 107.3: X is chosen as the spell is cast; the engine has no X-choice path yet.
-            ManaSymbol::X => return Err(EngineError::Illegal("X costs not yet supported")),
+            // CR 107.3b: each {X} pip is paid as `x_value` generic mana. One X is shared across
+            // all {X} pips in a cost (CR 107.3c) — the caller passes the single chosen value.
+            ManaSymbol::X => need_generic += x_value,
         }
     }
     let pool = &mut state.players[player_idx].mana_pool;
@@ -5185,7 +5217,7 @@ mod mana_payment_tests {
         let cost = ManaCost {
             pips: vec![ManaSymbol::Generic(15)],
         };
-        assert!(pay_mana(&mut e.state, 0, &cost).is_ok());
+        assert!(pay_mana(&mut e.state, 0, &cost, 0).is_ok());
         assert_eq!(e.state.players[0].mana_pool.colorless, 0);
     }
 
@@ -5197,7 +5229,7 @@ mod mana_payment_tests {
             pips: vec![ManaSymbol::Generic(15)],
         };
         assert!(matches!(
-            pay_mana(&mut e.state, 0, &cost),
+            pay_mana(&mut e.state, 0, &cost, 0),
             Err(EngineError::Illegal(_))
         ));
     }
@@ -5211,24 +5243,50 @@ mod mana_payment_tests {
             pips: vec![ManaSymbol::C],
         };
         assert!(matches!(
-            pay_mana(&mut e.state, 0, &cost),
+            pay_mana(&mut e.state, 0, &cost, 0),
             Err(EngineError::Illegal(_))
         ));
         e.state.players[0].mana_pool.colorless = 1;
-        assert!(pay_mana(&mut e.state, 0, &cost).is_ok());
+        assert!(pay_mana(&mut e.state, 0, &cost, 0).is_ok());
     }
 
     #[test]
-    fn x_cost_payment_rejected_cleanly() {
-        // X is representable but not castable yet: payment errors instead of mis-paying.
+    fn x_cost_pays_chosen_value_as_generic() {
+        // CR 107.3b: {X}{R} with X=4 needs 4 generic + 1 red.
         let mut e = engine_with_priority();
-        e.state.players[0].mana_pool.colorless = 99;
+        e.state.players[0].mana_pool.colorless = 4;
+        e.state.players[0].mana_pool.red = 1;
+        let cost = ManaCost {
+            pips: vec![ManaSymbol::X, ManaSymbol::R],
+        };
+        assert!(pay_mana(&mut e.state, 0, &cost, 4).is_ok());
+        assert_eq!(e.state.players[0].mana_pool.colorless, 0);
+        assert_eq!(e.state.players[0].mana_pool.red, 0);
+    }
+
+    #[test]
+    fn x_zero_pays_only_fixed_pips() {
+        // CR 107.3: X=0 is a legal choice; only the {R} must be paid.
+        let mut e = engine_with_priority();
+        e.state.players[0].mana_pool.red = 1;
+        let cost = ManaCost {
+            pips: vec![ManaSymbol::X, ManaSymbol::R],
+        };
+        assert!(pay_mana(&mut e.state, 0, &cost, 0).is_ok());
+    }
+
+    #[test]
+    fn insufficient_mana_for_chosen_x_rejected() {
+        // Choosing X larger than the pool can cover fails cleanly (no partial payment).
+        let mut e = engine_with_priority();
+        e.state.players[0].mana_pool.colorless = 3;
+        e.state.players[0].mana_pool.red = 1;
         let cost = ManaCost {
             pips: vec![ManaSymbol::X, ManaSymbol::R],
         };
         assert!(matches!(
-            pay_mana(&mut e.state, 0, &cost),
-            Err(EngineError::Illegal("X costs not yet supported"))
+            pay_mana(&mut e.state, 0, &cost, 4),
+            Err(EngineError::Illegal(_))
         ));
     }
 }

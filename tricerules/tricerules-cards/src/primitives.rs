@@ -7,6 +7,81 @@
 
 use crate::mana::ManaCost;
 use serde::{Deserialize, Serialize};
+use std::fmt;
+
+/// An effect amount that is either a fixed literal or the spell's cast-time X (CR 107.3).
+///
+/// In RON a bare integer (`amount: 3`) is [`Amount::Fixed`]; the string `amount: "X"` is the
+/// chosen X, resolved from the resolving stack item's `chosen_x`. Custom (de)serialize keeps the
+/// existing integer corpus untouched and roundtrips X as the string `"X"` (RON renders a bare
+/// `X` identifier as an ambiguous unit value, so the quoted form is used). Applied to the
+/// amount-bearing effects that can legally scale with X — the "name two cards" pair is Fireball
+/// (`DamageTarget { amount: "X" }`) and Blue Sun's Zenith (`Draw { count: "X" }`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Amount {
+    /// A literal count baked into the card data.
+    Fixed(u32),
+    /// The spell's cast-time X value (CR 107.3); resolved at resolution from `chosen_x`.
+    X,
+}
+
+impl Amount {
+    /// Resolve to a concrete count given the spell's chosen X (0 for non-X spells).
+    pub fn resolve(self, x: u32) -> u32 {
+        match self {
+            Amount::Fixed(n) => n,
+            Amount::X => x,
+        }
+    }
+
+    /// True if this amount depends on the cast-time X.
+    pub fn is_x(self) -> bool {
+        matches!(self, Amount::X)
+    }
+}
+
+impl From<u32> for Amount {
+    fn from(n: u32) -> Self {
+        Amount::Fixed(n)
+    }
+}
+
+impl Serialize for Amount {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Amount::Fixed(n) => s.serialize_u32(*n),
+            Amount::X => s.serialize_str("X"),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Amount {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct AmountVisitor;
+        impl serde::de::Visitor<'_> for AmountVisitor {
+            type Value = Amount;
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("a non-negative integer or the string \"X\"")
+            }
+            fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<Amount, E> {
+                Ok(Amount::Fixed(v as u32))
+            }
+            fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<Amount, E> {
+                u32::try_from(v)
+                    .map(Amount::Fixed)
+                    .map_err(|_| E::custom("amount must be non-negative"))
+            }
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Amount, E> {
+                if v == "X" {
+                    Ok(Amount::X)
+                } else {
+                    Err(E::custom(format!("unknown amount {v:?}, expected \"X\"")))
+                }
+            }
+        }
+        d.deserialize_any(AmountVisitor)
+    }
+}
 
 /// The five MTG colors. Used for characteristic-based blocking checks (Intimidate, Protection)
 /// and derived from a card's mana cost at query time — not stored as a separate RON field.
@@ -156,11 +231,11 @@ impl TargetFilter {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpellEffectKind {
     DamageTarget {
-        amount: u32,
+        amount: Amount,
         target: TargetFilter,
     },
     Draw {
-        count: u32,
+        count: Amount,
     },
     /// Destroy target matching `target` filter (default: any creature on the battlefield).
     /// Characteristic restrictions (e.g. `tapped: true` for Royal Assassin) live in the filter.
@@ -183,7 +258,7 @@ pub enum SpellEffectKind {
     },
     CounterTargetSpell,
     GainLife {
-        amount: u32,
+        amount: Amount,
     },
     TargetPlayerGainsLife {
         amount: u32,
@@ -540,7 +615,7 @@ mod tests {
             TargetKind::OpponentPlayer,
         ] {
             assert!(SpellEffectKind::DamageTarget {
-                amount: 3,
+                amount: Amount::Fixed(3),
                 target: TargetFilter {
                     kind,
                     not_artifact: false,

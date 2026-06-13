@@ -37,6 +37,7 @@
 #include <libcockatrice/utility/trice_limits.h>
 #include <libcockatrice/utility/zone_names.h>
 
+#include <QInputDialog>
 #include <QMenu>
 
 // milliseconds in between triggers of the move top cards until action
@@ -354,6 +355,7 @@ bool PlayerActions::completePendingRuledSpellCast()
     ruled::v1::RuledCommand ruledCommand;
     auto *cast = ruledCommand.mutable_cast_spell();
     cast->set_hand_card_index(pendingRuledSpellCast.handIndex);
+    cast->set_x_value(static_cast<quint32>(pendingRuledSpellCast.xValue));
     for (const quint32 targetOid : pendingRuledSpellCast.selectedTargetOids) {
         auto *target = cast->add_targets();
         target->set_object_id(targetOid);
@@ -934,6 +936,29 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
     pendingRuledSpellCast.cardName = card->getName();
     pendingRuledSpellCast.remainingCost = parseSimpleManaCost(card->getCardInfo().getManaCost());
     pendingRuledSpellCast.selectedTargetOids.clear();
+    pendingRuledSpellCast.xValue = 0;
+
+    // CR 107.3 / 601.2b: if the cost has an {X} pip, the value of X is chosen first — before
+    // targets and before paying costs. parseSimpleManaCost folds each {X} into the generic
+    // bucket as a single pip, so once X is chosen we top that bucket up to xPips * X generic.
+    const QString rawCost = card->getCardInfo().getManaCost();
+    const int xPips = rawCost.count(QStringLiteral("{X}"));
+    if (xPips > 0) {
+        bool ok = false;
+        const int chosenX = QInputDialog::getInt(
+            nullptr, tr("Choose X"), tr("Value of X for %1:").arg(card->getName()), 0, 0, 99, 1, &ok);
+        if (!ok) {
+            clearPendingRuledSpellCast();
+            return true; // user cancelled the cast at the X prompt
+        }
+        pendingRuledSpellCast.xValue = chosenX;
+        // Each {X} pip already contributed 1 to the generic bucket; convert that to chosenX.
+        pendingRuledSpellCast.remainingCost[QChar('X')] += xPips * (chosenX - 1);
+        if (pendingRuledSpellCast.remainingCost.value(QChar('X'), 0) <= 0) {
+            pendingRuledSpellCast.remainingCost.remove(QChar('X'));
+        }
+    }
+
     pendingRuledSpellCast.waitingForTarget = geh->isRuledSpellCastNeedsTargetForHandIndex(ruledHandIndex);
     emit landTapUndoAvailableChanged(false);
     emit ruledSpellCastPendingChanged(true);

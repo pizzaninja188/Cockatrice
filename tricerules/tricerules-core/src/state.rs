@@ -197,6 +197,10 @@ pub struct StackItem {
     pub ability_index: Option<usize>,
     /// `true` = this is a triggered ability; `false` = activated ability or spell.
     pub is_triggered: bool,
+    /// CR 107.3b: the value chosen for `{X}` as this spell was cast. `0` for spells without an
+    /// `{X}` pip (and for abilities). On the stack the spell's mana value is `fixed_mv + chosen_x`;
+    /// at resolution this feeds [`Amount::X`](tricerules_cards::Amount) effect amounts.
+    pub chosen_x: u32,
 }
 
 /// Pre-game: choose first player, then London-style mulligans (redraw to 7, then put N on bottom).

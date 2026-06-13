@@ -37,6 +37,7 @@ fn cast_spell(hand_card_index: u32, targets: Vec<TargetRef>) -> RuledCommand {
         cmd: Some(Cmd::CastSpell(CastSpell {
             hand_card_index,
             targets,
+            x_value: 0,
         })),
     }
 }

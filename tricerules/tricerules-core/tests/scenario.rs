@@ -66,10 +66,15 @@ fn play_land(hand_card_index: usize) -> RuledCommand {
 }
 
 fn cast_spell(hand_card_index: usize, targets: Vec<TargetRef>) -> RuledCommand {
+    cast_spell_x(hand_card_index, targets, 0)
+}
+
+fn cast_spell_x(hand_card_index: usize, targets: Vec<TargetRef>, x_value: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::CastSpell(CastSpell {
             hand_card_index: hand_card_index as u32,
             targets,
+            x_value,
         })),
     }
 }
@@ -392,6 +397,128 @@ fn cast_lightning_bolt_resolves_to_graveyard_after_double_pass() {
                         == tricerules_proto::ruled::v1::StackResolveDestination::Graveyard as i32
         )
     }));
+}
+
+/// CR 107.3: Blaze ({X}{R}, "deals X damage to any target") is the canonical single-target
+/// X spell. With X=3 it pays 3 generic + {R} and deals 3 to the chosen target.
+#[test]
+fn blaze_deals_chosen_x_damage_to_target() {
+    let decks = Some(vec![
+        vec![
+            "mountain".into(),
+            "blaze".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec!["forest".into(); 7],
+    ]);
+    let mut e = GameEngine::new(13, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let mountain_idx = hand_index_for_card(&e, 0, "mountain");
+    e.apply_command(0, &play_land(mountain_idx))
+        .expect("play mountain");
+    // {X}{R} with X=3 needs 4 mana; the {R} is paid red, the 3 generic from the rest.
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 4,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana");
+
+    let blaze_idx = hand_index_for_card(&e, 0, "blaze");
+    e.apply_command(0, &cast_spell_x(blaze_idx, target_player(1), 3))
+        .expect("cast blaze with X=3");
+    let blaze_oid = e.state.stack.last().expect("spell on stack").id;
+    assert_eq!(e.state.stack.last().unwrap().chosen_x, 3);
+    assert_eq!(e.state.players[0].mana_pool.red, 0, "X mana fully paid");
+
+    e.apply_command(0, &pass()).expect("caster pass");
+    e.apply_command(1, &pass()).expect("opponent pass");
+    assert!(e.state.stack.is_empty());
+    assert!(e.state.players[0].graveyard.contains(&blaze_oid));
+    assert_eq!(e.state.players[1].life, 17, "X=3 dealt 3 damage");
+}
+
+/// X=0 is a legal choice (CR 107.3); Blaze then deals 0 and the opponent's life is unchanged.
+#[test]
+fn blaze_x_zero_deals_no_damage() {
+    let decks = Some(vec![
+        vec![
+            "mountain".into(),
+            "blaze".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec!["forest".into(); 7],
+    ]);
+    let mut e = GameEngine::new(13, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let mountain_idx = hand_index_for_card(&e, 0, "mountain");
+    e.apply_command(0, &play_land(mountain_idx))
+        .expect("play mountain");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana");
+
+    let blaze_idx = hand_index_for_card(&e, 0, "blaze");
+    e.apply_command(0, &cast_spell_x(blaze_idx, target_player(1), 0))
+        .expect("cast blaze with X=0");
+    e.apply_command(0, &pass()).expect("caster pass");
+    e.apply_command(1, &pass()).expect("opponent pass");
+    assert!(e.state.stack.is_empty());
+    assert_eq!(e.state.players[1].life, 20, "X=0 dealt no damage");
+}
+
+/// Passing an x_value on a spell whose cost has no {X} is rejected (CR 107.3 strictness).
+#[test]
+fn x_value_on_non_x_spell_rejected() {
+    let decks = Some(vec![
+        vec![
+            "mountain".into(),
+            "lightning_bolt".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec!["forest".into(); 7],
+    ]);
+    let mut e = GameEngine::new(13, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let mountain_idx = hand_index_for_card(&e, 0, "mountain");
+    e.apply_command(0, &play_land(mountain_idx))
+        .expect("play mountain");
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana");
+
+    let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
+    let err = e.apply_command(0, &cast_spell_x(bolt_idx, target_player(1), 5));
+    assert!(err.is_err(), "x_value on a non-X spell must be rejected");
+    // The bolt stays in hand; nothing was paid or pushed.
+    assert!(e.state.stack.is_empty());
 }
 
 #[test]

@@ -81,6 +81,8 @@ message PrimitiveYieldStructured {}
 message CastSpell {
   uint32 hand_card_index = 1;
   repeated TargetRef targets = 2;
+  // CR 107.3: value chosen for {X} as the spell is cast. 0 when the cost has no {X} pip.
+  uint32 x_value = 3;
 }
 
 message TargetRef {
