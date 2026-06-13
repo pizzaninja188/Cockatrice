@@ -68,6 +68,12 @@ public:
     RuledZoneSyncResult applyRuledEngineZoneView(const ruled::v1::RuledPerPlayerView &v,
                                                  GameEventStorage *tapGes = nullptr,
                                                  bool allowUntapReset = true);
+    // CR 111: mint a physical token Server_Card on this player's table from an engine
+    // TokenCreated identity (tokens have no deck card / Oracle entry) and bind it to `engineOid`
+    // so the following zone-view sync matches the engine battlefield slot to it. The token is
+    // marked destroy-on-zone-change so it disappears client-side when the engine moves it off the
+    // battlefield (CR 111.7). Broadcasts an Event_CreateToken via `ges`.
+    void createRuledToken(quint32 engineOid, const ruled::v1::TokenIdentity &identity, GameEventStorage &ges);
     void shuffleMainDeckForRuledFallback();
 
     Response::ResponseCode drawCards(GameEventStorage &ges, int number);

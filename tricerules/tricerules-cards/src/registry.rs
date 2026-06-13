@@ -1,5 +1,6 @@
 use crate::card_def::CardDefinition;
-use crate::primitives::EffectContext;
+use crate::primitives::{EffectContext, SpellEffectKind};
+use crate::token_def::TokenDefinition;
 use once_cell::sync::Lazy;
 use ron::extensions::Extensions;
 use ron::Options;
@@ -28,6 +29,11 @@ pub struct CardRegistry {
     by_id: HashMap<String, CardDefinition>,
     /// Trimmed, lowercased Oracle name -> card id (see [`Self::id_for_name`]).
     by_name: HashMap<String, String>,
+    /// Token namespace: token id -> the [`CardDefinition`] synthesized from its
+    /// [`TokenDefinition`] (CR 111). Kept apart from `by_id` so tokens are never deck cards
+    /// or counted as implemented Oracle cards, but [`Self::get`] falls back here so the engine's
+    /// characteristic queries work uniformly for token objects.
+    tokens: HashMap<String, CardDefinition>,
 }
 
 /// Name-index key normalization, applied to both stored names and lookup queries.
@@ -37,11 +43,32 @@ fn normalize_name(name: &str) -> String {
 
 impl CardRegistry {
     pub fn from_embedded() -> Result<Self, RegistryError> {
-        Self::from_chunks(EMBEDDED_RON_CHUNKS)
+        Self::from_chunks_and_tokens(EMBEDDED_RON_CHUNKS, EMBEDDED_TOKEN_CHUNKS)
     }
 
+    #[cfg(test)]
     fn from_chunks(chunks: &[&str]) -> Result<Self, RegistryError> {
+        Self::from_chunks_and_tokens(chunks, &[])
+    }
+
+    fn from_chunks_and_tokens(
+        chunks: &[&str],
+        token_chunks: &[&str],
+    ) -> Result<Self, RegistryError> {
         let mut reg = CardRegistry::default();
+        // Tokens first: card effects (CreateTokens) are validated against the token namespace.
+        for chunk in token_chunks {
+            let token: TokenDefinition = RON_OPTS.from_str(chunk)?;
+            let mut def = token.to_card_def();
+            def.derive_type_flags();
+            let id = token.id.clone();
+            if reg.tokens.insert(id.clone(), def).is_some() {
+                return Err(RegistryError::InvalidCard {
+                    id,
+                    reason: "duplicate token id".into(),
+                });
+            }
+        }
         for chunk in chunks {
             let mut card: CardDefinition = RON_OPTS.from_str(chunk)?;
             // Type flags are derived from `types`/`supertypes`, not authored in RON.
@@ -74,6 +101,22 @@ impl CardRegistry {
                         reason,
                     })?;
             }
+            // Every CreateTokens effect must name a loaded token (an uncreatable token id is a bug).
+            let all_effects = card
+                .spell_effect
+                .iter()
+                .chain(card.activated_abilities.iter().map(|a| &a.effect))
+                .chain(card.triggered_abilities.iter().map(|t| &t.effect));
+            for effect in all_effects {
+                if let SpellEffectKind::CreateTokens { token, .. } = effect {
+                    if !reg.tokens.contains_key(token) {
+                        return Err(RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason: format!("CreateTokens references unknown token '{token}'"),
+                        });
+                    }
+                }
+            }
             let id = card.id.clone();
             if reg
                 .by_name
@@ -95,8 +138,15 @@ impl CardRegistry {
         Ok(reg)
     }
 
+    /// Look up a definition by id. Falls back to the token namespace so the engine queries a
+    /// token object's characteristics (types, P/T, keywords, colors) the same way as a card.
     pub fn get(&self, id: &str) -> Option<&CardDefinition> {
-        self.by_id.get(id)
+        self.by_id.get(id).or_else(|| self.tokens.get(id))
+    }
+
+    /// True if `id` names a token (created by an effect), not a deck card.
+    pub fn is_token(&self, id: &str) -> bool {
+        self.tokens.contains_key(id)
     }
 
     /// Resolves an Oracle card name (trimmed, case-insensitive) to a card id.
@@ -122,7 +172,11 @@ impl CardRegistry {
     pub fn content_hash() -> String {
         let mut hash: u64 = 0xcbf2_9ce4_8422_2325; // FNV-1a offset basis
         const PRIME: u64 = 0x0000_0100_0000_01b3;
-        for chunk in EMBEDDED_RON_CHUNKS {
+        // Tokens are part of the rules data, so fold them into the hash after cards.
+        for chunk in EMBEDDED_RON_CHUNKS
+            .iter()
+            .chain(EMBEDDED_TOKEN_CHUNKS.iter())
+        {
             for &b in chunk.as_bytes() {
                 hash ^= b as u64;
                 hash = hash.wrapping_mul(PRIME);
@@ -311,6 +365,45 @@ mod tests {
             }
             other => panic!("expected InvalidCard, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn tokens_load_into_separate_namespace_with_explicit_colors() {
+        use crate::primitives::Color;
+        let reg = CardRegistry::from_embedded().unwrap();
+        // A token resolves through get() but is flagged as a token and is not a deck card.
+        let soldier = reg.get("soldier").expect("soldier token");
+        assert!(reg.is_token("soldier"));
+        assert!(!reg.is_token("lightning_bolt"));
+        assert!(soldier.is_creature);
+        assert_eq!((soldier.power, soldier.toughness), (Some(1), Some(1)));
+        // CR 111.4: color comes from the creating effect, not a (nonexistent) mana cost.
+        assert_eq!(soldier.colors(), vec![Color::White]);
+        // Tokens never appear in the name index or the implemented-card iterator.
+        assert_eq!(reg.id_for_name("Soldier"), None);
+        assert!(reg.definitions().all(|d| !reg.is_token(&d.id)));
+    }
+
+    #[test]
+    fn token_ids_follow_slug_convention() {
+        // Tokens follow the same id == slugify(name) convention as cards.
+        let reg = CardRegistry::from_embedded().unwrap();
+        for (id, def) in &reg.tokens {
+            assert_eq!(*id, crate::slug::slugify(&def.name), "token '{}'", def.name);
+        }
+    }
+
+    #[test]
+    fn create_tokens_referencing_unknown_token_rejected() {
+        let bad = r#"(
+            id: "bad_maker",
+            name: "Bad Maker",
+            mana_cost: "{W}",
+            types: ["Sorcery"],
+            spell_effect: [CreateTokens(token: "no_such_token", count: 1)],
+        )"#;
+        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        assert!(matches!(err, RegistryError::InvalidCard { ref id, .. } if id == "bad_maker"));
     }
 
     #[test]

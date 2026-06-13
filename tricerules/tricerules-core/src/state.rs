@@ -79,6 +79,12 @@ impl GameObject {
             .unwrap_or(false)
     }
 
+    /// True if this object is a token (CR 111): created by an effect, not backed by a deck card.
+    /// Tokens cease to exist as a state-based action once they leave the battlefield (CR 111.7).
+    pub fn is_token(&self, registry: &tricerules_cards::CardRegistry) -> bool {
+        registry.is_token(&self.card_id)
+    }
+
     /// Returns true if this permanent's card definition includes the given keyword ability.
     pub fn has_keyword(
         &self,

@@ -12,8 +12,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use thiserror::Error;
 use tricerules_cards::mana::{ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
-    AbilityCost, CastTriggerPlayer, ContinuousEffectKind, EffectDuration, Keyword, SpellEffectKind,
-    SpellTypeFilter, TargetFilter, TargetKind, TriggerCondition,
+    AbilityCost, CastTriggerPlayer, Color, ContinuousEffectKind, EffectDuration, Keyword,
+    SpellEffectKind, SpellTypeFilter, TargetFilter, TargetKind, TokenController, TriggerCondition,
 };
 use tricerules_cards::CardRegistry;
 use tricerules_proto::ruled::v1 as rv1;
@@ -2691,11 +2691,114 @@ impl GameEngine {
                         )));
                     }
                 }
+                SpellEffectKind::CreateTokens {
+                    token,
+                    count,
+                    controller: who,
+                } => {
+                    self.create_tokens(&token, count, who, controller, &spell_label, events);
+                }
                 SpellEffectKind::None => {}
             }
         }
         events.push(ev_log(format!("{spell_label} resolves.")));
         Ok(())
+    }
+
+    /// CR 111: mint `count` tokens of `token_id` for each recipient and put them onto the
+    /// battlefield. Each minted token is a fresh [`GameObject`] whose characteristics come from
+    /// the token's [`CardDefinition`] (via the registry's token namespace), so combat, P/T, and
+    /// keyword queries treat it exactly like any other permanent. Entering tokens fire ETB
+    /// triggers (CR 603.6) through the same hook as a resolved creature spell, so Soul Warden et al.
+    /// see them. A [`TokenCreated`](rv1::TokenCreated) event carries the self-describing identity
+    /// the relay needs (tokens have no deck card / Oracle entry).
+    fn create_tokens(
+        &mut self,
+        token_id: &str,
+        count: u32,
+        who: TokenController,
+        spell_controller: PlayerId,
+        spell_label: &str,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) {
+        let registry = self.registry;
+        let Some(def) = registry.get(token_id) else {
+            // Registry load validates every CreateTokens reference, so this is unreachable;
+            // fail safe by doing nothing rather than panicking (server-authoritative).
+            events.push(ev_log(format!(
+                "{spell_label} could not create unknown token '{token_id}'."
+            )));
+            return;
+        };
+        let name = def.name.clone();
+        let is_creature = def.is_creature;
+        let power = def.power;
+        let toughness = def.toughness;
+        let types = def.types.clone();
+        let color = color_string(&def.colors());
+        let pt = if is_creature {
+            format!("{}/{}", power.unwrap_or(0), toughness.unwrap_or(0))
+        } else {
+            String::new()
+        };
+
+        let recipients: Vec<PlayerId> = match who {
+            TokenController::Controller => vec![spell_controller],
+            // CR 111.3: each token's owner/controller is the player it is created under.
+            TokenController::EachPlayer => self
+                .state
+                .players
+                .iter()
+                .filter(|p| !p.has_lost)
+                .map(|p| p.id)
+                .collect(),
+        };
+
+        for pid in recipients {
+            let Some(pidx) = self.state.player_idx(pid) else {
+                continue;
+            };
+            for _ in 0..count {
+                let oid = self.state.next_object_id;
+                self.state.next_object_id += 1;
+                self.state.objects.insert(
+                    oid,
+                    GameObject {
+                        id: oid,
+                        owner: pid,
+                        card_id: token_id.to_string(),
+                        zone: Zone::Battlefield,
+                        tapped: false,
+                        summoning_sick: is_creature,
+                        power,
+                        toughness,
+                        damage: 0,
+                        deathtouch_damage: false,
+                    },
+                );
+                self.state.players[pidx].battlefield.push(oid);
+                events.push(rv1::RuledEvent {
+                    ev: Some(rv1::ruled_event::Ev::TokenCreated(rv1::TokenCreated {
+                        object_id: oid,
+                        controller_player_id: pid,
+                        card_id: token_id.to_string(),
+                        identity: Some(rv1::TokenIdentity {
+                            name: name.clone(),
+                            pt: pt.clone(),
+                            color: color.clone(),
+                            types: types.clone(),
+                            is_creature,
+                        }),
+                    })),
+                });
+                // CR 603.6: a token entering the battlefield triggers ETB watchers.
+                self.fire_triggers(GameEvent::EntersBattlefield { object_id: oid }, events);
+            }
+            let noun = if count == 1 { "token" } else { "tokens" };
+            events.push(ev_log(format!(
+                "P{pid} creates {count} {name} {noun} ({spell_label})."
+            )));
+        }
     }
 
     fn cast_spell(
@@ -3201,6 +3304,30 @@ impl GameEngine {
                         },
                         out,
                     );
+                }
+            }
+        }
+
+        // CR 111.7/111.8: a token that has left the battlefield ceases to exist as a state-based
+        // action. The token already moved to its destination zone above (so any dies/leaves
+        // triggers saw it there and a PermanentMoved was emitted for the relay), so here we just
+        // delete the object entirely — it must not linger in a graveyard/hand/exile, nor return.
+        let vanished: Vec<ObjectId> = self
+            .state
+            .objects
+            .iter()
+            .filter(|(_, o)| o.zone != Zone::Battlefield && o.is_token(self.registry))
+            .map(|(id, _)| *id)
+            .collect();
+        for id in vanished {
+            if let Some(o) = self.state.objects.remove(&id) {
+                if let Some(pidx) = self.state.player_idx(o.owner) {
+                    let p = &mut self.state.players[pidx];
+                    p.hand.retain(|&x| x != id);
+                    p.battlefield.retain(|&x| x != id);
+                    p.graveyard.retain(|&x| x != id);
+                    p.exile.retain(|&x| x != id);
+                    p.library.retain(|&x| x != id);
                 }
             }
         }
@@ -3918,6 +4045,23 @@ impl GameEngine {
             events.push(ev_log(format!("Triggered: {card_name} — {ability_text}")));
         }
     }
+}
+
+/// Render a color set as Cockatrice's lowercase WUBRG color string (e.g. `[White, Blue]` → "wu",
+/// colorless → ""). Used to populate the token identity the relay feeds to Event_CreateToken.
+fn color_string(colors: &[Color]) -> String {
+    // Canonical WUBRG order regardless of input order.
+    [
+        (Color::White, 'w'),
+        (Color::Blue, 'u'),
+        (Color::Black, 'b'),
+        (Color::Red, 'r'),
+        (Color::Green, 'g'),
+    ]
+    .iter()
+    .filter(|(c, _)| colors.contains(c))
+    .map(|(_, ch)| ch)
+    .collect()
 }
 
 fn object_display_name(state: &GameState, registry: &CardRegistry, oid: ObjectId) -> String {
@@ -4835,6 +4979,7 @@ fn validate_effect_targets(
         | SpellEffectKind::CounterTargetSpell
         | SpellEffectKind::DestroyAll { .. }
         | SpellEffectKind::DamageAll { .. }
+        | SpellEffectKind::CreateTokens { .. }
         | SpellEffectKind::None => {
             if !targets.is_empty() {
                 return Err(EngineError::Illegal("this effect takes no targets"));

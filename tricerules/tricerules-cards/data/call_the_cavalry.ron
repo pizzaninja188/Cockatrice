@@ -1,0 +1,8 @@
+// Create two 2/2 white Knight creature tokens with vigilance.
+(
+  id: "call_the_cavalry",
+  name: "Call the Cavalry",
+  mana_cost: "{3}{W}",
+  types: ["Sorcery"],
+  spell_effect: [CreateTokens(token: "knight", count: 2)],
+)

@@ -206,7 +206,29 @@ pub enum SpellEffectKind {
         #[serde(default = "TargetFilter::default_creature")]
         kind: TargetFilter,
     },
+    /// CR 111: create `count` token permanents of the registry-defined [`token`](crate::token_def)
+    /// under the chosen controller. Untargeted — the characteristics come from the
+    /// [`TokenDefinition`](crate::token_def::TokenDefinition); only `count` and `controller` vary
+    /// per maker. Covers Raise the Alarm / Dragon Fodder (`Controller`, count 2) and symmetrical
+    /// makers (`EachPlayer`). Token *copies* of existing permanents (CR 707) are a separate effect.
+    CreateTokens {
+        /// Token id (slug of the token's name) in the registry's token namespace.
+        token: String,
+        count: u32,
+        #[serde(default)]
+        controller: TokenController,
+    },
     None,
+}
+
+/// Who receives the tokens made by [`SpellEffectKind::CreateTokens`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum TokenController {
+    /// The spell/ability's controller (the common case: Raise the Alarm, Krenko).
+    #[default]
+    Controller,
+    /// Each player still in the game gets `count` tokens (symmetrical makers).
+    EachPlayer,
 }
 
 impl SpellEffectKind {

@@ -1,0 +1,10 @@
+// 2/2 white Knight creature token with vigilance (Call the Cavalry, etc.).
+(
+    id: "knight",
+    name: "Knight",
+    types: ["Creature", "Knight"],
+    colors: [White],
+    power: 2,
+    toughness: 2,
+    keywords: [Vigilance],
+)

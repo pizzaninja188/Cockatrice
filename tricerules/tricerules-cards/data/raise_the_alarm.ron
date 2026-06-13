@@ -1,0 +1,8 @@
+// Create two 1/1 white Soldier creature tokens.
+(
+  id: "raise_the_alarm",
+  name: "Raise the Alarm",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  spell_effect: [CreateTokens(token: "soldier", count: 2)],
+)

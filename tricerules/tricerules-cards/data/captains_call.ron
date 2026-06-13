@@ -1,0 +1,8 @@
+// Create three 1/1 white Soldier creature tokens.
+(
+  id: "captains_call",
+  name: "Captain's Call",
+  mana_cost: "{3}{W}",
+  types: ["Sorcery"],
+  spell_effect: [CreateTokens(token: "soldier", count: 3)],
+)

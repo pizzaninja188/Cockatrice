@@ -4,7 +4,7 @@ use crate::primitives::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CardDefinition {
     pub id: String,
     pub name: String,
@@ -60,6 +60,12 @@ pub struct CardDefinition {
     /// `Some("what's missing")` = partially implemented; `None` = fully implemented.
     #[serde(default)]
     pub partial: Option<String>,
+    /// Explicit colors, set only when this definition is synthesized from a
+    /// [`TokenDefinition`](crate::token_def::TokenDefinition) (CR 111.4: a token's color comes
+    /// from the creating effect, not a mana cost). `None` for normal cards, whose colors are
+    /// derived from `mana_cost` — see [`Self::colors`]. Never authored in card RON.
+    #[serde(skip)]
+    pub colors_override: Option<Vec<Color>>,
 }
 
 impl CardDefinition {
@@ -97,9 +103,13 @@ impl CardDefinition {
         }
     }
 
-    /// Derive the card's colors from its mana cost (CR 202.2a).
+    /// Derive the card's colors from its mana cost (CR 202.2a), or use the explicit
+    /// [`colors_override`](Self::colors_override) for token definitions (CR 111.4).
     /// A card is colorless if its mana cost contains no color symbols (e.g. lands, `{0}`, generic-only).
     pub fn colors(&self) -> Vec<Color> {
+        if let Some(colors) = &self.colors_override {
+            return colors.clone();
+        }
         self.mana_cost.colors()
     }
 }

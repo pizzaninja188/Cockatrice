@@ -207,7 +207,31 @@ message RuledEvent {
     // SessionStart response batch. Server-only (enumerates deck contents): Servatrice
     // strips it from client broadcasts alongside zone_view private fields.
     CardCatalog card_catalog = 21;
+    // A token came into existence on the battlefield (CR 111). The relay creates a physical
+    // token card from the inline identity (tokens have no deck card / CardCatalog entry).
+    TokenCreated token_created = 22;
   }
+}
+
+// A token entered the battlefield (CR 111). Unlike a resolved permanent spell, a token has no
+// physical card in any deck/hand/stack and no Oracle cards.xml entry, so it is self-describing:
+// the relay builds a token Server_Card from `identity` and binds it to `object_id`.
+message TokenCreated {
+  uint32 object_id = 1;
+  int32 controller_player_id = 2;
+  // Engine token id (e.g. "soldier"); intentionally absent from the deck CardCatalog.
+  string card_id = 3;
+  TokenIdentity identity = 4;
+}
+
+// Self-describing token characteristics for the relay and client (tokens are absent from the
+// Oracle card database and the session CardCatalog). Public once the token is on the battlefield.
+message TokenIdentity {
+  string name = 1;            // e.g. "Soldier"
+  string pt = 2;              // "1/1" for creatures; empty for noncreature tokens
+  string color = 3;           // Cockatrice color string, lowercase wubrg; empty = colorless
+  repeated string types = 4;  // e.g. ["Creature", "Soldier"]
+  bool is_creature = 5;
 }
 
 // The single source of card identity for a ruled session: Servatrice sends Oracle names

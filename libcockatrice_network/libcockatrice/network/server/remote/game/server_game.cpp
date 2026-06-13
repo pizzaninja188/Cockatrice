@@ -1342,6 +1342,31 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
                                static_cast<Server_Player *>(ab)->getEngineOidToServerCardId());
     }
 
+    // Tokens (CR 111) appear on the engine battlefield with no physical card behind them. Mint
+    // one on the controller's table for each TokenCreated event before the zone-view sync below,
+    // so that sync can bind the engine battlefield slot to a real Server_Card by ObjectId. Runs
+    // before PermanentMoved: a token created this batch cannot also have died this batch.
+    GameEventStorage tokenCreateGes;
+    bool tokenCreateGesHasEvents = false;
+    for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
+        const auto &e = resp.batch().events(ei);
+        if (!e.has_token_created()) {
+            continue;
+        }
+        const auto &tc = e.token_created();
+        if (!tc.has_identity()) {
+            continue;
+        }
+        if (Server_AbstractPlayer *controller = getPlayer(tc.controller_player_id())) {
+            static_cast<Server_Player *>(controller)->createRuledToken(
+                static_cast<quint32>(tc.object_id()), tc.identity(), tokenCreateGes);
+            tokenCreateGesHasEvents = true;
+        }
+    }
+    if (tokenCreateGesHasEvents) {
+        tokenCreateGes.sendToGame(this);
+    }
+
     // Apply every PermanentMoved before zone_view. Hand discards are already absent from the
     // engine hand list in the sync that follows, so the server must move the physical card
     // first or applyRuledEngineZoneView's deck+hand pool counts disagree with the engine.

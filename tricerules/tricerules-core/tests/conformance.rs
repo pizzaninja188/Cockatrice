@@ -8,9 +8,10 @@
 //! The contract is deliberately weak so it scales automatically with the corpus: an action that
 //! the engine judges `Illegal` is fine (a card may need a board this harness doesn't set up), but
 //! the engine must never **panic** and must always leave a *sane* zone layout — every object in
-//! exactly one place, no objects conjured or lost (no token primitive exists yet). This is the
-//! safety net that makes Phase 6's bulk vanilla/french-vanilla import trustworthy without a
-//! hand-written scenario per generated card.
+//! exactly one place, and no *non-token* objects conjured or lost. Tokens (CR 111) legitimately
+//! appear when a maker resolves and may cease to exist, so they are counted separately from the
+//! fixed deck-card population. This is the safety net that makes Phase 6's bulk
+//! vanilla/french-vanilla import trustworthy without a hand-written scenario per generated card.
 
 use tricerules_cards::CardRegistry;
 use tricerules_core::{GameEngine, TurnStep, Zone};
@@ -136,12 +137,21 @@ fn try_drain_stack(e: &mut GameEngine) {
     }
 }
 
-/// Sanity invariant: every object lives in exactly one place, and none were conjured or lost.
+/// Sanity invariant: every object lives in exactly one place, and the fixed deck-card population
+/// is unchanged. `expected_objects` is the non-token baseline; tokens (CR 111) created by a
+/// resolving maker are counted on top of it, since they legitimately appear and vanish.
 fn assert_zone_integrity(e: &GameEngine, expected_objects: usize, ctx: &str) {
+    let registry = CardRegistry::global();
+    let token_count = e
+        .state
+        .objects
+        .values()
+        .filter(|o| registry.is_token(&o.card_id))
+        .count();
     assert_eq!(
         e.state.objects.len(),
-        expected_objects,
-        "{ctx}: object count changed (no token/copy primitive exists yet)"
+        expected_objects + token_count,
+        "{ctx}: non-token object count changed (deck cards conjured or lost)"
     );
     let mut seen: std::collections::HashSet<u32> = std::collections::HashSet::new();
     let mut count_in_zones = 0usize;
@@ -168,9 +178,10 @@ fn assert_zone_integrity(e: &GameEngine, expected_objects: usize, ctx: &str) {
             count_in_zones += 1; // a spell on the stack is a real object
         }
     }
-    // Every real object is accounted for in some zone or as a spell on the stack.
+    // Every real object (deck cards + live tokens) is in some zone or is a spell on the stack.
     assert_eq!(
-        count_in_zones, expected_objects,
+        count_in_zones,
+        expected_objects + token_count,
         "{ctx}: some objects are not in any zone"
     );
 }

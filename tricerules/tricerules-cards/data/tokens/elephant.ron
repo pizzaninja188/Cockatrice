@@ -1,0 +1,9 @@
+// 3/3 green Elephant creature token (Bestial Menace, Pelakka Wurm? no; Loxodon Partisan, etc.).
+(
+    id: "elephant",
+    name: "Elephant",
+    types: ["Creature", "Elephant"],
+    colors: [Green],
+    power: 3,
+    toughness: 3,
+)

@@ -1,0 +1,8 @@
+// Create two 1/1 white Spirit creature tokens with flying.
+(
+  id: "midnight_haunting",
+  name: "Midnight Haunting",
+  mana_cost: "{2}{W}",
+  types: ["Instant"],
+  spell_effect: [CreateTokens(token: "spirit", count: 2)],
+)

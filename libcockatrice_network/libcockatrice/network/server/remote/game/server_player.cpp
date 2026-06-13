@@ -521,6 +521,44 @@ Server_Card *Server_Player::findCardByEngineOid(quint32 engineOid) const
     return nullptr;
 }
 
+void Server_Player::createRuledToken(quint32 engineOid,
+                                     const ruled::v1::TokenIdentity &identity,
+                                     GameEventStorage &ges)
+{
+    Server_CardZone *table = zones.value(ZoneNames::TABLE);
+    if (!table) {
+        return;
+    }
+    const QString name = QString::fromStdString(identity.name());
+    // Creatures sit in the top row, other token permanents in the middle (mirrors the
+    // creature/noncreature row split applyRuledEngineZoneView applies to deck-card permanents).
+    int y = identity.is_creature() ? 0 : 1;
+    int x = 0;
+    if (table->hasCoords()) {
+        x = table->getFreeGridColumn(-1, y, name, true);
+    }
+    if (x < 0) {
+        x = 0;
+    }
+
+    auto *card = new Server_Card({name, QString()}, newCardId(), x, y);
+    card->moveToThread(thread());
+    card->setColor(QString::fromStdString(identity.color()));
+    card->setPT(QString::fromStdString(identity.pt()));
+    card->setAnnotation(QStringLiteral("Token"));
+    // CR 111.7: when the engine later moves the token off the battlefield it ceases to exist;
+    // destroy-on-zone-change makes the client drop the card the moment that move arrives.
+    card->setDestroyOnZoneChange(true);
+    table->insertCard(card, x, y);
+    sendCreateTokenEvents(table, card, x, y, ges);
+
+    // Pre-register the engine ObjectId <-> Server_Card binding so the zone-view sync that follows
+    // in the same batch matches this engine battlefield slot to the freshly minted card (rather
+    // than failing to find a physical card and aborting the reconcile).
+    engineOidToServerCardId.insert(engineOid, card->getId());
+    serverCardIdToEngineOid.insert(card->getId(), engineOid);
+}
+
 void Server_Player::shuffleMainDeckForRuledFallback()
 {
     if (Server_CardZone *deckZone = zones.value(ZoneNames::DECK)) {

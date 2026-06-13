@@ -278,6 +278,41 @@ TEST_F(RuledBatchTest, ApplyRuledBatchMovesPermanentToGraveyard)
     }
 }
 
+TEST_F(RuledBatchTest, ApplyRuledBatchCreatesTokenOnControllerTable)
+{
+    // A TokenCreated event has no physical card behind it (CR 111): the relay must mint one on
+    // the controller's table and bind it to the engine ObjectId so later syncs can find it.
+    Server_CardZone *p1Table = p1->getZones().value(ZoneNames::TABLE);
+    ASSERT_NE(p1Table, nullptr);
+    EXPECT_EQ(p1Table->getCards().size(), 0);
+
+    ruled::v1::IpcResponse resp;
+    resp.set_ok(true);
+    auto *batch = resp.mutable_batch();
+    auto *tc = batch->add_events()->mutable_token_created();
+    tc->set_object_id(501u);
+    tc->set_controller_player_id(1);
+    tc->set_card_id("soldier");
+    auto *id = tc->mutable_identity();
+    id->set_name("Soldier");
+    id->set_pt("1/1");
+    id->set_color("w");
+    id->set_is_creature(true);
+
+    callBatchApply(resp);
+
+    ASSERT_EQ(p1Table->getCards().size(), 1);
+    Server_Card *token = p1Table->getCards().first();
+    EXPECT_EQ(token->getName(), QStringLiteral("Soldier"));
+    EXPECT_EQ(token->getPT(), QStringLiteral("1/1"));
+    EXPECT_EQ(token->getColor(), QStringLiteral("w"));
+    EXPECT_TRUE(token->getDestroyOnZoneChange());
+    // The engine ObjectId is bound to the minted card for subsequent zone-view / combat sync.
+    EXPECT_EQ(p1->findCardByEngineOid(501u), token);
+    // The opponent received no token (controller-only effect).
+    EXPECT_EQ(p2->getZones().value(ZoneNames::TABLE)->getCards().size(), 0);
+}
+
 TEST_F(RuledBatchTest, ApplyRuledBatchUpdatesLifeCounter)
 {
     Server_Counter *p2Life = p2->getCounters().value(0, nullptr);
