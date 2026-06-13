@@ -10,7 +10,7 @@ use rand::seq::SliceRandom;
 use rand::SeedableRng;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use thiserror::Error;
-use tricerules_cards::mana::{ManaCost, ManaSymbol};
+use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
     AbilityCost, CastTriggerPlayer, Color, ContinuousEffectKind, CounterKind, EffectDuration,
     Keyword, SpellEffectKind, SpellTypeFilter, TargetFilter, TargetKind, TokenController,
@@ -609,14 +609,19 @@ impl GameEngine {
                 }
             }
             Some(Cmd::PrimitiveYieldStructured(_)) => self.primitive_yield_structured(player),
-            Some(Cmd::CastSpell(cs)) => {
-                self.cast_spell(player, cs.hand_card_index as usize, &cs.targets, cs.x_value)
-            }
+            Some(Cmd::CastSpell(cs)) => self.cast_spell(
+                player,
+                cs.hand_card_index as usize,
+                &cs.targets,
+                cs.x_value,
+                &cs.flex_payments,
+            ),
             Some(Cmd::ActivateAbility(aa)) => self.activate_ability(
                 player,
                 aa.permanent_id,
                 aa.ability_index as usize,
                 &aa.targets,
+                &aa.flex_payments,
             ),
             Some(Cmd::ChooseTriggerTarget(ctt)) => {
                 self.choose_trigger_target(player, ctt.target_object_id)
@@ -2853,6 +2858,7 @@ impl GameEngine {
         hand_idx: usize,
         targets: &[rv1::TargetRef],
         x_value: u32,
+        flex_payments: &[rv1::FlexPipPayment],
     ) -> Result<RuledEventBatch, EngineError> {
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("not your priority"));
@@ -2911,7 +2917,13 @@ impl GameEngine {
             return Err(EngineError::Illegal("x_value given but cost has no {X}"));
         }
         let chosen_x = if has_x { x_value } else { 0 };
-        pay_mana(&mut self.state, idx, &def.mana_cost, chosen_x)?;
+        pay_mana(
+            &mut self.state,
+            idx,
+            &def.mana_cost,
+            chosen_x,
+            flex_payments,
+        )?;
 
         self.state.players[idx].hand.retain(|&x| x != oid);
         let trefs: Vec<ObjectId> = targets.iter().map(|t| t.object_id).collect();
@@ -2976,6 +2988,7 @@ impl GameEngine {
         permanent_id: u32,
         ability_index: usize,
         targets: &[rv1::TargetRef],
+        flex_payments: &[rv1::FlexPipPayment],
     ) -> Result<RuledEventBatch, EngineError> {
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("not your priority"));
@@ -3046,12 +3059,12 @@ impl GameEngine {
             }
             AbilityCost::Mana(cost) => {
                 // X in activated-ability costs is deferred; abilities always pass X=0.
-                pay_mana(&mut self.state, idx, cost, 0)?;
+                pay_mana(&mut self.state, idx, cost, 0, flex_payments)?;
             }
             AbilityCost::TapAndMana(cost) => {
                 // Check mana sufficiency BEFORE tapping so a failed payment leaves the
                 // permanent untapped (costs are paid atomically in MTG CR 601.2h).
-                pay_mana(&mut self.state, idx, cost, 0)?;
+                pay_mana(&mut self.state, idx, cost, 0, flex_payments)?;
                 let o = self
                     .state
                     .objects
@@ -4636,11 +4649,91 @@ fn sacrifice_permanent(state: &mut GameState, oid: ObjectId) -> Result<(), Engin
 
 /// Pay `cost` from `player_idx`'s mana pool. `x_value` is the chosen value for any `{X}` pip
 /// (CR 107.3); each `{X}` is paid as that many generic mana. Pass `0` for costs without `{X}`.
+/// Pool counts indexed `[W, U, B, R, G, C]`. `C` is the colorless slot.
+type PoolVec = [u32; 6];
+const POOL_C: usize = 5;
+
+/// Index into a [`PoolVec`] for a colored pip.
+fn color_index(c: ColorPip) -> usize {
+    match c {
+        ColorPip::W => 0,
+        ColorPip::U => 1,
+        ColorPip::B => 2,
+        ColorPip::R => 3,
+        ColorPip::G => 4,
+    }
+}
+
+/// A flexible pip resolved against the pool after fixed colored/colorless demands are met.
+enum FlexPip {
+    /// Pay one mana of either color (hybrid `{G/U}`).
+    Hybrid(ColorPip, ColorPip),
+    /// Pay one mana of the color, or `n` generic (mono-hybrid `{2/W}`).
+    Mono(u32, ColorPip),
+    /// Pay one mana of the color (Phyrexian `{B/P}` paid with mana, not life).
+    Color(ColorPip),
+}
+
+/// Backtracking solve: can `flex` plus `generic` generic mana be paid from `pool`? Returns the
+/// leftover pool on success. Bounded by 2^(flexible pips), which is tiny in practice (a cost has
+/// only a handful of pips); the search exists to avoid greedy dead-ends like `{G/U}{G}` paid from
+/// one G and one U (CR 107.4 — hybrid payment is a genuine choice, not a fixed drain).
+fn solve_flex(pool: PoolVec, flex: &[FlexPip], idx: usize, generic: u32) -> Option<PoolVec> {
+    if idx == flex.len() {
+        // Pay generic from whatever remains, colorless first (preserves prior drain order).
+        let mut p = pool;
+        let mut g = generic;
+        for &i in &[POOL_C, 0, 1, 2, 3, 4] {
+            let t = g.min(p[i]);
+            p[i] -= t;
+            g -= t;
+        }
+        return (g == 0).then_some(p);
+    }
+    match &flex[idx] {
+        FlexPip::Hybrid(a, b) => {
+            for &c in &[*a, *b] {
+                let i = color_index(c);
+                if pool[i] > 0 {
+                    let mut p = pool;
+                    p[i] -= 1;
+                    if let Some(r) = solve_flex(p, flex, idx + 1, generic) {
+                        return Some(r);
+                    }
+                }
+            }
+            None
+        }
+        FlexPip::Color(c) => {
+            let i = color_index(*c);
+            if pool[i] == 0 {
+                return None;
+            }
+            let mut p = pool;
+            p[i] -= 1;
+            solve_flex(p, flex, idx + 1, generic)
+        }
+        FlexPip::Mono(n, c) => {
+            // Prefer paying with the color (cheaper in mana count); fall back to `n` generic.
+            let i = color_index(*c);
+            if pool[i] > 0 {
+                let mut p = pool;
+                p[i] -= 1;
+                if let Some(r) = solve_flex(p, flex, idx + 1, generic) {
+                    return Some(r);
+                }
+            }
+            solve_flex(pool, flex, idx + 1, generic + n)
+        }
+    }
+}
+
 fn pay_mana(
     state: &mut GameState,
     player_idx: usize,
     cost: &ManaCost,
     x_value: u32,
+    flex_payments: &[rv1::FlexPipPayment],
 ) -> Result<(), EngineError> {
     // Mana must already be in the player's pool (added via AddManaToPool / land taps).
     // The engine never auto-taps lands — the client is responsible for sending AddManaToPool
@@ -4650,73 +4743,83 @@ fn pay_mana(
             "only priority player can pay mana for spells",
         ));
     }
-    let mut need_w = 0u32;
-    let mut need_u = 0u32;
-    let mut need_b = 0u32;
-    let mut need_r = 0u32;
-    let mut need_g = 0u32;
-    let mut need_colorless = 0u32; // {C}: must be paid with colorless mana specifically
-    let mut need_generic = 0u32; // {N}: payable by any mana
-    for pip in &cost.pips {
+    // Pip indices the player chose to pay with life (CR 107.4f). Only meaningful on Phyrexian pips.
+    let life_pips: HashSet<usize> = flex_payments
+        .iter()
+        .filter(|fp| fp.pay_life)
+        .map(|fp| fp.pip_index as usize)
+        .collect();
+
+    let mut need_color: PoolVec = [0; 6]; // fixed W U B R G demand + colorless in slot 5
+    let mut need_generic = 0u32; // {N}/{X}: payable by any mana
+    let mut life_cost = 0u32; // Phyrexian pips paid with life
+    let mut flex: Vec<FlexPip> = Vec::new();
+    for (i, pip) in cost.pips.iter().enumerate() {
         match pip {
-            ManaSymbol::W => need_w += 1,
-            ManaSymbol::U => need_u += 1,
-            ManaSymbol::B => need_b += 1,
-            ManaSymbol::R => need_r += 1,
-            ManaSymbol::G => need_g += 1,
-            ManaSymbol::C => need_colorless += 1,
+            ManaSymbol::W => need_color[color_index(ColorPip::W)] += 1,
+            ManaSymbol::U => need_color[color_index(ColorPip::U)] += 1,
+            ManaSymbol::B => need_color[color_index(ColorPip::B)] += 1,
+            ManaSymbol::R => need_color[color_index(ColorPip::R)] += 1,
+            ManaSymbol::G => need_color[color_index(ColorPip::G)] += 1,
+            ManaSymbol::C => need_color[POOL_C] += 1,
             ManaSymbol::Generic(n) => need_generic += n,
             // CR 107.3b: each {X} pip is paid as `x_value` generic mana. One X is shared across
             // all {X} pips in a cost (CR 107.3c) — the caller passes the single chosen value.
             ManaSymbol::X => need_generic += x_value,
+            ManaSymbol::Hybrid(a, b) => flex.push(FlexPip::Hybrid(*a, *b)),
+            ManaSymbol::MonoHybrid(n, c) => flex.push(FlexPip::Mono(*n, *c)),
+            ManaSymbol::Phyrexian(c) => {
+                if life_pips.contains(&i) {
+                    life_cost += 2;
+                } else {
+                    flex.push(FlexPip::Color(*c));
+                }
+            }
         }
     }
-    let pool = &mut state.players[player_idx].mana_pool;
-    let take = |need: &mut u32, avail: &mut u32| {
-        let t = (*need).min(*avail);
-        *avail -= t;
-        *need -= t;
-    };
-    take(&mut need_w, &mut pool.white);
-    take(&mut need_u, &mut pool.blue);
-    take(&mut need_b, &mut pool.black);
-    take(&mut need_r, &mut pool.red);
-    take(&mut need_g, &mut pool.green);
-    take(&mut need_colorless, &mut pool.colorless);
 
-    // Generic mana can be paid by any mana in the pool (colorless first).
-    let mut generic = need_generic;
-    while generic > 0 {
-        if pool.colorless > 0 {
-            pool.colorless -= 1;
-            generic -= 1;
-        } else if pool.white > 0 {
-            pool.white -= 1;
-            generic -= 1;
-        } else if pool.blue > 0 {
-            pool.blue -= 1;
-            generic -= 1;
-        } else if pool.black > 0 {
-            pool.black -= 1;
-            generic -= 1;
-        } else if pool.red > 0 {
-            pool.red -= 1;
-            generic -= 1;
-        } else if pool.green > 0 {
-            pool.green -= 1;
-            generic -= 1;
-        } else {
-            break;
-        }
+    // CR 119.4: a player can pay life only if they have at least that much. Checked before any
+    // mana is drained so a failed payment leaves life untouched (costs are paid atomically,
+    // CR 601.2h). The actual deduction happens only after the mana solve succeeds.
+    if life_cost > 0 && state.players[player_idx].life < life_cost as i32 {
+        return Err(EngineError::Illegal(
+            "not enough life to pay Phyrexian cost",
+        ));
     }
-    need_generic = generic;
 
-    let need = need_generic + need_colorless + need_w + need_u + need_b + need_r + need_g;
-    if need > 0 {
+    let pool = &state.players[player_idx].mana_pool;
+    let mut working: PoolVec = [
+        pool.white,
+        pool.blue,
+        pool.black,
+        pool.red,
+        pool.green,
+        pool.colorless,
+    ];
+    // Fixed colored and colorless demands must be met exactly from matching mana.
+    for i in 0..6 {
+        if working[i] < need_color[i] {
+            return Err(EngineError::Illegal(
+                "not enough mana in pool; tap your lands first",
+            ));
+        }
+        working[i] -= need_color[i];
+    }
+    let Some(remaining) = solve_flex(working, &flex, 0, need_generic) else {
         return Err(EngineError::Illegal(
             "not enough mana in pool; tap your lands first",
         ));
-    }
+    };
+
+    // Commit: write the solved pool back, then deduct any Phyrexian life.
+    let pool = &mut state.players[player_idx].mana_pool;
+    pool.white = remaining[0];
+    pool.blue = remaining[1];
+    pool.black = remaining[2];
+    pool.red = remaining[3];
+    pool.green = remaining[4];
+    pool.colorless = remaining[POOL_C];
+    state.players[player_idx].life -= life_cost as i32;
     Ok(())
 }
 
@@ -5217,7 +5320,7 @@ mod mana_payment_tests {
         let cost = ManaCost {
             pips: vec![ManaSymbol::Generic(15)],
         };
-        assert!(pay_mana(&mut e.state, 0, &cost, 0).is_ok());
+        assert!(pay_mana(&mut e.state, 0, &cost, 0, &[]).is_ok());
         assert_eq!(e.state.players[0].mana_pool.colorless, 0);
     }
 
@@ -5229,7 +5332,7 @@ mod mana_payment_tests {
             pips: vec![ManaSymbol::Generic(15)],
         };
         assert!(matches!(
-            pay_mana(&mut e.state, 0, &cost, 0),
+            pay_mana(&mut e.state, 0, &cost, 0, &[]),
             Err(EngineError::Illegal(_))
         ));
     }
@@ -5243,11 +5346,11 @@ mod mana_payment_tests {
             pips: vec![ManaSymbol::C],
         };
         assert!(matches!(
-            pay_mana(&mut e.state, 0, &cost, 0),
+            pay_mana(&mut e.state, 0, &cost, 0, &[]),
             Err(EngineError::Illegal(_))
         ));
         e.state.players[0].mana_pool.colorless = 1;
-        assert!(pay_mana(&mut e.state, 0, &cost, 0).is_ok());
+        assert!(pay_mana(&mut e.state, 0, &cost, 0, &[]).is_ok());
     }
 
     #[test]
@@ -5259,7 +5362,7 @@ mod mana_payment_tests {
         let cost = ManaCost {
             pips: vec![ManaSymbol::X, ManaSymbol::R],
         };
-        assert!(pay_mana(&mut e.state, 0, &cost, 4).is_ok());
+        assert!(pay_mana(&mut e.state, 0, &cost, 4, &[]).is_ok());
         assert_eq!(e.state.players[0].mana_pool.colorless, 0);
         assert_eq!(e.state.players[0].mana_pool.red, 0);
     }
@@ -5272,7 +5375,7 @@ mod mana_payment_tests {
         let cost = ManaCost {
             pips: vec![ManaSymbol::X, ManaSymbol::R],
         };
-        assert!(pay_mana(&mut e.state, 0, &cost, 0).is_ok());
+        assert!(pay_mana(&mut e.state, 0, &cost, 0, &[]).is_ok());
     }
 
     #[test]
@@ -5285,8 +5388,122 @@ mod mana_payment_tests {
             pips: vec![ManaSymbol::X, ManaSymbol::R],
         };
         assert!(matches!(
-            pay_mana(&mut e.state, 0, &cost, 4),
+            pay_mana(&mut e.state, 0, &cost, 4, &[]),
             Err(EngineError::Illegal(_))
         ));
+    }
+
+    #[test]
+    fn hybrid_pip_paid_by_either_color() {
+        // {G/U} payable by green alone or by blue alone (CR 107.4d).
+        let cost = ManaCost {
+            pips: vec![ManaSymbol::Hybrid(ColorPip::G, ColorPip::U)],
+        };
+        let mut e = engine_with_priority();
+        e.state.players[0].mana_pool.green = 1;
+        assert!(pay_mana(&mut e.state, 0, &cost, 0, &[]).is_ok());
+        assert_eq!(e.state.players[0].mana_pool.green, 0);
+
+        let mut e = engine_with_priority();
+        e.state.players[0].mana_pool.blue = 1;
+        assert!(pay_mana(&mut e.state, 0, &cost, 0, &[]).is_ok());
+        assert_eq!(e.state.players[0].mana_pool.blue, 0);
+    }
+
+    #[test]
+    fn hybrid_solve_avoids_greedy_dead_end() {
+        // {G/U}{G} with one G + one U: the {G/U} must take U so the {G} can take G (CR 107.4).
+        let cost = ManaCost {
+            pips: vec![ManaSymbol::Hybrid(ColorPip::G, ColorPip::U), ManaSymbol::G],
+        };
+        let mut e = engine_with_priority();
+        e.state.players[0].mana_pool.green = 1;
+        e.state.players[0].mana_pool.blue = 1;
+        assert!(pay_mana(&mut e.state, 0, &cost, 0, &[]).is_ok());
+        assert_eq!(e.state.players[0].mana_pool.green, 0);
+        assert_eq!(e.state.players[0].mana_pool.blue, 0);
+    }
+
+    #[test]
+    fn mono_hybrid_paid_by_generic_when_color_absent() {
+        // {2/W} payable by two generic when no white is available (CR 107.4e).
+        let cost = ManaCost {
+            pips: vec![ManaSymbol::MonoHybrid(2, ColorPip::W)],
+        };
+        let mut e = engine_with_priority();
+        e.state.players[0].mana_pool.red = 2;
+        assert!(pay_mana(&mut e.state, 0, &cost, 0, &[]).is_ok());
+        assert_eq!(e.state.players[0].mana_pool.red, 0);
+
+        // ...or by one white (the cheaper alternative is preferred, leaving generic mana spare).
+        let mut e = engine_with_priority();
+        e.state.players[0].mana_pool.white = 1;
+        e.state.players[0].mana_pool.red = 2;
+        assert!(pay_mana(&mut e.state, 0, &cost, 0, &[]).is_ok());
+        assert_eq!(e.state.players[0].mana_pool.white, 0);
+        assert_eq!(e.state.players[0].mana_pool.red, 2);
+    }
+
+    #[test]
+    fn mono_hybrid_rejected_with_one_generic() {
+        // One spare mana can't cover the {2/...} generic alternative.
+        let cost = ManaCost {
+            pips: vec![ManaSymbol::MonoHybrid(2, ColorPip::W)],
+        };
+        let mut e = engine_with_priority();
+        e.state.players[0].mana_pool.red = 1;
+        assert!(matches!(
+            pay_mana(&mut e.state, 0, &cost, 0, &[]),
+            Err(EngineError::Illegal(_))
+        ));
+    }
+
+    #[test]
+    fn phyrexian_paid_by_mana() {
+        // {B/P} with no life flag must be paid by black mana (CR 107.4f).
+        let cost = ManaCost {
+            pips: vec![ManaSymbol::Phyrexian(ColorPip::B)],
+        };
+        let mut e = engine_with_priority();
+        e.state.players[0].mana_pool.black = 1;
+        let life = e.state.players[0].life;
+        assert!(pay_mana(&mut e.state, 0, &cost, 0, &[]).is_ok());
+        assert_eq!(e.state.players[0].mana_pool.black, 0);
+        assert_eq!(e.state.players[0].life, life); // no life paid
+    }
+
+    #[test]
+    fn phyrexian_paid_by_life() {
+        // {B/P} with pay_life on pip 0 deducts 2 life and touches no mana (CR 107.4f).
+        let cost = ManaCost {
+            pips: vec![ManaSymbol::Phyrexian(ColorPip::B)],
+        };
+        let mut e = engine_with_priority();
+        let life = e.state.players[0].life;
+        let flex = [rv1::FlexPipPayment {
+            pip_index: 0,
+            pay_life: true,
+        }];
+        assert!(pay_mana(&mut e.state, 0, &cost, 0, &flex).is_ok());
+        assert_eq!(e.state.players[0].life, life - 2);
+    }
+
+    #[test]
+    fn phyrexian_life_rejected_when_insufficient_life() {
+        // CR 119.4: can't pay 2 life with only 1 (and no mana to fall back on).
+        let cost = ManaCost {
+            pips: vec![ManaSymbol::Phyrexian(ColorPip::B)],
+        };
+        let mut e = engine_with_priority();
+        e.state.players[0].life = 1;
+        let flex = [rv1::FlexPipPayment {
+            pip_index: 0,
+            pay_life: true,
+        }];
+        assert!(matches!(
+            pay_mana(&mut e.state, 0, &cost, 0, &flex),
+            Err(EngineError::Illegal(_))
+        ));
+        assert_eq!(e.state.players[0].life, 1); // unchanged on failure
     }
 }

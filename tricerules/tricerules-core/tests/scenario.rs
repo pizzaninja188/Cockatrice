@@ -4,9 +4,9 @@ use tricerules_proto::ruled::v1::ruled_command::Cmd;
 use tricerules_proto::ruled::v1::ruled_event::Ev;
 use tricerules_proto::ruled::v1::{
     ActivateAbility, AddManaToPool, AssignCombatDamage, BlockPair, CastSpell, ChooseTriggerTarget,
-    DamagePair, DeclareAttackers, DeclareBlockers, DiscardToHandSize, PassPriority, PlayLand,
-    PreviewDeclareAttackers, PreviewDeclareBlockers, PrimitiveYieldStructured, RuledCommand,
-    TargetRef,
+    DamagePair, DeclareAttackers, DeclareBlockers, DiscardToHandSize, FlexPipPayment, PassPriority,
+    PlayLand, PreviewDeclareAttackers, PreviewDeclareBlockers, PrimitiveYieldStructured,
+    RuledCommand, TargetRef,
 };
 
 use tricerules_core::GameEngine;
@@ -75,6 +75,22 @@ fn cast_spell_x(hand_card_index: usize, targets: Vec<TargetRef>, x_value: u32) -
             hand_card_index: hand_card_index as u32,
             targets,
             x_value,
+            ..Default::default()
+        })),
+    }
+}
+
+fn cast_spell_flex(
+    hand_card_index: usize,
+    targets: Vec<TargetRef>,
+    flex_payments: Vec<FlexPipPayment>,
+) -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::CastSpell(CastSpell {
+            hand_card_index: hand_card_index as u32,
+            targets,
+            x_value: 0,
+            flex_payments,
         })),
     }
 }
@@ -95,6 +111,7 @@ fn activate_ability(
             permanent_id,
             ability_index,
             targets,
+            ..Default::default()
         })),
     }
 }
@@ -3037,6 +3054,132 @@ fn giant_growth_pump_expires_after_active_turn_ends() {
         "Giant Growth should expire at end of turn"
     );
     assert_eq!(e.effective_toughness(bear), Some(2));
+}
+
+/// CR 107.4d: a hybrid card ({R/W} Boros Recruit) casts identically whether the pip is paid
+/// with red or with white — both runs resolve the creature onto the battlefield.
+#[test]
+fn hybrid_creature_castable_with_either_color() {
+    for (red, white) in [(1, 0), (0, 1)] {
+        let decks = Some(vec![
+            vec![
+                "boros_recruit".into(),
+                "mountain".into(),
+                "mountain".into(),
+                "mountain".into(),
+                "mountain".into(),
+                "mountain".into(),
+                "mountain".into(),
+            ],
+            vec!["forest".into(); 7],
+        ]);
+        let mut e = GameEngine::new(71, &[0, 1], 20, decks, true).expect("new");
+        advance_to_main1_from_game_start(&mut e);
+
+        // Add exactly one R (first run) or one W (second run) — the {R/W} pip takes whichever.
+        e.apply_command(
+            0,
+            &add_mana_to_pool(AddManaToPool {
+                r: red,
+                w: white,
+                ..Default::default()
+            }),
+        )
+        .expect("add mana");
+
+        let idx = hand_index_for_card(&e, 0, "boros_recruit");
+        e.apply_command(0, &cast_spell(idx, vec![]))
+            .expect("cast Boros Recruit");
+        let oid = e.state.stack.last().expect("on stack").id;
+        pass_both_players(&mut e);
+        assert!(
+            e.state.players[0].battlefield.contains(&oid),
+            "Boros Recruit resolves to battlefield (red={red}, white={white})"
+        );
+    }
+}
+
+/// CR 107.4e: Flame Javelin ({2/R}{2/R}{2/R}) paid entirely with generic mana (6 colorless)
+/// deals 4 damage to a player.
+#[test]
+fn mono_hybrid_flame_javelin_paid_with_generic() {
+    let decks = Some(vec![
+        vec![
+            "flame_javelin".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec!["forest".into(); 7],
+    ]);
+    let mut e = GameEngine::new(72, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Six generic (colorless) mana covers three {2/R} pips at two generic each.
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            c: 6,
+            ..Default::default()
+        }),
+    )
+    .expect("add colorless mana");
+    let idx = hand_index_for_card(&e, 0, "flame_javelin");
+    e.apply_command(0, &cast_spell(idx, target_player(1)))
+        .expect("cast Flame Javelin");
+    pass_both_players(&mut e);
+    assert_eq!(
+        e.state.players[1].life, 16,
+        "Flame Javelin deals 4 to the targeted player"
+    );
+}
+
+/// CR 107.4f: Mutagenic Growth ({G/P}) cast by paying 2 life pumps the target +2/+2 and
+/// reduces the caster's life by 2 without using any mana.
+#[test]
+fn phyrexian_mutagenic_growth_paid_with_life() {
+    let decks = Some(vec![
+        vec![
+            "mutagenic_growth".into(),
+            "grizzly_bears".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+        vec!["forest".into(); 7],
+    ]);
+    let mut e = GameEngine::new(73, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let life_before = e.state.players[0].life;
+    let idx = hand_index_for_card(&e, 0, "mutagenic_growth");
+    // No mana added: pay the {G/P} pip (pip index 0) with 2 life.
+    e.apply_command(
+        0,
+        &cast_spell_flex(
+            idx,
+            vec![TargetRef { object_id: bear }],
+            vec![FlexPipPayment {
+                pip_index: 0,
+                pay_life: true,
+            }],
+        ),
+    )
+    .expect("cast Mutagenic Growth paying life");
+    assert_eq!(
+        e.state.players[0].life,
+        life_before - 2,
+        "paying Phyrexian mana costs 2 life"
+    );
+    pass_both_players(&mut e);
+    assert_eq!(e.effective_power(bear), Some(4), "2/2 + 2/2 = 4/4");
+    assert_eq!(e.effective_toughness(bear), Some(4));
 }
 
 /// Two Giant Growths on the same creature stack: effective P/T = base + both deltas.

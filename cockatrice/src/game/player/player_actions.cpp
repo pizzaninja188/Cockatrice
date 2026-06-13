@@ -39,6 +39,8 @@
 
 #include <QInputDialog>
 #include <QMenu>
+#include <QMessageBox>
+#include <QPushButton>
 
 // milliseconds in between triggers of the move top cards until action
 static constexpr int MOVE_TOP_CARD_UNTIL_INTERVAL = 100;
@@ -180,6 +182,105 @@ QString PlayerActions::formatSimpleManaCost(const QMap<QChar, int> &cost)
         }
     }
     return out;
+}
+
+QVector<PlayerActions::RuledFlexPip> PlayerActions::parseFlexPips(const QString &manaCost)
+{
+    // Walk the Scryfall brace groups in order so each pip's index matches the engine's
+    // ManaCost pip order. Flexible pips (CR 107.4d–f) contain a slash: {G/U} hybrid,
+    // {2/W} mono-hybrid, {C/P} Phyrexian. Everything else just advances the index.
+    QVector<RuledFlexPip> out;
+    const QString validColors = QStringLiteral("WUBRG");
+    quint32 index = 0;
+    bool inBraces = false;
+    QString token;
+    for (QChar c : manaCost) {
+        if (c == '{') {
+            inBraces = true;
+            token.clear();
+            continue;
+        }
+        if (c == '}') {
+            inBraces = false;
+            const int slash = token.indexOf('/');
+            if (slash > 0) {
+                const QString left = token.left(slash).toUpper();
+                const QString right = token.mid(slash + 1).toUpper();
+                RuledFlexPip pip;
+                pip.pipIndex = index;
+                bool numeric = false;
+                const int leftNum = left.toInt(&numeric);
+                if (right == QLatin1String("P") && left.size() == 1 && validColors.contains(left)) {
+                    pip.phyrexian = true;
+                    pip.colorA = left.at(0);
+                    out.append(pip);
+                } else if (numeric && right.size() == 1 && validColors.contains(right)) {
+                    pip.generic = leftNum;
+                    pip.colorA = right.at(0);
+                    out.append(pip);
+                } else if (left.size() == 1 && right.size() == 1 && validColors.contains(left) &&
+                           validColors.contains(right)) {
+                    pip.colorA = left.at(0);
+                    pip.colorB = right.at(0);
+                    out.append(pip);
+                }
+                // Unrecognized slash forms (e.g. {G/U/P}, {S}) are left for the engine to reject.
+            }
+            ++index;
+            token.clear();
+            continue;
+        }
+        if (inBraces) {
+            token.append(c);
+        }
+    }
+    return out;
+}
+
+bool PlayerActions::resolveFlexiblePipsForPendingSpell(const QString &rawCost, const QString &cardName)
+{
+    const QVector<RuledFlexPip> flexPips = parseFlexPips(rawCost);
+    for (const RuledFlexPip &pip : flexPips) {
+        QMessageBox box;
+        box.setIcon(QMessageBox::Question);
+        box.setWindowTitle(tr("Pay hybrid mana"));
+        QPushButton *colorBtn = nullptr;
+        QPushButton *altBtn = nullptr;
+        if (pip.phyrexian) {
+            // CR 107.4f: pay the color OR 2 life.
+            box.setText(tr("Pay {%1/P} for %2:").arg(pip.colorA).arg(cardName));
+            colorBtn = box.addButton(tr("Pay {%1}").arg(pip.colorA), QMessageBox::AcceptRole);
+            altBtn = box.addButton(tr("Pay 2 life"), QMessageBox::AcceptRole);
+        } else if (pip.generic > 0) {
+            // CR 107.4e: mono-hybrid — pay the color OR N generic.
+            box.setText(tr("Pay {%1/%2} for %3:").arg(pip.generic).arg(pip.colorA).arg(cardName));
+            colorBtn = box.addButton(tr("Pay {%1}").arg(pip.colorA), QMessageBox::AcceptRole);
+            altBtn = box.addButton(tr("Pay {%1} generic").arg(pip.generic), QMessageBox::AcceptRole);
+        } else {
+            // CR 107.4d: hybrid — pay either color.
+            box.setText(tr("Pay {%1/%2} for %3:").arg(pip.colorA).arg(pip.colorB).arg(cardName));
+            colorBtn = box.addButton(tr("Pay {%1}").arg(pip.colorA), QMessageBox::AcceptRole);
+            altBtn = box.addButton(tr("Pay {%1}").arg(pip.colorB), QMessageBox::AcceptRole);
+        }
+        QPushButton *cancelBtn = box.addButton(QMessageBox::Cancel);
+        box.exec();
+        QAbstractButton *clicked = box.clickedButton();
+        if (clicked == cancelBtn || clicked == nullptr) {
+            return false;
+        }
+        if (clicked == colorBtn) {
+            pendingRuledSpellCast.remainingCost[pip.colorA.toUpper()] += 1;
+        } else if (clicked == altBtn) {
+            if (pip.phyrexian) {
+                pendingRuledSpellCast.lifePipIndices.append(pip.pipIndex);
+            } else if (pip.generic > 0) {
+                pendingRuledSpellCast.remainingCost[QChar('X')] += pip.generic;
+            } else {
+                pendingRuledSpellCast.remainingCost[pip.colorB.toUpper()] += 1;
+            }
+        }
+    }
+    return true;
 }
 
 QString PlayerActions::pendingRuledSpellPromptText() const
@@ -359,6 +460,12 @@ bool PlayerActions::completePendingRuledSpellCast()
     for (const quint32 targetOid : pendingRuledSpellCast.selectedTargetOids) {
         auto *target = cast->add_targets();
         target->set_object_id(targetOid);
+    }
+    // CR 107.4f: Phyrexian pips the player chose to pay with life.
+    for (const quint32 pipIndex : pendingRuledSpellCast.lifePipIndices) {
+        auto *flex = cast->add_flex_payments();
+        flex->set_pip_index(pipIndex);
+        flex->set_pay_life(true);
     }
     std::string payload;
     if (!ruledCommand.SerializeToString(&payload)) {
@@ -957,6 +1064,14 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
         if (pendingRuledSpellCast.remainingCost.value(QChar('X'), 0) <= 0) {
             pendingRuledSpellCast.remainingCost.remove(QChar('X'));
         }
+    }
+
+    // CR 107.4d–f: resolve each hybrid/mono-hybrid/Phyrexian pip into concrete mana or life
+    // before targeting. The choices fold into remainingCost (and lifePipIndices for Phyrexian
+    // life) so the existing mana-payment flow handles them unchanged.
+    if (!resolveFlexiblePipsForPendingSpell(rawCost, card->getName())) {
+        clearPendingRuledSpellCast();
+        return true; // user cancelled at a hybrid-pip prompt
     }
 
     pendingRuledSpellCast.waitingForTarget = geh->isRuledSpellCastNeedsTargetForHandIndex(ruledHandIndex);

@@ -83,6 +83,17 @@ message CastSpell {
   repeated TargetRef targets = 2;
   // CR 107.3: value chosen for {X} as the spell is cast. 0 when the cost has no {X} pip.
   uint32 x_value = 3;
+  // CR 107.4: per-pip payment choices for flexible mana symbols (hybrid/Phyrexian). Empty
+  // when the cost has none.
+  repeated FlexPipPayment flex_payments = 4;
+}
+
+// A payment decision for one flexible mana pip (CR 107.4d–f). Currently only Phyrexian pips
+// carry one (the pay-2-life vs pay-mana choice); hybrid/mono-hybrid mana is resolved by the
+// engine from the pool. Identified by the pip's position in the spell/ability mana cost.
+message FlexPipPayment {
+  uint32 pip_index = 1; // index into the cost's pip list
+  bool pay_life = 2;    // Phyrexian: pay 2 life instead of the colored mana
 }
 
 message TargetRef {
@@ -281,6 +292,8 @@ message ActivateAbility {
   uint32 permanent_id = 1;     // ObjectId of the source permanent on the battlefield
   uint32 ability_index = 2;    // Index into card's activated_abilities list
   repeated TargetRef targets = 3;
+  // CR 107.4: per-pip payment choices for flexible mana in the ability cost (see CastSpell).
+  repeated FlexPipPayment flex_payments = 4;
 }
 
 message ChooseTriggerTarget {

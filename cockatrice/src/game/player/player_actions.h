@@ -245,6 +245,21 @@ private:
         // CR 107.3: value chosen for {X} when the cost has an {X} pip; 0 otherwise. Chosen up
         // front (before targets/mana, CR 601.2b) and sent on the CastSpell command.
         int xValue = 0;
+        // CR 107.4f: pip indices (into the full mana cost) the player chose to pay with life
+        // for Phyrexian pips. Sent as FlexPipPayment{pay_life} on the CastSpell command. Hybrid
+        // and mono-hybrid choices instead resolve into fixed entries in remainingCost.
+        QVector<quint32> lifePipIndices;
+    };
+
+    // A flexible mana pip (CR 107.4d–f) parsed from a Scryfall brace cost, with its ordinal
+    // position so the engine can match the player's payment choice to the right pip.
+    struct RuledFlexPip
+    {
+        quint32 pipIndex = 0; // position among all pips in the cost ({G/U} in "{1}{G/U}" is index 1)
+        QChar colorA;         // first/only color letter (W/U/B/R/G)
+        QChar colorB;         // hybrid second color; null otherwise
+        int generic = 0;      // mono-hybrid generic alternative N ({2/W} -> 2); 0 if not mono-hybrid
+        bool phyrexian = false; // Phyrexian {C/P}: payable with the color or 2 life
     };
 
     struct LandTapUndoEntry
@@ -258,7 +273,11 @@ private:
     bool tryPlayRuledLand(CardItem *card);
     bool tryStartRuledSpellCast(CardItem *card);
     static QMap<QChar, int> parseSimpleManaCost(const QString &manaCost);
+    static QVector<RuledFlexPip> parseFlexPips(const QString &manaCost);
     static QString formatSimpleManaCost(const QMap<QChar, int> &cost);
+    // Prompt the player to resolve each flexible pip (CR 107.4d–f) into fixed mana / life.
+    // Returns false if the player cancelled. Mutates pendingRuledSpellCast remainingCost + life.
+    bool resolveFlexiblePipsForPendingSpell(const QString &rawCost, const QString &cardName);
     void clearPendingRuledSpellCast();
     bool completePendingRuledSpellCast();
     bool tryReducePendingSpellRemainingCostOnePip(bool colorlessMana, QChar coloredMana);

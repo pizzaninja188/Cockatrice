@@ -1,0 +1,7 @@
+(
+  id: "mutagenic_growth",
+  name: "Mutagenic Growth",
+  mana_cost: "{G/P}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(power: 2, toughness: 2)],
+)

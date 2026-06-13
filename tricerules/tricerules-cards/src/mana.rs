@@ -8,9 +8,54 @@ use crate::primitives::Color;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-/// A single mana symbol in a cost (CR 107.4). Only the symbols the engine can pay are
-/// recognized; hybrid (`{G/U}`), Phyrexian (`{B/P}`) and snow (`{S}`) are expressible in
-/// the brace syntax but rejected at parse time until the engine supports them.
+/// One of the five colored mana symbols (W U B R G). Used inside flexible pips (hybrid,
+/// mono-hybrid, Phyrexian) so a pip can name its color(s) without nesting `ManaSymbol`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ColorPip {
+    W,
+    U,
+    B,
+    R,
+    G,
+}
+
+impl ColorPip {
+    fn parse(token: &str) -> Option<ColorPip> {
+        Some(match token {
+            "W" => ColorPip::W,
+            "U" => ColorPip::U,
+            "B" => ColorPip::B,
+            "R" => ColorPip::R,
+            "G" => ColorPip::G,
+            _ => return None,
+        })
+    }
+
+    /// The game color this pip contributes to a card's color identity (CR 202.2).
+    pub fn color(self) -> Color {
+        match self {
+            ColorPip::W => Color::White,
+            ColorPip::U => Color::Blue,
+            ColorPip::B => Color::Black,
+            ColorPip::R => Color::Red,
+            ColorPip::G => Color::Green,
+        }
+    }
+
+    fn letter(self) -> char {
+        match self {
+            ColorPip::W => 'W',
+            ColorPip::U => 'U',
+            ColorPip::B => 'B',
+            ColorPip::R => 'R',
+            ColorPip::G => 'G',
+        }
+    }
+}
+
+/// A single mana symbol in a cost (CR 107.4). Snow (`{S}`) is expressible in the brace syntax
+/// but rejected at parse time until snow sources exist. Hybrid/mono-hybrid/Phyrexian pips
+/// (CR 107.4d–f) are paid as a constrained choice — see `tricerules-core` `pay_mana`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ManaSymbol {
     W,
@@ -24,6 +69,12 @@ pub enum ManaSymbol {
     Generic(u32),
     /// Variable generic (`{X}`); CR 107.3. Representable but not castable yet.
     X,
+    /// Hybrid (`{G/U}`, CR 107.4d): payable with one mana of either color. The card is both colors.
+    Hybrid(ColorPip, ColorPip),
+    /// Monocolored hybrid / "twobrid" (`{2/W}`, CR 107.4e): pay the generic amount OR one of the color.
+    MonoHybrid(u32, ColorPip),
+    /// Phyrexian (`{B/P}`, CR 107.4f): pay one mana of the color OR 2 life.
+    Phyrexian(ColorPip),
 }
 
 /// An ordered list of mana symbols (CR 107.4). Serializes as the canonical brace string so
@@ -35,6 +86,22 @@ pub struct ManaCost {
 }
 
 fn parse_symbol(token: &str) -> Result<ManaSymbol, String> {
+    // Slash forms (CR 107.4d–f): {G/U} hybrid, {2/W} mono-hybrid, {B/P} Phyrexian. Three-part
+    // forms ({G/U/P}) and snow ({S}) are not split here and fall through to the error below.
+    if let Some((a, b)) = token.split_once('/') {
+        let err = || format!("unsupported mana symbol {{{token}}}");
+        if b == "P" {
+            return Ok(ManaSymbol::Phyrexian(ColorPip::parse(a).ok_or_else(err)?));
+        }
+        let right = ColorPip::parse(b).ok_or_else(err)?;
+        if let Ok(n) = a.parse::<u32>() {
+            return Ok(ManaSymbol::MonoHybrid(n, right));
+        }
+        return Ok(ManaSymbol::Hybrid(
+            ColorPip::parse(a).ok_or_else(err)?,
+            right,
+        ));
+    }
     match token {
         "W" => Ok(ManaSymbol::W),
         "U" => Ok(ManaSymbol::U),
@@ -81,25 +148,37 @@ impl ManaCost {
             .map(|p| match p {
                 ManaSymbol::Generic(n) => *n,
                 ManaSymbol::X => 0,
+                // CR 202.3f: a hybrid pip counts as the largest mana value among its alternatives,
+                // so {2/W} is 2; {G/U} and {B/P} are 1 (life is not mana).
+                ManaSymbol::MonoHybrid(n, _) => *n,
                 _ => 1,
             })
             .sum()
     }
 
-    /// Colors implied by the cost's colored pips (CR 202.2a). Colorless/generic/X contribute none.
+    /// Colors implied by the cost's colored pips (CR 202.2). Colorless/generic/X contribute none.
+    /// A hybrid pip contributes *both* of its colors regardless of how it is paid (CR 202.2b);
+    /// mono-hybrid and Phyrexian pips contribute their single color (CR 202.2c).
     pub fn colors(&self) -> Vec<Color> {
         let mut out = Vec::new();
-        for p in &self.pips {
-            let c = match p {
-                ManaSymbol::W => Color::White,
-                ManaSymbol::U => Color::Blue,
-                ManaSymbol::B => Color::Black,
-                ManaSymbol::R => Color::Red,
-                ManaSymbol::G => Color::Green,
-                _ => continue,
-            };
+        let mut push = |c: Color| {
             if !out.contains(&c) {
                 out.push(c);
+            }
+        };
+        for p in &self.pips {
+            match p {
+                ManaSymbol::W => push(Color::White),
+                ManaSymbol::U => push(Color::Blue),
+                ManaSymbol::B => push(Color::Black),
+                ManaSymbol::R => push(Color::Red),
+                ManaSymbol::G => push(Color::Green),
+                ManaSymbol::Hybrid(a, b) => {
+                    push(a.color());
+                    push(b.color());
+                }
+                ManaSymbol::MonoHybrid(_, c) | ManaSymbol::Phyrexian(c) => push(c.color()),
+                ManaSymbol::C | ManaSymbol::Generic(_) | ManaSymbol::X => {}
             }
         }
         out
@@ -127,6 +206,9 @@ impl fmt::Display for ManaSymbol {
             ManaSymbol::C => f.write_str("{C}"),
             ManaSymbol::Generic(n) => write!(f, "{{{n}}}"),
             ManaSymbol::X => f.write_str("{X}"),
+            ManaSymbol::Hybrid(a, b) => write!(f, "{{{}/{}}}", a.letter(), b.letter()),
+            ManaSymbol::MonoHybrid(n, c) => write!(f, "{{{n}/{}}}", c.letter()),
+            ManaSymbol::Phyrexian(c) => write!(f, "{{{}/P}}", c.letter()),
         }
     }
 }
@@ -204,8 +286,45 @@ mod tests {
 
     #[test]
     fn unsupported_symbol_errors_by_name() {
-        let err = ManaCost::parse("{G/U}").unwrap_err();
+        // Snow and three-part hybrid-Phyrexian are still rejected.
+        let err = ManaCost::parse("{S}").unwrap_err();
         assert!(err.contains("unsupported mana symbol"), "{err}");
+        assert!(ManaCost::parse("{G/U/P}").is_err());
+    }
+
+    #[test]
+    fn parses_hybrid_pips() {
+        assert_eq!(
+            cost("{G/U}").pips,
+            vec![ManaSymbol::Hybrid(ColorPip::G, ColorPip::U)]
+        );
+        assert_eq!(
+            cost("{2/W}").pips,
+            vec![ManaSymbol::MonoHybrid(2, ColorPip::W)]
+        );
+        assert_eq!(cost("{B/P}").pips, vec![ManaSymbol::Phyrexian(ColorPip::B)]);
+    }
+
+    #[test]
+    fn hybrid_mana_values_use_larger_alternative() {
+        assert_eq!(cost("{G/U}").mana_value(), 1);
+        assert_eq!(cost("{2/W}").mana_value(), 2);
+        assert_eq!(cost("{B/P}").mana_value(), 1);
+        assert_eq!(cost("{2/W}{2/W}").mana_value(), 4);
+    }
+
+    #[test]
+    fn hybrid_colors_include_both_halves() {
+        assert_eq!(cost("{G/U}").colors(), vec![Color::Green, Color::Blue]);
+        assert_eq!(cost("{2/W}").colors(), vec![Color::White]);
+        assert_eq!(cost("{B/P}").colors(), vec![Color::Black]);
+    }
+
+    #[test]
+    fn hybrid_display_roundtrips() {
+        for s in ["{G/U}", "{2/W}", "{B/P}", "{1}{G/U}{B/P}"] {
+            assert_eq!(cost(s).to_string(), s);
+        }
     }
 
     #[test]

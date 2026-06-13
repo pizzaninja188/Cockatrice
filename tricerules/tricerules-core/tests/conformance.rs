@@ -38,6 +38,7 @@ fn cast_spell(hand_card_index: u32, targets: Vec<TargetRef>) -> RuledCommand {
             hand_card_index,
             targets,
             x_value: 0,
+            ..Default::default()
         })),
     }
 }
@@ -52,6 +53,7 @@ fn activate_ability(
             permanent_id,
             ability_index,
             targets,
+            ..Default::default()
         })),
     }
 }

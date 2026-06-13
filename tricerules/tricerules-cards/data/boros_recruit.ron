@@ -1,0 +1,9 @@
+(
+  id: "boros_recruit",
+  name: "Boros Recruit",
+  mana_cost: "{R/W}",
+  types: ["Creature", "Goblin", "Soldier"],
+  power: 1,
+  toughness: 1,
+  keywords: [FirstStrike],
+)
