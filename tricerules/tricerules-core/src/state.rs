@@ -183,6 +183,35 @@ pub struct PendingTrigger {
     pub controller: PlayerId,
 }
 
+/// A tier-3 custom resolution (CR 608) parked mid-way, waiting on a player choice. Mirrors
+/// [`PendingTrigger`]: while present it blocks priority, and the deciding player's
+/// `SubmitResolutionChoice` command drives it forward. Stores only primitives + the in-flight
+/// [`StackItem`] (no `dyn CardEffect`) — the `CardEffect` is re-looked-up by `custom_key` so the
+/// engine never has to box a trait object into state. See `engine`/`custom` for the flow.
+#[derive(Debug, Clone)]
+pub struct PendingResolution {
+    /// The spell whose resolution is paused (its card already moved to graveyard/battlefield).
+    pub item: StackItem,
+    /// Key into the `custom` registry; re-resolves to the `CardEffect` each step.
+    pub custom_key: String,
+    /// Choices already answered (0 means `begin` produced the outstanding interrupt).
+    pub step: u32,
+    /// Object ids the effect carries between steps (e.g. Gifts' revealed set).
+    pub scratch: Vec<ObjectId>,
+    /// The player who must answer the outstanding interrupt (may be the opponent — Gifts Ungiven).
+    pub deciding_player: PlayerId,
+    /// The legal candidate object ids; the engine validates the submitted choice is a subset.
+    pub candidates: Vec<ObjectId>,
+    pub min: u32,
+    pub max: u32,
+    /// Whether the submitted order is significant (Brainstorm: top-of-library order).
+    pub ordered: bool,
+    /// Display-only prompt text (re-emitted on reconnect; no Oracle lookup).
+    pub prompt: String,
+    /// `ChoiceKind` proto discriminant for the client (0 = hand cards, 1 = revealed cards).
+    pub choice_kind: i32,
+}
+
 #[derive(Debug, Clone)]
 pub struct StackItem {
     pub id: ObjectId,
@@ -323,6 +352,10 @@ pub struct GameState {
     /// stack (CR 603.3d). Queue supports simultaneous triggers (CR 603.3b APNAP ordering);
     /// processed front-to-back, one target choice at a time.
     pub pending_triggers: VecDeque<PendingTrigger>,
+    /// A tier-3 custom resolution paused mid-way awaiting a player choice (CR 608), or `None`.
+    /// At most one at a time; while set it blocks priority (like a [`PendingTrigger`]) until the
+    /// deciding player submits their choice. See [`PendingResolution`] and the `custom` module.
+    pub pending_resolution: Option<PendingResolution>,
     /// Active continuous effects (CR 611/613). Effects are pushed here at resolution and drained
     /// at cleanup or when their source leaves the battlefield. P/T and other characteristics are
     /// recomputed from base + this list on demand — `GameObject.power/toughness` always hold the

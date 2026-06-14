@@ -223,12 +223,12 @@ mod tests {
         let err = resolve_deck_names(
             &[0, 1],
             &[
-                deck(0, &["Black Lotus", "Mountain", "Brainstorm"]),
-                deck(1, &["Brainstorm", "Forest"]),
+                deck(0, &["Black Lotus", "Mountain", "Time Walk"]),
+                deck(1, &["Time Walk", "Forest"]),
             ],
         )
         .expect_err("unimplemented names must fail the session");
-        assert_eq!(err, vec!["Black Lotus", "Brainstorm"]);
+        assert_eq!(err, vec!["Black Lotus", "Time Walk"]);
     }
 
     #[test]
@@ -254,8 +254,8 @@ mod tests {
         let resp = validate_deck_response(&names(&[
             "Black Lotus",
             "Mountain",
-            "Brainstorm",
-            "Brainstorm",
+            "Time Walk",
+            "Time Walk",
             " black lotus ",
         ]));
         assert!(!resp.ok);
@@ -263,11 +263,11 @@ mod tests {
         // " black lotus " stays a distinct entry alongside "Black Lotus".
         assert_eq!(
             resp.missing_card_names,
-            vec!["Black Lotus", "Brainstorm", "black lotus"]
+            vec!["Black Lotus", "Time Walk", "black lotus"]
         );
         assert_eq!(
             resp.error,
-            "unimplemented cards: Black Lotus, Brainstorm, black lotus"
+            "unimplemented cards: Black Lotus, Time Walk, black lotus"
         );
         assert!(resp.batch.is_none());
     }

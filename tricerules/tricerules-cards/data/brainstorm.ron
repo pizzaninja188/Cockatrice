@@ -1,0 +1,9 @@
+(
+  id: "brainstorm",
+  name: "Brainstorm",
+  mana_cost: "{U}",
+  types: ["Instant"],
+  // Tier-3: "Draw three cards, then put two cards from your hand on top of your library in any
+  // order." The put-back is a mid-resolution choice over live objects (see custom/brainstorm.rs).
+  custom_effect: "brainstorm",
+)

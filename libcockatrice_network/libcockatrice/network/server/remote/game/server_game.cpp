@@ -1835,6 +1835,22 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
         if (it != batch.legal_by_player().end()) {
             (*filtered.mutable_legal_by_player())[participant->getPlayerId()] = it->second;
         }
+        // Redact private candidates of a tier-3 resolution choice (CR 608) from everyone but the
+        // deciding player. HandCards (choice_kind 0) reveal a player's hand, so only the decider
+        // sees the candidate object ids / names; RevealedCards are public and pass through.
+        for (int ei = 0; ei < filtered.events_size(); ++ei) {
+            if (!filtered.events(ei).has_resolution_choice_required()) {
+                continue;
+            }
+            auto *rcr = filtered.mutable_events(ei)->mutable_resolution_choice_required();
+            const bool privateCards = rcr->choice_kind() == 0;
+            if (privateCards && rcr->deciding_player_id() != participant->getPlayerId()) {
+                rcr->clear_candidate_object_ids();
+                rcr->clear_candidate_card_ids();
+                rcr->clear_candidate_names();
+                rcr->set_prompt_text("Opponent is making a resolution choice.");
+            }
+        }
         Event_RuledPayload ev;
         std::string bytes;
         filtered.SerializeToString(&bytes);

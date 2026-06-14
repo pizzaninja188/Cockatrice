@@ -42,11 +42,18 @@
 #include "zones/logic/stack_zone_logic.h"
 #include <QColor>
 #include <QDateTime>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDir>
 #include <QFile>
+#include <QLabel>
+#include <QListWidget>
+#include <QPointer>
+#include <QPushButton>
 #include <QRegularExpression>
 #include <QTextStream>
 #include <QTimer>
+#include <QVBoxLayout>
 #include <algorithm>
 
 // ---------------------------------------------------------------------------
@@ -61,6 +68,66 @@ static void sdbgLog(const QString &msg)
         QTextStream ts(&f);
         ts << QDateTime::currentDateTime().toString(Qt::ISODateWithMs) << " [GEH] " << msg << "\n";
     }
+}
+
+// Minimal modal picker for a tier-3 custom resolution choice (CR 608): Brainstorm "put two on
+// top in order", Gifts Ungiven "opponent chooses two". Click a card to add it to the ordered
+// selection (click again to remove); OK enables only inside [minN, maxN]. There is no Cancel —
+// the resolution is mandatory, so the only exit is a legal selection. Returns the chosen engine
+// ObjectIds (in click order when `ordered`), parallel to `oids`.
+static QVector<quint32> askRuledResolutionChoice(const QString &prompt,
+                                                  const QVector<quint32> &oids,
+                                                  const QStringList &names,
+                                                  int minN,
+                                                  int maxN,
+                                                  bool ordered)
+{
+    QDialog dlg;
+    dlg.setWindowTitle(QObject::tr("Resolve"));
+    auto *layout = new QVBoxLayout(&dlg);
+    layout->addWidget(new QLabel(prompt, &dlg));
+    auto *list = new QListWidget(&dlg);
+    for (int i = 0; i < names.size(); ++i) {
+        new QListWidgetItem(names.value(i), list);
+    }
+    layout->addWidget(list);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok, &dlg);
+    layout->addWidget(buttons);
+
+    auto chosen = std::make_shared<QVector<int>>(); // selected rows, in click order
+    auto refresh = [=]() {
+        for (int r = 0; r < list->count(); ++r) {
+            const int pos = chosen->indexOf(r);
+            if (pos < 0) {
+                list->item(r)->setText(names.value(r));
+            } else if (ordered) {
+                list->item(r)->setText(QStringLiteral("%1. %2").arg(pos + 1).arg(names.value(r)));
+            } else {
+                list->item(r)->setText(QStringLiteral("✓ %1").arg(names.value(r)));
+            }
+        }
+        buttons->button(QDialogButtonBox::Ok)
+            ->setEnabled(chosen->size() >= minN && chosen->size() <= maxN);
+    };
+    QObject::connect(list, &QListWidget::itemClicked, [=](QListWidgetItem *item) {
+        const int r = list->row(item);
+        const int pos = chosen->indexOf(r);
+        if (pos >= 0) {
+            chosen->remove(pos);
+        } else if (chosen->size() < maxN) {
+            chosen->append(r);
+        }
+        refresh();
+    });
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    refresh();
+    dlg.exec();
+
+    QVector<quint32> out;
+    for (int r : *chosen) {
+        out.append(oids.value(r));
+    }
+    return out;
 }
 
 namespace {
@@ -1305,6 +1372,50 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                     promptFeed += QStringLiteral("Choose a target for: %1\n").arg(pendingTriggerAbilityText);
                                 }
                                 emit ruledTriggerNeedsTarget(pendingTriggerAbilityText);
+                            }
+                            if (e.has_resolution_choice_required()) {
+                                // Tier-3 custom resolution paused for a player choice (CR 608).
+                                const auto &rcr = e.resolution_choice_required();
+                                const int localId = game->getPlayerManager()->getLocalPlayerId();
+                                promptFeed += QString::fromStdString(rcr.prompt_text()) + QStringLiteral("\n");
+                                if (rcr.deciding_player_id() == localId && rcr.candidate_object_ids_size() > 0) {
+                                    QVector<quint32> oids;
+                                    for (int i = 0; i < rcr.candidate_object_ids_size(); ++i) {
+                                        oids.append(rcr.candidate_object_ids(i));
+                                    }
+                                    QStringList names;
+                                    for (int i = 0; i < rcr.candidate_names_size(); ++i) {
+                                        names.append(QString::fromStdString(rcr.candidate_names(i)));
+                                    }
+                                    const QString prompt = QString::fromStdString(rcr.prompt_text());
+                                    const int minN = static_cast<int>(rcr.min());
+                                    const int maxN = static_cast<int>(rcr.max());
+                                    const bool ordered = rcr.ordered();
+                                    // Defer the modal dialog until after this batch finishes processing
+                                    // (avoid re-entering event handling while a modal loop is open).
+                                    QPointer<GameEventHandler> self(this);
+                                    QTimer::singleShot(0, this, [self, prompt, oids, names, minN, maxN, ordered]() {
+                                        if (!self) {
+                                            return;
+                                        }
+                                        const QVector<quint32> chosen =
+                                            askRuledResolutionChoice(prompt, oids, names, minN, maxN, ordered);
+                                        if (chosen.size() < minN) {
+                                            return; // dialog closed without a legal selection
+                                        }
+                                        ruled::v1::RuledCommand cmd;
+                                        auto *sub = cmd.mutable_submit_resolution_choice();
+                                        for (quint32 o : chosen) {
+                                            sub->add_chosen_object_ids(o);
+                                        }
+                                        std::string payload;
+                                        if (cmd.SerializeToString(&payload)) {
+                                            Command_RuledPayload ruledPayload;
+                                            ruledPayload.set_payload(payload);
+                                            self->sendGameCommand(ruledPayload);
+                                        }
+                                    });
+                                }
                             }
                             if (e.has_battlefield_object_map()) {
                                 ownerCardIdToEngineOid.clear();

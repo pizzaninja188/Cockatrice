@@ -44,6 +44,12 @@ pub struct CardFace {
     pub toughness: Option<u32>,
     #[serde(default)]
     pub spell_effect: Vec<SpellEffectKind>,
+    /// Tier-3 escape hatch (CR-faithful per-card algorithm). `Some(key)` routes this face's
+    /// resolution to a `CardEffect` in `tricerules-core`'s `custom` module instead of the
+    /// data-driven `spell_effect` list. Mutually exclusive with a non-empty `spell_effect`
+    /// (one resolution owner) — enforced at registry load. See [`CardDefinition::custom_effect`].
+    #[serde(default)]
+    pub custom_effect: Option<String>,
     #[serde(default)]
     pub keywords: Vec<Keyword>,
     #[serde(default)]
@@ -94,6 +100,8 @@ pub struct FaceRef<'a> {
     pub power: Option<u32>,
     pub toughness: Option<u32>,
     pub spell_effect: &'a [SpellEffectKind],
+    /// Tier-3 custom resolution key for this face, if any (see [`CardFace::custom_effect`]).
+    pub custom_effect: Option<&'a str>,
     pub keywords: &'a [Keyword],
     pub activated_abilities: &'a [ActivatedAbilityDef],
     pub triggered_abilities: &'a [TriggeredAbilityDef],
@@ -158,6 +166,13 @@ pub struct CardDefinition {
     /// (see [`SpellEffectKind`]). RON: `spell_effect: [DamageTarget(...), Draw(count: 1)]`.
     #[serde(default)]
     pub spell_effect: Vec<SpellEffectKind>,
+    /// Tier-3 escape hatch: `Some(key)` resolves this card via a `CardEffect` (a CR-faithful
+    /// per-card algorithm in `tricerules-core`'s `custom` module) rather than the data-driven
+    /// `spell_effect` list — for cards whose resolution is a unique algorithm (mid-resolution
+    /// player choice over live objects), not `(effect_kind, parameters)` static data. Mutually
+    /// exclusive with a non-empty `spell_effect` (one resolution owner), enforced at registry load.
+    #[serde(default)]
+    pub custom_effect: Option<String>,
     /// Static keyword abilities (Flying, Reach, Intimidate, etc.). Omit or leave empty for keywordless cards.
     #[serde(default)]
     pub keywords: Vec<Keyword>,
@@ -232,6 +247,7 @@ impl CardDefinition {
                     power: self.power,
                     toughness: self.toughness,
                     spell_effect: &self.spell_effect,
+                    custom_effect: self.custom_effect.as_deref(),
                     keywords: &self.keywords,
                     activated_abilities: &self.activated_abilities,
                     triggered_abilities: &self.triggered_abilities,
@@ -255,6 +271,7 @@ impl CardDefinition {
             power: f.power,
             toughness: f.toughness,
             spell_effect: &f.spell_effect,
+            custom_effect: f.custom_effect.as_deref(),
             keywords: &f.keywords,
             activated_abilities: &f.activated_abilities,
             triggered_abilities: &f.triggered_abilities,

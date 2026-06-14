@@ -1137,7 +1137,7 @@ Legend: `[x]` = fully implemented · `[ ] 🟡 partial` = partially implemented 
 - [ ] Blizzard
 - [ ] Blue Scarab
 - [ ] Bone Shaman
-- [ ] Brainstorm
+- [x] Brainstorm
 - [ ] Brand of Ill Omen
 - [ ] Breath of Dreams
 - [ ] Brine Shaman
@@ -6796,7 +6796,7 @@ Legend: `[x]` = fully implemented · `[ ] 🟡 partial` = partially implemented 
 - [ ] Gideon Blackblade
 - [ ] Gideon Jura
 - [ ] Gideon of the Trials
-- [ ] Gifts Ungiven
+- [ ] Gifts Ungiven — 🟡 partial: search does not enforce the different-names restriction; 1v1 opponent is the automatic target
 - [ ] Gilanra, Caller of Wirewood
 - [ ] Gitaxian Probe
 - [ ] Giver of Runes

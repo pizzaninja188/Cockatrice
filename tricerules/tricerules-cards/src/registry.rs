@@ -78,6 +78,18 @@ impl CardRegistry {
             // effects have no source permanent, so `Self_` target filters are rejected here
             // (EffectContext::Spell); activated/triggered effects bind to a source (Ability).
             for face in card.faces_iter() {
+                // One resolution owner per face (CR 608): a custom (tier-3) effect and a
+                // data-driven `spell_effect` list cannot both resolve the same face. The
+                // matching custom impl is validated to exist on the `tricerules-core` side
+                // (it owns the `CardEffect` lookup; this crate has no engine access).
+                if face.custom_effect.is_some() && !face.spell_effect.is_empty() {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: "face has both spell_effect and custom_effect (one resolution \
+                                 owner allowed)"
+                            .into(),
+                    });
+                }
                 for effect in face.spell_effect {
                     effect.validate(EffectContext::Spell).map_err(|reason| {
                         RegistryError::InvalidCard {
@@ -438,6 +450,27 @@ mod tests {
         )"#;
         let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
         assert!(matches!(err, RegistryError::InvalidCard { ref id, .. } if id == "bad_maker"));
+    }
+
+    #[test]
+    fn load_rejects_card_with_both_spell_effect_and_custom_effect() {
+        // A face may have exactly one resolution owner (tier-1/2 data or tier-3 custom).
+        let bad = r#"(
+            id: "double_owner",
+            name: "Double Owner",
+            mana_cost: "{U}",
+            types: ["Instant"],
+            spell_effect: [Draw(count: 1)],
+            custom_effect: "brainstorm",
+        )"#;
+        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        match err {
+            RegistryError::InvalidCard { id, reason } => {
+                assert_eq!(id, "double_owner");
+                assert!(reason.contains("one resolution owner"));
+            }
+            other => panic!("expected InvalidCard, got {other:?}"),
+        }
     }
 
     #[test]

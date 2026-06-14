@@ -39,7 +39,16 @@ message RuledCommand {
     ActivateAbility activate_ability = 17;
     // Choose a target for a triggered ability that is waiting to be placed on the stack (CR 603.3d).
     ChooseTriggerTarget choose_trigger_target = 18;
+    // Answer an outstanding ResolutionChoiceRequired (tier-3 custom resolution, CR 608). Generic
+    // across every custom card (Brainstorm, Gifts Ungiven, …) — no per-card command.
+    SubmitResolutionChoice submit_resolution_choice = 19;
   }
+}
+
+// A player's answer to a ResolutionChoiceRequired: the chosen object ids (in order when the
+// request was `ordered`). The engine validates them against the parked request's candidates.
+message SubmitResolutionChoice {
+  repeated uint32 chosen_object_ids = 1;
 }
 
 // Per-blocker damage from one attacker during assign combat damage.
@@ -226,7 +235,39 @@ message RuledEvent {
     // A token came into existence on the battlefield (CR 111). The relay creates a physical
     // token card from the inline identity (tokens have no deck card / CardCatalog entry).
     TokenCreated token_created = 22;
+    // A tier-3 custom resolution paused and needs a player to choose among candidates (CR 608).
+    // Generic across every custom card; the client renders it as an ordered/multi-select pick.
+    ResolutionChoiceRequired resolution_choice_required = 23;
   }
+}
+
+// A parked custom resolution (CR 608) requesting input from one player. Reused by every tier-3
+// card (and later X-spells / modal spells) — the engine is the sole source of the candidate set,
+// so clients never replicate selection logic from Oracle text. The deciding player may be the
+// opponent of the spell's controller (Gifts Ungiven).
+message ResolutionChoiceRequired {
+  // Engine PlayerId who must answer; only that player's client prompts.
+  int32 deciding_player_id = 1;
+  // The in-flight spell's object id (the stack object being resolved), for display/context.
+  uint32 source_object_id = 2;
+  // Display-only prompt (server-only; the relay does not look up Oracle text for this).
+  string prompt_text = 3;
+  // What the candidate ids refer to: 0 = cards in the deciding player's hand, 1 = revealed cards.
+  int32 choice_kind = 4;
+  // Candidate object ids to choose among (engine ObjectIds).
+  repeated uint32 candidate_object_ids = 5;
+  // Parallel to candidate_object_ids: tricerules card id for each candidate, so the relay/client
+  // can show names (resolve to Oracle names via CardCatalog) without an oid->card lookup.
+  repeated string candidate_card_ids = 6;
+  // Inclusive bounds on how many candidates must be chosen.
+  uint32 min = 7;
+  uint32 max = 8;
+  // True when the chosen order is significant (Brainstorm: order cards put back on top).
+  bool ordered = 9;
+  // Parallel to candidate_object_ids: each candidate's display (Oracle) name, so the deciding
+  // player's client renders the choice without a card-id lookup. For HandCards (choice_kind 0)
+  // these are private; Servatrice redacts candidate_* for everyone but the deciding player.
+  repeated string candidate_names = 10;
 }
 
 // A token entered the battlefield (CR 111). Unlike a resolved permanent spell, a token has no

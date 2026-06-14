@@ -1,8 +1,9 @@
 //! Core rules processing (vanilla core ΓÇö simplified combat & mana).
 
+use crate::custom::{self, ResolutionChoice, ResolutionCtx, ResolutionStep};
 use crate::state::{
     AffectedScope, CombatState, ContinuousEffect, GameObject, GameState, ObjectId, OpeningSequence,
-    PendingTrigger, PlayerId, PlayerState, StackItem, TurnStep, Zone,
+    PendingResolution, PendingTrigger, PlayerId, PlayerState, StackItem, TurnStep, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -55,7 +56,7 @@ fn castable_at_instant_speed(face: &tricerules_cards::FaceRef<'_>) -> bool {
     face.is_instant || face.keywords.contains(&tricerules_cards::Keyword::Flash)
 }
 
-fn shuffle_player_library(state: &mut GameState, player_idx: usize, mix: u64) {
+pub(crate) fn shuffle_player_library(state: &mut GameState, player_idx: usize, mix: u64) {
     let mut rng = StdRng::seed_from_u64(mix);
     let mut v: Vec<ObjectId> = state.players[player_idx].library.iter().copied().collect();
     v.shuffle(&mut rng);
@@ -248,6 +249,7 @@ impl GameEngine {
             opening,
             starting_player_idx: 0,
             pending_triggers: VecDeque::new(),
+            pending_resolution: None,
             continuous_effects: Vec::new(),
         };
         let mut eng = GameEngine { state, registry };
@@ -555,6 +557,18 @@ impl GameEngine {
         if self.state.opening.is_some() {
             return self.apply_opening_command(player, cmd);
         }
+        // A parked tier-3 custom resolution (CR 608) blocks every action but answering it
+        // (or conceding), the same way a pending trigger gates the game.
+        if self.state.pending_resolution.is_some()
+            && !matches!(
+                cmd.cmd.as_ref(),
+                Some(Cmd::SubmitResolutionChoice(_)) | Some(Cmd::Concede(_))
+            )
+        {
+            return Err(EngineError::Illegal(
+                "resolve the pending choice before acting",
+            ));
+        }
         let res = match cmd.cmd.as_ref() {
             None => return Err(EngineError::Illegal("empty command")),
             Some(Cmd::PreviewDeclareBlockers(_) | Cmd::PreviewDeclareAttackers(_)) => {
@@ -627,6 +641,9 @@ impl GameEngine {
             Some(Cmd::ChooseTriggerTarget(ctt)) => {
                 self.choose_trigger_target(player, ctt.target_object_id)
             }
+            Some(Cmd::SubmitResolutionChoice(s)) => {
+                self.submit_resolution_choice(player, &s.chosen_object_ids)
+            }
             Some(Cmd::PlayLand(pl)) => self.play_land(player, pl.hand_card_index as usize),
             Some(Cmd::AddManaToPool(m)) => self.add_mana_to_pool(player, m),
             Some(Cmd::DiscardToHandSize(d)) => self.discard_to_hand_size(player, d),
@@ -644,9 +661,14 @@ impl GameEngine {
         };
         let mut b = res?;
         self.sweep_life();
-        let mut d = vec![];
-        self.apply_sbas(&mut d)?;
-        b.events.extend(d);
+        // SBAs are not checked while a tier-3 resolution is parked mid-resolution (CR 608/704);
+        // they run when it completes. Zone view + legal actions still refresh so the deciding
+        // player's client sees the drawn/revealed cards and the choice prompt.
+        if self.state.pending_resolution.is_none() {
+            let mut d = vec![];
+            self.apply_sbas(&mut d)?;
+            b.events.extend(d);
+        }
         b.events.push(self.ev_zone_view_sync());
         fill_legal(&mut b, self);
         Ok(b)
@@ -1643,6 +1665,11 @@ impl GameEngine {
                 "must choose trigger target before passing priority",
             ));
         }
+        if self.state.pending_resolution.is_some() {
+            return Err(EngineError::Illegal(
+                "must submit resolution choice before passing priority",
+            ));
+        }
         if self.state.stack.is_empty()
             && self.state.turn_step == TurnStep::Cleanup
             && self.state.cleanup_discard_player.is_some()
@@ -1701,8 +1728,13 @@ impl GameEngine {
             self.state.priority_idx = i;
         }
         self.resolve_top_of_stack(&mut ev)?;
-        ev.push(ev_priority_changed(self));
-        self.apply_sbas(&mut ev)?;
+        // A tier-3 custom resolution may have parked mid-resolution awaiting a player choice
+        // (CR 608): no player holds priority then — the ResolutionChoiceRequired event already
+        // drives the deciding player — so don't advance priority or run SBAs until it completes.
+        if self.state.pending_resolution.is_none() {
+            ev.push(ev_priority_changed(self));
+            self.apply_sbas(&mut ev)?;
+        }
         Ok(finish_with_events(self, ev))
     }
 
@@ -2287,6 +2319,20 @@ impl GameEngine {
                 .unwrap_or_else(|| "Spell".into());
             (effects, name)
         };
+
+        // Tier-3 (CR 608): a custom effect owns this spell's resolution. The spell card has
+        // already moved to its zone (graveyard/battlefield above); hand off the algorithm to the
+        // registered `CardEffect`, which either completes now or parks awaiting a player choice.
+        if !is_ability {
+            let custom_key = self
+                .registry
+                .get(&card_id)
+                .and_then(|d| d.face(top.face_index))
+                .and_then(|f| f.custom_effect.map(str::to_string));
+            if let Some(custom_key) = custom_key {
+                return self.begin_custom_resolution(top, custom_key, events);
+            }
+        }
 
         let fizzle = spell_has_no_legal_targets_at_resolution(
             &self.state,
@@ -3273,6 +3319,176 @@ impl GameEngine {
         }
         fill_legal(&mut batch, self);
         Ok(batch)
+    }
+
+    /// Begin a tier-3 custom resolution (CR 608). Runs the [`CardEffect::begin`] step and either
+    /// completes (resolution falls through normally) or parks the spell awaiting a player choice.
+    fn begin_custom_resolution(
+        &mut self,
+        item: StackItem,
+        custom_key: String,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let effect = custom::lookup(&custom_key)
+            .ok_or_else(|| EngineError::MissingCard(custom_key.clone()))?;
+        let controller = item.controller;
+        let (step, scratch) = {
+            let mut ctx = ResolutionCtx::new(
+                &mut self.state,
+                self.registry,
+                events,
+                controller,
+                0,
+                Vec::new(),
+            );
+            let r = effect.begin(&mut ctx);
+            (r, ctx.scratch)
+        };
+        self.park_or_finish(item, custom_key, 0, scratch, step, events);
+        Ok(())
+    }
+
+    /// Apply a deciding player's answer to the outstanding [`PendingResolution`] (CR 608) and
+    /// resume the [`CardEffect`], looping conceptually until it completes or asks for more input.
+    fn submit_resolution_choice(
+        &mut self,
+        player: PlayerId,
+        chosen: &[u32],
+    ) -> Result<RuledEventBatch, EngineError> {
+        let pending = self
+            .state
+            .pending_resolution
+            .take()
+            .ok_or(EngineError::Illegal("no resolution awaiting a choice"))?;
+        // Restore the parked state on any rejection so an illegal submission never mutates state.
+        if pending.deciding_player != player {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("not your resolution choice"));
+        }
+        let n = chosen.len() as u32;
+        if n < pending.min || n > pending.max {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("wrong number of cards chosen"));
+        }
+        let mut seen = HashSet::new();
+        for &oid in chosen {
+            if !pending.candidates.contains(&oid) || !seen.insert(oid) {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("invalid resolution choice"));
+            }
+        }
+
+        let effect = match custom::lookup(&pending.custom_key) {
+            Some(e) => e,
+            None => {
+                let key = pending.custom_key.clone();
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::MissingCard(key));
+            }
+        };
+        let controller = pending.item.controller;
+        let item = pending.item;
+        let custom_key = pending.custom_key;
+        let step_no = pending.step;
+        let choice = ResolutionChoice {
+            object_ids: chosen.to_vec(),
+        };
+
+        let mut ev = vec![];
+        let (step, scratch) = {
+            let mut ctx = ResolutionCtx::new(
+                &mut self.state,
+                self.registry,
+                &mut ev,
+                controller,
+                step_no,
+                pending.scratch,
+            );
+            let r = effect.resume(&mut ctx, &choice);
+            (r, ctx.scratch)
+        };
+        self.park_or_finish(item, custom_key, step_no, scratch, step, &mut ev);
+
+        // When the resolution finished (did not re-park), hand priority back to the active
+        // player so the game resumes normally (the apply_command tail runs SBAs + zone view).
+        if self.state.pending_resolution.is_none() {
+            if let Some(i) = self.state.player_idx(self.state.active_player_id()) {
+                self.state.priority_idx = i;
+            }
+            ev.push(ev_priority_changed(self));
+        }
+        Ok(finish_with_events(self, ev))
+    }
+
+    /// Shared tail of `begin`/`resume`: either let resolution complete, or park the in-flight
+    /// spell as a [`PendingResolution`] and emit the `ResolutionChoiceRequired` request. `step_no`
+    /// is the step that produced this outcome; the next resume runs as `step_no + 1`.
+    fn park_or_finish(
+        &mut self,
+        item: StackItem,
+        custom_key: String,
+        step_no: u32,
+        scratch: Vec<ObjectId>,
+        step: ResolutionStep,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) {
+        let interrupt = match step {
+            ResolutionStep::Done => return,
+            ResolutionStep::NeedsChoice(it) => it,
+        };
+        let candidate_card_ids: Vec<String> = interrupt
+            .candidates
+            .iter()
+            .map(|o| {
+                self.state
+                    .objects
+                    .get(o)
+                    .map(|x| x.card_id.clone())
+                    .unwrap_or_default()
+            })
+            .collect();
+        // Oracle display names for the deciding player's client (private hand cards are redacted
+        // per-player by Servatrice). `CardDefinition.name` is the Oracle name — same source the
+        // engine already uses for `StackPushed.description`.
+        let candidate_names: Vec<String> = candidate_card_ids
+            .iter()
+            .map(|cid| {
+                self.registry
+                    .get(cid)
+                    .map(|d| d.name.clone())
+                    .unwrap_or_else(|| cid.clone())
+            })
+            .collect();
+        events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    deciding_player_id: interrupt.deciding_player,
+                    source_object_id: item.id,
+                    prompt_text: interrupt.prompt.clone(),
+                    choice_kind: interrupt.choice_kind.as_proto(),
+                    candidate_object_ids: interrupt.candidates.clone(),
+                    candidate_card_ids,
+                    candidate_names,
+                    min: interrupt.min,
+                    max: interrupt.max,
+                    ordered: interrupt.ordered,
+                },
+            )),
+        });
+        events.push(ev_log(interrupt.prompt.clone()));
+        self.state.pending_resolution = Some(PendingResolution {
+            item,
+            custom_key,
+            step: step_no + 1,
+            scratch,
+            deciding_player: interrupt.deciding_player,
+            candidates: interrupt.candidates,
+            min: interrupt.min,
+            max: interrupt.max,
+            ordered: interrupt.ordered,
+            prompt: interrupt.prompt,
+            choice_kind: interrupt.choice_kind.as_proto(),
+        });
     }
 
     fn play_land(
@@ -4424,6 +4640,14 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
     if let Some(op) = &eng.state.opening {
         return opening_legal_labels(eng, pid, op);
     }
+    // A parked tier-3 custom resolution (CR 608) must be answered before any other action.
+    if let Some(pr) = &eng.state.pending_resolution {
+        return if pr.deciding_player == pid {
+            vec![format!("Resolve: {}", pr.prompt)]
+        } else {
+            vec!["Waiting: opponent making a resolution choice".into()]
+        };
+    }
     // Triggered ability awaiting a target must be resolved before any other action.
     if let Some(pt) = eng.state.pending_triggers.front() {
         return if pt.controller == pid {
@@ -4631,7 +4855,7 @@ fn draw_card(
 
 /// Build a `PermanentMoved` event, stamping the tricerules `card_id` from the object so
 /// servers can resolve cards that have no engine-oid mapping (e.g. milled library cards).
-fn permanent_moved_event(
+pub(crate) fn permanent_moved_event(
     state: &GameState,
     oid: ObjectId,
     owner_player_id: PlayerId,

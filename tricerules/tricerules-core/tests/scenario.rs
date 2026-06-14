@@ -6,7 +6,7 @@ use tricerules_proto::ruled::v1::{
     ActivateAbility, AddManaToPool, AssignCombatDamage, BlockPair, CastSpell, ChooseTriggerTarget,
     DamagePair, DeclareAttackers, DeclareBlockers, DiscardToHandSize, FlexPipPayment, PassPriority,
     PlayLand, PreviewDeclareAttackers, PreviewDeclareBlockers, PrimitiveYieldStructured,
-    RuledCommand, TargetRef,
+    ResolutionChoiceRequired, RuledCommand, RuledEventBatch, SubmitResolutionChoice, TargetRef,
 };
 
 use tricerules_core::GameEngine;
@@ -9087,4 +9087,297 @@ fn fire_ice_ice_half_taps_and_draws() {
         lib_before - 1,
         "Ice draws a card"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Tier-3 custom resolution (resumable resolution): Brainstorm + Gifts Ungiven.
+// ---------------------------------------------------------------------------
+
+fn submit_resolution_choice(chosen: Vec<u32>) -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            chosen_object_ids: chosen,
+        })),
+    }
+}
+
+fn find_resolution_choice(batch: &RuledEventBatch) -> Option<ResolutionChoiceRequired> {
+    batch.events.iter().find_map(|e| match &e.ev {
+        Some(Ev::ResolutionChoiceRequired(r)) => Some(r.clone()),
+        _ => None,
+    })
+}
+
+/// Cast the instant `card_id` for `mana` and pass both players so it resolves; returns the
+/// resolving batch (which parks a custom resolution for tier-3 cards).
+fn cast_instant_and_resolve(
+    e: &mut GameEngine,
+    caster: i32,
+    card_id: &str,
+    mana: AddManaToPool,
+) -> RuledEventBatch {
+    ensure_in_hand(e, caster as usize, card_id);
+    e.apply_command(caster, &add_mana_to_pool(mana))
+        .expect("fund cast");
+    let idx = hand_index_for_card(e, caster as usize, card_id);
+    e.apply_command(caster, &cast_spell(idx, vec![]))
+        .expect("cast");
+    e.apply_command(caster, &pass()).expect("caster pass");
+    e.apply_command(1 - caster, &pass()).expect("other pass")
+}
+
+#[test]
+fn brainstorm_draws_three_then_returns_two_in_chosen_order() {
+    let decks = Some(vec![
+        {
+            let mut d = vec!["brainstorm".to_string()];
+            d.extend(std::iter::repeat_n("island".to_string(), 29));
+            d
+        },
+        vec!["forest".into(); 30],
+    ]);
+    let mut e = GameEngine::new(42, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    ensure_in_hand(&mut e, 0, "brainstorm");
+
+    let hand_before = e.state.players[0].hand.len();
+    let lib_before = e.state.players[0].library.len();
+    let batch = cast_instant_and_resolve(
+        &mut e,
+        0,
+        "brainstorm",
+        AddManaToPool {
+            u: 1,
+            ..Default::default()
+        },
+    );
+
+    // Parked on a choice; the spell drew three and asks for two back, in order.
+    let req = find_resolution_choice(&batch).expect("resolution choice required");
+    assert_eq!(req.deciding_player_id, 0);
+    assert_eq!((req.min, req.max), (2, 2));
+    assert!(req.ordered);
+    assert_eq!(req.choice_kind, 0, "hand cards");
+    assert!(e.state.pending_resolution.is_some());
+    // Cast removed brainstorm from hand; begin drew three.
+    assert_eq!(e.state.players[0].hand.len(), hand_before - 1 + 3);
+    assert_eq!(e.state.players[0].library.len(), lib_before - 3);
+
+    // Put two specific hand cards on top, first chosen = top of library.
+    let chosen: Vec<u32> = e.state.players[0].hand.iter().take(2).copied().collect();
+    let (top0, top1) = (chosen[0], chosen[1]);
+    e.apply_command(0, &submit_resolution_choice(chosen))
+        .expect("submit brainstorm choice");
+
+    assert!(e.state.pending_resolution.is_none(), "resolution completed");
+    assert_eq!(e.state.players[0].library[0], top0, "first chosen on top");
+    assert_eq!(e.state.players[0].library[1], top1, "second chosen below");
+    assert_eq!(e.state.players[0].hand.len(), hand_before - 1 + 3 - 2);
+    assert_eq!(count_card_id_in_graveyard(&e, 0, "brainstorm"), 1);
+}
+
+#[test]
+fn brainstorm_rejects_card_not_in_hand_without_mutating() {
+    let decks = Some(vec![
+        {
+            let mut d = vec!["brainstorm".to_string()];
+            d.extend(std::iter::repeat_n("island".to_string(), 29));
+            d
+        },
+        vec!["forest".into(); 30],
+    ]);
+    let mut e = GameEngine::new(42, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    cast_instant_and_resolve(
+        &mut e,
+        0,
+        "brainstorm",
+        AddManaToPool {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    assert!(e.state.pending_resolution.is_some());
+
+    let hand_snapshot = e.state.players[0].hand.clone();
+    let lib_snapshot: Vec<u32> = e.state.players[0].library.iter().copied().collect();
+
+    // One legal hand card + one library card (not a legal candidate) -> rejected, no mutation.
+    let legal = e.state.players[0].hand[0];
+    let library_card = e.state.players[0].library[0];
+    let res = e.apply_command(0, &submit_resolution_choice(vec![legal, library_card]));
+    assert!(res.is_err(), "returning a card not in hand is illegal");
+
+    assert!(e.state.pending_resolution.is_some(), "still parked");
+    assert_eq!(e.state.players[0].hand, hand_snapshot, "hand unchanged");
+    assert_eq!(
+        e.state.players[0]
+            .library
+            .iter()
+            .copied()
+            .collect::<Vec<u32>>(),
+        lib_snapshot,
+        "library unchanged"
+    );
+
+    // Wrong count is also rejected.
+    assert!(
+        e.apply_command(0, &submit_resolution_choice(vec![legal]))
+            .is_err(),
+        "must choose exactly two"
+    );
+    // The opponent cannot answer the controller's choice.
+    assert!(
+        e.apply_command(
+            1,
+            &submit_resolution_choice(vec![legal, e.state.players[0].hand[1]])
+        )
+        .is_err(),
+        "only the deciding player may submit"
+    );
+}
+
+#[test]
+fn brainstorm_resolution_is_deterministic() {
+    let make = || {
+        let decks = Some(vec![
+            vec![
+                "brainstorm".into(),
+                "island".into(),
+                "forest".into(),
+                "swamp".into(),
+                "mountain".into(),
+                "plains".into(),
+                "island".into(),
+                "forest".into(),
+                "swamp".into(),
+                "mountain".into(),
+            ],
+            vec!["forest".into(); 10],
+        ]);
+        let mut e = GameEngine::new(1234, &[0, 1], 20, decks, true).expect("new");
+        advance_to_main1_from_game_start(&mut e);
+        cast_instant_and_resolve(
+            &mut e,
+            0,
+            "brainstorm",
+            AddManaToPool {
+                u: 1,
+                ..Default::default()
+            },
+        );
+        // Same choice command (indices into hand) on both runs.
+        let chosen: Vec<u32> = e.state.players[0].hand.iter().take(2).copied().collect();
+        e.apply_command(0, &submit_resolution_choice(chosen))
+            .unwrap();
+        e.state.players[0]
+            .library
+            .iter()
+            .map(|&o| e.state.objects[&o].card_id.clone())
+            .collect::<Vec<String>>()
+    };
+    assert_eq!(make(), make(), "same seed + same choices => same library");
+}
+
+#[test]
+fn gifts_ungiven_opponent_chooses_the_split() {
+    use tricerules_core::Zone;
+    let decks = Some(vec![
+        {
+            let mut d = vec![
+                "gifts_ungiven".to_string(),
+                "lightning_bolt".to_string(),
+                "divination".to_string(),
+                "counterspell".to_string(),
+                "murder".to_string(),
+            ];
+            d.extend(std::iter::repeat_n("island".to_string(), 25));
+            d
+        },
+        vec!["forest".into(); 30],
+    ]);
+    let mut e = GameEngine::new(7, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let batch = cast_instant_and_resolve(
+        &mut e,
+        0,
+        "gifts_ungiven",
+        AddManaToPool {
+            u: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+
+    // First interrupt: the controller searches their library (up to four).
+    let search = find_resolution_choice(&batch).expect("search choice");
+    assert_eq!(search.deciding_player_id, 0);
+    assert_eq!(search.choice_kind, 1, "revealed/search cards");
+    let found: Vec<u32> = search
+        .candidate_object_ids
+        .iter()
+        .take(4)
+        .copied()
+        .collect();
+    assert_eq!(found.len(), 4);
+
+    let batch2 = e
+        .apply_command(0, &submit_resolution_choice(found.clone()))
+        .expect("search submit");
+
+    // Second interrupt: the OPPONENT chooses which two go to the controller's graveyard.
+    let split = find_resolution_choice(&batch2).expect("opponent split choice");
+    assert_eq!(split.deciding_player_id, 1, "opponent decides the split");
+    assert_eq!((split.min, split.max), (2, 2));
+    assert_eq!(
+        split.candidate_object_ids, found,
+        "split is over the revealed set"
+    );
+
+    let to_grave: Vec<u32> = found.iter().take(2).copied().collect();
+    let to_hand: Vec<u32> = found.iter().skip(2).copied().collect();
+    // The controller cannot make the opponent's choice.
+    assert!(
+        e.apply_command(0, &submit_resolution_choice(to_grave.clone()))
+            .is_err(),
+        "only the deciding (opponent) player may submit"
+    );
+    e.apply_command(1, &submit_resolution_choice(to_grave.clone()))
+        .expect("opponent submits split");
+
+    assert!(e.state.pending_resolution.is_none(), "resolution completed");
+    for oid in &to_grave {
+        assert_eq!(
+            e.state.objects[oid].zone,
+            Zone::Graveyard,
+            "chosen -> graveyard"
+        );
+        assert!(e.state.players[0].graveyard.contains(oid));
+    }
+    for oid in &to_hand {
+        assert_eq!(e.state.objects[oid].zone, Zone::Hand, "rest -> hand");
+        assert!(e.state.players[0].hand.contains(oid));
+    }
+    assert_eq!(count_card_id_in_graveyard(&e, 0, "gifts_ungiven"), 1);
+}
+
+/// Every `custom_effect` key in the card registry must resolve to a registered `CardEffect`
+/// (an unregistered key is uncastable card data). The "one resolution owner" rule is enforced
+/// in the cards crate; this is the core-side half (the lookup must exist).
+#[test]
+fn every_custom_effect_key_has_an_impl() {
+    let reg = tricerules_cards::CardRegistry::global();
+    for def in reg.definitions() {
+        for face in def.faces_iter() {
+            if let Some(key) = face.custom_effect {
+                assert!(
+                    tricerules_core::custom::lookup(key).is_some(),
+                    "card '{}' has custom_effect '{}' with no registered CardEffect",
+                    def.name,
+                    key
+                );
+            }
+        }
+    }
 }

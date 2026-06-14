@@ -52,7 +52,7 @@ Rules logic for a card lives in `tricerules-cards`, validated at startup (`regis
 
 1. **Data (RON in `tricerules-cards/data/`)** — `spell_effect` is a `Vec<SpellEffectKind>` resolved in order, e.g. `spell_effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))]`.
 2. **Generic primitives (`primitives.rs`)** — `SpellEffectKind` variants + composable `TargetFilter { kind, not_artifact, tapped, … }` (replaces the old flat `TargetSpec`; enables characteristic-based restrictions without new variants).
-3. **Custom Rust (`custom/` `CardEffect`)** — *not built yet.* The escape hatch for logic data can't express. Add when the first real card forces it; trust the tree until then.
+3. **Custom Rust (`tricerules-core/src/custom/` `CardEffect`)** — the escape hatch for a *resolution algorithm* data can't express. One impl per file, keyed by a card's `custom_effect: Some("key")` marker (mutually exclusive with `spell_effect`, enforced at registry load). Resolution is **resumable**: `begin`/`resume` drive a capability-narrowed `ResolutionCtx` and either finish or return a `ResolutionInterrupt` (a player choice); the engine parks it in `GameState::pending_resolution`, emits the generic `RuledEvent.resolution_choice_required`, and resumes on the `SubmitResolutionChoice` command. Determinism holds because every choice is a logged command. Implemented: **Brainstorm**, **Gifts Ungiven**.
 
 `SpellEffectKind` is shared by spells, activated abilities, and triggered abilities. `TriggeredAbilityDef.effect` is a plain `SpellEffectKind` (the old `TriggeredEffect`/`PumpSelf` wrappers are gone). A self-referencing ability uses `TargetKind::Self_` (auto-bound to the source, not "targeting" per CR 115; rejected in `spell_effect` via `EffectContext::Spell`), e.g. `PumpTarget { target: (kind: Self_) }`.
 
@@ -63,6 +63,8 @@ Rules logic for a card lives in `tricerules-cards`, validated at startup (`regis
 **Use custom Rust** only when the *resolution algorithm itself is unique* — a mid-resolution player choice over live objects, or multiple players choosing interdependently over one revealed set: **Brainstorm** (draw 3, choose 2 from hand to put back in an order), **Gifts Ungiven** (you search 4, opponent picks 2 for your graveyard).
 
 When in doubt: *can I describe this completely with `(effect_kind, parameters)`?* If yes, it's a primitive.
+
+**Tier-3 review rule (the gate that keeps `custom/` from becoming a scripting dump):** a card may land in `custom/` only if a reviewer agrees **no `(effect_kind, parameters)` description exists** — prefer widening a primitive every time it's close. Custom code never touches `&mut GameState`; it drives `ResolutionCtx` (audited, zone-integrity-preserving mutators only). The generic `resolution_choice_required` / `SubmitResolutionChoice` proto pair is reused by *every* tier-3 card (and later X-spells / modal spells), so a new custom card adds **no** per-card proto. Each `CardEffect` impl cites its Oracle text + CR in a header comment and carries happy + illegal `scenario.rs` coverage (same standard as engine changes).
 
 ### Design for reuse — the one rule
 
