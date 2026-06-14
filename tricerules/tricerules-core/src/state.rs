@@ -197,6 +197,10 @@ pub struct StackItem {
     pub ability_index: Option<usize>,
     /// `true` = this is a triggered ability; `false` = activated ability or spell.
     pub is_triggered: bool,
+    /// CR 709/712/715: which face of a multi-face card was cast (the split half / MDFC face /
+    /// adventure half on the stack). `0` for single-face cards and abilities; drives which face's
+    /// effects, mana value, and permanence are used when this spell resolves.
+    pub face_index: usize,
     /// CR 107.3b: the value chosen for `{X}` as this spell was cast. `0` for spells without an
     /// `{X}` pip (and for abilities). On the stack the spell's mana value is `fixed_mv + chosen_x`;
     /// at resolution this feeds [`Amount::X`](tricerules_cards::Amount) effect amounts.

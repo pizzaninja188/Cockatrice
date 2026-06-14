@@ -86,6 +86,9 @@ message CastSpell {
   // CR 107.4: per-pip payment choices for flexible mana symbols (hybrid/Phyrexian). Empty
   // when the cost has none.
   repeated FlexPipPayment flex_payments = 4;
+  // CR 709/712/715: which face of a multi-face card to cast (split half, MDFC face, adventure
+  // half). 0 (default) is the front/primary face, so single-face casts need not set it.
+  uint32 face_index = 5;
 }
 
 // A payment decision for one flexible mana pip (CR 107.4d–f). Currently only Phyrexian pips
@@ -252,10 +255,13 @@ message TokenIdentity {
 // back to a name through this catalog — no name->id derivation happens in C++.
 message CardCatalog {
   message Entry {
-    string card_id = 1;        // engine id, e.g. "lightning_bolt"
-    string name = 2;           // Oracle name, e.g. "Lightning Bolt"
-    repeated string types = 3; // from CardDefinition.types
+    string card_id = 1;        // engine id, e.g. "lightning_bolt" or "fire_ice"
+    string name = 2;           // whole-card Oracle name, e.g. "Lightning Bolt" / "Fire // Ice"
+    repeated string types = 3; // from CardDefinition.types (primary face for multi-face cards)
     bool is_permanent = 4;     // CR 110.4: resolves to the battlefield, not the graveyard
+    // CR 709/712/715: per-face Oracle names in face order (e.g. ["Fire", "Ice"]). Empty for
+    // single-face cards. Lets the relay display the cast/active half by its own name.
+    repeated string face_names = 5;
   }
   repeated Entry entries = 1;
 }

@@ -71,62 +71,72 @@ impl CardRegistry {
         }
         for chunk in chunks {
             let mut card: CardDefinition = RON_OPTS.from_str(chunk)?;
-            // Type flags are derived from `types`/`supertypes`, not authored in RON.
+            // Type flags are derived from `types`/`supertypes`, not authored in RON (per face).
             card.derive_type_flags();
-            // Validate spell effects at startup. Spells have no source permanent, so `Self_`
-            // target filters are rejected here (EffectContext::Spell).
-            for effect in &card.spell_effect {
-                effect.validate(EffectContext::Spell).map_err(|reason| {
-                    RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    }
-                })?;
-            }
-            // Validate activated ability effects (bound to a source permanent → Ability context).
-            for aa in &card.activated_abilities {
-                aa.effect
-                    .validate(EffectContext::Ability)
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    })?;
-            }
-            // Validate triggered ability effects (also Ability context — `Self_` is allowed).
-            for ta in &card.triggered_abilities {
-                ta.effect
-                    .validate(EffectContext::Ability)
-                    .map_err(|reason| RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason,
-                    })?;
-            }
-            // Every CreateTokens effect must name a loaded token (an uncreatable token id is a bug).
-            let all_effects = card
-                .spell_effect
-                .iter()
-                .chain(card.activated_abilities.iter().map(|a| &a.effect))
-                .chain(card.triggered_abilities.iter().map(|t| &t.effect));
-            for effect in all_effects {
-                if let SpellEffectKind::CreateTokens { token, .. } = effect {
-                    if !reg.tokens.contains_key(token) {
-                        return Err(RegistryError::InvalidCard {
+            // Validate every face's effects at startup. `face(0)` of a Normal card is the flat
+            // fields; multi-face cards (CR 709/712/715) validate each face uniformly. Spell
+            // effects have no source permanent, so `Self_` target filters are rejected here
+            // (EffectContext::Spell); activated/triggered effects bind to a source (Ability).
+            for face in card.faces_iter() {
+                for effect in face.spell_effect {
+                    effect.validate(EffectContext::Spell).map_err(|reason| {
+                        RegistryError::InvalidCard {
                             id: card.id.clone(),
-                            reason: format!("CreateTokens references unknown token '{token}'"),
-                        });
+                            reason,
+                        }
+                    })?;
+                }
+                for aa in face.activated_abilities {
+                    aa.effect
+                        .validate(EffectContext::Ability)
+                        .map_err(|reason| RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason,
+                        })?;
+                }
+                for ta in face.triggered_abilities {
+                    ta.effect
+                        .validate(EffectContext::Ability)
+                        .map_err(|reason| RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason,
+                        })?;
+                }
+                // Every CreateTokens effect must name a loaded token (an uncreatable id is a bug).
+                let all_effects = face
+                    .spell_effect
+                    .iter()
+                    .chain(face.activated_abilities.iter().map(|a| &a.effect))
+                    .chain(face.triggered_abilities.iter().map(|t| &t.effect));
+                for effect in all_effects {
+                    if let SpellEffectKind::CreateTokens { token, .. } = effect {
+                        if !reg.tokens.contains_key(token) {
+                            return Err(RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason: format!("CreateTokens references unknown token '{token}'"),
+                            });
+                        }
                     }
                 }
             }
             let id = card.id.clone();
-            if reg
-                .by_name
-                .insert(normalize_name(&card.name), id.clone())
-                .is_some()
-            {
-                return Err(RegistryError::InvalidCard {
-                    id,
-                    reason: format!("duplicate name '{}'", card.name),
-                });
+            // Index the whole-card name (what decks/`cards.xml` reference) and, for multi-face
+            // cards, each face name, so `id_for_name` resolves either half to the one card id.
+            let mut names: Vec<String> = vec![card.name.clone()];
+            if card.is_multiface() {
+                names.extend(card.faces.iter().map(|f| f.name.clone()));
+            }
+            for name in names {
+                if reg
+                    .by_name
+                    .insert(normalize_name(&name), id.clone())
+                    .is_some()
+                {
+                    return Err(RegistryError::InvalidCard {
+                        id,
+                        reason: format!("duplicate name '{name}'"),
+                    });
+                }
             }
             if reg.by_id.insert(id.clone(), card).is_some() {
                 return Err(RegistryError::InvalidCard {
@@ -316,6 +326,28 @@ mod tests {
                 def.name
             );
         }
+    }
+
+    /// CR 709/712/715: a multi-face card loads with a `faces` vec, resolves to the card id by
+    /// either its whole-card `//` name or either face name, and each face exposes its own
+    /// characteristics. The slug invariant (tested above) covers the `//` whole-card name.
+    #[test]
+    fn multiface_card_loads_and_resolves_by_face_name() {
+        let reg = CardRegistry::from_embedded().unwrap();
+        let def = reg.get("fire_ice").expect("fire_ice loaded");
+        assert_eq!(def.face_count(), 2);
+        assert!(def.is_multiface());
+        // Whole-card name and both face names all resolve to the one card id.
+        assert_eq!(reg.id_for_name("Fire // Ice"), Some("fire_ice"));
+        assert_eq!(reg.id_for_name("Fire"), Some("fire_ice"));
+        assert_eq!(reg.id_for_name("Ice"), Some("fire_ice"));
+        // Each face carries its own cost/types.
+        let fire = def.face(0).unwrap();
+        let ice = def.face(1).unwrap();
+        assert_eq!(fire.name, "Fire");
+        assert_eq!(ice.name, "Ice");
+        assert!(fire.is_instant && ice.is_instant);
+        assert!(!fire.is_permanent() && !ice.is_permanent());
     }
 
     #[test]

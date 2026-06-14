@@ -33,11 +33,16 @@ fn play_land(hand_card_index: u32) -> RuledCommand {
 }
 
 fn cast_spell(hand_card_index: u32, targets: Vec<TargetRef>) -> RuledCommand {
+    cast_spell_face(hand_card_index, targets, 0)
+}
+
+fn cast_spell_face(hand_card_index: u32, targets: Vec<TargetRef>, face_index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::CastSpell(CastSpell {
             hand_card_index,
             targets,
             x_value: 0,
+            face_index,
             ..Default::default()
         })),
     }
@@ -189,6 +194,46 @@ fn assert_zone_integrity(e: &GameEngine, expected_objects: usize, ctx: &str) {
     );
 }
 
+/// Cast one face of `card_id` (CR 709/712/715) in a fresh game and assert zone integrity.
+/// Used to exercise the non-front faces of a multi-face card, which the front-face sweep skips.
+fn exercise_spell_face_in_fresh_game(card_id: &str, face_index: u32) {
+    let mut p0_deck: Vec<String> = std::iter::repeat_n(card_id.to_string(), 20).collect();
+    p0_deck.extend(std::iter::repeat_n("grizzly_bears".to_string(), 10));
+    p0_deck.extend(std::iter::repeat_n("forest".to_string(), 10));
+    let p1_deck: Vec<String> = std::iter::repeat_n("grizzly_bears".to_string(), 30).collect();
+    let decks = Some(vec![p0_deck, p1_deck]);
+    let mut e = GameEngine::new(901, &[0, 1], 20, decks, true)
+        .unwrap_or_else(|err| panic!("{card_id}: engine init failed: {err:?}"));
+    advance_to_main1(&mut e);
+    let my_creature = deploy(&mut e, 0, "grizzly_bears");
+    let their_creature = deploy(&mut e, 1, "grizzly_bears");
+    let opp = e.state.players[1].id as u32;
+    let me = e.state.players[0].id as u32;
+    let baseline = e.state.objects.len();
+    let slot = put_card_in_hand(&mut e, card_id);
+    let candidates: Vec<Vec<TargetRef>> = vec![
+        vec![],
+        vec![tref(opp)],
+        vec![tref(me)],
+        vec![tref(their_creature)],
+        vec![tref(my_creature)],
+    ];
+    for targets in candidates {
+        grant_ample_mana(&mut e);
+        if e.apply_command(0, &cast_spell_face(slot, targets, face_index))
+            .is_ok()
+        {
+            try_drain_stack(&mut e);
+            break;
+        }
+    }
+    assert_zone_integrity(
+        &e,
+        baseline,
+        &format!("{card_id} face {face_index} (spell)"),
+    );
+}
+
 #[test]
 fn every_registered_card_resolves_without_panic() {
     let registry = CardRegistry::global();
@@ -250,6 +295,14 @@ fn every_registered_card_resolves_without_panic() {
             try_drain_stack(&mut e);
         }
         assert_zone_integrity(&e, baseline, &format!("{card_id} (spell)"));
+
+        // CR 709/712/715: the sweep above casts the front face (index 0). Exercise each
+        // additional face of a multi-face card (split half / MDFC face) in its own fresh game.
+        if def.is_multiface() {
+            for face_index in 1..def.face_count() as u32 {
+                exercise_spell_face_in_fresh_game(card_id, face_index);
+            }
+        }
 
         // Activated abilities: exercise each on a battlefield copy of the card (permanents only).
         if def.is_permanent() && !def.activated_abilities.is_empty() {

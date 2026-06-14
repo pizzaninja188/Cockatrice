@@ -2074,6 +2074,11 @@ void Server_Game::applyRuledStartupBatch(const ruled::v1::IpcResponse &resp,
             const QString cardId = QString::fromStdString(entry.card_id());
             ruledCardCatalogById.insert(cardId, entry);
             ruledCardIdByLowerName.insert(QString::fromStdString(entry.name()).trimmed().toLower(), cardId);
+            // CR 709/712/715: a multi-face card also resolves to its id by either face's Oracle
+            // name (e.g. "Fire" / "Ice" -> "fire_ice"), mirroring the engine's name index.
+            for (const auto &faceName : entry.face_names()) {
+                ruledCardIdByLowerName.insert(QString::fromStdString(faceName).trimmed().toLower(), cardId);
+            }
         }
     }
     if (ruledCardCatalogById.isEmpty()) {

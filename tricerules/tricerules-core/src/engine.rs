@@ -51,8 +51,8 @@ fn instant_timing_step_allowed(step: TurnStep) -> bool {
 
 /// CR 702.8b: a card may be cast at instant speed if it is an instant or has flash. Sorceries
 /// and flashless permanents remain sorcery-speed only.
-fn castable_at_instant_speed(def: &tricerules_cards::CardDefinition) -> bool {
-    def.is_instant || def.keywords.contains(&tricerules_cards::Keyword::Flash)
+fn castable_at_instant_speed(face: &tricerules_cards::FaceRef<'_>) -> bool {
+    face.is_instant || face.keywords.contains(&tricerules_cards::Keyword::Flash)
 }
 
 fn shuffle_player_library(state: &mut GameState, player_idx: usize, mix: u64) {
@@ -615,6 +615,7 @@ impl GameEngine {
                 &cs.targets,
                 cs.x_value,
                 &cs.flex_payments,
+                cs.face_index as usize,
             ),
             Some(Cmd::ActivateAbility(aa)) => self.activate_ability(
                 player,
@@ -2223,10 +2224,13 @@ impl GameEngine {
                 })),
             });
         } else {
+            // CR 709/712/715: permanence is the *cast face's* (Ice resolves to graveyard; an MDFC
+            // permanent face resolves to the battlefield as that face).
             let resolves_to_battlefield = self
                 .registry
                 .get(&card_id)
-                .map(|d| d.is_permanent())
+                .and_then(|d| d.face(top.face_index))
+                .map(|f| f.is_permanent())
                 .unwrap_or(false);
             let destination = if resolves_to_battlefield {
                 rv1::StackResolveDestination::Battlefield as i32
@@ -2272,10 +2276,14 @@ impl GameEngine {
             };
             (vec![abilities.unwrap_or(SpellEffectKind::None)], name)
         } else {
-            let def = self.registry.get(&card_id);
-            let effects = def.map(|c| c.spell_effect.clone()).unwrap_or_default();
-            let name = def
-                .map(|d| d.name.clone())
+            // CR 709/712/715: resolve the cast face's effects and show its name.
+            let face = self
+                .registry
+                .get(&card_id)
+                .and_then(|d| d.face(top.face_index));
+            let effects = face.map(|f| f.spell_effect.to_vec()).unwrap_or_default();
+            let name = face
+                .map(|f| f.name.to_string())
                 .unwrap_or_else(|| "Spell".into());
             (effects, name)
         };
@@ -2859,6 +2867,7 @@ impl GameEngine {
         targets: &[rv1::TargetRef],
         x_value: u32,
         flex_payments: &[rv1::FlexPipPayment],
+        face_index: usize,
     ) -> Result<RuledEventBatch, EngineError> {
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("not your priority"));
@@ -2879,18 +2888,29 @@ impl GameEngine {
             .registry
             .get(&card_id)
             .ok_or_else(|| EngineError::MissingCard(card_id.clone()))?;
-        if def.is_land {
+        // CR 709/712/715: cast the chosen face of a multi-face card (split half / MDFC face /
+        // adventure half). Single-face cards have only face 0. Capture the face's characteristics
+        // into owned locals so the (immutable) registry borrow can be released before mutating state.
+        let face = def
+            .face(face_index)
+            .ok_or(EngineError::Illegal("bad face index"))?;
+        if face.is_land {
             return Err(EngineError::Illegal("use play land"));
         }
+        let face_is_sorcery = face.is_sorcery;
+        let face_instant_speed = castable_at_instant_speed(&face);
+        let face_mana = face.mana_cost.clone();
+        let face_name = face.name.to_string();
+        let face_effects: Vec<SpellEffectKind> = face.spell_effect.to_vec();
         let sorcery_ok = sorcery_speed_available(&self.state, player);
         let instant_ok = instant_timing_step_allowed(self.state.turn_step);
         // CR 601.3a: sorceries are sorcery-speed only; instants and flash cards (CR 702.8b)
         // use instant timing; every other permanent is sorcery-speed only.
-        if def.is_sorcery {
+        if face_is_sorcery {
             if !sorcery_ok {
                 return Err(EngineError::Illegal("sorcery speed only"));
             }
-        } else if castable_at_instant_speed(def) {
+        } else if face_instant_speed {
             if !instant_ok {
                 return Err(EngineError::Illegal("instant timing"));
             }
@@ -2909,21 +2929,15 @@ impl GameEngine {
                 "must choose trigger target before casting",
             ));
         }
-        validate_spell_targets(&self.state, self.registry, player, &card_id, targets)?;
+        validate_spell_targets(&self.state, self.registry, player, &face_effects, targets)?;
         // CR 107.3: a chosen X is required iff the cost has an {X} pip; reject a stray x_value on a
         // non-X spell (strictness) and a missing one on an X spell. X=0 is a legal choice.
-        let has_x = def.mana_cost.has_x();
+        let has_x = face_mana.has_x();
         if x_value != 0 && !has_x {
             return Err(EngineError::Illegal("x_value given but cost has no {X}"));
         }
         let chosen_x = if has_x { x_value } else { 0 };
-        pay_mana(
-            &mut self.state,
-            idx,
-            &def.mana_cost,
-            chosen_x,
-            flex_payments,
-        )?;
+        pay_mana(&mut self.state, idx, &face_mana, chosen_x, flex_payments)?;
 
         self.state.players[idx].hand.retain(|&x| x != oid);
         let trefs: Vec<ObjectId> = targets.iter().map(|t| t.object_id).collect();
@@ -2939,6 +2953,7 @@ impl GameEngine {
             ability_index: None,
             is_triggered: false,
             chosen_x,
+            face_index,
         });
         if let Some(o) = self.state.objects.get_mut(&oid) {
             o.zone = Zone::Stack;
@@ -2948,8 +2963,8 @@ impl GameEngine {
         // MTG priority: after casting a spell, the caster gets priority first.
         self.state.priority_idx = idx;
 
-        let def_name = def.name.clone();
-        // Clone card_id before the mutable batch; def was already dropped at pay_mana_simple.
+        // The cast face's own name (e.g. "Fire" / "Ice"), so logs and the stack card show the
+        // half that was cast, not the whole-card `//` name.
         let cast_card_id = card_id.clone();
         let mut batch = RuledEventBatch::default();
         let x_line = if has_x {
@@ -2959,12 +2974,12 @@ impl GameEngine {
         };
         batch.events.push(ev_log(format!(
             "P{} casts {}{}{}",
-            player, def.name, x_line, tgt_line
+            player, face_name, x_line, tgt_line
         )));
         batch.events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
                 object_id: oid,
-                description: def_name,
+                description: face_name,
                 targets: targets.to_vec(),
                 ability_annotation: String::new(),
                 card_id: cast_card_id.clone(),
@@ -3126,6 +3141,8 @@ impl GameEngine {
             is_triggered: false,
             // Abilities don't have an {X} cast value (X in activated-ability costs is deferred).
             chosen_x: 0,
+            // Abilities are not faces; the front face (0) is the conventional default.
+            face_index: 0,
         });
         self.state.passes_since_stack_change = 0;
         self.state.priority_idx = idx;
@@ -3210,6 +3227,7 @@ impl GameEngine {
             ability_index: Some(ability_index),
             is_triggered: true,
             chosen_x: 0,
+            face_index: 0,
         });
         self.state.passes_since_stack_change = 0;
 
@@ -3547,8 +3565,16 @@ impl GameEngine {
             .map(|def| rv1::card_catalog::Entry {
                 card_id: def.id.clone(),
                 name: def.name.clone(),
-                types: def.types.clone(),
-                is_permanent: def.is_permanent(),
+                // Multi-face cards carry no flat types; describe by the primary (front) face.
+                types: def.primary_face().types.to_vec(),
+                is_permanent: def.primary_face().is_permanent(),
+                // CR 709/712/715: per-face names so the relay can display a cast/active half;
+                // empty for single-face cards.
+                face_names: if def.is_multiface() {
+                    def.faces.iter().map(|f| f.name.clone()).collect()
+                } else {
+                    Vec::new()
+                },
             })
             .collect();
         RuledEvent {
@@ -4125,6 +4151,7 @@ impl GameEngine {
                 ability_index: Some(ability_index),
                 is_triggered: true,
                 chosen_x: 0,
+                face_index: 0,
             });
             self.state.passes_since_stack_change = 0;
             events.push(rv1::RuledEvent {
@@ -4276,13 +4303,34 @@ fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 let Some(def) = eng.registry.get(&obj.card_id) else {
                     continue;
                 };
-                if def.is_land {
-                    continue;
+                // CR 709/712/715: a multi-face card's halves can target different things; offer the
+                // union of every face's legal targets so the UI highlights anything castable from
+                // some face. The chosen face is validated server-side at cast time.
+                let mut merged = rv1::SpellTargets::default();
+                let mut any = false;
+                for face in def.faces_iter() {
+                    if face.is_land || !face.spell_effect.iter().any(spell_effect_kind_needs_target)
+                    {
+                        continue;
+                    }
+                    any = true;
+                    let t =
+                        compute_spell_targets(&eng.state, eng.registry, p.id, face.spell_effect);
+                    for id in t.valid_permanent_ids {
+                        if !merged.valid_permanent_ids.contains(&id) {
+                            merged.valid_permanent_ids.push(id);
+                        }
+                    }
+                    for id in t.valid_stack_ids {
+                        if !merged.valid_stack_ids.contains(&id) {
+                            merged.valid_stack_ids.push(id);
+                        }
+                    }
+                    merged.can_target_self |= t.can_target_self;
+                    merged.can_target_opponent |= t.can_target_opponent;
                 }
-                if def.spell_effect.iter().any(spell_effect_kind_needs_target) {
-                    let targets =
-                        compute_spell_targets(&eng.state, eng.registry, p.id, &def.spell_effect);
-                    valid_targets_by_hand_slot.insert(slot as u32, targets);
+                if any {
+                    valid_targets_by_hand_slot.insert(slot as u32, merged);
                 }
             }
 
@@ -4439,25 +4487,30 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
     for (i, &oid) in eng.state.players[idx].hand.iter().enumerate() {
         let cid = &eng.state.objects.get(&oid).unwrap().card_id;
         if let Some(def) = eng.registry.get(cid) {
-            let name = def.name.as_str();
-            if def.is_land {
-                if sorcery_ok && !eng.state.land_dropped_this_turn {
-                    v.push(format!("Play land {name} (hand idx {i})"));
-                }
-            } else if !combat_decl_lock {
-                // CR 601.3a / 702.8b: instants and flash cards use instant timing; everything
-                // else is sorcery-speed only.
-                let cast_ok = if castable_at_instant_speed(def) {
-                    instant_ok
-                } else {
-                    sorcery_ok
-                };
-                if cast_ok {
-                    let needs_target = def.spell_effect.iter().any(spell_effect_kind_needs_target);
-                    if needs_target {
-                        v.push(format!("Cast {name} (hand idx {i}, target)"));
+            // CR 709/712/715: a multi-face card offers a label per castable face (each split
+            // half / MDFC face); a single-face card has exactly one face (the flat fields).
+            for face in def.faces_iter() {
+                let name = face.name;
+                if face.is_land {
+                    if sorcery_ok && !eng.state.land_dropped_this_turn {
+                        v.push(format!("Play land {name} (hand idx {i})"));
+                    }
+                } else if !combat_decl_lock {
+                    // CR 601.3a / 702.8b: instants and flash cards use instant timing; everything
+                    // else is sorcery-speed only.
+                    let cast_ok = if castable_at_instant_speed(&face) {
+                        instant_ok
                     } else {
-                        v.push(format!("Cast {name} (hand idx {i})"));
+                        sorcery_ok
+                    };
+                    if cast_ok {
+                        let needs_target =
+                            face.spell_effect.iter().any(spell_effect_kind_needs_target);
+                        if needs_target {
+                            v.push(format!("Cast {name} (hand idx {i}, target)"));
+                        } else {
+                            v.push(format!("Cast {name} (hand idx {i})"));
+                        }
                     }
                 }
             }
@@ -5197,21 +5250,16 @@ fn validate_spell_targets(
     state: &GameState,
     registry: &CardRegistry,
     caster: PlayerId,
-    card_id: &str,
+    effects: &[SpellEffectKind],
     targets: &[rv1::TargetRef],
 ) -> Result<(), EngineError> {
-    let effects = registry
-        .get(card_id)
-        .map(|c| c.spell_effect.clone())
-        .unwrap_or_default();
-
     let needs_target = effects.iter().any(spell_effect_kind_needs_target);
     if needs_target {
         if targets.len() != 1 {
             return Err(EngineError::Illegal("spell requires exactly one target"));
         }
         let tid = targets[0].object_id;
-        for effect in &effects {
+        for effect in effects {
             if !spell_effect_kind_needs_target(effect) {
                 continue;
             }

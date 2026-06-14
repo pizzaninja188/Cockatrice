@@ -4,10 +4,131 @@ use crate::primitives::{
 };
 use serde::{Deserialize, Serialize};
 
+/// Physical card layout (CR 709/710/712/715). Drives how many faces a card has and how each
+/// face becomes castable. `Normal` is the overwhelming majority — one face, the flat fields on
+/// [`CardDefinition`] *are* that face. The multi-face variants populate [`CardDefinition::faces`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum Layout {
+    /// One face; characteristics live in the flat [`CardDefinition`] fields.
+    #[default]
+    Normal,
+    /// CR 709: two halves printed side by side, each independently castable (Fire // Ice).
+    Split,
+    /// CR 712 modal DFC: either face castable from hand; the back is a real card.
+    ModalDfc,
+    /// CR 712 transforming DFC: front cast, transforms in place to the back (werewolves, Delver).
+    Transform,
+    /// CR 715: cast the adventure (spell) half, then later the creature half from exile.
+    Adventure,
+    /// CR 710: one card, two states stacked on one face (older Kamigawa flip cards).
+    Flip,
+}
+
+/// One face of a card (CR 712.4: a card has the characteristics of its current face only).
+/// Mirrors the per-face fields of [`CardDefinition`]; the whole-card fields (`id`, `layout`,
+/// `partial`, `colors_override`) stay on [`CardDefinition`]. Authored only for multi-face
+/// layouts — a `Normal` card's single face is the flat [`CardDefinition`] fields, not a `CardFace`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CardFace {
+    pub name: String,
+    /// Scryfall brace syntax, copied verbatim from this face's `card_faces[i].mana_cost`.
+    #[serde(default)]
+    pub mana_cost: ManaCost,
+    #[serde(default)]
+    pub types: Vec<String>,
+    #[serde(default)]
+    pub supertypes: Vec<String>,
+    #[serde(default)]
+    pub power: Option<u32>,
+    #[serde(default)]
+    pub toughness: Option<u32>,
+    #[serde(default)]
+    pub spell_effect: Vec<SpellEffectKind>,
+    #[serde(default)]
+    pub keywords: Vec<Keyword>,
+    #[serde(default)]
+    pub activated_abilities: Vec<ActivatedAbilityDef>,
+    #[serde(default)]
+    pub triggered_abilities: Vec<TriggeredAbilityDef>,
+    // Derived type/supertype flags — same convention as CardDefinition (never authored in RON).
+    #[serde(skip)]
+    pub is_land: bool,
+    #[serde(skip)]
+    pub is_creature: bool,
+    #[serde(skip)]
+    pub is_instant: bool,
+    #[serde(skip)]
+    pub is_sorcery: bool,
+    #[serde(skip)]
+    pub is_artifact: bool,
+    #[serde(skip)]
+    pub is_enchantment: bool,
+    #[serde(skip)]
+    pub is_legendary: bool,
+}
+
+impl CardFace {
+    fn derive_type_flags(&mut self) {
+        fn has(list: &[String], t: &str) -> bool {
+            list.iter().any(|x| x == t)
+        }
+        self.is_creature = has(&self.types, "Creature");
+        self.is_instant = has(&self.types, "Instant");
+        self.is_sorcery = has(&self.types, "Sorcery");
+        self.is_artifact = has(&self.types, "Artifact");
+        self.is_enchantment = has(&self.types, "Enchantment");
+        self.is_land = has(&self.types, "Land");
+        self.is_legendary = has(&self.supertypes, "Legendary");
+    }
+}
+
+/// A read-only view of one face's characteristics, uniform across single-face (flat fields) and
+/// multi-face (a [`CardFace`]) cards. Returned by [`CardDefinition::face`] so the engine's cast
+/// path and characteristic queries read "the face that is up" without caring which layout it is.
+#[derive(Debug, Clone, Copy)]
+pub struct FaceRef<'a> {
+    pub name: &'a str,
+    pub mana_cost: &'a ManaCost,
+    pub types: &'a [String],
+    pub supertypes: &'a [String],
+    pub power: Option<u32>,
+    pub toughness: Option<u32>,
+    pub spell_effect: &'a [SpellEffectKind],
+    pub keywords: &'a [Keyword],
+    pub activated_abilities: &'a [ActivatedAbilityDef],
+    pub triggered_abilities: &'a [TriggeredAbilityDef],
+    pub is_land: bool,
+    pub is_creature: bool,
+    pub is_instant: bool,
+    pub is_sorcery: bool,
+    pub is_artifact: bool,
+    pub is_enchantment: bool,
+    pub is_legendary: bool,
+}
+
+impl FaceRef<'_> {
+    /// True for permanent faces (CR 110.4): resolves to the battlefield, not the graveyard.
+    pub fn is_permanent(&self) -> bool {
+        !self.is_instant && !self.is_sorcery
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CardDefinition {
     pub id: String,
+    /// The whole-card Oracle name. For multi-face cards this is the `//` name
+    /// (e.g. `"Fire // Ice"`) that `cards.xml` stores and decks reference; the slug invariant
+    /// (`id == slugify(name)`) keys off it. Per-face names live in [`CardFace::name`].
     pub name: String,
+    /// Physical layout (CR 709/710/712/715). `Normal` (default) leaves [`Self::faces`] empty and
+    /// the single face is the flat fields below. Multi-face layouts populate [`Self::faces`].
+    #[serde(default)]
+    pub layout: Layout,
+    /// The card's faces, authored only for multi-face layouts (`faces.len() == 2` for split/MDFC/
+    /// transform/adventure/flip). Empty for `Normal`, whose lone face *is* the flat fields below;
+    /// [`Self::face`] hides this asymmetry so call sites read faces uniformly.
+    #[serde(default)]
+    pub faces: Vec<CardFace>,
     /// Scryfall brace syntax, copied verbatim (e.g. `"{1}{R}"`, `""` for lands). See [`ManaCost`].
     #[serde(default)]
     pub mana_cost: ManaCost,
@@ -83,6 +204,83 @@ impl CardDefinition {
         self.is_enchantment = has(&self.types, "Enchantment");
         self.is_land = has(&self.types, "Land");
         self.is_legendary = has(&self.supertypes, "Legendary");
+        for face in &mut self.faces {
+            face.derive_type_flags();
+        }
+    }
+
+    /// Number of faces (CR 712.4). `1` for a `Normal` card (the flat fields), else `faces.len()`.
+    pub fn face_count(&self) -> usize {
+        if self.faces.is_empty() {
+            1
+        } else {
+            self.faces.len()
+        }
+    }
+
+    /// A uniform view of face `index`, or `None` if out of range. Index `0` of a `Normal` card is
+    /// the flat fields; multi-face cards index into [`Self::faces`]. The engine casts and reads
+    /// characteristics through this so split/MDFC/transform need no per-call-site branching.
+    pub fn face(&self, index: usize) -> Option<FaceRef<'_>> {
+        if self.faces.is_empty() {
+            return if index == 0 {
+                Some(FaceRef {
+                    name: &self.name,
+                    mana_cost: &self.mana_cost,
+                    types: &self.types,
+                    supertypes: &self.supertypes,
+                    power: self.power,
+                    toughness: self.toughness,
+                    spell_effect: &self.spell_effect,
+                    keywords: &self.keywords,
+                    activated_abilities: &self.activated_abilities,
+                    triggered_abilities: &self.triggered_abilities,
+                    is_land: self.is_land,
+                    is_creature: self.is_creature,
+                    is_instant: self.is_instant,
+                    is_sorcery: self.is_sorcery,
+                    is_artifact: self.is_artifact,
+                    is_enchantment: self.is_enchantment,
+                    is_legendary: self.is_legendary,
+                })
+            } else {
+                None
+            };
+        }
+        self.faces.get(index).map(|f| FaceRef {
+            name: &f.name,
+            mana_cost: &f.mana_cost,
+            types: &f.types,
+            supertypes: &f.supertypes,
+            power: f.power,
+            toughness: f.toughness,
+            spell_effect: &f.spell_effect,
+            keywords: &f.keywords,
+            activated_abilities: &f.activated_abilities,
+            triggered_abilities: &f.triggered_abilities,
+            is_land: f.is_land,
+            is_creature: f.is_creature,
+            is_instant: f.is_instant,
+            is_sorcery: f.is_sorcery,
+            is_artifact: f.is_artifact,
+            is_enchantment: f.is_enchantment,
+            is_legendary: f.is_legendary,
+        })
+    }
+
+    /// The primary face (front face / face 0). Always present — every card has at least one face.
+    pub fn primary_face(&self) -> FaceRef<'_> {
+        self.face(0).expect("every card has a face 0")
+    }
+
+    /// Iterate every face in index order (length [`Self::face_count`]).
+    pub fn faces_iter(&self) -> impl Iterator<Item = FaceRef<'_>> {
+        (0..self.face_count()).map(move |i| self.face(i).expect("face index in range"))
+    }
+
+    /// True if this card has more than one face (any non-`Normal` layout).
+    pub fn is_multiface(&self) -> bool {
+        !self.faces.is_empty()
     }
 
     /// True for permanent cards (CR 110.4): the spell resolves to the battlefield rather

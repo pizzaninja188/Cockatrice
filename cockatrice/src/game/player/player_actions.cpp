@@ -457,6 +457,8 @@ bool PlayerActions::completePendingRuledSpellCast()
     auto *cast = ruledCommand.mutable_cast_spell();
     cast->set_hand_card_index(pendingRuledSpellCast.handIndex);
     cast->set_x_value(static_cast<quint32>(pendingRuledSpellCast.xValue));
+    // CR 709/712/715: which face of a multi-face card to cast (0 for single-face cards).
+    cast->set_face_index(static_cast<quint32>(pendingRuledSpellCast.faceIndex));
     for (const quint32 targetOid : pendingRuledSpellCast.selectedTargetOids) {
         auto *target = cast->add_targets();
         target->set_object_id(targetOid);
@@ -1040,15 +1042,43 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
     clearPendingRuledSpellCast();
     pendingRuledSpellCast.valid = true;
     pendingRuledSpellCast.handIndex = ruledHandIndex;
-    pendingRuledSpellCast.cardName = card->getName();
-    pendingRuledSpellCast.remainingCost = parseSimpleManaCost(card->getCardInfo().getManaCost());
     pendingRuledSpellCast.selectedTargetOids.clear();
     pendingRuledSpellCast.xValue = 0;
+
+    // CR 709/712/715: a multi-face card carries an Oracle "A // B" name; each half is cast
+    // separately. Let the player pick the half and use that face's name + mana cost. The engine
+    // re-derives and validates the chosen face authoritatively (CastSpell.face_index below).
+    QString castName = card->getName();
+    QString castCost = card->getCardInfo().getManaCost();
+    pendingRuledSpellCast.faceIndex = 0;
+    const QStringList faceNames = card->getName().split(QStringLiteral(" // "), Qt::SkipEmptyParts);
+    if (faceNames.size() > 1) {
+        bool faceOk = false;
+        const QString chosen = QInputDialog::getItem(nullptr, tr("Choose a face to cast"),
+                                                     tr("Which half of %1 do you want to cast?").arg(card->getName()),
+                                                     faceNames, 0, false, &faceOk);
+        if (!faceOk) {
+            clearPendingRuledSpellCast();
+            return true; // user cancelled at the face picker
+        }
+        int chosenFace = faceNames.indexOf(chosen);
+        if (chosenFace < 0) {
+            chosenFace = 0;
+        }
+        pendingRuledSpellCast.faceIndex = chosenFace;
+        castName = faceNames.at(chosenFace);
+        // Oracle stores a split mana cost as "{1}{R} // {1}{U}"; fall back to the whole string
+        // (or empty for higher faces) when it isn't per-face split.
+        const QStringList faceCosts = card->getCardInfo().getManaCost().split(QStringLiteral(" // "));
+        castCost = chosenFace < faceCosts.size() ? faceCosts.at(chosenFace).trimmed() : QString();
+    }
+    pendingRuledSpellCast.cardName = castName;
+    pendingRuledSpellCast.remainingCost = parseSimpleManaCost(castCost);
 
     // CR 107.3 / 601.2b: if the cost has an {X} pip, the value of X is chosen first — before
     // targets and before paying costs. parseSimpleManaCost folds each {X} into the generic
     // bucket as a single pip, so once X is chosen we top that bucket up to xPips * X generic.
-    const QString rawCost = card->getCardInfo().getManaCost();
+    const QString rawCost = castCost;
     const int xPips = rawCost.count(QStringLiteral("{X}"));
     if (xPips > 0) {
         bool ok = false;

@@ -237,6 +237,9 @@ private:
     struct PendingRuledSpellCast
     {
         int handIndex = -1;
+        // CR 709/712/715: which face of a multi-face card is being cast (split half / MDFC face).
+        // 0 (front/primary) for single-face cards; sent as CastSpell.face_index.
+        int faceIndex = 0;
         QString cardName;
         QMap<QChar, int> remainingCost;
         QVector<quint32> selectedTargetOids;

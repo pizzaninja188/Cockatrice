@@ -1,0 +1,24 @@
+// Fire // Ice (Apocalypse) — split card, CR 709. Each half is an independently castable
+// instant; the engine picks the half via CastSpell.face_index.
+(
+    id: "fire_ice",
+    name: "Fire // Ice",
+    layout: Split,
+    faces: [
+        (
+            name: "Fire",
+            mana_cost: "{1}{R}",
+            types: ["Instant"],
+            // Oracle: "Fire deals 2 damage divided as you choose among one or two targets."
+            spell_effect: [DamageTarget(amount: 2, target: (kind: AnyTarget))],
+        ),
+        (
+            name: "Ice",
+            mana_cost: "{1}{U}",
+            types: ["Instant"],
+            // Oracle: "Tap target permanent. Draw a card."
+            spell_effect: [TapTarget(target: (kind: AnyPermanent)), Draw(count: 1)],
+        ),
+    ],
+    partial: "Fire deals its 2 damage to a single target; dividing among two targets is not modeled",
+)

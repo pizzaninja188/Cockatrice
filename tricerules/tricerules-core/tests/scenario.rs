@@ -91,6 +91,23 @@ fn cast_spell_flex(
             targets,
             x_value: 0,
             flex_payments,
+            ..Default::default()
+        })),
+    }
+}
+
+/// Cast a specific face of a multi-face card (CR 709/712/715): split half / MDFC face index.
+fn cast_spell_face(
+    hand_card_index: usize,
+    targets: Vec<TargetRef>,
+    face_index: u32,
+) -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::CastSpell(CastSpell {
+            hand_card_index: hand_card_index as u32,
+            targets,
+            face_index,
+            ..Default::default()
         })),
     }
 }
@@ -8948,5 +8965,126 @@ fn anthem_buffs_token_via_shared_pt_path() {
         e.effective_toughness(token),
         Some(2),
         "anthem buffs token toughness"
+    );
+}
+
+/// CR 709: Fire // Ice is a split card. Each half is an independently castable instant chosen by
+/// `CastSpell.face_index`. Casting face 0 (Fire) deals 2 damage and shows the half's own name.
+#[test]
+fn fire_ice_fire_half_deals_two_and_shows_face_name() {
+    let decks = Some(vec![
+        vec![
+            "fire_ice".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec!["forest".into(); 7],
+    ]);
+    let mut e = GameEngine::new(21, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // {1}{R}: two red pays the colored pip and the generic.
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 2,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana");
+
+    let idx = hand_index_for_card(&e, 0, "fire_ice");
+    let pushed = e
+        .apply_command(0, &cast_spell_face(idx, target_player(1), 0))
+        .expect("cast Fire");
+    let spell_oid = e.state.stack.last().expect("spell on stack").id;
+    let push = pushed
+        .events
+        .iter()
+        .find_map(|ev| match &ev.ev {
+            Some(Ev::StackPushed(s)) => Some(s),
+            _ => None,
+        })
+        .expect("stack pushed");
+    // The cast half's own name is on the stack card; the card id is the whole-card id.
+    assert_eq!(push.description, "Fire");
+    assert_eq!(push.card_id, "fire_ice");
+
+    e.apply_command(0, &pass()).expect("caster pass");
+    e.apply_command(1, &pass()).expect("opponent pass");
+    assert!(e.state.stack.is_empty());
+    assert_eq!(e.state.players[1].life, 18, "Fire deals 2 to the player");
+    // An instant half resolves to its owner's graveyard, not the battlefield.
+    assert!(e.state.players[0].graveyard.contains(&spell_oid));
+}
+
+/// CR 709: casting the other half (Ice, face 1) of the same split card taps a target permanent
+/// and draws — different cost, effect, and name from Fire, resolved from the same physical card.
+#[test]
+fn fire_ice_ice_half_taps_and_draws() {
+    let mut p0_deck: Vec<String> = vec!["fire_ice".into(), "mountain".into()];
+    p0_deck.extend(std::iter::repeat_n("island".to_string(), 10));
+    let decks = Some(vec![p0_deck, vec!["forest".into(); 12]]);
+    let mut e = GameEngine::new(22, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Place the card and an untapped land deterministically (shuffle-independent).
+    let card_oid = relocate_to_hand(&mut e, 0, "fire_ice");
+    let land_oid = relocate_to_battlefield(&mut e, 0, "mountain", false);
+    let idx = e.state.players[0]
+        .hand
+        .iter()
+        .position(|&o| o == card_oid)
+        .expect("fire_ice in hand");
+    assert!(!e.state.objects.get(&land_oid).unwrap().tapped);
+
+    // {1}{U}: two blue pays the colored pip and the generic.
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            u: 2,
+            ..Default::default()
+        }),
+    )
+    .expect("add blue mana");
+
+    let lib_before = e.state.players[0].library.len();
+    let pushed = e
+        .apply_command(
+            0,
+            &cast_spell_face(
+                idx,
+                vec![TargetRef {
+                    object_id: land_oid,
+                }],
+                1,
+            ),
+        )
+        .expect("cast Ice");
+    let push = pushed
+        .events
+        .iter()
+        .find_map(|ev| match &ev.ev {
+            Some(Ev::StackPushed(s)) => Some(s),
+            _ => None,
+        })
+        .expect("stack pushed");
+    assert_eq!(push.description, "Ice");
+
+    e.apply_command(0, &pass()).expect("caster pass");
+    e.apply_command(1, &pass()).expect("opponent pass");
+    assert!(e.state.stack.is_empty());
+    assert!(
+        e.state.objects.get(&land_oid).unwrap().tapped,
+        "Ice taps the target permanent"
+    );
+    assert_eq!(
+        e.state.players[0].library.len(),
+        lib_before - 1,
+        "Ice draws a card"
     );
 }
