@@ -2244,9 +2244,12 @@ impl GameEngine {
         let card_id = top.card_id.clone();
         let targets = top.targets.clone();
 
-        // Abilities leave no object behind when they resolve — only spells move to a zone.
+        // Abilities — and spell copies (CR 707.10d) — leave no object behind when they resolve;
+        // only a genuinely cast spell has a backing card that moves to a zone. A copy has no
+        // `GameObject` in `objects`, so it must take the same no-zone-move path as an ability.
         let is_ability = top.ability_text.is_some();
-        if is_ability {
+        let leaves_no_object = is_ability || top.is_copy;
+        if leaves_no_object {
             events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
                     object_id: top.id,
@@ -2323,7 +2326,10 @@ impl GameEngine {
         // Tier-3 (CR 608): a custom effect owns this spell's resolution. The spell card has
         // already moved to its zone (graveyard/battlefield above); hand off the algorithm to the
         // registered `CardEffect`, which either completes now or parks awaiting a player choice.
-        if !is_ability {
+        // A copy is excluded: the resumable custom machinery (`begin_custom_resolution`) expects the
+        // spell's backing `GameObject`, which a copy lacks. Copying a tier-3 spell is a documented
+        // limitation (the copy resolves its non-custom effects only, if any).
+        if !is_ability && !top.is_copy {
             let custom_key = self
                 .registry
                 .get(&card_id)
@@ -2523,6 +2529,59 @@ impl GameEngine {
                                 ));
                             }
                             events.push(ev_log(format!("{spell_label} counters {tgt}")));
+                        }
+                    }
+                }
+                SpellEffectKind::CopyTargetSpell { count } => {
+                    // CR 707.10: create `count` copies of the target spell on the stack, each
+                    // controlled by this spell's controller. The copy is not cast (no mana/cast
+                    // triggers) and ceases to exist after resolving (handled by `is_copy`). It uses
+                    // the original's chosen X, face, and targets — CR 707.10c new-target choice is
+                    // deferred (the copy keeps the original's targets). If the target spell has left
+                    // the stack (e.g. countered in response), this fizzles via the resolution check.
+                    if let Some(&tid) = targets.first() {
+                        if let Some(src) = self.state.stack.iter().find(|s| s.id == tid).cloned() {
+                            let copied_name = self
+                                .registry
+                                .get(&src.card_id)
+                                .and_then(|d| d.face(src.face_index))
+                                .map(|f| f.name.to_string())
+                                .unwrap_or_else(|| src.card_id.clone());
+                            for _ in 0..count {
+                                let copy_id = self.state.next_object_id;
+                                self.state.next_object_id += 1;
+                                self.state.stack.push(StackItem {
+                                    id: copy_id,
+                                    controller,
+                                    card_id: src.card_id.clone(),
+                                    targets: src.targets.clone(),
+                                    ability_text: None,
+                                    source_permanent_id: None,
+                                    ability_index: None,
+                                    is_triggered: false,
+                                    is_copy: true,
+                                    chosen_x: src.chosen_x,
+                                    face_index: src.face_index,
+                                });
+                                events.push(rv1::RuledEvent {
+                                    ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
+                                        object_id: copy_id,
+                                        description: copied_name.clone(),
+                                        targets: src
+                                            .targets
+                                            .iter()
+                                            .map(|&o| rv1::TargetRef { object_id: o })
+                                            .collect(),
+                                        // Overlay marks the stack item as a copy in the existing UI.
+                                        ability_annotation: "(copy)".to_string(),
+                                        card_id: src.card_id.clone(),
+                                        is_copy: true,
+                                    })),
+                                });
+                                events.push(ev_log(format!(
+                                    "{spell_label} copies {copied_name} (P{controller})"
+                                )));
+                            }
                         }
                     }
                 }
@@ -2998,6 +3057,7 @@ impl GameEngine {
             source_permanent_id: None,
             ability_index: None,
             is_triggered: false,
+            is_copy: false,
             chosen_x,
             face_index,
         });
@@ -3029,6 +3089,7 @@ impl GameEngine {
                 targets: targets.to_vec(),
                 ability_annotation: String::new(),
                 card_id: cast_card_id.clone(),
+                is_copy: false,
             })),
         });
         self.fire_triggers(
@@ -3185,6 +3246,7 @@ impl GameEngine {
             source_permanent_id: Some(permanent_id),
             ability_index: Some(ability_index),
             is_triggered: false,
+            is_copy: false,
             // Abilities don't have an {X} cast value (X in activated-ability costs is deferred).
             chosen_x: 0,
             // Abilities are not faces; the front face (0) is the conventional default.
@@ -3208,6 +3270,7 @@ impl GameEngine {
                 targets: targets.to_vec(),
                 ability_annotation: ability_text,
                 card_id: String::new(),
+                is_copy: false,
             })),
         });
         batch.events.push(ev_priority_changed(self));
@@ -3272,6 +3335,7 @@ impl GameEngine {
             source_permanent_id: Some(source_id),
             ability_index: Some(ability_index),
             is_triggered: true,
+            is_copy: false,
             chosen_x: 0,
             face_index: 0,
         });
@@ -3290,6 +3354,7 @@ impl GameEngine {
                 }],
                 ability_annotation: ability_text,
                 card_id: String::new(),
+                is_copy: false,
             })),
         });
 
@@ -4366,6 +4431,7 @@ impl GameEngine {
                 source_permanent_id: Some(source_id),
                 ability_index: Some(ability_index),
                 is_triggered: true,
+                is_copy: false,
                 chosen_x: 0,
                 face_index: 0,
             });
@@ -4377,6 +4443,7 @@ impl GameEngine {
                     targets: vec![],
                     ability_annotation: ability_text.clone(),
                     card_id: String::new(),
+                    is_copy: false,
                 })),
             });
             events.push(ev_log(format!("Triggered: {card_name} — {ability_text}")));
@@ -5323,8 +5390,10 @@ fn effect_target_legal_at_resolution(
             any_battlefield_permanent_target_legal(state, tid)
                 && object_targetable_by(state, registry, tid, caster)
         }
-        // CR 115.2: counterspells target spells, not activated/triggered abilities.
-        SpellEffectKind::CounterTargetSpell => state
+        // CR 115.2 / 707.10b: counter and copy effects target *spells* on the stack, not
+        // activated/triggered abilities. (Both abilities and copies carry `ability_text` /
+        // `is_copy`; a copy is itself a spell, so it stays a legal target for either.)
+        SpellEffectKind::CounterTargetSpell | SpellEffectKind::CopyTargetSpell { .. } => state
             .stack
             .iter()
             .any(|s| s.id == tid && s.ability_text.is_none()),
@@ -5348,7 +5417,8 @@ fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
         | SpellEffectKind::TargetPlayerLosesLife { .. }
         | SpellEffectKind::MillTargetPlayer { .. }
         | SpellEffectKind::TapTarget { .. }
-        | SpellEffectKind::CounterTargetSpell => true,
+        | SpellEffectKind::CounterTargetSpell
+        | SpellEffectKind::CopyTargetSpell { .. } => true,
         _ => false,
     }
 }
@@ -5457,7 +5527,11 @@ fn validate_effect_targets(
         SpellEffectKind::Draw { .. }
         | SpellEffectKind::GainLife { .. }
         | SpellEffectKind::EachOpponentLosesLifeYouGainEqual { .. }
+        // Counter/copy target *spells*; they are never put on an ability, so this ability-only
+        // validator only needs them present for exhaustiveness (spell targets go through
+        // `spell_target_legality_error`).
         | SpellEffectKind::CounterTargetSpell
+        | SpellEffectKind::CopyTargetSpell { .. }
         | SpellEffectKind::DestroyAll { .. }
         | SpellEffectKind::DamageAll { .. }
         | SpellEffectKind::CreateTokens { .. }
@@ -5557,16 +5631,14 @@ fn spell_target_legality_error(
                 ));
             }
         }
-        // CR 115.2: counterspells target spells, not activated/triggered abilities.
-        SpellEffectKind::CounterTargetSpell
+        // CR 115.2 / 707.10b: counter and copy effects target spells, not abilities.
+        SpellEffectKind::CounterTargetSpell | SpellEffectKind::CopyTargetSpell { .. }
             if !state
                 .stack
                 .iter()
                 .any(|s| s.id == tid && s.ability_text.is_none()) =>
         {
-            return Err(EngineError::Illegal(
-                "counter target must be a spell on the stack",
-            ));
+            return Err(EngineError::Illegal("target must be a spell on the stack"));
         }
         _ => {}
     }

@@ -109,6 +109,11 @@ private:
     QHash<quint32, int> ruledStackObjectIdToCasterPlayerId;
     // Stack object id -> target engine object ids captured from CastSpell intent.
     QHash<quint32, QVector<quint32>> ruledStackTargetsByObjectId;
+    /// Stack object ids that are spell *copies* (CR 707.10, StackPushed.is_copy). A copy has no
+    /// physical Cockatrice card on the shared stack, so it is never bound to a Server_Card and its
+    /// StackResolved is a no-op move — without this guard the copy (which shares the original's
+    /// card_id/name) would mis-resolve the original's physical card.
+    QSet<quint32> ruledStackCopyObjectIds;
     struct PendingRuledCastVisual
     {
         QString cardName;

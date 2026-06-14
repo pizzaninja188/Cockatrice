@@ -333,6 +333,10 @@ message StackPushed {
   // Engine card id of the pushed spell (e.g. "lightning_bolt"); empty for abilities,
   // which have no physical card on the stack. Resolve to an Oracle name via CardCatalog.
   string card_id = 5;
+  // CR 707.10: true when this stack item is a *copy* of a spell (Twincast/Fork), not a cast
+  // object. Like an ability it has no physical card on the shared stack; the client shows it via
+  // card_id + the "(copy)" ability_annotation and expects no permanent/graveyard card on resolve.
+  bool is_copy = 6;
 }
 
 message ActivateAbility {

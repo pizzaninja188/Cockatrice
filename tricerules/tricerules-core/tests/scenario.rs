@@ -9381,3 +9381,221 @@ fn every_custom_effect_key_has_an_impl() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// CR 707.10 — copying a spell on the stack (Twincast)
+// ---------------------------------------------------------------------------
+
+/// Happy path: P0 bolts P1; P1 casts Twincast at the bolt. Twincast resolves, putting a *copy*
+/// of the bolt on the stack (controlled by P1, retaining the original's target — P1). The copy
+/// resolves first (3 to P1), then the original bolt (3 to P1): P1 goes 20 → 14. The copy is a
+/// virtual stack item (CR 707.10): it has no backing object, leaves nothing in any graveyard,
+/// and its StackPushed is flagged `is_copy`.
+#[test]
+fn twincast_copies_bolt_both_deal_damage() {
+    let decks = Some(vec![
+        vec![
+            "mountain".into(),
+            "lightning_bolt".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec![
+            "island".into(),
+            "twincast".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(144, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let mountain_idx = hand_index_for_card(&e, 0, "mountain");
+    e.apply_command(0, &play_land(mountain_idx))
+        .expect("p0 play mountain");
+
+    // Give P1 two untapped islands on the battlefield to pay {U}{U}.
+    for _ in 0..2 {
+        let island_idx = hand_index_for_card(&e, 1, "island");
+        let island_oid = e.state.players[1].hand.remove(island_idx);
+        e.state.players[1].battlefield.push(island_oid);
+        e.state
+            .objects
+            .get_mut(&island_oid)
+            .expect("seeded island")
+            .zone = tricerules_core::Zone::Battlefield;
+    }
+
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red mana for bolt");
+    let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+        .expect("p0 cast bolt at p1");
+    let bolt_oid = e.state.stack.last().expect("bolt on stack").id;
+    e.apply_command(0, &pass()).expect("p0 pass priority to p1");
+
+    e.apply_command(
+        1,
+        &add_mana_to_pool(AddManaToPool {
+            u: 2,
+            ..Default::default()
+        }),
+    )
+    .expect("add UU for twincast");
+    let twincast_idx = hand_index_for_card(&e, 1, "twincast");
+    let cast = e
+        .apply_command(
+            1,
+            &cast_spell(
+                twincast_idx,
+                vec![TargetRef {
+                    object_id: bolt_oid,
+                }],
+            ),
+        )
+        .expect("p1 cast twincast at the bolt");
+    // Twincast on the stack is a normal (non-copy) spell.
+    let tw_push = cast
+        .events
+        .iter()
+        .find_map(|ev| match &ev.ev {
+            Some(Ev::StackPushed(s)) if s.card_id == "twincast" => Some(s),
+            _ => None,
+        })
+        .expect("twincast stack push");
+    assert!(!tw_push.is_copy, "the cast Twincast is not itself a copy");
+    assert_eq!(e.state.stack.len(), 2, "bolt + twincast on stack");
+
+    // Both pass: Twincast resolves and pushes one copy of the bolt onto the stack.
+    e.apply_command(1, &pass()).expect("p1 pass after twincast");
+    let resolve = e
+        .apply_command(0, &pass())
+        .expect("p0 pass resolves twincast");
+    let copy_push = resolve
+        .events
+        .iter()
+        .find_map(|ev| match &ev.ev {
+            Some(Ev::StackPushed(s)) if s.is_copy => Some(s),
+            _ => None,
+        })
+        .expect("copy stack push emitted");
+    assert_eq!(copy_push.card_id, "lightning_bolt", "copy is of the bolt");
+    assert_eq!(copy_push.ability_annotation, "(copy)");
+    assert_eq!(
+        copy_push.targets,
+        vec![TargetRef { object_id: 1 }],
+        "copy retains the original's target (P1)"
+    );
+
+    assert_eq!(e.state.stack.len(), 2, "original bolt + its copy on stack");
+    let copy_item = e.state.stack.last().expect("copy on top");
+    assert!(copy_item.is_copy, "top of stack is the copy");
+    assert_eq!(
+        copy_item.controller, 1,
+        "copy controlled by Twincast's caster"
+    );
+    assert!(
+        !e.state.objects.contains_key(&copy_item.id),
+        "a copy has no backing GameObject (CR 707.10)"
+    );
+
+    // Copy resolves: 3 damage to P1, and it ceases to exist (no graveyard card).
+    let copy_id = copy_item.id;
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass()).expect("p1 pass resolves copy");
+    assert_eq!(e.state.players[1].life, 17, "copy dealt 3 to P1");
+    assert!(
+        !e.state.players[0].graveyard.contains(&copy_id)
+            && !e.state.players[1].graveyard.contains(&copy_id),
+        "the copy left no card in any graveyard"
+    );
+
+    // Original bolt resolves: another 3 to P1, and the real card goes to P0's graveyard.
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass()).expect("p1 pass resolves bolt");
+    assert!(e.state.stack.is_empty(), "stack empty");
+    assert_eq!(e.state.players[1].life, 14, "bolt dealt the remaining 3");
+    assert!(
+        e.state.players[0].graveyard.contains(&bolt_oid),
+        "the real bolt card is in its owner's graveyard"
+    );
+}
+
+/// Illegal path: Twincast must target a spell on the stack. Targeting a battlefield permanent
+/// (a creature) is rejected at cast, leaving game state untouched.
+#[test]
+fn twincast_rejects_non_spell_target() {
+    let decks = Some(vec![
+        vec![
+            "island".into(),
+            "twincast".into(),
+            "grizzly_bears".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+        ],
+        vec![
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(77, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Put a creature on P0's battlefield to (illegally) target.
+    let bears_idx = hand_index_for_card(&e, 0, "grizzly_bears");
+    let bears_oid = e.state.players[0].hand.remove(bears_idx);
+    e.state.players[0].battlefield.push(bears_oid);
+    e.state
+        .objects
+        .get_mut(&bears_oid)
+        .expect("seeded bears")
+        .zone = tricerules_core::Zone::Battlefield;
+
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            u: 2,
+            ..Default::default()
+        }),
+    )
+    .expect("add UU");
+    let twincast_idx = hand_index_for_card(&e, 0, "twincast");
+    let before = e.state.stack.len();
+    let err = e.apply_command(
+        0,
+        &cast_spell(
+            twincast_idx,
+            vec![TargetRef {
+                object_id: bears_oid,
+            }],
+        ),
+    );
+    assert!(err.is_err(), "targeting a permanent must be rejected");
+    assert_eq!(e.state.stack.len(), before, "no spell put on the stack");
+    assert!(
+        e.state.players[0]
+            .hand
+            .iter()
+            .any(|&o| e.state.objects[&o].card_id == "twincast"),
+        "Twincast stays in hand after the illegal cast"
+    );
+}

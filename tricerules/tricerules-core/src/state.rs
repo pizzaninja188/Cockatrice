@@ -226,6 +226,11 @@ pub struct StackItem {
     pub ability_index: Option<usize>,
     /// `true` = this is a triggered ability; `false` = activated ability or spell.
     pub is_triggered: bool,
+    /// CR 707.10: this stack item is a *copy* of a spell (Twincast/Fork), not a cast object. A
+    /// copy has no backing [`GameObject`] in `objects` — like an ability it leaves no card behind,
+    /// so resolution skips the zone move and the copy ceases to exist (CR 707.10d). It also never
+    /// fires cast triggers or counts toward storm (it was put on the stack, not cast).
+    pub is_copy: bool,
     /// CR 709/712/715: which face of a multi-face card was cast (the split half / MDFC face /
     /// adventure half on the stack). `0` for single-face cards and abilities; drives which face's
     /// effects, mana value, and permanence are used when this spell resolves.

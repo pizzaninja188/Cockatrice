@@ -10350,7 +10350,7 @@ Legend: `[x]` = fully implemented · `[ ] 🟡 partial` = partially implemented 
 - [ ] Tomb of Urami
 - [ ] Torii Watchward
 - [ ] Trusted Advisor
-- [ ] Twincast
+- [ ] Twincast — 🟡 partial: copies any spell (instant/sorcery restriction unenforced); no new targets for the copy (CR 707.10c)
 - [ ] Undying Flames
 - [ ] Wine of Blood and Iron
 - [ ] Yuki-Onna

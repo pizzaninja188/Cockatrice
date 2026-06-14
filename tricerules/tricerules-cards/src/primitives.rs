@@ -257,6 +257,16 @@ pub enum SpellEffectKind {
         target: TargetFilter,
     },
     CounterTargetSpell,
+    /// CR 707.10: put `count` copies of target spell on the stack, each controlled by this
+    /// spell's controller. A copy is **not cast** (no mana, no cast triggers, no storm count) and
+    /// ceases to exist after it resolves (CR 707.10d). The copy uses the original's chosen modes,
+    /// X, and targets; CR 707.10c lets the copy's controller choose new targets (deferred — copies
+    /// keep the original's targets for now). `count` covers Twincast / Fork / Reverberate (1) and
+    /// "copy it twice" effects without a new variant; only spells (not abilities) are legal targets.
+    CopyTargetSpell {
+        #[serde(default = "one")]
+        count: u32,
+    },
     GainLife {
         amount: Amount,
     },
@@ -500,6 +510,11 @@ pub enum TriggerCondition {
 
 fn any_player_trigger() -> CastTriggerPlayer {
     CastTriggerPlayer::AnyPlayer
+}
+
+/// Serde default for `CopyTargetSpell.count` — the overwhelmingly common "make one copy".
+fn one() -> u32 {
+    1
 }
 
 /// Permanent card-type filter for [`TriggerCondition::WheneverPermanentEntersBattlefield`].

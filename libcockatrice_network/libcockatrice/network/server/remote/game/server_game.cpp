@@ -546,6 +546,7 @@ void Server_Game::doStartGameIfReady(bool forceStartGame)
     ruledStackObjectIdToServerCardId.clear();
     ruledStackObjectIdToCasterPlayerId.clear();
     ruledStackTargetsByObjectId.clear();
+    ruledStackCopyObjectIds.clear();
     ruledPendingCastVisualQueue.clear();
 
     gameStarted = true;
@@ -1214,6 +1215,13 @@ void Server_Game::relayRuledPayloadAndBroadcast(int playerId, const QByteArray &
 void Server_Game::applyRuledStackResolvedEvent(const ruled::v1::StackResolved &stackResolved)
 {
     const quint32 resolvedOid = static_cast<quint32>(stackResolved.object_id());
+    // CR 707.10d: a spell copy ceases to exist on resolution and has no physical card to move.
+    // Returning here also stops the name-matching fallback from resolving the original spell's
+    // still-on-stack card (the copy shares its card_id/name).
+    if (ruledStackCopyObjectIds.remove(resolvedOid)) {
+        ruledEngineStackPushDescriptionsByObjectId.remove(resolvedOid);
+        return;
+    }
     const QString engineStackDescription = ruledEngineStackPushDescriptionsByObjectId.value(resolvedOid);
 
     auto tryResolveCardOnStack = [this, &stackResolved](Server_AbstractPlayer *ab, Server_CardZone *stackZone,
@@ -1529,6 +1537,22 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
             if (e.has_stack_pushed()) {
                 const auto &sp = e.stack_pushed();
                 const quint32 pushedOid = static_cast<quint32>(sp.object_id());
+                // CR 707.10: a spell copy (Twincast/Fork) has no physical card on the shared stack.
+                // Record its display name (for the prompt/log) but never bind it to a Server_Card —
+                // its card_id matches the original, so binding would steal the original's physical
+                // card. The resolve handler treats it as a no-op move (see ruledStackCopyObjectIds).
+                if (sp.is_copy()) {
+                    ruledStackCopyObjectIds.insert(pushedOid);
+                    QString copyName = QString::fromStdString(sp.description());
+                    if (!sp.card_id().empty()) {
+                        const QString catalogName = ruledCardNameForId(QString::fromStdString(sp.card_id()));
+                        if (!catalogName.isEmpty()) {
+                            copyName = catalogName;
+                        }
+                    }
+                    ruledEngineStackPushDescriptionsByObjectId.insert(pushedOid, copyName);
+                    continue;
+                }
                 // Physical binding matches on display names. For spells, resolve the engine
                 // card id through the catalog (authoritative Oracle name) rather than trusting
                 // the free-form description; abilities carry no card_id and keep the description.

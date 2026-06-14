@@ -1,0 +1,10 @@
+(
+  id: "twincast",
+  name: "Twincast",
+  mana_cost: "{U}{U}",
+  types: ["Instant"],
+  // CR 707.10: copy target instant or sorcery spell. The copy keeps the original's targets;
+  // "you may choose new targets for the copy" (CR 707.10c) is not yet offered.
+  spell_effect: [CopyTargetSpell(count: 1)],
+  partial: "copies any spell (instant/sorcery restriction unenforced); no new targets for the copy (CR 707.10c)",
+)
