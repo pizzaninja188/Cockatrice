@@ -4,5 +4,5 @@
   name: "Raise the Alarm",
   mana_cost: "{1}{W}",
   types: ["Instant"],
-  spell_effect: [CreateTokens(token: "soldier", count: 2)],
+  spell_effect: [CreateTokens(token: "soldier_w_1_1", count: 2)],
 )

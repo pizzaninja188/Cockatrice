@@ -21,9 +21,13 @@
 #include <QMenu>
 #include <QPainter>
 #include <QPen>
+#include <QSet>
+#include <algorithm>
 #include <libcockatrice/card/card_info.h>
+#include <libcockatrice/card/database/card_database_manager.h>
 #include <libcockatrice/protocol/pb/serverinfo_card.pb.h>
 #include <libcockatrice/utility/zone_names.h>
+#include <limits>
 
 CardItem::CardItem(Player *_owner, QGraphicsItem *parent, const CardRef &cardRef, int _cardid, CardZoneLogic *_zone)
     : AbstractCardItem(parent, cardRef, _owner, _cardid), zone(_zone), attacking(false), destroyOnZoneChange(false),
@@ -390,6 +394,116 @@ void CardItem::resetState(bool keepAnnotations)
     update();
 }
 
+namespace {
+// WUBRG letters only, uppercased and sorted — so "w", "W", and "rw"/"wr" compare equal.
+QString normalizeColors(const QString &colors)
+{
+    QString out;
+    for (const QChar &c : colors.toUpper()) {
+        if (QStringLiteral("WUBRG").contains(c)) {
+            out.append(c);
+        }
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+// Lowercased, space-stripped, so "First strike" and "FirstStrike" compare equal.
+QString normalizeKeyword(const QString &kw)
+{
+    return kw.toLower().remove(QLatin1Char(' '));
+}
+
+bool cardItemIsRuledGame(const CardItem *card)
+{
+    return card && card->getOwner() && card->getOwner()->getGame() &&
+           card->getOwner()->getGame()->getGameMetaInfo()->proto().ruled_game();
+}
+
+// Apply CardItem::resolveRuledTokenDisplayCard to `ref` in place when `card` is a ruled-game token
+// whose bare engine name ("Knight") has no Oracle entry. Shared by token creation and resync.
+void retargetRuledTokenCardRef(const CardItem *card, CardRef &ref, const QString &pt, const QString &color,
+                               const QStringList &keywords)
+{
+    if (ref.name.isEmpty() || !cardItemIsRuledGame(card) || CardDatabaseManager::query()->getCard(ref)) {
+        return;
+    }
+    CardRef resolved = CardItem::resolveRuledTokenDisplayCard(ref.name, pt, color, keywords);
+    if (!resolved.name.isEmpty()) {
+        ref = resolved;
+    }
+}
+} // namespace
+
+CardRef CardItem::resolveRuledTokenDisplayCard(const QString &subtype,
+                                               const QString &enginePt,
+                                               const QString &engineColor,
+                                               const QStringList &engineKeywords)
+{
+    // The vocabulary we can detect in a DB token's printed text (mirrors tricerules Keyword).
+    static const QStringList kKeywordVocab = {
+        QStringLiteral("Flying"),        QStringLiteral("Reach"),         QStringLiteral("Intimidate"),
+        QStringLiteral("Vigilance"),     QStringLiteral("Lifelink"),      QStringLiteral("Haste"),
+        QStringLiteral("Deathtouch"),    QStringLiteral("Menace"),        QStringLiteral("Trample"),
+        QStringLiteral("First strike"),  QStringLiteral("Double strike"), QStringLiteral("Indestructible"),
+        QStringLiteral("Hexproof"),      QStringLiteral("Shroud"),        QStringLiteral("Defender"),
+        QStringLiteral("Flash")};
+
+    const QString base = subtype + QStringLiteral(" Token");
+    auto *db = CardDatabaseManager::query();
+
+    // Gather the trailing-space-disambiguated family. Keys are contiguous (0, 1, 2, … spaces).
+    QList<CardInfoPtr> family;
+    for (int spaces = 0; spaces < 64; ++spaces) {
+        CardInfoPtr info = db->getCardInfo(base + QString(spaces, QLatin1Char(' ')));
+        if (!info) {
+            break;
+        }
+        family.append(info);
+    }
+    if (family.isEmpty()) {
+        return {};
+    }
+
+    QSet<QString> wantKeywords;
+    for (const QString &kw : engineKeywords) {
+        wantKeywords.insert(normalizeKeyword(kw));
+    }
+    const QString wantColors = normalizeColors(engineColor);
+
+    CardInfoPtr best;
+    int bestScore = std::numeric_limits<int>::min();
+    for (const CardInfoPtr &info : family) {
+        int score = 0;
+        if (info->getPowTough().trimmed() == enginePt.trimmed()) {
+            score += 100;
+        }
+        if (normalizeColors(info->getColors()) == wantColors) {
+            score += 50;
+        }
+        // Agreement over the keyword vocabulary: reward each keyword both sides agree on
+        // (present or absent), penalise disagreements. This separates same-P/T/color variants
+        // (e.g. vanilla Knight vs. vigilance Knight).
+        const QString text = info->getText();
+        for (const QString &kw : kKeywordVocab) {
+            const bool dbHas = text.contains(kw, Qt::CaseInsensitive);
+            const bool engineHas = wantKeywords.contains(normalizeKeyword(kw));
+            score += (dbHas == engineHas) ? 5 : -5;
+        }
+        if (score > bestScore) {
+            bestScore = score;
+            best = info;
+        }
+    }
+
+    // Require at least the P/T to line up; otherwise the family is the wrong shape — fall back to
+    // the canonical base entry so we still show generic subtype art rather than a mismatched one.
+    if (best && best->getPowTough().trimmed() == enginePt.trimmed()) {
+        return {best->getName(), {}};
+    }
+    return {family.first()->getName(), {}};
+}
+
 void CardItem::processCardInfo(const ServerInfo_Card &_info)
 {
     counters.clear();
@@ -400,7 +514,20 @@ void CardItem::processCardInfo(const ServerInfo_Card &_info)
     }
 
     setId(_info.id());
-    setCardRef({QString::fromStdString(_info.name()), QString::fromStdString(_info.provider_id())});
+    // A full-state resync (e.g. after a ruled battlefield reorder) carries the engine's bare token
+    // subtype as the name; remap it to the matching Oracle "<Subtype> Token" art so it doesn't revert
+    // the resolution done at token creation. See CardItem::resolveRuledTokenDisplayCard.
+    CardRef ref{QString::fromStdString(_info.name()), QString::fromStdString(_info.provider_id())};
+    if (!_info.face_down()) {
+        QStringList keywords;
+        keywords.reserve(_info.ability_keywords_size());
+        for (const auto &kw : _info.ability_keywords()) {
+            keywords.append(QString::fromStdString(kw));
+        }
+        retargetRuledTokenCardRef(this, ref, QString::fromStdString(_info.pt()),
+                                  QString::fromStdString(_info.color()), keywords);
+    }
+    setCardRef(ref);
     setAttacking(_info.attacking());
     setFaceDown(_info.face_down());
     setPT(QString::fromStdString(_info.pt()));
@@ -672,6 +799,17 @@ bool isCombatEligibleCreature(const CardItem *card)
     }
     if (card->getFaceDown()) {
         return false;
+    }
+    // Creature-ness is a ruled/mechanical decision: ask the engine (via the battlefield object
+    // map) rather than the Oracle display DB. The Oracle path has no entry for engine-minted
+    // tokens, so deciding from getCardType() would wrongly make tokens combat-ineligible.
+    if (GameEventHandler *handler = ruledHandlerForCard(card)) {
+        Player *owner = card->getOwner();
+        const int ownerPlayerId = owner ? owner->getPlayerInfo()->getId() : -1;
+        const quint32 oid = handler->engineOidForCardId(ownerPlayerId, card->getId());
+        if (oid != 0) {
+            return handler->isEngineOidCreature(oid);
+        }
     }
     return card->getCardInfo().getCardType().contains("Creature", Qt::CaseInsensitive);
 }

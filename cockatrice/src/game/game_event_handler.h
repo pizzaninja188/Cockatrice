@@ -107,6 +107,9 @@ private:
     QHash<quint32, bool> engineOidHaste;
     // Engine ObjectId -> trample keyword (CR 702.19) from BattlefieldObjectMap entries.
     QHash<quint32, bool> engineOidTrample;
+    // Engine ObjectId -> creature-ness from BattlefieldObjectMap entries. Engine-authoritative
+    // (tricerules registry), so engine tokens with no Oracle entry are still combat-eligible.
+    QHash<quint32, bool> engineOidCreature;
 
     // Engine-authoritative targeting data, refreshed from LegalActions each RuledEventBatch.
     // Replaces all Oracle/card-name-based target filtering in the client.
@@ -264,6 +267,12 @@ public:
     [[nodiscard]] bool isEngineOidTrample(quint32 engineOid) const
     {
         return engineOidTrample.value(engineOid, false);
+    }
+    // Engine-authoritative creature-ness (from the tricerules registry). Used for combat
+    // eligibility instead of the Oracle display DB, which has no entry for engine tokens.
+    [[nodiscard]] bool isEngineOidCreature(quint32 engineOid) const
+    {
+        return engineOidCreature.value(engineOid, false);
     }
     // Spell targeting queries (keyed by engine hand slot).
     [[nodiscard]] bool isValidSpellTarget(int handSlot, quint32 oid) const

@@ -17,11 +17,14 @@ use serde::{Deserialize, Serialize};
 /// [`CardDefinition`] that a token can have — no mana cost, no spell effect (tokens are never cast).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenDefinition {
-    /// Token id; by convention the slug of `name` (enforced by a registry test, like cards).
-    /// Referenced by [`CreateTokens.token`](crate::primitives::SpellEffectKind::CreateTokens).
+    /// Token id, referenced by [`CreateTokens.token`](crate::primitives::SpellEffectKind::CreateTokens).
+    /// Because token identity (CR 111.4) is the full characteristic tuple — not just the name —
+    /// the id is descriptive: `<name-slug>[_<characteristics...>]`, e.g. `soldier_w_1_1`,
+    /// `soldier_w_1_1_lifelink`, `elephant_g_5_5`. A registry test requires `slugify(name)` to be
+    /// the id's leading segment so it stays traceable to the name.
     pub id: String,
     /// Display name, e.g. `"Soldier"`. Tokens with the same name but different characteristics
-    /// (CR 111.4) get distinct ids.
+    /// (CR 111.4) get distinct ids (see `id`).
     pub name: String,
     /// Card types followed by subtypes, e.g. `["Creature", "Soldier"]`. Source of the type flags.
     #[serde(default)]

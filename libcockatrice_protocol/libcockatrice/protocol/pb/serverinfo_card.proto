@@ -53,4 +53,9 @@ message ServerInfo_Card {
 
     // unique id of this kind of card, extends the name to specify a specific printing of a card
     optional string provider_id = 17;
+
+    // Ruled engine tokens only: static keyword abilities (MTG spelling, e.g. "Flying", "Lifelink").
+    // Mirrors Event_CreateToken.ability_keywords so a full-state resync can re-resolve the matching
+    // Oracle token art among same-name variants. Empty for normal cards/tokens.
+    repeated string ability_keywords = 18;
 }

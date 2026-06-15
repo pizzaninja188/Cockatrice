@@ -142,6 +142,31 @@ pub enum Keyword {
     Flash,
 }
 
+impl Keyword {
+    /// Canonical MTG keyword text (e.g. `Keyword::FirstStrike` → `"First strike"`). Used for the
+    /// token identity feed and any place a keyword must render as printed Oracle text.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Keyword::Flying => "Flying",
+            Keyword::Reach => "Reach",
+            Keyword::Intimidate => "Intimidate",
+            Keyword::Vigilance => "Vigilance",
+            Keyword::Lifelink => "Lifelink",
+            Keyword::Haste => "Haste",
+            Keyword::Deathtouch => "Deathtouch",
+            Keyword::Menace => "Menace",
+            Keyword::Trample => "Trample",
+            Keyword::FirstStrike => "First strike",
+            Keyword::DoubleStrike => "Double strike",
+            Keyword::Indestructible => "Indestructible",
+            Keyword::Hexproof => "Hexproof",
+            Keyword::Shroud => "Shroud",
+            Keyword::Defender => "Defender",
+            Keyword::Flash => "Flash",
+        }
+    }
+}
+
 /// A kind of counter that can sit on a permanent (CR 122.1). Only the two counter kinds
 /// with engine rules interactions exist so far: the +1/+1 / -1/-1 pair, which modify P/T in
 /// CR 613.4 layer 7d and annihilate as a state-based action (CR 122.3). Loyalty, charge, and

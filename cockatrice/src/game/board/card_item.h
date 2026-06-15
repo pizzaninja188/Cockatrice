@@ -10,6 +10,7 @@
 #include "../zones/logic/card_zone_logic.h"
 #include "abstract_card_item.h"
 
+#include <QStringList>
 #include <libcockatrice/network/server/remote/game/server_card.h>
 
 class CardDatabase;
@@ -138,6 +139,17 @@ public:
     }
     void resetState(bool keepAnnotations = false);
     void processCardInfo(const ServerInfo_Card &_info);
+
+    // Ruled engine tokens are named by their MTG subtype ("Knight"); the Oracle display DB stores
+    // generic tokens as "<Subtype> Token", with same-name variants kept apart by trailing spaces.
+    // Given the engine token's characteristics, return the CardRef of the best-matching Oracle token
+    // (by P/T, color, keyword abilities) so it shows the right art/details, or an empty CardRef if
+    // the family has no entry. Display-only; the engine stays authoritative for rules. Shared by the
+    // token-creation event and full-state resync so the resolved name survives a battlefield resync.
+    static CardRef resolveRuledTokenDisplayCard(const QString &subtype,
+                                                const QString &enginePt,
+                                                const QString &engineColor,
+                                                const QStringList &engineKeywords);
 
     bool animationEvent();
     CardDragItem *createDragItem(int _id, const QPointF &_pos, const QPointF &_scenePos, bool forceFaceDown);

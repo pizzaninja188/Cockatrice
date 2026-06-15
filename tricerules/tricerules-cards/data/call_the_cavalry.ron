@@ -4,5 +4,5 @@
   name: "Call the Cavalry",
   mana_cost: "{3}{W}",
   types: ["Sorcery"],
-  spell_effect: [CreateTokens(token: "knight", count: 2)],
+  spell_effect: [CreateTokens(token: "knight_w_2_2_vigilance", count: 2)],
 )

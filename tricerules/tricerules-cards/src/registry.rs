@@ -418,8 +418,8 @@ mod tests {
         use crate::primitives::Color;
         let reg = CardRegistry::from_embedded().unwrap();
         // A token resolves through get() but is flagged as a token and is not a deck card.
-        let soldier = reg.get("soldier").expect("soldier token");
-        assert!(reg.is_token("soldier"));
+        let soldier = reg.get("soldier_w_1_1").expect("soldier token");
+        assert!(reg.is_token("soldier_w_1_1"));
         assert!(!reg.is_token("lightning_bolt"));
         assert!(soldier.is_creature);
         assert_eq!((soldier.power, soldier.toughness), (Some(1), Some(1)));
@@ -431,11 +431,25 @@ mod tests {
     }
 
     #[test]
-    fn token_ids_follow_slug_convention() {
-        // Tokens follow the same id == slugify(name) convention as cards.
+    fn token_ids_extend_name_slug() {
+        // A token's name is just its subtype ("Soldier"), but its identity (CR 111.4) is the full
+        // characteristic tuple, so several distinct tokens can share a name. Each therefore gets a
+        // descriptive id of the form `<name-slug>[_<characteristics...>]` (e.g. `soldier_w_1_1`,
+        // `soldier_w_1_1_lifelink`). We can't require id == slugify(name) (that allows only one
+        // token per name); instead require slugify(name) to be the id's leading segment, keeping
+        // the id traceable to the name. Uniqueness is enforced at load (duplicate token id error).
         let reg = CardRegistry::from_embedded().unwrap();
         for (id, def) in &reg.tokens {
-            assert_eq!(*id, crate::slug::slugify(&def.name), "token '{}'", def.name);
+            let slug = crate::slug::slugify(&def.name);
+            let ok = *id == slug
+                || id
+                    .strip_prefix(&slug)
+                    .is_some_and(|rest| rest.starts_with('_'));
+            assert!(
+                ok,
+                "token '{}': id '{id}' must be '{slug}' or start with '{slug}_'",
+                def.name
+            );
         }
     }
 

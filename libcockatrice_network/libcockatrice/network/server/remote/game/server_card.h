@@ -24,6 +24,7 @@
 
 #include <QMap>
 #include <QString>
+#include <QStringList>
 #include <libcockatrice/protocol/pb/card_attributes.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_card.pb.h>
 #include <libcockatrice/utility/card_ref.h>
@@ -47,6 +48,9 @@ private:
     QString color;
     QString ptString;
     QString annotation;
+    // Ruled engine tokens only: static keyword abilities (MTG spelling). Forwarded into
+    // Event_CreateToken so the client can pick matching Oracle art among same-name token variants.
+    QStringList tokenAbilityKeywords;
     bool destroyOnZoneChange;
     bool doesntUntap;
 
@@ -123,6 +127,10 @@ public:
     {
         return annotation;
     }
+    const QStringList &getTokenAbilityKeywords() const
+    {
+        return tokenAbilityKeywords;
+    }
     bool getDoesntUntap() const
     {
         return doesntUntap;
@@ -173,6 +181,10 @@ public:
     void setPT(const QString &_pt)
     {
         ptString = _pt;
+    }
+    void setTokenAbilityKeywords(const QStringList &_keywords)
+    {
+        tokenAbilityKeywords = _keywords;
     }
     void setAnnotation(const QString &_annotation)
     {

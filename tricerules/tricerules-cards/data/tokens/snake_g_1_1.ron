@@ -1,6 +1,6 @@
 // 1/1 green Snake creature token (Bestial Menace, Sosuke's Summons, etc.).
 (
-    id: "snake",
+    id: "snake_g_1_1",
     name: "Snake",
     types: ["Creature", "Snake"],
     colors: [Green],
