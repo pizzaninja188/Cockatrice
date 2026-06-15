@@ -6,6 +6,11 @@ package ruled.v1;
 message RuledCommand {
   reserved 15;
   reserved "assign_damage_order";
+  // Tag 9 was AddManaToPool, the client-trusted "mint mana into my pool" command. Removed:
+  // mana is now engine-owned and produced only by activating a mana ability (CR 605), so a
+  // tampered client can no longer add mana it did not legally produce.
+  reserved 9;
+  reserved "add_mana_to_pool";
   oneof cmd {
     PassPriority pass_priority = 1;
     CastSpell cast_spell = 2;
@@ -17,9 +22,6 @@ message RuledCommand {
     // Cockatrice "pass turn" in ruled mode: one empty-stack structural advance
     // (active player outside declare blockers; defender during declare blockers).
     PrimitiveYieldStructured primitive_yield_structured = 8;
-    // Cockatrice ruled mode: mana pool counters increment when lands add mana (IncCounter).
-    // Positive deltas only from Servatrice; spell payment still consumes pool inside the engine on cast.
-    AddManaToPool add_mana_to_pool = 9;
     // CR 514.1: discard during cleanup when above maximum hand size (vanilla: 7).
     DiscardToHandSize discard_to_hand_size = 10;
     // Opening: randomly chosen player picks who takes the first turn (seat id).
@@ -71,16 +73,6 @@ message DiscardToHandSize {
   uint32 hand_card_index = 1;
   // Batch discard in one command: must list exactly (current hand size − 7) distinct indices.
   repeated uint32 hand_card_indices = 2;
-}
-
-// Sint32 so Servatrice can forward IncCounter deltas; engine clamps each component at 0.
-message AddManaToPool {
-  sint32 w = 1;
-  sint32 u = 2;
-  sint32 b = 3;
-  sint32 r = 4;
-  sint32 g = 5;
-  sint32 c = 6;
 }
 
 message PassPriority {}
@@ -238,7 +230,23 @@ message RuledEvent {
     // A tier-3 custom resolution paused and needs a player to choose among candidates (CR 608).
     // Generic across every custom card; the client renders it as an ordered/multi-select pick.
     ResolutionChoiceRequired resolution_choice_required = 23;
+    // A player's mana pool changed (CR 106): engine-authoritative pool after a mana ability
+    // produced mana, a cost was paid, or the pool emptied on a step/phase change. The relay
+    // mirrors it onto that player's ruled mana-pool counters (Event_SetCounter).
+    ManaPoolUpdated mana_pool_updated = 24;
   }
+}
+
+// Engine-authoritative mana pool snapshot for one player (CR 106). Absolute counts (not deltas),
+// so the relay can set the client's mana-pool counters directly. Emitted whenever a pool changes.
+message ManaPoolUpdated {
+  int32 player_id = 1;
+  uint32 w = 2;
+  uint32 u = 3;
+  uint32 b = 4;
+  uint32 r = 5;
+  uint32 g = 6;
+  uint32 c = 7;
 }
 
 // A parked custom resolution (CR 608) requesting input from one player. Reused by every tier-3
@@ -348,6 +356,11 @@ message ActivateAbility {
   repeated TargetRef targets = 3;
   // CR 107.4: per-pip payment choices for flexible mana in the ability cost (see CastSpell).
   repeated FlexPipPayment flex_payments = 4;
+  // CR 605: for a mana ability with multiple producible options (e.g. a dual land), which
+  // option to produce — index into the ability's ProduceMana `options`. The choice is made at
+  // activation because mana abilities don't use the stack (CR 605.3b). 0 (default) for
+  // single-option mana abilities and all non-mana abilities.
+  uint32 mana_option_index = 5;
 }
 
 message ChooseTriggerTarget {
@@ -431,6 +444,13 @@ message RuledPerPlayerView {
   // for each ability, in the same order. Derived from AbilityCost (Tap/Sacrifice → "", Mana/TapAndMana → "4"/"R"/etc.).
   // Clients use this for mana payment without re-parsing the display text.
   repeated string battlefield_activated_ability_mana_costs = 20;
+  // Parallel array to `battlefield_activated_ability_texts`: which abilities are mana abilities
+  // (CR 605) and what they produce, so the client drives "tap for mana" from engine data rather
+  // than guessing colors from Oracle text. Per permanent: abilities joined by "|"; a non-mana
+  // ability is the empty string; a mana ability is its ProduceMana options joined by "/", each
+  // option a brace-less symbol run ("G", "WU", "CC"). Multiple options (e.g. "W/U") mean the
+  // client prompts for a color → ActivateAbility.mana_option_index. Empty string = no abilities.
+  repeated string battlefield_activated_ability_mana_produced = 21;
 }
 
 message ZoneViewSync {

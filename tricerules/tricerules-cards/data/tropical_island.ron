@@ -1,0 +1,13 @@
+(
+  id: "tropical_island",
+  name: "Tropical Island",
+  mana_cost: "",
+  types: ["Land", "Forest", "Island"],
+  activated_abilities: [
+    (
+      cost: Tap,
+      effect: ProduceMana(options: [(g: 1), (u: 1)]),
+      text: "{T}: Add {G} or {U}.",
+    ),
+  ],
+)

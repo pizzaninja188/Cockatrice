@@ -656,6 +656,7 @@ impl GameEngine {
                 aa.ability_index as usize,
                 &aa.targets,
                 &aa.flex_payments,
+                aa.mana_option_index,
             ),
             Some(Cmd::ChooseTriggerTarget(ctt)) => {
                 self.choose_trigger_target(player, ctt.target_object_id)
@@ -664,7 +665,6 @@ impl GameEngine {
                 self.submit_resolution_choice(player, &s.chosen_object_ids)
             }
             Some(Cmd::PlayLand(pl)) => self.play_land(player, pl.hand_card_index as usize),
-            Some(Cmd::AddManaToPool(m)) => self.add_mana_to_pool(player, m),
             Some(Cmd::DiscardToHandSize(d)) => self.discard_to_hand_size(player, d),
             Some(Cmd::AssignCombatDamage(acd)) => {
                 if self.state.active_player_id() != player {
@@ -689,6 +689,13 @@ impl GameEngine {
             b.events.extend(d);
         }
         b.events.push(self.ev_zone_view_sync());
+        // CR 106: emit each player's authoritative mana pool so the relay/clients mirror it onto
+        // their mana-pool counters. An absolute snapshot per batch covers production (mana
+        // abilities), payment (pay_mana), and emptying (clear_all_mana_pools on step/phase change)
+        // in one place — clients never track mana locally, so a tampered client can't mint mana.
+        for i in 0..self.state.players.len() {
+            b.events.push(self.ev_mana_pool_updated(i));
+        }
         fill_legal(&mut b, self);
         Ok(b)
     }
@@ -2921,6 +2928,11 @@ impl GameEngine {
                 } => {
                     self.create_tokens(&token, count, who, controller, &spell_label, events);
                 }
+                // CR 605.3b: a mana ability never uses the stack, so a ProduceMana effect is
+                // resolved immediately in `resolve_mana_ability` and can never reach this generic
+                // stack-resolution path. Defensive no-op (registry validation also forbids it on
+                // spells); producing mana here would be off-stack-timing and is intentionally not done.
+                SpellEffectKind::ProduceMana { .. } => {}
                 SpellEffectKind::None => {}
             }
         }
@@ -3177,6 +3189,7 @@ impl GameEngine {
         ability_index: usize,
         targets: &[rv1::TargetRef],
         flex_payments: &[rv1::FlexPipPayment],
+        mana_option_index: u32,
     ) -> Result<RuledEventBatch, EngineError> {
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("not your priority"));
@@ -3217,79 +3230,34 @@ impl GameEngine {
             .ok_or(EngineError::Illegal("no such activated ability"))?
             .clone();
 
+        // CR 605.1a: classify mana abilities by their effect (ProduceMana). They don't use the
+        // stack (CR 605.3a) and resolve immediately, so they take a wholly separate path below —
+        // before target validation (a mana ability is untargeted) and before the stack push.
+        if matches!(ability.effect, SpellEffectKind::ProduceMana { .. }) {
+            return self.resolve_mana_ability(
+                player,
+                idx,
+                permanent_id,
+                &card_id,
+                &ability,
+                mana_option_index,
+                targets,
+                flex_payments,
+            );
+        }
+
         // CR 602.2: validate targets BEFORE paying cost.
         validate_effect_targets(&self.state, self.registry, player, &ability.effect, targets)?;
 
         // Pay the cost. Track sacrifice separately so we can emit a PermanentMoved event below.
-        let mut sacrifice_ev: Option<rv1::RuledEvent> = None;
-        match &ability.cost {
-            AbilityCost::Tap => {
-                let o = self
-                    .state
-                    .objects
-                    .get_mut(&permanent_id)
-                    .ok_or(EngineError::Illegal("permanent missing"))?;
-                if o.tapped {
-                    return Err(EngineError::Illegal("permanent is already tapped"));
-                }
-                if o.summoning_sick
-                    && self
-                        .registry
-                        .get(&card_id)
-                        .map(|d| !d.keywords.contains(&tricerules_cards::Keyword::Haste))
-                        .unwrap_or(true)
-                {
-                    return Err(EngineError::Illegal(
-                        "cannot use tap ability due to summoning sickness",
-                    ));
-                }
-                o.tapped = true;
-            }
-            AbilityCost::Mana(cost) => {
-                // X in activated-ability costs is deferred; abilities always pass X=0.
-                pay_mana(&mut self.state, idx, cost, 0, flex_payments)?;
-            }
-            AbilityCost::TapAndMana(cost) => {
-                // Check mana sufficiency BEFORE tapping so a failed payment leaves the
-                // permanent untapped (costs are paid atomically in MTG CR 601.2h).
-                pay_mana(&mut self.state, idx, cost, 0, flex_payments)?;
-                let o = self
-                    .state
-                    .objects
-                    .get_mut(&permanent_id)
-                    .ok_or(EngineError::Illegal("permanent missing"))?;
-                if o.tapped {
-                    return Err(EngineError::Illegal("permanent is already tapped"));
-                }
-                if o.summoning_sick
-                    && self
-                        .registry
-                        .get(&card_id)
-                        .map(|d| !d.keywords.contains(&tricerules_cards::Keyword::Haste))
-                        .unwrap_or(true)
-                {
-                    return Err(EngineError::Illegal(
-                        "cannot use tap ability due to summoning sickness",
-                    ));
-                }
-                o.tapped = true;
-            }
-            AbilityCost::Sacrifice => {
-                let owner = self
-                    .state
-                    .objects
-                    .get(&permanent_id)
-                    .map(|o| o.owner)
-                    .unwrap_or(player);
-                sacrifice_permanent(&mut self.state, permanent_id)?;
-                sacrifice_ev = Some(permanent_moved_event(
-                    &self.state,
-                    permanent_id,
-                    owner,
-                    rv1::permanent_moved::Destination::Graveyard,
-                ));
-            }
-        }
+        let sacrifice_ev = self.pay_ability_cost(
+            player,
+            idx,
+            permanent_id,
+            &card_id,
+            &ability.cost,
+            flex_payments,
+        )?;
 
         let trefs: Vec<ObjectId> = targets.iter().map(|t| t.object_id).collect();
         let ability_text = ability.text.clone();
@@ -3341,6 +3309,146 @@ impl GameEngine {
         });
         batch.events.push(ev_priority_changed(self));
         fill_legal(&mut batch, self);
+        Ok(batch)
+    }
+
+    /// Pay an activated ability's cost (CR 602.2) atomically. Shared by the stack path
+    /// ([`Self::activate_ability`]) and the no-stack mana-ability path
+    /// ([`Self::resolve_mana_ability`]). Mana is checked before the source is tapped so a failed
+    /// payment leaves the permanent untapped (CR 601.2h). Returns the sacrifice `PermanentMoved`
+    /// event when the cost was a sacrifice, so the caller can surface it.
+    fn pay_ability_cost(
+        &mut self,
+        player: PlayerId,
+        idx: usize,
+        permanent_id: ObjectId,
+        card_id: &str,
+        cost: &AbilityCost,
+        flex_payments: &[rv1::FlexPipPayment],
+    ) -> Result<Option<rv1::RuledEvent>, EngineError> {
+        match cost {
+            AbilityCost::Tap => {
+                self.tap_for_cost(permanent_id, card_id)?;
+                Ok(None)
+            }
+            AbilityCost::Mana(cost) => {
+                // X in activated-ability costs is deferred; abilities always pass X=0.
+                pay_mana(&mut self.state, idx, cost, 0, flex_payments)?;
+                Ok(None)
+            }
+            AbilityCost::TapAndMana(cost) => {
+                // Check mana sufficiency BEFORE tapping so a failed payment leaves the
+                // permanent untapped (costs are paid atomically in MTG CR 601.2h).
+                pay_mana(&mut self.state, idx, cost, 0, flex_payments)?;
+                self.tap_for_cost(permanent_id, card_id)?;
+                Ok(None)
+            }
+            AbilityCost::Sacrifice => {
+                let owner = self
+                    .state
+                    .objects
+                    .get(&permanent_id)
+                    .map(|o| o.owner)
+                    .unwrap_or(player);
+                sacrifice_permanent(&mut self.state, permanent_id)?;
+                Ok(Some(permanent_moved_event(
+                    &self.state,
+                    permanent_id,
+                    owner,
+                    rv1::permanent_moved::Destination::Graveyard,
+                )))
+            }
+        }
+    }
+
+    /// Tap `permanent_id` as a {T} cost component, rejecting an already-tapped or
+    /// summoning-sick source (CR 302.6 / 702.10 — Haste exempts the latter).
+    fn tap_for_cost(&mut self, permanent_id: ObjectId, card_id: &str) -> Result<(), EngineError> {
+        let has_haste = self
+            .registry
+            .get(card_id)
+            .map(|d| d.keywords.contains(&tricerules_cards::Keyword::Haste))
+            .unwrap_or(false);
+        let o = self
+            .state
+            .objects
+            .get_mut(&permanent_id)
+            .ok_or(EngineError::Illegal("permanent missing"))?;
+        if o.tapped {
+            return Err(EngineError::Illegal("permanent is already tapped"));
+        }
+        if o.summoning_sick && !has_haste {
+            return Err(EngineError::Illegal(
+                "cannot use tap ability due to summoning sickness",
+            ));
+        }
+        o.tapped = true;
+        Ok(())
+    }
+
+    /// Resolve a mana ability (CR 605) immediately, with no stack and no priority change
+    /// (CR 605.3a–b). Pays the cost, adds the chosen `ProduceMana` option to the player's pool,
+    /// and emits the pool update + a log line. The tap (when the cost is `{T}`) reaches clients
+    /// via the batch's normal `ev_zone_view_sync` (`battlefield_tapped`); no opponent gets a
+    /// window to respond, matching the rule that mana abilities resolve as they are activated.
+    #[allow(clippy::too_many_arguments)]
+    fn resolve_mana_ability(
+        &mut self,
+        player: PlayerId,
+        idx: usize,
+        permanent_id: ObjectId,
+        card_id: &str,
+        ability: &tricerules_cards::ActivatedAbilityDef,
+        mana_option_index: u32,
+        targets: &[rv1::TargetRef],
+        flex_payments: &[rv1::FlexPipPayment],
+    ) -> Result<RuledEventBatch, EngineError> {
+        // A mana ability is untargeted (CR 605.1a).
+        if !targets.is_empty() {
+            return Err(EngineError::Illegal("mana ability takes no targets"));
+        }
+        let SpellEffectKind::ProduceMana { options } = &ability.effect else {
+            return Err(EngineError::Illegal("not a mana ability"));
+        };
+        let amount = options
+            .get(mana_option_index as usize)
+            .ok_or(EngineError::Illegal("invalid mana option"))?;
+
+        // Pay the cost first (CR 602.2). On failure nothing has changed yet (atomic).
+        let sacrifice_ev = self.pay_ability_cost(
+            player,
+            idx,
+            permanent_id,
+            card_id,
+            &ability.cost,
+            flex_payments,
+        )?;
+
+        // Add the produced mana to the player's pool (CR 106.4).
+        let pool = &mut self.state.players[idx].mana_pool;
+        pool.white += amount.w;
+        pool.blue += amount.u;
+        pool.black += amount.b;
+        pool.red += amount.r;
+        pool.green += amount.g;
+        pool.colorless += amount.c;
+
+        let card_name = self
+            .registry
+            .get(card_id)
+            .map(|d| d.name.clone())
+            .unwrap_or_else(|| card_id.to_string());
+        let ability_text = ability.text.clone();
+
+        let mut batch = RuledEventBatch::default();
+        batch.events.push(ev_log(format!(
+            "P{player} activates {card_name}: {ability_text}"
+        )));
+        if let Some(ev) = sacrifice_ev {
+            batch.events.push(ev);
+        }
+        // The pool update reaches clients via the per-batch ManaPoolUpdated emit in apply_command.
+        // No stack push, no priority change, no passes_since_stack_change reset (CR 605.3a–b).
         Ok(batch)
     }
 
@@ -3669,34 +3777,6 @@ impl GameEngine {
         Ok(batch)
     }
 
-    fn add_mana_to_pool(
-        &mut self,
-        player: PlayerId,
-        m: &rv1::AddManaToPool,
-    ) -> Result<RuledEventBatch, EngineError> {
-        let idx = self
-            .state
-            .player_idx(player)
-            .ok_or(EngineError::UnknownPlayer(player))?;
-        if idx != self.state.priority_idx {
-            return Err(EngineError::Illegal("only priority player can add mana"));
-        }
-        if priority_locked_for_combat_declaration(&self.state) {
-            return Err(EngineError::Illegal(
-                "cannot activate mana abilities while declaring attackers or blockers",
-            ));
-        }
-        let clamp = |v: u32, d: i32| -> u32 { (v as i64 + i64::from(d)).clamp(0, 10_000) as u32 };
-        let p = &mut self.state.players[idx].mana_pool;
-        p.white = clamp(p.white, m.w);
-        p.blue = clamp(p.blue, m.u);
-        p.black = clamp(p.black, m.b);
-        p.red = clamp(p.red, m.r);
-        p.green = clamp(p.green, m.g);
-        p.colorless = clamp(p.colorless, m.c);
-        Ok(RuledEventBatch::default())
-    }
-
     fn apply_sbas(&mut self, out: &mut Vec<rv1::RuledEvent>) -> Result<(), EngineError> {
         // CR 122.3: if a permanent has both +1/+1 and -1/-1 counters, N of each are removed as a
         // state-based action, where N is the smaller count. Done before the toughness/lethal-damage
@@ -3942,6 +4022,25 @@ impl GameEngine {
     }
 
     /// Deck + hand for Cockatrice server to line up with tricerules state.
+    /// Build a `ManaPoolUpdated` event (CR 106) carrying player `idx`'s current absolute pool.
+    fn ev_mana_pool_updated(&self, idx: usize) -> RuledEvent {
+        let p = &self.state.players[idx];
+        let pool = &p.mana_pool;
+        RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ManaPoolUpdated(
+                rv1::ManaPoolUpdated {
+                    player_id: p.id,
+                    w: pool.white,
+                    u: pool.blue,
+                    b: pool.black,
+                    r: pool.red,
+                    g: pool.green,
+                    c: pool.colorless,
+                },
+            )),
+        }
+    }
+
     fn ev_zone_view_sync(&self) -> RuledEvent {
         let per_player: Vec<rv1::RuledPerPlayerView> = self
             .state
@@ -4168,6 +4267,32 @@ impl GameEngine {
                                         AbilityCost::Mana(c) | AbilityCost::TapAndMana(c) => {
                                             c.to_string()
                                         }
+                                        _ => String::new(),
+                                    })
+                                    .collect::<Vec<_>>()
+                                    .join("|")
+                            })
+                            .unwrap_or_default()
+                    })
+                    .collect(),
+                // Parallel to `battlefield_activated_ability_texts`: mana-ability production (CR 605).
+                battlefield_activated_ability_mana_produced: p
+                    .battlefield
+                    .iter()
+                    .map(|&oid| {
+                        self.state
+                            .objects
+                            .get(&oid)
+                            .and_then(|o| self.registry.get(&o.card_id))
+                            .map(|def| {
+                                def.activated_abilities
+                                    .iter()
+                                    .map(|a| match &a.effect {
+                                        SpellEffectKind::ProduceMana { options } => options
+                                            .iter()
+                                            .map(mana_amount_symbols)
+                                            .collect::<Vec<_>>()
+                                            .join("/"),
                                         _ => String::new(),
                                     })
                                     .collect::<Vec<_>>()
@@ -4975,6 +5100,25 @@ fn finish_with_events(eng: &GameEngine, events: Vec<RuledEvent>) -> RuledEventBa
     b
 }
 
+/// Render one [`ManaAmount`] as a brace-less symbol run for the zone view's mana-produced field
+/// (e.g. `{g:1}` → `"G"`, `{c:2}` → `"CC"`, `{w:1,u:1}` → `"WU"`). Order W U B R G C is canonical.
+fn mana_amount_symbols(a: &tricerules_cards::ManaAmount) -> String {
+    let mut s = String::new();
+    for (sym, n) in [
+        ('W', a.w),
+        ('U', a.u),
+        ('B', a.b),
+        ('R', a.r),
+        ('G', a.g),
+        ('C', a.c),
+    ] {
+        for _ in 0..n {
+            s.push(sym);
+        }
+    }
+    s
+}
+
 fn ev_log(text: String) -> RuledEvent {
     RuledEvent {
         ev: Some(rv1::ruled_event::Ev::Log(rv1::LogMessage { text })),
@@ -5611,6 +5755,8 @@ fn validate_effect_targets(
         | SpellEffectKind::DestroyAll { .. }
         | SpellEffectKind::DamageAll { .. }
         | SpellEffectKind::CreateTokens { .. }
+        // CR 605.1a: a mana ability is untargeted by definition.
+        | SpellEffectKind::ProduceMana { .. }
         | SpellEffectKind::None => {
             if !targets.is_empty() {
                 return Err(EngineError::Illegal("this effect takes no targets"));

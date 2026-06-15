@@ -1498,6 +1498,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 engineOidBattlefieldToughness.clear();
                                 engineOidToActivatedAbilityTexts.clear();
                                 engineOidToActivatedAbilityManaCosts.clear();
+                                engineOidToActivatedAbilityManaProduced.clear();
                                 bool anyFirstStrikePending = false;
                                 for (const auto &p : e.zone_view().per_player()) {
                                     if (p.first_strike_step_pending()) {
@@ -1528,6 +1529,13 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                             // Split on '|'; an empty entry means no mana cost for that ability.
                                             engineOidToActivatedAbilityManaCosts.insert(
                                                 oid, costsStr.split(QChar('|')));
+                                        }
+                                        if (oid != 0 && ai < p.battlefield_activated_ability_mana_produced_size()) {
+                                            const QString producedStr = QString::fromStdString(
+                                                p.battlefield_activated_ability_mana_produced(ai));
+                                            // Split on '|'; empty entry = non-mana ability (CR 605).
+                                            engineOidToActivatedAbilityManaProduced.insert(
+                                                oid, producedStr.split(QChar('|')));
                                         }
                                     }
                                     const int nPow = std::min(p.battlefield_object_id_size(), p.battlefield_power_size());

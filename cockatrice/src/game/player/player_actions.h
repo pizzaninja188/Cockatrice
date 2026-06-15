@@ -84,8 +84,10 @@ public:
     [[nodiscard]] QPair<bool, bool> tryConsumeLandManaPipTowardPendingSpell(const QString &manaCounterName);
     /// Call after tap `SetCardAttr` commands are sent. Completes cast and/or updates prompt.
     void afterRuledLandTapsAppliedForSpellMana(bool completeCast, bool partialCostRemainPrompt);
-    /// Ruled engine pool +1 for this land pip (no UI counter). Caller owns the pointer; nullptr if N/A.
-    [[nodiscard]] Command_RuledPayload *newRuledPayloadAddManaToPoolForLandName(const QString &manaCounterName);
+    /// CR 605: activate this land's mana ability so the engine produces mana and taps it. When the
+    /// ability has multiple options (a dual land), `desiredColor` (e.g. 'u') selects the matching
+    /// one. Caller owns the pointer; nullptr if the card is not a mana source in this ruled game.
+    [[nodiscard]] Command_RuledPayload *newRuledPayloadActivateManaAbilityForLand(CardItem *card, QChar desiredColor);
     bool tryHandleRuledSpellTargetClick(CardItem *card);
     bool tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer);
     /// True when the local player must pick a player (not permanent) for the pending ruled cast.

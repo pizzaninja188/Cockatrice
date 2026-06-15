@@ -866,15 +866,11 @@ Server_Player::cmdIncCounter(const Command_IncCounter &cmd, ResponseContainer & 
     }
 
     if (game->getRuledGame()) {
-        if (playerId != game->getRuledPriorityPlayer()) {
-            return Response::RespInvalidCommand;
-        }
-        if (!isRuledModeManaPoolCounterName(c->getName())) {
-            return Response::RespInvalidCommand;
-        }
-        if (qAbs(cmd.delta()) > 32) {
-            return Response::RespInvalidCommand;
-        }
+        // CR 106/605: in ruled mode the rules engine is the sole owner of the mana pool (and of
+        // life). Counters are display-only, set from engine events (ManaPoolUpdated / LifeChanged),
+        // so a client can no longer mint mana — or alter any counter — by poking it directly.
+        // (Previously this path translated a mana-counter increment into a trusted AddManaToPool.)
+        return Response::RespInvalidCommand;
     }
 
     c->setCount(c->getCount() + cmd.delta());
@@ -883,33 +879,6 @@ Server_Player::cmdIncCounter(const Command_IncCounter &cmd, ResponseContainer & 
     event.set_counter_id(c->getId());
     event.set_value(c->getCount());
     ges.enqueueGameEvent(event, playerId);
-
-    if (game->getRuledGame() && cmd.delta() > 0) {
-        ruled::v1::RuledCommand rc;
-        auto *m = rc.mutable_add_mana_to_pool();
-        bool mapped = true;
-        const QString n = c->getName().toLower();
-        if (n == QStringLiteral("w")) {
-            m->set_w(cmd.delta());
-        } else if (n == QStringLiteral("u")) {
-            m->set_u(cmd.delta());
-        } else if (n == QStringLiteral("b")) {
-            m->set_b(cmd.delta());
-        } else if (n == QStringLiteral("r")) {
-            m->set_r(cmd.delta());
-        } else if (n == QStringLiteral("g")) {
-            m->set_g(cmd.delta());
-        } else if (n == QStringLiteral("x") || n == QStringLiteral("c")) {
-            m->set_c(cmd.delta());
-        } else {
-            mapped = false;
-        }
-        if (mapped) {
-            std::string serialized;
-            rc.SerializeToString(&serialized);
-            game->relayRuledPayloadAndBroadcast(playerId, QByteArray::fromStdString(serialized));
-        }
-    }
 
     return Response::RespOk;
 }

@@ -354,7 +354,38 @@ pub enum SpellEffectKind {
         #[serde(default = "TargetFilter::default_creature")]
         target: TargetFilter,
     },
+    /// CR 605 mana ability: add mana to the activating player's pool. Legal only as an
+    /// activated ability's `effect` (never a spell `spell_effect`) — the engine classifies an
+    /// ability with this effect as a mana ability (CR 605.1a), so it doesn't use the stack and
+    /// resolves immediately. `options` lists the mutually exclusive bags of mana producible;
+    /// one option = no choice (basic lands, Llanowar Elves, Sol Ring), several = the player
+    /// picks at activation (dual/filter lands, any-color rocks). Untargeted.
+    ProduceMana {
+        options: Vec<ManaAmount>,
+    },
     None,
+}
+
+/// One bag of mana a mana ability can produce (CR 106): a count per mana type. A mana ability's
+/// [`SpellEffectKind::ProduceMana`] carries a `Vec<ManaAmount>` of *options*; with one option the
+/// ability produces it unconditionally (basic Forest `(g: 1)`, Sol Ring `(c: 2)`, Llanowar Elves
+/// `(g: 1)`), with several the activating player picks one (a dual land's two colors; "any color"
+/// enumerated as five single-color options). Serde defaults every field to 0 so RON lists only the
+/// nonzero types (`(g: 1)`, `(w: 1, u: 1)`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct ManaAmount {
+    #[serde(default)]
+    pub w: u32,
+    #[serde(default)]
+    pub u: u32,
+    #[serde(default)]
+    pub b: u32,
+    #[serde(default)]
+    pub r: u32,
+    #[serde(default)]
+    pub g: u32,
+    #[serde(default)]
+    pub c: u32,
 }
 
 /// Who receives the tokens made by [`SpellEffectKind::CreateTokens`].
@@ -449,6 +480,17 @@ impl SpellEffectKind {
                     ))
                 }
             }
+            // CR 605.1a: a mana ability is an activated/triggered ability — never a spell. An
+            // empty option set would produce nothing and is rejected as malformed.
+            SpellEffectKind::ProduceMana { options } => {
+                if context == EffectContext::Spell {
+                    Err("ProduceMana is only valid on a mana ability, not a spell".into())
+                } else if options.is_empty() {
+                    Err("ProduceMana requires at least one mana option".into())
+                } else {
+                    Ok(())
+                }
+            }
             _ => Ok(()),
         }
     }
@@ -458,9 +500,10 @@ impl SpellEffectKind {
 // Activated abilities
 // ---------------------------------------------------------------------------
 
-/// Cost to activate an activated ability (CR 602).
-/// Mana abilities that only produce mana (CR 605.3) are intentionally excluded —
-/// they don't use the stack and are handled separately.
+/// Cost to activate an activated ability (CR 602). Shared by every activated ability,
+/// including mana abilities: an ability is classified as a mana ability (CR 605.1a) by its
+/// *effect* being [`SpellEffectKind::ProduceMana`], not by its cost — so a `{T}` land, a
+/// `{1}, {T}` filter land, and a sacrifice-for-mana rock all use these same cost kinds.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AbilityCost {
     /// {T}: tap the source permanent.

@@ -175,6 +175,10 @@ private:
     QHash<quint32, QStringList> engineOidToActivatedAbilityTexts;
     // Engine ObjectId (battlefield permanent) -> list of mana cost strings per ability (parallel to above).
     QHash<quint32, QStringList> engineOidToActivatedAbilityManaCosts;
+    // Engine ObjectId -> mana produced per ability (CR 605), parallel to the texts list. Each entry
+    // is empty for a non-mana ability, or its options joined by "/" (each a symbol run like "G",
+    // "WU"), so the client can identify mana abilities and their colors without Oracle lookups.
+    QHash<quint32, QStringList> engineOidToActivatedAbilityManaProduced;
     // Pending trigger: set when engine emits TriggerNeedsTarget, cleared on ChooseTriggerTarget.
     quint32 pendingTriggerSourceOid = 0;
     quint32 pendingTriggerAbilityIndex = 0;
@@ -388,6 +392,13 @@ public:
     [[nodiscard]] QStringList activatedAbilityManaCostsForOid(quint32 oid) const
     {
         return engineOidToActivatedAbilityManaCosts.value(oid);
+    }
+    /// Mana produced per activated ability (CR 605), in ability-index order. Empty entry = not a
+    /// mana ability; otherwise the producible options joined by "/" (each a symbol run, e.g. "G",
+    /// "W/U" for a dual). Used to drive "tap land for mana" from engine data.
+    [[nodiscard]] QStringList activatedAbilityManaProducedForOid(quint32 oid) const
+    {
+        return engineOidToActivatedAbilityManaProduced.value(oid);
     }
     [[nodiscard]] bool hasPendingTriggerTarget() const { return hasPendingTrigger; }
     [[nodiscard]] QString pendingTriggerText() const { return pendingTriggerAbilityText; }

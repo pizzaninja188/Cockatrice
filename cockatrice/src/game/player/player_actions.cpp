@@ -45,70 +45,6 @@
 // milliseconds in between triggers of the move top cards until action
 static constexpr int MOVE_TOP_CARD_UNTIL_INTERVAL = 100;
 
-namespace {
-
-// Builds a Command_RuledPayload that decrements the engine's mana pool by 1 for the given counter
-// color. Returns nullptr if the counter name doesn't map to a known mana color (nothing to send).
-Command_RuledPayload *buildManaPoolDecrementPayload(const QString &counterName)
-{
-    ruled::v1::RuledCommand rc;
-    auto *m = rc.mutable_add_mana_to_pool();
-    const QString n = counterName.toLower();
-    if (n == QLatin1String("w")) {
-        m->set_w(-1);
-    } else if (n == QLatin1String("u")) {
-        m->set_u(-1);
-    } else if (n == QLatin1String("b")) {
-        m->set_b(-1);
-    } else if (n == QLatin1String("r")) {
-        m->set_r(-1);
-    } else if (n == QLatin1String("g")) {
-        m->set_g(-1);
-    } else if (n == QLatin1String("c") || n == QLatin1String("x")) {
-        m->set_c(-1);
-    } else {
-        return nullptr;
-    }
-    std::string payload;
-    if (!rc.SerializeToString(&payload)) {
-        return nullptr;
-    }
-    auto *cmd = new Command_RuledPayload;
-    cmd->set_payload(payload);
-    return cmd;
-}
-
-// +1 for each pip; mirrors server `cmdIncCounter` positive delta → engine pool (no Cockatrice counter).
-Command_RuledPayload *buildManaPoolIncrementPayload(const QString &counterName)
-{
-    ruled::v1::RuledCommand rc;
-    auto *m = rc.mutable_add_mana_to_pool();
-    const QString n = counterName.toLower();
-    if (n == QLatin1String("w")) {
-        m->set_w(1);
-    } else if (n == QLatin1String("u")) {
-        m->set_u(1);
-    } else if (n == QLatin1String("b")) {
-        m->set_b(1);
-    } else if (n == QLatin1String("r")) {
-        m->set_r(1);
-    } else if (n == QLatin1String("g")) {
-        m->set_g(1);
-    } else if (n == QLatin1String("c") || n == QLatin1String("x")) {
-        m->set_c(1);
-    } else {
-        return nullptr;
-    }
-    std::string payload;
-    if (!rc.SerializeToString(&payload)) {
-        return nullptr;
-    }
-    auto *cmd = new Command_RuledPayload;
-    cmd->set_payload(payload);
-    return cmd;
-}
-} // namespace
-
 PlayerActions::PlayerActions(Player *_player)
     : QObject(_player), player(_player), lastTokenTableRow(0), movingCardsUntil(false)
 {
@@ -353,16 +289,6 @@ void PlayerActions::cancelPendingRuledSpellCast()
             counterCmd->set_counter_id(entry.counterId);
             counterCmd->set_delta(-1);
             cmdList.append(counterCmd);
-            if (player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
-                if (Command_RuledPayload *poolCmd = buildManaPoolDecrementPayload(entry.counterName)) {
-                    cmdList.append(poolCmd);
-                }
-            }
-        } else if (player->getGame()->getGameMetaInfo()->proto().ruled_game() && !entry.counterName.isEmpty()) {
-            // Land paid spell cost without IncCounter; engine pool was incremented — remove it on cancel.
-            if (Command_RuledPayload *poolCmd = buildManaPoolDecrementPayload(entry.counterName)) {
-                cmdList.append(poolCmd);
-            }
         }
     }
     midCastLandTapStack.clear();
@@ -417,11 +343,6 @@ void PlayerActions::undoLastLandTap()
         counterCmd->set_counter_id(entry.counterId);
         counterCmd->set_delta(-1);
         cmdList.append(counterCmd);
-        if (player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
-            if (Command_RuledPayload *poolCmd = buildManaPoolDecrementPayload(entry.counterName)) {
-                cmdList.append(poolCmd);
-            }
-        }
     }
 
     if (!cmdList.isEmpty()) {
@@ -779,16 +700,6 @@ void PlayerActions::cancelPendingActivatedAbility()
             counterCmd->set_counter_id(entry.counterId);
             counterCmd->set_delta(-1);
             cmdList.append(counterCmd);
-            if (player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
-                if (Command_RuledPayload *poolCmd = buildManaPoolDecrementPayload(entry.counterName)) {
-                    cmdList.append(poolCmd);
-                }
-            }
-        } else if (player->getGame()->getGameMetaInfo()->proto().ruled_game() &&
-                   !entry.counterName.isEmpty()) {
-            if (Command_RuledPayload *poolCmd = buildManaPoolDecrementPayload(entry.counterName)) {
-                cmdList.append(poolCmd);
-            }
         }
     }
     midCastLandTapStack.clear();
@@ -823,12 +734,57 @@ QString PlayerActions::pendingRuledAbilityPromptText() const
              formatSimpleManaCost(pendingActivatedAbility.remainingCost));
 }
 
-Command_RuledPayload *PlayerActions::newRuledPayloadAddManaToPoolForLandName(const QString &manaCounterName)
+Command_RuledPayload *PlayerActions::newRuledPayloadActivateManaAbilityForLand(CardItem *card, QChar desiredColor)
 {
-    if (!player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+    if (!card || !player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
         return nullptr;
     }
-    return buildManaPoolIncrementPayload(manaCounterName);
+    auto *handler = player->getGame()->getGameEventHandler();
+    if (!handler) {
+        return nullptr;
+    }
+    const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
+    const quint32 oid = handler->engineOidForCardId(ownerPlayerId, card->getId());
+    if (oid == 0) {
+        return nullptr;
+    }
+    // CR 605: pick this permanent's first mana ability (non-empty produced entry) and, when the
+    // ability offers multiple options (a dual land), the option that makes the wanted color.
+    const QStringList produced = handler->activatedAbilityManaProducedForOid(oid);
+    int abilityIndex = -1;
+    int optionIndex = 0;
+    for (int i = 0; i < produced.size(); ++i) {
+        if (produced.at(i).isEmpty()) {
+            continue;
+        }
+        abilityIndex = i;
+        if (!desiredColor.isNull()) {
+            const QStringList options = produced.at(i).split(QChar('/'));
+            for (int o = 0; o < options.size(); ++o) {
+                if (options.at(o).contains(desiredColor.toUpper())) {
+                    optionIndex = o;
+                    break;
+                }
+            }
+        }
+        break;
+    }
+    if (abilityIndex < 0) {
+        return nullptr; // not a mana source
+    }
+
+    ruled::v1::RuledCommand rc;
+    auto *aa = rc.mutable_activate_ability();
+    aa->set_permanent_id(oid);
+    aa->set_ability_index(static_cast<uint32_t>(abilityIndex));
+    aa->set_mana_option_index(static_cast<uint32_t>(optionIndex));
+    std::string payload;
+    if (!rc.SerializeToString(&payload)) {
+        return nullptr;
+    }
+    auto *cmd = new Command_RuledPayload;
+    cmd->set_payload(payload);
+    return cmd;
 }
 
 bool PlayerActions::tryPayRuledSpellWithCounter(const QString &counterName)

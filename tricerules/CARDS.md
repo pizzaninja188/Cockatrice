@@ -259,7 +259,7 @@ Legend: `[x]` = fully implemented · `[ ] 🟡 partial` = partially implemented 
 - [ ] Time Walk
 - [ ] Timetwister
 - [ ] Tranquility
-- [ ] Tropical Island
+- [x] Tropical Island
 - [ ] Tsunami
 - [ ] Tundra
 - [ ] Tunnel

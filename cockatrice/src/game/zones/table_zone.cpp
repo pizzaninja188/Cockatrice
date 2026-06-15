@@ -319,67 +319,78 @@ void TableZone::toggleTapped()
     for (const auto &selectedItem : selectedItems) {
         CardItem *temp = qgraphicsitem_cast<CardItem *>(selectedItem);
         const bool wasTapped = temp->getTapped();
-        if (wasTapped != tapAll) {
-            Command_SetCardAttr *cmd = new Command_SetCardAttr;
-            cmd->set_zone(getLogic()->getName().toStdString());
-            cmd->set_card_id(temp->getId());
-            cmd->set_attribute(AttrTapped);
-            cmd->set_attr_value(tapAll ? "1" : "0");
-            cmdList.append(cmd);
-            temp->setTapped(tapAll, true);
+        if (wasTapped == tapAll) {
+            continue;
+        }
 
-            if (tapAll && !wasTapped) {
-                const QString manaCounterName = inferLandManaCounterName(temp);
-                const int manaCounterId = findCounterIdByName(getLogic()->getPlayer(), manaCounterName);
-                const QPair<bool, bool> spellLand =
-                    playerActions->tryConsumeLandManaPipTowardPendingSpell(manaCounterName);
-                if (spellLand.first) {
-                    spellLandManaConsumed = true;
-                    playerActions->recordLandTapUndo(temp->getId(), manaCounterName, -1);
-                    if (ruledGame) {
-                        if (Command_RuledPayload *poolAdd =
-                                playerActions->newRuledPayloadAddManaToPoolForLandName(manaCounterName)) {
-                            cmdList.append(poolAdd);
-                        }
-                    }
-                    if (spellLand.second) {
-                        spellCostFullyPaidAfterLands = true;
+        if (ruledGame) {
+            // CR 605/106: the engine owns tap state and the mana pool. Tapping a land here means
+            // activating its mana ability — the engine taps the source and adds the mana, which
+            // come back via zone_view (battlefield_tapped) and ManaPoolUpdated. The client never
+            // taps locally, mints mana, or pokes counters. The pip bookkeeping below only decides
+            // when to auto-cast / refresh the prompt; the engine is authoritative either way.
+            if (!(tapAll && !wasTapped)) {
+                continue;
+            }
+            const QString manaCounterName = inferLandManaCounterName(temp);
+            const QChar desiredColor = manaCounterName.isEmpty() ? QChar() : manaCounterName.at(0);
+            Command_RuledPayload *activate =
+                playerActions->newRuledPayloadActivateManaAbilityForLand(temp, desiredColor);
+            if (!activate) {
+                continue; // not a mana source in the engine
+            }
+            const QPair<bool, bool> spellLand =
+                playerActions->tryConsumeLandManaPipTowardPendingSpell(manaCounterName);
+            if (spellLand.first) {
+                spellLandManaConsumed = true;
+                cmdList.append(activate);
+                if (spellLand.second) {
+                    spellCostFullyPaidAfterLands = true;
+                } else {
+                    spellLandPartialRemain = true;
+                }
+            } else {
+                const QPair<bool, bool> abilityLand =
+                    playerActions->tryConsumeLandManaPipTowardPendingAbility(manaCounterName);
+                if (abilityLand.first) {
+                    abilityLandManaConsumed = true;
+                    cmdList.append(activate);
+                    if (abilityLand.second) {
+                        abilityCostFullyPaidAfterLands = true;
                     } else {
-                        spellLandPartialRemain = true;
+                        abilityLandPartialRemain = true;
                     }
                 } else {
-                    // No pending spell — try pending ability.
-                    const QPair<bool, bool> abilityLand =
-                        playerActions->tryConsumeLandManaPipTowardPendingAbility(manaCounterName);
-                    if (abilityLand.first) {
-                        abilityLandManaConsumed = true;
-                        playerActions->recordLandTapUndo(temp->getId(), manaCounterName, -1);
-                        if (ruledGame) {
-                            if (Command_RuledPayload *poolAdd =
-                                    playerActions->newRuledPayloadAddManaToPoolForLandName(manaCounterName)) {
-                                cmdList.append(poolAdd);
-                            }
-                        }
-                        if (abilityLand.second) {
-                            abilityCostFullyPaidAfterLands = true;
-                        } else {
-                            abilityLandPartialRemain = true;
-                        }
-                    } else if (manaCounterId >= 0 && !spellCostFullyPaidAfterLands &&
-                               !abilityCostFullyPaidAfterLands) {
-                        auto *counterCmd = new Command_IncCounter;
-                        counterCmd->set_counter_id(manaCounterId);
-                        counterCmd->set_delta(1);
-                        cmdList.append(counterCmd);
-
-                        if (auto *counter =
-                                getLogic()->getPlayer()->getCounters().value(manaCounterId, nullptr)) {
-                            counter->setValue(counter->getValue() + 1);
-                        }
-
-                        playerActions->recordLandTapUndo(temp->getId(), manaCounterName, manaCounterId);
-                    }
+                    // No pending cost — just float the produced mana into the pool.
+                    cmdList.append(activate);
                 }
+            }
+            continue;
+        }
+
+        // Freeform (legacy): the client taps the card locally and bumps its own mana counter.
+        Command_SetCardAttr *cmd = new Command_SetCardAttr;
+        cmd->set_zone(getLogic()->getName().toStdString());
+        cmd->set_card_id(temp->getId());
+        cmd->set_attribute(AttrTapped);
+        cmd->set_attr_value(tapAll ? "1" : "0");
+        cmdList.append(cmd);
+        temp->setTapped(tapAll, true);
+
+        if (tapAll && !wasTapped) {
+            const QString manaCounterName = inferLandManaCounterName(temp);
+            const int manaCounterId = findCounterIdByName(getLogic()->getPlayer(), manaCounterName);
+            if (manaCounterId >= 0) {
+                auto *counterCmd = new Command_IncCounter;
+                counterCmd->set_counter_id(manaCounterId);
+                counterCmd->set_delta(1);
+                cmdList.append(counterCmd);
+
+                if (auto *counter = getLogic()->getPlayer()->getCounters().value(manaCounterId, nullptr)) {
+                    counter->setValue(counter->getValue() + 1);
+                }
+
+                playerActions->recordLandTapUndo(temp->getId(), manaCounterName, manaCounterId);
             }
         }
     }

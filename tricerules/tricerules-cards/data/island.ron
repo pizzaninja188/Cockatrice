@@ -3,4 +3,11 @@
   name: "Island",
   mana_cost: "",
   types: ["Land", "Island"],
+  activated_abilities: [
+    (
+      cost: Tap,
+      effect: ProduceMana(options: [(u: 1)]),
+      text: "{T}: Add {U}.",
+    ),
+  ],
 )

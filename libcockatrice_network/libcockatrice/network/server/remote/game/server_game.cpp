@@ -162,33 +162,6 @@ void stripRuledServerOnlyEventsForBroadcast(ruled::v1::IpcResponse *resp)
     }
 }
 
-void clearRuledManaPoolsOnServer(Server_Game *game)
-{
-    if (!game) {
-        return;
-    }
-
-    GameEventStorage ges;
-    bool changed = false;
-    for (Server_AbstractPlayer *ab : game->getPlayers().values()) {
-        auto *pl = static_cast<Server_Player *>(ab);
-        for (Server_Counter *counter : pl->getCounters()) {
-            if (!counter || !isRuledModeManaPoolCounterName(counter->getName()) || counter->getCount() == 0) {
-                continue;
-            }
-            counter->setCount(0);
-            Event_SetCounter ev;
-            ev.set_counter_id(counter->getId());
-            ev.set_value(0);
-            ges.enqueueGameEvent(ev, pl->getPlayerId());
-            changed = true;
-        }
-    }
-    if (changed) {
-        ges.sendToGame(game);
-    }
-}
-
 int expectedMainboardSizeForStartupSync(Server_Game *game,
                                         int playerId,
                                         const QList<QPair<int, QStringList>> &deckByPlayer)
@@ -1167,10 +1140,6 @@ Response::ResponseCode Server_Game::processRuledPayload(int playerId, const Comm
     }
 
     const RuledBatchApplyResult batchResult = applyRuledBatch(resp);
-    if (batchResult.phaseChanged) {
-        // In ruled mode, floating mana empties whenever the step/phase changes.
-        clearRuledManaPoolsOnServer(this);
-    }
     if (batchResult.zoneViewApplied &&
         (batchResult.handOrLibraryChanged || batchResult.battlefieldOrderChanged)) {
         sendGameStateToPlayers();
@@ -1198,9 +1167,6 @@ void Server_Game::relayRuledPayloadAndBroadcast(int playerId, const QByteArray &
         return;
     }
     const RuledBatchApplyResult batchResult = applyRuledBatch(resp);
-    if (batchResult.phaseChanged) {
-        clearRuledManaPoolsOnServer(this);
-    }
     if (batchResult.zoneViewApplied &&
         (batchResult.handOrLibraryChanged || batchResult.battlefieldOrderChanged)) {
         sendGameStateToPlayers();
@@ -1667,6 +1633,40 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
             ev.set_value(lifeCounter->getCount());
             combatGes.enqueueGameEvent(ev, target->getPlayerId());
             combatGesHasEvents = true;
+        }
+        if (e.has_mana_pool_updated()) {
+            const auto &mp = e.mana_pool_updated();
+            Server_AbstractPlayer *target = getPlayer(mp.player_id());
+            if (!target) {
+                continue;
+            }
+            auto *targetPlayer = static_cast<Server_Player *>(target);
+            // CR 106: the engine is the sole owner of the mana pool. Mirror its absolute snapshot
+            // onto the player's single-letter mana counters (w/u/b/r/g/c). Because it is absolute,
+            // this one handler covers production (mana abilities), payment (pay_mana), and the
+            // empty-on-step/phase-change case — so no separate server-side pool clear is needed.
+            // Colorless ("c") has no display counter yet; it is harmlessly skipped until a
+            // colorless-producing card (and counter) is added.
+            const QHash<QString, int> desired = {
+                {QStringLiteral("w"), static_cast<int>(mp.w())}, {QStringLiteral("u"), static_cast<int>(mp.u())},
+                {QStringLiteral("b"), static_cast<int>(mp.b())}, {QStringLiteral("r"), static_cast<int>(mp.r())},
+                {QStringLiteral("g"), static_cast<int>(mp.g())}, {QStringLiteral("c"), static_cast<int>(mp.c())},
+            };
+            for (Server_Counter *counter : targetPlayer->getCounters()) {
+                if (!counter) {
+                    continue;
+                }
+                const auto it = desired.constFind(counter->getName().trimmed().toLower());
+                if (it == desired.constEnd() || counter->getCount() == it.value()) {
+                    continue;
+                }
+                counter->setCount(it.value());
+                Event_SetCounter ev;
+                ev.set_counter_id(counter->getId());
+                ev.set_value(it.value());
+                combatGes.enqueueGameEvent(ev, target->getPlayerId());
+                combatGesHasEvents = true;
+            }
         }
         if (e.has_attackers_declared()) {
             const auto &ad = e.attackers_declared();
