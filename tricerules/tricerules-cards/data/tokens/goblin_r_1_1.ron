@@ -1,6 +1,6 @@
 // 1/1 red Goblin creature token (Dragon Fodder, Krenko, etc.).
 (
-    id: "goblin",
+    id: "goblin_r_1_1",
     name: "Goblin",
     types: ["Creature", "Goblin"],
     colors: [Red],

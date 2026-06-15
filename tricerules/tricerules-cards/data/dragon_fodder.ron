@@ -4,5 +4,5 @@
   name: "Dragon Fodder",
   mana_cost: "{1}{R}",
   types: ["Sorcery"],
-  spell_effect: [CreateTokens(token: "goblin", count: 2)],
+  spell_effect: [CreateTokens(token: "goblin_r_1_1", count: 2)],
 )

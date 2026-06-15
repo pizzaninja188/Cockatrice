@@ -161,6 +161,11 @@ void Server_Card::getInfo(ServerInfo_Card *info)
     if (doesntUntap) {
         info->set_doesnt_untap(true);
     }
+    if (!facedown) {
+        for (const QString &kw : tokenAbilityKeywords) {
+            info->add_ability_keywords(kw.toStdString());
+        }
+    }
 
     QMapIterator<int, int> cardCounterIterator(counters);
     while (cardCounterIterator.hasNext()) {

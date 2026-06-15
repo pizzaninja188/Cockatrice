@@ -20,6 +20,7 @@ private:
     QHash<quint32, bool> engineOidToSummoningSick;
     QHash<quint32, bool> engineOidToHaste;
     QHash<quint32, bool> engineOidToTrample;
+    QHash<quint32, bool> engineOidToCreature;
 
 public:
     struct RuledZoneSyncResult
@@ -47,6 +48,10 @@ public:
     bool isEngineOidTrample(quint32 engineOid) const
     {
         return engineOidToTrample.value(engineOid, false);
+    }
+    bool isEngineOidCreature(quint32 engineOid) const
+    {
+        return engineOidToCreature.value(engineOid, false);
     }
     Server_Card *findCardByEngineOid(quint32 engineOid) const;
 

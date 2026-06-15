@@ -1,6 +1,6 @@
 // 1/1 white Spirit creature token with flying (Midnight Haunting, Lingering Souls, etc.).
 (
-    id: "spirit",
+    id: "spirit_w_1_1_flying",
     name: "Spirit",
     types: ["Creature", "Spirit"],
     colors: [White],

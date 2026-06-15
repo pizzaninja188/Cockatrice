@@ -67,6 +67,31 @@ pub enum Keyword {
     Flash,
 }
 
+impl Keyword {
+    /// Canonical MTG keyword text (e.g. `Keyword::FirstStrike` → `"First strike"`). Used for the
+    /// token identity feed and any place a keyword must render as printed Oracle text.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Keyword::Flying => "Flying",
+            Keyword::Reach => "Reach",
+            Keyword::Intimidate => "Intimidate",
+            Keyword::Vigilance => "Vigilance",
+            Keyword::Lifelink => "Lifelink",
+            Keyword::Haste => "Haste",
+            Keyword::Deathtouch => "Deathtouch",
+            Keyword::Menace => "Menace",
+            Keyword::Trample => "Trample",
+            Keyword::FirstStrike => "First strike",
+            Keyword::DoubleStrike => "Double strike",
+            Keyword::Indestructible => "Indestructible",
+            Keyword::Hexproof => "Hexproof",
+            Keyword::Shroud => "Shroud",
+            Keyword::Defender => "Defender",
+            Keyword::Flash => "Flash",
+        }
+    }
+}
+
 /// Base kind for a [`TargetFilter`] — what category of object is targeted.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TargetKind {

@@ -16,4 +16,7 @@ message Event_CreateToken {
     optional sint32 y = 9;
     optional string card_provider_id = 10;
     optional bool face_down = 11;
+    // Ruled engine tokens only: static keyword abilities (MTG spelling, e.g. "Flying", "Lifelink").
+    // Lets the client pick the matching Oracle token art among same-name variants. Empty otherwise.
+    repeated string ability_keywords = 12;
 }

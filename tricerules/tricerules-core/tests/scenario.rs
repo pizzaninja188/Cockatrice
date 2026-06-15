@@ -8226,7 +8226,7 @@ fn raise_the_alarm_creates_two_soldier_tokens() {
     e.apply_command(0, &pass()).expect("caster pass");
     let resolved = e.apply_command(1, &pass()).expect("opponent pass");
 
-    let soldiers = battlefield_token_oids(&e, 0, "soldier");
+    let soldiers = battlefield_token_oids(&e, 0, "soldier_w_1_1");
     assert_eq!(soldiers.len(), 2, "two soldier tokens created");
     for oid in &soldiers {
         let o = e.state.objects.get(oid).expect("token object");
@@ -8236,18 +8236,52 @@ fn raise_the_alarm_creates_two_soldier_tokens() {
         assert!(o.summoning_sick, "entering token is summoning sick");
     }
     // P1 received no tokens (Controller, not EachPlayer).
-    assert!(battlefield_token_oids(&e, 1, "soldier").is_empty());
+    assert!(battlefield_token_oids(&e, 1, "soldier_w_1_1").is_empty());
 
     let created = token_created_events(&resolved);
     assert_eq!(created.len(), 2, "one TokenCreated per token");
     for tc in &created {
         assert_eq!(tc.controller_player_id, 0);
-        assert_eq!(tc.card_id, "soldier");
+        assert_eq!(tc.card_id, "soldier_w_1_1");
         let id = tc.identity.as_ref().expect("identity");
         assert_eq!(id.name, "Soldier");
         assert_eq!(id.pt, "1/1");
         assert_eq!(id.color, "w");
         assert!(id.is_creature);
+        // Vanilla token: no keyword abilities feed to the client art matcher.
+        assert!(id.keywords.is_empty());
+    }
+}
+
+/// A keyword-bearing token (Call the Cavalry → 2/2 white Knight with vigilance) feeds its keyword
+/// abilities through TokenIdentity so the client can pick the matching Oracle token art among
+/// same-name/P/T variants (vanilla vs. vigilance Knight).
+#[test]
+fn call_the_cavalry_token_identity_carries_keywords() {
+    let decks = Some(vec![
+        vec!["call_the_cavalry".into(); 7],
+        vec!["forest".into(); 7],
+    ]);
+    let mut e = GameEngine::new(22, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    grant_pool(&mut e, 0);
+    let idx = hand_index_for_card(&e, 0, "call_the_cavalry");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast call the cavalry");
+    e.apply_command(0, &pass()).expect("caster pass");
+    let resolved = e.apply_command(1, &pass()).expect("opponent pass");
+
+    let created = token_created_events(&resolved);
+    assert_eq!(created.len(), 2, "two knight tokens created");
+    for tc in &created {
+        assert_eq!(tc.card_id, "knight_w_2_2_vigilance");
+        let id = tc.identity.as_ref().expect("identity");
+        assert_eq!(id.name, "Knight");
+        assert_eq!(id.pt, "2/2");
+        assert_eq!(id.color, "w");
+        // The keyword feed uses canonical MTG spelling (Keyword::as_str).
+        assert_eq!(id.keywords, vec!["Vigilance".to_string()]);
     }
 }
 
@@ -8277,9 +8311,9 @@ fn bestial_menace_creates_three_distinct_tokens() {
     e.apply_command(0, &pass()).expect("pass");
     e.apply_command(1, &pass()).expect("pass");
 
-    let snake = battlefield_token_oids(&e, 0, "snake");
-    let wolf = battlefield_token_oids(&e, 0, "wolf");
-    let elephant = battlefield_token_oids(&e, 0, "elephant");
+    let snake = battlefield_token_oids(&e, 0, "snake_g_1_1");
+    let wolf = battlefield_token_oids(&e, 0, "wolf_g_2_2");
+    let elephant = battlefield_token_oids(&e, 0, "elephant_g_3_3");
     assert_eq!(snake.len(), 1);
     assert_eq!(wolf.len(), 1);
     assert_eq!(elephant.len(), 1);
@@ -8328,7 +8362,7 @@ fn token_dies_and_ceases_to_exist() {
     e.apply_command(0, &pass()).expect("pass");
     e.apply_command(1, &pass()).expect("pass");
 
-    let soldiers = battlefield_token_oids(&e, 0, "soldier");
+    let soldiers = battlefield_token_oids(&e, 0, "soldier_w_1_1");
     assert_eq!(soldiers.len(), 2);
     let victim = soldiers[0];
     let survivor = soldiers[1];
@@ -8354,7 +8388,10 @@ fn token_dies_and_ceases_to_exist() {
     );
     // The other token is untouched.
     assert!(e.state.objects.contains_key(&survivor));
-    assert_eq!(battlefield_token_oids(&e, 0, "soldier"), vec![survivor]);
+    assert_eq!(
+        battlefield_token_oids(&e, 0, "soldier_w_1_1"),
+        vec![survivor]
+    );
 }
 
 /// CR 111.7: a token returned to its owner's hand ceases to exist rather than becoming a hand
@@ -8382,7 +8419,7 @@ fn bounced_token_ceases_to_exist() {
     e.apply_command(0, &pass()).expect("pass");
     e.apply_command(1, &pass()).expect("pass");
 
-    let victim = battlefield_token_oids(&e, 0, "soldier")[0];
+    let victim = battlefield_token_oids(&e, 0, "soldier_w_1_1")[0];
     let hand_before = e.state.players[0].hand.len();
 
     grant_pool(&mut e, 0);
@@ -8439,7 +8476,7 @@ fn anthem_buffs_token_via_shared_pt_path() {
     e.apply_command(0, &pass()).expect("pass");
     e.apply_command(1, &pass()).expect("pass");
 
-    let token = battlefield_token_oids(&e, 0, "soldier")[0];
+    let token = battlefield_token_oids(&e, 0, "soldier_w_1_1")[0];
     assert_eq!(e.effective_power(token), Some(1));
     assert_eq!(e.effective_toughness(token), Some(1));
 

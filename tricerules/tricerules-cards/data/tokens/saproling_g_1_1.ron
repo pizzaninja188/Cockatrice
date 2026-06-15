@@ -1,6 +1,6 @@
 // 1/1 green Saproling creature token (Sprout, Saproling Migration, etc.).
 (
-    id: "saproling",
+    id: "saproling_g_1_1",
     name: "Saproling",
     types: ["Creature", "Saproling"],
     colors: [Green],

@@ -4,5 +4,5 @@
   name: "Captain's Call",
   mana_cost: "{3}{W}",
   types: ["Sorcery"],
-  spell_effect: [CreateTokens(token: "soldier", count: 3)],
+  spell_effect: [CreateTokens(token: "soldier_w_1_1", count: 3)],
 )

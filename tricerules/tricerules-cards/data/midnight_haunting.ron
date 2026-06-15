@@ -4,5 +4,5 @@
   name: "Midnight Haunting",
   mana_cost: "{2}{W}",
   types: ["Instant"],
-  spell_effect: [CreateTokens(token: "spirit", count: 2)],
+  spell_effect: [CreateTokens(token: "spirit_w_1_1_flying", count: 2)],
 )

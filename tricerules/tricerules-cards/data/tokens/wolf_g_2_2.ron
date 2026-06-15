@@ -1,6 +1,6 @@
 // 2/2 green Wolf creature token (Bestial Menace, Master of the Wild Hunt, etc.).
 (
-    id: "wolf",
+    id: "wolf_g_2_2",
     name: "Wolf",
     types: ["Creature", "Wolf"],
     colors: [Green],

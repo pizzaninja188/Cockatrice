@@ -4,5 +4,5 @@
   name: "Sprout",
   mana_cost: "{G}",
   types: ["Instant"],
-  spell_effect: [CreateTokens(token: "saproling", count: 1)],
+  spell_effect: [CreateTokens(token: "saproling_g_1_1", count: 1)],
 )

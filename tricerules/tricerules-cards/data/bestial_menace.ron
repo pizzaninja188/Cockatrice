@@ -6,8 +6,8 @@
   mana_cost: "{3}{G}{G}",
   types: ["Sorcery"],
   spell_effect: [
-    CreateTokens(token: "snake", count: 1),
-    CreateTokens(token: "wolf", count: 1),
-    CreateTokens(token: "elephant", count: 1),
+    CreateTokens(token: "snake_g_1_1", count: 1),
+    CreateTokens(token: "wolf_g_2_2", count: 1),
+    CreateTokens(token: "elephant_g_3_3", count: 1),
   ],
 )

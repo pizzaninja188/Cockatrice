@@ -151,6 +151,11 @@ makeCreateTokenEvent(Server_CardZone *zone, Server_Card *card, int xCoord, int y
     if (!card->getFaceDown() || revealFacedownInfo) {
         event.set_card_name(card->getName().toStdString());
         event.set_card_provider_id(card->getProviderId().toStdString());
+        // Ruled tokens carry their keyword abilities so the client can disambiguate same-name
+        // Oracle token art (e.g. vanilla vs. vigilance Knight). Empty for normal tokens.
+        for (const QString &kw : card->getTokenAbilityKeywords()) {
+            event.add_ability_keywords(kw.toStdString());
+        }
     }
 
     event.set_color(card->getColor().toStdString());

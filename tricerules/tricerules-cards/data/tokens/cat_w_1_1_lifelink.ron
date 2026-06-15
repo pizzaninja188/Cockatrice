@@ -1,0 +1,13 @@
+// 1/1 white Cat creature token with lifelink (e.g. Regal Caracal, Ajani, Strength of the Pride).
+// Reference variant: demonstrates a keyword-bearing token whose subtype ("Cat") has multiple Oracle
+// printings (1/1 white vanilla Cat vs. this 1/1 white lifelink Cat). The client's token-art matcher
+// uses the keyword set to select the lifelink printing. Not yet created by a card.
+(
+    id: "cat_w_1_1_lifelink",
+    name: "Cat",
+    types: ["Creature", "Cat"],
+    colors: [White],
+    power: 1,
+    toughness: 1,
+    keywords: [Lifelink],
+)

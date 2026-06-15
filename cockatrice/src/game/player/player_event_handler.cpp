@@ -9,6 +9,7 @@
 #include "player.h"
 #include "player_actions.h"
 
+#include <libcockatrice/card/database/card_database_manager.h>
 #include <libcockatrice/protocol/pb/command_set_card_attr.pb.h>
 #include <libcockatrice/protocol/pb/context_move_card.pb.h>
 #include <libcockatrice/protocol/pb/context_undo_draw.pb.h>
@@ -61,6 +62,7 @@ bool isRuledManaPoolCounterName(const QString &name)
     }
     return QStringLiteral("wubrgxc").contains(n.at(0));
 }
+
 } // namespace
 
 PlayerEventHandler::PlayerEventHandler(Player *_player) : QObject(_player), player(_player)
@@ -149,6 +151,26 @@ void PlayerEventHandler::eventCreateToken(const Event_CreateToken &event)
     }
 
     CardRef cardRef = {QString::fromStdString(event.card_name()), QString::fromStdString(event.card_provider_id())};
+    // Ruled engine tokens carry their MTG subtype as the name ("Knight"); Oracle's display DB stores
+    // generic tokens as "<Subtype> Token", with same-name variants kept apart by trailing spaces. If
+    // the bare name has no Oracle entry, retarget the card at the best-matching "<Subtype> Token"
+    // variant so it shows the right art and details (CardItem::resolveRuledTokenDisplayCard). The same
+    // resolution runs in CardItem::processCardInfo so a battlefield resync doesn't revert it. Display-
+    // only; only triggers on an exact-name miss, so freeform tokens (exact DB names) are unaffected.
+    if (player->getGame() && player->getGame()->getGameMetaInfo()->proto().ruled_game() &&
+        !event.face_down() && !cardRef.name.isEmpty() &&
+        !CardDatabaseManager::query()->getCard(cardRef)) {
+        QStringList engineKeywords;
+        engineKeywords.reserve(event.ability_keywords_size());
+        for (const auto &kw : event.ability_keywords()) {
+            engineKeywords.append(QString::fromStdString(kw));
+        }
+        CardRef tokenRef = CardItem::resolveRuledTokenDisplayCard(
+            cardRef.name, QString::fromStdString(event.pt()), QString::fromStdString(event.color()), engineKeywords);
+        if (!tokenRef.name.isEmpty()) {
+            cardRef = tokenRef;
+        }
+    }
     CardItem *card = new CardItem(player, nullptr, cardRef, event.card_id());
     // use db PT if not provided in event and not face-down
     if (!QString::fromStdString(event.pt()).isEmpty()) {

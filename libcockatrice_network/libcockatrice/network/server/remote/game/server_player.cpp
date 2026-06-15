@@ -401,6 +401,7 @@ Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const
             engineOidToSummoningSick.clear();
             engineOidToHaste.clear();
             engineOidToTrample.clear();
+            engineOidToCreature.clear();
             const bool haveCreatureStats = v.battlefield_power_size() == v.battlefield_size() &&
                                            v.battlefield_toughness_size() == v.battlefield_size() &&
                                            v.battlefield_damage_size() == v.battlefield_size() &&
@@ -420,6 +421,8 @@ Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const
                 engineOidToHaste.insert(oid, hasHaste);
                 const bool hasTrample = (i < v.battlefield_trample_size()) ? v.battlefield_trample(i) : false;
                 engineOidToTrample.insert(oid, hasTrample);
+                const bool isCreatureFlag = (i < v.battlefield_is_creature_size()) ? v.battlefield_is_creature(i) : false;
+                engineOidToCreature.insert(oid, isCreatureFlag);
 
                 if (tapGes && i < v.battlefield_tapped_size()) {
                     const bool desiredTapped = v.battlefield_tapped(i);
@@ -545,6 +548,12 @@ void Server_Player::createRuledToken(quint32 engineOid,
     card->moveToThread(thread());
     card->setColor(QString::fromStdString(identity.color()));
     card->setPT(QString::fromStdString(identity.pt()));
+    QStringList keywords;
+    keywords.reserve(identity.keywords_size());
+    for (const auto &kw : identity.keywords()) {
+        keywords.append(QString::fromStdString(kw));
+    }
+    card->setTokenAbilityKeywords(keywords);
     card->setAnnotation(QStringLiteral("Token"));
     // CR 111.7: when the engine later moves the token off the battlefield it ceases to exist;
     // destroy-on-zone-change makes the client drop the card the moment that move arrives.

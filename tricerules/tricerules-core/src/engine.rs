@@ -2735,6 +2735,11 @@ impl GameEngine {
         let power = def.power;
         let toughness = def.toughness;
         let types = def.types.clone();
+        let keywords: Vec<String> = def
+            .keywords
+            .iter()
+            .map(|k| k.as_str().to_string())
+            .collect();
         let color = color_string(&def.colors());
         let pt = if is_creature {
             format!("{}/{}", power.unwrap_or(0), toughness.unwrap_or(0))
@@ -2788,6 +2793,7 @@ impl GameEngine {
                             color: color.clone(),
                             types: types.clone(),
                             is_creature,
+                            keywords: keywords.clone(),
                         }),
                     })),
                 });

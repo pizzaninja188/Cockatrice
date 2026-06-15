@@ -82,23 +82,29 @@ protected:
     }
 };
 
-CardItem *findCardByServerId(AbstractGame *game, int cardId)
+// Server card ids (Server_Player::nextCardId) are assigned per player starting at 0, so they
+// collide across players. Combat arrows are inherently cross-player (attacker vs. blocker), so
+// resolving an engine OID to a CardItem must be scoped to that object's owning player — a plain
+// id-only search returns whichever player's table happens to hold the same id first.
+CardItem *findOwnedTableCard(AbstractGame *game, int ownerPlayerId, int cardId)
 {
-    if (!game || cardId < 0) {
+    if (!game || cardId < 0 || ownerPlayerId < 0) {
         return nullptr;
     }
-
-    const QMap<int, Player *> &players = game->getPlayerManager()->getPlayers();
-    for (Player *player : players) {
-        if (!player) {
-            continue;
-        }
-        CardItem *card = player->getTableZone()->getCard(cardId);
-        if (card) {
-            return card;
-        }
+    Player *player = game->getPlayerManager()->getPlayers().value(ownerPlayerId, nullptr);
+    if (!player) {
+        return nullptr;
     }
-    return nullptr;
+    return player->getTableZone()->getCard(cardId);
+}
+
+// Resolve an engine ObjectId to the table CardItem owned by that object's controller.
+CardItem *findTableCardForEngineOid(AbstractGame *game, GameEventHandler *handler, quint32 oid)
+{
+    if (!handler) {
+        return nullptr;
+    }
+    return findOwnedTableCard(game, handler->playerIdForEngineOid(oid), handler->cardIdForEngineOid(oid));
 }
 
 ArrowTarget *findDefendingPlayerTarget(AbstractGame *game, int activePlayerId)
@@ -627,10 +633,8 @@ void TabGame::refreshRuledCombatArrows()
     }
 
     for (auto it = blocksToDraw.constBegin(); it != blocksToDraw.constEnd(); ++it) {
-        const int blockerCardId = handler->cardIdForEngineOid(it.key());
-        const int attackerCardId = handler->cardIdForEngineOid(it.value());
-        CardItem *blockerCard = findCardByServerId(game, blockerCardId);
-        CardItem *attackerCard = findCardByServerId(game, attackerCardId);
+        CardItem *blockerCard = findTableCardForEngineOid(game, handler, it.key());
+        CardItem *attackerCard = findTableCardForEngineOid(game, handler, it.value());
         if (!blockerCard || !attackerCard) {
             continue;
         }
@@ -656,8 +660,7 @@ void TabGame::refreshRuledCombatArrows()
     }
 
     for (const quint32 attackerOid : attackersToDraw) {
-        const int attackerCardId = handler->cardIdForEngineOid(attackerOid);
-        CardItem *attackerCard = findCardByServerId(game, attackerCardId);
+        CardItem *attackerCard = findTableCardForEngineOid(game, handler, attackerOid);
         if (!attackerCard) {
             continue;
         }

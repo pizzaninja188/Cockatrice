@@ -219,7 +219,7 @@ message RuledEvent {
 message TokenCreated {
   uint32 object_id = 1;
   int32 controller_player_id = 2;
-  // Engine token id (e.g. "soldier"); intentionally absent from the deck CardCatalog.
+  // Engine token id (e.g. "soldier_w_1_1"); intentionally absent from the deck CardCatalog.
   string card_id = 3;
   TokenIdentity identity = 4;
 }
@@ -232,6 +232,9 @@ message TokenIdentity {
   string color = 3;           // Cockatrice color string, lowercase wubrg; empty = colorless
   repeated string types = 4;  // e.g. ["Creature", "Soldier"]
   bool is_creature = 5;
+  // Static keyword abilities, MTG spelling (e.g. ["Flying"], ["Lifelink"]). Lets the client pick
+  // the matching Oracle token art among same-name variants (e.g. vanilla vs. vigilance Knight).
+  repeated string keywords = 6;
 }
 
 // The single source of card identity for a ruled session: Servatrice sends Oracle names
@@ -431,6 +434,10 @@ message BattlefieldObjectMap {
     // Empty for permanents with no activated abilities. Used by clients to build the
     // activation context menu.
     repeated string activated_ability_texts = 9;
+    // True if this permanent is a creature (engine-authoritative, from the tricerules
+    // registry — NOT the Oracle display DB). Clients use this for combat eligibility so
+    // engine-minted tokens (which have no Oracle entry) can be declared as attackers/blockers.
+    bool is_creature = 10;
   }
   repeated Entry entries = 1;
 }

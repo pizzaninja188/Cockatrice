@@ -1,6 +1,6 @@
 // 1/1 white Soldier creature token (Raise the Alarm, Gather the Townsfolk, etc.).
 (
-    id: "soldier",
+    id: "soldier_w_1_1",
     name: "Soldier",
     types: ["Creature", "Soldier"],
     colors: [White],
