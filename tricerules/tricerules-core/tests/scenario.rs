@@ -9636,3 +9636,168 @@ fn twincast_rejects_non_spell_target() {
         "Twincast stays in hand after the illegal cast"
     );
 }
+
+/// Regression: a Draw spell that empties the library must NOT error out of resolution (the old
+/// `draw_card(...)?` aborted mid-resolution and left the stack half-mutated). CR 120.3 / 104.3c:
+/// draw as many as possible, then the player loses as a state-based action.
+#[test]
+fn draw_spell_decking_out_loses_without_erroring() {
+    let decks = Some(vec![
+        vec![
+            "divination".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+        ],
+        vec!["island".into(); 7],
+    ]);
+    let mut e = GameEngine::new(2025, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Seven-card deck => the whole deck is in hand and the library is empty. Move one card back
+    // so Divination (draw 2) draws exactly one, then runs the library dry on the second draw.
+    let island_idx = hand_index_for_card(&e, 0, "island");
+    let island_oid = e.state.players[0].hand.remove(island_idx);
+    e.state.players[0].library.push_back(island_oid);
+    e.state
+        .objects
+        .get_mut(&island_oid)
+        .expect("seeded island")
+        .zone = tricerules_core::Zone::Library;
+    assert_eq!(e.state.players[0].library.len(), 1);
+
+    // Pay {2}{U} and cast Divination.
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            u: 1,
+            c: 2,
+            ..Default::default()
+        }),
+    )
+    .expect("add mana for divination");
+    let div_idx = hand_index_for_card(&e, 0, "divination");
+    e.apply_command(0, &cast_spell(div_idx, vec![]))
+        .expect("p0 cast divination");
+
+    // Resolving must succeed even though the library runs dry partway through the draw.
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass())
+        .expect("p1 pass resolves divination (must not error)");
+
+    assert!(e.state.players[0].library.is_empty(), "library drawn dry");
+    assert!(
+        e.state.players[0].has_lost,
+        "P0 attempted to draw from an empty library and loses (CR 104.3c)"
+    );
+    assert_eq!(e.state.winner, Some(1), "P1 wins once P0 decks out");
+}
+
+/// Regression (CR 707.10d): a copy of a spell has no backing card, so countering it must simply
+/// remove the copy from the stack — not try to move a nonexistent `GameObject` (which errored and
+/// left the already-popped stack inconsistent). Here P1's Twincast copies P0's bolt, then P0
+/// counters the copy.
+#[test]
+fn countering_a_spell_copy_removes_it_without_error() {
+    let decks = Some(vec![
+        vec![
+            "lightning_bolt".into(),
+            "counterspell".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec![
+            "twincast".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(144, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // P0 casts Lightning Bolt at P1.
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            r: 1,
+            ..Default::default()
+        }),
+    )
+    .expect("add red for bolt");
+    let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+        .expect("p0 cast bolt");
+    let bolt_oid = e.state.stack.last().expect("bolt on stack").id;
+    e.apply_command(0, &pass()).expect("p0 pass to p1");
+
+    // P1 casts Twincast at the bolt; both pass; it resolves into a copy of the bolt.
+    e.apply_command(
+        1,
+        &add_mana_to_pool(AddManaToPool {
+            u: 2,
+            ..Default::default()
+        }),
+    )
+    .expect("add UU for twincast");
+    let twincast_idx = hand_index_for_card(&e, 1, "twincast");
+    e.apply_command(
+        1,
+        &cast_spell(
+            twincast_idx,
+            vec![TargetRef {
+                object_id: bolt_oid,
+            }],
+        ),
+    )
+    .expect("p1 cast twincast at the bolt");
+    e.apply_command(1, &pass()).expect("p1 pass after twincast");
+    e.apply_command(0, &pass())
+        .expect("p0 pass resolves twincast");
+
+    let copy_item = e.state.stack.last().expect("copy on stack");
+    assert!(copy_item.is_copy, "top of stack is the bolt copy");
+    let copy_id = copy_item.id;
+
+    // P0 holds priority after Twincast resolves — counter the copy.
+    e.apply_command(
+        0,
+        &add_mana_to_pool(AddManaToPool {
+            u: 2,
+            ..Default::default()
+        }),
+    )
+    .expect("add UU for counterspell");
+    let counter_idx = hand_index_for_card(&e, 0, "counterspell");
+    e.apply_command(
+        0,
+        &cast_spell(counter_idx, vec![TargetRef { object_id: copy_id }]),
+    )
+    .expect("p0 counter the copy");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass())
+        .expect("p1 pass resolves counterspell (must not error on the copy)");
+
+    assert!(
+        !e.state.stack.iter().any(|s| s.id == copy_id),
+        "the copy is gone from the stack"
+    );
+    assert!(
+        !e.state.players[0].graveyard.contains(&copy_id)
+            && !e.state.players[1].graveyard.contains(&copy_id),
+        "a countered copy leaves no card in any graveyard (CR 707.10d)"
+    );
+    assert!(
+        e.state.stack.iter().any(|s| s.id == bolt_oid),
+        "the original bolt is untouched on the stack"
+    );
+}

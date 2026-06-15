@@ -553,7 +553,26 @@ impl GameEngine {
         ) {
             return Err(EngineError::Illegal("preview is not a game command"));
         }
-        self.state.command_index += 1;
+        let result = self.dispatch_command(player, cmd);
+        // Replay determinism: `command_index` seeds shuffles (mulligan/search) and stamps
+        // continuous-effect timestamps (CR 613.7). Only a command that is actually applied may
+        // advance it — a rejected command must leave it untouched, otherwise replay (which
+        // re-applies only the accepted commands) would compute different shuffles/timestamps and
+        // diverge from live play.
+        if result.is_ok() {
+            self.state.command_index += 1;
+        }
+        result
+    }
+
+    /// Apply a single accepted command, mutating state and producing its event batch. Called by
+    /// [`apply_command`], which owns the `command_index` bookkeeping and the pre-dispatch rejects.
+    fn dispatch_command(
+        &mut self,
+        player: PlayerId,
+        cmd: &RuledCommand,
+    ) -> Result<RuledEventBatch, EngineError> {
+        use rv1::ruled_command::Cmd;
         if self.state.opening.is_some() {
             return self.apply_opening_command(player, cmd);
         }
@@ -1102,6 +1121,14 @@ impl GameEngine {
             .get(&attacker_id)
             .map(|o| o.has_keyword(self.registry, tricerules_cards::Keyword::Trample))
             .unwrap_or(false);
+        // CR 702.2b: any nonzero damage from a deathtouch source is lethal, which lowers the
+        // per-blocker lethal amount the trample assignment must cover (CR 702.19e) to 1.
+        let att_has_deathtouch = self
+            .state
+            .objects
+            .get(&attacker_id)
+            .map(|o| o.has_keyword(self.registry, tricerules_cards::Keyword::Deathtouch))
+            .unwrap_or(false);
 
         // Clone expected blockers to free the immutable borrow on combat before the mutable one.
         let expected_blockers: Vec<ObjectId> = self
@@ -1146,7 +1173,13 @@ impl GameEngine {
             for &blk in &expected_blockers {
                 let blk_toughness = self.effective_toughness(blk).unwrap_or(1);
                 let marked = self.state.objects.get(&blk).map(|o| o.damage).unwrap_or(0);
-                let lethal = blk_toughness.saturating_sub(marked).max(1);
+                // CR 702.19e: with deathtouch, 1 damage counts as lethal for assignment, so the
+                // attacker may assign just 1 to each blocker before trampling the rest over.
+                let lethal = if att_has_deathtouch {
+                    1
+                } else {
+                    blk_toughness.saturating_sub(marked).max(1)
+                };
                 let assigned = assignments
                     .iter()
                     .find(|(b, _)| *b == blk)
@@ -1170,6 +1203,11 @@ impl GameEngine {
                     "cannot assign player damage without trample",
                 ));
             }
+            // CR 510.1c (post-2017): a multiply-blocked attacker no longer uses a declared
+            // "damage assignment order" — the attacking player now freely divides the attacker's
+            // combat damage among its blockers. So the only constraint here is that the assigned
+            // amounts sum to the attacker's power; any per-blocker split is legal. (This is the
+            // current rule, NOT a simplification — do not re-add an ordering/lethal-first check.)
             let sum: u32 = assignments.iter().map(|(_, d)| d).sum();
             if sum != att_power {
                 return Err(EngineError::Illegal(
@@ -2388,13 +2426,30 @@ impl GameEngine {
                     // Blue Sun's Zenith / Braingeyser: `count` may be the cast-time X.
                     let count = count.resolve(top.chosen_x);
                     let idx = self.state.player_idx(controller).unwrap();
+                    // CR 120.3 / 104.3c: drawing from an empty library does NOT fail the spell —
+                    // draw as many as possible, then the player loses as a state-based action
+                    // (swept in by `sweep_life`). Aborting resolution here would corrupt state
+                    // (cards already drawn, stack already popped).
+                    let mut drawn = 0u32;
+                    let mut decked_out = false;
                     for _ in 0..count {
+                        if self.state.players[idx].library.is_empty() {
+                            decked_out = true;
+                            break;
+                        }
                         draw_card(&mut self.state.players[idx], &mut self.state.objects)?;
+                        drawn += 1;
                     }
-                    let noun = if count == 1 { "card" } else { "cards" };
+                    let noun = if drawn == 1 { "card" } else { "cards" };
                     events.push(ev_log(format!(
-                        "P{controller} draws {count} {noun} ({spell_label})."
+                        "P{controller} draws {drawn} {noun} ({spell_label})."
                     )));
+                    if decked_out {
+                        self.state.players[idx].has_lost = true;
+                        events.push(ev_log(format!(
+                            "P{controller} tried to draw from an empty library and loses (CR 104.3c)."
+                        )));
+                    }
                 }
                 SpellEffectKind::PumpTarget {
                     power,
@@ -2515,18 +2570,23 @@ impl GameEngine {
                                 .get(&st.card_id)
                                 .map(|d| d.name.as_str())
                                 .unwrap_or("spell");
-                            // CR 701.6a: a countered spell goes to its OWNER's graveyard. Emit an
-                            // explicit PermanentMoved so the C++ relay routes the physical card off
-                            // the shared stack to the owner's graveyard — no per-card special-case.
-                            let owner = self.state.objects.get(&st.id).map(|o| o.owner);
-                            move_object_to_zone(&mut self.state, st.id, Zone::Graveyard)?;
-                            if let Some(owner) = owner {
-                                events.push(permanent_moved_event(
-                                    &self.state,
-                                    st.id,
-                                    owner,
-                                    rv1::permanent_moved::Destination::Graveyard,
-                                ));
+                            // CR 707.10d: a copy of a spell has no backing card — it simply ceases
+                            // to exist when it leaves the stack. Only a genuinely cast spell has a
+                            // `GameObject` that moves; CR 701.6a sends that card to its OWNER's
+                            // graveyard via an explicit PermanentMoved so the C++ relay routes the
+                            // physical card off the shared stack. Moving a copy would error on the
+                            // missing object and corrupt the already-popped stack.
+                            if !st.is_copy {
+                                let owner = self.state.objects.get(&st.id).map(|o| o.owner);
+                                move_object_to_zone(&mut self.state, st.id, Zone::Graveyard)?;
+                                if let Some(owner) = owner {
+                                    events.push(permanent_moved_event(
+                                        &self.state,
+                                        st.id,
+                                        owner,
+                                        rv1::permanent_moved::Destination::Graveyard,
+                                    ));
+                                }
                             }
                             events.push(ev_log(format!("{spell_label} counters {tgt}")));
                         }
@@ -3729,6 +3789,16 @@ impl GameEngine {
                 }
             }
         }
+
+        // CR 704.5j: the legend rule is a state-based action, so it must be checked on every SBA
+        // pass — not only at the combat-damage steps and the turn roll where it was historically
+        // wired up. Otherwise a second same-named legend that enters mid-main-phase (e.g. a second
+        // legendary creature spell resolving) would illegally coexist until the next combat or
+        // cleanup. `apply_legend_sbas` is idempotent: once a duplicate has moved to the graveyard
+        // its `zone != Battlefield` excludes it, so the pre-existing explicit call sites that still
+        // run alongside this one find nothing and emit no duplicate events.
+        let legend_events = self.apply_legend_sbas()?;
+        out.extend(legend_events);
         Ok(())
     }
 

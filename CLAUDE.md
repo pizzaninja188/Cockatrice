@@ -83,7 +83,7 @@ Before committing **any** new `SpellEffectKind`, `TriggerCondition`, `AbilityCos
 https://api.scryfall.com/cards/named?exact=<Card+Name>
 ```
 If the fetch fails or the name is ambiguous, **surface that before writing any RON/Rust** — don't fall back to memory. Use the response for:
-- **`mana_cost`** — copy the Scryfall brace string **verbatim** into RON (`mana_cost: "{1}{R}"`, `""` for lands). Parsed by `ManaCost`/`ManaSymbol` (`tricerules-cards/src/mana.rs`); `AbilityCost::Mana`/`TapAndMana` use the same syntax. Supported pips: `W U B R G C X` + generic integers. Hybrid/Phyrexian/snow are representable but **reject at registry load**; `{X}` loads but errors at cast (CR 107.3, deferred). Never hand-write the old flat `"1R"` form.
+- **`mana_cost`** — copy the Scryfall brace string **verbatim** into RON (`mana_cost: "{1}{R}"`, `""` for lands). Parsed by `ManaCost`/`ManaSymbol` (`tricerules-cards/src/mana.rs`); `AbilityCost::Mana`/`TapAndMana` use the same syntax. Supported pips: `W U B R G C X` + generic integers. Hybrid/Phyrexian are supported; snow is representable but **rejected at registry load**. `{X}` is supported: the value is chosen at cast time and paid as that much generic mana (CR 107.3b). Never hand-write the old flat `"1R"` form.
 - **`power`/`toughness`** — exact values, never guessed.
 - **`oracle_text`** — authoritative; CR takes precedence for mechanics not spelled out on the card.
 - **`type_line`** — supertypes, types, subtypes.
