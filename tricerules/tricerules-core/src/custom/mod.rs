@@ -132,14 +132,20 @@ impl<'a> ResolutionCtx<'a> {
     }
 
     /// Draw `n` cards for `player` (CR 120). Returns the drawn object ids (fewer than `n` if the
-    /// library empties — drawing from an empty library is an SBA loss handled by the engine).
+    /// library empties). CR 120.3 / 104.3c: *attempting* to draw from an empty library makes the
+    /// player lose as a state-based action — so if the library runs out before `n` cards are drawn,
+    /// we flag the player `has_lost` (the engine's post-command `sweep_life` then names the winner),
+    /// exactly as the primitive `Draw` effect does. Silently stopping would let a player Brainstorm
+    /// into an empty library without decking out.
     pub fn draw(&mut self, player: PlayerId, n: u32) -> Vec<ObjectId> {
         let Some(idx) = self.state.player_idx(player) else {
             return Vec::new();
         };
         let mut drawn = Vec::new();
+        let mut decked_out = false;
         for _ in 0..n {
             let Some(oid) = self.state.players[idx].library.pop_front() else {
+                decked_out = true;
                 break;
             };
             self.state.players[idx].hand.push(oid);
@@ -147,6 +153,12 @@ impl<'a> ResolutionCtx<'a> {
                 o.zone = Zone::Hand;
             }
             drawn.push(oid);
+        }
+        if decked_out {
+            self.state.players[idx].has_lost = true;
+            self.log(format!(
+                "P{player} tried to draw from an empty library and loses (CR 104.3c)."
+            ));
         }
         drawn
     }

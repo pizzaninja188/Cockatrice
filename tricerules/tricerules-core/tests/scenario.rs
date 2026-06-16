@@ -441,6 +441,32 @@ fn cannot_activate_mana_ability_when_already_tapped() {
     assert_eq!(e.state.players[0].mana_pool.red, 1, "no extra mana");
 }
 
+/// CR 601.2h: an activated ability's cost is paid atomically. Activating a `TapAndMana` ability
+/// (Jayemdae Tome's "{4}, {T}: Draw a card.") whose source is already tapped must be rejected
+/// *without* draining the mana — `apply_command` does not roll back partial state mutations on an
+/// Illegal result, so paying the {4} first and then failing the tap would burn the player's pool.
+#[test]
+fn tap_and_mana_ability_rejected_when_tapped_leaves_pool_intact() {
+    let mut e = GameEngine::new(11, &[0, 1], 20, None, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let tome = inject_permanent_on_battlefield(&mut e, 0, "jayemdae_tome");
+    // Source already tapped (e.g. used earlier this turn); the player has the {4} ready in pool.
+    e.state.objects.get_mut(&tome).unwrap().tapped = true;
+    e.state.players[0].mana_pool.colorless = 4;
+
+    let err = e
+        .apply_command(0, &activate_ability(tome, 0, vec![]))
+        .expect_err("cannot activate a TapAndMana ability on an already-tapped source");
+    assert!(
+        format!("{err:?}").contains("already tapped"),
+        "unexpected error: {err:?}"
+    );
+    assert_eq!(
+        e.state.players[0].mana_pool.colorless, 4,
+        "mana pool must be untouched when the tap precondition fails"
+    );
+}
+
 /// CR 605: a multi-option mana ability (Tropical Island, "{T}: Add {G} or {U}") produces the
 /// option the player chose via `mana_option_index`; an out-of-range index is rejected.
 #[test]
@@ -9449,20 +9475,21 @@ fn brainstorm_rejects_card_not_in_hand_without_mutating() {
 #[test]
 fn brainstorm_resolution_is_deterministic() {
     let make = || {
+        // Deck must stay large enough that Brainstorm's "draw three" never reaches an empty
+        // library — otherwise the caster decks out (CR 104.3c) and the resolution is mooted.
         let decks = Some(vec![
-            vec![
-                "brainstorm".into(),
-                "island".into(),
-                "forest".into(),
-                "swamp".into(),
-                "mountain".into(),
-                "plains".into(),
-                "island".into(),
-                "forest".into(),
-                "swamp".into(),
-                "mountain".into(),
-            ],
-            vec!["forest".into(); 10],
+            {
+                let mut d = vec!["brainstorm".to_string()];
+                d.extend(
+                    ["island", "forest", "swamp", "mountain", "plains"]
+                        .iter()
+                        .cycle()
+                        .take(29)
+                        .map(|s| s.to_string()),
+                );
+                d
+            },
+            vec!["forest".into(); 30],
         ]);
         let mut e = GameEngine::new(1234, &[0, 1], 20, decks, true).expect("new");
         advance_to_main1_from_game_start(&mut e);

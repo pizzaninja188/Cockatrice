@@ -3346,8 +3346,12 @@ impl GameEngine {
                 Ok(None)
             }
             AbilityCost::TapAndMana(cost) => {
-                // Check mana sufficiency BEFORE tapping so a failed payment leaves the
-                // permanent untapped (costs are paid atomically in MTG CR 601.2h).
+                // CR 601.2h: a cost is paid atomically. Verify the source *can* be tapped before
+                // draining any mana — apply_command does not roll back partial state mutations on
+                // an Illegal result, so paying mana first and then failing the tap (already tapped
+                // / summoning sick) would corrupt the player's mana pool. Checking tappability up
+                // front also keeps the permanent untapped on a mana shortfall (pay_mana is atomic).
+                self.check_tappable(permanent_id, card_id)?;
                 pay_mana(&mut self.state, idx, cost, 0, flex_payments)?;
                 self.tap_for_cost(permanent_id, card_id)?;
                 Ok(None)
@@ -3370,9 +3374,11 @@ impl GameEngine {
         }
     }
 
-    /// Tap `permanent_id` as a {T} cost component, rejecting an already-tapped or
-    /// summoning-sick source (CR 302.6 / 702.10 — Haste exempts the latter).
-    fn tap_for_cost(&mut self, permanent_id: ObjectId, card_id: &str) -> Result<(), EngineError> {
+    /// Read-only precondition for a {T} cost: the source must exist, be untapped, and not be
+    /// summoning-sick (CR 302.6 / 702.10 — Haste exempts the latter). Split out from
+    /// [`Self::tap_for_cost`] so callers that pay other cost components first can verify
+    /// tappability before mutating any state (CR 601.2h atomicity).
+    fn check_tappable(&self, permanent_id: ObjectId, card_id: &str) -> Result<(), EngineError> {
         let has_haste = self
             .registry
             .get(card_id)
@@ -3381,7 +3387,7 @@ impl GameEngine {
         let o = self
             .state
             .objects
-            .get_mut(&permanent_id)
+            .get(&permanent_id)
             .ok_or(EngineError::Illegal("permanent missing"))?;
         if o.tapped {
             return Err(EngineError::Illegal("permanent is already tapped"));
@@ -3391,7 +3397,16 @@ impl GameEngine {
                 "cannot use tap ability due to summoning sickness",
             ));
         }
-        o.tapped = true;
+        Ok(())
+    }
+
+    /// Tap `permanent_id` as a {T} cost component, rejecting an already-tapped or
+    /// summoning-sick source (CR 302.6 / 702.10 — Haste exempts the latter).
+    fn tap_for_cost(&mut self, permanent_id: ObjectId, card_id: &str) -> Result<(), EngineError> {
+        self.check_tappable(permanent_id, card_id)?;
+        if let Some(o) = self.state.objects.get_mut(&permanent_id) {
+            o.tapped = true;
+        }
         Ok(())
     }
 
