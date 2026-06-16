@@ -63,21 +63,29 @@ pub struct ResolutionInterrupt {
     pub ordered: bool,
 }
 
-/// What the candidate object ids in a [`ResolutionInterrupt`] are, for client presentation.
+/// What the candidate object ids in a [`ResolutionInterrupt`] are, for client presentation and,
+/// crucially, for hidden-information redaction by the relay. `HandCards` and `LibrarySearch` are
+/// *private* to the deciding player (their own concealed zone), so Servatrice strips the candidate
+/// ids/names from every other player; `RevealedCards` are public (they were shown to the table).
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ChoiceKind {
-    /// Cards in the deciding player's hand (Brainstorm: pick 2 to put back).
+    /// Cards in the deciding player's hand (Brainstorm: pick 2 to put back). Private.
     HandCards,
-    /// Cards revealed during resolution (Gifts Ungiven: opponent picks 2 of the revealed set).
+    /// Cards revealed during resolution (Gifts Ungiven: opponent picks 2 of the revealed set). Public.
     RevealedCards,
+    /// Cards the deciding player is searching out of their own library (Gifts Ungiven's search step,
+    /// Demonic Tutor, …). Private — the library stays hidden; only the chosen cards become public.
+    LibrarySearch,
 }
 
 impl ChoiceKind {
-    /// Stable proto-wire discriminant (kept in sync with `RuledEvent.ResolutionChoiceRequired.choice_kind`).
+    /// Stable proto-wire discriminant (kept in sync with `RuledEvent.ResolutionChoiceRequired.choice_kind`
+    /// and the relay's redaction in `Server_Game::sendRuledBatch`). 0 and 2 are private kinds.
     pub fn as_proto(self) -> i32 {
         match self {
             ChoiceKind::HandCards => 0,
             ChoiceKind::RevealedCards => 1,
+            ChoiceKind::LibrarySearch => 2,
         }
     }
 }

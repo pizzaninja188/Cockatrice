@@ -36,7 +36,9 @@ impl CardEffect for GiftsUngiven {
             prompt: format!(
                 "Gifts Ungiven: search your library for up to {max} card(s) with different names."
             ),
-            choice_kind: ChoiceKind::RevealedCards,
+            // Private: the searcher's library must not leak to the opponent. Only the cards the
+            // controller chooses become public (revealed) in the next step.
+            choice_kind: ChoiceKind::LibrarySearch,
             candidates: library,
             min: 0,
             max,

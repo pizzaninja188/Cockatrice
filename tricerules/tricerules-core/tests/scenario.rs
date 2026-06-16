@@ -23,6 +23,12 @@ fn primitive_yield() -> RuledCommand {
     }
 }
 
+fn concede() -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::Concede(tricerules_proto::ruled::v1::Concede {})),
+    }
+}
+
 fn discard_cleanup(hand_card_index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::DiscardToHandSize(DiscardToHandSize {
@@ -9513,10 +9519,15 @@ fn gifts_ungiven_opponent_chooses_the_split() {
         },
     );
 
-    // First interrupt: the controller searches their library (up to four).
+    // First interrupt: the controller searches their library (up to four). This is a *private*
+    // library search (choice_kind 2 = LibrarySearch), so the relay redacts the candidate library
+    // cards from the opponent — the library must not leak. Only the chosen cards become public.
     let search = find_resolution_choice(&batch).expect("search choice");
     assert_eq!(search.deciding_player_id, 0);
-    assert_eq!(search.choice_kind, 1, "revealed/search cards");
+    assert_eq!(
+        search.choice_kind, 2,
+        "private library search (not public-revealed)"
+    );
     let found: Vec<u32> = search
         .candidate_object_ids
         .iter()
@@ -9965,5 +9976,104 @@ fn countering_a_spell_copy_removes_it_without_error() {
     assert!(
         e.state.stack.iter().any(|s| s.id == bolt_oid),
         "the original bolt is untouched on the stack"
+    );
+}
+
+// ── Summoning sickness on re-entry ─────────────────────────────────────────────
+
+#[test]
+fn recast_bounced_creature_is_summoning_sick() {
+    // CR 302.6: a creature that left and re-entered the battlefield has not been controlled
+    // continuously since its controller's turn began, so it is summoning sick again. Regression:
+    // bouncing a creature cleared `summoning_sick`, and entering the battlefield never re-asserted
+    // it, so a bounced-and-recast creature could attack/tap the same turn. Entry now re-asserts it.
+    use tricerules_core::Zone;
+    let decks = Some(vec![
+        {
+            let mut d = vec!["grizzly_bears".to_string(), "unsummon".to_string()];
+            d.extend(std::iter::repeat_n("forest".to_string(), 20));
+            d.extend(std::iter::repeat_n("island".to_string(), 8));
+            d
+        },
+        vec!["forest".into(); 30],
+    ]);
+    let mut e = GameEngine::new(4242, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // A grizzly already established on the battlefield (no longer summoning sick).
+    ensure_in_hand(&mut e, 0, "grizzly_bears");
+    let grizzly = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    assert!(
+        !e.state.objects[&grizzly].summoning_sick,
+        "an established creature is not summoning sick"
+    );
+
+    // Bounce it back to hand with Unsummon ({U}).
+    ensure_in_hand(&mut e, 0, "unsummon");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    let unsummon_idx = hand_index_for_card(&e, 0, "unsummon");
+    e.apply_command(
+        0,
+        &cast_spell(unsummon_idx, vec![TargetRef { object_id: grizzly }]),
+    )
+    .expect("cast unsummon at own grizzly");
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(
+        e.state.objects[&grizzly].zone,
+        Zone::Hand,
+        "grizzly bounced to hand"
+    );
+
+    // Recast the same grizzly ({1}{G}). The object id is reused across the zone change.
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            g: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let grizzly_idx = hand_index_for_card(&e, 0, "grizzly_bears");
+    e.apply_command(0, &cast_spell(grizzly_idx, vec![]))
+        .expect("recast grizzly");
+    resolve_entire_stack_two_player(&mut e);
+
+    assert_eq!(
+        e.state.objects[&grizzly].zone,
+        Zone::Battlefield,
+        "grizzly recast onto the battlefield"
+    );
+    assert!(
+        e.state.objects[&grizzly].summoning_sick,
+        "the recast creature is summoning sick again (CR 302.6)"
+    );
+}
+
+// ── Concede availability ───────────────────────────────────────────────────────
+
+#[test]
+fn concede_is_legal_during_opening_sequence() {
+    // CR 104.3a: a player may concede at any time. Regression: during the choose-first / mulligan
+    // opening sequence every non-opening command (including Concede) was rejected, so a player
+    // could not bail out before the first turn.
+    let mut e = GameEngine::new(11, &[0, 1], 20, None, false).expect("new");
+    assert!(
+        e.state.opening.is_some(),
+        "engine is still in the opening/mulligan sequence"
+    );
+    e.apply_command(0, &concede())
+        .expect("a player may concede during the opening sequence");
+    assert_eq!(
+        e.state.winner,
+        Some(1),
+        "the opponent wins once the other player concedes"
     );
 }

@@ -573,6 +573,11 @@ impl GameEngine {
         cmd: &RuledCommand,
     ) -> Result<RuledEventBatch, EngineError> {
         use rv1::ruled_command::Cmd;
+        // CR 104.3a: a player may concede at any time. Handle it before the opening early-return so
+        // a player can bail out of the choose-first / mulligan sequence.
+        if matches!(cmd.cmd.as_ref(), Some(Cmd::Concede(_))) {
+            return self.concede_batch(player);
+        }
         if self.state.opening.is_some() {
             return self.apply_opening_command(player, cmd);
         }
@@ -1582,6 +1587,10 @@ impl GameEngine {
                             self.state.players[di].life -= player_trample_dmg as i32;
                             total_life_lost += player_trample_dmg as i32;
                         }
+                        // CR 510: trample excess is combat damage the attacker deals to the
+                        // defending player, so it fires "deals combat damage to a player" triggers
+                        // exactly like an unblocked hit.
+                        combat_dmg_to_player.push((att, dfd));
                     }
                     // CR 702.15b: attacker with lifelink gains life = damage dealt to all blockers.
                     if att_has_lifelink && att_power > 0 {
@@ -5196,6 +5205,14 @@ fn move_object_to_zone(state: &mut GameState, oid: ObjectId, z: Zone) -> Result<
     }
     if let Some(o) = state.objects.get_mut(&oid) {
         o.zone = z;
+        // CR 302.6: a permanent entering the battlefield has not been controlled continuously
+        // since its controller's most recent turn began, so it is summoning sick. Assert this on
+        // entry rather than trusting a persisted flag — a prior bounce/leave clears transient
+        // state, so a creature returned to hand and recast (or reanimated/flickered) the same turn
+        // must still be sick. Haste exempts the *use* of this (checked at attack/tap time).
+        if z == Zone::Battlefield {
+            o.summoning_sick = true;
+        }
     }
     Ok(())
 }
