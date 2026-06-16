@@ -2035,9 +2035,10 @@ impl GameEngine {
                 self.state.turn_step = Cleanup;
                 self.state.passes_since_stack_change = 0;
                 // No PhaseChanged: clients keep highlighting end step during engine cleanup (CR 514).
-                let mut ev = vec![];
-                self.apply_sbas(&mut ev)?;
-                return self.start_cleanup_or_roll_turn(ev);
+                // Carry the caller's accumulated events forward (consistent with the `Draw` branch);
+                // shadowing `ev` with a fresh vec here would silently drop anything already in it.
+                self.apply_sbas(ev)?;
+                return self.start_cleanup_or_roll_turn(std::mem::take(ev));
             }
             _ => {
                 self.clear_all_mana_pools();

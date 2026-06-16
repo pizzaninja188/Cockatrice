@@ -26,25 +26,6 @@ pub enum TurnStep {
     Cleanup,
 }
 
-impl TurnStep {
-    /// Next step after a full "pass priority with empty stack" in this step, or `None` if
-    /// `pass_priority` must not advance (e.g. declare substeps are handled by explicit commands).
-    pub fn next_after_all_pass(self) -> Option<TurnStep> {
-        use TurnStep::*;
-        match self {
-            Untap => None, // auto-advances, should not reach pass
-            Upkeep | Draw => Some(Main1),
-            Main1 => Some(BeginCombat),
-            BeginCombat => None, // moves to declare substeps on pass, see engine
-            DeclareAttackers | DeclareBlockers | FirstStrikeDamage | CombatDamage => None,
-            EndCombat => Some(Main2),
-            Main2 => Some(EndStep),
-            EndStep => Some(Cleanup),
-            Cleanup => None, // new turn: handled in engine
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Zone {
     Library,
