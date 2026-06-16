@@ -3802,7 +3802,21 @@ impl GameEngine {
         Ok(batch)
     }
 
+    /// CR 704.4: state-based actions are checked and performed repeatedly until a check finds
+    /// nothing left to do. One application can create the conditions for another — e.g. a creature
+    /// dying drains its static anthem (`WhileSourceOnBattlefield`, see `move_object_to_zone`),
+    /// which lowers other creatures' toughness so they now die too. Each pass only ever *removes*
+    /// permanents/counters (never adds), so the board strictly shrinks and the loop terminates.
     fn apply_sbas(&mut self, out: &mut Vec<rv1::RuledEvent>) -> Result<(), EngineError> {
+        while self.apply_sbas_once(out)? {}
+        Ok(())
+    }
+
+    /// One state-based-action pass (CR 704.5). Returns `true` if it changed the game state, so
+    /// [`apply_sbas`] knows to check again (CR 704.4). Idempotent on a settled board: a second
+    /// call right after a `true` one that found a fixed point returns `false`.
+    fn apply_sbas_once(&mut self, out: &mut Vec<rv1::RuledEvent>) -> Result<bool, EngineError> {
+        let mut changed = false;
         // CR 122.3: if a permanent has both +1/+1 and -1/-1 counters, N of each are removed as a
         // state-based action, where N is the smaller count. Done before the toughness/lethal-damage
         // death check below so a net-zero creature is evaluated on its true (post-annihilation) P/T.
@@ -3816,6 +3830,7 @@ impl GameEngine {
             if pairs > 0 {
                 o.set_counter(CounterKind::PlusOnePlusOne, plus - pairs);
                 o.set_counter(CounterKind::MinusOneMinusOne, minus - pairs);
+                changed = true;
             }
         }
 
@@ -3850,6 +3865,7 @@ impl GameEngine {
             let owner = self.state.objects.get(&id).map(|o| o.owner);
             let card_id_for_trigger = self.state.objects.get(&id).map(|o| o.card_id.clone());
             if destroy_permanent(&mut self.state, id).is_ok() {
+                changed = true;
                 if let Some(owner_id) = owner {
                     out.push(permanent_moved_event(
                         &self.state,
@@ -3884,6 +3900,7 @@ impl GameEngine {
             .collect();
         for id in vanished {
             if let Some(o) = self.state.objects.remove(&id) {
+                changed = true;
                 if let Some(pidx) = self.state.player_idx(o.owner) {
                     let p = &mut self.state.players[pidx];
                     p.hand.retain(|&x| x != id);
@@ -3903,8 +3920,11 @@ impl GameEngine {
         // its `zone != Battlefield` excludes it, so the pre-existing explicit call sites that still
         // run alongside this one find nothing and emit no duplicate events.
         let legend_events = self.apply_legend_sbas()?;
+        if !legend_events.is_empty() {
+            changed = true;
+        }
         out.extend(legend_events);
-        Ok(())
+        Ok(changed)
     }
 
     fn apply_legend_sbas(&mut self) -> Result<Vec<rv1::RuledEvent>, EngineError> {
@@ -5207,11 +5227,18 @@ fn move_object_to_zone(state: &mut GameState, oid: ObjectId, z: Zone) -> Result<
 
     // CR 400.7: a zone change creates a new game object. Remove any Single-target continuous
     // effects on this object so they don't apply if the same ObjectId is reused later.
+    // CR 604.3 / 611.3: also drain any `WhileSourceOnBattlefield` effects this permanent was the
+    // source of (anthems) — a static ability stops applying the moment its source leaves (LTB).
+    // One-shot `UntilEndOfTurn` effects (Giant Growth, firebreathing) are deliberately NOT drained
+    // here: once created they are independent of their source (CR 611.2g) and only end at cleanup.
     let leaving_battlefield = state.objects.get(&oid).map(|o| o.zone) == Some(Zone::Battlefield);
     if leaving_battlefield && z != Zone::Battlefield {
-        state
-            .continuous_effects
-            .retain(|e| !matches!(&e.affected, AffectedScope::Single(id) if *id == oid));
+        state.continuous_effects.retain(|e| {
+            let single_on_this = matches!(&e.affected, AffectedScope::Single(id) if *id == oid);
+            let static_from_this =
+                e.source_id == Some(oid) && e.duration == EffectDuration::WhileSourceOnBattlefield;
+            !single_on_this && !static_from_this
+        });
     }
 
     let idx = state.player_idx(owner).unwrap();
@@ -6114,5 +6141,120 @@ mod mana_payment_tests {
             Err(EngineError::Illegal(_))
         ));
         assert_eq!(e.state.players[0].life, 1); // unchanged on failure
+    }
+}
+
+#[cfg(test)]
+mod sba_tests {
+    use super::*;
+
+    fn engine() -> GameEngine {
+        GameEngine::new_with_default_decks(1, &[0, 1], 20).expect("new")
+    }
+
+    /// Put a vanilla creature ("walking_corpse", no keywords/triggers, non-legendary, non-token)
+    /// on `owner`'s battlefield with the given base toughness and marked damage; returns its id.
+    fn add_creature(e: &mut GameEngine, owner: PlayerId, toughness: u32, damage: u32) -> ObjectId {
+        let id = e.state.next_object_id;
+        e.state.next_object_id += 1;
+        e.state.objects.insert(
+            id,
+            GameObject {
+                id,
+                owner,
+                card_id: "walking_corpse".to_string(),
+                zone: Zone::Battlefield,
+                tapped: false,
+                summoning_sick: false,
+                power: Some(2),
+                toughness: Some(toughness),
+                damage,
+                deathtouch_damage: false,
+                counters: Default::default(),
+            },
+        );
+        let idx = e.state.player_idx(owner).unwrap();
+        e.state.players[idx].battlefield.push(id);
+        id
+    }
+
+    fn anthem(source: ObjectId, dt: i32, duration: EffectDuration) -> ContinuousEffect {
+        ContinuousEffect {
+            source_id: Some(source),
+            affected: AffectedScope::AllCreatures,
+            kind: ContinuousEffectKind::PtModify {
+                delta_power: 0,
+                delta_toughness: dt,
+            },
+            duration,
+            timestamp: 0,
+        }
+    }
+
+    #[test]
+    fn static_anthem_drained_when_source_leaves_battlefield() {
+        // CR 611.3: a static-ability continuous effect ends the moment its source leaves play.
+        let mut e = engine();
+        let src = add_creature(&mut e, 0, 2, 0);
+        let other = add_creature(&mut e, 0, 1, 0);
+        e.state
+            .continuous_effects
+            .push(anthem(src, 1, EffectDuration::WhileSourceOnBattlefield));
+        assert_eq!(e.effective_toughness(other), Some(2)); // base 1 + anthem +1
+        move_object_to_zone(&mut e.state, src, Zone::Graveyard).unwrap();
+        assert_eq!(e.effective_toughness(other), Some(1)); // anthem gone
+        assert!(e.state.continuous_effects.is_empty());
+    }
+
+    #[test]
+    fn one_shot_pump_survives_source_leaving() {
+        // CR 611.2g: a one-shot pump (e.g. firebreathing) is independent of its source once made,
+        // so the source leaving must NOT drain it — only `WhileSourceOnBattlefield` effects drain.
+        let mut e = engine();
+        let src = add_creature(&mut e, 0, 2, 0);
+        let target = add_creature(&mut e, 0, 1, 0);
+        e.state.continuous_effects.push(ContinuousEffect {
+            source_id: Some(src),
+            affected: AffectedScope::Single(target),
+            kind: ContinuousEffectKind::PtModify {
+                delta_power: 0,
+                delta_toughness: 2,
+            },
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 0,
+        });
+        move_object_to_zone(&mut e.state, src, Zone::Graveyard).unwrap();
+        assert_eq!(e.effective_toughness(target), Some(3)); // still buffed
+    }
+
+    #[test]
+    fn sba_cascades_to_fixpoint_when_anthem_dies() {
+        // CR 704.4: SBAs re-check until stable. The anthem (+0/+1, AllCreatures, source-bound)
+        // keeps `dependent` alive; the anthem's source has lethal damage and dies on the first
+        // pass, draining the anthem; the *same* `apply_sbas` call must then catch `dependent`.
+        let mut e = engine();
+        // src: base toughness 1, damage 2. The anthem buffs src too -> eff toughness 2, damage 2,
+        // so it dies on pass 1 (the anthem can't save its own source here).
+        let src = add_creature(&mut e, 0, 1, 2);
+        // dependent: base toughness 1, damage 1. With the +1 anthem it's eff toughness 2 (lives on
+        // pass 1); once the anthem drains it's eff toughness 1 with 1 damage (dies on the re-check).
+        let dependent = add_creature(&mut e, 0, 1, 1);
+        e.state
+            .continuous_effects
+            .push(anthem(src, 1, EffectDuration::WhileSourceOnBattlefield));
+
+        let mut out = vec![];
+        e.apply_sbas(&mut out).unwrap();
+
+        assert_eq!(
+            e.state.objects.get(&src).map(|o| o.zone),
+            Some(Zone::Graveyard),
+            "anthem source dies on the first SBA pass"
+        );
+        assert_eq!(
+            e.state.objects.get(&dependent).map(|o| o.zone),
+            Some(Zone::Graveyard),
+            "dependent must die on the SBA re-check once the anthem drains (CR 704.4)"
+        );
     }
 }
