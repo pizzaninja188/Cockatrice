@@ -3272,6 +3272,86 @@ fn giant_growth_pump_expires_after_active_turn_ends() {
     assert_eq!(e.effective_toughness(bear), Some(2));
 }
 
+/// CR 113/606: Fiery Hellhound's firebreathing (`{R}: this creature gets +1/+0`) is the first
+/// card to drive a `PumpTarget` with `TargetKind::Self_` from an *activated* ability — the effect
+/// auto-binds to the source (not a chosen target, CR 115) and is repeatable. Each activation goes
+/// on the stack (non-mana ability), resolves to a layer-7c `UntilEndOfTurn` P/T bump, and the
+/// bumps stack; they all drain at cleanup (CR 514.2 / 611.2g — independent of the source).
+#[test]
+fn fiery_hellhound_self_firebreathing_pumps_and_expires() {
+    let decks = Some(vec![
+        {
+            let mut d = vec!["fiery_hellhound".to_string()];
+            d.extend(std::iter::repeat_n("mountain".to_string(), 6));
+            d
+        },
+        vec!["forest".into(); 7],
+    ]);
+    let mut e = GameEngine::new(7311, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let hound = put_creature_on_battlefield(&mut e, 0, "fiery_hellhound");
+    assert_eq!(e.effective_power(hound), Some(2), "printed 2/2 power");
+    assert_eq!(
+        e.effective_toughness(hound),
+        Some(2),
+        "printed 2/2 toughness"
+    );
+
+    // Fund two activations of the {R} firebreathing cost.
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 2,
+            ..Default::default()
+        },
+    );
+
+    // First activation: cost paid on activation (pool 2 -> 1), ability on the stack; resolves to +1/+0.
+    e.apply_command(0, &activate_ability(hound, 0, vec![]))
+        .expect("activate firebreathing #1");
+    assert_eq!(
+        e.state.players[0].mana_pool.red, 1,
+        "first {{R}} paid on activation"
+    );
+    pass_both_players(&mut e);
+    assert_eq!(e.effective_power(hound), Some(3), "+1/+0 after first pump");
+    assert_eq!(e.effective_toughness(hound), Some(2), "toughness unchanged");
+
+    // Second activation stacks another +1/+0.
+    e.apply_command(0, &activate_ability(hound, 0, vec![]))
+        .expect("activate firebreathing #2");
+    assert_eq!(
+        e.state.players[0].mana_pool.red, 0,
+        "second {{R}} paid on activation"
+    );
+    pass_both_players(&mut e);
+    assert_eq!(
+        e.effective_power(hound),
+        Some(4),
+        "+2/+0 after two pumps stack"
+    );
+    assert_eq!(
+        e.effective_toughness(hound),
+        Some(2),
+        "toughness still unchanged"
+    );
+
+    // CR 514.2: both until-end-of-turn pumps drain at cleanup; back to printed 2/2.
+    end_active_turn(&mut e, 0);
+    assert_eq!(
+        e.effective_power(hound),
+        Some(2),
+        "firebreathing expires at end of turn"
+    );
+    assert_eq!(
+        e.effective_toughness(hound),
+        Some(2),
+        "toughness back to printed"
+    );
+}
+
 /// CR 107.4d: a hybrid card ({R/W} Boros Recruit) casts identically whether the pip is paid
 /// with red or with white — both runs resolve the creature onto the battlefield.
 #[test]

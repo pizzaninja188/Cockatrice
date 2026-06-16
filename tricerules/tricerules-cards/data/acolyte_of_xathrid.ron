@@ -1,0 +1,15 @@
+(
+  id: "acolyte_of_xathrid",
+  name: "Acolyte of Xathrid",
+  mana_cost: "{B}",
+  types: ["Creature", "Human", "Cleric"],
+  power: 0,
+  toughness: 1,
+  activated_abilities: [
+    (
+      cost: TapAndMana("{1}{B}"),
+      effect: TargetPlayerLosesLife(amount: 1, target: (kind: AnyPlayer)),
+      text: "{1}{B}, {T}: Target player loses 1 life.",
+    ),
+  ],
+)

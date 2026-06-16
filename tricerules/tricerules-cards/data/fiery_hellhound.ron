@@ -1,0 +1,15 @@
+(
+  id: "fiery_hellhound",
+  name: "Fiery Hellhound",
+  mana_cost: "{1}{R}{R}",
+  types: ["Creature", "Elemental", "Dog"],
+  power: 2,
+  toughness: 2,
+  activated_abilities: [
+    (
+      cost: Mana("{R}"),
+      effect: PumpTarget(power: 1, toughness: 0, target: (kind: Self_)),
+      text: "{R}: This creature gets +1/+0 until end of turn.",
+    ),
+  ],
+)

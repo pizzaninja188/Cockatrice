@@ -1,0 +1,19 @@
+(
+  id: "captain_of_the_watch",
+  name: "Captain of the Watch",
+  mana_cost: "{4}{W}{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 3,
+  toughness: 3,
+  keywords: [Vigilance],
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: CreateTokens(token: "soldier_w_1_1", count: 3),
+      text: "When this creature enters, create three 1/1 white Soldier creature tokens.",
+    ),
+  ],
+  // Anthem ("Other Soldier creatures you control get +1/+1 and have vigilance") not yet
+  // expressible — no static type-filtered continuous effect primitive.
+  partial: "Soldier anthem (+1/+1 and vigilance to other Soldiers you control) not implemented",
+)
