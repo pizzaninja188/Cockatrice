@@ -3892,7 +3892,11 @@ impl GameEngine {
     }
 
     fn apply_legend_sbas(&mut self) -> Result<Vec<rv1::RuledEvent>, EngineError> {
-        let mut by_name: HashMap<String, Vec<ObjectId>> = HashMap::new();
+        // CR 704.5j: the legend rule applies per controller — only same-named legends controlled
+        // by the *same* player conflict, so two players may each control a copy. Keyed by
+        // (controller, name); `BTreeMap` + sorted ids keep the kept-permanent choice deterministic
+        // for replay (we keep the lowest object id; controller-chosen keep is not modeled yet).
+        let mut by_owner_name: BTreeMap<(PlayerId, String), Vec<ObjectId>> = BTreeMap::new();
         let mut out = Vec::new();
         for (&id, o) in &self.state.objects {
             if o.zone != Zone::Battlefield {
@@ -3907,12 +3911,13 @@ impl GameEngine {
                 continue;
             }
             let n = self.registry.get(&o.card_id).unwrap().name.clone();
-            by_name.entry(n).or_default().push(id);
+            by_owner_name.entry((o.owner, n)).or_default().push(id);
         }
-        for ids in by_name.values() {
+        for ids in by_owner_name.values_mut() {
             if ids.len() < 2 {
                 continue;
             }
+            ids.sort_unstable();
             for &g in ids.iter().skip(1) {
                 let owner = self.state.objects.get(&g).map(|o| o.owner);
                 if destroy_permanent(&mut self.state, g).is_ok() {
@@ -4506,18 +4511,23 @@ impl GameEngine {
                 let is_creature = cast_def.map(|d| d.is_creature).unwrap_or(false);
                 let is_artifact = cast_def.map(|d| d.is_artifact).unwrap_or(false);
 
-                let all_oids: Vec<ObjectId> = self.state.objects.keys().copied().collect();
-                all_oids
-                    .iter()
-                    .flat_map(|&oid| {
-                        let Some(obj) = self.state.objects.get(&oid) else {
-                            return vec![];
-                        };
-                        if obj.zone != Zone::Battlefield {
-                            return vec![];
+                // Deterministic APNAP order: active player's permanents first (CR 603.3b).
+                // Iterating the raw `objects` HashMap here would be non-deterministic and break
+                // replay reconstruction when two permanents (Young Pyromancer + Guttersnipe …)
+                // both watch for spells being cast.
+                let mut ordered: Vec<usize> = (0..self.state.players.len()).collect();
+                ordered.sort_by_key(|&i| (self.state.players[i].id != ap) as u8);
+                let mut sources: Vec<(ObjectId, String, PlayerId)> = Vec::new();
+                for pi in ordered {
+                    for &sid in &self.state.players[pi].battlefield {
+                        if let Some(o) = self.state.objects.get(&sid) {
+                            sources.push((sid, o.card_id.clone(), o.owner));
                         }
-                        let source_controller = obj.owner;
-                        let card_id = obj.card_id.clone();
+                    }
+                }
+                sources
+                    .into_iter()
+                    .flat_map(|(oid, card_id, source_controller)| {
                         self.matching_triggered_abilities(&card_id, oid, source_controller, |tc| {
                             let TriggerCondition::WheneverPlayerCastsSpell {
                                 caster: caster_filter,
