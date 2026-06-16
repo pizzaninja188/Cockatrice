@@ -13,7 +13,15 @@
       text: "When this creature enters, create three 1/1 white Soldier creature tokens.",
     ),
   ],
-  // Anthem ("Other Soldier creatures you control get +1/+1 and have vigilance") not yet
-  // expressible — no static type-filtered continuous effect primitive.
-  partial: "Soldier anthem (+1/+1 and vigilance to other Soldiers you control) not implemented",
+  // "Other Soldier creatures you control get +1/+1 and have vigilance." The +1/+1 is a
+  // static type-filtered anthem (CR 604/613.4 layer 7c); the vigilance grant is a layer-6
+  // keyword-granting effect, still deferred.
+  static_abilities: [
+    AnthemPt(
+      filter: (controller: YouControl, subtype: "Soldier", exclude_self: true),
+      delta_power: 1,
+      delta_toughness: 1,
+    ),
+  ],
+  partial: "vigilance grant to other Soldiers you control not implemented (keyword-granting anthem, layer 6)",
 )

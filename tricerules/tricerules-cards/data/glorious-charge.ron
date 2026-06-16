@@ -1,0 +1,8 @@
+(
+  id: "glorious_charge",
+  name: "Glorious Charge",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  // CR 613.4 layer 7c (one-shot): "Creatures you control get +1/+1 until end of turn."
+  spell_effect: [PumpAll(filter: (controller: YouControl), power: 1, toughness: 1)],
+)

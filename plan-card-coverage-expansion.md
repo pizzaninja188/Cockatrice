@@ -2,8 +2,19 @@
 
 ## Status
 
-All phases **TODO**. This plan is the prioritized roadmap for widening the data-tier
-vocabulary so more real cards become implementable without new custom Rust.
+**P1 (static anthems/lords + one-shot mass pump) and P2 (target-filter widening) are
+implemented.** P3–P5 remain **TODO** (P4 to be promoted to its own plan before any code).
+This plan is the prioritized roadmap for widening the data-tier vocabulary so more real cards
+become implementable without new custom Rust.
+
+Shipped in P1: `StaticAbilityDef::AnthemPt` + `AnthemFilter` (controller/subtype/color/
+exclude_self), `AffectedScope::CreaturesMatching` (dynamic, registry-evaluated),
+`SpellEffectKind::PumpAll`. Cards: Glorious Anthem, Crusade, Bad Moon, Glorious Charge,
+Inspired Charge; Captain of the Watch's +1/+1 Soldier anthem (vigilance grant still deferred).
+Shipped in P2: `TargetFilter.not_color` + `.attacking_or_blocking`, and an optional
+`spell_filter` on `CounterTargetSpell`/`CopyTargetSpell`. Cards: Doom Blade, Divine Verdict,
+Essence Scatter, Negate; Twincast's instant/sorcery restriction now enforced. Next: re-run the
+calibration triage (the re-measure gate below) before P3 / batch generation.
 
 ## Motivation
 

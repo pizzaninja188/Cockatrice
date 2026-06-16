@@ -10184,3 +10184,530 @@ fn concede_is_legal_during_opening_sequence() {
         "the opponent wins once the other player concedes"
     );
 }
+
+// ===========================================================================
+// Card-coverage expansion — P1 (static anthems / lords, one-shot mass pump)
+// and P2 (target-filter widening). See plan-card-coverage-expansion.md.
+// ===========================================================================
+
+/// Build a two-player engine at Main 1 with P0 holding `p0_card` (deck padded with mountains)
+/// and P1 a vanilla island deck. The named card is in P0's opening hand.
+fn anthem_engine(seed: u64, p0_card: &str) -> GameEngine {
+    let decks = Some(vec![
+        vec![
+            p0_card.into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec![
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    e
+}
+
+/// P1: Glorious Anthem ("Creatures you control get +1/+1") buffs only the controller's creatures.
+/// A creature an opponent controls is untouched (controller-filtered scope).
+#[test]
+fn glorious_anthem_buffs_only_controllers_creatures() {
+    let mut e = anthem_engine(5001, "glorious_anthem");
+    let mine = inject_creature_on_battlefield(&mut e, 0, "savannah_lions");
+    let theirs = inject_creature_on_battlefield(&mut e, 1, "savannah_lions");
+
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            w: 3,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "glorious_anthem");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast anthem");
+    resolve_entire_stack_two_player(&mut e);
+
+    assert_eq!(e.effective_power(mine), Some(3), "your creature gets +1/+1");
+    assert_eq!(e.effective_toughness(mine), Some(3));
+    assert_eq!(
+        e.effective_power(theirs),
+        Some(2),
+        "opponent's creature is not affected by your anthem"
+    );
+}
+
+/// P1 dynamic scope (not a snapshot): a creature entering *after* Glorious Anthem resolves is
+/// still buffed, because `CreaturesMatching` is evaluated on each P/T query.
+#[test]
+fn anthem_scope_is_dynamic_for_creatures_entering_later() {
+    let mut e = anthem_engine(5002, "glorious_anthem");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            w: 3,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "glorious_anthem");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast anthem");
+    resolve_entire_stack_two_player(&mut e);
+
+    // Enters after the anthem is already on the battlefield.
+    let late = inject_creature_on_battlefield(&mut e, 0, "savannah_lions");
+    assert_eq!(
+        e.effective_power(late),
+        Some(3),
+        "a creature entering after the anthem is buffed (dynamic scope)"
+    );
+}
+
+/// P1 LTB drain: bouncing Glorious Anthem off the battlefield removes its continuous effect
+/// (CR 604.3/611.3) — the buff disappears the moment the source leaves.
+#[test]
+fn anthem_buff_drains_when_source_leaves_battlefield() {
+    let decks = Some(vec![
+        vec![
+            "glorious_anthem".into(),
+            "boomerang".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec![
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(5003, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let mine = inject_creature_on_battlefield(&mut e, 0, "savannah_lions");
+
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            w: 3,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "glorious_anthem");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast anthem");
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(
+        e.effective_power(mine),
+        Some(3),
+        "buffed while anthem in play"
+    );
+
+    let anthem = battlefield_object_for_card(&e, 0, "glorious_anthem");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            u: 2,
+            ..Default::default()
+        },
+    );
+    let b_idx = hand_index_for_card(&e, 0, "boomerang");
+    e.apply_command(0, &cast_spell(b_idx, vec![TargetRef { object_id: anthem }]))
+        .expect("cast boomerang at own anthem");
+    resolve_entire_stack_two_player(&mut e);
+
+    assert_eq!(
+        e.effective_power(mine),
+        Some(2),
+        "buff drains when the anthem leaves the battlefield"
+    );
+}
+
+/// P1 color-filtered, symmetrical lord: Crusade ("White creatures get +1/+1") buffs every white
+/// creature regardless of controller, and leaves non-white creatures alone.
+#[test]
+fn crusade_buffs_white_creatures_of_either_player() {
+    let mut e = anthem_engine(5004, "crusade");
+    let my_white = inject_creature_on_battlefield(&mut e, 0, "savannah_lions");
+    let my_green = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let their_white = inject_creature_on_battlefield(&mut e, 1, "savannah_lions");
+
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            w: 2,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "crusade");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast crusade");
+    resolve_entire_stack_two_player(&mut e);
+
+    assert_eq!(
+        e.effective_power(my_white),
+        Some(3),
+        "your white creature buffed"
+    );
+    assert_eq!(
+        e.effective_power(their_white),
+        Some(3),
+        "opponent's white creature is also buffed (symmetrical color lord)"
+    );
+    assert_eq!(
+        e.effective_power(my_green),
+        Some(2),
+        "a non-white creature is not affected"
+    );
+}
+
+/// P1 subtype + exclude_self: Captain of the Watch ("Other Soldier creatures you control get
+/// +1/+1") buffs only your other Soldiers — not itself, not your non-Soldiers, not the opponent's.
+#[test]
+fn captain_of_the_watch_buffs_other_soldiers_you_control() {
+    let mut e = anthem_engine(5005, "captain_of_the_watch");
+    let my_soldier = inject_creature_on_battlefield(&mut e, 0, "squire"); // Human Soldier
+    let my_nonsoldier = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let their_soldier = inject_creature_on_battlefield(&mut e, 1, "squire");
+
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            w: 6,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "captain_of_the_watch");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast captain");
+    // Resolve the spell and its ETB token-making trigger to a quiet board.
+    while !e.state.stack.is_empty() || !e.state.pending_triggers.is_empty() {
+        pass_both_players(&mut e);
+    }
+
+    let captain = battlefield_object_for_card(&e, 0, "captain_of_the_watch");
+    assert_eq!(
+        e.effective_power(captain),
+        Some(3),
+        "Captain does not buff itself (exclude_self / 'other')"
+    );
+    assert_eq!(
+        e.effective_power(my_soldier),
+        Some(3),
+        "your other Soldier gets +1/+1"
+    );
+    assert_eq!(
+        e.effective_power(my_nonsoldier),
+        Some(2),
+        "your non-Soldier is unaffected (subtype filter)"
+    );
+    assert_eq!(
+        e.effective_power(their_soldier),
+        Some(2),
+        "opponent's Soldier is unaffected (controller filter)"
+    );
+}
+
+/// P1 one-shot sibling: Glorious Charge ("Creatures you control get +1/+1 until end of turn")
+/// pumps your team and expires at cleanup (CR 514.2).
+#[test]
+fn glorious_charge_pumps_team_until_cleanup() {
+    let mut e = anthem_engine(5006, "glorious_charge");
+    let mine = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            w: 2,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "glorious_charge");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast glorious charge");
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(e.effective_power(mine), Some(3), "+1/+1 this turn");
+    assert_eq!(e.effective_toughness(mine), Some(3));
+
+    end_active_turn(&mut e, 0);
+    assert_eq!(
+        e.effective_power(mine),
+        Some(2),
+        "the until-end-of-turn pump expires at cleanup"
+    );
+}
+
+/// P2 color filter: Doom Blade ("Destroy target nonblack creature") accepts a nonblack target
+/// and rejects a black one.
+#[test]
+fn doom_blade_targets_only_nonblack_creatures() {
+    let mut e = anthem_engine(5007, "doom_blade");
+    let green = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    let black = inject_creature_on_battlefield(&mut e, 1, "acolyte_of_xathrid");
+
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 2,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "doom_blade");
+    // Black creature is an illegal target (nonblack restriction).
+    assert!(
+        e.apply_command(0, &cast_spell(idx, vec![TargetRef { object_id: black }]))
+            .is_err(),
+        "Doom Blade cannot target a black creature"
+    );
+    // Nonblack creature is legal; it resolves and dies.
+    let idx = hand_index_for_card(&e, 0, "doom_blade");
+    e.apply_command(0, &cast_spell(idx, vec![TargetRef { object_id: green }]))
+        .expect("Doom Blade targets a nonblack creature");
+    resolve_entire_stack_two_player(&mut e);
+    assert!(
+        e.state.objects.get(&green).map(|o| o.zone) != Some(tricerules_core::Zone::Battlefield),
+        "the nonblack creature is destroyed"
+    );
+}
+
+/// P2 combat filter: Divine Verdict ("Destroy target attacking or blocking creature") is legal
+/// against a declared attacker and illegal against a creature not in combat.
+#[test]
+fn divine_verdict_targets_only_combatants() {
+    let decks = Some(vec![
+        vec![
+            "divine_verdict".into(),
+            "plains".into(),
+            "plains".into(),
+            "plains".into(),
+            "plains".into(),
+            "plains".into(),
+            "plains".into(),
+        ],
+        vec![
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(5008, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    e.apply_command(0, &primitive_yield())
+        .expect("main1 to begin combat");
+    let attacker = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let bystander = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    e.apply_command(0, &pass()).expect("ap pass begin combat");
+    e.apply_command(1, &pass()).expect("nap pass begin combat");
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareAttackers
+    );
+
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("declare attacker");
+    // The active player holds priority in DeclareAttackers after declaring; it casts the instant.
+    assert_eq!(
+        e.state.priority_player_id(),
+        0,
+        "active player has priority after declaration"
+    );
+
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            w: 4,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "divine_verdict");
+    // A creature not in combat is an illegal target.
+    assert!(
+        e.apply_command(
+            0,
+            &cast_spell(
+                idx,
+                vec![TargetRef {
+                    object_id: bystander
+                }]
+            )
+        )
+        .is_err(),
+        "Divine Verdict cannot target a creature that is not attacking or blocking"
+    );
+    let idx = hand_index_for_card(&e, 0, "divine_verdict");
+    e.apply_command(
+        0,
+        &cast_spell(
+            idx,
+            vec![TargetRef {
+                object_id: attacker,
+            }],
+        ),
+    )
+    .expect("Divine Verdict targets the attacker");
+    resolve_entire_stack_two_player(&mut e);
+    assert!(
+        e.state.objects.get(&attacker).map(|o| o.zone) != Some(tricerules_core::Zone::Battlefield),
+        "the attacking creature is destroyed"
+    );
+}
+
+/// P2 counter spell-type filter: Essence Scatter counters a creature spell but cannot target a
+/// noncreature spell; Negate is the mirror image.
+#[test]
+fn essence_scatter_and_negate_respect_spell_type() {
+    let decks = Some(vec![
+        vec![
+            "grizzly_bears".into(),
+            "lightning_bolt".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec![
+            "essence_scatter".into(),
+            "essence_scatter".into(),
+            "negate".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(5009, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // P0 casts a creature spell (grizzly_bears) — it sits on the stack.
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            g: 2,
+            ..Default::default()
+        },
+    );
+    let gb_idx = hand_index_for_card(&e, 0, "grizzly_bears");
+    e.apply_command(0, &cast_spell(gb_idx, vec![]))
+        .expect("cast bears");
+    let bears_spell = e.state.stack.last().expect("bears on stack").id;
+    e.apply_command(0, &pass())
+        .expect("p0 pass to give p1 priority");
+
+    // Negate (noncreature only) cannot target a creature spell (illegal cast — card not consumed).
+    give_mana(
+        &mut e,
+        1,
+        ManaGift {
+            u: 6,
+            ..Default::default()
+        },
+    );
+    let neg_idx = hand_index_for_card(&e, 1, "negate");
+    assert!(
+        e.apply_command(
+            1,
+            &cast_spell(
+                neg_idx,
+                vec![TargetRef {
+                    object_id: bears_spell
+                }]
+            )
+        )
+        .is_err(),
+        "Negate cannot counter a creature spell"
+    );
+    // Essence Scatter (creature only) can.
+    let es_idx = hand_index_for_card(&e, 1, "essence_scatter");
+    e.apply_command(
+        1,
+        &cast_spell(
+            es_idx,
+            vec![TargetRef {
+                object_id: bears_spell,
+            }],
+        ),
+    )
+    .expect("Essence Scatter counters a creature spell");
+    resolve_entire_stack_two_player(&mut e);
+    assert!(
+        count_card_id_in_graveyard(&e, 0, "grizzly_bears") == 1,
+        "the creature spell is countered into its owner's graveyard"
+    );
+
+    // Now P0 casts a noncreature spell (lightning_bolt) and P1's Essence Scatter cannot hit it.
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+    let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+        .expect("cast bolt");
+    let bolt_spell = e.state.stack.last().expect("bolt on stack").id;
+    e.apply_command(0, &pass())
+        .expect("p0 pass to give p1 priority");
+
+    let es2 = hand_index_for_card(&e, 1, "essence_scatter");
+    assert!(
+        e.apply_command(
+            1,
+            &cast_spell(
+                es2,
+                vec![TargetRef {
+                    object_id: bolt_spell
+                }]
+            )
+        )
+        .is_err(),
+        "Essence Scatter cannot counter a noncreature spell"
+    );
+    let neg2 = hand_index_for_card(&e, 1, "negate");
+    e.apply_command(
+        1,
+        &cast_spell(
+            neg2,
+            vec![TargetRef {
+                object_id: bolt_spell,
+            }],
+        ),
+    )
+    .expect("Negate counters a noncreature spell");
+    resolve_entire_stack_two_player(&mut e);
+    assert!(
+        count_card_id_in_graveyard(&e, 0, "lightning_bolt") == 1,
+        "the noncreature spell is countered"
+    );
+}

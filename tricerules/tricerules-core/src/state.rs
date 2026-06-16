@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, HashMap, VecDeque};
-use tricerules_cards::primitives::{ContinuousEffectKind, CounterKind, EffectDuration};
+use tricerules_cards::primitives::{Color, ContinuousEffectKind, CounterKind, EffectDuration};
 
 pub type PlayerId = i32;
 pub type ObjectId = u32;
@@ -246,7 +246,20 @@ pub struct OpeningSequence {
 pub enum AffectedScope {
     Single(ObjectId),
     AllCreatures,
-    // Future: CreaturesControlledBy(PlayerId), CreaturesWithPower(u32), …
+    /// Creatures matching an anthem/lord filter (CR 613) — resolved from an [`AnthemFilter`] when
+    /// the source's static ability or one-shot pump fires. Evaluated dynamically each P/T query so
+    /// creatures entering *after* the effect are still affected. `controller` `None` = any player's
+    /// creatures; `Some(pid)` = only `pid`'s. `subtype`/`color` narrow by characteristics
+    /// (Lord of Atlantis = Merfolk, Bad Moon = Black). `exclude` is the source for "other ...
+    /// creatures" lords. Membership needs card characteristics, so it is evaluated in the engine
+    /// (which holds the registry), not in [`ContinuousEffect::affects`].
+    CreaturesMatching {
+        controller: Option<PlayerId>,
+        subtype: Option<String>,
+        color: Option<Color>,
+        exclude: Option<ObjectId>,
+    },
+    // Future: CreaturesWithPower(u32), …
 }
 
 /// A single active continuous effect (CR 611/613).
@@ -259,16 +272,6 @@ pub struct ContinuousEffect {
     pub duration: EffectDuration,
     /// `command_index` at creation; used for layer sublayer timestamp ordering (CR 613.7).
     pub timestamp: u64,
-}
-
-impl ContinuousEffect {
-    /// True if this effect applies to the permanent with id `oid`.
-    pub fn affects(&self, oid: ObjectId) -> bool {
-        match &self.affected {
-            AffectedScope::Single(id) => *id == oid,
-            AffectedScope::AllCreatures => true,
-        }
-    }
 }
 
 /// During combat, after attack/block declarations.

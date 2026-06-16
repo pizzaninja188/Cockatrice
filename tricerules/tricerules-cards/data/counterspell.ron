@@ -3,5 +3,6 @@
   name: "Counterspell",
   mana_cost: "{U}{U}",
   types: ["Instant"],
-  spell_effect: [CounterTargetSpell],
+  // "Counter target spell." No type restriction (CR 701.5).
+  spell_effect: [CounterTargetSpell(spell_filter: None)],
 )

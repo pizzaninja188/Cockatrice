@@ -182,9 +182,10 @@ pub enum CounterKind {
 }
 
 /// Base kind for a [`TargetFilter`] — what category of object is targeted.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum TargetKind {
     /// Creature or player (later expands to planeswalker/battle).
+    #[default]
     AnyTarget,
     /// A creature on the battlefield.
     Creature,
@@ -214,8 +215,7 @@ pub enum EffectContext {
 fn default_creature_filter() -> TargetFilter {
     TargetFilter {
         kind: TargetKind::Creature,
-        not_artifact: false,
-        tapped: None,
+        ..TargetFilter::default()
     }
 }
 
@@ -227,8 +227,11 @@ fn default_creature_filter() -> TargetFilter {
 /// - `(kind: AnyTarget)` — any creature or player
 /// - `(kind: Creature, not_artifact: true)` — non-artifact creature
 /// - `(kind: Creature, tapped: true)` — tapped creature (for future use)
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// - `(kind: Creature, not_color: Black)` — nonblack creature (Doom Blade, Terror)
+/// - `(kind: Creature, attacking_or_blocking: true)` — Divine Verdict, Hunt Down
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct TargetFilter {
+    #[serde(default)]
     pub kind: TargetKind,
     /// If true, the target must not be an artifact.
     #[serde(default)]
@@ -236,6 +239,14 @@ pub struct TargetFilter {
     /// If Some(true), target must be tapped; Some(false) must be untapped; None = either.
     #[serde(default)]
     pub tapped: Option<bool>,
+    /// CR 508/509: if true, the target must currently be attacking or blocking. Combat-only
+    /// removal/tricks — Divine Verdict, Hunt Down ("destroy target attacking or blocking creature").
+    #[serde(default)]
+    pub attacking_or_blocking: bool,
+    /// CR 105/202.2: if `Some`, the target must NOT be of this color (derived from its mana cost).
+    /// Doom Blade ("nonblack creature"), Terror ("nonblack" — paired with `not_artifact`).
+    #[serde(default)]
+    pub not_color: Option<Color>,
 }
 
 impl TargetFilter {
@@ -281,16 +292,37 @@ pub enum SpellEffectKind {
     TapTarget {
         target: TargetFilter,
     },
-    CounterTargetSpell,
+    /// CR 701.5: counter target spell on the stack. `spell_filter` narrows which spells are legal
+    /// targets — `None` is unrestricted (Counterspell), `Some(Creature)` is Essence Scatter,
+    /// `Some(Noncreature)` is Negate. Reuses [`SpellTypeFilter`] so any future "counter target
+    /// X spell" needs no new variant.
+    CounterTargetSpell {
+        #[serde(default)]
+        spell_filter: Option<SpellTypeFilter>,
+    },
     /// CR 707.10: put `count` copies of target spell on the stack, each controlled by this
     /// spell's controller. A copy is **not cast** (no mana, no cast triggers, no storm count) and
     /// ceases to exist after it resolves (CR 707.10d). The copy uses the original's chosen modes,
     /// X, and targets; CR 707.10c lets the copy's controller choose new targets (deferred — copies
     /// keep the original's targets for now). `count` covers Twincast / Fork / Reverberate (1) and
-    /// "copy it twice" effects without a new variant; only spells (not abilities) are legal targets.
+    /// "copy it twice" effects without a new variant. `spell_filter` restricts the legal target
+    /// the same way as [`Self::CounterTargetSpell`] — `Some(InstantOrSorcery)` for Twincast /
+    /// Reverberate ("copy target instant or sorcery spell"); only spells (not abilities) qualify.
     CopyTargetSpell {
         #[serde(default = "one")]
         count: u32,
+        #[serde(default)]
+        spell_filter: Option<SpellTypeFilter>,
+    },
+    /// CR 613.4 layer 7c: give every creature matching `filter` +power/+toughness until end of
+    /// turn (the mass, one-shot sibling of [`Self::PumpTarget`]). Untargeted — `filter` selects
+    /// the set the same way a static anthem does. Glorious Charge / Inspired Charge
+    /// (`controller: YouControl`); attacking-creature pumps reuse the same filter machinery.
+    PumpAll {
+        #[serde(default)]
+        filter: AnthemFilter,
+        power: i32,
+        toughness: i32,
     },
     GainLife {
         amount: Amount,
@@ -663,6 +695,59 @@ pub enum ContinuousEffectKind {
     // Future: Layer6AddKeyword(Keyword), Layer7bSetPt { power: i32, toughness: i32 }, …
 }
 
+// ---------------------------------------------------------------------------
+// Static abilities (CR 604) and anthem/lord scopes
+// ---------------------------------------------------------------------------
+
+/// Controller restriction for an [`AnthemFilter`]. `None` on the field means "every creature in
+/// play" (Crusade, Bad Moon — symmetrical anthems); `Some(YouControl)` means only the source's
+/// controller's creatures (Glorious Anthem, Goblin King). An opponents-only variant is added with
+/// its first card (e.g. an "opponents' creatures get -1/-1" enchantment).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AnthemController {
+    /// Only creatures controlled by the anthem source's controller ("creatures you control").
+    YouControl,
+}
+
+/// Which creatures a static anthem or one-shot mass pump applies to (CR 613). AND-combined
+/// optional constraints over the creatures in play, mirroring how [`TargetFilter`] narrows a
+/// chosen target. "Name two" per field: `controller` (Glorious Anthem, Goblin King) · `subtype`
+/// (Lord of Atlantis = Merfolk, Goblin Chieftain = Goblin) · `color` (Crusade = White, Bad Moon =
+/// Black) · `exclude_self` (every "Other ... creatures" lord). Reused by both
+/// [`StaticAbilityDef::AnthemPt`] and [`SpellEffectKind::PumpAll`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct AnthemFilter {
+    /// `None` = every creature in play; `Some(YouControl)` = only the source controller's creatures.
+    #[serde(default)]
+    pub controller: Option<AnthemController>,
+    /// If `Some`, only creatures whose type line contains this subtype (e.g. "Merfolk", "Goblin").
+    #[serde(default)]
+    pub subtype: Option<String>,
+    /// If `Some`, only creatures of this color (Crusade = White, Bad Moon = Black).
+    #[serde(default)]
+    pub color: Option<Color>,
+    /// CR "other ... creatures": exclude the anthem's own source permanent (a lord that doesn't
+    /// pump itself). Ignored by [`SpellEffectKind::PumpAll`], which has no persistent source.
+    #[serde(default)]
+    pub exclude_self: bool,
+}
+
+/// One static ability on a permanent (CR 604) — a continuous effect that exists only while the
+/// permanent is on the battlefield. Distinct from triggered/activated abilities (which use the
+/// stack); the engine emits the corresponding continuous effect on ETB and drains it at LTB.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StaticAbilityDef {
+    /// CR 613.4 layer 7c: every creature matching `filter` gets +`delta_power`/+`delta_toughness`
+    /// (negative values for a debuff anthem). Anthems (Glorious Anthem) and lords (Crusade, Bad
+    /// Moon). Keyword-granting anthems (layer 6) are a separate future variant.
+    AnthemPt {
+        #[serde(default)]
+        filter: AnthemFilter,
+        delta_power: i32,
+        delta_toughness: i32,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -673,8 +758,7 @@ mod tests {
             amount: 3,
             target: TargetFilter {
                 kind: TargetKind::OpponentPlayer,
-                not_artifact: false,
-                tapped: None,
+                ..Default::default()
             },
         }
         .validate(EffectContext::Spell)
@@ -687,8 +771,7 @@ mod tests {
             amount: 3,
             target: TargetFilter {
                 kind: TargetKind::Creature,
-                not_artifact: false,
-                tapped: None,
+                ..Default::default()
             },
         }
         .validate(EffectContext::Spell)
@@ -707,8 +790,7 @@ mod tests {
                 amount: Amount::Fixed(3),
                 target: TargetFilter {
                     kind,
-                    not_artifact: false,
-                    tapped: None
+                    ..Default::default()
                 },
             }
             .validate(EffectContext::Spell)
@@ -723,8 +805,7 @@ mod tests {
             toughness: 1,
             target: TargetFilter {
                 kind: TargetKind::Self_,
-                not_artifact: false,
-                tapped: None,
+                ..Default::default()
             },
         };
         assert!(pump_self.validate(EffectContext::Spell).is_err());

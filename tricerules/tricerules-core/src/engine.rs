@@ -13,9 +13,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use thiserror::Error;
 use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
-    AbilityCost, CastTriggerPlayer, Color, ContinuousEffectKind, CounterKind, EffectDuration,
-    Keyword, SpellEffectKind, SpellTypeFilter, TargetFilter, TargetKind, TokenController,
-    TriggerCondition,
+    AbilityCost, AnthemController, AnthemFilter, CastTriggerPlayer, Color, ContinuousEffectKind,
+    CounterKind, EffectDuration, Keyword, SpellEffectKind, SpellTypeFilter, StaticAbilityDef,
+    TargetFilter, TargetKind, TokenController, TriggerCondition,
 };
 use tricerules_cards::CardRegistry;
 use tricerules_proto::ruled::v1 as rv1;
@@ -2054,6 +2054,91 @@ impl GameEngine {
         Ok(finish_with_events(self, std::mem::take(ev)))
     }
 
+    /// True if continuous effect `e` applies to the permanent `oid` (CR 613). Unlike a bare
+    /// `AffectedScope` test, a `CreaturesMatching` scope (anthems/lords) needs card characteristics
+    /// — controller, subtype, color — so it is evaluated here where the registry is available.
+    /// Evaluated dynamically each query, so a creature entering after the anthem is still affected.
+    fn effect_affects(&self, e: &ContinuousEffect, oid: ObjectId) -> bool {
+        match &e.affected {
+            AffectedScope::Single(id) => *id == oid,
+            AffectedScope::AllCreatures => true,
+            AffectedScope::CreaturesMatching {
+                controller,
+                subtype,
+                color,
+                exclude,
+            } => {
+                if *exclude == Some(oid) {
+                    return false;
+                }
+                let Some(obj) = self.state.objects.get(&oid) else {
+                    return false;
+                };
+                // CR 109.4: controller is the object's owner until control-changing exists.
+                if let Some(pid) = controller {
+                    if obj.owner != *pid {
+                        return false;
+                    }
+                }
+                let Some(def) = self.registry.get(&obj.card_id) else {
+                    return false;
+                };
+                if !def.is_creature {
+                    return false;
+                }
+                if let Some(sub) = subtype {
+                    if !def.types.iter().any(|t| t == sub) {
+                        return false;
+                    }
+                }
+                if let Some(c) = color {
+                    if !def.colors().contains(c) {
+                        return false;
+                    }
+                }
+                true
+            }
+        }
+    }
+
+    /// CR 604.3 / 611.3: when a permanent with static anthem abilities enters the battlefield,
+    /// push the corresponding `WhileSourceOnBattlefield` continuous effect(s). The LTB drain in
+    /// `move_object_to_zone` removes them when the source leaves — reusing the existing duration
+    /// plumbing exactly. Called from `fire_triggers` on every ETB, alongside trigger collection.
+    fn emit_static_abilities_on_enter(&mut self, object_id: ObjectId) {
+        let Some(obj) = self.state.objects.get(&object_id) else {
+            return;
+        };
+        let controller = obj.owner;
+        let card_id = obj.card_id.clone();
+        // Static abilities are per-face (CR 712.4); a permanent uses its current (front) face.
+        let statics: Vec<StaticAbilityDef> = match self.registry.get(&card_id) {
+            Some(def) => def.primary_face().static_abilities.to_vec(),
+            None => return,
+        };
+        let timestamp = self.state.command_index;
+        for sa in statics {
+            match sa {
+                StaticAbilityDef::AnthemPt {
+                    filter,
+                    delta_power,
+                    delta_toughness,
+                } => {
+                    self.state.continuous_effects.push(ContinuousEffect {
+                        source_id: Some(object_id),
+                        affected: resolve_anthem_scope(&filter, controller, object_id),
+                        kind: ContinuousEffectKind::PtModify {
+                            delta_power,
+                            delta_toughness,
+                        },
+                        duration: EffectDuration::WhileSourceOnBattlefield,
+                        timestamp,
+                    });
+                }
+            }
+        }
+    }
+
     /// Effective (rules-visible) power of `oid`: base from card definition, then CR 613.4
     /// layer 7c modifying continuous effects, then layer 7d +1/+1 / -1/-1 counters. Returns
     /// `None` for non-creatures (no base power).
@@ -2064,7 +2149,7 @@ impl GameEngine {
             .state
             .continuous_effects
             .iter()
-            .filter(|e| e.affects(oid))
+            .filter(|e| self.effect_affects(e, oid))
             .map(|e| match &e.kind {
                 ContinuousEffectKind::PtModify { delta_power, .. } => *delta_power,
             })
@@ -2082,7 +2167,7 @@ impl GameEngine {
             .state
             .continuous_effects
             .iter()
-            .filter(|e| e.affects(oid))
+            .filter(|e| self.effect_affects(e, oid))
             .map(|e| match &e.kind {
                 ContinuousEffectKind::PtModify {
                     delta_toughness, ..
@@ -2505,6 +2590,29 @@ impl GameEngine {
                         }
                     }
                 }
+                SpellEffectKind::PumpAll {
+                    filter,
+                    power,
+                    toughness,
+                } => {
+                    // CR 613.4 layer 7c, one-shot: an UntilEndOfTurn continuous effect over the
+                    // filtered creature set (controller resolved from the spell's controller).
+                    // The resolving spell is the nominal source; it does not persist as a creature,
+                    // so the scope drains at cleanup (UntilEndOfTurn), not at LTB.
+                    self.state.continuous_effects.push(ContinuousEffect {
+                        source_id: Some(top.id),
+                        affected: resolve_anthem_scope(&filter, controller, top.id),
+                        kind: ContinuousEffectKind::PtModify {
+                            delta_power: power,
+                            delta_toughness: toughness,
+                        },
+                        duration: EffectDuration::UntilEndOfTurn,
+                        timestamp: self.state.command_index,
+                    });
+                    events.push(ev_log(format!(
+                        "{spell_label} gives +{power}/+{toughness} to each affected creature"
+                    )));
+                }
                 SpellEffectKind::PutCounters {
                     counter,
                     count,
@@ -2578,7 +2686,7 @@ impl GameEngine {
                         }
                     }
                 }
-                SpellEffectKind::CounterTargetSpell => {
+                SpellEffectKind::CounterTargetSpell { .. } => {
                     if let Some(&tid) = targets.first() {
                         if let Some(pos) = self.state.stack.iter().position(|s| s.id == tid) {
                             let st = self.state.stack.remove(pos);
@@ -2609,7 +2717,7 @@ impl GameEngine {
                         }
                     }
                 }
-                SpellEffectKind::CopyTargetSpell { count } => {
+                SpellEffectKind::CopyTargetSpell { count, .. } => {
                     // CR 707.10: create `count` copies of the target spell on the stack, each
                     // controlled by this spell's controller. The copy is not cast (no mana/cast
                     // triggers) and ceases to exist after resolving (handled by `is_copy`). It uses
@@ -4377,6 +4485,11 @@ impl GameEngine {
     /// Emit a game event and enqueue all matching triggered abilities (CR 603.3b APNAP order).
     /// Replaces the old per-condition `fire_*` helpers.
     fn fire_triggers(&mut self, event: GameEvent, events: &mut Vec<rv1::RuledEvent>) {
+        // CR 604.3: static anthem abilities take effect the moment their source enters; emit their
+        // continuous effects here, on the same ETB seam that collects triggered abilities.
+        if let GameEvent::EntersBattlefield { object_id } = &event {
+            self.emit_static_abilities_on_enter(*object_id);
+        }
         let triggers = self.collect_triggers(&event);
         for (source_id, card_id, controller, ability_index, ability_text) in triggers {
             self.push_trigger(
@@ -5218,6 +5331,30 @@ pub(crate) fn permanent_moved_event(
     }
 }
 
+/// Resolve an [`AnthemFilter`] into an [`AffectedScope`] for a continuous effect, given the
+/// effect's `controller` and the source permanent `source`. Shared by static anthems
+/// (`AnthemPt`, source on the battlefield) and one-shot mass pumps (`PumpAll`, `source` is the
+/// resolving spell). `exclude_self` only applies when the source persists, so a spell passes a
+/// `source` that is harmlessly never on the battlefield as a creature.
+fn resolve_anthem_scope(
+    filter: &AnthemFilter,
+    controller: PlayerId,
+    source: ObjectId,
+) -> AffectedScope {
+    AffectedScope::CreaturesMatching {
+        controller: filter
+            .controller
+            .map(|AnthemController::YouControl| controller),
+        subtype: filter.subtype.clone(),
+        color: filter.color,
+        exclude: if filter.exclude_self {
+            Some(source)
+        } else {
+            None
+        },
+    }
+}
+
 fn move_object_to_zone(state: &mut GameState, oid: ObjectId, z: Zone) -> Result<(), EngineError> {
     let owner = state
         .objects
@@ -5617,8 +5754,71 @@ fn target_filter_legal(
                 _ => {}
             }
         }
+        // CR 105/202.2: "nonblack", "nonwhite", … — reject a target of the excluded color.
+        if let Some(c) = filter.not_color {
+            match state.objects.get(&tid) {
+                Some(obj)
+                    if registry
+                        .get(&obj.card_id)
+                        .is_some_and(|d| d.colors().contains(&c)) =>
+                {
+                    return false
+                }
+                None => return false,
+                _ => {}
+            }
+        }
+        // CR 508/509: "target attacking or blocking creature" — must be in combat right now.
+        if filter.attacking_or_blocking && !is_attacking_or_blocking(state, tid) {
+            return false;
+        }
     }
     true
+}
+
+/// CR 508/509: true if `oid` is currently an attacker or a blocker in the active combat.
+fn is_attacking_or_blocking(state: &GameState, oid: ObjectId) -> bool {
+    let Some(combat) = &state.combat else {
+        return false;
+    };
+    combat.attacking.contains(&oid) || combat.blockers.values().any(|bs| bs.contains(&oid))
+}
+
+/// CR 701.5/707.10: legality of `tid` as the target of a counter/copy spell. The object must be a
+/// spell on the stack (not an activated/triggered ability), and — when `spell_filter` is `Some` —
+/// must be a spell of that type (Essence Scatter = Creature, Negate = Noncreature, Twincast =
+/// InstantOrSorcery). `None` accepts any spell (Counterspell).
+fn stack_spell_target_legal(
+    state: &GameState,
+    registry: &CardRegistry,
+    tid: ObjectId,
+    spell_filter: Option<SpellTypeFilter>,
+) -> bool {
+    let Some(item) = state
+        .stack
+        .iter()
+        .find(|s| s.id == tid && s.ability_text.is_none())
+    else {
+        return false;
+    };
+    let Some(filter) = spell_filter else {
+        return true;
+    };
+    let Some(face) = registry
+        .get(&item.card_id)
+        .and_then(|d| d.face(item.face_index))
+    else {
+        return false;
+    };
+    match filter {
+        SpellTypeFilter::Creature => face.is_creature,
+        SpellTypeFilter::Instant => face.is_instant,
+        SpellTypeFilter::Sorcery => face.is_sorcery,
+        SpellTypeFilter::InstantOrSorcery => face.is_instant || face.is_sorcery,
+        SpellTypeFilter::Enchantment => face.is_enchantment,
+        SpellTypeFilter::Artifact => face.is_artifact,
+        SpellTypeFilter::Noncreature => !face.is_creature,
+    }
 }
 
 /// Human-readable counter name for game-log messages (CR 122.1).
@@ -5681,12 +5881,14 @@ fn effect_target_legal_at_resolution(
                 && object_targetable_by(state, registry, tid, caster)
         }
         // CR 115.2 / 707.10b: counter and copy effects target *spells* on the stack, not
-        // activated/triggered abilities. (Both abilities and copies carry `ability_text` /
-        // `is_copy`; a copy is itself a spell, so it stays a legal target for either.)
-        SpellEffectKind::CounterTargetSpell | SpellEffectKind::CopyTargetSpell { .. } => state
-            .stack
-            .iter()
-            .any(|s| s.id == tid && s.ability_text.is_none()),
+        // activated/triggered abilities. The optional `spell_filter` further restricts which
+        // spell types are legal (Essence Scatter, Negate, Twincast).
+        SpellEffectKind::CounterTargetSpell { spell_filter } => {
+            stack_spell_target_legal(state, registry, tid, *spell_filter)
+        }
+        SpellEffectKind::CopyTargetSpell { spell_filter, .. } => {
+            stack_spell_target_legal(state, registry, tid, *spell_filter)
+        }
         _ => true,
     }
 }
@@ -5707,7 +5909,7 @@ fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
         | SpellEffectKind::TargetPlayerLosesLife { .. }
         | SpellEffectKind::MillTargetPlayer { .. }
         | SpellEffectKind::TapTarget { .. }
-        | SpellEffectKind::CounterTargetSpell
+        | SpellEffectKind::CounterTargetSpell { .. }
         | SpellEffectKind::CopyTargetSpell { .. } => true,
         _ => false,
     }
@@ -5820,10 +6022,11 @@ fn validate_effect_targets(
         // Counter/copy target *spells*; they are never put on an ability, so this ability-only
         // validator only needs them present for exhaustiveness (spell targets go through
         // `spell_target_legality_error`).
-        | SpellEffectKind::CounterTargetSpell
+        | SpellEffectKind::CounterTargetSpell { .. }
         | SpellEffectKind::CopyTargetSpell { .. }
         | SpellEffectKind::DestroyAll { .. }
         | SpellEffectKind::DamageAll { .. }
+        | SpellEffectKind::PumpAll { .. }
         | SpellEffectKind::CreateTokens { .. }
         // CR 605.1a: a mana ability is untargeted by definition.
         | SpellEffectKind::ProduceMana { .. }
@@ -5923,14 +6126,21 @@ fn spell_target_legality_error(
                 ));
             }
         }
-        // CR 115.2 / 707.10b: counter and copy effects target spells, not abilities.
-        SpellEffectKind::CounterTargetSpell | SpellEffectKind::CopyTargetSpell { .. }
-            if !state
-                .stack
-                .iter()
-                .any(|s| s.id == tid && s.ability_text.is_none()) =>
+        // CR 115.2 / 707.10b: counter and copy effects target spells, not abilities. The optional
+        // `spell_filter` further restricts the spell type (Essence Scatter, Negate, Twincast).
+        SpellEffectKind::CounterTargetSpell { spell_filter }
+            if !stack_spell_target_legal(state, registry, tid, *spell_filter) =>
         {
-            return Err(EngineError::Illegal("target must be a spell on the stack"));
+            return Err(EngineError::Illegal(
+                "target must be a spell of the required type on the stack",
+            ));
+        }
+        SpellEffectKind::CopyTargetSpell { spell_filter, .. }
+            if !stack_spell_target_legal(state, registry, tid, *spell_filter) =>
+        {
+            return Err(EngineError::Illegal(
+                "target must be a spell of the required type on the stack",
+            ));
         }
         _ => {}
     }

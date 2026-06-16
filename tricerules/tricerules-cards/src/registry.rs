@@ -98,6 +98,17 @@ impl CardRegistry {
                         }
                     })?;
                 }
+                // CR 604.2: static abilities exist only on permanents (they generate continuous
+                // effects while the source is on the battlefield). An instant/sorcery with one is
+                // invalid data — its "anthem" belongs in `spell_effect` as a one-shot `PumpAll`.
+                if !face.static_abilities.is_empty() && (face.is_instant || face.is_sorcery) {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason:
+                            "static_abilities are only valid on permanents (not instant/sorcery)"
+                                .into(),
+                    });
+                }
                 for aa in face.activated_abilities {
                     aa.effect
                         .validate(EffectContext::Ability)
@@ -238,8 +249,7 @@ mod tests {
                 amount: Amount::Fixed(3),
                 target: TargetFilter {
                     kind: TargetKind::AnyTarget,
-                    not_artifact: false,
-                    tapped: None,
+                    ..Default::default()
                 },
             }]
         );
@@ -249,8 +259,7 @@ mod tests {
                 count: 7,
                 target: TargetFilter {
                     kind: TargetKind::OpponentPlayer,
-                    not_artifact: false,
-                    tapped: None,
+                    ..Default::default()
                 },
             }]
         );

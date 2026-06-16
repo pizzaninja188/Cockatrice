@@ -1,0 +1,11 @@
+(
+  id: "glorious_anthem",
+  name: "Glorious Anthem",
+  mana_cost: "{1}{W}{W}",
+  types: ["Enchantment"],
+  // CR 604/613.4 layer 7c: "Creatures you control get +1/+1." Static anthem, active while on
+  // the battlefield; drains when it leaves.
+  static_abilities: [
+    AnthemPt(filter: (controller: YouControl), delta_power: 1, delta_toughness: 1),
+  ],
+)

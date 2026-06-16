@@ -1,6 +1,7 @@
 use crate::mana::ManaCost;
 use crate::primitives::{
-    ActivatedAbilityDef, Color, Keyword, PermanentTypeFilter, SpellEffectKind, TriggeredAbilityDef,
+    ActivatedAbilityDef, Color, Keyword, PermanentTypeFilter, SpellEffectKind, StaticAbilityDef,
+    TriggeredAbilityDef,
 };
 use serde::{Deserialize, Serialize};
 
@@ -56,6 +57,9 @@ pub struct CardFace {
     pub activated_abilities: Vec<ActivatedAbilityDef>,
     #[serde(default)]
     pub triggered_abilities: Vec<TriggeredAbilityDef>,
+    /// Static abilities (CR 604): anthems/lords. Omit or leave empty for cards with none.
+    #[serde(default)]
+    pub static_abilities: Vec<StaticAbilityDef>,
     // Derived type/supertype flags — same convention as CardDefinition (never authored in RON).
     #[serde(skip)]
     pub is_land: bool,
@@ -105,6 +109,7 @@ pub struct FaceRef<'a> {
     pub keywords: &'a [Keyword],
     pub activated_abilities: &'a [ActivatedAbilityDef],
     pub triggered_abilities: &'a [TriggeredAbilityDef],
+    pub static_abilities: &'a [StaticAbilityDef],
     pub is_land: bool,
     pub is_creature: bool,
     pub is_instant: bool,
@@ -192,6 +197,10 @@ pub struct CardDefinition {
     /// Triggered abilities (trigger condition + effect pairs). Omit or leave empty for cards with none.
     #[serde(default)]
     pub triggered_abilities: Vec<TriggeredAbilityDef>,
+    /// Static abilities (CR 604): anthems and lords (Glorious Anthem, Crusade, Bad Moon). Omit or
+    /// leave empty for cards with none. Emitted as a continuous effect on ETB, drained at LTB.
+    #[serde(default)]
+    pub static_abilities: Vec<StaticAbilityDef>,
     /// Implementation tracking only (ignored by the engine):
     /// `Some("what's missing")` = partially implemented; `None` = fully implemented.
     #[serde(default)]
@@ -251,6 +260,7 @@ impl CardDefinition {
                     keywords: &self.keywords,
                     activated_abilities: &self.activated_abilities,
                     triggered_abilities: &self.triggered_abilities,
+                    static_abilities: &self.static_abilities,
                     is_land: self.is_land,
                     is_creature: self.is_creature,
                     is_instant: self.is_instant,
@@ -275,6 +285,7 @@ impl CardDefinition {
             keywords: &f.keywords,
             activated_abilities: &f.activated_abilities,
             triggered_abilities: &f.triggered_abilities,
+            static_abilities: &f.static_abilities,
             is_land: f.is_land,
             is_creature: f.is_creature,
             is_instant: f.is_instant,

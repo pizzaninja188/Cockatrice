@@ -1,0 +1,8 @@
+(
+  id: "divine_verdict",
+  name: "Divine Verdict",
+  mana_cost: "{3}{W}",
+  types: ["Instant"],
+  // "Destroy target attacking or blocking creature." (CR 508/509).
+  spell_effect: [DestroyTarget(target: (kind: Creature, attacking_or_blocking: true))],
+)

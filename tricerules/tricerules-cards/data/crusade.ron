@@ -1,0 +1,11 @@
+(
+  id: "crusade",
+  name: "Crusade",
+  mana_cost: "{W}{W}",
+  types: ["Enchantment"],
+  // CR 604/613.4 layer 7c: "White creatures get +1/+1." Color-filtered lord; affects every
+  // player's white creatures (symmetrical), so no controller restriction.
+  static_abilities: [
+    AnthemPt(filter: (color: White), delta_power: 1, delta_toughness: 1),
+  ],
+)
