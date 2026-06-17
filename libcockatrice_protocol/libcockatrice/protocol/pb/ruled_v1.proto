@@ -362,6 +362,10 @@ message RuledPerPlayerView {
   // for each ability, in the same order. Derived from AbilityCost (Tap/Sacrifice → "", Mana/TapAndMana → "4"/"R"/etc.).
   // Clients use this for mana payment without re-parsing the display text.
   repeated string battlefield_activated_ability_mana_costs = 20;
+  // Parallel array to `battlefield`: human-readable counter annotation for each permanent
+  // (e.g. "1 +1/+1 counter(s)"), one line per counter kind. Empty string for permanents with
+  // no counters. Clients overlay this on the card annotation alongside ruled damage.
+  repeated string battlefield_counters_annotation = 21;
 }
 
 message ZoneViewSync {
