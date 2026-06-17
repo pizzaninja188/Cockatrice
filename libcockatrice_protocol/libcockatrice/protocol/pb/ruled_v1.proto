@@ -340,8 +340,9 @@ message StackPushed {
   // Chosen targets for this spell/ability while it is on the stack (object ids; player targets
   // use the engine's PlayerId as object_id, same as CastSpell.targets).
   repeated TargetRef targets = 3;
-  // Present for activated/triggered abilities; absent (empty string) for spells.
-  // The client overlays this text on the stack card as an annotation.
+  // Text the client overlays on the stack card as an annotation: the ability text for
+  // activated/triggered abilities, or "X = N" for an X spell (CR 107.3). Empty for plain
+  // spells. card_id (below) distinguishes a spell (non-empty) from an ability (empty).
   string ability_annotation = 4;
   // Engine card id of the pushed spell (e.g. "lightning_bolt"); empty for abilities,
   // which have no physical card on the stack. Resolve to an Oracle name via CardCatalog.

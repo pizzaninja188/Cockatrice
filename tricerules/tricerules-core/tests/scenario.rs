@@ -590,6 +590,8 @@ fn cast_lightning_bolt_resolves_to_graveyard_after_double_pass() {
     // Spells carry their engine card id so the relay can bind the physical stack card
     // through the CardCatalog instead of guessing from the display description.
     assert_eq!(stack_push.card_id, "lightning_bolt");
+    // A non-X spell carries no X annotation (the client overlays nothing).
+    assert!(stack_push.ability_annotation.is_empty());
 
     e.apply_command(0, &pass()).expect("caster pass");
     let resolved = e.apply_command(1, &pass()).expect("opponent pass");
@@ -639,11 +641,26 @@ fn blaze_deals_chosen_x_damage_to_target() {
     );
 
     let blaze_idx = hand_index_for_card(&e, 0, "blaze");
-    e.apply_command(0, &cast_spell_x(blaze_idx, target_player(1), 3))
+    let cast = e
+        .apply_command(0, &cast_spell_x(blaze_idx, target_player(1), 3))
         .expect("cast blaze with X=3");
     let blaze_oid = e.state.stack.last().expect("spell on stack").id;
     assert_eq!(e.state.stack.last().unwrap().chosen_x, 3);
     assert_eq!(e.state.players[0].mana_pool.red, 0, "X mana fully paid");
+    // CR 107.3: the chosen X is surfaced on the stack card as an annotation for the client.
+    let blaze_push = cast
+        .events
+        .iter()
+        .find_map(|ev| match &ev.ev {
+            Some(Ev::StackPushed(s)) => Some(s),
+            _ => None,
+        })
+        .expect("blaze stack pushed");
+    assert_eq!(blaze_push.ability_annotation, "X = 3");
+    assert_eq!(
+        blaze_push.card_id, "blaze",
+        "spell carries its engine card id"
+    );
 
     e.apply_command(0, &pass()).expect("caster pass");
     e.apply_command(1, &pass()).expect("opponent pass");
@@ -683,8 +700,19 @@ fn blaze_x_zero_deals_no_damage() {
     );
 
     let blaze_idx = hand_index_for_card(&e, 0, "blaze");
-    e.apply_command(0, &cast_spell_x(blaze_idx, target_player(1), 0))
+    let cast = e
+        .apply_command(0, &cast_spell_x(blaze_idx, target_player(1), 0))
         .expect("cast blaze with X=0");
+    // X=0 is still an X spell, so the stack card is annotated "X = 0".
+    let blaze_push = cast
+        .events
+        .iter()
+        .find_map(|ev| match &ev.ev {
+            Some(Ev::StackPushed(s)) => Some(s),
+            _ => None,
+        })
+        .expect("blaze stack pushed");
+    assert_eq!(blaze_push.ability_annotation, "X = 0");
     e.apply_command(0, &pass()).expect("caster pass");
     e.apply_command(1, &pass()).expect("opponent pass");
     assert!(e.state.stack.is_empty());

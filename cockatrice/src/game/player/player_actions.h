@@ -247,8 +247,12 @@ private:
         QVector<quint32> selectedTargetOids;
         bool waitingForTarget = false;
         bool valid = false;
-        // CR 107.3: value chosen for {X} when the cost has an {X} pip; 0 otherwise. Chosen up
-        // front (before targets/mana, CR 601.2b) and sent on the CastSpell command.
+        // CR 107.3: value chosen for X when the cost has an X pip; 0 otherwise. The number of
+        // X pips in the cost (folded into remainingCost's generic bucket at parse time); 0 when
+        // the cost has no X. Used to defer the X prompt until after targeting.
+        int xPips = 0;
+        // Value chosen for X, sent on the CastSpell command. Chosen after targets but before
+        // paying mana (CR 601.2b orders X before costs; we prompt for targets first for UX).
         int xValue = 0;
         // CR 107.4f: pip indices (into the full mana cost) the player chose to pay with life
         // for Phyrexian pips. Sent as FlexPipPayment{pay_life} on the CastSpell command. Hybrid
@@ -284,6 +288,9 @@ private:
     // Returns false if the player cancelled. Mutates pendingRuledSpellCast remainingCost + life.
     bool resolveFlexiblePipsForPendingSpell(const QString &rawCost, const QString &cardName);
     void clearPendingRuledSpellCast();
+    // Prompts for the value of X when the pending spell's cost has X pips, tops up the generic
+    // mana bucket, and records xValue. Returns false if the player cancelled (cast is aborted).
+    bool promptForRuledSpellXIfNeeded();
     bool completePendingRuledSpellCast();
     bool tryReducePendingSpellRemainingCostOnePip(bool colorlessMana, QChar coloredMana);
     void finishPendingSpellManaPaymentStep();
