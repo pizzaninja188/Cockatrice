@@ -1253,25 +1253,32 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                     sdbgLog(QStringLiteral("StackPushed localPid=%1 oid=%2 isAbility=%3 desc='%4' targets=[%5]")
                                                 .arg(localPid)
                                                 .arg(sp.object_id())
-                                                .arg(!sp.ability_annotation().empty())
+                                                .arg(sp.card_id().empty())
                                                 .arg(QString::fromStdString(sp.description()))
                                                 .arg(targetStr));
                                 }
                                 if (!sp.ability_annotation().empty()) {
-                                    // A triggered ability was just placed on the stack — the pending
-                                    // trigger target has been chosen and is no longer pending.
-                                    hasPendingTrigger = false;
-                                    // Record the source permanent so the targeting arrow starts from it.
-                                    if (pendingTriggerSourceOid != 0) {
-                                        ruledStackSourceOidByStackOid.insert(sp.object_id(), pendingTriggerSourceOid);
-                                    }
+                                    // Overlay the annotation on the stack card: an X value for an
+                                    // X spell ("X = N", CR 107.3) or the ability text for an ability.
                                     ruledStackAnnotationByOid.insert(
                                         sp.object_id(),
                                         QString::fromStdString(sp.ability_annotation()));
-                                    createSyntheticAbilityStackCard(
-                                        sp.object_id(),
-                                        QString::fromStdString(sp.description()),
-                                        pendingTriggerControllerPlayerId);
+                                    // Only abilities (no physical card_id) need a synthetic stack card
+                                    // and clear the pending trigger — a spell already has a real
+                                    // CardItem on the stack, so skip that path for it.
+                                    if (sp.card_id().empty()) {
+                                        // A triggered ability was just placed on the stack — the pending
+                                        // trigger target has been chosen and is no longer pending.
+                                        hasPendingTrigger = false;
+                                        // Record the source permanent so the targeting arrow starts from it.
+                                        if (pendingTriggerSourceOid != 0) {
+                                            ruledStackSourceOidByStackOid.insert(sp.object_id(), pendingTriggerSourceOid);
+                                        }
+                                        createSyntheticAbilityStackCard(
+                                            sp.object_id(),
+                                            QString::fromStdString(sp.description()),
+                                            pendingTriggerControllerPlayerId);
+                                    }
                                 }
                                 ruledStackTrackingDirty = true;
                             }

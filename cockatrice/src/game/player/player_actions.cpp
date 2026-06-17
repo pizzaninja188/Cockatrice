@@ -211,6 +211,31 @@ void PlayerActions::clearPendingRuledSpellCast()
         emit ruledSpellCastPendingChanged(false);
     }
 }
+
+bool PlayerActions::promptForRuledSpellXIfNeeded()
+{
+    // No X pips, or X already chosen (xPips zeroed below): nothing to do.
+    if (pendingRuledSpellCast.xPips <= 0) {
+        return true;
+    }
+    bool ok = false;
+    const int chosenX = QInputDialog::getInt(nullptr, tr("Choose X"),
+                                             tr("Value of X for %1:").arg(pendingRuledSpellCast.cardName), 0, 0, 99, 1,
+                                             &ok);
+    if (!ok) {
+        clearPendingRuledSpellCast();
+        return false; // user cancelled the cast at the X prompt
+    }
+    pendingRuledSpellCast.xValue = chosenX;
+    // Each X pip already contributed 1 to the generic bucket; convert that to chosenX.
+    pendingRuledSpellCast.remainingCost[QChar('X')] += pendingRuledSpellCast.xPips * (chosenX - 1);
+    if (pendingRuledSpellCast.remainingCost.value(QChar('X'), 0) <= 0) {
+        pendingRuledSpellCast.remainingCost.remove(QChar('X'));
+    }
+    pendingRuledSpellCast.xPips = 0; // guard against double-prompting
+    return true;
+}
+
 void PlayerActions::cancelPendingRuledSpellCast()
 {
     if (!pendingRuledSpellCast.valid) {
@@ -938,26 +963,13 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
     pendingRuledSpellCast.selectedTargetOids.clear();
     pendingRuledSpellCast.xValue = 0;
 
-    // CR 107.3 / 601.2b: if the cost has an {X} pip, the value of X is chosen first — before
-    // targets and before paying costs. parseSimpleManaCost folds each {X} into the generic
-    // bucket as a single pip, so once X is chosen we top that bucket up to xPips * X generic.
+    // CR 107.3: record how many X pips the cost has; the value of X is chosen later, after a
+    // target is picked (see promptForRuledSpellXIfNeeded). parseSimpleManaCost folds each X pip
+    // into the generic bucket as a single pip, so once X is chosen we top that bucket up to
+    // xPips * X generic. Oracle (cards.xml) stores costs unbraced ("XR"), so count the X symbol
+    // directly rather than the Scryfall brace form — X is only ever the variable pip in a cost.
     const QString rawCost = card->getCardInfo().getManaCost();
-    const int xPips = rawCost.count(QStringLiteral("{X}"));
-    if (xPips > 0) {
-        bool ok = false;
-        const int chosenX = QInputDialog::getInt(
-            nullptr, tr("Choose X"), tr("Value of X for %1:").arg(card->getName()), 0, 0, 99, 1, &ok);
-        if (!ok) {
-            clearPendingRuledSpellCast();
-            return true; // user cancelled the cast at the X prompt
-        }
-        pendingRuledSpellCast.xValue = chosenX;
-        // Each {X} pip already contributed 1 to the generic bucket; convert that to chosenX.
-        pendingRuledSpellCast.remainingCost[QChar('X')] += xPips * (chosenX - 1);
-        if (pendingRuledSpellCast.remainingCost.value(QChar('X'), 0) <= 0) {
-            pendingRuledSpellCast.remainingCost.remove(QChar('X'));
-        }
-    }
+    pendingRuledSpellCast.xPips = rawCost.count(QLatin1Char('X'), Qt::CaseInsensitive);
 
     pendingRuledSpellCast.waitingForTarget = geh->isRuledSpellCastNeedsTargetForHandIndex(ruledHandIndex);
     emit landTapUndoAvailableChanged(false);
@@ -973,6 +985,11 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
                 tr("Cast %1 selected. Select a target card, or press Cancel.").arg(card->getName()));
         }
         return true;
+    }
+
+    // No target needed: choose X now (still before paying mana), then size the payment.
+    if (!promptForRuledSpellXIfNeeded()) {
+        return true; // cancelled at the X prompt; cast aborted
     }
 
     int totalRequired = 0;
@@ -1033,6 +1050,11 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
     pendingRuledSpellCast.selectedTargetOids = {targetOid};
     pendingRuledSpellCast.waitingForTarget = false;
     emit ruledSpellTargetingChanged(false, {});
+
+    // CR 601.2b: choose X after the target is locked in, before paying mana.
+    if (!promptForRuledSpellXIfNeeded()) {
+        return true; // cancelled at the X prompt; cast aborted
+    }
 
     int totalRequired = 0;
     for (auto it = pendingRuledSpellCast.remainingCost.constBegin(); it != pendingRuledSpellCast.remainingCost.constEnd();
@@ -1114,6 +1136,11 @@ bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
     pendingRuledSpellCast.selectedTargetOids = {targetOid};
     pendingRuledSpellCast.waitingForTarget = false;
     emit ruledSpellTargetingChanged(false, {});
+
+    // CR 601.2b: choose X after the target is locked in, before paying mana.
+    if (!promptForRuledSpellXIfNeeded()) {
+        return true; // cancelled at the X prompt; cast aborted
+    }
 
     int totalRequired = 0;
     for (auto it = pendingRuledSpellCast.remainingCost.constBegin(); it != pendingRuledSpellCast.remainingCost.constEnd();

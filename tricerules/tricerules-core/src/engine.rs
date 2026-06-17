@@ -2949,12 +2949,19 @@ impl GameEngine {
             "P{} casts {}{}{}",
             player, def.name, x_line, tgt_line
         )));
+        // CR 107.3: surface the locked-in X on the stack card so players can read the spell's
+        // size at a glance. Empty for non-X spells (the client overlays nothing).
+        let x_annotation = if has_x {
+            format!("X = {chosen_x}")
+        } else {
+            String::new()
+        };
         batch.events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
                 object_id: oid,
                 description: def_name,
                 targets: targets.to_vec(),
-                ability_annotation: String::new(),
+                ability_annotation: x_annotation,
                 card_id: cast_card_id.clone(),
             })),
         });
