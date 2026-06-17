@@ -3238,7 +3238,7 @@ impl GameEngine {
             return Err(EngineError::Illegal("x_value given but cost has no {X}"));
         }
         let chosen_x = if has_x { x_value } else { 0 };
-        pay_mana(&mut self.state, idx, &face_mana, chosen_x, flex_payments)?;
+        let life_paid = pay_mana(&mut self.state, idx, &face_mana, chosen_x, flex_payments)?;
 
         self.state.players[idx].hand.retain(|&x| x != oid);
         let trefs: Vec<ObjectId> = targets.iter().map(|t| t.object_id).collect();
@@ -3285,6 +3285,19 @@ impl GameEngine {
         } else {
             String::new()
         };
+        // CR 107.4f: surface Phyrexian life paid so the client updates the life total.
+        if life_paid > 0 {
+            batch.events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                    player_id: player,
+                    new_total: self.state.players[idx].life,
+                    delta: -(life_paid as i32),
+                })),
+            });
+            batch.events.push(ev_log(format!(
+                "P{player} pays {life_paid} life (Phyrexian mana)."
+            )));
+        }
         batch.events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
                 object_id: oid,
@@ -3374,8 +3387,9 @@ impl GameEngine {
         // CR 602.2: validate targets BEFORE paying cost.
         validate_effect_targets(&self.state, self.registry, player, &ability.effect, targets)?;
 
-        // Pay the cost. Track sacrifice separately so we can emit a PermanentMoved event below.
-        let sacrifice_ev = self.pay_ability_cost(
+        // Pay the cost. Track sacrifice separately so we can emit a PermanentMoved event below,
+        // and Phyrexian life so we can emit a LifeChanged event (CR 107.4f).
+        let (sacrifice_ev, life_paid) = self.pay_ability_cost(
             player,
             idx,
             permanent_id,
@@ -3419,6 +3433,19 @@ impl GameEngine {
         batch.events.push(ev_log(format!(
             "P{player} activates {card_name}: {ability_text}{tgt_line}"
         )));
+        // CR 107.4f: surface Phyrexian life paid so the client updates the life total.
+        if life_paid > 0 {
+            batch.events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                    player_id: player,
+                    new_total: self.state.players[idx].life,
+                    delta: -(life_paid as i32),
+                })),
+            });
+            batch.events.push(ev_log(format!(
+                "P{player} pays {life_paid} life (Phyrexian mana)."
+            )));
+        }
         if let Some(ev) = sacrifice_ev {
             batch.events.push(ev);
         }
@@ -3450,16 +3477,17 @@ impl GameEngine {
         card_id: &str,
         cost: &AbilityCost,
         flex_payments: &[rv1::FlexPipPayment],
-    ) -> Result<Option<rv1::RuledEvent>, EngineError> {
+    ) -> Result<(Option<rv1::RuledEvent>, u32), EngineError> {
+        // Returns (sacrifice PermanentMoved event, Phyrexian life paid for the mana cost).
         match cost {
             AbilityCost::Tap => {
                 self.tap_for_cost(permanent_id, card_id)?;
-                Ok(None)
+                Ok((None, 0))
             }
             AbilityCost::Mana(cost) => {
                 // X in activated-ability costs is deferred; abilities always pass X=0.
-                pay_mana(&mut self.state, idx, cost, 0, flex_payments)?;
-                Ok(None)
+                let life_paid = pay_mana(&mut self.state, idx, cost, 0, flex_payments)?;
+                Ok((None, life_paid))
             }
             AbilityCost::TapAndMana(cost) => {
                 // CR 601.2h: a cost is paid atomically. Verify the source *can* be tapped before
@@ -3468,9 +3496,9 @@ impl GameEngine {
                 // / summoning sick) would corrupt the player's mana pool. Checking tappability up
                 // front also keeps the permanent untapped on a mana shortfall (pay_mana is atomic).
                 self.check_tappable(permanent_id, card_id)?;
-                pay_mana(&mut self.state, idx, cost, 0, flex_payments)?;
+                let life_paid = pay_mana(&mut self.state, idx, cost, 0, flex_payments)?;
                 self.tap_for_cost(permanent_id, card_id)?;
-                Ok(None)
+                Ok((None, life_paid))
             }
             AbilityCost::Sacrifice => {
                 let owner = self
@@ -3480,12 +3508,15 @@ impl GameEngine {
                     .map(|o| o.owner)
                     .unwrap_or(player);
                 sacrifice_permanent(&mut self.state, permanent_id)?;
-                Ok(Some(permanent_moved_event(
-                    &self.state,
-                    permanent_id,
-                    owner,
-                    rv1::permanent_moved::Destination::Graveyard,
-                )))
+                Ok((
+                    Some(permanent_moved_event(
+                        &self.state,
+                        permanent_id,
+                        owner,
+                        rv1::permanent_moved::Destination::Graveyard,
+                    )),
+                    0,
+                ))
             }
         }
     }
@@ -3555,7 +3586,7 @@ impl GameEngine {
             .ok_or(EngineError::Illegal("invalid mana option"))?;
 
         // Pay the cost first (CR 602.2). On failure nothing has changed yet (atomic).
-        let sacrifice_ev = self.pay_ability_cost(
+        let (sacrifice_ev, life_paid) = self.pay_ability_cost(
             player,
             idx,
             permanent_id,
@@ -3586,6 +3617,19 @@ impl GameEngine {
         )));
         if let Some(ev) = sacrifice_ev {
             batch.events.push(ev);
+        }
+        // CR 107.4f: surface Phyrexian life paid so the client updates the life total.
+        if life_paid > 0 {
+            batch.events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                    player_id: player,
+                    new_total: self.state.players[idx].life,
+                    delta: -(life_paid as i32),
+                })),
+            });
+            batch.events.push(ev_log(format!(
+                "P{player} pays {life_paid} life (Phyrexian mana)."
+            )));
         }
         // The pool update reaches clients via the per-batch ManaPoolUpdated emit in apply_command.
         // No stack push, no priority change, no passes_since_stack_change reset (CR 605.3a–b).
@@ -5519,13 +5563,15 @@ fn solve_flex(pool: PoolVec, flex: &[FlexPip], idx: usize, generic: u32) -> Opti
     }
 }
 
+/// Pays `cost` and returns the amount of life spent on Phyrexian pips (CR 107.4f), so the caller
+/// can emit a `LifeChanged` event. Zero when no Phyrexian pip was paid with life.
 fn pay_mana(
     state: &mut GameState,
     player_idx: usize,
     cost: &ManaCost,
     x_value: u32,
     flex_payments: &[rv1::FlexPipPayment],
-) -> Result<(), EngineError> {
+) -> Result<u32, EngineError> {
     // Mana must already be in the player's pool (added via AddManaToPool / land taps).
     // The engine never auto-taps lands — the client is responsible for sending AddManaToPool
     // before casting a spell or activating an ability.
@@ -5611,7 +5657,7 @@ fn pay_mana(
     pool.green = remaining[4];
     pool.colorless = remaining[POOL_C];
     state.players[player_idx].life -= life_cost as i32;
-    Ok(())
+    Ok(life_cost)
 }
 
 /// Player or creature permanent on the battlefield (matches cast validation for `bolt`).
