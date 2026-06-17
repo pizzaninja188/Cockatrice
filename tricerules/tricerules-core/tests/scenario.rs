@@ -3160,22 +3160,31 @@ fn phyrexian_mutagenic_growth_paid_with_life() {
     let life_before = e.state.players[0].life;
     let idx = hand_index_for_card(&e, 0, "mutagenic_growth");
     // No mana added: pay the {G/P} pip (pip index 0) with 2 life.
-    e.apply_command(
-        0,
-        &cast_spell_flex(
-            idx,
-            vec![TargetRef { object_id: bear }],
-            vec![FlexPipPayment {
-                pip_index: 0,
-                pay_life: true,
-            }],
-        ),
-    )
-    .expect("cast Mutagenic Growth paying life");
+    let batch = e
+        .apply_command(
+            0,
+            &cast_spell_flex(
+                idx,
+                vec![TargetRef { object_id: bear }],
+                vec![FlexPipPayment {
+                    pip_index: 0,
+                    pay_life: true,
+                }],
+            ),
+        )
+        .expect("cast Mutagenic Growth paying life");
     assert_eq!(
         e.state.players[0].life,
         life_before - 2,
         "paying Phyrexian mana costs 2 life"
+    );
+    // The life payment must be surfaced as a LifeChanged event so the client updates the total.
+    let life_events = life_changes_in(&batch);
+    assert!(
+        life_events
+            .iter()
+            .any(|lc| lc.player_id == 0 && lc.delta == -2 && lc.new_total == life_before - 2),
+        "casting with Phyrexian life emits a LifeChanged event: {life_events:?}"
     );
     pass_both_players(&mut e);
     assert_eq!(e.effective_power(bear), Some(4), "2/2 + 2/2 = 4/4");

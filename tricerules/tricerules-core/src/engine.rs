@@ -2917,7 +2917,7 @@ impl GameEngine {
             return Err(EngineError::Illegal("x_value given but cost has no {X}"));
         }
         let chosen_x = if has_x { x_value } else { 0 };
-        pay_mana(
+        let life_paid = pay_mana(
             &mut self.state,
             idx,
             &def.mana_cost,
@@ -2961,6 +2961,19 @@ impl GameEngine {
             "P{} casts {}{}{}",
             player, def.name, x_line, tgt_line
         )));
+        // CR 107.4f: surface Phyrexian life paid so the client updates the life total.
+        if life_paid > 0 {
+            batch.events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                    player_id: player,
+                    new_total: self.state.players[idx].life,
+                    delta: -(life_paid as i32),
+                })),
+            });
+            batch.events.push(ev_log(format!(
+                "P{player} pays {life_paid} life (Phyrexian mana)."
+            )));
+        }
         batch.events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
                 object_id: oid,
@@ -3034,6 +3047,8 @@ impl GameEngine {
 
         // Pay the cost. Track sacrifice separately so we can emit a PermanentMoved event below.
         let mut sacrifice_ev: Option<rv1::RuledEvent> = None;
+        // CR 107.4f: Phyrexian life paid from the mana cost, emitted as LifeChanged below.
+        let mut life_paid = 0u32;
         match &ability.cost {
             AbilityCost::Tap => {
                 let o = self
@@ -3059,12 +3074,12 @@ impl GameEngine {
             }
             AbilityCost::Mana(cost) => {
                 // X in activated-ability costs is deferred; abilities always pass X=0.
-                pay_mana(&mut self.state, idx, cost, 0, flex_payments)?;
+                life_paid = pay_mana(&mut self.state, idx, cost, 0, flex_payments)?;
             }
             AbilityCost::TapAndMana(cost) => {
                 // Check mana sufficiency BEFORE tapping so a failed payment leaves the
                 // permanent untapped (costs are paid atomically in MTG CR 601.2h).
-                pay_mana(&mut self.state, idx, cost, 0, flex_payments)?;
+                life_paid = pay_mana(&mut self.state, idx, cost, 0, flex_payments)?;
                 let o = self
                     .state
                     .objects
@@ -3135,6 +3150,19 @@ impl GameEngine {
         batch.events.push(ev_log(format!(
             "P{player} activates {card_name}: {ability_text}{tgt_line}"
         )));
+        // CR 107.4f: surface Phyrexian life paid so the client updates the life total.
+        if life_paid > 0 {
+            batch.events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                    player_id: player,
+                    new_total: self.state.players[idx].life,
+                    delta: -(life_paid as i32),
+                })),
+            });
+            batch.events.push(ev_log(format!(
+                "P{player} pays {life_paid} life (Phyrexian mana)."
+            )));
+        }
         if let Some(ev) = sacrifice_ev {
             batch.events.push(ev);
         }
@@ -4728,13 +4756,15 @@ fn solve_flex(pool: PoolVec, flex: &[FlexPip], idx: usize, generic: u32) -> Opti
     }
 }
 
+/// Pays `cost` and returns the amount of life spent on Phyrexian pips (CR 107.4f), so the caller
+/// can emit a `LifeChanged` event. Zero when no Phyrexian pip was paid with life.
 fn pay_mana(
     state: &mut GameState,
     player_idx: usize,
     cost: &ManaCost,
     x_value: u32,
     flex_payments: &[rv1::FlexPipPayment],
-) -> Result<(), EngineError> {
+) -> Result<u32, EngineError> {
     // Mana must already be in the player's pool (added via AddManaToPool / land taps).
     // The engine never auto-taps lands — the client is responsible for sending AddManaToPool
     // before casting a spell or activating an ability.
@@ -4820,7 +4850,7 @@ fn pay_mana(
     pool.green = remaining[4];
     pool.colorless = remaining[POOL_C];
     state.players[player_idx].life -= life_cost as i32;
-    Ok(())
+    Ok(life_cost)
 }
 
 /// Player or creature permanent on the battlefield (matches cast validation for `bolt`).

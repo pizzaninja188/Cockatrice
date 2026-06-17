@@ -88,6 +88,11 @@ public:
     [[nodiscard]] Command_RuledPayload *newRuledPayloadAddManaToPoolForLandName(const QString &manaCounterName);
     bool tryHandleRuledSpellTargetClick(CardItem *card);
     bool tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer);
+    /// CR 107.4f: clicking your own portrait while paying for a pending spell/ability with an
+    /// unpaid Phyrexian pip pays 2 life for it. Returns true if the click was consumed this way.
+    bool tryHandleRuledPhyrexianLifeClick(Player *clickedPlayer);
+    /// True when the local player has an unpaid Phyrexian pip and a self-portrait click would pay life.
+    [[nodiscard]] bool isAwaitingRuledPhyrexianLifeSelection() const;
     /// True when the local player must pick a player (not permanent) for the pending ruled cast.
     [[nodiscard]] bool isAwaitingRuledPlayerTargetSelection() const;
     /// True when an activated ability or triggered ability is waiting for a target (player click allowed).
@@ -220,6 +225,20 @@ public slots:
     void cardMenuAction();
 
 private:
+    // A flexible mana pip (CR 107.4d–f) parsed from a Scryfall brace cost, with its ordinal
+    // position so the engine can match the player's payment choice to the right pip.
+    struct RuledFlexPip
+    {
+        quint32 pipIndex = 0; // position among all pips in the cost ({G/U} in "{1}{G/U}" is index 1)
+        QChar colorA;         // first/only color letter (W/U/B/R/G)
+        QChar colorB;         // hybrid second color; null otherwise
+        int generic = 0;      // mono-hybrid generic alternative N ({2/W} -> 2); 0 if not mono-hybrid
+        bool phyrexian = false; // Phyrexian {C/P}: payable with the color or 2 life
+        // Mono-hybrid only: how many of `generic` have been paid so far with off-color/colorless
+        // mana. The pip is satisfied once it reaches `generic` (or earlier via the color).
+        int genericPaid = 0;
+    };
+
     struct PendingActivatedAbility
     {
         bool valid = false;
@@ -232,6 +251,12 @@ private:
         quint32 selectedTargetOid = 0;
         bool waitingForMana = false;
         QMap<QChar, int> remainingCost;
+        // CR 107.4d–f: unresolved flexible pips (hybrid/mono-hybrid/Phyrexian) in the ability
+        // cost. Resolved as mana is tapped (hybrid/mono) or via a self-portrait click (Phyrexian
+        // life), mirroring the spell-cast flow — no upfront prompt.
+        QVector<RuledFlexPip> flexPips;
+        // CR 107.4f: pip indices the player chose to pay with 2 life. Sent as FlexPipPayment.
+        QVector<quint32> lifePipIndices;
     };
 
     struct PendingRuledSpellCast
@@ -245,21 +270,12 @@ private:
         // CR 107.3: value chosen for {X} when the cost has an {X} pip; 0 otherwise. Chosen up
         // front (before targets/mana, CR 601.2b) and sent on the CastSpell command.
         int xValue = 0;
+        // CR 107.4d–f: unresolved flexible pips (hybrid/mono-hybrid/Phyrexian). Resolved as mana
+        // is tapped (hybrid/mono) or via a self-portrait click (Phyrexian life) — no upfront prompt.
+        QVector<RuledFlexPip> flexPips;
         // CR 107.4f: pip indices (into the full mana cost) the player chose to pay with life
-        // for Phyrexian pips. Sent as FlexPipPayment{pay_life} on the CastSpell command. Hybrid
-        // and mono-hybrid choices instead resolve into fixed entries in remainingCost.
+        // for Phyrexian pips. Sent as FlexPipPayment{pay_life} on the CastSpell command.
         QVector<quint32> lifePipIndices;
-    };
-
-    // A flexible mana pip (CR 107.4d–f) parsed from a Scryfall brace cost, with its ordinal
-    // position so the engine can match the player's payment choice to the right pip.
-    struct RuledFlexPip
-    {
-        quint32 pipIndex = 0; // position among all pips in the cost ({G/U} in "{1}{G/U}" is index 1)
-        QChar colorA;         // first/only color letter (W/U/B/R/G)
-        QChar colorB;         // hybrid second color; null otherwise
-        int generic = 0;      // mono-hybrid generic alternative N ({2/W} -> 2); 0 if not mono-hybrid
-        bool phyrexian = false; // Phyrexian {C/P}: payable with the color or 2 life
     };
 
     struct LandTapUndoEntry
@@ -275,9 +291,22 @@ private:
     static QMap<QChar, int> parseSimpleManaCost(const QString &manaCost);
     static QVector<RuledFlexPip> parseFlexPips(const QString &manaCost);
     static QString formatSimpleManaCost(const QMap<QChar, int> &cost);
-    // Prompt the player to resolve each flexible pip (CR 107.4d–f) into fixed mana / life.
-    // Returns false if the player cancelled. Mutates pendingRuledSpellCast remainingCost + life.
-    bool resolveFlexiblePipsForPendingSpell(const QString &rawCost, const QString &cardName);
+    // Render the still-unpaid cost, fixed pips plus any flexible pips ({G/U}, {2/W}, {B/P}).
+    static QString formatRemainingCost(const QMap<QChar, int> &fixed, const QVector<RuledFlexPip> &flex);
+    // Total pips still owed (fixed + flexible). Zero means the cost is fully paid.
+    static int totalRemainingForCost(const QMap<QChar, int> &fixed, const QVector<RuledFlexPip> &flex);
+    // True if `color` can satisfy `pip`'s colored alternative (either side of a hybrid, the
+    // single color of a mono-hybrid/Phyrexian pip).
+    static bool flexPipMatchesColor(const RuledFlexPip &pip, QChar color);
+    // True if any pip in `flex` is a Phyrexian pip still owing payment (mana or 2 life).
+    static bool flexHasPhyrexianPip(const QVector<RuledFlexPip> &flex);
+    // CR 107.4d–f: route one tapped mana into the cheapest still-open demand — a fixed colored
+    // pip, an untouched flexible pip's color, fixed generic, or a mono-hybrid generic alternative.
+    // Returns false if the mana can't be used (caller leaves it unspent). Mutates fixed + flex.
+    static bool applyManaPipToFlexibleCost(QMap<QChar, int> &fixed,
+                                           QVector<RuledFlexPip> &flex,
+                                           bool colorlessMana,
+                                           QChar coloredMana);
     void clearPendingRuledSpellCast();
     bool completePendingRuledSpellCast();
     bool tryReducePendingSpellRemainingCostOnePip(bool colorlessMana, QChar coloredMana);

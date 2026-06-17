@@ -39,8 +39,6 @@
 
 #include <QInputDialog>
 #include <QMenu>
-#include <QMessageBox>
-#include <QPushButton>
 
 // milliseconds in between triggers of the move top cards until action
 static constexpr int MOVE_TOP_CARD_UNTIL_INTERVAL = 100;
@@ -237,50 +235,102 @@ QVector<PlayerActions::RuledFlexPip> PlayerActions::parseFlexPips(const QString 
     return out;
 }
 
-bool PlayerActions::resolveFlexiblePipsForPendingSpell(const QString &rawCost, const QString &cardName)
+bool PlayerActions::flexPipMatchesColor(const RuledFlexPip &pip, QChar color)
 {
-    const QVector<RuledFlexPip> flexPips = parseFlexPips(rawCost);
-    for (const RuledFlexPip &pip : flexPips) {
-        QMessageBox box;
-        box.setIcon(QMessageBox::Question);
-        box.setWindowTitle(tr("Pay hybrid mana"));
-        QPushButton *colorBtn = nullptr;
-        QPushButton *altBtn = nullptr;
-        if (pip.phyrexian) {
-            // CR 107.4f: pay the color OR 2 life.
-            box.setText(tr("Pay {%1/P} for %2:").arg(pip.colorA).arg(cardName));
-            colorBtn = box.addButton(tr("Pay {%1}").arg(pip.colorA), QMessageBox::AcceptRole);
-            altBtn = box.addButton(tr("Pay 2 life"), QMessageBox::AcceptRole);
-        } else if (pip.generic > 0) {
-            // CR 107.4e: mono-hybrid — pay the color OR N generic.
-            box.setText(tr("Pay {%1/%2} for %3:").arg(pip.generic).arg(pip.colorA).arg(cardName));
-            colorBtn = box.addButton(tr("Pay {%1}").arg(pip.colorA), QMessageBox::AcceptRole);
-            altBtn = box.addButton(tr("Pay {%1} generic").arg(pip.generic), QMessageBox::AcceptRole);
-        } else {
-            // CR 107.4d: hybrid — pay either color.
-            box.setText(tr("Pay {%1/%2} for %3:").arg(pip.colorA).arg(pip.colorB).arg(cardName));
-            colorBtn = box.addButton(tr("Pay {%1}").arg(pip.colorA), QMessageBox::AcceptRole);
-            altBtn = box.addButton(tr("Pay {%1}").arg(pip.colorB), QMessageBox::AcceptRole);
+    const QChar c = color.toUpper();
+    if (pip.colorA == c) {
+        return true;
+    }
+    // Only true two-color hybrid pips ({G/U}) accept their second color; mono-hybrid and
+    // Phyrexian pips have a single color (their other alternative is generic mana / life).
+    return !pip.phyrexian && pip.generic == 0 && !pip.colorB.isNull() && pip.colorB == c;
+}
+
+bool PlayerActions::applyManaPipToFlexibleCost(QMap<QChar, int> &fixed,
+                                               QVector<RuledFlexPip> &flex,
+                                               bool colorlessMana,
+                                               QChar coloredMana)
+{
+    if (!colorlessMana) {
+        const QChar sym = coloredMana.toUpper();
+        // 1. A fixed colored demand of this exact color (CR 202.1).
+        if (fixed.value(sym, 0) > 0) {
+            fixed[sym] -= 1;
+            return true;
         }
-        QPushButton *cancelBtn = box.addButton(QMessageBox::Cancel);
-        box.exec();
-        QAbstractButton *clicked = box.clickedButton();
-        if (clicked == cancelBtn || clicked == nullptr) {
-            return false;
-        }
-        if (clicked == colorBtn) {
-            pendingRuledSpellCast.remainingCost[pip.colorA.toUpper()] += 1;
-        } else if (clicked == altBtn) {
-            if (pip.phyrexian) {
-                pendingRuledSpellCast.lifePipIndices.append(pip.pipIndex);
-            } else if (pip.generic > 0) {
-                pendingRuledSpellCast.remainingCost[QChar('X')] += pip.generic;
-            } else {
-                pendingRuledSpellCast.remainingCost[pip.colorB.toUpper()] += 1;
+        // 2. CR 107.4d–f: pay an as-yet-untouched flexible pip's colored alternative. Preferring
+        //    untouched pips means a correct-color tap claims a fresh pip rather than topping up a
+        //    half-paid mono-hybrid generic — e.g. {2/R}{2/R} with one generic already down, a red
+        //    completes the *other* pip and leaves the partial one alone.
+        for (int i = 0; i < flex.size(); ++i) {
+            if (flex[i].genericPaid == 0 && flexPipMatchesColor(flex[i], sym)) {
+                flex.remove(i);
+                return true;
             }
         }
     }
-    return true;
+    // 3. Fixed generic {N}/{X}: payable by any mana.
+    if (fixed.value('X', 0) > 0) {
+        fixed['X'] -= 1;
+        return true;
+    }
+    // 4. Fixed colorless {C}: only colorless mana qualifies (CR 107.4c).
+    if (colorlessMana && fixed.value('C', 0) > 0) {
+        fixed['C'] -= 1;
+        return true;
+    }
+    // 5. CR 107.4e: a mono-hybrid generic alternative ({2/W}), payable by any mana. Top up a
+    //    partially-paid pip first (so the mana already spent on it isn't stranded), otherwise
+    //    open a fresh one.
+    int partialIdx = -1;
+    int freshIdx = -1;
+    for (int i = 0; i < flex.size(); ++i) {
+        if (flex[i].generic <= 0) {
+            continue; // hybrid / Phyrexian have no generic alternative
+        }
+        if (flex[i].genericPaid > 0) {
+            if (partialIdx < 0 || flex[i].genericPaid > flex[partialIdx].genericPaid) {
+                partialIdx = i;
+            }
+        } else if (freshIdx < 0) {
+            freshIdx = i;
+        }
+    }
+    const int idx = (partialIdx >= 0) ? partialIdx : freshIdx;
+    if (idx >= 0) {
+        flex[idx].genericPaid += 1;
+        if (flex[idx].genericPaid >= flex[idx].generic) {
+            flex.remove(idx);
+        }
+        return true;
+    }
+    return false;
+}
+
+QString PlayerActions::formatRemainingCost(const QMap<QChar, int> &fixed, const QVector<RuledFlexPip> &flex)
+{
+    QString out = formatSimpleManaCost(fixed);
+    for (const RuledFlexPip &pip : flex) {
+        if (pip.phyrexian) {
+            out += QStringLiteral("{%1/P}").arg(pip.colorA);
+        } else if (pip.generic > 0) {
+            out += QStringLiteral("{%1/%2}").arg(pip.generic - pip.genericPaid).arg(pip.colorA);
+        } else {
+            out += QStringLiteral("{%1/%2}").arg(pip.colorA).arg(pip.colorB);
+        }
+    }
+    return out;
+}
+
+int PlayerActions::totalRemainingForCost(const QMap<QChar, int> &fixed, const QVector<RuledFlexPip> &flex)
+{
+    int total = 0;
+    for (auto it = fixed.constBegin(); it != fixed.constEnd(); ++it) {
+        total += it.value();
+    }
+    // Every unresolved flexible pip still owes at least one more mana (or, for Phyrexian, 2 life).
+    total += flex.size();
+    return total;
 }
 
 QString PlayerActions::pendingRuledSpellPromptText() const
@@ -288,16 +338,26 @@ QString PlayerActions::pendingRuledSpellPromptText() const
     if (!pendingRuledSpellCast.valid || pendingRuledSpellCast.waitingForTarget) {
         return {};
     }
-    int total = 0;
-    for (auto it = pendingRuledSpellCast.remainingCost.constBegin(); it != pendingRuledSpellCast.remainingCost.constEnd();
-         ++it) {
-        total += it.value();
-    }
-    if (total == 0) {
+    if (totalRemainingForCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips) == 0) {
         return {};
     }
-    return tr("Pay mana for %1: %2 remaining (click mana counters).")
-        .arg(pendingRuledSpellCast.cardName, formatSimpleManaCost(pendingRuledSpellCast.remainingCost));
+    QString text = tr("Pay mana for %1: %2 remaining (click mana counters).")
+                       .arg(pendingRuledSpellCast.cardName,
+                            formatRemainingCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips));
+    if (flexHasPhyrexianPip(pendingRuledSpellCast.flexPips)) {
+        text += tr(" Click your portrait to pay 2 life for a Phyrexian pip.");
+    }
+    return text;
+}
+
+bool PlayerActions::flexHasPhyrexianPip(const QVector<RuledFlexPip> &flex)
+{
+    for (const RuledFlexPip &pip : flex) {
+        if (pip.phyrexian) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void PlayerActions::clearPendingRuledSpellCast()
@@ -500,6 +560,12 @@ bool PlayerActions::completeActivateAbility()
         auto *tref = aa->add_targets();
         tref->set_object_id(pendingActivatedAbility.selectedTargetOid);
     }
+    // CR 107.4f: Phyrexian pips the player chose to pay with life (via self-portrait click).
+    for (const quint32 pipIndex : pendingActivatedAbility.lifePipIndices) {
+        auto *flex = aa->add_flex_payments();
+        flex->set_pip_index(pipIndex);
+        flex->set_pay_life(true);
+    }
     std::string payload;
     if (!cmd.SerializeToString(&payload)) {
         pendingActivatedAbility = {};
@@ -522,35 +588,13 @@ bool PlayerActions::tryReducePendingAbilityRemainingCostOnePip(bool colorlessMan
     if (!pendingActivatedAbility.valid || !pendingActivatedAbility.waitingForMana) {
         return false;
     }
-    if (colorlessMana) {
-        if (pendingActivatedAbility.remainingCost.value('X', 0) > 0) {
-            pendingActivatedAbility.remainingCost['X'] -= 1;
-        } else if (pendingActivatedAbility.remainingCost.value('C', 0) > 0) {
-            pendingActivatedAbility.remainingCost['C'] -= 1;
-        } else {
-            return false;
-        }
-    } else {
-        const QChar sym = coloredMana.toUpper();
-        if (pendingActivatedAbility.remainingCost.value(sym, 0) > 0) {
-            pendingActivatedAbility.remainingCost[sym] -= 1;
-        } else if (pendingActivatedAbility.remainingCost.value('X', 0) > 0) {
-            pendingActivatedAbility.remainingCost['X'] -= 1;
-        } else {
-            return false;
-        }
-    }
-    return true;
+    return applyManaPipToFlexibleCost(pendingActivatedAbility.remainingCost, pendingActivatedAbility.flexPips,
+                                      colorlessMana, coloredMana);
 }
 
 void PlayerActions::finishPendingAbilityManaPaymentStep()
 {
-    int totalRemaining = 0;
-    for (auto it = pendingActivatedAbility.remainingCost.constBegin();
-         it != pendingActivatedAbility.remainingCost.constEnd(); ++it) {
-        totalRemaining += it.value();
-    }
-    if (totalRemaining == 0) {
+    if (totalRemainingForCost(pendingActivatedAbility.remainingCost, pendingActivatedAbility.flexPips) == 0) {
         pendingActivatedAbility.waitingForMana = false;
         completeActivateAbility();
         return;
@@ -559,7 +603,7 @@ void PlayerActions::finishPendingAbilityManaPaymentStep()
     player->getGame()->getGameEventHandler()->emitLocalRuledLog(
         tr("Pay mana for %1: %2 remaining (tap your lands).")
             .arg(pendingActivatedAbility.cardName,
-                 formatSimpleManaCost(pendingActivatedAbility.remainingCost)));
+                 formatRemainingCost(pendingActivatedAbility.remainingCost, pendingActivatedAbility.flexPips)));
 }
 
 bool PlayerActions::tryReducePendingSpellRemainingCostOnePip(bool colorlessMana, QChar coloredMana)
@@ -567,42 +611,21 @@ bool PlayerActions::tryReducePendingSpellRemainingCostOnePip(bool colorlessMana,
     if (!pendingRuledSpellCast.valid || pendingRuledSpellCast.waitingForTarget) {
         return false;
     }
-    if (colorlessMana) {
-        if (pendingRuledSpellCast.remainingCost.value('X', 0) > 0) {
-            pendingRuledSpellCast.remainingCost['X'] -= 1;
-        } else if (pendingRuledSpellCast.remainingCost.value('C', 0) > 0) {
-            pendingRuledSpellCast.remainingCost['C'] -= 1;
-        } else {
-            return false;
-        }
-    } else {
-        const QChar sym = coloredMana.toUpper();
-        if (pendingRuledSpellCast.remainingCost.value(sym, 0) > 0) {
-            pendingRuledSpellCast.remainingCost[sym] -= 1;
-        } else if (pendingRuledSpellCast.remainingCost.value('X', 0) > 0) {
-            pendingRuledSpellCast.remainingCost['X'] -= 1;
-        } else {
-            return false;
-        }
-    }
-    return true;
+    return applyManaPipToFlexibleCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips,
+                                      colorlessMana, coloredMana);
 }
 
 void PlayerActions::finishPendingSpellManaPaymentStep()
 {
-    int totalRemaining = 0;
-    for (auto it = pendingRuledSpellCast.remainingCost.constBegin(); it != pendingRuledSpellCast.remainingCost.constEnd();
-         ++it) {
-        totalRemaining += it.value();
-    }
-    if (totalRemaining == 0) {
+    if (totalRemainingForCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips) == 0) {
         completePendingRuledSpellCast();
         return;
     }
     emit ruledSpellManaPromptChanged();
     player->getGame()->getGameEventHandler()->emitLocalRuledLog(
         tr("Pay mana for %1: %2 remaining (click mana counters).")
-            .arg(pendingRuledSpellCast.cardName, formatSimpleManaCost(pendingRuledSpellCast.remainingCost)));
+            .arg(pendingRuledSpellCast.cardName,
+                 formatRemainingCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips)));
 }
 
 QPair<bool, bool> PlayerActions::tryConsumeLandManaPipTowardPendingSpell(const QString &manaCounterName)
@@ -629,11 +652,8 @@ QPair<bool, bool> PlayerActions::tryConsumeLandManaPipTowardPendingSpell(const Q
     if (!tryReducePendingSpellRemainingCostOnePip(colorlessOnly, sym)) {
         return {false, false};
     }
-    int totalRemaining = 0;
-    for (auto it = pendingRuledSpellCast.remainingCost.constBegin(); it != pendingRuledSpellCast.remainingCost.constEnd();
-         ++it) {
-        totalRemaining += it.value();
-    }
+    const int totalRemaining =
+        totalRemainingForCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips);
     return {true, totalRemaining == 0};
 }
 
@@ -645,7 +665,8 @@ void PlayerActions::afterRuledLandTapsAppliedForSpellMana(bool completeCast, boo
         emit ruledSpellManaPromptChanged();
         player->getGame()->getGameEventHandler()->emitLocalRuledLog(
             tr("Pay mana for %1: %2 remaining (click mana counters).")
-                .arg(pendingRuledSpellCast.cardName, formatSimpleManaCost(pendingRuledSpellCast.remainingCost)));
+                .arg(pendingRuledSpellCast.cardName,
+                     formatRemainingCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips)));
     }
 }
 
@@ -673,11 +694,8 @@ QPair<bool, bool> PlayerActions::tryConsumeLandManaPipTowardPendingAbility(const
     if (!tryReducePendingAbilityRemainingCostOnePip(colorlessOnly, sym)) {
         return {false, false};
     }
-    int totalRemaining = 0;
-    for (auto it = pendingActivatedAbility.remainingCost.constBegin();
-         it != pendingActivatedAbility.remainingCost.constEnd(); ++it) {
-        totalRemaining += it.value();
-    }
+    const int totalRemaining =
+        totalRemainingForCost(pendingActivatedAbility.remainingCost, pendingActivatedAbility.flexPips);
     return {true, totalRemaining == 0};
 }
 
@@ -691,7 +709,7 @@ void PlayerActions::afterRuledLandTapsAppliedForAbilityMana(bool completeActivat
         player->getGame()->getGameEventHandler()->emitLocalRuledLog(
             tr("Pay mana for %1: %2 remaining (tap your lands).")
                 .arg(pendingActivatedAbility.cardName,
-                     formatSimpleManaCost(pendingActivatedAbility.remainingCost)));
+                     formatRemainingCost(pendingActivatedAbility.remainingCost, pendingActivatedAbility.flexPips)));
     }
 }
 
@@ -808,17 +826,16 @@ QString PlayerActions::pendingRuledAbilityPromptText() const
     if (!pendingActivatedAbility.valid || !pendingActivatedAbility.waitingForMana) {
         return {};
     }
-    int total = 0;
-    for (auto it = pendingActivatedAbility.remainingCost.constBegin();
-         it != pendingActivatedAbility.remainingCost.constEnd(); ++it) {
-        total += it.value();
-    }
-    if (total == 0) {
+    if (totalRemainingForCost(pendingActivatedAbility.remainingCost, pendingActivatedAbility.flexPips) == 0) {
         return {};
     }
-    return tr("Pay mana for %1: %2 remaining (tap your lands).")
-        .arg(pendingActivatedAbility.cardName,
-             formatSimpleManaCost(pendingActivatedAbility.remainingCost));
+    QString text = tr("Pay mana for %1: %2 remaining (tap your lands).")
+                       .arg(pendingActivatedAbility.cardName,
+                            formatRemainingCost(pendingActivatedAbility.remainingCost, pendingActivatedAbility.flexPips));
+    if (flexHasPhyrexianPip(pendingActivatedAbility.flexPips)) {
+        text += tr(" Click your portrait to pay 2 life for a Phyrexian pip.");
+    }
+    return text;
 }
 
 Command_RuledPayload *PlayerActions::newRuledPayloadAddManaToPoolForLandName(const QString &manaCounterName)
@@ -1066,13 +1083,11 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
         }
     }
 
-    // CR 107.4d–f: resolve each hybrid/mono-hybrid/Phyrexian pip into concrete mana or life
-    // before targeting. The choices fold into remainingCost (and lifePipIndices for Phyrexian
-    // life) so the existing mana-payment flow handles them unchanged.
-    if (!resolveFlexiblePipsForPendingSpell(rawCost, card->getName())) {
-        clearPendingRuledSpellCast();
-        return true; // user cancelled at a hybrid-pip prompt
-    }
+    // CR 107.4d–f: keep flexible pips (hybrid {G/U}, mono-hybrid {2/W}, Phyrexian {B/P}) live
+    // rather than prompting. They resolve as the player taps mana — a tapped color claims a pip
+    // whose alternative it matches, off-color/colorless mana funds a mono-hybrid generic
+    // alternative — and a Phyrexian pip can be paid with 2 life by clicking the player's portrait.
+    pendingRuledSpellCast.flexPips = parseFlexPips(rawCost);
 
     pendingRuledSpellCast.waitingForTarget = geh->isRuledSpellCastNeedsTargetForHandIndex(ruledHandIndex);
     emit landTapUndoAvailableChanged(false);
@@ -1090,18 +1105,14 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
         return true;
     }
 
-    int totalRequired = 0;
-    for (auto it = pendingRuledSpellCast.remainingCost.constBegin(); it != pendingRuledSpellCast.remainingCost.constEnd();
-         ++it) {
-        totalRequired += it.value();
-    }
-    if (totalRequired == 0) {
+    if (totalRemainingForCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips) == 0) {
         return completePendingRuledSpellCast();
     }
 
     player->getGame()->getGameEventHandler()->emitLocalRuledLog(
         tr("Cast %1 selected. Pay mana by clicking counters: %2.")
-            .arg(card->getName(), formatSimpleManaCost(pendingRuledSpellCast.remainingCost)));
+            .arg(card->getName(),
+                 formatRemainingCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips)));
     return true;
 }
 
@@ -1149,18 +1160,14 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
     pendingRuledSpellCast.waitingForTarget = false;
     emit ruledSpellTargetingChanged(false, {});
 
-    int totalRequired = 0;
-    for (auto it = pendingRuledSpellCast.remainingCost.constBegin(); it != pendingRuledSpellCast.remainingCost.constEnd();
-         ++it) {
-        totalRequired += it.value();
-    }
-    if (totalRequired == 0) {
+    if (totalRemainingForCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips) == 0) {
         return completePendingRuledSpellCast();
     }
 
     player->getGame()->getGameEventHandler()->emitLocalRuledLog(
         tr("Target selected for %1. Pay mana by clicking counters: %2.")
-            .arg(pendingRuledSpellCast.cardName, formatSimpleManaCost(pendingRuledSpellCast.remainingCost)));
+            .arg(pendingRuledSpellCast.cardName,
+                 formatRemainingCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips)));
     return true;
 }
 
@@ -1230,19 +1237,73 @@ bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
     pendingRuledSpellCast.waitingForTarget = false;
     emit ruledSpellTargetingChanged(false, {});
 
-    int totalRequired = 0;
-    for (auto it = pendingRuledSpellCast.remainingCost.constBegin(); it != pendingRuledSpellCast.remainingCost.constEnd();
-         ++it) {
-        totalRequired += it.value();
-    }
-    if (totalRequired == 0) {
+    if (totalRemainingForCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips) == 0) {
         return completePendingRuledSpellCast();
     }
 
     player->getGame()->getGameEventHandler()->emitLocalRuledLog(
         tr("Target selected for %1. Pay mana by clicking counters: %2.")
-            .arg(pendingRuledSpellCast.cardName, formatSimpleManaCost(pendingRuledSpellCast.remainingCost)));
+            .arg(pendingRuledSpellCast.cardName,
+                 formatRemainingCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips)));
     return true;
+}
+
+bool PlayerActions::isAwaitingRuledPhyrexianLifeSelection() const
+{
+    if (!player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+        return false;
+    }
+    if (pendingRuledSpellCast.valid && !pendingRuledSpellCast.waitingForTarget &&
+        flexHasPhyrexianPip(pendingRuledSpellCast.flexPips)) {
+        return true;
+    }
+    if (pendingActivatedAbility.valid && pendingActivatedAbility.waitingForMana &&
+        flexHasPhyrexianPip(pendingActivatedAbility.flexPips)) {
+        return true;
+    }
+    return false;
+}
+
+bool PlayerActions::tryHandleRuledPhyrexianLifeClick(Player *clickedPlayer)
+{
+    // CR 107.4f: paying the 2-life alternative for a Phyrexian pip. Only the caster's own portrait
+    // pays their life, and only while a cost with an unpaid Phyrexian pip is being paid.
+    if (!clickedPlayer || !player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+        return false;
+    }
+    if (clickedPlayer->getPlayerInfo()->getId() != player->getPlayerInfo()->getId()) {
+        return false;
+    }
+
+    // Spell being cast (mana-payment stage).
+    if (pendingRuledSpellCast.valid && !pendingRuledSpellCast.waitingForTarget) {
+        for (int i = 0; i < pendingRuledSpellCast.flexPips.size(); ++i) {
+            if (pendingRuledSpellCast.flexPips[i].phyrexian) {
+                pendingRuledSpellCast.lifePipIndices.append(pendingRuledSpellCast.flexPips[i].pipIndex);
+                pendingRuledSpellCast.flexPips.remove(i);
+                player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+                    tr("Paying 2 life for a Phyrexian pip of %1.").arg(pendingRuledSpellCast.cardName));
+                finishPendingSpellManaPaymentStep();
+                return true;
+            }
+        }
+    }
+
+    // Activated ability (mana-payment stage).
+    if (pendingActivatedAbility.valid && pendingActivatedAbility.waitingForMana) {
+        for (int i = 0; i < pendingActivatedAbility.flexPips.size(); ++i) {
+            if (pendingActivatedAbility.flexPips[i].phyrexian) {
+                pendingActivatedAbility.lifePipIndices.append(pendingActivatedAbility.flexPips[i].pipIndex);
+                pendingActivatedAbility.flexPips.remove(i);
+                player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+                    tr("Paying 2 life for a Phyrexian pip of %1.").arg(pendingActivatedAbility.cardName));
+                finishPendingAbilityManaPaymentStep();
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 void PlayerActions::playCard(CardItem *card, bool faceDown)
@@ -3314,15 +3375,15 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card)
                                     ? manaCostStrings.at(abilityIndex)
                                     : QString{};
     const QMap<QChar, int> manaCost = parseSimpleManaCost(manaCostStr);
-    int totalManaCost = 0;
-    for (auto it = manaCost.constBegin(); it != manaCost.constEnd(); ++it) {
-        totalManaCost += it.value();
-    }
-    const bool needsMana = totalManaCost > 0;
+    // CR 107.4d–f: flexible pips ({G/U}, {2/W}, {B/P}) in the ability cost resolve as mana is
+    // tapped / via a self-portrait click, just like a spell cast — never prompted upfront.
+    const QVector<RuledFlexPip> flexPips = parseFlexPips(manaCostStr);
+    const bool needsMana = totalRemainingForCost(manaCost, flexPips) > 0;
 
     manaPaymentCounterIds.clear();
     midCastLandTapStack.clear();
 
+    pendingActivatedAbility = {};
     pendingActivatedAbility.valid = true;
     pendingActivatedAbility.permanentOid = oid;
     pendingActivatedAbility.abilityIndex = abilityIndex;
@@ -3333,6 +3394,7 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card)
     pendingActivatedAbility.selectedTargetOid = 0;
     pendingActivatedAbility.waitingForMana = false;
     pendingActivatedAbility.remainingCost = manaCost;
+    pendingActivatedAbility.flexPips = flexPips;
 
     if (needsTarget) {
         // Target first, then mana payment after target is chosen.
@@ -3408,12 +3470,7 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
     pendingActivatedAbility.waitingForTarget = false;
     emit ruledActivatedAbilityTargetPendingChanged(false, {});
 
-    int totalManaCost = 0;
-    for (auto it = pendingActivatedAbility.remainingCost.constBegin();
-         it != pendingActivatedAbility.remainingCost.constEnd(); ++it) {
-        totalManaCost += it.value();
-    }
-    if (totalManaCost > 0) {
+    if (totalRemainingForCost(pendingActivatedAbility.remainingCost, pendingActivatedAbility.flexPips) > 0) {
         pendingActivatedAbility.waitingForMana = true;
         emit ruledAbilityActivationPendingChanged(true);
         emit ruledAbilityManaPromptChanged();
@@ -3467,12 +3524,7 @@ bool PlayerActions::tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer)
     pendingActivatedAbility.waitingForTarget = false;
     emit ruledActivatedAbilityTargetPendingChanged(false, {});
 
-    int totalManaCost = 0;
-    for (auto it = pendingActivatedAbility.remainingCost.constBegin();
-         it != pendingActivatedAbility.remainingCost.constEnd(); ++it) {
-        totalManaCost += it.value();
-    }
-    if (totalManaCost > 0) {
+    if (totalRemainingForCost(pendingActivatedAbility.remainingCost, pendingActivatedAbility.flexPips) > 0) {
         pendingActivatedAbility.waitingForMana = true;
         emit ruledAbilityActivationPendingChanged(true);
         emit ruledAbilityManaPromptChanged();
