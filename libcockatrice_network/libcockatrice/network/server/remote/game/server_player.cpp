@@ -86,6 +86,37 @@ QString mergeRuledDamageIntoAnnotation(const QString &baseAnn, uint32_t damage)
     }
     return without + QLatin1Char('\n') + dmgLine;
 }
+
+// Engine-emitted counter lines end with "counter(s)" (e.g. "1 +1/+1 counter(s)"). Strip any such
+// line so a stale counter annotation never lingers after counters change or are removed.
+QString stripRuledCounterLines(const QString &ann)
+{
+    if (ann.isEmpty()) {
+        return ann;
+    }
+    const QString suffix = QStringLiteral("counter(s)");
+    QStringList kept;
+    for (const QString &line : ann.split(QLatin1Char('\n'))) {
+        if (line.trimmed().endsWith(suffix)) {
+            continue;
+        }
+        kept.append(line);
+    }
+    return kept.join(QLatin1Char('\n')).trimmed();
+}
+
+// `counterAnn` is the engine's per-permanent counter annotation (possibly multi-line, empty if none).
+QString mergeRuledCountersIntoAnnotation(const QString &baseAnn, const QString &counterAnn)
+{
+    QString without = stripRuledCounterLines(baseAnn);
+    if (counterAnn.isEmpty()) {
+        return without;
+    }
+    if (without.isEmpty()) {
+        return counterAnn;
+    }
+    return without + QLatin1Char('\n') + counterAnn;
+}
 } // namespace
 
 Server_Player::Server_Player(Server_Game *_game,
@@ -467,7 +498,11 @@ Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const
                         }
                     }
 
-                    const QString mergedAnn = mergeRuledDamageIntoAnnotation(card->getAnnotation(), isCreature ? dmg : 0);
+                    const QString counterAnn = (i < v.battlefield_counters_annotation_size())
+                                                   ? QString::fromStdString(v.battlefield_counters_annotation(i))
+                                                   : QString();
+                    QString mergedAnn = mergeRuledDamageIntoAnnotation(card->getAnnotation(), isCreature ? dmg : 0);
+                    mergedAnn = mergeRuledCountersIntoAnnotation(mergedAnn, counterAnn);
                     if (mergedAnn != card->getAnnotation()) {
                         card->setAnnotation(mergedAnn);
                         result.tapStateChanged = true;

@@ -94,6 +94,18 @@ impl GameObject {
             - self.counter_count(CounterKind::MinusOneMinusOne) as i32
     }
 
+    /// Human-readable annotation of the counters on this permanent for client display,
+    /// one line per counter kind (e.g. `"1 +1/+1 counter(s)"`). Empty string when the
+    /// permanent has no counters. Iteration order is deterministic (`BTreeMap`).
+    pub fn counter_annotation(&self) -> String {
+        self.counters
+            .iter()
+            .filter(|&(_, &n)| n > 0)
+            .map(|(kind, &n)| format!("{} {} counter(s)", n, kind.label()))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     /// Returns true if this permanent's card definition includes the given keyword ability.
     pub fn has_keyword(
         &self,

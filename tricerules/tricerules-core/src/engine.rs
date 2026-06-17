@@ -4459,6 +4459,19 @@ impl GameEngine {
                             .unwrap_or_default()
                     })
                     .collect(),
+                // Parallel to `battlefield`: per-permanent counter annotation for client display
+                // (e.g. "1 +1/+1 counter(s)"). Empty when the permanent has no counters.
+                battlefield_counters_annotation: p
+                    .battlefield
+                    .iter()
+                    .map(|&oid| {
+                        self.state
+                            .objects
+                            .get(&oid)
+                            .map(|o| o.counter_annotation())
+                            .unwrap_or_default()
+                    })
+                    .collect(),
             })
             .collect();
         RuledEvent {

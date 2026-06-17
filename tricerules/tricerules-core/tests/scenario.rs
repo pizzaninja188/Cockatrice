@@ -3608,6 +3608,86 @@ fn battlegrowth_counter_raises_pt_and_persists() {
     );
 }
 
+/// A creature with counters exposes a human-readable counter annotation in the zone view so the
+/// client can overlay it on the card (e.g. "1 +1/+1 counter(s)"); a counter-free creature reports
+/// an empty annotation.
+#[test]
+fn zone_view_reports_counter_annotation() {
+    let decks = Some(vec![
+        vec![
+            "battlegrowth".into(),
+            "grizzly_bears".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+        vec!["forest".into(); 7],
+    ]);
+    let mut e = GameEngine::new(1313, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let bear = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    // A second creature stays counter-free so we can assert the empty-annotation case.
+    let plain = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            g: 1,
+            ..Default::default()
+        },
+    );
+    let bg = hand_index_for_card(&e, 0, "battlegrowth");
+    e.apply_command(0, &cast_spell(bg, vec![TargetRef { object_id: bear }]))
+        .expect("cast battlegrowth");
+    let first = e.state.priority_player_id();
+    e.apply_command(first, &pass()).expect("first pass");
+    let second = if first == 0 { 1 } else { 0 };
+    let b = e
+        .apply_command(second, &pass())
+        .expect("second pass resolves");
+
+    let zone_view = b
+        .events
+        .iter()
+        .rev()
+        .find_map(|ev| match &ev.ev {
+            Some(Ev::ZoneView(zv)) => Some(zv.clone()),
+            _ => None,
+        })
+        .expect("zone view in batch");
+    let p0 = zone_view
+        .per_player
+        .iter()
+        .find(|p| p.player_id == 0)
+        .expect("p0 view");
+    assert_eq!(
+        p0.battlefield_counters_annotation.len(),
+        p0.battlefield.len(),
+        "annotation array parallels battlefield"
+    );
+    let bear_pos = p0
+        .battlefield_object_id
+        .iter()
+        .position(|&oid| oid == bear)
+        .expect("bear in view");
+    assert_eq!(
+        p0.battlefield_counters_annotation[bear_pos], "1 +1/+1 counter(s)",
+        "bear with one +1/+1 counter is annotated"
+    );
+    let plain_pos = p0
+        .battlefield_object_id
+        .iter()
+        .position(|&oid| oid == plain)
+        .expect("plain creature in view");
+    assert!(
+        p0.battlefield_counters_annotation[plain_pos].is_empty(),
+        "counter-free permanent has no annotation"
+    );
+}
+
 /// CR 122.3: when a creature has both +1/+1 and -1/-1 counters, equal numbers annihilate as a
 /// state-based action. Battlegrowth (+1/+1) then Instill Infection (-1/-1) net back to base P/T.
 #[test]

@@ -453,6 +453,10 @@ message RuledPerPlayerView {
   // option a brace-less symbol run ("G", "WU", "CC"). Multiple options (e.g. "W/U") mean the
   // client prompts for a color → ActivateAbility.mana_option_index. Empty string = no abilities.
   repeated string battlefield_activated_ability_mana_produced = 21;
+  // Parallel array to `battlefield`: human-readable counter annotation for each permanent
+  // (e.g. "1 +1/+1 counter(s)"), one line per counter kind. Empty string for permanents with
+  // no counters. Clients overlay this on the card annotation alongside ruled damage.
+  repeated string battlefield_counters_annotation = 22;
 }
 
 message ZoneViewSync {

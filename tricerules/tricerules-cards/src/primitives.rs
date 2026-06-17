@@ -181,6 +181,17 @@ pub enum CounterKind {
     MinusOneMinusOne,
 }
 
+impl CounterKind {
+    /// Short human-readable label for client display (e.g. in card annotations).
+    /// Matches the conventional MTG counter naming ("+1/+1", "-1/-1").
+    pub fn label(self) -> &'static str {
+        match self {
+            CounterKind::PlusOnePlusOne => "+1/+1",
+            CounterKind::MinusOneMinusOne => "-1/-1",
+        }
+    }
+}
+
 /// Base kind for a [`TargetFilter`] — what category of object is targeted.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum TargetKind {
