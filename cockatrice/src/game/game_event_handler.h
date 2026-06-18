@@ -116,7 +116,8 @@ private:
         bool canTargetSelf = false;
         bool canTargetOpponent = false;
     };
-    // Key = engine hand slot index. Presence of a key means the spell needs a target.
+    // Key = (engine hand slot << 8 | face index); see spellTargetKey(). One entry per castable
+    // face of a hand card that needs a target (single-face cards use face 0).
     QHash<int, SpellTargetData> ruledValidTargetsByHandSlot;
     // Key = (permanentOid << 32 | abilityIndex). Presence means the ability needs a target.
     QHash<quint64, SpellTargetData> ruledValidTargetsByAbility;
@@ -127,9 +128,6 @@ private:
     QHash<quint32, int> engineOidBattlefieldToughness;
     // Servatrice HandSlotMap: (owner player id, Server_Card.id) -> engine hand index for ruled commands.
     QHash<quint64, int> ruledOwnedCardToEngineHandSlot;
-
-    [[nodiscard]] int resolveEngineHandIndexFromLegalSlots(const CardItem *card,
-                                                           const QList<int> &sortedLegalHandIndices) const;
 
     // Latest combat phase derived from PhaseChanged events.
     RuledCombatPhase currentRuledCombatPhase = RuledCombatPhase::None;
@@ -207,6 +205,10 @@ public:
     [[nodiscard]] QList<int> getRuledSpellCastHandIndicesForCardName(const QString &cardName) const;
     /// Maps the clicked hand card to an engine hand index by matching Server_Card ids at legal slots.
     [[nodiscard]] int resolveRuledSpellCastHandIndexForClickedCard(const CardItem *card) const;
+    /// Maps a clicked hand card to an engine hand index given a precomputed set of legal slots
+    /// (e.g. the slots for a particular split-card face name). Public for the cast face menu.
+    [[nodiscard]] int resolveEngineHandIndexFromLegalSlots(const CardItem *card,
+                                                           const QList<int> &sortedLegalHandIndices) const;
     [[nodiscard]] int resolveRuledLandPlayHandIndexForClickedCard(const CardItem *card) const;
     [[nodiscard]] bool isRuledCleanupDiscardLegalForHandIndex(int handIndex) const;
     [[nodiscard]] int getRuledCleanupDiscardHandIndexForCard(const QString &cardName, int preferredHandIndex) const;
@@ -265,24 +267,29 @@ public:
     {
         return engineOidTrample.value(engineOid, false);
     }
-    // Spell targeting queries (keyed by engine hand slot).
-    [[nodiscard]] bool isValidSpellTarget(int handSlot, quint32 oid) const
+    // Spell targeting queries. Key encodes (handSlot << 8 | faceIndex) so a multi-face card's
+    // halves (split / MDFC) each carry their own legal targets; single-face cards use faceIndex 0.
+    static int spellTargetKey(int handSlot, int faceIndex)
     {
-        const auto it = ruledValidTargetsByHandSlot.constFind(handSlot);
+        return (handSlot << 8) | (faceIndex & 0xff);
+    }
+    [[nodiscard]] bool isValidSpellTarget(int handSlot, int faceIndex, quint32 oid) const
+    {
+        const auto it = ruledValidTargetsByHandSlot.constFind(spellTargetKey(handSlot, faceIndex));
         return it != ruledValidTargetsByHandSlot.constEnd() && it->validPermanentIds.contains(oid);
     }
-    [[nodiscard]] bool isValidSpellStackTarget(int handSlot, quint32 oid) const
+    [[nodiscard]] bool isValidSpellStackTarget(int handSlot, int faceIndex, quint32 oid) const
     {
-        const auto it = ruledValidTargetsByHandSlot.constFind(handSlot);
+        const auto it = ruledValidTargetsByHandSlot.constFind(spellTargetKey(handSlot, faceIndex));
         return it != ruledValidTargetsByHandSlot.constEnd() && it->validStackIds.contains(oid);
     }
-    [[nodiscard]] bool canSpellTargetSelf(int handSlot) const
+    [[nodiscard]] bool canSpellTargetSelf(int handSlot, int faceIndex) const
     {
-        return ruledValidTargetsByHandSlot.value(handSlot).canTargetSelf;
+        return ruledValidTargetsByHandSlot.value(spellTargetKey(handSlot, faceIndex)).canTargetSelf;
     }
-    [[nodiscard]] bool canSpellTargetOpponent(int handSlot) const
+    [[nodiscard]] bool canSpellTargetOpponent(int handSlot, int faceIndex) const
     {
-        return ruledValidTargetsByHandSlot.value(handSlot).canTargetOpponent;
+        return ruledValidTargetsByHandSlot.value(spellTargetKey(handSlot, faceIndex)).canTargetOpponent;
     }
     // Activated ability targeting queries. Key encodes (permanentOid << 32 | abilityIndex).
     static quint64 abilityTargetKey(quint32 permanentOid, int abilityIndex)

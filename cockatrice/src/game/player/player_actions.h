@@ -97,6 +97,10 @@ public:
     [[nodiscard]] QString pendingRuledSpellPromptText() const;
     /// Show context menu for activated abilities on a battlefield permanent. Returns true if menu was shown.
     bool tryRuledActivateAbilityMenu(CardItem *card);
+    /// Show a side-picker menu ("Cast Fire" / "Cast Ice") for a multi-face card in hand and begin the
+    /// chosen face's cast. Returns true if the menu was shown (click consumed); false for single-face
+    /// cards or when no face is currently castable.
+    bool tryRuledSpellCastFaceMenu(CardItem *card);
     /// Handle a target click for a pending activated ability activation or trigger target selection.
     bool tryHandleRuledAbilityTargetClick(CardItem *card);
     bool tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer);
@@ -275,6 +279,11 @@ private:
     Player *player;
     bool tryPlayRuledLand(CardItem *card);
     bool tryStartRuledSpellCast(CardItem *card);
+    // Set up and begin a pending ruled cast for an already-resolved hand slot + face. faceIndex selects
+    // the split/MDFC half (0 for single-face); castName/castCost are that face's name and mana cost.
+    // Handles the toggle-cancel, {X}, hybrid/Phyrexian pip, target and mana-payment flow.
+    bool beginRuledSpellCast(CardItem *card, int ruledHandIndex, int faceIndex, const QString &castName,
+                             const QString &castCost);
     static QMap<QChar, int> parseSimpleManaCost(const QString &manaCost);
     static QVector<RuledFlexPip> parseFlexPips(const QString &manaCost);
     static QString formatSimpleManaCost(const QMap<QChar, int> &cost);

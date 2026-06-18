@@ -170,8 +170,11 @@ message SpellTargets {
 
 message LegalActions {
   repeated string labels = 1;
-  // Per-hand-slot valid targets for spells that need a target. Key = engine hand slot index.
-  // Presence of a key means the spell at that slot requires a target.
+  // Valid targets per castable face of a hand card that needs a target. Key encodes both the
+  // engine hand slot and the face index: key = (hand_slot << 8) | face_index. Single-face cards
+  // use face 0 (key == hand_slot << 8); multi-face cards (split / MDFC) emit one entry per face
+  // whose half targets, so clients can offer the chosen face's targets and not the union (CR
+  // 709/712/715 — e.g. Fire targets "any target", Ice targets "any permanent").
   map<uint32, SpellTargets> valid_targets_by_hand_slot = 3;
   // Per-activated-ability valid targets. Key = (permanent_id << 32 | ability_index).
   // Presence of a key means the ability at that index requires a target.
@@ -286,8 +289,10 @@ message StackPushed {
   // Chosen targets for this spell/ability while it is on the stack (object ids; player targets
   // use the engine's PlayerId as object_id, same as CastSpell.targets).
   repeated TargetRef targets = 3;
-  // Present for activated/triggered abilities; absent (empty string) for spells.
-  // The client overlays this text on the stack card as an annotation.
+  // Annotation overlaid on the stack card: an activated/triggered ability's text, or the cast
+  // face name of a multi-face spell (e.g. "Fire" / "Ice"). Empty for ordinary single-face spells.
+  // For abilities `card_id` is empty (the client builds a synthetic stack card); for spells the
+  // physical card is already on the stack and only the annotation is overlaid.
   string ability_annotation = 4;
   // Engine card id of the pushed spell (e.g. "lightning_bolt"); empty for abilities,
   // which have no physical card on the stack. Resolve to an Oracle name via CardCatalog.

@@ -801,13 +801,18 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
             AbstractCardItem::mouseReleaseEvent(event);
             return;
         }
-        // Activated ability menu on right-click (battlefield permanents with abilities).
+        // Activated ability menu on right-click (battlefield permanents with abilities), and the
+        // split/MDFC side-picker menu ("Cast Fire" / "Cast Ice") for multi-face cards in hand.
         if (owner != nullptr) {
             auto *game = owner->getGame();
             auto *playerManager = game ? game->getPlayerManager() : nullptr;
             auto *localPlayer = playerManager ? playerManager->getPlayers().value(playerManager->getLocalPlayerId()) : nullptr;
             auto *actions = localPlayer ? localPlayer->getPlayerActions() : nullptr;
             if (owner->getPlayerInfo()->getLocal() && actions && actions->tryRuledActivateAbilityMenu(this)) {
+                AbstractCardItem::mouseReleaseEvent(event);
+                return;
+            }
+            if (owner->getPlayerInfo()->getLocal() && actions && actions->tryRuledSpellCastFaceMenu(this)) {
                 AbstractCardItem::mouseReleaseEvent(event);
                 return;
             }
