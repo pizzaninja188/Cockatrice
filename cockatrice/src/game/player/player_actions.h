@@ -90,11 +90,6 @@ public:
     [[nodiscard]] Command_RuledPayload *newRuledPayloadActivateManaAbilityForLand(CardItem *card, QChar desiredColor);
     bool tryHandleRuledSpellTargetClick(CardItem *card);
     bool tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer);
-    /// CR 107.4f: clicking your own portrait while paying for a pending spell/ability with an
-    /// unpaid Phyrexian pip pays 2 life for it. Returns true if the click was consumed this way.
-    bool tryHandleRuledPhyrexianLifeClick(Player *clickedPlayer);
-    /// True when the local player has an unpaid Phyrexian pip and a self-portrait click would pay life.
-    [[nodiscard]] bool isAwaitingRuledPhyrexianLifeSelection() const;
     /// True when the local player must pick a player (not permanent) for the pending ruled cast.
     [[nodiscard]] bool isAwaitingRuledPlayerTargetSelection() const;
     /// True when an activated ability or triggered ability is waiting for a target (player click allowed).
@@ -307,8 +302,23 @@ private:
     // True if `color` can satisfy `pip`'s colored alternative (either side of a hybrid, the
     // single color of a mono-hybrid/Phyrexian pip).
     static bool flexPipMatchesColor(const RuledFlexPip &pip, QChar color);
-    // True if any pip in `flex` is a Phyrexian pip still owing payment (mana or 2 life).
-    static bool flexHasPhyrexianPip(const QVector<RuledFlexPip> &flex);
+    // CR 107.4d–f: front-load the flexible-pip choice. Shows a modal dialog displaying the full
+    // cost plus one dropdown per flexible pip (hybrid {G/U} → either color; mono-hybrid {2/W} →
+    // the color or N generic; Phyrexian {C/P} → the color or 2 life). On confirm, fills
+    // `choiceIsAlternative` index-aligned to `flex` (false = primary color `colorA`, true = the
+    // alternative). Returns false if the player cancelled.
+    static bool promptFlexiblePipChoices(const QString &fullCost,
+                                         const QString &cardName,
+                                         const QVector<RuledFlexPip> &flex,
+                                         QVector<bool> &choiceIsAlternative);
+    // Fold the player's per-pip choices into the fixed cost: a color choice adds a fixed colored
+    // pip, a mono-hybrid generic choice adds N to the generic bucket, a Phyrexian life choice
+    // records the pip index in `lifePipIndices`. Clears `flex` once everything is folded so the
+    // remaining cost (and the widget prompt) reflects only the resolved mana.
+    static void applyFlexChoicesToCost(QMap<QChar, int> &fixed,
+                                       QVector<quint32> &lifePipIndices,
+                                       QVector<RuledFlexPip> &flex,
+                                       const QVector<bool> &choiceIsAlternative);
     // CR 107.4d–f: route one tapped mana into the cheapest still-open demand — a fixed colored
     // pip, an untouched flexible pip's color, fixed generic, or a mono-hybrid generic alternative.
     // Returns false if the mana can't be used (caller leaves it unspent). Mutates fixed + flex.
@@ -320,6 +330,12 @@ private:
     // Prompts for the value of X when the pending spell's cost has X pips, tops up the generic
     // mana bucket, and records xValue. Returns false if the player cancelled (cast is aborted).
     bool promptForRuledSpellXIfNeeded();
+    // CR 107.4d–f: front-load the pending spell's flexible-pip choices via promptFlexiblePipChoices,
+    // folding them into the fixed cost. No-op (returns true) when the cost has no flexible pips.
+    // Returns false if the player cancelled the dialog (cast is aborted).
+    bool resolvePendingSpellFlexiblePips();
+    // Same as resolvePendingSpellFlexiblePips for the pending activated ability.
+    bool resolvePendingAbilityFlexiblePips();
     bool completePendingRuledSpellCast();
     bool tryReducePendingSpellRemainingCostOnePip(bool colorlessMana, QChar coloredMana);
     void finishPendingSpellManaPaymentStep();

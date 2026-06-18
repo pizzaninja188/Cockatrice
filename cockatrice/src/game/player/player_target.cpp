@@ -202,8 +202,7 @@ void PlayerTarget::mousePressEvent(QGraphicsSceneMouseEvent *event)
             if (localPlayer && localPlayer->getPlayerActions()) {
                 PlayerActions *actions = localPlayer->getPlayerActions();
                 if (actions->isAwaitingRuledPlayerTargetSelection() ||
-                    actions->isAwaitingRuledAbilityOrTriggerPlayerTarget() ||
-                    actions->isAwaitingRuledPhyrexianLifeSelection()) {
+                    actions->isAwaitingRuledAbilityOrTriggerPlayerTarget()) {
                     event->accept();
                     return;
                 }
@@ -225,10 +224,6 @@ void PlayerTarget::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
                     return;
                 }
                 if (localPlayer->getPlayerActions()->tryHandleRuledSpellTargetPlayerClick(owner)) {
-                    event->accept();
-                    return;
-                }
-                if (localPlayer->getPlayerActions()->tryHandleRuledPhyrexianLifeClick(owner)) {
                     event->accept();
                     return;
                 }
