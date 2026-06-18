@@ -539,7 +539,24 @@ int GameEventHandler::resolveRuledSpellCastHandIndexForClickedCard(const CardIte
     if (!card) {
         return -1;
     }
-    return resolveEngineHandIndexFromLegalSlots(card, getRuledSpellCastHandIndicesForCardName(card->getName()));
+    int resolved =
+        resolveEngineHandIndexFromLegalSlots(card, getRuledSpellCastHandIndicesForCardName(card->getName()));
+    if (resolved >= 0) {
+        return resolved;
+    }
+    // CR 709/712/715: the engine labels each castable face of a multi-face card (split half / MDFC
+    // face) by that face's own name, not the combined "A // B" Oracle name a CardItem carries. Try
+    // each face so a click on a multi-face card resolves to its shared hand slot.
+    const QStringList faceNames = card->getName().split(QStringLiteral(" // "), Qt::SkipEmptyParts);
+    if (faceNames.size() > 1) {
+        for (const QString &faceName : faceNames) {
+            resolved = resolveEngineHandIndexFromLegalSlots(card, getRuledSpellCastHandIndicesForCardName(faceName));
+            if (resolved >= 0) {
+                return resolved;
+            }
+        }
+    }
+    return resolved;
 }
 
 int GameEventHandler::resolveRuledLandPlayHandIndexForClickedCard(const CardItem *card) const
@@ -1324,15 +1341,16 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                                 .arg(QString::fromStdString(sp.description()))
                                                 .arg(targetStr));
                                 }
+                                // Overlay the annotation on the stack card: an ability's text, an X
+                                // value for an X spell ("X = N", CR 107.3), or the cast face of a
+                                // multi-face spell (e.g. "Fire" / "Ice").
                                 if (!sp.ability_annotation().empty()) {
-                                    // Overlay the annotation on the stack card: an X value for an
-                                    // X spell ("X = N", CR 107.3) or the ability text for an ability.
                                     ruledStackAnnotationByOid.insert(
                                         sp.object_id(),
                                         QString::fromStdString(sp.ability_annotation()));
                                     // Only abilities (no physical card_id) need a synthetic stack card
-                                    // and clear the pending trigger — a spell already has a real
-                                    // CardItem on the stack, so skip that path for it.
+                                    // and clear the pending trigger — a spell (incl. a cast split half)
+                                    // already has a real CardItem on the stack, so skip that path for it.
                                     if (sp.card_id().empty()) {
                                         // A triggered ability was just placed on the stack — the pending
                                         // trigger target has been chosen and is no longer pending.
@@ -1672,7 +1690,9 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             legalRuledSpellCastNeedsTargetHandIndices = parsedCast.needsTargetHandIndices;
                             ruledValidTargetsByHandSlot.clear();
                             for (const auto &entry : lit->second.valid_targets_by_hand_slot()) {
-                                const int slot = static_cast<int>(entry.first);
+                                // Key is the engine's composite (hand slot << 8 | face index); stored
+                                // verbatim and matched by GameEventHandler::spellTargetKey().
+                                const int key = static_cast<int>(entry.first);
                                 const auto &src = entry.second;
                                 SpellTargetData data;
                                 for (const quint32 oid : src.valid_permanent_ids()) {
@@ -1683,7 +1703,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 }
                                 data.canTargetSelf = src.can_target_self();
                                 data.canTargetOpponent = src.can_target_opponent();
-                                ruledValidTargetsByHandSlot.insert(slot, std::move(data));
+                                ruledValidTargetsByHandSlot.insert(key, std::move(data));
                             }
                             ruledValidTargetsByAbility.clear();
                             for (const auto &entry : lit->second.valid_targets_by_ability()) {

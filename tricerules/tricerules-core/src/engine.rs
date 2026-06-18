@@ -3202,6 +3202,11 @@ impl GameEngine {
         let face_instant_speed = castable_at_instant_speed(&face);
         let face_mana = face.mana_cost.clone();
         let face_name = face.name.to_string();
+        // CR 709/712/715: a multi-face card on the stack is a single object, but the player should
+        // see which half/face was cast. Annotate the stack card with the face name (e.g. "Fire" /
+        // "Ice") just as activated/triggered abilities annotate their source card. Single-face
+        // spells leave the annotation empty (the whole-card name already names them).
+        let is_multiface = def.is_multiface();
         let face_effects: Vec<SpellEffectKind> = face.spell_effect.to_vec();
         let sorcery_ok = sorcery_speed_available(&self.state, player);
         let instant_ok = instant_timing_step_allowed(self.state.turn_step);
@@ -3278,12 +3283,15 @@ impl GameEngine {
             "P{} casts {}{}{}",
             player, face_name, x_line, tgt_line
         )));
-        // CR 107.3: surface the locked-in X on the stack card so players can read the spell's
-        // size at a glance. Empty for non-X spells (the client overlays nothing).
-        let x_annotation = if has_x {
-            format!("X = {chosen_x}")
-        } else {
-            String::new()
+        // Stack-card annotation the client overlays: the cast face name for a multi-face spell
+        // (CR 709/712/715 — "Fire" / "Ice"), and/or the locked-in X for an X spell (CR 107.3 —
+        // "X = N", so players read the spell's size at a glance). A multi-face X spell shows both
+        // ("Fire (X = N)"); a plain single-face spell has none (the whole-card name already names it).
+        let stack_annotation = match (is_multiface, has_x) {
+            (true, true) => format!("{face_name} (X = {chosen_x})"),
+            (true, false) => face_name.clone(),
+            (false, true) => format!("X = {chosen_x}"),
+            (false, false) => String::new(),
         };
         // CR 107.4f: surface Phyrexian life paid so the client updates the life total.
         if life_paid > 0 {
@@ -3301,9 +3309,9 @@ impl GameEngine {
         batch.events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
                 object_id: oid,
-                description: face_name,
+                description: face_name.clone(),
                 targets: targets.to_vec(),
-                ability_annotation: x_annotation,
+                ability_annotation: stack_annotation,
                 card_id: cast_card_id.clone(),
                 is_copy: false,
             })),
@@ -5019,34 +5027,21 @@ fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 let Some(def) = eng.registry.get(&obj.card_id) else {
                     continue;
                 };
-                // CR 709/712/715: a multi-face card's halves can target different things; offer the
-                // union of every face's legal targets so the UI highlights anything castable from
-                // some face. The chosen face is validated server-side at cast time.
-                let mut merged = rv1::SpellTargets::default();
-                let mut any = false;
-                for face in def.faces_iter() {
+                // CR 709/712/715: a multi-face card's halves can target different things (Fire
+                // hits "any target", Ice taps "any permanent"). Emit a separate target set per
+                // castable face, keyed by (slot << 8 | face_index), so the UI offers only the
+                // chosen face's legal targets instead of the union (which would let Fire target a
+                // land via Ice's filter). Single-face cards use face 0 (key == slot << 8). The
+                // chosen face is still validated server-side at cast time.
+                for (face_index, face) in def.faces_iter().enumerate() {
                     if face.is_land || !face.spell_effect.iter().any(spell_effect_kind_needs_target)
                     {
                         continue;
                     }
-                    any = true;
                     let t =
                         compute_spell_targets(&eng.state, eng.registry, p.id, face.spell_effect);
-                    for id in t.valid_permanent_ids {
-                        if !merged.valid_permanent_ids.contains(&id) {
-                            merged.valid_permanent_ids.push(id);
-                        }
-                    }
-                    for id in t.valid_stack_ids {
-                        if !merged.valid_stack_ids.contains(&id) {
-                            merged.valid_stack_ids.push(id);
-                        }
-                    }
-                    merged.can_target_self |= t.can_target_self;
-                    merged.can_target_opponent |= t.can_target_opponent;
-                }
-                if any {
-                    valid_targets_by_hand_slot.insert(slot as u32, merged);
+                    let key = (slot as u32) << 8 | face_index as u32;
+                    valid_targets_by_hand_slot.insert(key, t);
                 }
             }
 

@@ -1124,16 +1124,34 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
     if (handIndex < 0) {
         return false;
     }
+
+    // CR 709/712/715: a multi-face card carries an Oracle "A // B" name; each half is cast
+    // separately. Present a side-picker menu ("Cast Fire" / "Cast Ice") rather than casting a
+    // single fixed face. Single-face cards fall through to the direct cast below.
+    if (card->getName().split(QStringLiteral(" // "), Qt::SkipEmptyParts).size() > 1) {
+        return tryRuledSpellCastFaceMenu(card);
+    }
+
     GameEventHandler *const geh = player->getGame()->getGameEventHandler();
     const int ruledHandIndex = geh->resolveRuledSpellCastHandIndexForClickedCard(card);
     if (ruledHandIndex < 0) {
         return false;
     }
-    if (!player->getGame()->getGameEventHandler()->isRuledSpellCastLegalForHandIndex(ruledHandIndex)) {
+    return beginRuledSpellCast(card, ruledHandIndex, 0, card->getName(), card->getCardInfo().getManaCost());
+}
+
+bool PlayerActions::beginRuledSpellCast(CardItem *card,
+                                        int ruledHandIndex,
+                                        int faceIndex,
+                                        const QString &castName,
+                                        const QString &castCost)
+{
+    GameEventHandler *const geh = player->getGame()->getGameEventHandler();
+    if (!geh->isRuledSpellCastLegalForHandIndex(ruledHandIndex)) {
         return false;
     }
     if (pendingRuledSpellCast.valid && pendingRuledSpellCast.waitingForTarget &&
-        pendingRuledSpellCast.handIndex == ruledHandIndex) {
+        pendingRuledSpellCast.handIndex == ruledHandIndex && pendingRuledSpellCast.faceIndex == faceIndex) {
         cancelPendingRuledSpellCast();
         return true;
     }
@@ -1149,36 +1167,9 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
     clearPendingRuledSpellCast();
     pendingRuledSpellCast.valid = true;
     pendingRuledSpellCast.handIndex = ruledHandIndex;
+    pendingRuledSpellCast.faceIndex = faceIndex;
     pendingRuledSpellCast.selectedTargetOids.clear();
     pendingRuledSpellCast.xValue = 0;
-
-    // CR 709/712/715: a multi-face card carries an Oracle "A // B" name; each half is cast
-    // separately. Let the player pick the half and use that face's name + mana cost. The engine
-    // re-derives and validates the chosen face authoritatively (CastSpell.face_index below).
-    QString castName = card->getName();
-    QString castCost = card->getCardInfo().getManaCost();
-    pendingRuledSpellCast.faceIndex = 0;
-    const QStringList faceNames = card->getName().split(QStringLiteral(" // "), Qt::SkipEmptyParts);
-    if (faceNames.size() > 1) {
-        bool faceOk = false;
-        const QString chosen = QInputDialog::getItem(nullptr, tr("Choose a face to cast"),
-                                                     tr("Which half of %1 do you want to cast?").arg(card->getName()),
-                                                     faceNames, 0, false, &faceOk);
-        if (!faceOk) {
-            clearPendingRuledSpellCast();
-            return true; // user cancelled at the face picker
-        }
-        int chosenFace = faceNames.indexOf(chosen);
-        if (chosenFace < 0) {
-            chosenFace = 0;
-        }
-        pendingRuledSpellCast.faceIndex = chosenFace;
-        castName = faceNames.at(chosenFace);
-        // Oracle stores a split mana cost as "{1}{R} // {1}{U}"; fall back to the whole string
-        // (or empty for higher faces) when it isn't per-face split.
-        const QStringList faceCosts = card->getCardInfo().getManaCost().split(QStringLiteral(" // "));
-        castCost = chosenFace < faceCosts.size() ? faceCosts.at(chosenFace).trimmed() : QString();
-    }
     pendingRuledSpellCast.cardName = castName;
     pendingRuledSpellCast.remainingCost = parseSimpleManaCost(castCost);
 
@@ -1204,10 +1195,11 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
         emit ruledSpellTargetingChanged(true, pendingRuledSpellCast.cardName);
         if (card->getName().trimmed().compare(QStringLiteral("Lightning Bolt"), Qt::CaseInsensitive) == 0) {
             player->getGame()->getGameEventHandler()->emitLocalRuledLog(
-                tr("Cast %1 selected. Click a player's portrait or a creature, or press Cancel.").arg(card->getName()));
+                tr("Cast %1 selected. Click a player's portrait or a creature, or press Cancel.")
+                    .arg(pendingRuledSpellCast.cardName));
         } else {
             player->getGame()->getGameEventHandler()->emitLocalRuledLog(
-                tr("Cast %1 selected. Select a target card, or press Cancel.").arg(card->getName()));
+                tr("Cast %1 selected. Select a target card, or press Cancel.").arg(pendingRuledSpellCast.cardName));
         }
         return true;
     }
@@ -1229,8 +1221,75 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
 
     player->getGame()->getGameEventHandler()->emitLocalRuledLog(
         tr("Cast %1 selected. Pay mana by clicking counters: %2.")
-            .arg(card->getName(),
+            .arg(pendingRuledSpellCast.cardName,
                  formatRemainingCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips)));
+    return true;
+}
+
+bool PlayerActions::tryRuledSpellCastFaceMenu(CardItem *card)
+{
+    if (!card || !card->getZone()) {
+        return false;
+    }
+    if (!player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+        return false;
+    }
+    if (card->getZone()->getName() != ZoneNames::HAND) {
+        return false;
+    }
+    // Only multi-face cards (split / MDFC) use the side picker; single-face cards keep their direct
+    // single-click cast (CR 709/712/715: each face is cast separately via CastSpell.face_index).
+    const QStringList faceNames = card->getName().split(QStringLiteral(" // "), Qt::SkipEmptyParts);
+    if (faceNames.size() < 2) {
+        return false;
+    }
+    GameEventHandler *const geh = player->getGame()->getGameEventHandler();
+    if (!geh) {
+        return false;
+    }
+
+    // Collect the faces that are currently castable. Timing/zone legality is already reflected in the
+    // engine's per-face cast labels; all faces of one card resolve to the same hand slot. Oracle stores
+    // a split mana cost as "{1}{R} // {1}{U}"; fall back to the whole string for non-split costs.
+    struct FaceOption
+    {
+        int faceIndex;
+        int handIndex;
+        QString name;
+        QString cost;
+    };
+    QVector<FaceOption> options;
+    const QStringList faceCosts = card->getCardInfo().getManaCost().split(QStringLiteral(" // "));
+    for (int f = 0; f < faceNames.size(); ++f) {
+        const QList<int> legalSlots = geh->getRuledSpellCastHandIndicesForCardName(faceNames.at(f));
+        const int handIndex = geh->resolveEngineHandIndexFromLegalSlots(card, legalSlots);
+        if (handIndex < 0) {
+            continue;
+        }
+        const QString cost = f < faceCosts.size() ? faceCosts.at(f).trimmed() : QString();
+        options.append({f, handIndex, faceNames.at(f), cost});
+    }
+    if (options.isEmpty()) {
+        return false; // no face castable right now — let the caller fall through
+    }
+
+    QMenu menu;
+    menu.setTitle(card->getName());
+    QVector<QAction *> actionsByOption;
+    actionsByOption.reserve(options.size());
+    for (const FaceOption &opt : options) {
+        actionsByOption.append(menu.addAction(tr("Cast %1").arg(opt.name)));
+    }
+    QAction *chosen = menu.exec(QCursor::pos());
+    if (!chosen) {
+        return true; // menu was shown, player cancelled
+    }
+    const int sel = actionsByOption.indexOf(chosen);
+    if (sel < 0) {
+        return true;
+    }
+    const FaceOption &opt = options.at(sel);
+    beginRuledSpellCast(card, opt.handIndex, opt.faceIndex, opt.name, opt.cost);
     return true;
 }
 
@@ -1266,8 +1325,9 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
         return true;
     }
     const int slot = pendingRuledSpellCast.handIndex;
-    const bool valid = isOnBattlefield ? handler->isValidSpellTarget(slot, targetOid)
-                                       : handler->isValidSpellStackTarget(slot, targetOid);
+    const int face = pendingRuledSpellCast.faceIndex;
+    const bool valid = isOnBattlefield ? handler->isValidSpellTarget(slot, face, targetOid)
+                                       : handler->isValidSpellStackTarget(slot, face, targetOid);
     if (!valid) {
         player->getGame()->getGameEventHandler()->emitLocalRuledLog(
             tr("That is not a legal target for %1.").arg(pendingRuledSpellCast.cardName));
@@ -1314,7 +1374,8 @@ bool PlayerActions::isAwaitingRuledPlayerTargetSelection() const
         return false;
     }
     const int slot = pendingRuledSpellCast.handIndex;
-    return handler->canSpellTargetSelf(slot) || handler->canSpellTargetOpponent(slot);
+    const int face = pendingRuledSpellCast.faceIndex;
+    return handler->canSpellTargetSelf(slot, face) || handler->canSpellTargetOpponent(slot, face);
 }
 
 bool PlayerActions::isAwaitingRuledAbilityOrTriggerPlayerTarget() const
@@ -1349,13 +1410,14 @@ bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
 
     auto *handler = player->getGame()->getGameEventHandler();
     const int slot = pendingRuledSpellCast.handIndex;
+    const int face = pendingRuledSpellCast.faceIndex;
     const bool isSelf = (targetPlayerId == player->getPlayerInfo()->getId());
-    if (isSelf && !handler->canSpellTargetSelf(slot)) {
+    if (isSelf && !handler->canSpellTargetSelf(slot, face)) {
         player->getGame()->getGameEventHandler()->emitLocalRuledLog(
             tr("%1 must target an opponent.").arg(pendingRuledSpellCast.cardName));
         return true;
     }
-    if (!isSelf && !handler->canSpellTargetOpponent(slot)) {
+    if (!isSelf && !handler->canSpellTargetOpponent(slot, face)) {
         player->getGame()->getGameEventHandler()->emitLocalRuledLog(
             tr("%1 cannot target opponents.").arg(pendingRuledSpellCast.cardName));
         return true;

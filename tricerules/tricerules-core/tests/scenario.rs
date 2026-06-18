@@ -9446,6 +9446,9 @@ fn fire_ice_fire_half_deals_two_and_shows_face_name() {
     // The cast half's own name is on the stack card; the card id is the whole-card id.
     assert_eq!(push.description, "Fire");
     assert_eq!(push.card_id, "fire_ice");
+    // CR 709: a multi-face spell's stack card is annotated with the cast face name so the player
+    // sees which half resolves (the physical card still shows "Fire // Ice").
+    assert_eq!(push.ability_annotation, "Fire");
 
     e.apply_command(0, &pass()).expect("caster pass");
     e.apply_command(1, &pass()).expect("opponent pass");
@@ -9507,6 +9510,7 @@ fn fire_ice_ice_half_taps_and_draws() {
         })
         .expect("stack pushed");
     assert_eq!(push.description, "Ice");
+    assert_eq!(push.ability_annotation, "Ice");
 
     e.apply_command(0, &pass()).expect("caster pass");
     e.apply_command(1, &pass()).expect("opponent pass");
@@ -10826,5 +10830,71 @@ fn essence_scatter_and_negate_respect_spell_type() {
     assert!(
         count_card_id_in_graveyard(&e, 0, "lightning_bolt") == 1,
         "the noncreature spell is countered"
+    );
+}
+
+/// CR 709/115.4: each half of a split card offers only its own legal targets. Fire targets "any
+/// target" (creatures/players, never lands); Ice targets "any permanent" (including lands). The
+/// engine emits per-face target sets keyed by (hand_slot << 8 | face_index) so the UI cannot offer
+/// a land for Fire and then waste mana on an illegal cast the engine would reject.
+#[test]
+fn fire_ice_target_sets_are_per_face() {
+    let decks = Some(vec![
+        deck_with("mountain", &["fire_ice", "grizzly_bears"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(23, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // A creature (legal for both halves) and a land (legal for Ice only) on the battlefield.
+    let bears = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
+    let land = relocate_to_battlefield(&mut e, 0, "mountain", false);
+    let card_oid = relocate_to_hand(&mut e, 0, "fire_ice");
+    let slot = e.state.players[0]
+        .hand
+        .iter()
+        .position(|&o| o == card_oid)
+        .expect("fire_ice in hand") as u32;
+
+    // fill_legal emits a target set for every targeting face regardless of affordability, so no
+    // mana is needed; read the legal actions for the current state directly.
+    let batch = e.initial_response_batch();
+
+    let legal = batch.legal_by_player.get(&0).expect("legal for P0");
+    let fire_key = slot << 8; // face 0
+    let ice_key = (slot << 8) | 1; // face 1
+    let fire = legal
+        .valid_targets_by_hand_slot
+        .get(&fire_key)
+        .expect("Fire face target set");
+    let ice = legal
+        .valid_targets_by_hand_slot
+        .get(&ice_key)
+        .expect("Ice face target set");
+
+    assert!(
+        fire.valid_permanent_ids.contains(&bears),
+        "Fire can target a creature"
+    );
+    assert!(
+        !fire.valid_permanent_ids.contains(&land),
+        "Fire cannot target a land (any target excludes lands)"
+    );
+    assert!(
+        fire.can_target_opponent,
+        "Fire can target a player (any target)"
+    );
+
+    assert!(
+        ice.valid_permanent_ids.contains(&bears),
+        "Ice can target a creature permanent"
+    );
+    assert!(
+        ice.valid_permanent_ids.contains(&land),
+        "Ice can target a land permanent"
+    );
+    assert!(
+        !ice.can_target_opponent,
+        "Ice targets a permanent, not a player"
     );
 }
