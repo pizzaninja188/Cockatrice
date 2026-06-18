@@ -2340,14 +2340,18 @@ impl GameEngine {
         self.state.turn_step = TurnStep::Untap;
         ev.push(ev_phase_labeled(self, "untap"));
 
-        for o in self.state.objects.values_mut() {
-            if o.owner == ap {
-                o.tapped = false;
-            }
-        }
+        // CR 502.1 / 502.3: in their untap step the active player untaps the permanents they
+        // control and any creature they've controlled since their last turn began loses summoning
+        // sickness. Scope to the active player's battlefield, not every object they *own*: untapping
+        // is a battlefield-only action (cards in hand/graveyard/library/exile have no tap state),
+        // and a permanent is untapped by its controller, not its owner — untapping by owner would
+        // wrongly untap a permanent its owner no longer controls and skip one they took control of.
+        // (The battlefield zone list currently is the control list — owner == controller until
+        // control-changing effects are modeled.)
         if let Some(idx) = self.state.player_idx(ap) {
             for &oid in &self.state.players[idx].battlefield.clone() {
                 if let Some(c) = self.state.objects.get_mut(&oid) {
+                    c.tapped = false;
                     c.summoning_sick = false;
                 }
             }
