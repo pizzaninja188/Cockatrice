@@ -176,6 +176,12 @@ async fn read_proto<M: Message + Default>(
     let mut lenbuf = [0u8; 4];
     sock.read_exact(&mut lenbuf).await?;
     let len = u32::from_be_bytes(lenbuf) as usize;
+    // Cap the framed length so a corrupt/oversized prefix can't trigger a multi-GB allocation
+    // (mirrors the 16 MiB cap on the Servatrice relay side; full zone sync is a few KB).
+    const MAX_FRAME_LEN: usize = 16 * 1024 * 1024;
+    if len > MAX_FRAME_LEN {
+        return Err(format!("frame length {len} exceeds cap {MAX_FRAME_LEN}").into());
+    }
     let mut buf = vec![0u8; len];
     sock.read_exact(&mut buf).await?;
     Ok(M::decode(&buf[..])?)

@@ -3016,9 +3016,13 @@ fn lightning_bolt_fizzles_when_creature_target_left_battlefield() {
 
     let dead = e.state.objects.get(&bear).expect("bear");
     assert_eq!(dead.zone, tricerules_core::Zone::Graveyard);
+    // The first bolt's 3 damage killed the bear; the second fizzled (target left the
+    // battlefield). Marked damage is cleared on the zone change (CR 400.7) — the card in the
+    // graveyard is a new object — so the proof the second bolt added nothing is that the bear
+    // is dead with no lingering damage, not a damage total of 3.
     assert_eq!(
-        dead.damage, 3,
-        "only the first resolving bolt should deal damage"
+        dead.damage, 0,
+        "marked damage clears when leaving the battlefield"
     );
 }
 
@@ -6279,6 +6283,58 @@ fn unsummon_returns_target_creature_to_owner_hand() {
             && m.destination
                 == tricerules_proto::ruled::v1::permanent_moved::Destination::Hand as i32),
         "expected PermanentMoved(Hand) for bear, got {moves:?}"
+    );
+}
+
+/// CR 400.7 / 121.2: counters and marked damage do not survive a zone change. A creature with a
+/// +1/+1 counter and combat damage that is bounced to hand becomes a new object — the returned
+/// card must carry neither, so a recast is a fresh 2/2 rather than a damaged 3/3.
+#[test]
+fn bounce_clears_counters_and_marked_damage() {
+    use tricerules_cards::CounterKind;
+    let decks = Some(vec![
+        vec![
+            "island".into(),
+            "unsummon".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+        ],
+        forest_only_deck(),
+    ]);
+    let mut e = GameEngine::new(2611, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let bear = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    {
+        let o = e.state.objects.get_mut(&bear).expect("bear");
+        o.set_counter(CounterKind::PlusOnePlusOne, 1);
+        o.damage = 1;
+    }
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "unsummon");
+    e.apply_command(0, &cast_spell(idx, vec![TargetRef { object_id: bear }]))
+        .expect("cast unsummon");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass()).expect("p1 pass");
+    let returned = e.state.objects.get(&bear).expect("bear");
+    assert_eq!(returned.zone, tricerules_core::Zone::Hand);
+    assert_eq!(
+        returned.counter_count(CounterKind::PlusOnePlusOne),
+        0,
+        "counters must not survive the bounce"
+    );
+    assert_eq!(
+        returned.damage, 0,
+        "marked damage must not survive the bounce"
     );
 }
 

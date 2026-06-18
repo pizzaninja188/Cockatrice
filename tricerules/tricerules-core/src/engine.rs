@@ -2916,16 +2916,9 @@ impl GameEngine {
                     if let Some(&tid) = targets.first() {
                         let tgt = object_display_name(&self.state, self.registry, tid);
                         let owner = self.state.objects.get(&tid).map(|o| o.owner);
+                        // Transient battlefield state (damage, counters, tap) is reset centrally
+                        // by move_object_to_zone on leaving the battlefield (CR 400.7 / 121.2).
                         move_object_to_zone(&mut self.state, tid, Zone::Hand)?;
-                        // Reset transient permanent state when leaving the battlefield.
-                        if let Some(o) = self.state.objects.get_mut(&tid) {
-                            o.tapped = false;
-                            o.summoning_sick = false;
-                            o.damage = 0;
-                            o.deathtouch_damage = false;
-                            // power/toughness hold the printed base and are not cleared:
-                            // they remain valid for when the card re-enters the battlefield.
-                        }
                         events.push(ev_log(format!(
                             "{spell_label} returns {tgt} to its owner's hand"
                         )));
@@ -5435,6 +5428,17 @@ fn move_object_to_zone(state: &mut GameState, oid: ObjectId, z: Zone) -> Result<
                 e.source_id == Some(oid) && e.duration == EffectDuration::WhileSourceOnBattlefield;
             !single_on_this && !static_from_this
         });
+        // CR 400.7 / 121.2: a zone change makes this a new game object — transient
+        // battlefield-only state (marked damage, deathtouch marking, tap status) and all
+        // counters do not carry over. Centralized here so every leave path (SBA destroy,
+        // sacrifice, bounce, discard, mill, exile) is correct by construction; otherwise a
+        // creature bounced and recast would keep its +1/+1 counters or stale combat damage.
+        if let Some(o) = state.objects.get_mut(&oid) {
+            o.damage = 0;
+            o.deathtouch_damage = false;
+            o.tapped = false;
+            o.counters.clear();
+        }
     }
 
     let idx = state.player_idx(owner).unwrap();
