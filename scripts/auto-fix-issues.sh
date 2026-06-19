@@ -126,8 +126,14 @@ for (( i=1; i<=MAX_ISSUES; i++ )); do
       echo "agent found nothing eligible; stopping."
       break
       ;;
+    *"BLOCKED #"*)
+      # Issue was parked on master (Status: blocked/needs-human) so it won't be
+      # re-selected; move on to a different issue.
+      echo "agent parked an issue as blocked; moving on to the next."
+      ;;
     *"BLOCKED"*)
-      echo "agent reported BLOCKED; stopping so we don't loop on a hard issue."
+      # No issue id (e.g. dirty tree at start) — structural problem, don't churn.
+      echo "agent reported BLOCKED with no issue id (structural); stopping."
       break
       ;;
     *)

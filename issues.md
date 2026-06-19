@@ -6,6 +6,12 @@
 - Move to **Done** when resolved (keep a short log for history).
 - Use labels in brackets: `[bug]`, `[feature]`, `[chore]`, `[docs]`.
 
+### Auto-fixer `Status:` values (set by the unattended runs on `## In Progress` items)
+- `in-progress` — claimed/being worked. If a run ends here, it was interrupted (e.g. usage window) and the next run will **resume** it (up to 3 attempts).
+- `in-review` — a `fix/issue-N` branch is ready; test + merge it, then move the item to `## Done`.
+- `blocked - <reason>` — the agent gave up; needs a human. Not auto-retried.
+- `needs-human` — hit the attempt cap. Not auto-retried.
+
 ---
 
 ## Open
