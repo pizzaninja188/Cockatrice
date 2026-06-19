@@ -453,50 +453,20 @@ void PlayerActions::cancelPendingRuledSpellCast()
     }
     const QString cardName = pendingRuledSpellCast.cardName;
 
-    QList<const ::google::protobuf::Message *> cmdList;
-
-    // Refund mana paid toward the spell (last-in first-out) BEFORE undoing taps so counters
-    // never dip below zero. Payments were delta=-1; refund is delta=+1.
+    // Restore the mana counters drained pip-by-pip toward this spell. The cast was never sent, so
+    // the engine never spent the mana (the pool is engine-owned; the display was only decremented
+    // locally — see tryPayRuledSpellWithCounter). Any lands tapped to float mana stay tapped/floated
+    // and remain undoable via the engine's UndoManaAbility (the Undo button), not unwound here.
     for (int i = manaPaymentCounterIds.size() - 1; i >= 0; --i) {
-        const int cid = manaPaymentCounterIds[i];
-        auto *counterCmd = new Command_IncCounter;
-        counterCmd->set_counter_id(cid);
-        counterCmd->set_delta(1);
-        cmdList.append(counterCmd);
+        if (auto *counter = player->getCounters().value(manaPaymentCounterIds[i], nullptr)) {
+            counter->setValue(counter->getValue() + 1);
+        }
     }
     manaPaymentCounterIds.clear();
-
-    // Undo any lands tapped for mana after the spell was initiated.
-    for (int i = midCastLandTapStack.size() - 1; i >= 0; --i) {
-        const LandTapUndoEntry &entry = midCastLandTapStack[i];
-        CardItem *card = player->getTableZone()->getCards().findCard(entry.cardId);
-        if (card) {
-            card->setTapped(false, true);
-            auto *attrCmd = new Command_SetCardAttr;
-            attrCmd->set_zone(ZoneNames::TABLE);
-            attrCmd->set_card_id(entry.cardId);
-            attrCmd->set_attribute(AttrTapped);
-            attrCmd->set_attr_value("0");
-            cmdList.append(attrCmd);
-        }
-        if (entry.counterId >= 0) {
-            if (auto *counter = player->getCounters().value(entry.counterId, nullptr)) {
-                counter->setValue(counter->getValue() - 1);
-            }
-            auto *counterCmd = new Command_IncCounter;
-            counterCmd->set_counter_id(entry.counterId);
-            counterCmd->set_delta(-1);
-            cmdList.append(counterCmd);
-        }
-    }
     midCastLandTapStack.clear();
 
-    if (!cmdList.isEmpty()) {
-        sendGameCommand(prepareGameCommand(cmdList));
-    }
-
     clearPendingRuledSpellCast();
-    emit landTapUndoAvailableChanged(!landTapUndoStack.isEmpty());
+    emit landTapUndoAvailableChanged(landTapUndoCurrentlyAvailable());
     player->getGame()->getGameEventHandler()->emitLocalRuledLog(tr("Canceled casting %1.").arg(cardName));
 }
 
@@ -513,8 +483,45 @@ void PlayerActions::recordLandTapUndo(int cardId, const QString &counterName, in
     }
 }
 
+bool PlayerActions::landTapUndoCurrentlyAvailable() const
+{
+    if (player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+        return ruledUndoableManaCount > 0;
+    }
+    return !landTapUndoStack.isEmpty();
+}
+
+void PlayerActions::setRuledUndoableManaCount(int count)
+{
+    const int clamped = count < 0 ? 0 : count;
+    if (clamped == ruledUndoableManaCount) {
+        return;
+    }
+    ruledUndoableManaCount = clamped;
+    emit landTapUndoAvailableChanged(landTapUndoCurrentlyAvailable());
+}
+
 void PlayerActions::undoLastLandTap()
 {
+    // CR 605 float courtesy: in ruled mode the engine owns tap state and the mana pool, so undo is
+    // an engine command (UndoManaAbility) that untaps the source and removes the floated mana. The
+    // resulting batch refreshes undoable_mana_abilities, which drives the button back off when 0.
+    if (player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+        if (ruledUndoableManaCount <= 0) {
+            return;
+        }
+        ruled::v1::RuledCommand ruledCommand;
+        ruledCommand.mutable_undo_mana_ability();
+        std::string payload;
+        if (!ruledCommand.SerializeToString(&payload)) {
+            return;
+        }
+        Command_RuledPayload cmd;
+        cmd.set_payload(payload);
+        sendGameCommand(cmd);
+        return;
+    }
+
     if (landTapUndoStack.isEmpty()) {
         return;
     }
@@ -547,7 +554,7 @@ void PlayerActions::undoLastLandTap()
         sendGameCommand(prepareGameCommand(cmdList));
     }
 
-    emit landTapUndoAvailableChanged(!landTapUndoStack.isEmpty());
+    emit landTapUndoAvailableChanged(landTapUndoCurrentlyAvailable());
 }
 
 void PlayerActions::clearLandTapUndoStack()
@@ -662,7 +669,7 @@ void PlayerActions::finishPendingAbilityManaPaymentStep()
     }
     emit ruledAbilityManaPromptChanged();
     player->getGame()->getGameEventHandler()->emitLocalRuledLog(
-        tr("Pay mana for %1: %2 remaining (tap your lands).")
+        tr("Pay mana for %1: %2 remaining (click mana counters).")
             .arg(pendingActivatedAbility.cardName,
                  formatRemainingCost(pendingActivatedAbility.remainingCost, pendingActivatedAbility.flexPips)));
 }
@@ -687,91 +694,6 @@ void PlayerActions::finishPendingSpellManaPaymentStep()
         tr("Pay mana for %1: %2 remaining (click mana counters).")
             .arg(pendingRuledSpellCast.cardName,
                  formatRemainingCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips)));
-}
-
-QPair<bool, bool> PlayerActions::tryConsumeLandManaPipTowardPendingSpell(const QString &manaCounterName)
-{
-    if (manaCounterName.trimmed().isEmpty()) {
-        return {false, false};
-    }
-    const QString rawLower = manaCounterName.trimmed().toLower();
-    const bool colorlessOnly = (rawLower == QLatin1String("x") || rawLower == QLatin1String("c"));
-    QChar sym;
-    if (!colorlessOnly) {
-        if (rawLower.size() != 1) {
-            return {false, false};
-        }
-        const QChar c = rawLower.at(0).toUpper();
-        if (!QStringLiteral("WUBRGC").contains(c)) {
-            return {false, false};
-        }
-        sym = c;
-    } else {
-        sym = QChar();
-    }
-
-    if (!tryReducePendingSpellRemainingCostOnePip(colorlessOnly, sym)) {
-        return {false, false};
-    }
-    const int totalRemaining =
-        totalRemainingForCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips);
-    return {true, totalRemaining == 0};
-}
-
-void PlayerActions::afterRuledLandTapsAppliedForSpellMana(bool completeCast, bool partialCostRemainPrompt)
-{
-    if (completeCast) {
-        completePendingRuledSpellCast();
-    } else if (partialCostRemainPrompt) {
-        emit ruledSpellManaPromptChanged();
-        player->getGame()->getGameEventHandler()->emitLocalRuledLog(
-            tr("Pay mana for %1: %2 remaining (click mana counters).")
-                .arg(pendingRuledSpellCast.cardName,
-                     formatRemainingCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips)));
-    }
-}
-
-QPair<bool, bool> PlayerActions::tryConsumeLandManaPipTowardPendingAbility(const QString &manaCounterName)
-{
-    if (manaCounterName.trimmed().isEmpty()) {
-        return {false, false};
-    }
-    const QString rawLower = manaCounterName.trimmed().toLower();
-    const bool colorlessOnly = (rawLower == QLatin1String("x") || rawLower == QLatin1String("c"));
-    QChar sym;
-    if (!colorlessOnly) {
-        if (rawLower.size() != 1) {
-            return {false, false};
-        }
-        const QChar c = rawLower.at(0).toUpper();
-        if (!QStringLiteral("WUBRGC").contains(c)) {
-            return {false, false};
-        }
-        sym = c;
-    } else {
-        sym = QChar();
-    }
-
-    if (!tryReducePendingAbilityRemainingCostOnePip(colorlessOnly, sym)) {
-        return {false, false};
-    }
-    const int totalRemaining =
-        totalRemainingForCost(pendingActivatedAbility.remainingCost, pendingActivatedAbility.flexPips);
-    return {true, totalRemaining == 0};
-}
-
-void PlayerActions::afterRuledLandTapsAppliedForAbilityMana(bool completeActivation, bool partialCostRemainPrompt)
-{
-    if (completeActivation) {
-        pendingActivatedAbility.waitingForMana = false;
-        completeActivateAbility();
-    } else if (partialCostRemainPrompt) {
-        emit ruledAbilityManaPromptChanged();
-        player->getGame()->getGameEventHandler()->emitLocalRuledLog(
-            tr("Pay mana for %1: %2 remaining (tap your lands).")
-                .arg(pendingActivatedAbility.cardName,
-                     formatRemainingCost(pendingActivatedAbility.remainingCost, pendingActivatedAbility.flexPips)));
-    }
 }
 
 bool PlayerActions::tryPayRuledAbilityWithCounter(const QString &counterName)
@@ -809,10 +731,14 @@ bool PlayerActions::tryPayRuledAbilityWithCounter(const QString &counterName)
     }
 
     manaPaymentCounterIds.append(counterId);
-    Command_IncCounter cmd;
-    cmd.set_counter_id(counterId);
-    cmd.set_delta(-1);
-    sendGameCommand(cmd);
+    // CR 106/605: the mana pool is engine-owned and the server rejects client IncCounter on pool
+    // counters; the real deduction lands engine-side when the activation is sent (echoed back as
+    // ManaPoolUpdated). Reflect the pending spend immediately by decrementing the displayed counter
+    // locally so the player sees their pool drain pip-by-pip and can't over-click mana they lack;
+    // cancelPendingActivatedAbility restores it if the activation is abandoned.
+    if (auto *counter = player->getCounters().value(counterId, nullptr)) {
+        counter->setValue(counter->getValue() - 1);
+    }
     finishPendingAbilityManaPaymentStep();
     return true;
 }
@@ -825,49 +751,22 @@ void PlayerActions::cancelPendingActivatedAbility()
     const QString abilityText = pendingActivatedAbility.abilityText;
     const QString cardName = pendingActivatedAbility.cardName;
 
-    QList<const ::google::protobuf::Message *> cmdList;
-
+    // Restore the mana counters drained pip-by-pip toward this activation. The activation was never
+    // sent, so the engine never spent the mana (the pool is engine-owned; the display was only
+    // decremented locally — see tryPayRuledAbilityWithCounter). Any lands tapped to float mana stay
+    // floated and remain undoable via the engine's UndoManaAbility (the Undo button).
     for (int i = manaPaymentCounterIds.size() - 1; i >= 0; --i) {
-        const int cid = manaPaymentCounterIds[i];
-        auto *counterCmd = new Command_IncCounter;
-        counterCmd->set_counter_id(cid);
-        counterCmd->set_delta(1);
-        cmdList.append(counterCmd);
+        if (auto *counter = player->getCounters().value(manaPaymentCounterIds[i], nullptr)) {
+            counter->setValue(counter->getValue() + 1);
+        }
     }
     manaPaymentCounterIds.clear();
-
-    for (int i = midCastLandTapStack.size() - 1; i >= 0; --i) {
-        const LandTapUndoEntry &entry = midCastLandTapStack[i];
-        CardItem *card = player->getTableZone()->getCards().findCard(entry.cardId);
-        if (card) {
-            card->setTapped(false, true);
-            auto *attrCmd = new Command_SetCardAttr;
-            attrCmd->set_zone(ZoneNames::TABLE);
-            attrCmd->set_card_id(entry.cardId);
-            attrCmd->set_attribute(AttrTapped);
-            attrCmd->set_attr_value("0");
-            cmdList.append(attrCmd);
-        }
-        if (entry.counterId >= 0) {
-            if (auto *counter = player->getCounters().value(entry.counterId, nullptr)) {
-                counter->setValue(counter->getValue() - 1);
-            }
-            auto *counterCmd = new Command_IncCounter;
-            counterCmd->set_counter_id(entry.counterId);
-            counterCmd->set_delta(-1);
-            cmdList.append(counterCmd);
-        }
-    }
     midCastLandTapStack.clear();
-
-    if (!cmdList.isEmpty()) {
-        sendGameCommand(prepareGameCommand(cmdList));
-    }
 
     emit ruledActivatedAbilityTargetPendingChanged(false, {});
     emit ruledAbilityActivationPendingChanged(false);
     pendingActivatedAbility = {};
-    emit landTapUndoAvailableChanged(!landTapUndoStack.isEmpty());
+    emit landTapUndoAvailableChanged(landTapUndoCurrentlyAvailable());
     player->getGame()->getGameEventHandler()->emitLocalRuledLog(
         tr("Canceled activating %1.").arg(cardName.isEmpty() ? abilityText : cardName));
 }
@@ -880,7 +779,7 @@ QString PlayerActions::pendingRuledAbilityPromptText() const
     if (totalRemainingForCost(pendingActivatedAbility.remainingCost, pendingActivatedAbility.flexPips) == 0) {
         return {};
     }
-    return tr("Pay mana for %1: %2 remaining (tap your lands).")
+    return tr("Pay mana for %1: %2 remaining (click mana counters).")
         .arg(pendingActivatedAbility.cardName,
              formatRemainingCost(pendingActivatedAbility.remainingCost, pendingActivatedAbility.flexPips));
 }
@@ -979,10 +878,14 @@ bool PlayerActions::tryPayRuledSpellWithCounter(const QString &counterName)
     }
 
     manaPaymentCounterIds.append(counterId);
-    Command_IncCounter cmd;
-    cmd.set_counter_id(counterId);
-    cmd.set_delta(-1);
-    sendGameCommand(cmd);
+    // CR 106/605: the mana pool is engine-owned and the server rejects client IncCounter on pool
+    // counters; the real deduction lands engine-side when the cast is sent (echoed back as
+    // ManaPoolUpdated). Reflect the pending spend immediately by decrementing the displayed counter
+    // locally so the player sees their pool drain pip-by-pip and can't over-click mana they lack;
+    // cancelPendingRuledSpellCast restores it if the cast is abandoned.
+    if (auto *counter = player->getCounters().value(counterId, nullptr)) {
+        counter->setValue(counter->getValue() - 1);
+    }
     finishPendingSpellManaPaymentStep();
     return true;
 }
@@ -3437,7 +3340,7 @@ PendingCommand *PlayerActions::prepareGameCommand(const QList<const ::google::pr
     }
 }
 
-bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card)
+bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
 {
     if (!card || !card->getZone()) {
         return false;
@@ -3491,6 +3394,21 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card)
     const QStringList abilityTexts = handler->activatedAbilitiesForOid(oid);
     if (abilityTexts.isEmpty()) {
         return false;
+    }
+
+    // CR 605: a left-click on a permanent whose *only* activated ability is a mana ability skips the
+    // menu and floats the mana directly (the engine taps the source and adds the mana; it comes back
+    // via ManaPoolUpdated). Right-click (leftClick == false) always opens the full menu. A permanent
+    // with more than one ability, or whose single ability is not a mana ability, also uses the menu.
+    const QStringList manaProduced = handler->activatedAbilityManaProducedForOid(oid);
+    if (leftClick && abilityTexts.size() == 1 && !manaProduced.value(0).isEmpty()) {
+        Command_RuledPayload *activate = newRuledPayloadActivateManaAbilityForLand(card, QChar());
+        if (!activate) {
+            return false; // not a mana source the engine recognizes; let normal handling continue
+        }
+        sendGameCommand(*activate);
+        delete activate;
+        return true;
     }
 
     // Build and show the context menu.

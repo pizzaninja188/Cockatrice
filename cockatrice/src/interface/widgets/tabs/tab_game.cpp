@@ -1334,6 +1334,10 @@ void TabGame::addLocalPlayer(Player *newPlayer, int playerId)
                 });
         connect(gamePromptWidget, &GamePromptWidget::undoLandTapRequested, newPlayer->getPlayerActions(),
                 &PlayerActions::undoLastLandTap);
+        // CR 605 float courtesy: in ruled mode the Undo button reflects the engine's authoritative
+        // undoable-mana count (per local player), which re-emits landTapUndoAvailableChanged.
+        connect(game->getGameEventHandler(), &GameEventHandler::ruledUndoableManaAbilitiesChanged,
+                newPlayer->getPlayerActions(), &PlayerActions::setRuledUndoableManaCount);
     }
 
     // auto load deck for player if that debug setting is enabled

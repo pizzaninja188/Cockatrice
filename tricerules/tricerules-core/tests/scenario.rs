@@ -7,6 +7,7 @@ use tricerules_proto::ruled::v1::{
     DeclareAttackers, DeclareBlockers, DiscardToHandSize, FlexPipPayment, PassPriority, PlayLand,
     PreviewDeclareAttackers, PreviewDeclareBlockers, PrimitiveYieldStructured,
     ResolutionChoiceRequired, RuledCommand, RuledEventBatch, SubmitResolutionChoice, TargetRef,
+    UndoManaAbility,
 };
 
 use tricerules_core::GameEngine;
@@ -154,6 +155,12 @@ fn activate_ability(
             targets,
             ..Default::default()
         })),
+    }
+}
+
+fn undo_mana_ability() -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::UndoManaAbility(UndoManaAbility {})),
     }
 }
 
@@ -464,6 +471,110 @@ fn tap_and_mana_ability_rejected_when_tapped_leaves_pool_intact() {
     assert_eq!(
         e.state.players[0].mana_pool.colorless, 4,
         "mana pool must be untouched when the tap precondition fails"
+    );
+}
+
+/// CR 605 float courtesy: a freshly activated pure-`{T}` mana ability is undoable while still
+/// inconsequential. `UndoManaAbility` untaps the source and removes exactly the produced mana, and
+/// the controller's `LegalActions` advertises the undoable count.
+#[test]
+fn undo_mana_ability_untaps_source_and_removes_float() {
+    let mut e = GameEngine::new(31, &[0, 1], 20, None, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let land = inject_permanent_on_battlefield(&mut e, 0, "mountain");
+
+    let batch = e
+        .apply_command(0, &activate_ability(land, 0, vec![]))
+        .expect("tap mountain for {R}");
+    assert_eq!(e.state.players[0].mana_pool.red, 1, "floated {{R}}");
+    assert!(
+        e.state.objects[&land].tapped,
+        "source tapped as the {{T}} cost"
+    );
+    assert_eq!(
+        batch.legal_by_player[&0].undoable_mana_abilities, 1,
+        "one undoable float advertised to the controller"
+    );
+
+    let undo = e
+        .apply_command(0, &undo_mana_ability())
+        .expect("undo the float");
+    assert_eq!(e.state.players[0].mana_pool.red, 0, "floated mana removed");
+    assert!(
+        !e.state.objects[&land].tapped,
+        "source untapped by the undo"
+    );
+    assert_eq!(
+        undo.legal_by_player[&0].undoable_mana_abilities, 0,
+        "nothing left to undo after rewinding"
+    );
+
+    let err = e
+        .apply_command(0, &undo_mana_ability())
+        .expect_err("no float remains to undo");
+    assert!(
+        format!("{err:?}").contains("no mana ability to undo"),
+        "unexpected error: {err:?}"
+    );
+}
+
+/// The undo courtesy ends the instant the float is spent: casting a spell off the floated mana
+/// clears the undo history, so a later `UndoManaAbility` is rejected (it would otherwise let a
+/// player re-float spent mana / untap a land that paid for a spell on the stack).
+#[test]
+fn undo_mana_ability_cleared_once_float_is_spent() {
+    let decks = Some(vec![
+        {
+            let mut d = vec!["mountain".to_string(), "lightning_bolt".to_string()];
+            d.extend(std::iter::repeat_n("mountain".to_string(), 10));
+            d
+        },
+        vec!["forest".into(); 12],
+    ]);
+    let mut e = GameEngine::new(13, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let mountain_idx = hand_index_for_card(&e, 0, "mountain");
+    e.apply_command(0, &play_land(mountain_idx))
+        .expect("play mountain");
+    let land = *e.state.players[0].battlefield.last().expect("land on bf");
+    e.apply_command(0, &activate_ability(land, 0, vec![]))
+        .expect("tap mountain for {R}");
+
+    let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+        .expect("cast bolt off the floated red");
+
+    let err = e
+        .apply_command(0, &undo_mana_ability())
+        .expect_err("float was spent on the bolt; nothing to undo");
+    assert!(
+        format!("{err:?}").contains("no mana ability to undo"),
+        "unexpected error: {err:?}"
+    );
+}
+
+/// Passing priority makes a float consequential (the opponent gets a window), so the undo history
+/// is dropped: the floated mana stays in the pool but can no longer be rewound.
+#[test]
+fn undo_mana_ability_cleared_by_passing_priority() {
+    let mut e = GameEngine::new(14, &[0, 1], 20, None, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let land = inject_permanent_on_battlefield(&mut e, 0, "mountain");
+    e.apply_command(0, &activate_ability(land, 0, vec![]))
+        .expect("tap mountain for {R}");
+
+    e.apply_command(0, &pass()).expect("pass priority");
+    // Stack cleared by the pass and it is no longer player 0's priority.
+    let err = e
+        .apply_command(0, &undo_mana_ability())
+        .expect_err("cannot undo after passing priority");
+    assert!(
+        format!("{err:?}").contains("not your priority"),
+        "unexpected error: {err:?}"
+    );
+    assert_eq!(
+        e.state.players[0].mana_pool.red, 1,
+        "floated mana persists (only the undo affordance is gone)"
     );
 }
 

@@ -941,12 +941,13 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
         }
         // Activated ability menu on right-click (battlefield permanents with abilities), and the
         // split/MDFC side-picker menu ("Cast Fire" / "Cast Ice") for multi-face cards in hand.
+        // Right-click always shows the full ability menu (leftClick = false).
         if (owner != nullptr) {
             auto *game = owner->getGame();
             auto *playerManager = game ? game->getPlayerManager() : nullptr;
             auto *localPlayer = playerManager ? playerManager->getPlayers().value(playerManager->getLocalPlayerId()) : nullptr;
             auto *actions = localPlayer ? localPlayer->getPlayerActions() : nullptr;
-            if (owner->getPlayerInfo()->getLocal() && actions && actions->tryRuledActivateAbilityMenu(this)) {
+            if (owner->getPlayerInfo()->getLocal() && actions && actions->tryRuledActivateAbilityMenu(this, false)) {
                 AbstractCardItem::mouseReleaseEvent(event);
                 return;
             }
@@ -992,9 +993,11 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
                 AbstractCardItem::mouseReleaseEvent(event);
                 return;
             }
-            // Left-click on a permanent with activated abilities — show activation menu.
+            // Left-click on a permanent with activated abilities. A permanent whose sole ability is
+            // a mana ability (CR 605) activates directly (floats mana, no menu); anything else opens
+            // the activation menu (leftClick = true selects that fast path).
             if (stationaryLeft && owner->getPlayerInfo()->getLocal() && actions && zone &&
-                zone->getName() == ZoneNames::TABLE && actions->tryRuledActivateAbilityMenu(this)) {
+                zone->getName() == ZoneNames::TABLE && actions->tryRuledActivateAbilityMenu(this, true)) {
                 setCursor(Qt::OpenHandCursor);
                 AbstractCardItem::mouseReleaseEvent(event);
                 return;

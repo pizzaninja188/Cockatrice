@@ -1762,6 +1762,10 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             for (const auto &l : lit->second.labels()) {
                                 promptFeed += QStringLiteral(" — %1\n").arg(QString::fromStdString(l));
                             }
+                            // CR 605 float courtesy: surface the engine's undoable-mana count so the
+                            // client can offer/retract the Undo affordance authoritatively.
+                            emit ruledUndoableManaAbilitiesChanged(
+                                static_cast<int>(lit->second.undoable_mana_abilities()));
                         } else {
                             legalRuledLandPlayHandIndices.clear();
                             legalRuledLandPlayIndicesByCardName.clear();
@@ -1774,6 +1778,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             ruledOpeningBottomSelectedIndices.clear();
                             ruledOpeningPickSeatIds.clear();
                             ruledOpeningUiKind = RuledOpeningUiKind::None;
+                            emit ruledUndoableManaAbilitiesChanged(0);
                         }
                         pruneCleanupDiscardSelectionAndEmitUi();
                         if (ruledStackTrackingDirty) {

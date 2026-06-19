@@ -80,10 +80,6 @@ public:
     void moveOneCardUntil(CardItem *card);
     void stopMoveTopCardsUntil();
     bool tryPayRuledSpellWithCounter(const QString &counterName);
-    /// Apply one land mana pip toward pending spell cost (local only). Returns { consumed, costFullyPaid }.
-    [[nodiscard]] QPair<bool, bool> tryConsumeLandManaPipTowardPendingSpell(const QString &manaCounterName);
-    /// Call after tap `SetCardAttr` commands are sent. Completes cast and/or updates prompt.
-    void afterRuledLandTapsAppliedForSpellMana(bool completeCast, bool partialCostRemainPrompt);
     /// CR 605: activate this land's mana ability so the engine produces mana and taps it. When the
     /// ability has multiple options (a dual land), `desiredColor` (e.g. 'u') selects the matching
     /// one. Caller owns the pointer; nullptr if the card is not a mana source in this ruled game.
@@ -97,8 +93,11 @@ public:
     void cancelPendingRuledSpellCast();
     /// Returns the mana-payment prompt text if a spell is pending and still needs mana, otherwise empty.
     [[nodiscard]] QString pendingRuledSpellPromptText() const;
-    /// Show context menu for activated abilities on a battlefield permanent. Returns true if menu was shown.
-    bool tryRuledActivateAbilityMenu(CardItem *card);
+    /// Activated abilities on a battlefield permanent. With `leftClick` true, a permanent whose sole
+    /// ability is a mana ability (CR 605) is activated directly (the mana floats, no menu); every
+    /// other case (multiple abilities, or a non-mana ability) opens the activation menu. Right-click
+    /// passes `leftClick` false to always open the menu. Returns true if the click was consumed.
+    bool tryRuledActivateAbilityMenu(CardItem *card, bool leftClick);
     /// Show a side-picker menu ("Cast Fire" / "Cast Ice") for a multi-face card in hand and begin the
     /// chosen face's cast. Returns true if the menu was shown (click consumed); false for single-face
     /// cards or when no face is currently castable.
@@ -108,10 +107,6 @@ public:
     bool tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer);
     /// Click a pool mana counter to pay toward a pending activated ability. Returns true if consumed.
     bool tryPayRuledAbilityWithCounter(const QString &counterName);
-    /// Apply one land mana pip toward pending ability cost (local only). Returns { consumed, costFullyPaid }.
-    [[nodiscard]] QPair<bool, bool> tryConsumeLandManaPipTowardPendingAbility(const QString &manaCounterName);
-    /// Call after tap commands are sent. Completes activation and/or updates prompt.
-    void afterRuledLandTapsAppliedForAbilityMana(bool completeActivation, bool partialCostRemainPrompt);
     void cancelPendingActivatedAbility();
     /// Returns the mana-payment prompt text if an ability is pending and still needs mana, otherwise empty.
     [[nodiscard]] QString pendingRuledAbilityPromptText() const;
@@ -224,6 +219,11 @@ public slots:
     void actSortHand();
 
     void cardMenuAction();
+
+    /// Ruled mode: the engine's count of this player's currently-undoable mana abilities
+    /// (LegalActions.undoable_mana_abilities). Drives the Undo affordance; re-emits
+    /// landTapUndoAvailableChanged so the prompt reflects the authoritative state.
+    void setRuledUndoableManaCount(int count);
 
 private:
     // A flexible mana pip (CR 107.4d–f) parsed from a Scryfall brace cost, with its ordinal
@@ -370,6 +370,13 @@ private:
     QVector<LandTapUndoEntry> landTapUndoStack;
     QVector<LandTapUndoEntry> midCastLandTapStack;
     QVector<int> manaPaymentCounterIds;
+    // Ruled mode: engine-reported count of this player's undoable mana abilities (CR 605 float
+    // courtesy). Authoritative source for the Undo button in ruled games; the local
+    // `landTapUndoStack` drives it only in freeform. See setRuledUndoableManaCount.
+    int ruledUndoableManaCount = 0;
+    // True when the Undo affordance should currently be offered: engine count > 0 in ruled mode,
+    // a non-empty local stack in freeform.
+    [[nodiscard]] bool landTapUndoCurrentlyAvailable() const;
 
     void moveTopCardsTo(const QString &targetZone, const QString &zoneDisplayName, bool faceDown);
     void moveBottomCardsTo(const QString &targetZone, const QString &zoneDisplayName, bool faceDown);

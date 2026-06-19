@@ -309,12 +309,6 @@ void TableZone::toggleTapped()
             return;
         }
     }
-    bool spellLandManaConsumed = false;
-    bool spellCostFullyPaidAfterLands = false;
-    bool spellLandPartialRemain = false;
-    bool abilityLandManaConsumed = false;
-    bool abilityCostFullyPaidAfterLands = false;
-    bool abilityLandPartialRemain = false;
     PlayerActions *const playerActions = getLogic()->getPlayer()->getPlayerActions();
     for (const auto &selectedItem : selectedItems) {
         CardItem *temp = qgraphicsitem_cast<CardItem *>(selectedItem);
@@ -325,45 +319,19 @@ void TableZone::toggleTapped()
 
         if (ruledGame) {
             // CR 605/106: the engine owns tap state and the mana pool. Tapping a land here means
-            // activating its mana ability — the engine taps the source and adds the mana, which
+            // activating its mana ability — the engine taps the source and floats the mana, which
             // come back via zone_view (battlefield_tapped) and ManaPoolUpdated. The client never
-            // taps locally, mints mana, or pokes counters. The pip bookkeeping below only decides
-            // when to auto-cast / refresh the prompt; the engine is authoritative either way.
+            // taps locally, mints mana, or pokes counters. Tapping only ever *produces* mana; paying
+            // a pending spell/ability is a separate step (click the pool counters), so the produced
+            // mana shows on the pool counter and can be undone via the engine's UndoManaAbility.
             if (!(tapAll && !wasTapped)) {
                 continue;
             }
             const QString manaCounterName = inferLandManaCounterName(temp);
             const QChar desiredColor = manaCounterName.isEmpty() ? QChar() : manaCounterName.at(0);
-            Command_RuledPayload *activate =
-                playerActions->newRuledPayloadActivateManaAbilityForLand(temp, desiredColor);
-            if (!activate) {
-                continue; // not a mana source in the engine
-            }
-            const QPair<bool, bool> spellLand =
-                playerActions->tryConsumeLandManaPipTowardPendingSpell(manaCounterName);
-            if (spellLand.first) {
-                spellLandManaConsumed = true;
+            if (Command_RuledPayload *activate =
+                    playerActions->newRuledPayloadActivateManaAbilityForLand(temp, desiredColor)) {
                 cmdList.append(activate);
-                if (spellLand.second) {
-                    spellCostFullyPaidAfterLands = true;
-                } else {
-                    spellLandPartialRemain = true;
-                }
-            } else {
-                const QPair<bool, bool> abilityLand =
-                    playerActions->tryConsumeLandManaPipTowardPendingAbility(manaCounterName);
-                if (abilityLand.first) {
-                    abilityLandManaConsumed = true;
-                    cmdList.append(activate);
-                    if (abilityLand.second) {
-                        abilityCostFullyPaidAfterLands = true;
-                    } else {
-                        abilityLandPartialRemain = true;
-                    }
-                } else {
-                    // No pending cost — just float the produced mana into the pool.
-                    cmdList.append(activate);
-                }
             }
             continue;
         }
@@ -396,15 +364,6 @@ void TableZone::toggleTapped()
     }
     if (!cmdList.isEmpty()) {
         playerActions->sendGameCommand(playerActions->prepareGameCommand(cmdList));
-    }
-    if (spellLandManaConsumed) {
-        playerActions->afterRuledLandTapsAppliedForSpellMana(spellCostFullyPaidAfterLands,
-                                                               spellLandPartialRemain && !spellCostFullyPaidAfterLands);
-    }
-    if (abilityLandManaConsumed) {
-        playerActions->afterRuledLandTapsAppliedForAbilityMana(
-            abilityCostFullyPaidAfterLands,
-            abilityLandPartialRemain && !abilityCostFullyPaidAfterLands);
     }
 }
 

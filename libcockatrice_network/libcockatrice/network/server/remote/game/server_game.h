@@ -159,7 +159,10 @@ private:
     void handleRuledEngineConnectionLost();
     void applyRuledStartupBatch(const ruled::v1::IpcResponse &resp,
                                 const QList<QPair<int, QStringList>> &deckByPlayer);
-    RuledBatchApplyResult applyRuledBatch(const ruled::v1::IpcResponse &resp);
+    // `forceUntapForPlayerId` (default -1 = none) lets engine untaps outside the untap step reach
+    // clients for that player's permanents — used for UndoManaAbility (CR 605 float courtesy), which
+    // legitimately untaps a mana source mid-turn. Without it the normal guard keeps the visual tapped.
+    RuledBatchApplyResult applyRuledBatch(const ruled::v1::IpcResponse &resp, int forceUntapForPlayerId = -1);
     void applyRuledStackResolvedEvent(const ruled::v1::StackResolved &stackResolved);
 signals:
     void sigStartGameIfReady(bool override);

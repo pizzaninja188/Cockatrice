@@ -1139,7 +1139,10 @@ Response::ResponseCode Server_Game::processRuledPayload(int playerId, const Comm
         }
     }
 
-    const RuledBatchApplyResult batchResult = applyRuledBatch(resp);
+    // CR 605 float courtesy: an UndoManaAbility untaps the source mid-turn, so let that untap reach
+    // the commanding player's clients (the normal guard only releases taps during the untap step).
+    const int forceUntapForPlayerId = ruledCmd.has_undo_mana_ability() ? playerId : -1;
+    const RuledBatchApplyResult batchResult = applyRuledBatch(resp, forceUntapForPlayerId);
     if (batchResult.zoneViewApplied &&
         (batchResult.handOrLibraryChanged || batchResult.battlefieldOrderChanged)) {
         sendGameStateToPlayers();
@@ -1287,7 +1290,8 @@ void Server_Game::applyRuledStackResolvedEvent(const ruled::v1::StackResolved &s
     }
 }
 
-Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1::IpcResponse &resp)
+Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1::IpcResponse &resp,
+                                                                int forceUntapForPlayerId)
 {
     RuledBatchApplyResult result;
     if (!resp.has_batch()) {
@@ -1581,8 +1585,10 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
         }
         for (const auto &p : e.zone_view().per_player()) {
             // Untap-step "reset" applies only to the active player's view; NAP may stay tapped.
+            // UndoManaAbility (CR 605) also untaps mid-turn, but only for the player who undid it.
             const bool perPlayerAllowUntap =
-                batchHasUntapPhase && p.player_id() == getActivePlayer();
+                (batchHasUntapPhase && p.player_id() == getActivePlayer()) ||
+                p.player_id() == forceUntapForPlayerId;
             if (Server_AbstractPlayer *ab = getPlayer(p.player_id())) {
                 const Server_Player::RuledZoneSyncResult sync =
                     static_cast<Server_Player *>(ab)->applyRuledEngineZoneView(p, &tapSyncGes, perPlayerAllowUntap);

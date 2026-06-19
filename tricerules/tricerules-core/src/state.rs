@@ -1,5 +1,7 @@
 use std::collections::{BTreeMap, HashMap, VecDeque};
-use tricerules_cards::primitives::{Color, ContinuousEffectKind, CounterKind, EffectDuration};
+use tricerules_cards::primitives::{
+    Color, ContinuousEffectKind, CounterKind, EffectDuration, ManaAmount,
+};
 
 pub type PlayerId = i32;
 pub type ObjectId = u32;
@@ -322,6 +324,21 @@ pub struct CombatState {
     pub first_strike_damage_done: bool,
 }
 
+/// A still-rewindable mana ability the priority player just activated (CR 605). Recorded only for
+/// the classic, fully-reversible case — a pure `{T}` mana ability — so an undo is a clean untap +
+/// pool removal with no mana/life/sacrifice cost to refund. The engine drops every entry the moment
+/// the float becomes consequential (mana spent, spell/ability cast, priority passed, step change),
+/// so a present entry is always safe to undo.
+#[derive(Debug, Clone)]
+pub struct UndoableManaAbility {
+    /// The player who activated it (and the only one who may undo it).
+    pub player: PlayerId,
+    /// The permanent that was tapped to produce the mana.
+    pub source: ObjectId,
+    /// Mana added to `player`'s pool by this activation; removed verbatim on undo.
+    pub produced: ManaAmount,
+}
+
 #[derive(Debug)]
 pub struct GameState {
     pub seed: u64,
@@ -362,6 +379,11 @@ pub struct GameState {
     /// recomputed from base + this list on demand — `GameObject.power/toughness` always hold the
     /// printed base value and are never mutated by effects.
     pub continuous_effects: Vec<ContinuousEffect>,
+    /// Mana abilities the priority player has activated this priority window that are still
+    /// inconsequential and may be rewound by `UndoManaAbility` (CR 605 float courtesy). Newest
+    /// last. Cleared by any consequential action (see [`UndoableManaAbility`]); empty whenever no
+    /// fresh float is undoable.
+    pub undoable_mana_abilities: Vec<UndoableManaAbility>,
 }
 
 impl GameState {

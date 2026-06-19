@@ -44,8 +44,17 @@ message RuledCommand {
     // Answer an outstanding ResolutionChoiceRequired (tier-3 custom resolution, CR 608). Generic
     // across every custom card (Brainstorm, Gifts Ungiven, …) — no per-card command.
     SubmitResolutionChoice submit_resolution_choice = 19;
+    // UI courtesy: rewind the priority player's most recent still-floating mana ability (CR 605
+    // mana abilities resolve immediately, but a digital client may undo a float while it is
+    // strictly inconsequential — no mana spent, no spell/ability cast, priority not passed).
+    // The engine untaps the source and removes the produced mana; rejected once consequential.
+    UndoManaAbility undo_mana_ability = 20;
   }
 }
+
+// Undo the most recent undoable mana ability for the commanding player (no payload needed; the
+// engine pops its own per-player undo stack). See RuledCommand.undo_mana_ability.
+message UndoManaAbility {}
 
 // A player's answer to a ResolutionChoiceRequired: the chosen object ids (in order when the
 // request was `ordered`). The engine validates them against the parked request's candidates.
@@ -180,6 +189,10 @@ message LegalActions {
   // Per-activated-ability valid targets. Key = (permanent_id << 32 | ability_index).
   // Presence of a key means the ability at that index requires a target.
   map<uint64, SpellTargets> valid_targets_by_ability = 4;
+  // Count of this player's mana abilities that are currently undoable via UndoManaAbility (CR 605
+  // float courtesy). Non-zero only while strictly inconsequential; clients show an Undo affordance
+  // when > 0. Drops to 0 the moment mana is spent, a spell/ability is cast, or priority passes.
+  uint32 undoable_mana_abilities = 5;
 }
 
 // Servatrice-injected each ruled broadcast: engine hand slot index -> Server_Card.id for that player,

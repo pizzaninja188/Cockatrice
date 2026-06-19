@@ -3,7 +3,8 @@
 use crate::custom::{self, ResolutionChoice, ResolutionCtx, ResolutionStep};
 use crate::state::{
     AffectedScope, CombatState, ContinuousEffect, GameObject, GameState, ObjectId, OpeningSequence,
-    PendingResolution, PendingTrigger, PlayerId, PlayerState, StackItem, TurnStep, Zone,
+    PendingResolution, PendingTrigger, PlayerId, PlayerState, StackItem, TurnStep,
+    UndoableManaAbility, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -251,6 +252,7 @@ impl GameEngine {
             pending_triggers: VecDeque::new(),
             pending_resolution: None,
             continuous_effects: Vec::new(),
+            undoable_mana_abilities: Vec::new(),
         };
         let mut eng = GameEngine { state, registry };
         let mut e = vec![];
@@ -593,6 +595,16 @@ impl GameEngine {
                 "resolve the pending choice before acting",
             ));
         }
+        // CR 605 float-undo courtesy: a mana ability stays undoable only across further mana-ability
+        // activations (or another undo). Every other command makes the float consequential, so drop
+        // the undo history before it runs. ActivateAbility is preserved here and cleared inside the
+        // non-mana branch (a non-mana activation is itself consequential).
+        if !matches!(
+            cmd.cmd.as_ref(),
+            Some(Cmd::ActivateAbility(_)) | Some(Cmd::UndoManaAbility(_))
+        ) {
+            self.state.undoable_mana_abilities.clear();
+        }
         let res = match cmd.cmd.as_ref() {
             None => return Err(EngineError::Illegal("empty command")),
             Some(Cmd::PreviewDeclareBlockers(_) | Cmd::PreviewDeclareAttackers(_)) => {
@@ -663,6 +675,7 @@ impl GameEngine {
                 &aa.flex_payments,
                 aa.mana_option_index,
             ),
+            Some(Cmd::UndoManaAbility(_)) => self.undo_mana_ability(player),
             Some(Cmd::ChooseTriggerTarget(ctt)) => {
                 self.choose_trigger_target(player, ctt.target_object_id)
             }
@@ -3389,6 +3402,10 @@ impl GameEngine {
             );
         }
 
+        // A non-mana activated ability (it uses the stack, pays mana, etc.) is consequential, so
+        // any previously floated mana can no longer be undone (CR 605 float courtesy ends here).
+        self.state.undoable_mana_abilities.clear();
+
         // CR 602.2: validate targets BEFORE paying cost.
         validate_effect_targets(&self.state, self.registry, player, &ability.effect, targets)?;
 
@@ -3609,6 +3626,20 @@ impl GameEngine {
         pool.green += amount.g;
         pool.colorless += amount.c;
 
+        // Record a float-undo entry for the fully-reversible classic case: a pure `{T}` mana
+        // ability (no mana/life/sacrifice cost to refund). Undoing it is a clean untap + pool
+        // removal. Other cost shapes (TapAndMana, Sacrifice, …) are never recorded, so they are
+        // simply not undoable. (CR 605 abilities are normally irreversible; this is a UI courtesy.)
+        if matches!(ability.cost, AbilityCost::Tap) {
+            self.state
+                .undoable_mana_abilities
+                .push(UndoableManaAbility {
+                    player,
+                    source: permanent_id,
+                    produced: *amount,
+                });
+        }
+
         let card_name = self
             .registry
             .get(card_id)
@@ -3638,6 +3669,68 @@ impl GameEngine {
         }
         // The pool update reaches clients via the per-batch ManaPoolUpdated emit in apply_command.
         // No stack push, no priority change, no passes_since_stack_change reset (CR 605.3a–b).
+        Ok(batch)
+    }
+
+    /// Rewind the commanding player's most recent still-floating mana ability (CR 605 float
+    /// courtesy; see [`UndoableManaAbility`]). Only the priority player may undo, and only an entry
+    /// the engine still tracks (it drops them the instant a float turns consequential). The source
+    /// is untapped and the produced mana removed from the pool; the pool snapshot + zone-view untap
+    /// reach clients through the normal per-batch emits in `apply_command`.
+    fn undo_mana_ability(&mut self, player: PlayerId) -> Result<RuledEventBatch, EngineError> {
+        let idx = self
+            .state
+            .player_idx(player)
+            .ok_or(EngineError::UnknownPlayer(player))?;
+        if self.state.priority_player_id() != player {
+            return Err(EngineError::Illegal("not your priority"));
+        }
+        // Pop this player's newest tracked float. (Entries are per-player; another player's float
+        // never sits on top because passing priority clears the stack.)
+        let pos = self
+            .state
+            .undoable_mana_abilities
+            .iter()
+            .rposition(|e| e.player == player)
+            .ok_or(EngineError::Illegal("no mana ability to undo"))?;
+        let entry = self.state.undoable_mana_abilities.remove(pos);
+
+        // The produced mana must still be wholly in the pool — it always is, since spending any
+        // mana clears the undo stack. Guard defensively so an undo can never underflow the pool.
+        let pool = &mut self.state.players[idx].mana_pool;
+        let p = &entry.produced;
+        if pool.white < p.w
+            || pool.blue < p.u
+            || pool.black < p.b
+            || pool.red < p.r
+            || pool.green < p.g
+            || pool.colorless < p.c
+        {
+            return Err(EngineError::Illegal("floated mana already spent"));
+        }
+        pool.white -= p.w;
+        pool.blue -= p.u;
+        pool.black -= p.b;
+        pool.red -= p.r;
+        pool.green -= p.g;
+        pool.colorless -= p.c;
+
+        // Untap the source (the {T} cost is reversed). The untap reaches clients via zone_view.
+        if let Some(o) = self.state.objects.get_mut(&entry.source) {
+            o.tapped = false;
+        }
+
+        let card_name = self
+            .state
+            .objects
+            .get(&entry.source)
+            .and_then(|o| self.registry.get(&o.card_id))
+            .map(|d| d.name.clone())
+            .unwrap_or_else(|| "permanent".to_string());
+        let mut batch = RuledEventBatch::default();
+        batch.events.push(ev_log(format!(
+            "P{player} undoes mana ability: {card_name}"
+        )));
         Ok(batch)
     }
 
@@ -5066,12 +5159,20 @@ fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
             }
         }
 
+        let undoable_mana_abilities = eng
+            .state
+            .undoable_mana_abilities
+            .iter()
+            .filter(|e| e.player == p.id)
+            .count() as u32;
+
         batch.legal_by_player.insert(
             p.id,
             LegalActions {
                 labels,
                 valid_targets_by_hand_slot,
                 valid_targets_by_ability,
+                undoable_mana_abilities,
             },
         );
     }

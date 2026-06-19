@@ -575,6 +575,10 @@ signals:
     void ruledCombatDamageUiChanged();
     void ruledBattlefieldMapUpdated();
     void ruledStackHasItemsChanged(bool hasItems);
+    /// Emitted each ruled batch with the engine's count of the local player's currently-undoable
+    /// mana abilities (LegalActions.undoable_mana_abilities, CR 605 float courtesy). Drives the
+    /// Undo affordance: > 0 means a still-inconsequential mana float can be rewound.
+    void ruledUndoableManaAbilitiesChanged(int count);
     /// Emitted at the end of each ruled event batch when the stack OID order changes.
     /// Front of list = most recently pushed = resolves first. Triggers a visual re-sort
     /// of the stack window, which may have received Event_MoveCard before stack_pushed.
