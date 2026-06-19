@@ -42,17 +42,13 @@
 
 ## In Progress
 
-- [ ] #3 [bug] Short description
-  - Assigned: you
-  - Started: 2026-06-18
+_(none)_
 
 ---
 
 ## Done
 
-- [x] #0 [chore] Example completed issue
-  - Resolved: 2026-06-10
-  - Notes: how it was fixed
+_(none yet)_
 
 ---
 
