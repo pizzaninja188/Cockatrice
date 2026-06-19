@@ -35,6 +35,10 @@ MAX_ISSUES="${MAX_ISSUES:-10}"            # hard cap on issues per run
 PER_ISSUE_TIMEOUT="${PER_ISSUE_TIMEOUT:-5400}"  # seconds (90 min) per issue
 RESUME_ENABLED="${RESUME_ENABLED:-1}"     # 1 = resume interrupted sessions w/ full context
 RESUME_CAP="${RESUME_CAP:-3}"             # max attempts before an issue needs a human
+CARDS_ENABLED="${CARDS_ENABLED:-1}"       # when no issues remain, implement no-new-logic cards
+CARDS_PROMPT_FILE="${CARDS_PROMPT_FILE:-$REPO/.claude/automation/implement-cards.md}"
+# Card changes may only touch these paths ("no new logic" guardrail):
+ALLOWED_CARD_PATHS='^(tricerules/tricerules-cards/data/|tricerules/CARDS\.md$|tricerules/tricerules-core/tests/scenario\.rs$)'
 # CLAUDE_MODEL="${CLAUDE_MODEL:-}"        # e.g. "opus"; empty = your configured default
 # ----------------------------------------------------------------------------
 
@@ -96,12 +100,18 @@ find_resumable_session() {
   ' issues.md
 }
 
+PROMPT_CARDS=""
+[[ -f "$CARDS_PROMPT_FILE" ]] && PROMPT_CARDS="$(cat "$CARDS_PROMPT_FILE")"
+
 resolved=0
+cards_added=0
+mode="issues"   # issues -> (when drained) cards
+
 for (( i=1; i<=MAX_ISSUES; i++ )); do
   echo
-  echo "---- iteration $i  $(date '+%H:%M:%S') ----"
+  echo "---- iteration $i ($mode)  $(date '+%H:%M:%S') ----"
 
-  # Start each issue from a clean base branch.
+  # Start each task from a clean base branch.
   git checkout "$BASE_BRANCH" >/dev/null 2>&1
   if [[ -n "$(git status --porcelain)" ]]; then
     echo "Base branch dirty before iteration $i (previous agent left a mess); stopping."
@@ -109,43 +119,49 @@ for (( i=1; i<=MAX_ISSUES; i++ )); do
     break
   fi
 
-  # Cheap pre-check: any unchecked '#' items at all? (Coarse; agent makes the
-  # real eligibility decision and prints NO_ELIGIBLE_ISSUES if none.)
-  if ! grep -qE '^[[:space:]]*-[[:space:]]*\[ \][[:space:]]*#' issues.md; then
-    echo "No '- [ ] #' rows left in issues.md; stopping."
-    break
-  fi
-
-  ISSUE_LOG="$LOG_DIR/issue-$RUN_TS-$(printf '%02d' "$i").log"
-
-  # Decide: resume an interrupted session (full context) or start fresh.
-  resume_id=""; resume_sid=""
-  if [[ "$RESUME_ENABLED" == "1" ]]; then
-    read -r resume_id resume_sid < <(find_resumable_session) || true
-  fi
-
-  rc=0
-  if [[ -n "$resume_sid" ]]; then
-    echo "resuming session $resume_sid for interrupted issue #$resume_id (log: $ISSUE_LOG)"
-    timeout "$PER_ISSUE_TIMEOUT" "$CLAUDE_BIN" -p \
-"Your previous session was interrupted (the usage window ended). You were working issue #$resume_id on branch fix/issue-$resume_id. Re-check git state and continue to completion, following the workflow and output discipline you were already given. Keep the line \`Session: $resume_sid\` in that issue's In Progress block. Finish with the required AUTOFIX_RESULT line." \
-        --resume "$resume_sid" \
-        "${model_args[@]}" \
-        --dangerously-skip-permissions \
-        --output-format text \
-        >"$ISSUE_LOG" 2>&1
-    rc=$?
-    # Stale/unusable session -> fall back to a fresh cold-resume agent.
-    if [[ $rc -ne 0 ]] && grep -qiE "session.*(not found|does not exist|invalid|unknown|expired)|no such session|could not.*resume" "$ISSUE_LOG"; then
-      echo "resume failed (stale session); falling back to a fresh agent."
-      resume_sid=""
+  # Once no issue rows remain at all, switch to card mode (or stop).
+  if [[ "$mode" == "issues" ]] \
+     && ! grep -qE '^[[:space:]]*-[[:space:]]*\[ \][[:space:]]*#' issues.md; then
+    if [[ "$CARDS_ENABLED" == "1" && -n "$PROMPT_CARDS" ]]; then
+      echo "No issue rows left in issues.md; switching to card mode."
+      mode="cards"
+    else
+      echo "No issue rows left and card mode disabled; stopping."
+      break
     fi
   fi
 
-  if [[ -z "$resume_sid" ]]; then
-    new_sid="$(uuidgen)"
-    echo "fresh claude -p, session $new_sid (log: $ISSUE_LOG)"
-    timeout "$PER_ISSUE_TIMEOUT" "$CLAUDE_BIN" -p \
+  TASK_LOG="$LOG_DIR/task-$RUN_TS-$(printf '%02d' "$i").log"
+  rc=0
+  pre_master="$(git rev-parse "$BASE_BRANCH")"
+
+  if [[ "$mode" == "issues" ]]; then
+    # ---- ISSUE iteration: resume an interrupted session or start fresh ----
+    resume_id=""; resume_sid=""
+    if [[ "$RESUME_ENABLED" == "1" ]]; then
+      read -r resume_id resume_sid < <(find_resumable_session) || true
+    fi
+
+    if [[ -n "$resume_sid" ]]; then
+      echo "resuming session $resume_sid for interrupted issue #$resume_id (log: $TASK_LOG)"
+      timeout "$PER_ISSUE_TIMEOUT" "$CLAUDE_BIN" -p \
+"Your previous session was interrupted (the usage window ended). You were working issue #$resume_id on branch fix/issue-$resume_id. Re-check git state and continue to completion, following the workflow and output discipline you were already given. Keep the line \`Session: $resume_sid\` in that issue's In Progress block. Finish with the required AUTOFIX_RESULT line." \
+          --resume "$resume_sid" \
+          "${model_args[@]}" \
+          --dangerously-skip-permissions \
+          --output-format text \
+          >"$TASK_LOG" 2>&1
+      rc=$?
+      if [[ $rc -ne 0 ]] && grep -qiE "session.*(not found|does not exist|invalid|unknown|expired)|no such session|could not.*resume" "$TASK_LOG"; then
+        echo "resume failed (stale session); falling back to a fresh agent."
+        resume_sid=""
+      fi
+    fi
+
+    if [[ -z "$resume_sid" ]]; then
+      new_sid="$(uuidgen)"
+      echo "fresh issue agent, session $new_sid (log: $TASK_LOG)"
+      timeout "$PER_ISSUE_TIMEOUT" "$CLAUDE_BIN" -p \
 "$PROMPT
 
 ## Your session id
@@ -153,16 +169,27 @@ This run's session id is: $new_sid
 When you create or update the chosen issue's \`## In Progress\` block (on claim
 OR on resume), include/refresh the line \`  - Session: $new_sid\` so a future
 interrupted run can resume this exact session with full context." \
+          --session-id "$new_sid" \
+          "${model_args[@]}" \
+          --dangerously-skip-permissions \
+          --output-format text \
+          >"$TASK_LOG" 2>&1
+      rc=$?
+    fi
+  else
+    # ---- CARD iteration: fresh agent, no resume ----
+    new_sid="$(uuidgen)"
+    echo "fresh card agent, session $new_sid (log: $TASK_LOG)"
+    timeout "$PER_ISSUE_TIMEOUT" "$CLAUDE_BIN" -p "$PROMPT_CARDS" \
         --session-id "$new_sid" \
         "${model_args[@]}" \
         --dangerously-skip-permissions \
         --output-format text \
-        >"$ISSUE_LOG" 2>&1
+        >"$TASK_LOG" 2>&1
     rc=$?
   fi
 
-  # Surface the agent's output into the run log too.
-  tail -n 40 "$ISSUE_LOG"
+  tail -n 40 "$TASK_LOG"
 
   if [[ $rc -eq 124 ]]; then
     echo "Agent hit the ${PER_ISSUE_TIMEOUT}s timeout; stopping."
@@ -173,39 +200,58 @@ interrupted run can resume this exact session with full context." \
     break
   fi
 
-  result_line="$(grep -aE '^AUTOFIX_RESULT:' "$ISSUE_LOG" | tail -n 1)"
+  result_line="$(grep -aE '^AUTOFIX_RESULT:' "$TASK_LOG" | tail -n 1)"
   echo "result: ${result_line:-<none>}"
 
-  case "$result_line" in
-    *"RESOLVED"*)
-      resolved=$(( resolved + 1 ))
-      echo "issue resolved; continuing to next."
-      ;;
-    *"NO_ELIGIBLE_ISSUES"*)
-      echo "agent found nothing eligible; stopping."
-      break
-      ;;
-    *"BLOCKED #"*)
-      # Issue was parked on master (Status: blocked/needs-human) so it won't be
-      # re-selected; move on to a different issue.
-      echo "agent parked an issue as blocked; moving on to the next."
-      ;;
-    *"BLOCKED"*)
-      # No issue id (e.g. dirty tree at start) — structural problem, don't churn.
-      echo "agent reported BLOCKED with no issue id (structural); stopping."
-      break
-      ;;
-    *)
-      echo "no clear AUTOFIX_RESULT line; treating as failure and stopping."
-      break
-      ;;
-  esac
+  if [[ "$mode" == "issues" ]]; then
+    case "$result_line" in
+      *"RESOLVED"*)
+        resolved=$(( resolved + 1 )); echo "issue resolved; continuing." ;;
+      *"NO_ELIGIBLE_ISSUES"*)
+        if [[ "$CARDS_ENABLED" == "1" && -n "$PROMPT_CARDS" ]]; then
+          echo "no eligible issues; switching to card mode."; mode="cards"
+        else
+          echo "no eligible issues; stopping."; break
+        fi ;;
+      *"BLOCKED #"*)
+        echo "issue parked as blocked; moving on to the next." ;;
+      *"BLOCKED"*)
+        echo "structural BLOCKED (no issue id); stopping."; break ;;
+      *)
+        echo "no clear AUTOFIX_RESULT; stopping."; break ;;
+    esac
+  else
+    case "$result_line" in
+      *"CARD_ADDED master "*)
+        # Vanilla batch committed to master: enforce data-only, else revert it.
+        git checkout "$BASE_BRANCH" >/dev/null 2>&1
+        bad="$(git diff --name-only "$pre_master".."$BASE_BRANCH" | grep -vE "$ALLOWED_CARD_PATHS" || true)"
+        if [[ -n "$bad" ]]; then
+          echo "VIOLATION: vanilla commit touched non-allowed paths — reverting:"; echo "$bad"
+          git reset --hard "$pre_master" >/dev/null 2>&1
+          echo "reverted to $pre_master; stopping."; break
+        fi
+        cards_added=$(( cards_added + 1 )); echo "vanilla batch added; continuing." ;;
+      *"CARD_ADDED cards/"*)
+        slug="${result_line##*cards/}"; branch="cards/${slug%% *}"
+        bad="$(git diff --name-only "$BASE_BRANCH".."$branch" 2>/dev/null | grep -vE "$ALLOWED_CARD_PATHS" || true)"
+        [[ -n "$bad" ]] && { echo "WARNING: $branch touched non-allowed paths (needs human review):"; echo "$bad"; }
+        cards_added=$(( cards_added + 1 )); echo "card $branch added; continuing." ;;
+      *"CARD_NONE"*)
+        echo "no no-new-logic cards left; stopping."; break ;;
+      *"CARD_BLOCKED"*)
+        echo "card attempt blocked; moving on." ;;
+      *)
+        echo "no clear AUTOFIX_RESULT; stopping."; break ;;
+    esac
+  fi
 done
 
 git checkout "$BASE_BRANCH" >/dev/null 2>&1
 echo
 echo "================================================================"
-echo "auto-fix run end: $(date)  — issues resolved this run: $resolved"
-echo "feature branches created:"
-git branch --list 'fix/issue-*' | sed 's/^/  /'
+echo "auto-fix run end: $(date)"
+echo "  issues resolved: $resolved    card tasks added: $cards_added"
+echo "  fix branches:";   git branch --list 'fix/issue-*' | sed 's/^/    /'
+echo "  card branches:";  git branch --list 'cards/*'     | sed 's/^/    /'
 echo "================================================================"
