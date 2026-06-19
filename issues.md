@@ -8,7 +8,7 @@
 
 ### Auto-fixer `Status:` values (set by the unattended runs on `## In Progress` items)
 - `in-progress` — claimed/being worked. If a run ends here, it was interrupted (e.g. usage window) and the next run will **resume** it (up to 3 attempts).
-- `in-review` — a `fix/issue-N` branch is ready; test + merge it, then move the item to `## Done`.
+- `in-review` — a `fix/issue-N` branch is ready; test + merge it, then move the item to `## Done`. Any manual UI test steps are in that branch's commit message.
 - `blocked - <reason>` — the agent gave up; needs a human. Not auto-retried.
 - `needs-human` — hit the attempt cap. Not auto-retried.
 
@@ -59,12 +59,6 @@
 ## Done
 
 _(none yet)_
-
----
-
-## UI testing to perform
-
-- [ ] #1 fix/issue-1 — In a two-client ruled game: (a) tap a Mountain with no spell selected, confirm the R pool shows 1 and is NOT auto-spent when you then click a 1-mana red spell (pay via the R counter click); (b) click a 1-mana red spell first, then tap a Mountain → spell pays + casts directly, pool counter does not retain the produced R; (c) {1}{R} spell, tap Mountain then Forest → each tap pays one pip, cast fires after the second, pool ends empty; (d) {R} spell, tap a Forest → G is left floating (not lost), cast stays pending; (e) activated ability needing mana → tapping lands pays it and it resolves.
 
 ---
 
