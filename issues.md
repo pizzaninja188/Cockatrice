@@ -47,17 +47,24 @@
 - [ ] #1 [feature] Restore mana behavior when tapping lands while casting a spell
   - Details: Before the engine-owned mana pool commit, lands tapped after clicking a spell would automatically go to the spell instead of adding to the mana pool. After the engine-owned mana update, this no longer happens. Note that a related issue was fixed in a previous commit where mana would both go toward the spell and to the mana pool. These two methods of paying mana are mutually exclusive, going to the mana pool if activating mana abilities without clicking a spell/ability first, and going directly toward the spell/ability if the spell/ability is first clicked then the user starts activating mana abilities with the cost remaining prompt up.
   - Priority: High
-  - Status: in-progress
+  - Status: in-review
   - Attempts: 1
   - Branch: fix/issue-1
   - Session: be6b0445-1dd4-4fff-bfe0-87a56d8f72dc
   - Started: 2026-06-19
+  - Notes: Tapping a mana land while a ruled spell/ability is mid-payment now routes the produced mana straight into the pending cost (reactively, via the ManaPoolUpdated SetCounter increase) instead of leaving it floating; pre-floated mana keeps the manual pool-counter-click path. Client-only, ruled mode. Needs manual UI verification.
 
 ---
 
 ## Done
 
 _(none yet)_
+
+---
+
+## UI testing to perform
+
+- [ ] #1 fix/issue-1 — In a two-client ruled game: (a) tap a Mountain with no spell selected, confirm the R pool shows 1 and is NOT auto-spent when you then click a 1-mana red spell (pay via the R counter click); (b) click a 1-mana red spell first, then tap a Mountain → spell pays + casts directly, pool counter does not retain the produced R; (c) {1}{R} spell, tap Mountain then Forest → each tap pays one pip, cast fires after the second, pool ends empty; (d) {R} spell, tap a Forest → G is left floating (not lost), cast stays pending; (e) activated ability needing mana → tapping lands pays it and it resolves.
 
 ---
 
