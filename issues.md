@@ -11,7 +11,7 @@
 ## Open
 
 - [ ] #1 [feature] Restore mana behavior when tapping lands while casting a spell
-  - Details: Before the engine-owned mana pool commit, lands tapped after clicking a spell would automatically go to the spell instead of adding to the mana pool. After the engine-owned mana update, this no longer happens
+  - Details: Before the engine-owned mana pool commit, lands tapped after clicking a spell would automatically go to the spell instead of adding to the mana pool. After the engine-owned mana update, this no longer happens. Note that a related issue was fixed in a previous commit where mana would both go toward the spell and to the mana pool. These two methods of paying mana are mutually exclusive, going to the mana pool if activating mana abilities without clicking a spell/ability first, and going directly toward the spell/ability if the spell/ability is first clicked then the user starts activating mana abilities with the cost remaining prompt up.
   - Priority: High
 
 - [ ] #2 [bug] Gifts Ungiven allows a player to choose 2 cards with the same name
@@ -36,7 +36,7 @@
 
 - [ ] #7 [bug] Copying a spell that targets with Twincast uses same targets instead of having Twincast's controller choose new ones
   - Details: After casting Twincast on a Lightning Bolt, both bolts will damage the same target. There should be a targeting prompt for the Twincast player to choose their own targets for the copy
-  - Priority: High
+  - Priority: Medium
 
 ---
 
