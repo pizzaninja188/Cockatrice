@@ -16,10 +16,6 @@
 
 ## Open
 
-- [ ] #1 [feature] Restore mana behavior when tapping lands while casting a spell
-  - Details: Before the engine-owned mana pool commit, lands tapped after clicking a spell would automatically go to the spell instead of adding to the mana pool. After the engine-owned mana update, this no longer happens. Note that a related issue was fixed in a previous commit where mana would both go toward the spell and to the mana pool. These two methods of paying mana are mutually exclusive, going to the mana pool if activating mana abilities without clicking a spell/ability first, and going directly toward the spell/ability if the spell/ability is first clicked then the user starts activating mana abilities with the cost remaining prompt up.
-  - Priority: High
-
 - [ ] #2 [bug] Gifts Ungiven allows a player to choose 2 cards with the same name
   - Details: Card says choose 4 cards with different names, but in current implementation cards with the same name can be chosen
   - Priority: Medium
@@ -48,7 +44,14 @@
 
 ## In Progress
 
-_(none)_
+- [ ] #1 [feature] Restore mana behavior when tapping lands while casting a spell
+  - Details: Before the engine-owned mana pool commit, lands tapped after clicking a spell would automatically go to the spell instead of adding to the mana pool. After the engine-owned mana update, this no longer happens. Note that a related issue was fixed in a previous commit where mana would both go toward the spell and to the mana pool. These two methods of paying mana are mutually exclusive, going to the mana pool if activating mana abilities without clicking a spell/ability first, and going directly toward the spell/ability if the spell/ability is first clicked then the user starts activating mana abilities with the cost remaining prompt up.
+  - Priority: High
+  - Status: in-progress
+  - Attempts: 1
+  - Branch: fix/issue-1
+  - Session: be6b0445-1dd4-4fff-bfe0-87a56d8f72dc
+  - Started: 2026-06-19
 
 ---
 
