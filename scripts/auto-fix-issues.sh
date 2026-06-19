@@ -31,7 +31,9 @@ BASE_BRANCH="${BASE_BRANCH:-master}"
 PROMPT_FILE="${PROMPT_FILE:-$REPO/.claude/automation/fix-one-issue.md}"
 LOG_DIR="${LOG_DIR:-/home/ubuntu/cockatrice-auto-logs}"
 CLAUDE_BIN="${CLAUDE_BIN:-/home/ubuntu/.local/bin/claude}"
-MAX_ISSUES="${MAX_ISSUES:-10}"            # hard cap on issues per run
+MAX_ISSUES="${MAX_ISSUES:-100}"           # runaway-safety backstop on total tasks/run
+                                          # (issues + cards). NOT the primary stop —
+                                          # usage-window exhaustion ends the run first.
 PER_ISSUE_TIMEOUT="${PER_ISSUE_TIMEOUT:-5400}"  # seconds (90 min) per issue
 RESUME_ENABLED="${RESUME_ENABLED:-1}"     # 1 = resume interrupted sessions w/ full context
 RESUME_CAP="${RESUME_CAP:-3}"             # max attempts before an issue needs a human
