@@ -107,6 +107,12 @@ public:
     bool tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer);
     /// Click a pool mana counter to pay toward a pending activated ability. Returns true if consumed.
     bool tryPayRuledAbilityWithCounter(const QString &counterName);
+    /// CR 605/106: route mana the player just produced (e.g. by tapping a land *after* clicking a
+    /// spell/ability, so its ManaPoolUpdated SetCounter just raised this pool counter by `amount`)
+    /// straight into the pending cost instead of leaving it floating in the pool. Each pip is paid
+    /// through the same step a pool-counter click uses; pips the pending cost cannot use are left in
+    /// the pool. No-op when nothing is pending payment, so pre-floated mana keeps the manual-click path.
+    void autoApplyFloatedManaToPendingCost(const QString &counterName, int amount);
     void cancelPendingActivatedAbility();
     /// Returns the mana-payment prompt text if an ability is pending and still needs mana, otherwise empty.
     [[nodiscard]] QString pendingRuledAbilityPromptText() const;
