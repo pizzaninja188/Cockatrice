@@ -37,6 +37,7 @@ impl CardEffect for Brainstorm {
             min: count,
             max: count,
             ordered: true,
+            unique_names: false,
         })
     }
 

@@ -162,6 +162,28 @@ impl GameEngine {
                 return Err(EngineError::Illegal("invalid resolution choice"));
             }
         }
+        if pending.unique_names {
+            let mut name_seen: HashSet<String> = HashSet::new();
+            for &oid in chosen {
+                let card_id = self
+                    .state
+                    .objects
+                    .get(&oid)
+                    .map(|o| o.card_id.clone())
+                    .unwrap_or_default();
+                let name = self
+                    .registry
+                    .get(&card_id)
+                    .map(|d| d.name.clone())
+                    .unwrap_or(card_id);
+                if !name_seen.insert(name) {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "chosen cards must have different names",
+                    ));
+                }
+            }
+        }
 
         let effect = match custom::lookup(&pending.custom_key) {
             Some(e) => e,
@@ -263,6 +285,7 @@ impl GameEngine {
             min: interrupt.min,
             max: interrupt.max,
             ordered: interrupt.ordered,
+            unique_names: interrupt.unique_names,
             prompt: interrupt.prompt,
             choice_kind: interrupt.choice_kind.as_proto(),
         });

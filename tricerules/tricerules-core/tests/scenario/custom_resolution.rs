@@ -157,22 +157,25 @@ fn brainstorm_resolution_is_deterministic() {
 #[test]
 fn gifts_ungiven_opponent_chooses_the_split() {
     use tricerules_core::Zone;
+    // Minimal deck: inject specific distinct-name cards after setup so shuffle order
+    // cannot affect which names are available in the library for the search.
     let decks = Some(vec![
         {
-            let mut d = vec![
-                "gifts_ungiven".to_string(),
-                "lightning_bolt".to_string(),
-                "divination".to_string(),
-                "counterspell".to_string(),
-                "murder".to_string(),
-            ];
-            d.extend(std::iter::repeat_n("island".to_string(), 25));
+            let mut d = vec!["gifts_ungiven".to_string()];
+            d.extend(std::iter::repeat_n("island".to_string(), 29));
             d
         },
         vec!["forest".into(); 30],
     ]);
     let mut e = GameEngine::new(7, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
+
+    // Inject four distinct-name cards so we always have exactly 4 to choose from.
+    let lb_id = inject_library_card(&mut e, 0, "lightning_bolt");
+    let div_id = inject_library_card(&mut e, 0, "divination");
+    let ctsp_id = inject_library_card(&mut e, 0, "counterspell");
+    let murd_id = inject_library_card(&mut e, 0, "murder");
+    let found = vec![lb_id, div_id, ctsp_id, murd_id];
 
     let batch = cast_instant_and_resolve(
         &mut e,
@@ -194,13 +197,12 @@ fn gifts_ungiven_opponent_chooses_the_split() {
         search.choice_kind, 2,
         "private library search (not public-revealed)"
     );
-    let found: Vec<u32> = search
-        .candidate_object_ids
-        .iter()
-        .take(4)
-        .copied()
-        .collect();
-    assert_eq!(found.len(), 4);
+    for &oid in &found {
+        assert!(
+            search.candidate_object_ids.contains(&oid),
+            "injected card must be a search candidate"
+        );
+    }
 
     let batch2 = e
         .apply_command(0, &submit_resolution_choice(found.clone()))
@@ -240,6 +242,85 @@ fn gifts_ungiven_opponent_chooses_the_split() {
         assert!(e.state.players[0].hand.contains(oid));
     }
     assert_eq!(count_card_id_in_graveyard(&e, 0, "gifts_ungiven"), 1);
+}
+
+/// Gifts Ungiven: submitting two library cards with the same name must be rejected (Oracle:
+/// "up to four cards with *different* names"). The engine enforces this at choice submission
+/// via `PendingResolution::unique_names`; the pending state must be restored on failure.
+#[test]
+fn gifts_ungiven_rejects_same_name_in_search() {
+    // Minimal deck; we inject the cards we need deterministically after setup so shuffle
+    // order cannot affect which cards are in the library when the search fires.
+    let decks = Some(vec![
+        {
+            let mut d = vec!["gifts_ungiven".to_string()];
+            d.extend(std::iter::repeat_n("island".to_string(), 29));
+            d
+        },
+        vec!["forest".into(); 30],
+    ]);
+    let mut e = GameEngine::new(8, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Inject two Lightning Bolts (same name, different objects) plus three distinct others so
+    // the test has 2 duplicate-name candidates and ≥4 distinct-name candidates available.
+    let bolt1_id = inject_library_card(&mut e, 0, "lightning_bolt");
+    let bolt2_id = inject_library_card(&mut e, 0, "lightning_bolt");
+    let div_id = inject_library_card(&mut e, 0, "divination");
+    let ctsp_id = inject_library_card(&mut e, 0, "counterspell");
+    let murd_id = inject_library_card(&mut e, 0, "murder");
+
+    let batch = cast_instant_and_resolve(
+        &mut e,
+        0,
+        "gifts_ungiven",
+        ManaGift {
+            u: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+
+    let search = find_resolution_choice(&batch).expect("search choice");
+    assert_eq!(search.deciding_player_id, 0);
+
+    // bolt1 and bolt2 are both valid candidates (they are in the library).
+    assert!(
+        search.candidate_object_ids.contains(&bolt1_id),
+        "bolt1 must be in candidates"
+    );
+    assert!(
+        search.candidate_object_ids.contains(&bolt2_id),
+        "bolt2 must be in candidates"
+    );
+
+    // Illegal: two cards with the same name (both Lightning Bolts) plus one other.
+    let bad_choice = vec![bolt1_id, bolt2_id, div_id];
+    let err = e
+        .apply_command(0, &submit_resolution_choice(bad_choice))
+        .expect_err("same-name cards must be rejected");
+    assert!(
+        matches!(err, tricerules_core::EngineError::Illegal(_)),
+        "expected Illegal, got {err:?}"
+    );
+
+    // Pending resolution must still be set (state rolled back) so the player can retry.
+    assert!(
+        e.state.pending_resolution.is_some(),
+        "pending resolution must be restored after rejection"
+    );
+
+    // Happy path: submit 4 cards with all different names — should succeed.
+    // bolt1 (Lightning Bolt) + divination + counterspell + murder
+    let good_choice = vec![bolt1_id, div_id, ctsp_id, murd_id];
+    e.apply_command(0, &submit_resolution_choice(good_choice))
+        .expect("four different-name cards must be accepted");
+
+    // Resolution now needs the opponent to choose which 2 go to graveyard.
+    assert!(
+        e.state.pending_resolution.is_some(),
+        "opponent split still pending"
+    );
 }
 
 /// Every `custom_effect` key in the card registry must resolve to a registered `CardEffect`
