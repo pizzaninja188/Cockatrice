@@ -84,6 +84,9 @@ static QVector<quint32> askRuledResolutionChoice(const QString &prompt,
 {
     QDialog dlg;
     dlg.setWindowTitle(QObject::tr("Resolve"));
+    // Resolution is mandatory (CR 608); disable the X button so the player
+    // cannot dismiss the dialog without submitting a legal selection.
+    dlg.setWindowFlags(dlg.windowFlags() & ~Qt::WindowCloseButtonHint);
     auto *layout = new QVBoxLayout(&dlg);
     layout->addWidget(new QLabel(prompt, &dlg));
     auto *list = new QListWidget(&dlg);
