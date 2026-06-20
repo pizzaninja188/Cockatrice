@@ -252,6 +252,14 @@ void PlayerEventHandler::eventSetCounter(const Event_SetCounter &event)
     ctr->setValue(event.value());
     if (player->getGame() && player->getGame()->getGameMetaInfo()->proto().ruled_game() &&
         isRuledManaPoolCounterName(ctr->getName())) {
+        // CR 605: when the local player produces mana (this pool counter just went up) while a spell or
+        // ability is mid-payment, route the new mana straight into that pending cost rather than leaving
+        // it floating — the "tap a land after clicking the spell pays the spell" behavior. The engine's
+        // own deduction at cast is a decrease and is ignored here.
+        if (player->getPlayerInfo()->getLocal() && event.value() > oldValue && player->getPlayerActions()) {
+            player->getPlayerActions()->autoApplyFloatedManaToPendingCost(ctr->getName(),
+                                                                          event.value() - oldValue);
+        }
         return;
     }
     emit logSetCounter(player, ctr->getName(), event.value(), oldValue);

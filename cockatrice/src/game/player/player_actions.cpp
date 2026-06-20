@@ -890,6 +890,33 @@ bool PlayerActions::tryPayRuledSpellWithCounter(const QString &counterName)
     return true;
 }
 
+void PlayerActions::autoApplyFloatedManaToPendingCost(const QString &counterName, int amount)
+{
+    if (amount <= 0) {
+        return;
+    }
+    // CR 605/106: mana produced while a spell or ability is mid-payment is applied straight to that
+    // pending cost (it goes "toward the spell", not into the pool) — the pre-engine-owned behavior the
+    // player expects when they tap a land after clicking a spell. Each produced pip is routed through
+    // the same pay step a pool-counter click uses (reduce the remaining cost AND decrement the displayed
+    // counter), so the just-floated mana never lingers visibly in the pool and producing/spending can't
+    // double-count. A spell waiting on a target is skipped (mana comes after targets). Pips the pending
+    // cost cannot use (wrong color, nothing left to pay) are left floating for later use.
+    for (int i = 0; i < amount; ++i) {
+        if (pendingRuledSpellCast.valid && !pendingRuledSpellCast.waitingForTarget) {
+            if (tryPayRuledSpellWithCounter(counterName)) {
+                continue;
+            }
+        }
+        if (pendingActivatedAbility.valid && pendingActivatedAbility.waitingForMana) {
+            if (tryPayRuledAbilityWithCounter(counterName)) {
+                continue;
+            }
+        }
+        break;
+    }
+}
+
 bool PlayerActions::tryPlayRuledLand(CardItem *card)
 {
     if (!card || !player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
@@ -3378,8 +3405,12 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
             !handler->hasBlockersSubmittedThisStep()) {
             return false;
         }
+        // Block starting a new activation while choosing a target. Paying mana (a pending spell or
+        // ability waiting on mana) is intentionally NOT blocked here: tapping a mana land floats mana
+        // that autoApplyFloatedManaToPendingCost routes into the pending cost. The full ability menu is
+        // still suppressed during ability payment further below, to avoid clobbering it.
         if (handler->hasPendingTriggerTarget() || pendingActivatedAbility.waitingForTarget ||
-            pendingActivatedAbility.waitingForMana || pendingRuledSpellCast.waitingForTarget) {
+            pendingRuledSpellCast.waitingForTarget) {
             return false;
         }
     }
@@ -3409,6 +3440,13 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         sendGameCommand(*activate);
         delete activate;
         return true;
+    }
+
+    // Past the direct mana-float fast path: opening the full activation menu now would overwrite an
+    // activated ability that is still mid-payment (the shared pendingActivatedAbility). Suppress it so
+    // mana taps keep flowing into that ability instead of starting a second one.
+    if (pendingActivatedAbility.waitingForMana) {
+        return false;
     }
 
     // Build and show the context menu.
