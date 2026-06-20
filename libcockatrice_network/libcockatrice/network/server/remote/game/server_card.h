@@ -51,6 +51,9 @@ private:
     // Ruled engine tokens only: static keyword abilities (MTG spelling). Forwarded into
     // Event_CreateToken so the client can pick matching Oracle art among same-name token variants.
     QStringList tokenAbilityKeywords;
+    // Ruled engine tokens only: immutable printed P/T (e.g. "1/1"). ptString is updated by
+    // zone-view syncs to the effective P/T; this stays at the base value for Oracle art lookup.
+    QString tokenBasePt;
     bool destroyOnZoneChange;
     bool doesntUntap;
 
@@ -181,6 +184,14 @@ public:
     void setPT(const QString &_pt)
     {
         ptString = _pt;
+    }
+    const QString &getTokenBasePt() const
+    {
+        return tokenBasePt;
+    }
+    void setTokenBasePt(const QString &_basePt)
+    {
+        tokenBasePt = _basePt;
     }
     void setTokenAbilityKeywords(const QStringList &_keywords)
     {

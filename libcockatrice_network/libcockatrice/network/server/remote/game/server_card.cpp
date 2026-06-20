@@ -165,6 +165,9 @@ void Server_Card::getInfo(ServerInfo_Card *info)
         for (const QString &kw : tokenAbilityKeywords) {
             info->add_ability_keywords(kw.toStdString());
         }
+        if (!tokenBasePt.isEmpty()) {
+            info->set_token_base_pt(tokenBasePt.toStdString());
+        }
     }
 
     QMapIterator<int, int> cardCounterIterator(counters);

@@ -583,6 +583,7 @@ void Server_Player::createRuledToken(quint32 engineOid,
     card->moveToThread(thread());
     card->setColor(QString::fromStdString(identity.color()));
     card->setPT(QString::fromStdString(identity.pt()));
+    card->setTokenBasePt(QString::fromStdString(identity.pt()));
     QStringList keywords;
     keywords.reserve(identity.keywords_size());
     for (const auto &kw : identity.keywords()) {

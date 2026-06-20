@@ -58,4 +58,11 @@ message ServerInfo_Card {
     // Mirrors Event_CreateToken.ability_keywords so a full-state resync can re-resolve the matching
     // Oracle token art among same-name variants. Empty for normal cards/tokens.
     repeated string ability_keywords = 18;
+
+    // Ruled engine tokens only: the immutable printed P/T of the token (e.g. "1/1").
+    // Distinct from `pt`, which is updated to the effective P/T by zone-view syncs and
+    // therefore includes anthem bonuses. `processCardInfo` uses this for Oracle art
+    // resolution so anthem-inflated effective P/T can't match the wrong token variant.
+    // Empty for normal (non-token) cards.
+    optional string token_base_pt = 19;
 }

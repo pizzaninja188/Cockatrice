@@ -524,7 +524,14 @@ void CardItem::processCardInfo(const ServerInfo_Card &_info)
         for (const auto &kw : _info.ability_keywords()) {
             keywords.append(QString::fromStdString(kw));
         }
-        retargetRuledTokenCardRef(this, ref, QString::fromStdString(_info.pt()),
+        // `_info.pt()` is the EFFECTIVE P/T (anthem-boosted) from the zone-view sync.
+        // Using it for Oracle art lookup would match a higher-P/T token variant
+        // (e.g. "Soldier Token        " 2/2) instead of the token's actual 1/1 base.
+        // Use `token_base_pt` — the immutable printed stats — when the server provides it.
+        const QString lookupPt = _info.has_token_base_pt() && !_info.token_base_pt().empty()
+                                     ? QString::fromStdString(_info.token_base_pt())
+                                     : QString::fromStdString(_info.pt());
+        retargetRuledTokenCardRef(this, ref, lookupPt,
                                   QString::fromStdString(_info.color()), keywords);
     }
     setCardRef(ref);
