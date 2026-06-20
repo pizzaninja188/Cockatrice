@@ -1,20 +1,28 @@
 # Issue Tracker
 
-## How to use
-- Add new issues under **Open**, give each a short ID (e.g. `#1`).
-- Move to **In Progress** when you start work.
-- Move to **Done** when resolved (keep a short log for history).
-- Use labels in brackets: `[bug]`, `[feature]`, `[chore]`, `[docs]`.
+This file is **your input** to the automated fixer. You own it — edit it (ideally
+on your Windows machine) and push. The automation reads it but never writes it;
+it records progress in `AUTOMATION_STATUS.md` instead.
 
-### Auto-fixer `Status:` values (set by the unattended runs on `## In Progress` items)
-- `in-progress` — claimed/being worked. If a run ends here, it was interrupted (e.g. usage window) and the next run will **resume** it (up to 3 attempts).
-- `in-review` — a `fix/issue-N` branch is ready; test + merge it, then move the item to `## Done`. Any manual UI test steps are in that branch's commit message.
-- `blocked - <reason>` — the agent gave up; needs a human. Not auto-retried.
-- `needs-human` — hit the attempt cap. Not auto-retried.
+## How to use
+- Add issues under **Open**, each with a unique short ID (`#1`, `#2`, …). Don't
+  reuse IDs.
+- Give each a `Priority:` (High / Medium / Low) — the automation works High first.
+- Use labels in brackets: `[bug]`, `[feature]`, `[chore]`, `[docs]`.
+- When a `fix/issue-N` branch is merged, remove that issue from here (its status is
+  tracked in `AUTOMATION_STATUS.md` until then).
+- Workflow: you add issues here → the box (cron) fixes them on `fix/issue-N`
+  branches and pushes them → you pull, UI-test, and merge to `master`. Status and
+  per-branch manual UI test steps live in `AUTOMATION_STATUS.md` / the branch
+  commit message.
 
 ---
 
 ## Open
+
+- [ ] #1 [feature] Restore mana behavior when tapping lands while casting a spell
+  - Details: Before the engine-owned mana pool commit, lands tapped after clicking a spell would automatically go to the spell instead of adding to the mana pool. After the engine-owned mana update, this no longer happens. Note that a related issue was fixed in a previous commit where mana would both go toward the spell and to the mana pool. These two methods of paying mana are mutually exclusive, going to the mana pool if activating mana abilities without clicking a spell/ability first, and going directly toward the spell/ability if the spell/ability is first clicked then the user starts activating mana abilities with the cost remaining prompt up.
+  - Priority: High
 
 - [ ] #2 [bug] Gifts Ungiven allows a player to choose 2 cards with the same name
   - Details: Card says choose 4 cards with different names, but in current implementation cards with the same name can be chosen
@@ -39,26 +47,6 @@
 - [ ] #7 [bug] Copying a spell that targets with Twincast uses same targets instead of having Twincast's controller choose new ones
   - Details: After casting Twincast on a Lightning Bolt, both bolts will damage the same target. There should be a targeting prompt for the Twincast player to choose their own targets for the copy
   - Priority: Medium
-
----
-
-## In Progress
-
-- [ ] #1 [feature] Restore mana behavior when tapping lands while casting a spell
-  - Details: Before the engine-owned mana pool commit, lands tapped after clicking a spell would automatically go to the spell instead of adding to the mana pool. After the engine-owned mana update, this no longer happens. Note that a related issue was fixed in a previous commit where mana would both go toward the spell and to the mana pool. These two methods of paying mana are mutually exclusive, going to the mana pool if activating mana abilities without clicking a spell/ability first, and going directly toward the spell/ability if the spell/ability is first clicked then the user starts activating mana abilities with the cost remaining prompt up.
-  - Priority: High
-  - Status: in-review
-  - Attempts: 1
-  - Branch: fix/issue-1
-  - Session: be6b0445-1dd4-4fff-bfe0-87a56d8f72dc
-  - Started: 2026-06-19
-  - Notes: Tapping a mana land while a ruled spell/ability is mid-payment now routes the produced mana straight into the pending cost (reactively, via the ManaPoolUpdated SetCounter increase) instead of leaving it floating; pre-floated mana keeps the manual pool-counter-click path. Client-only, ruled mode. Needs manual UI verification.
-
----
-
-## Done
-
-_(none yet)_
 
 ---
 
