@@ -15,3 +15,4 @@ Line format (one per issue the automation has touched):
 ## Issues
 
 #1 status=done merged=2026-06-20 branch=fix/issue-1 attempts=1 session=be6b0445-1dd4-4fff-bfe0-87a56d8f72dc started=2026-06-19 notes="tap-land-pays-pending-cast; client-only; build+14 ctest green"
+#2 status=in-progress branch=fix/issue-2 attempts=1 session=215c69fb-9036-4ff8-9b9a-410593605e5c started=2026-06-20
