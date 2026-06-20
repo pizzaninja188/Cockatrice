@@ -1348,9 +1348,9 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                     ruledStackAnnotationByOid.insert(
                                         sp.object_id(),
                                         QString::fromStdString(sp.ability_annotation()));
-                                    // Only abilities (no physical card_id) need a synthetic stack card
-                                    // and clear the pending trigger — a spell (incl. a cast split half)
-                                    // already has a real CardItem on the stack, so skip that path for it.
+                                    // Abilities (no card_id) and spell copies (is_copy) both lack a
+                                    // physical CardItem on the stack and need a synthetic one. A normal
+                                    // spell (non-empty card_id, not a copy) already has a real card.
                                     if (sp.card_id().empty()) {
                                         // A triggered ability was just placed on the stack — the pending
                                         // trigger target has been chosen and is no longer pending.
@@ -1363,6 +1363,13 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                             sp.object_id(),
                                             QString::fromStdString(sp.description()),
                                             pendingTriggerControllerPlayerId);
+                                    } else if (sp.is_copy()) {
+                                        // CR 707.10: a spell copy (Twincast/Fork) has no physical card;
+                                        // create a synthetic stack card so the copy is visible.
+                                        createSyntheticAbilityStackCard(
+                                            sp.object_id(),
+                                            QString::fromStdString(sp.description()),
+                                            -1);
                                     }
                                 }
                                 ruledStackTrackingDirty = true;
