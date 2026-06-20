@@ -1,0 +1,935 @@
+use super::events::{color_string, ev_log, object_display_name};
+use super::targeting::{battlefield_objects_matching, spell_has_no_legal_targets_at_resolution};
+use super::*;
+
+impl GameEngine {
+    pub(super) fn resolve_top_of_stack(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let top = self
+            .state
+            .stack
+            .pop()
+            .ok_or(EngineError::Illegal("empty stack"))?;
+        let controller = top.controller;
+        let card_id = top.card_id.clone();
+        let targets = top.targets.clone();
+
+        // Abilities — and spell copies (CR 707.10d) — leave no object behind when they resolve;
+        // only a genuinely cast spell has a backing card that moves to a zone. A copy has no
+        // `GameObject` in `objects`, so it must take the same no-zone-move path as an ability.
+        let is_ability = top.ability_text.is_some();
+        let leaves_no_object = is_ability || top.is_copy;
+        if leaves_no_object {
+            events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
+                    object_id: top.id,
+                    // Abilities cease to exist on resolution; graveyard tells the C++ server
+                    // not to expect a permanent to land.
+                    destination: rv1::StackResolveDestination::Graveyard as i32,
+                })),
+            });
+        } else {
+            // CR 709/712/715: permanence is the *cast face's* (Ice resolves to graveyard; an MDFC
+            // permanent face resolves to the battlefield as that face).
+            let resolves_to_battlefield = self
+                .registry
+                .get(&card_id)
+                .and_then(|d| d.face(top.face_index))
+                .map(|f| f.is_permanent())
+                .unwrap_or(false);
+            let destination = if resolves_to_battlefield {
+                rv1::StackResolveDestination::Battlefield as i32
+            } else {
+                rv1::StackResolveDestination::Graveyard as i32
+            };
+            events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
+                    object_id: top.id,
+                    destination,
+                })),
+            });
+            move_object_to_zone(
+                &mut self.state,
+                top.id,
+                if resolves_to_battlefield {
+                    Zone::Battlefield
+                } else {
+                    Zone::Graveyard
+                },
+            )?;
+            if resolves_to_battlefield {
+                self.fire_triggers(GameEvent::EntersBattlefield { object_id: top.id }, events);
+            }
+        }
+
+        // Determine effects: for spells use spell_effect (Vec); for abilities wrap the single
+        // effect. Triggered and activated abilities are now uniform — both carry a plain
+        // `SpellEffectKind` (self-referencing effects use a `Self_` target filter, bound below).
+        let (effects, spell_label): (Vec<SpellEffectKind>, String) = if is_ability {
+            let ability_index = top.ability_index.unwrap_or(0);
+            let def = self.registry.get(&card_id);
+            let name = def
+                .map(|d| d.name.clone())
+                .unwrap_or_else(|| "Ability".into());
+            let abilities = if top.is_triggered {
+                def.map(|d| &d.triggered_abilities[..])
+                    .and_then(|a| a.get(ability_index))
+                    .map(|a| a.effect.clone())
+            } else {
+                def.and_then(|d| d.activated_abilities.get(ability_index))
+                    .map(|a| a.effect.clone())
+            };
+            (vec![abilities.unwrap_or(SpellEffectKind::None)], name)
+        } else {
+            // CR 709/712/715: resolve the cast face's effects and show its name.
+            let face = self
+                .registry
+                .get(&card_id)
+                .and_then(|d| d.face(top.face_index));
+            let effects = face.map(|f| f.spell_effect.to_vec()).unwrap_or_default();
+            let name = face
+                .map(|f| f.name.to_string())
+                .unwrap_or_else(|| "Spell".into());
+            (effects, name)
+        };
+
+        // Tier-3 (CR 608): a custom effect owns this spell's resolution. The spell card has
+        // already moved to its zone (graveyard/battlefield above); hand off the algorithm to the
+        // registered `CardEffect`, which either completes now or parks awaiting a player choice.
+        // A copy is excluded: the resumable custom machinery (`begin_custom_resolution`) expects the
+        // spell's backing `GameObject`, which a copy lacks. Copying a tier-3 spell is a documented
+        // limitation (the copy resolves its non-custom effects only, if any).
+        if !is_ability && !top.is_copy {
+            let custom_key = self
+                .registry
+                .get(&card_id)
+                .and_then(|d| d.face(top.face_index))
+                .and_then(|f| f.custom_effect.map(str::to_string));
+            if let Some(custom_key) = custom_key {
+                return self.begin_custom_resolution(top, custom_key, events);
+            }
+        }
+
+        let fizzle = spell_has_no_legal_targets_at_resolution(
+            &self.state,
+            self.registry,
+            &effects,
+            &targets,
+            controller,
+        );
+        if fizzle {
+            events.push(ev_log(format!("{spell_label} fizzles (no legal targets).")));
+            return Ok(());
+        }
+
+        for effect in effects {
+            match effect {
+                SpellEffectKind::DamageTarget { amount, .. } => {
+                    // CR 107.3: `amount` may be the cast-time X (Fireball) or a literal (Bolt).
+                    let amount = amount.resolve(top.chosen_x);
+                    if let Some(&tid) = targets.first() {
+                        if let Some(pi) = self.state.player_idx(tid as i32) {
+                            let pid = self.state.players[pi].id;
+                            self.state.players[pi].life -= amount as i32;
+                            events.push(rv1::RuledEvent {
+                                ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                                    player_id: self.state.players[pi].id,
+                                    new_total: self.state.players[pi].life,
+                                    delta: -(amount as i32),
+                                })),
+                            });
+                            events.push(ev_log(format!(
+                                "{spell_label} deals {amount} damage to P{pid}"
+                            )));
+                        } else {
+                            let tgt = object_display_name(&self.state, self.registry, tid);
+                            if let Some(t) = self.state.objects.get_mut(&tid) {
+                                if t.zone == Zone::Battlefield && t.is_creature(self.registry) {
+                                    t.damage += amount;
+                                    events.push(ev_log(format!(
+                                        "{spell_label} deals {amount} damage to {tgt}"
+                                    )));
+                                }
+                            }
+                        }
+                    }
+                }
+                SpellEffectKind::Draw { count } => {
+                    // Blue Sun's Zenith / Braingeyser: `count` may be the cast-time X.
+                    let count = count.resolve(top.chosen_x);
+                    let idx = self.state.player_idx(controller).unwrap();
+                    // CR 120.3 / 104.3c: drawing from an empty library does NOT fail the spell —
+                    // draw as many as possible, then the player loses as a state-based action
+                    // (swept in by `sweep_life`). Aborting resolution here would corrupt state
+                    // (cards already drawn, stack already popped).
+                    let mut drawn = 0u32;
+                    let mut decked_out = false;
+                    for _ in 0..count {
+                        if self.state.players[idx].library.is_empty() {
+                            decked_out = true;
+                            break;
+                        }
+                        draw_card(&mut self.state.players[idx], &mut self.state.objects)?;
+                        drawn += 1;
+                    }
+                    let noun = if drawn == 1 { "card" } else { "cards" };
+                    events.push(ev_log(format!(
+                        "P{controller} draws {drawn} {noun} ({spell_label})."
+                    )));
+                    if decked_out {
+                        self.state.players[idx].has_lost = true;
+                        events.push(ev_log(format!(
+                            "P{controller} tried to draw from an empty library and loses (CR 104.3c)."
+                        )));
+                    }
+                }
+                SpellEffectKind::PumpTarget {
+                    power,
+                    toughness,
+                    target,
+                } => {
+                    // `Self_` is auto-bound to the source permanent (CR 115 — not a chosen target);
+                    // every other filter uses the player's selected target.
+                    let tid = if matches!(target.kind, TargetKind::Self_) {
+                        top.source_permanent_id
+                    } else {
+                        targets.first().copied()
+                    };
+                    if let Some(tid) = tid {
+                        let is_valid_target = self
+                            .state
+                            .objects
+                            .get(&tid)
+                            .map(|t| t.zone == Zone::Battlefield && t.is_creature(self.registry))
+                            .unwrap_or(false);
+                        if is_valid_target {
+                            let tgt = object_display_name(&self.state, self.registry, tid);
+                            self.state.continuous_effects.push(ContinuousEffect {
+                                source_id: top.source_permanent_id,
+                                affected: AffectedScope::Single(tid),
+                                kind: ContinuousEffectKind::PtModify {
+                                    delta_power: power,
+                                    delta_toughness: toughness,
+                                },
+                                duration: EffectDuration::UntilEndOfTurn,
+                                timestamp: self.state.command_index,
+                            });
+                            events.push(ev_log(format!(
+                                "{spell_label} gives +{power}/+{toughness} to {tgt}"
+                            )));
+                        }
+                    }
+                }
+                SpellEffectKind::PumpAll {
+                    filter,
+                    power,
+                    toughness,
+                } => {
+                    // CR 613.4 layer 7c, one-shot: an UntilEndOfTurn continuous effect over the
+                    // filtered creature set (controller resolved from the spell's controller).
+                    // The resolving spell is the nominal source; it does not persist as a creature,
+                    // so the scope drains at cleanup (UntilEndOfTurn), not at LTB.
+                    self.state.continuous_effects.push(ContinuousEffect {
+                        source_id: Some(top.id),
+                        affected: resolve_anthem_scope(&filter, controller, top.id),
+                        kind: ContinuousEffectKind::PtModify {
+                            delta_power: power,
+                            delta_toughness: toughness,
+                        },
+                        duration: EffectDuration::UntilEndOfTurn,
+                        timestamp: self.state.command_index,
+                    });
+                    events.push(ev_log(format!(
+                        "{spell_label} gives +{power}/+{toughness} to each affected creature"
+                    )));
+                }
+                SpellEffectKind::PutCounters {
+                    counter,
+                    count,
+                    target,
+                } => {
+                    // `Self_` is auto-bound to the source permanent (CR 115); any other filter
+                    // uses the chosen target. Counters go on a permanent on the battlefield.
+                    let tid = if matches!(target.kind, TargetKind::Self_) {
+                        top.source_permanent_id
+                    } else {
+                        targets.first().copied()
+                    };
+                    if let Some(tid) = tid {
+                        let is_valid_target = self
+                            .state
+                            .objects
+                            .get(&tid)
+                            .map(|t| t.zone == Zone::Battlefield && t.is_creature(self.registry))
+                            .unwrap_or(false);
+                        if is_valid_target {
+                            let tgt = object_display_name(&self.state, self.registry, tid);
+                            if let Some(t) = self.state.objects.get_mut(&tid) {
+                                *t.counters.entry(counter).or_insert(0) += count;
+                            }
+                            events.push(ev_log(format!(
+                                "{spell_label} puts {count} {} counter{} on {tgt}",
+                                counter_label(counter),
+                                if count == 1 { "" } else { "s" },
+                            )));
+                            // Annihilation / toughness-0 death are checked by the SBA pass that
+                            // runs after this resolution (CR 122.3, CR 704.5f).
+                        }
+                    }
+                }
+                SpellEffectKind::DestroyTarget { .. } => {
+                    if let Some(&tid) = targets.first() {
+                        let tgt = object_display_name(&self.state, self.registry, tid);
+                        let indestructible = self
+                            .state
+                            .objects
+                            .get(&tid)
+                            .map(|o| o.has_keyword(self.registry, Keyword::Indestructible))
+                            .unwrap_or(false);
+                        if indestructible {
+                            events.push(ev_log(format!(
+                                "{spell_label} has no effect: {tgt} is indestructible."
+                            )));
+                        } else {
+                            events.push(ev_log(format!("{spell_label} destroys {tgt}")));
+                            let owner = self.state.objects.get(&tid).map(|o| o.owner);
+                            let card_id_t = self.state.objects.get(&tid).map(|o| o.card_id.clone());
+                            destroy_permanent(&mut self.state, tid)?;
+                            if let Some(owner_id) = owner {
+                                events.push(permanent_moved_event(
+                                    &self.state,
+                                    tid,
+                                    owner_id,
+                                    rv1::permanent_moved::Destination::Graveyard,
+                                ));
+                            }
+                            if let (Some(cid), Some(ctrl)) = (card_id_t, owner) {
+                                self.fire_triggers(
+                                    GameEvent::Dies {
+                                        object_id: tid,
+                                        card_id: cid,
+                                        controller: ctrl,
+                                    },
+                                    events,
+                                );
+                            }
+                        }
+                    }
+                }
+                SpellEffectKind::CounterTargetSpell { .. } => {
+                    if let Some(&tid) = targets.first() {
+                        if let Some(pos) = self.state.stack.iter().position(|s| s.id == tid) {
+                            let st = self.state.stack.remove(pos);
+                            let tgt = self
+                                .registry
+                                .get(&st.card_id)
+                                .map(|d| d.name.as_str())
+                                .unwrap_or("spell");
+                            // CR 707.10d: a copy of a spell has no backing card — it simply ceases
+                            // to exist when it leaves the stack. Only a genuinely cast spell has a
+                            // `GameObject` that moves; CR 701.6a sends that card to its OWNER's
+                            // graveyard via an explicit PermanentMoved so the C++ relay routes the
+                            // physical card off the shared stack. Moving a copy would error on the
+                            // missing object and corrupt the already-popped stack.
+                            if !st.is_copy {
+                                let owner = self.state.objects.get(&st.id).map(|o| o.owner);
+                                move_object_to_zone(&mut self.state, st.id, Zone::Graveyard)?;
+                                if let Some(owner) = owner {
+                                    events.push(permanent_moved_event(
+                                        &self.state,
+                                        st.id,
+                                        owner,
+                                        rv1::permanent_moved::Destination::Graveyard,
+                                    ));
+                                }
+                            }
+                            events.push(ev_log(format!("{spell_label} counters {tgt}")));
+                        }
+                    }
+                }
+                SpellEffectKind::CopyTargetSpell { count, .. } => {
+                    // CR 707.10: create `count` copies of the target spell on the stack, each
+                    // controlled by this spell's controller. The copy is not cast (no mana/cast
+                    // triggers) and ceases to exist after resolving (handled by `is_copy`). It uses
+                    // the original's chosen X, face, and targets — CR 707.10c new-target choice is
+                    // deferred (the copy keeps the original's targets). If the target spell has left
+                    // the stack (e.g. countered in response), this fizzles via the resolution check.
+                    if let Some(&tid) = targets.first() {
+                        if let Some(src) = self.state.stack.iter().find(|s| s.id == tid).cloned() {
+                            let copied_name = self
+                                .registry
+                                .get(&src.card_id)
+                                .and_then(|d| d.face(src.face_index))
+                                .map(|f| f.name.to_string())
+                                .unwrap_or_else(|| src.card_id.clone());
+                            for _ in 0..count {
+                                let copy_id = self.state.next_object_id;
+                                self.state.next_object_id += 1;
+                                self.state.stack.push(StackItem {
+                                    id: copy_id,
+                                    controller,
+                                    card_id: src.card_id.clone(),
+                                    targets: src.targets.clone(),
+                                    ability_text: None,
+                                    source_permanent_id: None,
+                                    ability_index: None,
+                                    is_triggered: false,
+                                    is_copy: true,
+                                    chosen_x: src.chosen_x,
+                                    face_index: src.face_index,
+                                });
+                                events.push(rv1::RuledEvent {
+                                    ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
+                                        object_id: copy_id,
+                                        description: copied_name.clone(),
+                                        targets: src
+                                            .targets
+                                            .iter()
+                                            .map(|&o| rv1::TargetRef { object_id: o })
+                                            .collect(),
+                                        // Overlay marks the stack item as a copy in the existing UI.
+                                        ability_annotation: "(copy)".to_string(),
+                                        card_id: src.card_id.clone(),
+                                        is_copy: true,
+                                    })),
+                                });
+                                events.push(ev_log(format!(
+                                    "{spell_label} copies {copied_name} (P{controller})"
+                                )));
+                            }
+                        }
+                    }
+                }
+                SpellEffectKind::GainLife { amount } => {
+                    let amount = amount.resolve(top.chosen_x);
+                    let pi = self.state.player_idx(controller).unwrap();
+                    self.state.players[pi].life += amount as i32;
+                    events.push(rv1::RuledEvent {
+                        ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                            player_id: controller,
+                            new_total: self.state.players[pi].life,
+                            delta: amount as i32,
+                        })),
+                    });
+                    events.push(ev_log(format!(
+                        "P{controller} gains {amount} life ({spell_label})."
+                    )));
+                }
+                SpellEffectKind::TargetPlayerGainsLife { amount, .. } => {
+                    if let Some(&tid) = targets.first() {
+                        if let Some(pi) = self.state.player_idx(tid as i32) {
+                            let pid = self.state.players[pi].id;
+                            self.state.players[pi].life += amount as i32;
+                            events.push(rv1::RuledEvent {
+                                ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                                    player_id: pid,
+                                    new_total: self.state.players[pi].life,
+                                    delta: amount as i32,
+                                })),
+                            });
+                            events.push(ev_log(format!(
+                                "P{pid} gains {amount} life ({spell_label})."
+                            )));
+                        }
+                    }
+                }
+                SpellEffectKind::TargetPlayerLosesLife { amount, .. } => {
+                    if let Some(&tid) = targets.first() {
+                        if let Some(pi) = self.state.player_idx(tid as i32) {
+                            let pid = self.state.players[pi].id;
+                            self.state.players[pi].life -= amount as i32;
+                            events.push(rv1::RuledEvent {
+                                ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                                    player_id: pid,
+                                    new_total: self.state.players[pi].life,
+                                    delta: -(amount as i32),
+                                })),
+                            });
+                            events.push(ev_log(format!(
+                                "P{pid} loses {amount} life ({spell_label})."
+                            )));
+                        }
+                    }
+                }
+                SpellEffectKind::EachOpponentLosesLifeYouGainEqual { amount } => {
+                    let opps: Vec<(usize, PlayerId)> = self
+                        .state
+                        .players
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, p)| p.id != controller && !p.has_lost)
+                        .map(|(i, p)| (i, p.id))
+                        .collect();
+                    let mut total_lost: u32 = 0;
+                    for (pi, pid) in opps {
+                        self.state.players[pi].life -= amount as i32;
+                        total_lost += amount;
+                        events.push(rv1::RuledEvent {
+                            ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                                player_id: pid,
+                                new_total: self.state.players[pi].life,
+                                delta: -(amount as i32),
+                            })),
+                        });
+                        events.push(ev_log(format!(
+                            "P{pid} loses {amount} life ({spell_label})."
+                        )));
+                    }
+                    if total_lost > 0 {
+                        if let Some(ci) = self.state.player_idx(controller) {
+                            self.state.players[ci].life += total_lost as i32;
+                            events.push(rv1::RuledEvent {
+                                ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                                    player_id: controller,
+                                    new_total: self.state.players[ci].life,
+                                    delta: total_lost as i32,
+                                })),
+                            });
+                            events.push(ev_log(format!(
+                                "P{controller} gains {total_lost} life ({spell_label})."
+                            )));
+                        }
+                    }
+                }
+                SpellEffectKind::ExileTarget => {
+                    if let Some(&tid) = targets.first() {
+                        let tgt = object_display_name(&self.state, self.registry, tid);
+                        let owner = self.state.objects.get(&tid).map(|o| o.owner);
+                        move_object_to_zone(&mut self.state, tid, Zone::Exile)?;
+                        events.push(ev_log(format!("{spell_label} exiles {tgt}")));
+                        if let Some(owner_id) = owner {
+                            events.push(permanent_moved_event(
+                                &self.state,
+                                tid,
+                                owner_id,
+                                rv1::permanent_moved::Destination::Exile,
+                            ));
+                        }
+                    }
+                }
+                SpellEffectKind::ExileTargetGainLifeEqualToPower => {
+                    if let Some(&tid) = targets.first() {
+                        let tgt = object_display_name(&self.state, self.registry, tid);
+                        // CR 608: read effective power at resolution before the object leaves.
+                        let power = self.effective_power(tid).unwrap_or(0);
+                        let owner = self.state.objects.get(&tid).map(|o| o.owner);
+                        let target_controller = owner.unwrap_or(controller);
+                        move_object_to_zone(&mut self.state, tid, Zone::Exile)?;
+                        events.push(ev_log(format!("{spell_label} exiles {tgt}")));
+                        if let Some(owner_id) = owner {
+                            events.push(permanent_moved_event(
+                                &self.state,
+                                tid,
+                                owner_id,
+                                rv1::permanent_moved::Destination::Exile,
+                            ));
+                        }
+                        if power > 0 {
+                            if let Some(pi) = self.state.player_idx(target_controller) {
+                                self.state.players[pi].life += power as i32;
+                                events.push(rv1::RuledEvent {
+                                    ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                                        player_id: target_controller,
+                                        new_total: self.state.players[pi].life,
+                                        delta: power as i32,
+                                    })),
+                                });
+                                events.push(ev_log(format!(
+                                    "P{target_controller} gains {power} life."
+                                )));
+                            }
+                        }
+                    }
+                }
+                SpellEffectKind::ReturnTargetCreatureToHand
+                | SpellEffectKind::ReturnTargetPermanentToHand => {
+                    if let Some(&tid) = targets.first() {
+                        let tgt = object_display_name(&self.state, self.registry, tid);
+                        let owner = self.state.objects.get(&tid).map(|o| o.owner);
+                        // Transient battlefield state (damage, counters, tap) is reset centrally
+                        // by move_object_to_zone on leaving the battlefield (CR 400.7 / 121.2).
+                        move_object_to_zone(&mut self.state, tid, Zone::Hand)?;
+                        events.push(ev_log(format!(
+                            "{spell_label} returns {tgt} to its owner's hand"
+                        )));
+                        if let Some(owner_id) = owner {
+                            events.push(permanent_moved_event(
+                                &self.state,
+                                tid,
+                                owner_id,
+                                rv1::permanent_moved::Destination::Hand,
+                            ));
+                        }
+                    }
+                }
+                SpellEffectKind::MillTargetPlayer { count, .. } => {
+                    if let Some(&tid) = targets.first() {
+                        if let Some(pi) = self.state.player_idx(tid as i32) {
+                            let pid = self.state.players[pi].id;
+                            let mut milled = 0u32;
+                            for _ in 0..count {
+                                let Some(oid) = self.state.players[pi].library.pop_front() else {
+                                    break;
+                                };
+                                self.state.players[pi].graveyard.push(oid);
+                                if let Some(o) = self.state.objects.get_mut(&oid) {
+                                    o.zone = Zone::Graveyard;
+                                }
+                                events.push(permanent_moved_event(
+                                    &self.state,
+                                    oid,
+                                    pid,
+                                    rv1::permanent_moved::Destination::Graveyard,
+                                ));
+                                milled += 1;
+                            }
+                            events.push(ev_log(format!(
+                                "{spell_label} mills {milled} card(s) from P{pid}"
+                            )));
+                        }
+                    }
+                }
+                SpellEffectKind::TapTarget { .. } => {
+                    if let Some(&tid) = targets.first() {
+                        let tgt = object_display_name(&self.state, self.registry, tid);
+                        if let Some(o) = self.state.objects.get_mut(&tid) {
+                            if o.zone == Zone::Battlefield && !o.tapped {
+                                o.tapped = true;
+                                events.push(ev_log(format!("{spell_label} taps {tgt}")));
+                            }
+                        }
+                    }
+                }
+                SpellEffectKind::DestroyAll { kind } => {
+                    // CR 701.7 / 704.4: all matching permanents are destroyed simultaneously,
+                    // then their "dies" triggers fire together. Indestructible permanents survive
+                    // (CR 702.12b). Untargeted, so hexproof/shroud are irrelevant.
+                    let victims = battlefield_objects_matching(&self.state, self.registry, &kind);
+                    let mut destroyed: Vec<(ObjectId, String, PlayerId)> = Vec::new();
+                    for tid in victims {
+                        let indestructible = self
+                            .state
+                            .objects
+                            .get(&tid)
+                            .map(|o| o.has_keyword(self.registry, Keyword::Indestructible))
+                            .unwrap_or(false);
+                        let tgt = object_display_name(&self.state, self.registry, tid);
+                        if indestructible {
+                            events.push(ev_log(format!(
+                                "{tgt} is indestructible and survives {spell_label}."
+                            )));
+                            continue;
+                        }
+                        let owner = self.state.objects.get(&tid).map(|o| o.owner);
+                        let card_id_t = self.state.objects.get(&tid).map(|o| o.card_id.clone());
+                        destroy_permanent(&mut self.state, tid)?;
+                        events.push(ev_log(format!("{spell_label} destroys {tgt}")));
+                        if let Some(owner_id) = owner {
+                            events.push(permanent_moved_event(
+                                &self.state,
+                                tid,
+                                owner_id,
+                                rv1::permanent_moved::Destination::Graveyard,
+                            ));
+                        }
+                        if let (Some(cid), Some(ctrl)) = (card_id_t, owner) {
+                            destroyed.push((tid, cid, ctrl));
+                        }
+                    }
+                    for (tid, cid, ctrl) in destroyed {
+                        self.fire_triggers(
+                            GameEvent::Dies {
+                                object_id: tid,
+                                card_id: cid,
+                                controller: ctrl,
+                            },
+                            events,
+                        );
+                    }
+                }
+                SpellEffectKind::DamageAll { amount, kind } => {
+                    // CR 119: deal damage to each matching permanent. Marking damage mirrors
+                    // DamageTarget; lethal-damage destruction is left to state-based actions
+                    // (CR 704.5g), which run immediately after this spell resolves.
+                    let affected = battlefield_objects_matching(&self.state, self.registry, &kind);
+                    for tid in &affected {
+                        let tgt = object_display_name(&self.state, self.registry, *tid);
+                        if let Some(o) = self.state.objects.get_mut(tid) {
+                            o.damage += amount;
+                        }
+                        events.push(ev_log(format!(
+                            "{spell_label} deals {amount} damage to {tgt}"
+                        )));
+                    }
+                }
+                SpellEffectKind::CreateTokens {
+                    token,
+                    count,
+                    controller: who,
+                } => {
+                    self.create_tokens(&token, count, who, controller, &spell_label, events);
+                }
+                // CR 605.3b: a mana ability never uses the stack, so a ProduceMana effect is
+                // resolved immediately in `resolve_mana_ability` and can never reach this generic
+                // stack-resolution path. Defensive no-op (registry validation also forbids it on
+                // spells); producing mana here would be off-stack-timing and is intentionally not done.
+                SpellEffectKind::ProduceMana { .. } => {}
+                SpellEffectKind::None => {}
+            }
+        }
+        events.push(ev_log(format!("{spell_label} resolves.")));
+        Ok(())
+    }
+
+    /// CR 111: mint `count` tokens of `token_id` for each recipient and put them onto the
+    /// battlefield. Each minted token is a fresh [`GameObject`] whose characteristics come from
+    /// the token's [`CardDefinition`] (via the registry's token namespace), so combat, P/T, and
+    /// keyword queries treat it exactly like any other permanent. Entering tokens fire ETB
+    /// triggers (CR 603.6) through the same hook as a resolved creature spell, so Soul Warden et al.
+    /// see them. A [`TokenCreated`](rv1::TokenCreated) event carries the self-describing identity
+    /// the relay needs (tokens have no deck card / Oracle entry).
+    pub(super) fn create_tokens(
+        &mut self,
+        token_id: &str,
+        count: u32,
+        who: TokenController,
+        spell_controller: PlayerId,
+        spell_label: &str,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) {
+        let registry = self.registry;
+        let Some(def) = registry.get(token_id) else {
+            // Registry load validates every CreateTokens reference, so this is unreachable;
+            // fail safe by doing nothing rather than panicking (server-authoritative).
+            events.push(ev_log(format!(
+                "{spell_label} could not create unknown token '{token_id}'."
+            )));
+            return;
+        };
+        let name = def.name.clone();
+        let is_creature = def.is_creature;
+        let power = def.power;
+        let toughness = def.toughness;
+        let types = def.types.clone();
+        let keywords: Vec<String> = def
+            .keywords
+            .iter()
+            .map(|k| k.as_str().to_string())
+            .collect();
+        let color = color_string(&def.colors());
+        let pt = if is_creature {
+            format!("{}/{}", power.unwrap_or(0), toughness.unwrap_or(0))
+        } else {
+            String::new()
+        };
+
+        let recipients: Vec<PlayerId> = match who {
+            TokenController::Controller => vec![spell_controller],
+            // CR 111.3: each token's owner/controller is the player it is created under.
+            TokenController::EachPlayer => self
+                .state
+                .players
+                .iter()
+                .filter(|p| !p.has_lost)
+                .map(|p| p.id)
+                .collect(),
+        };
+
+        for pid in recipients {
+            let Some(pidx) = self.state.player_idx(pid) else {
+                continue;
+            };
+            for _ in 0..count {
+                let oid = self.state.next_object_id;
+                self.state.next_object_id += 1;
+                self.state.objects.insert(
+                    oid,
+                    GameObject {
+                        id: oid,
+                        owner: pid,
+                        card_id: token_id.to_string(),
+                        zone: Zone::Battlefield,
+                        tapped: false,
+                        summoning_sick: is_creature,
+                        power,
+                        toughness,
+                        damage: 0,
+                        deathtouch_damage: false,
+                        counters: BTreeMap::new(),
+                    },
+                );
+                self.state.players[pidx].battlefield.push(oid);
+                events.push(rv1::RuledEvent {
+                    ev: Some(rv1::ruled_event::Ev::TokenCreated(rv1::TokenCreated {
+                        object_id: oid,
+                        controller_player_id: pid,
+                        card_id: token_id.to_string(),
+                        identity: Some(rv1::TokenIdentity {
+                            name: name.clone(),
+                            pt: pt.clone(),
+                            color: color.clone(),
+                            types: types.clone(),
+                            is_creature,
+                            keywords: keywords.clone(),
+                        }),
+                    })),
+                });
+                // CR 603.6: a token entering the battlefield triggers ETB watchers.
+                self.fire_triggers(GameEvent::EntersBattlefield { object_id: oid }, events);
+            }
+            let noun = if count == 1 { "token" } else { "tokens" };
+            events.push(ev_log(format!(
+                "P{pid} creates {count} {name} {noun} ({spell_label})."
+            )));
+        }
+    }
+}
+
+pub(super) fn draw_card(
+    p: &mut PlayerState,
+    objects: &mut HashMap<ObjectId, GameObject>,
+) -> Result<(), EngineError> {
+    let oid = p
+        .library
+        .pop_front()
+        .ok_or(EngineError::Illegal("library empty"))?;
+    p.hand.push(oid);
+    if let Some(o) = objects.get_mut(&oid) {
+        o.zone = Zone::Hand;
+    }
+    Ok(())
+}
+
+/// Build a `PermanentMoved` event, stamping the tricerules `card_id` from the object so
+/// servers can resolve cards that have no engine-oid mapping (e.g. milled library cards).
+pub(crate) fn permanent_moved_event(
+    state: &GameState,
+    oid: ObjectId,
+    owner_player_id: PlayerId,
+    destination: rv1::permanent_moved::Destination,
+) -> rv1::RuledEvent {
+    let card_id = state
+        .objects
+        .get(&oid)
+        .map(|o| o.card_id.clone())
+        .unwrap_or_default();
+    rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::PermanentMoved(rv1::PermanentMoved {
+            object_id: oid,
+            owner_player_id,
+            destination: destination as i32,
+            card_id,
+        })),
+    }
+}
+
+/// Resolve an [`AnthemFilter`] into an [`AffectedScope`] for a continuous effect, given the
+/// effect's `controller` and the source permanent `source`. Shared by static anthems
+/// (`AnthemPt`, source on the battlefield) and one-shot mass pumps (`PumpAll`, `source` is the
+/// resolving spell). `exclude_self` only applies when the source persists, so a spell passes a
+/// `source` that is harmlessly never on the battlefield as a creature.
+pub(super) fn resolve_anthem_scope(
+    filter: &AnthemFilter,
+    controller: PlayerId,
+    source: ObjectId,
+) -> AffectedScope {
+    AffectedScope::CreaturesMatching {
+        controller: filter
+            .controller
+            .map(|AnthemController::YouControl| controller),
+        subtype: filter.subtype.clone(),
+        color: filter.color,
+        exclude: if filter.exclude_self {
+            Some(source)
+        } else {
+            None
+        },
+    }
+}
+
+pub(super) fn move_object_to_zone(
+    state: &mut GameState,
+    oid: ObjectId,
+    z: Zone,
+) -> Result<(), EngineError> {
+    let owner = state
+        .objects
+        .get(&oid)
+        .map(|o| o.owner)
+        .ok_or(EngineError::Illegal("no object"))?;
+
+    // CR 400.7: a zone change creates a new game object. Remove any Single-target continuous
+    // effects on this object so they don't apply if the same ObjectId is reused later.
+    // CR 604.3 / 611.3: also drain any `WhileSourceOnBattlefield` effects this permanent was the
+    // source of (anthems) — a static ability stops applying the moment its source leaves (LTB).
+    // One-shot `UntilEndOfTurn` effects (Giant Growth, firebreathing) are deliberately NOT drained
+    // here: once created they are independent of their source (CR 611.2g) and only end at cleanup.
+    let leaving_battlefield = state.objects.get(&oid).map(|o| o.zone) == Some(Zone::Battlefield);
+    if leaving_battlefield && z != Zone::Battlefield {
+        state.continuous_effects.retain(|e| {
+            let single_on_this = matches!(&e.affected, AffectedScope::Single(id) if *id == oid);
+            let static_from_this =
+                e.source_id == Some(oid) && e.duration == EffectDuration::WhileSourceOnBattlefield;
+            !single_on_this && !static_from_this
+        });
+        // CR 400.7 / 121.2: a zone change makes this a new game object — transient
+        // battlefield-only state (marked damage, deathtouch marking, tap status) and all
+        // counters do not carry over. Centralized here so every leave path (SBA destroy,
+        // sacrifice, bounce, discard, mill, exile) is correct by construction; otherwise a
+        // creature bounced and recast would keep its +1/+1 counters or stale combat damage.
+        if let Some(o) = state.objects.get_mut(&oid) {
+            o.damage = 0;
+            o.deathtouch_damage = false;
+            o.tapped = false;
+            o.counters.clear();
+        }
+    }
+
+    let idx = state.player_idx(owner).unwrap();
+    let p = &mut state.players[idx];
+    p.library.retain(|&x| x != oid);
+    p.hand.retain(|&x| x != oid);
+    p.battlefield.retain(|&x| x != oid);
+    p.graveyard.retain(|&x| x != oid);
+    p.exile.retain(|&x| x != oid);
+    match z {
+        Zone::Graveyard => p.graveyard.push(oid),
+        Zone::Hand => p.hand.push(oid),
+        Zone::Battlefield => p.battlefield.push(oid),
+        Zone::Library => p.library.push_back(oid),
+        Zone::Exile => p.exile.push(oid),
+        Zone::Stack => {}
+    }
+    if let Some(o) = state.objects.get_mut(&oid) {
+        o.zone = z;
+        // CR 302.6: a permanent entering the battlefield has not been controlled continuously
+        // since its controller's most recent turn began, so it is summoning sick. Assert this on
+        // entry rather than trusting a persisted flag — a prior bounce/leave clears transient
+        // state, so a creature returned to hand and recast (or reanimated/flickered) the same turn
+        // must still be sick. Haste exempts the *use* of this (checked at attack/tap time).
+        if z == Zone::Battlefield {
+            o.summoning_sick = true;
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn destroy_permanent(state: &mut GameState, oid: ObjectId) -> Result<(), EngineError> {
+    move_object_to_zone(state, oid, Zone::Graveyard)
+}
+
+/// Sacrifice a permanent (CR 701.17). Unlike destroy, sacrifice bypasses indestructible and
+/// regeneration — it is always a cost, never a triggered or replacement effect that can be
+/// redirected.
+pub(super) fn sacrifice_permanent(state: &mut GameState, oid: ObjectId) -> Result<(), EngineError> {
+    move_object_to_zone(state, oid, Zone::Graveyard)
+}
+
+fn counter_label(kind: CounterKind) -> &'static str {
+    match kind {
+        CounterKind::PlusOnePlusOne => "+1/+1",
+        CounterKind::MinusOneMinusOne => "-1/-1",
+    }
+}
