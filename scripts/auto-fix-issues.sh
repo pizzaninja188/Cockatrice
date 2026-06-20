@@ -228,7 +228,10 @@ resume), set \`session=$new_sid\` so a future interrupted run can resume it." \
   if [[ $rc -eq 124 ]]; then echo "task hit ${PER_ISSUE_TIMEOUT}s timeout; stopping."; break; fi
   if [[ $rc -ne 0 ]]; then echo "claude exited non-zero ($rc) — usage window exhausted or crash. Stopping."; break; fi
 
-  result_line="$(grep -aE '^AUTOFIX_RESULT:' "$TASK_LOG" | tail -n 1)"
+  # Match anywhere on the line (not just column 0) and normalize from the keyword
+  # onward, stripping any backticks an agent wrapped it in (a common markdown habit).
+  # `tail -n 1` keeps the genuine final line from beating an earlier prose mention.
+  result_line="$(grep -aoE 'AUTOFIX_RESULT:.*' "$TASK_LOG" | tail -n 1 | tr -d '`')"
   echo "result: ${result_line:-<none>}"
 
   if [[ "$mode" == "issues" ]]; then
