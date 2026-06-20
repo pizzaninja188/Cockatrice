@@ -1,5 +1,5 @@
-use super::*;
 use super::combat::is_attacking_or_blocking;
+use super::*;
 
 /// Player or creature permanent on the battlefield (matches cast validation for `bolt`).
 fn damage_spell_target_legal(state: &GameState, registry: &CardRegistry, tid: ObjectId) -> bool {

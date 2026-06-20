@@ -39,6 +39,11 @@ mod resolution;
 mod targeting;
 mod triggers;
 
+// Re-export the two helpers that are called from outside the `engine` module tree
+// (`crate::custom`) so their long-standing `crate::engine::<fn>` paths keep resolving.
+pub(crate) use opening::shuffle_player_library;
+pub(crate) use resolution::permanent_moved_event;
+
 #[derive(Debug, Error)]
 pub enum EngineError {
     #[error("unknown player {0}")]

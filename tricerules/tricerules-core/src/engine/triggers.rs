@@ -1,6 +1,6 @@
-use super::*;
 use super::events::ev_log;
 use super::targeting::spell_effect_kind_needs_target;
+use super::*;
 
 impl GameEngine {
     /// Emit a game event and enqueue all matching triggered abilities (CR 603.3b APNAP order).

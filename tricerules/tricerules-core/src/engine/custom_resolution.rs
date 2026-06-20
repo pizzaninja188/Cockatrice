@@ -1,7 +1,7 @@
-use super::*;
 use super::events::{ev_log, ev_priority_changed, finish_with_events, format_spell_targets_log};
 use super::legal_actions::fill_legal;
 use super::targeting::validate_effect_targets;
+use super::*;
 
 impl GameEngine {
     pub(super) fn choose_trigger_target(

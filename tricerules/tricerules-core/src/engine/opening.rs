@@ -1,7 +1,7 @@
-use super::*;
-use super::resolution::{draw_card, move_object_to_zone, permanent_moved_event};
-use super::events::{ev_log, ev_priority_changed, ev_phase_labeled, finish_with_events};
+use super::events::{ev_log, ev_phase_labeled, ev_priority_changed};
 use super::legal_actions::fill_legal;
+use super::resolution::{draw_card, move_object_to_zone, permanent_moved_event};
+use super::*;
 
 pub(crate) fn shuffle_player_library(state: &mut GameState, player_idx: usize, mix: u64) {
     let mut rng = rand::rngs::StdRng::seed_from_u64(mix);

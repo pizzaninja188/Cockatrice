@@ -1,6 +1,5 @@
-use super::*;
 use super::legal_actions::fill_legal;
-use super::combat::combat_needs_first_strike_step;
+use super::*;
 
 impl GameEngine {
     pub fn initial_response_batch(&self) -> RuledEventBatch {

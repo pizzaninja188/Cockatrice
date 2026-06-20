@@ -1,7 +1,6 @@
+use super::events::{color_string, ev_log, object_display_name};
+use super::targeting::{battlefield_objects_matching, spell_has_no_legal_targets_at_resolution};
 use super::*;
-use super::events::{color_string, ev_log, finish_with_events, format_spell_targets_log, object_display_name};
-use super::targeting::{battlefield_objects_matching, spell_effect_kind_needs_target, spell_has_no_legal_targets_at_resolution};
-use super::legal_actions::fill_legal;
 
 impl GameEngine {
     pub(super) fn resolve_top_of_stack(
@@ -917,20 +916,14 @@ pub(super) fn move_object_to_zone(
     Ok(())
 }
 
-pub(super) fn destroy_permanent(
-    state: &mut GameState,
-    oid: ObjectId,
-) -> Result<(), EngineError> {
+pub(super) fn destroy_permanent(state: &mut GameState, oid: ObjectId) -> Result<(), EngineError> {
     move_object_to_zone(state, oid, Zone::Graveyard)
 }
 
 /// Sacrifice a permanent (CR 701.17). Unlike destroy, sacrifice bypasses indestructible and
 /// regeneration — it is always a cost, never a triggered or replacement effect that can be
 /// redirected.
-pub(super) fn sacrifice_permanent(
-    state: &mut GameState,
-    oid: ObjectId,
-) -> Result<(), EngineError> {
+pub(super) fn sacrifice_permanent(state: &mut GameState, oid: ObjectId) -> Result<(), EngineError> {
     move_object_to_zone(state, oid, Zone::Graveyard)
 }
 

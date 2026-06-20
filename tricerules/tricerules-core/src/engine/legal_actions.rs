@@ -1,9 +1,9 @@
-use super::*;
-use super::combat::priority_locked_for_combat_declaration;
 use super::casting::castable_at_instant_speed;
+use super::combat::priority_locked_for_combat_declaration;
 use super::events::object_display_name;
-use super::priority::{sorcery_speed_available, instant_timing_step_allowed};
+use super::priority::{instant_timing_step_allowed, sorcery_speed_available};
 use super::targeting::{compute_spell_targets, spell_effect_kind_needs_target};
+use super::*;
 
 pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
     for p in &eng.state.players {

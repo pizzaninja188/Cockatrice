@@ -1,7 +1,6 @@
-use super::*;
-use super::resolution::{move_object_to_zone, draw_card, permanent_moved_event, destroy_permanent};
-use super::events::{ev_log, ev_priority_changed, ev_phase_labeled, finish_with_events, object_display_name};
+use super::events::{ev_log, ev_phase_labeled, ev_priority_changed, object_display_name};
 use super::legal_actions::fill_legal;
+use super::*;
 
 impl GameEngine {
     /// Returns false if `blocker_id` is not permitted to block `attacker_id` due to
@@ -264,7 +263,10 @@ impl GameEngine {
         Ok(b)
     }
 
-    pub(super) fn set_blockers(&mut self, pairs: &[rv1::BlockPair]) -> Result<RuledEventBatch, EngineError> {
+    pub(super) fn set_blockers(
+        &mut self,
+        pairs: &[rv1::BlockPair],
+    ) -> Result<RuledEventBatch, EngineError> {
         let defending_player = self
             .state
             .defending_player_id_1v1()

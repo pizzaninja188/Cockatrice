@@ -1,7 +1,7 @@
-use super::*;
-use super::resolution::{draw_card, move_object_to_zone, permanent_moved_event};
-use super::events::{ev_log, ev_priority_changed, ev_phase_labeled, finish_with_events};
+use super::events::{ev_log, ev_phase_labeled, ev_priority_changed, finish_with_events};
 use super::legal_actions::fill_legal;
+use super::resolution::{draw_card, move_object_to_zone, permanent_moved_event};
+use super::*;
 
 /// Sorcery-speed window: your main phase, stack empty, you are the active player (CR 307.5,
 /// 601.2; lands CR 305.3).
@@ -46,7 +46,10 @@ impl GameEngine {
         }
     }
 
-    pub(super) fn concede_batch(&mut self, player: PlayerId) -> Result<RuledEventBatch, EngineError> {
+    pub(super) fn concede_batch(
+        &mut self,
+        player: PlayerId,
+    ) -> Result<RuledEventBatch, EngineError> {
         for p in &mut self.state.players {
             if p.id == player {
                 p.has_lost = true;
@@ -64,7 +67,10 @@ impl GameEngine {
         Ok(batch)
     }
 
-    pub(super) fn pass_priority(&mut self, player: PlayerId) -> Result<RuledEventBatch, EngineError> {
+    pub(super) fn pass_priority(
+        &mut self,
+        player: PlayerId,
+    ) -> Result<RuledEventBatch, EngineError> {
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("not your priority"));
         }
