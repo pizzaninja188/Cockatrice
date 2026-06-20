@@ -139,9 +139,12 @@ if [[ ! -f "$STATUS_FILE" ]]; then
 fi
 [[ "$SYNC_REMOTE" == "1" ]] && mark_done_merged
 
-# Refuse to run on a dirty tree — never clobber in-progress work.
+# A dirty tree here means a previous run left something behind (the per-task
+# reconciliation should normally prevent this). Stash it to self-heal rather than
+# block every future run; never discard.
 if [[ -n "$(git status --porcelain)" ]]; then
-  echo "FATAL: working tree dirty; refusing to run."; git status --short; exit 1
+  echo "WARNING: working tree dirty at start; stashing to unblock:"; git status --short
+  git stash push -u -m "auto-fix start-stash $RUN_TS" >/dev/null 2>&1 || true
 fi
 
 # --- main loop ---------------------------------------------------------------
@@ -201,6 +204,22 @@ resume), set \`session=$new_sid\` so a future interrupted run can resume it." \
   fi
 
   tail -n 40 "$TASK_LOG"
+
+  # If the agent was interrupted (e.g. usage limit) mid-work, it leaves the tree
+  # dirty. Preserve that WIP on its task branch so (a) the tree returns clean and
+  # future runs aren't blocked, and (b) a resume continues from the committed
+  # state. NEVER discard: stash anything that isn't on a task branch.
+  if [[ -n "$(git status --porcelain)" ]]; then
+    cur="$(git branch --show-current)"
+    if [[ "$cur" == fix/* || "$cur" == cards/* ]]; then
+      git add -A && git commit -q -m "wip: auto-preserved (interrupted run)" \
+        && echo "  preserved interrupted WIP on $cur"
+      [[ "$SYNC_REMOTE" == "1" ]] && timeout 120 git push -u origin "$cur" >/dev/null 2>&1 || true
+    else
+      echo "  WARNING: dirty tree on '$cur' (not a task branch); stashing to unblock."
+      git stash push -u -m "auto-fix stray $RUN_TS" >/dev/null 2>&1 || true
+    fi
+  fi
 
   # Flush any AUTOMATION_STATUS.md commits the agent made on master.
   git checkout "$BASE_BRANCH" >/dev/null 2>&1
