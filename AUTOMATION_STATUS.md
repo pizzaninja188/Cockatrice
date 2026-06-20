@@ -17,4 +17,4 @@ Line format (one per issue the automation has touched):
 #1 status=done merged=2026-06-20 branch=fix/issue-1 attempts=1 session=be6b0445-1dd4-4fff-bfe0-87a56d8f72dc started=2026-06-19 notes="tap-land-pays-pending-cast; client-only; build+14 ctest green"
 #2 status=done merged=2026-06-20 branch=fix/issue-2 attempts=1 session=215c69fb-9036-4ff8-9b9a-410593605e5c started=2026-06-20 notes="split engine.rs->engine/ and scenario.rs->scenario/ (15 themed files, single binary); pure refactor, 16+1+200+2 tests + clippy + fmt green"
 #3 status=in-review branch=fix/issue-3 attempts=1 session=472ded8c-6d35-42d3-af1a-51e85ece4f7b started=2026-06-20 notes="enforce Gifts Ungiven different-names restriction via unique_names flag in PendingResolution; 201+all tests green, clippy+fmt clean"
-#6 status=in-progress branch=fix/issue-6 attempts=1 session=78de6a6d-9978-4ae5-b9bf-8ba0a41a21d2 started=2026-06-20
+#6 status=in-review branch=fix/issue-6 attempts=1 session=78de6a6d-9978-4ae5-b9bf-8ba0a41a21d2 started=2026-06-20 notes="disable Qt::WindowCloseButtonHint on resolution dialog; 14/14 tests pass"
