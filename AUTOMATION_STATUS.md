@@ -19,3 +19,4 @@ Line format (one per issue the automation has touched):
 #3 status=in-review branch=fix/issue-3 attempts=1 session=472ded8c-6d35-42d3-af1a-51e85ece4f7b started=2026-06-20 notes="enforce Gifts Ungiven different-names restriction via unique_names flag in PendingResolution; 201+all tests green, clippy+fmt clean"
 #6 status=in-review branch=fix/issue-6 attempts=1 session=78de6a6d-9978-4ae5-b9bf-8ba0a41a21d2 started=2026-06-20 notes="disable Qt::WindowCloseButtonHint on resolution dialog; 14/14 tests pass"
 #7 status=in-review branch=fix/issue-7 attempts=1 session=427839e9-7d82-4e87-b04a-0bb812a86f93 started=2026-06-20 notes="add else-if(is_copy) branch in StackPushed handler to call createSyntheticAbilityStackCard for copies; 14 C++ + 200 Rust tests pass"
+#8 status=in-progress branch=fix/issue-8 attempts=1 session=5aa0cd9b-4428-4050-94c6-28d1ece46892 started=2026-06-20
