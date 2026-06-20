@@ -20,10 +20,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
 
 ## Open
 
-- [ ] #2 [feature] Refactor engine.rs and scenario.rs because they are huge
-  - Details: Implement engine-and-scenario-module-split-plan.md. There have been changes since the plan was made, so fit those changes into one of the mentioned files or make a new one if appropriate
-  - Priority: High
-
 - [ ] #3 [bug] Gifts Ungiven allows a player to choose 2 cards with the same name
   - Details: Card says choose 4 cards with different names, but in current implementation cards with the same name can be chosen
   - Priority: Medium
