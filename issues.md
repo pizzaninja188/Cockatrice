@@ -20,27 +20,31 @@ it records progress in `AUTOMATION_STATUS.md` instead.
 
 ## Open
 
-- [ ] #2 [bug] Gifts Ungiven allows a player to choose 2 cards with the same name
+- [ ] #2 [feature] Refactor engine.rs and scenario.rs because they are huge
+  - Details: Implement engine-and-scenario-module-split-plan.md. There have been changes since the plan was made, so fit those changes into one of the mentioned files or make a new one if appropriate
+  - Priority: High
+
+- [ ] #3 [bug] Gifts Ungiven allows a player to choose 2 cards with the same name
   - Details: Card says choose 4 cards with different names, but in current implementation cards with the same name can be chosen
   - Priority: Medium
 
-- [ ] #3 [feature] Using Cockatrice UI elements when possible
+- [ ] #4 [feature] Using Cockatrice UI elements when possible
   - Details: For Brainstorm, when choosing cards to put on top, a popup shows up with a list of cards in hand. This can be improved visually by just having the user click cards in hand and numbering them like when putting cards on top after mulliganing. Also, it has the first chosen go to the top, which is the opposite of what should happen intuitively. Similarly, Gifts Ungiven has the player searching for cards in library choose from a similar text list, when Cockatrice already has search library functionality. The player choosing cards to go to the graveyard could also get a custom zone view that shows the card images instead of just text (like what we did with the stack). I want this train of thought to be used for other custom resolution + custom zone cards in the future as well.
   - Priority: Low
 
-- [ ] #4 [bug] Tap/Untap animations not working
+- [ ] #5 [bug] Tap/Untap animations not working
   - Details: Lands used to have a quick animation when tapping, but this stopped working after the engine-owned mana update and lands tap instantly. Animations also never worked for untapping.
   - Priority: Low
 
-- [ ] #5 [bug] Closing a custom resolution prompt softlocks the game
+- [ ] #6 [bug] Closing a custom resolution prompt softlocks the game
   - Details: Prompts for cards like Brainstorm and Gifts Ungiven should have the X button disabled. Note that this might not be an issue depending how the custom zone refactor works.
   - Priority: Medium
 
-- [ ] #6 [bug] Copying a spell with Twincast causes two copies in the engine, but the copy doesn't show up on the stack visually
+- [ ] #7 [bug] Copying a spell with Twincast causes two copies in the engine, but the copy doesn't show up on the stack visually
   - Details: After resolving Twincast, only a single copy of the spell remains on the stack. There should be two of the same spell on the stack after resolution, and the copy should have an annotation that says "Copy".
   - Priority: Medium
 
-- [ ] #7 [bug] Copying a spell that targets with Twincast uses same targets instead of having Twincast's controller choose new ones
+- [ ] #8 [bug] Copying a spell that targets with Twincast uses same targets instead of having Twincast's controller choose new ones
   - Details: After casting Twincast on a Lightning Bolt, both bolts will damage the same target. There should be a targeting prompt for the Twincast player to choose their own targets for the copy
   - Priority: Medium
 
