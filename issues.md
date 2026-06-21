@@ -44,6 +44,14 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: After casting Twincast on a Lightning Bolt, both bolts will damage the same target. There should be a targeting prompt for the Twincast player to choose their own targets for the copy
   - Priority: Medium
 
+- [ ] #9 [feature] Dual lands
+  - Details: Right now, basic lands are the only implemented lands. I want to implement the 10 original dual lands. These lands should have the context menu open on left or right click to choose which mana ability to activate.
+  - Priority: Medium
+
+- [ ] #10 [feature] Auras
+  - Details: Implement basic auras. Choose some effects that already exist from the engine and implement auras that use those effects. Auras should stack underneath the permanent they are enchanting in the client, and should die when the permanent is removed.
+  - Priority: Medium
+
 ---
 
 ## Backlog (not yet prioritized)
