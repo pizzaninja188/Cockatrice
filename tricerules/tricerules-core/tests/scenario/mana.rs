@@ -480,6 +480,69 @@ fn mono_hybrid_flame_javelin_paid_with_generic() {
     );
 }
 
+// CR 605.1a / Sol Ring: "{T}: Add {C}{C}" — tapping an artifact mana source produces
+// two colorless mana. Covers the first multi-colorless tap-only mana ability in the engine.
+
+/// Happy path: Sol Ring injected onto the battlefield; tapping it immediately adds {C}{C} to
+/// the controller's pool with no stack and no priority change (CR 605.3a–b).
+#[test]
+fn sol_ring_tap_produces_two_colorless() {
+    let mut e = GameEngine::new(200, &[0, 1], 20, None, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let ring = inject_permanent_on_battlefield(&mut e, 0, "sol_ring");
+    assert!(!e.state.objects[&ring].tapped, "starts untapped");
+
+    let priority_before = e.state.priority_player_id();
+    let batch = e
+        .apply_command(0, &activate_ability(ring, 0, vec![]))
+        .expect("tap sol ring");
+
+    assert_eq!(
+        e.state.players[0].mana_pool.colorless, 2,
+        "produced {{C}}{{C}}"
+    );
+    assert!(e.state.objects[&ring].tapped, "source tapped");
+    assert!(
+        e.state.stack.is_empty(),
+        "mana ability never uses the stack"
+    );
+    assert_eq!(
+        e.state.priority_player_id(),
+        priority_before,
+        "priority unchanged"
+    );
+    let pool_ev = batch
+        .events
+        .iter()
+        .find_map(|ev| match &ev.ev {
+            Some(Ev::ManaPoolUpdated(m)) if m.player_id == 0 => Some(m),
+            _ => None,
+        })
+        .expect("ManaPoolUpdated emitted");
+    assert_eq!(pool_ev.c, 2, "pool event carries two colorless");
+}
+
+/// Illegal: activating Sol Ring when already tapped is rejected (CR 605.2a).
+#[test]
+fn sol_ring_already_tapped_is_rejected() {
+    let mut e = GameEngine::new(201, &[0, 1], 20, None, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let ring = inject_permanent_on_battlefield(&mut e, 0, "sol_ring");
+    e.state.objects.get_mut(&ring).unwrap().tapped = true;
+
+    let err = e
+        .apply_command(0, &activate_ability(ring, 0, vec![]))
+        .expect_err("already-tapped source must be rejected");
+    assert!(
+        format!("{err:?}").contains("already tapped"),
+        "unexpected error: {err:?}"
+    );
+    assert_eq!(
+        e.state.players[0].mana_pool.colorless, 0,
+        "pool untouched on rejection"
+    );
+}
+
 /// CR 107.4f: Mutagenic Growth ({G/P}) cast by paying 2 life pumps the target +2/+2 and
 /// reduces the caster's life by 2 without using any mana.
 #[test]

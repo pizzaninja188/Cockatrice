@@ -1,0 +1,13 @@
+(
+  id: "sol_ring",
+  name: "Sol Ring",
+  mana_cost: "{1}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      cost: Tap,
+      effect: ProduceMana(options: [(c: 2)]),
+      text: "{T}: Add {C}{C}.",
+    ),
+  ],
+)
