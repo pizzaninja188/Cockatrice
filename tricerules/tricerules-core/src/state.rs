@@ -57,6 +57,10 @@ pub struct GameObject {
     /// in pairs as a state-based action (CR 122.3). Unlike continuous effects, counters persist
     /// across cleanup — they are not until-end-of-turn effects.
     pub counters: BTreeMap<CounterKind, u32>,
+    /// CR 303.4: for Aura permanents, the `ObjectId` of the permanent this aura is attached to.
+    /// `None` for non-aura permanents and for auras before their attachment is set. Cleared when
+    /// the aura leaves the battlefield (zone change clears transient state in `move_object_to_zone`).
+    pub attached_to: Option<ObjectId>,
 }
 
 impl GameObject {

@@ -335,6 +335,15 @@ pub enum SpellEffectKind {
         power: i32,
         toughness: i32,
     },
+    /// CR 303.4: the aura's "Enchant [type]" clause. Authored in `spell_effect` of every Aura
+    /// enchantment — it is the sole effect that requires a target during casting, and at resolution
+    /// it records the attachment (engine sets `attached_to` before processing this effect). The
+    /// `target` filter mirrors the card's "Enchant [type]" line; default is any creature. Validated
+    /// at registry load to reject player-kind filters (auras enchant permanents, CR 303.4a).
+    AuraAttach {
+        #[serde(default = "TargetFilter::default_creature")]
+        target: TargetFilter,
+    },
     GainLife {
         amount: Amount,
     },
@@ -454,7 +463,8 @@ impl SpellEffectKind {
             | SpellEffectKind::TargetPlayerGainsLife { target, .. }
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
             | SpellEffectKind::MillTargetPlayer { target, .. }
-            | SpellEffectKind::PutCounters { target, .. } => vec![target],
+            | SpellEffectKind::PutCounters { target, .. }
+            | SpellEffectKind::AuraAttach { target } => vec![target],
             _ => vec![],
         }
     }
@@ -530,6 +540,14 @@ impl SpellEffectKind {
                     Err("ProduceMana is only valid on a mana ability, not a spell".into())
                 } else if options.is_empty() {
                     Err("ProduceMana requires at least one mana option".into())
+                } else {
+                    Ok(())
+                }
+            }
+            // CR 303.4a: an aura enchants a permanent (never a player).
+            SpellEffectKind::AuraAttach { target } => {
+                if target.is_player() {
+                    Err("AuraAttach cannot target players; auras enchant permanents (CR 303.4a)".into())
                 } else {
                     Ok(())
                 }
@@ -754,6 +772,15 @@ pub enum StaticAbilityDef {
     AnthemPt {
         #[serde(default)]
         filter: AnthemFilter,
+        delta_power: i32,
+        delta_toughness: i32,
+    },
+    /// CR 613.4 layer 7c + CR 303.4: the enchanted creature (stored as `attached_to` on the aura's
+    /// `GameObject`) gets +`delta_power`/+`delta_toughness` as long as the aura remains attached.
+    /// The effect drains via `WhileSourceOnBattlefield` (source = the aura permanent); it is
+    /// scoped to a single permanent (`AffectedScope::Single`) so it disappears the moment the aura
+    /// leaves. Holy Strength (+1/+2), Unholy Strength (+2/+1).
+    AuraPtModify {
         delta_power: i32,
         delta_toughness: i32,
     },
