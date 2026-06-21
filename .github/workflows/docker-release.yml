@@ -4,14 +4,6 @@ on:
   push:
     tags:
       - '*Release*'
-    branches:
-      - master
-  pull_request:
-    branches:
-      - master
-    paths:
-      - '.github/workflows/docker-release.yml'
-      - 'Dockerfile'
 
 # Cancel earlier, unfinished runs of this workflow on the same branch (unless on release)
 concurrency:
