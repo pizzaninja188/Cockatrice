@@ -903,25 +903,52 @@ fn twincast_copies_bolt_both_deal_damage() {
     assert!(!tw_push.is_copy, "the cast Twincast is not itself a copy");
     assert_eq!(e.state.stack.len(), 2, "bolt + twincast on stack");
 
-    // Both pass: Twincast resolves and pushes one copy of the bolt onto the stack.
+    // Both pass: Twincast resolves and emits ResolutionChoiceRequired (CR 707.10c: copy
+    // controller must choose new targets before the copy lands on the stack).
     e.apply_command(1, &pass()).expect("p1 pass after twincast");
     let resolve = e
         .apply_command(0, &pass())
         .expect("p0 pass resolves twincast");
-    let copy_push = resolve
+
+    // No StackPushed yet — copy is parked pending target choice.
+    assert!(
+        resolve
+            .events
+            .iter()
+            .all(|ev| !matches!(&ev.ev, Some(Ev::StackPushed(s)) if s.is_copy)),
+        "copy is not on the stack until targets are chosen"
+    );
+    let rcr = find_resolution_choice(&resolve).expect("ResolutionChoiceRequired emitted");
+    assert_eq!(
+        rcr.deciding_player_id, 1,
+        "P1 (Twincast controller) chooses"
+    );
+    assert!(
+        rcr.candidate_object_ids.contains(&1u32),
+        "P1 (object id 1) is a valid target for the copy"
+    );
+    // Stack still just has the original bolt; copy not yet pushed.
+    assert_eq!(e.state.stack.len(), 1, "only the original bolt on stack");
+
+    // P1 submits target choice: keep original target (P1 = player id 1).
+    let target_batch = e
+        .apply_command(1, &submit_resolution_choice(vec![1]))
+        .expect("P1 submits copy target");
+
+    let copy_push = target_batch
         .events
         .iter()
         .find_map(|ev| match &ev.ev {
             Some(Ev::StackPushed(s)) if s.is_copy => Some(s),
             _ => None,
         })
-        .expect("copy stack push emitted");
+        .expect("copy stack push emitted after target choice");
     assert_eq!(copy_push.card_id, "lightning_bolt", "copy is of the bolt");
     assert_eq!(copy_push.ability_annotation, "(copy)");
     assert_eq!(
         copy_push.targets,
         vec![TargetRef { object_id: 1 }],
-        "copy retains the original's target (P1)"
+        "copy has the chosen target (P1)"
     );
 
     assert_eq!(e.state.stack.len(), 2, "original bolt + its copy on stack");
@@ -1069,7 +1096,7 @@ fn countering_a_spell_copy_removes_it_without_error() {
     let bolt_oid = e.state.stack.last().expect("bolt on stack").id;
     e.apply_command(0, &pass()).expect("p0 pass to p1");
 
-    // P1 casts Twincast at the bolt; both pass; it resolves into a copy of the bolt.
+    // P1 casts Twincast at the bolt; both pass; Twincast resolves and prompts P1 for new targets.
     give_mana(
         &mut e,
         1,
@@ -1093,11 +1120,20 @@ fn countering_a_spell_copy_removes_it_without_error() {
     e.apply_command(0, &pass())
         .expect("p0 pass resolves twincast");
 
+    // P1 must choose targets for the copy (CR 707.10c) before it lands on the stack.
+    assert!(
+        e.state.pending_resolution.is_some(),
+        "copy target choice is pending"
+    );
+    // P1 keeps the original target (P1 = player 1).
+    e.apply_command(1, &submit_resolution_choice(vec![1]))
+        .expect("P1 submits copy target");
+
     let copy_item = e.state.stack.last().expect("copy on stack");
     assert!(copy_item.is_copy, "top of stack is the bolt copy");
     let copy_id = copy_item.id;
 
-    // P0 holds priority after Twincast resolves — counter the copy.
+    // P0 holds priority after the copy lands — counter the copy.
     give_mana(
         &mut e,
         0,
@@ -1128,5 +1164,134 @@ fn countering_a_spell_copy_removes_it_without_error() {
     assert!(
         e.state.stack.iter().any(|s| s.id == bolt_oid),
         "the original bolt is untouched on the stack"
+    );
+}
+
+/// CR 707.10c: Twincast's controller may choose *different* targets for the copy. P0 bolts P1;
+/// P1 casts Twincast. When Twincast resolves, P1 redirects the copy to target P0 instead. The
+/// copy deals 3 to P0 and the original bolt deals 3 to P1 → each player takes 3.
+#[test]
+fn twincast_copy_controller_chooses_new_target() {
+    let decks = Some(vec![
+        vec![
+            "mountain".into(),
+            "lightning_bolt".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec![
+            "island".into(),
+            "twincast".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(144, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let mountain_idx = hand_index_for_card(&e, 0, "mountain");
+    e.apply_command(0, &play_land(mountain_idx))
+        .expect("p0 play mountain");
+
+    for _ in 0..2 {
+        let island_idx = hand_index_for_card(&e, 1, "island");
+        let island_oid = e.state.players[1].hand.remove(island_idx);
+        e.state.players[1].battlefield.push(island_oid);
+        e.state.objects.get_mut(&island_oid).unwrap().zone = tricerules_core::Zone::Battlefield;
+    }
+
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+    let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
+    // P0 bolts P1 (player id 1).
+    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+        .expect("p0 cast bolt at p1");
+    let bolt_oid = e.state.stack.last().unwrap().id;
+    e.apply_command(0, &pass()).expect("p0 pass");
+
+    give_mana(
+        &mut e,
+        1,
+        ManaGift {
+            u: 2,
+            ..Default::default()
+        },
+    );
+    let twincast_idx = hand_index_for_card(&e, 1, "twincast");
+    e.apply_command(
+        1,
+        &cast_spell(
+            twincast_idx,
+            vec![TargetRef {
+                object_id: bolt_oid,
+            }],
+        ),
+    )
+    .expect("p1 cast twincast");
+    e.apply_command(1, &pass()).expect("p1 pass");
+    let resolve = e
+        .apply_command(0, &pass())
+        .expect("p0 pass resolves twincast");
+
+    // ResolutionChoiceRequired must be emitted (CR 707.10c).
+    let rcr = find_resolution_choice(&resolve).expect("copy target choice required");
+    assert_eq!(rcr.deciding_player_id, 1, "P1 chooses targets for the copy");
+    // Both players should be valid targets for Lightning Bolt.
+    assert!(
+        rcr.candidate_object_ids.contains(&0u32),
+        "P0 is a valid target"
+    );
+    assert!(
+        rcr.candidate_object_ids.contains(&1u32),
+        "P1 is a valid target"
+    );
+
+    // P1 redirects the copy to hit P0 instead.
+    let target_batch = e
+        .apply_command(1, &submit_resolution_choice(vec![0]))
+        .expect("P1 chooses P0 as new target");
+
+    let copy_push = target_batch
+        .events
+        .iter()
+        .find_map(|ev| match &ev.ev {
+            Some(Ev::StackPushed(s)) if s.is_copy => Some(s),
+            _ => None,
+        })
+        .expect("copy StackPushed after target choice");
+    assert_eq!(
+        copy_push.targets,
+        vec![TargetRef { object_id: 0 }],
+        "copy targets P0"
+    );
+
+    // Copy resolves first: 3 to P0.
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass()).expect("p1 pass resolves copy");
+    assert_eq!(e.state.players[0].life, 17, "copy dealt 3 to P0");
+    assert_eq!(e.state.players[1].life, 20, "P1 untouched so far");
+
+    // Original bolt resolves: 3 to P1.
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass())
+        .expect("p1 pass resolves original bolt");
+    assert_eq!(e.state.players[0].life, 17, "P0 at 17");
+    assert_eq!(e.state.players[1].life, 17, "bolt dealt 3 to P1");
+    assert!(e.state.stack.is_empty(), "stack empty");
+    assert!(
+        e.state.players[0].graveyard.contains(&bolt_oid),
+        "real bolt in P0's graveyard"
     );
 }

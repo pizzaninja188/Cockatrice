@@ -1,5 +1,7 @@
 use super::events::{color_string, ev_log, object_display_name};
-use super::targeting::{battlefield_objects_matching, spell_has_no_legal_targets_at_resolution};
+use super::targeting::{
+    battlefield_objects_matching, compute_spell_targets, spell_has_no_legal_targets_at_resolution,
+};
 use super::*;
 
 impl GameEngine {
@@ -353,9 +355,10 @@ impl GameEngine {
                     // CR 707.10: create `count` copies of the target spell on the stack, each
                     // controlled by this spell's controller. The copy is not cast (no mana/cast
                     // triggers) and ceases to exist after resolving (handled by `is_copy`). It uses
-                    // the original's chosen X, face, and targets — CR 707.10c new-target choice is
-                    // deferred (the copy keeps the original's targets). If the target spell has left
-                    // the stack (e.g. countered in response), this fizzles via the resolution check.
+                    // the original's chosen X and face. CR 707.10c: the copy's controller may choose
+                    // new targets for each copy; if the copied spell has targets, we prompt before
+                    // placing the copy on the stack. Only the first copy that needs targets is
+                    // handled via pending_resolution (count=1 covers Twincast/Fork/Reverberate).
                     if let Some(&tid) = targets.first() {
                         if let Some(src) = self.state.stack.iter().find(|s| s.id == tid).cloned() {
                             let copied_name = self
@@ -364,10 +367,17 @@ impl GameEngine {
                                 .and_then(|d| d.face(src.face_index))
                                 .map(|f| f.name.to_string())
                                 .unwrap_or_else(|| src.card_id.clone());
-                            for _ in 0..count {
+                            let src_effects = self
+                                .registry
+                                .get(&src.card_id)
+                                .and_then(|d| d.face(src.face_index))
+                                .map(|f| f.spell_effect.to_vec())
+                                .unwrap_or_default();
+                            let needs_target_choice = !src.targets.is_empty();
+                            for copy_num in 0..count {
                                 let copy_id = self.state.next_object_id;
                                 self.state.next_object_id += 1;
-                                self.state.stack.push(StackItem {
+                                let copy_template = StackItem {
                                     id: copy_id,
                                     controller,
                                     card_id: src.card_id.clone(),
@@ -379,25 +389,112 @@ impl GameEngine {
                                     is_copy: true,
                                     chosen_x: src.chosen_x,
                                     face_index: src.face_index,
-                                });
-                                events.push(rv1::RuledEvent {
-                                    ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
-                                        object_id: copy_id,
-                                        description: copied_name.clone(),
-                                        targets: src
-                                            .targets
-                                            .iter()
-                                            .map(|&o| rv1::TargetRef { object_id: o })
-                                            .collect(),
-                                        // Overlay marks the stack item as a copy in the existing UI.
-                                        ability_annotation: "(copy)".to_string(),
-                                        card_id: src.card_id.clone(),
-                                        is_copy: true,
-                                    })),
-                                });
-                                events.push(ev_log(format!(
-                                    "{spell_label} copies {copied_name} (P{controller})"
-                                )));
+                                };
+                                // CR 707.10c: prompt for new targets on the first copy; push any
+                                // additional copies immediately with the original targets.
+                                if needs_target_choice && copy_num == 0 {
+                                    let sp = compute_spell_targets(
+                                        &self.state,
+                                        self.registry,
+                                        controller,
+                                        &src_effects,
+                                    );
+                                    let mut candidates: Vec<ObjectId> =
+                                        sp.valid_permanent_ids.clone();
+                                    candidates.extend(sp.valid_stack_ids.iter().copied());
+                                    for p in &self.state.players {
+                                        if (sp.can_target_self && p.id == controller)
+                                            || (sp.can_target_opponent && p.id != controller)
+                                        {
+                                            candidates.push(p.id as ObjectId);
+                                        }
+                                    }
+                                    // CR 707.10c: may keep original targets even if now illegal.
+                                    for &ot in &src.targets {
+                                        if !candidates.contains(&ot) {
+                                            candidates.push(ot);
+                                        }
+                                    }
+                                    let candidate_card_ids: Vec<String> = candidates
+                                        .iter()
+                                        .map(|&oid| {
+                                            self.state
+                                                .objects
+                                                .get(&oid)
+                                                .map(|o| o.card_id.clone())
+                                                .unwrap_or_default()
+                                        })
+                                        .collect();
+                                    let candidate_names: Vec<String> = candidates
+                                        .iter()
+                                        .map(|&oid| {
+                                            if self.state.player_idx(oid as i32).is_some() {
+                                                format!("Player {oid}")
+                                            } else {
+                                                self.state
+                                                    .objects
+                                                    .get(&oid)
+                                                    .and_then(|o| self.registry.get(&o.card_id))
+                                                    .map(|d| d.name.clone())
+                                                    .unwrap_or_else(|| format!("[object {oid}]"))
+                                            }
+                                        })
+                                        .collect();
+                                    let prompt =
+                                        format!("Choose new targets for {copied_name} (copy)");
+                                    events.push(rv1::RuledEvent {
+                                        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                                            rv1::ResolutionChoiceRequired {
+                                                deciding_player_id: controller,
+                                                source_object_id: copy_id,
+                                                prompt_text: prompt.clone(),
+                                                choice_kind: 1,
+                                                candidate_object_ids: candidates.clone(),
+                                                candidate_card_ids,
+                                                candidate_names,
+                                                min: 1,
+                                                max: 1,
+                                                ordered: false,
+                                            },
+                                        )),
+                                    });
+                                    events.push(ev_log(prompt.clone()));
+                                    self.state.pending_resolution = Some(PendingResolution {
+                                        item: copy_template,
+                                        custom_key: "__copy_targets".to_string(),
+                                        step: 0,
+                                        scratch: vec![],
+                                        deciding_player: controller,
+                                        candidates,
+                                        min: 1,
+                                        max: 1,
+                                        ordered: false,
+                                        prompt,
+                                        choice_kind: 1,
+                                    });
+                                    // Copy will be pushed to the stack after target is submitted.
+                                } else {
+                                    self.state.stack.push(copy_template);
+                                    events.push(rv1::RuledEvent {
+                                        ev: Some(rv1::ruled_event::Ev::StackPushed(
+                                            rv1::StackPushed {
+                                                object_id: copy_id,
+                                                description: copied_name.clone(),
+                                                targets: src
+                                                    .targets
+                                                    .iter()
+                                                    .map(|&o| rv1::TargetRef { object_id: o })
+                                                    .collect(),
+                                                ability_annotation: "(copy)".to_string(),
+                                                card_id: src.card_id.clone(),
+                                                is_copy: true,
+                                            },
+                                        )),
+                                    });
+                                    events.push(ev_log(format!(
+                                        "{spell_label} copies {copied_name} (P{controller})"
+                                    )));
+                                }
                             }
                         }
                     }
