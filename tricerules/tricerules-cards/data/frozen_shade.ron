@@ -1,0 +1,15 @@
+(
+  id: "frozen_shade",
+  name: "Frozen Shade",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Shade"],
+  power: 0,
+  toughness: 1,
+  activated_abilities: [
+    (
+      cost: Mana("{B}"),
+      effect: PumpTarget(power: 1, toughness: 1, target: (kind: Self_)),
+      text: "{B}: This creature gets +1/+1 until end of turn.",
+    ),
+  ],
+)

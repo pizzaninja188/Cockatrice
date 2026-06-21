@@ -921,3 +921,94 @@ fn glorious_charge_pumps_team_until_cleanup() {
         "the until-end-of-turn pump expires at cleanup"
     );
 }
+
+/// CR 113/606: Frozen Shade's {B}: +1/+1 activated ability stacks and expires at cleanup
+/// (CR 514.2). Same mechanics as Fiery Hellhound but +1/+1 instead of +1/+0 and black mana.
+#[test]
+fn frozen_shade_self_pump_stacks_and_expires() {
+    let decks = Some(vec![
+        {
+            let mut d = vec!["frozen_shade".to_string()];
+            d.extend(std::iter::repeat_n("swamp".to_string(), 6));
+            d
+        },
+        vec!["forest".into(); 7],
+    ]);
+    let mut e = GameEngine::new(4201, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let shade = put_creature_on_battlefield(&mut e, 0, "frozen_shade");
+    assert_eq!(e.effective_power(shade), Some(0), "printed 0/1 power");
+    assert_eq!(
+        e.effective_toughness(shade),
+        Some(1),
+        "printed 0/1 toughness"
+    );
+
+    // Two {B} activations.
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 2,
+            ..Default::default()
+        },
+    );
+
+    e.apply_command(0, &activate_ability(shade, 0, vec![]))
+        .expect("activate shade pump #1");
+    assert_eq!(
+        e.state.players[0].mana_pool.black, 1,
+        "first {{B}} spent on activation"
+    );
+    pass_both_players(&mut e);
+    assert_eq!(e.effective_power(shade), Some(1), "+1/+1 after first pump");
+    assert_eq!(e.effective_toughness(shade), Some(2), "+1/+1 toughness");
+
+    e.apply_command(0, &activate_ability(shade, 0, vec![]))
+        .expect("activate shade pump #2");
+    assert_eq!(
+        e.state.players[0].mana_pool.black, 0,
+        "second {{B}} spent on activation"
+    );
+    pass_both_players(&mut e);
+    assert_eq!(e.effective_power(shade), Some(2), "+2/+2 after two pumps");
+    assert_eq!(e.effective_toughness(shade), Some(3), "+2/+2 toughness");
+
+    // CR 514.2: all until-end-of-turn pumps drain at cleanup.
+    end_active_turn(&mut e, 0);
+    assert_eq!(
+        e.effective_power(shade),
+        Some(0),
+        "pump expires at end of turn"
+    );
+    assert_eq!(
+        e.effective_toughness(shade),
+        Some(1),
+        "toughness back to printed 1"
+    );
+}
+
+/// Activating Frozen Shade's pump without enough mana is rejected (illegal action).
+#[test]
+fn frozen_shade_pump_without_mana_is_illegal() {
+    let decks = Some(vec![
+        {
+            let mut d = vec!["frozen_shade".to_string()];
+            d.extend(std::iter::repeat_n("swamp".to_string(), 6));
+            d
+        },
+        vec!["forest".into(); 7],
+    ]);
+    let mut e = GameEngine::new(4202, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let shade = put_creature_on_battlefield(&mut e, 0, "frozen_shade");
+    // No mana in pool — activation must be rejected.
+    assert_eq!(e.state.players[0].mana_pool.black, 0, "pool is empty");
+    let result = e.apply_command(0, &activate_ability(shade, 0, vec![]));
+    assert!(
+        result.is_err(),
+        "activating without {{B}} mana must be an error"
+    );
+}
