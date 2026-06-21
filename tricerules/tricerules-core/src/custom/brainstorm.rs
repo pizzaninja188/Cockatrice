@@ -5,9 +5,10 @@
 //! `(effect_kind, parameters)` primitive can express — this is the canonical tier-3 case.
 //!
 //! Algorithm: `begin` draws three, then asks the controller to choose two hand cards in order;
-//! `resume` puts them on top of the library (chosen card first = top). When the hand holds fewer
-//! than two cards after drawing (a short library), it puts back as many as it can (CR 120: "as
-//! many as you can" when an exact count is impossible).
+//! `resume` puts them on top of the library (last chosen = top, matching "place one then the
+//! other on top" intuition). When the hand holds fewer than two cards after drawing (a short
+//! library), it puts back as many as it can (CR 120: "as many as you can" when an exact count
+//! is impossible).
 
 use super::{
     CardEffect, ChoiceKind, ResolutionChoice, ResolutionCtx, ResolutionInterrupt, ResolutionStep,
@@ -29,7 +30,7 @@ impl CardEffect for Brainstorm {
         ResolutionStep::NeedsChoice(ResolutionInterrupt {
             deciding_player: controller,
             prompt: format!(
-                "Brainstorm: put {count} card{} from your hand on top of your library (first chosen = top).",
+                "Brainstorm: choose {count} card{} to put back on top of your library (last chosen = top).",
                 if count == 1 { "" } else { "s" }
             ),
             choice_kind: ChoiceKind::HandCards,
@@ -42,9 +43,13 @@ impl CardEffect for Brainstorm {
 
     fn resume(&self, ctx: &mut ResolutionCtx, choice: &ResolutionChoice) -> ResolutionStep {
         // The engine has already validated `choice.object_ids` against the interrupt
-        // (subset of the hand, exactly `count`, distinct). Put them on top, chosen-first.
-        ctx.put_on_top_of_library(&choice.object_ids);
-        let n = choice.object_ids.len();
+        // (subset of the hand, exactly `count`, distinct). Reverse so last-chosen ends on top:
+        // click order 1 = bottom-most, click order N = top card (physical "place A, then B on
+        // top of A" intuition).
+        let mut ordered = choice.object_ids.clone();
+        ordered.reverse();
+        ctx.put_on_top_of_library(&ordered);
+        let n = ordered.len();
         ctx.log(format!(
             "P{} puts {n} card{} on top of library (Brainstorm).",
             ctx.controller,

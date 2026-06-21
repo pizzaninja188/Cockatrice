@@ -37,15 +37,15 @@ fn brainstorm_draws_three_then_returns_two_in_chosen_order() {
     assert_eq!(e.state.players[0].hand.len(), hand_before - 1 + 3);
     assert_eq!(e.state.players[0].library.len(), lib_before - 3);
 
-    // Put two specific hand cards on top, first chosen = top of library.
+    // Put two specific hand cards on top: last chosen = top (intuitive "place A, then B on top").
     let chosen: Vec<u32> = e.state.players[0].hand.iter().take(2).copied().collect();
-    let (top0, top1) = (chosen[0], chosen[1]);
+    let (first, second) = (chosen[0], chosen[1]);
     e.apply_command(0, &submit_resolution_choice(chosen))
         .expect("submit brainstorm choice");
 
     assert!(e.state.pending_resolution.is_none(), "resolution completed");
-    assert_eq!(e.state.players[0].library[0], top0, "first chosen on top");
-    assert_eq!(e.state.players[0].library[1], top1, "second chosen below");
+    assert_eq!(e.state.players[0].library[0], second, "last chosen on top");
+    assert_eq!(e.state.players[0].library[1], first, "first chosen below");
     assert_eq!(e.state.players[0].hand.len(), hand_before - 1 + 3 - 2);
     assert_eq!(count_card_id_in_graveyard(&e, 0, "brainstorm"), 1);
 }

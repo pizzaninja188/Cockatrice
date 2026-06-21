@@ -249,6 +249,8 @@ impl GameEngine {
                     min: interrupt.min,
                     max: interrupt.max,
                     ordered: interrupt.ordered,
+                    // Populated by the server relay per-player; the engine never fills it.
+                    candidate_server_card_ids: Vec::new(),
                 },
             )),
         });

@@ -1870,6 +1870,8 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
         // deciding player. Private kinds expose a concealed zone: HandCards (choice_kind 0) reveal a
         // player's hand and LibrarySearch (choice_kind 2) reveal their library, so only the decider
         // sees the candidate object ids / names; RevealedCards (1) are public and pass through.
+        // For HandCards (choice_kind 0), inject candidate_server_card_ids for the deciding player
+        // so the client can map engine OIDs to physical hand CardItems for the hand-click UI.
         for (int ei = 0; ei < filtered.events_size(); ++ei) {
             if (!filtered.events(ei).has_resolution_choice_required()) {
                 continue;
@@ -1880,7 +1882,19 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
                 rcr->clear_candidate_object_ids();
                 rcr->clear_candidate_card_ids();
                 rcr->clear_candidate_names();
+                rcr->clear_candidate_server_card_ids();
                 rcr->set_prompt_text("Opponent is making a resolution choice.");
+            } else if (rcr->choice_kind() == 0) {
+                // HandCards: populate server card ids so client hand-click UI can match engine OIDs.
+                const int deciderId = rcr->deciding_player_id();
+                auto *deciderPlayer = static_cast<Server_Player *>(getPlayers().value(deciderId));
+                if (deciderPlayer) {
+                    for (int ci = 0; ci < rcr->candidate_object_ids_size(); ++ci) {
+                        const quint32 oid = static_cast<quint32>(rcr->candidate_object_ids(ci));
+                        Server_Card *sc = deciderPlayer->findCardByEngineOid(oid);
+                        rcr->add_candidate_server_card_ids(sc ? sc->getId() : -1);
+                    }
+                }
             }
         }
         Event_RuledPayload ev;
