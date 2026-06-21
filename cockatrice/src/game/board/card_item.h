@@ -152,6 +152,7 @@ public:
                                                 const QStringList &engineKeywords);
 
     bool animationEvent();
+    void triggerUntapAnimation();
     CardDragItem *createDragItem(int _id, const QPointF &_pos, const QPointF &_scenePos, bool forceFaceDown);
     void deleteDragItem();
     void drawArrow(const QColor &arrowColor);

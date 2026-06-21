@@ -332,6 +332,7 @@ void TableZone::toggleTapped()
             if (Command_RuledPayload *activate =
                     playerActions->newRuledPayloadActivateManaAbilityForLand(temp, desiredColor)) {
                 cmdList.append(activate);
+                temp->setTapped(true, true);
             }
             continue;
         }

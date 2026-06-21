@@ -135,6 +135,19 @@ void Player::processPlayerInfo(const ServerInfo_Player &info)
     // card is still alive (deleteLater) while the repopulated card is immediately added.
     const bool ruledMode = game && game->getGameMetaInfo()->proto().ruled_game();
 
+    // Before clearing the table zone, snapshot which card IDs were tapped. The zone is
+    // rebuilt from scratch (new CardItem objects, same server IDs) by the loop below, so
+    // IDs are stable across the clear/rebuild cycle. Used to replay untap animations that
+    // were registered by Event_SetCardAttr but cancelled by the clearContents() call.
+    QSet<int> tableCardsTappedBeforeClear;
+    if (CardZoneLogic *tableZone = zones.value(QLatin1String(ZoneNames::TABLE), nullptr)) {
+        for (CardItem *c : tableZone->getCards()) {
+            if (c && c->getTapped()) {
+                tableCardsTappedBeforeClear.insert(c->getId());
+            }
+        }
+    }
+
     QMutableMapIterator<QString, CardZoneLogic *> zoneIt(zones);
     while (zoneIt.hasNext()) {
         zoneIt.next();
@@ -220,6 +233,20 @@ void Player::processPlayerInfo(const ServerInfo_Player &info)
         }
 
         zone->reorganizeCards();
+    }
+
+    // Replay untap animations for cards that were tapped before the resync and are now
+    // untapped. This recovers animations cancelled by the clearContents() call above —
+    // the most common case is the untap-step Event_SetCardAttr events arriving just
+    // before the draw-step sendGameStateToPlayers() wipes the animation registration.
+    if (!tableCardsTappedBeforeClear.isEmpty()) {
+        if (CardZoneLogic *tableZone = zones.value(QLatin1String(ZoneNames::TABLE), nullptr)) {
+            for (CardItem *c : tableZone->getCards()) {
+                if (c && !c->getTapped() && tableCardsTappedBeforeClear.contains(c->getId())) {
+                    c->triggerUntapAnimation();
+                }
+            }
+        }
     }
 
     const int counterListSize = info.counter_list_size();

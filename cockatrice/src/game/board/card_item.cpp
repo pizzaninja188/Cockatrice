@@ -1068,6 +1068,14 @@ bool CardItem::animationEvent()
     return animationIncomplete;
 }
 
+void CardItem::triggerUntapAnimation()
+{
+    if (!SettingsCache::instance().getTapAnimation() || !scene())
+        return;
+    tapAngle = 90;
+    static_cast<GameScene *>(scene())->registerAnimationItem(this);
+}
+
 QVariant CardItem::itemChange(GraphicsItemChange change, const QVariant &value)
 {
     if ((change == ItemSelectedHasChanged) && owner != nullptr) {
