@@ -1,0 +1,13 @@
+(
+  id: "mox_ruby",
+  name: "Mox Ruby",
+  mana_cost: "{0}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      cost: Tap,
+      effect: ProduceMana(options: [(r: 1)]),
+      text: "{T}: Add {R}.",
+    ),
+  ],
+)
