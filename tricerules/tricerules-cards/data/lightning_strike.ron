@@ -1,0 +1,7 @@
+(
+  id: "lightning_strike",
+  name: "Lightning Strike",
+  mana_cost: "{1}{R}",
+  types: ["Instant"],
+  spell_effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
+)

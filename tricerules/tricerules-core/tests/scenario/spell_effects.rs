@@ -800,6 +800,112 @@ fn pyroclasm_deals_two_damage_to_each_creature() {
     assert_eq!(e.state.objects.get(&spider).expect("spider").damage, 2);
 }
 
+// ── Lightning Strike ──────────────────────────────────────────────────────────
+
+#[test]
+fn lightning_strike_deals_three_damage_to_creature() {
+    let decks = Some(vec![
+        deck_with("mountain", &["lightning_strike"]),
+        deck_with("forest", &["grizzly_bears"]),
+    ]);
+    let mut e = GameEngine::new(91025, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    relocate_to_hand(&mut e, 0, "lightning_strike");
+    let bear = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "lightning_strike");
+    e.apply_command(0, &cast_spell(idx, vec![TargetRef { object_id: bear }]))
+        .expect("cast lightning strike targeting creature");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass()).expect("p1 pass");
+    // Grizzly Bears is 2/2; 3 damage is lethal — SBA destroys it.
+    assert!(e.state.players[1].graveyard.contains(&bear));
+    assert_eq!(
+        e.state.objects.get(&bear).expect("bear").zone,
+        tricerules_core::Zone::Graveyard
+    );
+}
+
+#[test]
+fn lightning_strike_deals_three_damage_to_player() {
+    let decks = Some(vec![
+        deck_with("mountain", &["lightning_strike"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(91026, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    relocate_to_hand(&mut e, 0, "lightning_strike");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let p1_life_before = e.state.players[1].life;
+    let idx = hand_index_for_card(&e, 0, "lightning_strike");
+    e.apply_command(0, &cast_spell(idx, target_player(1)))
+        .expect("cast lightning strike targeting opponent");
+    let batch = {
+        e.apply_command(0, &pass()).expect("p0 pass");
+        e.apply_command(1, &pass()).expect("p1 pass")
+    };
+    assert_eq!(e.state.players[1].life, p1_life_before - 3);
+    let life = life_changes_in(&batch);
+    assert!(
+        life.iter().any(|lc| lc.player_id == 1 && lc.delta == -3),
+        "LifeChanged(-3) on P1 expected, got {life:?}"
+    );
+}
+
+#[test]
+fn lightning_strike_rejects_land_target() {
+    let decks = Some(vec![
+        deck_with("mountain", &["lightning_strike"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(91027, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    relocate_to_hand(&mut e, 0, "lightning_strike");
+    let mountain_idx = hand_index_for_card(&e, 0, "mountain");
+    e.apply_command(0, &play_land(mountain_idx))
+        .expect("play mountain");
+    let land_oid = battlefield_object_for_card(&e, 0, "mountain");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "lightning_strike");
+    e.apply_command(
+        0,
+        &cast_spell(
+            idx,
+            vec![TargetRef {
+                object_id: land_oid,
+            }],
+        ),
+    )
+    .expect_err("lightning strike cannot target a land");
+}
+
 /// Regression: a Draw spell that empties the library must NOT error out of resolution (the old
 /// `draw_card(...)?` aborted mid-resolution and left the stack half-mutated). CR 120.3 / 104.3c:
 /// draw as many as possible, then the player loses as a state-based action.
