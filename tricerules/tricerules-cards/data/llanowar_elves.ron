@@ -1,0 +1,15 @@
+(
+  id: "llanowar_elves",
+  name: "Llanowar Elves",
+  mana_cost: "{G}",
+  types: ["Creature", "Elf", "Druid"],
+  power: 1,
+  toughness: 1,
+  activated_abilities: [
+    (
+      cost: Tap,
+      effect: ProduceMana(options: [(g: 1)]),
+      text: "{T}: Add {G}.",
+    ),
+  ],
+)
