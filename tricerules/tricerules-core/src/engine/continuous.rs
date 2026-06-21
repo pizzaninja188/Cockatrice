@@ -88,8 +88,11 @@ impl GameEngine {
                     delta_power,
                     delta_toughness,
                 } => {
-                    let Some(enchanted_oid) =
-                        self.state.objects.get(&object_id).and_then(|o| o.attached_to)
+                    let Some(enchanted_oid) = self
+                        .state
+                        .objects
+                        .get(&object_id)
+                        .and_then(|o| o.attached_to)
                     else {
                         continue;
                     };

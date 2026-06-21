@@ -547,7 +547,10 @@ impl SpellEffectKind {
             // CR 303.4a: an aura enchants a permanent (never a player).
             SpellEffectKind::AuraAttach { target } => {
                 if target.is_player() {
-                    Err("AuraAttach cannot target players; auras enchant permanents (CR 303.4a)".into())
+                    Err(
+                        "AuraAttach cannot target players; auras enchant permanents (CR 303.4a)"
+                            .into(),
+                    )
                 } else {
                     Ok(())
                 }

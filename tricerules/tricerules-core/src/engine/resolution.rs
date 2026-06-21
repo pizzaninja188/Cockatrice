@@ -48,7 +48,7 @@ impl GameEngine {
                     .map(|d| d.is_aura)
                     .unwrap_or(false);
             let aura_target_valid = !is_aura
-                || targets.first().map_or(false, |&tid| {
+                || targets.first().is_some_and(|&tid| {
                     self.state
                         .objects
                         .get(&tid)
@@ -716,21 +716,19 @@ impl GameEngine {
                 // The attached_to field was already set before fire_triggers; emit the proto event
                 // so the relay can issue Event_AttachCard to connected clients.
                 SpellEffectKind::AuraAttach { .. } => {
-                    if let (Some(enchanted_oid), Some(obj)) = (
-                        targets.first().copied(),
-                        self.state.objects.get(&top.id),
-                    ) {
+                    if let (Some(enchanted_oid), Some(obj)) =
+                        (targets.first().copied(), self.state.objects.get(&top.id))
+                    {
                         if obj.zone == Zone::Battlefield {
-                            let tgt = object_display_name(&self.state, self.registry, enchanted_oid);
+                            let tgt =
+                                object_display_name(&self.state, self.registry, enchanted_oid);
                             events.push(rv1::RuledEvent {
                                 ev: Some(rv1::ruled_event::Ev::AuraAttached(rv1::AuraAttached {
                                     aura_object_id: top.id,
                                     enchanted_object_id: enchanted_oid,
                                 })),
                             });
-                            events.push(ev_log(format!(
-                                "{spell_label} attaches to {tgt}."
-                            )));
+                            events.push(ev_log(format!("{spell_label} attaches to {tgt}.")));
                         }
                     }
                 }
