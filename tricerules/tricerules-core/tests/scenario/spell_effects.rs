@@ -858,3 +858,104 @@ fn draw_spell_decking_out_loses_without_erroring() {
     );
     assert_eq!(e.state.winner, Some(1), "P1 wins once P0 decks out");
 }
+
+// ---------------------------------------------------------------------------
+// Terror (Alpha)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn terror_destroys_nonblack_nonartifact_creature() {
+    let decks = Some(vec![
+        deck_with("swamp", &["terror"]),
+        deck_with("forest", &["grizzly_bears"]),
+    ]);
+    let mut e = GameEngine::new(9401, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let bear = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    relocate_to_hand(&mut e, 0, "terror");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "terror");
+    e.apply_command(0, &cast_spell(idx, vec![TargetRef { object_id: bear }]))
+        .expect("terror targets nonblack nonartifact creature");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass()).expect("p1 pass");
+
+    assert_eq!(
+        e.state.objects.get(&bear).expect("bear").zone,
+        tricerules_core::Zone::Graveyard,
+        "Terror destroys the creature"
+    );
+    assert!(e.state.players[1].graveyard.contains(&bear));
+}
+
+#[test]
+fn terror_rejects_black_creature_target() {
+    // Walking Corpse is {1}{B} — a black creature; Terror cannot target it.
+    let decks = Some(vec![
+        deck_with("swamp", &["terror"]),
+        deck_with("swamp", &["walking_corpse"]),
+    ]);
+    let mut e = GameEngine::new(9402, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let corpse = inject_creature_on_battlefield(&mut e, 1, "walking_corpse");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "terror");
+    let err = e
+        .apply_command(0, &cast_spell(idx, vec![TargetRef { object_id: corpse }]))
+        .expect_err("Terror cannot target a black creature");
+    assert!(
+        err.to_string().contains("creature") || err.to_string().contains("illegal"),
+        "unexpected: {err}"
+    );
+    assert!(e.state.players[1].battlefield.contains(&corpse));
+}
+
+#[test]
+fn terror_rejects_artifact_creature_target() {
+    // Ornithopter is an artifact creature; Terror cannot target it.
+    let decks = Some(vec![
+        deck_with("swamp", &["terror"]),
+        deck_with("plains", &["ornithopter"]),
+    ]);
+    let mut e = GameEngine::new(9403, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let bird = inject_creature_on_battlefield(&mut e, 1, "ornithopter");
+    relocate_to_hand(&mut e, 0, "terror");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "terror");
+    let err = e
+        .apply_command(0, &cast_spell(idx, vec![TargetRef { object_id: bird }]))
+        .expect_err("Terror cannot target an artifact creature");
+    assert!(
+        err.to_string().contains("creature") || err.to_string().contains("illegal"),
+        "unexpected: {err}"
+    );
+    assert!(e.state.players[1].battlefield.contains(&bird));
+}

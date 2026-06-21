@@ -1,0 +1,9 @@
+(
+  id: "terror",
+  name: "Terror",
+  mana_cost: "{1}{B}",
+  types: ["Instant"],
+  // "Destroy target nonartifact, nonblack creature. It can't be regenerated."
+  spell_effect: [DestroyTarget(target: (kind: Creature, not_artifact: true, not_color: Black))],
+  partial: "\"it can't be regenerated\" clause unenforced (no regeneration mechanic in the engine)",
+)
