@@ -1,0 +1,16 @@
+(
+  id: "birds_of_paradise",
+  name: "Birds of Paradise",
+  mana_cost: "{G}",
+  types: ["Creature", "Bird"],
+  power: 0,
+  toughness: 1,
+  keywords: [Flying],
+  activated_abilities: [
+    (
+      cost: Tap,
+      effect: ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)]),
+      text: "{T}: Add one mana of any color.",
+    ),
+  ],
+)
