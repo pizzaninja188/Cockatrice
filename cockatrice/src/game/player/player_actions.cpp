@@ -3427,19 +3427,49 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         return false;
     }
 
-    // CR 605: a left-click on a permanent whose *only* activated ability is a mana ability skips the
-    // menu and floats the mana directly (the engine taps the source and adds the mana; it comes back
-    // via ManaPoolUpdated). Right-click (leftClick == false) always opens the full menu. A permanent
-    // with more than one ability, or whose single ability is not a mana ability, also uses the menu.
+    // CR 605: a permanent whose *only* activated ability is a mana ability gets the fast path —
+    // no pending-ability state, just send activate_ability. Two sub-cases:
+    //   • Single option (basic land): left-click auto-activates; right-click falls through to the
+    //     full menu (keeps the existing "right-click = see text" behavior).
+    //   • Multiple options (dual land): both left and right click show a compact color-picker menu
+    //     so the player can choose which color to produce.
     const QStringList manaProduced = handler->activatedAbilityManaProducedForOid(oid);
-    if (leftClick && abilityTexts.size() == 1 && !manaProduced.value(0).isEmpty()) {
-        Command_RuledPayload *activate = newRuledPayloadActivateManaAbilityForLand(card, QChar());
-        if (!activate) {
-            return false; // not a mana source the engine recognizes; let normal handling continue
+    if (abilityTexts.size() == 1 && !manaProduced.value(0).isEmpty()) {
+        const QStringList colorOptions = manaProduced.value(0).split(QChar('/'));
+        if (colorOptions.size() > 1) {
+            // Dual land: show a compact color-picker on both left and right click.
+            QMenu colorMenu;
+            colorMenu.setTitle(card->getName());
+            for (const QString &opt : colorOptions) {
+                colorMenu.addAction(tr("Add {%1}").arg(opt));
+            }
+            QAction *chosen = colorMenu.exec(QCursor::pos());
+            if (!chosen) {
+                return true; // player dismissed the picker
+            }
+            const int sel = colorMenu.actions().indexOf(chosen);
+            const QChar desiredColor =
+                (sel >= 0 && sel < colorOptions.size() && !colorOptions.at(sel).isEmpty())
+                    ? colorOptions.at(sel).at(0).toUpper()
+                    : QChar();
+            Command_RuledPayload *activate = newRuledPayloadActivateManaAbilityForLand(card, desiredColor);
+            if (!activate) {
+                return false;
+            }
+            sendGameCommand(*activate);
+            delete activate;
+            return true;
         }
-        sendGameCommand(*activate);
-        delete activate;
-        return true;
+        // Single-option mana ability: left-click auto-activates, right-click falls through.
+        if (leftClick) {
+            Command_RuledPayload *activate = newRuledPayloadActivateManaAbilityForLand(card, QChar());
+            if (!activate) {
+                return false; // not a mana source the engine recognizes; let normal handling continue
+            }
+            sendGameCommand(*activate);
+            delete activate;
+            return true;
+        }
     }
 
     // Past the direct mana-float fast path: opening the full activation menu now would overwrite an

@@ -1,0 +1,13 @@
+(
+  id: "badlands",
+  name: "Badlands",
+  mana_cost: "",
+  types: ["Land", "Swamp", "Mountain"],
+  activated_abilities: [
+    (
+      cost: Tap,
+      effect: ProduceMana(options: [(b: 1), (r: 1)]),
+      text: "{T}: Add {B} or {R}.",
+    ),
+  ],
+)

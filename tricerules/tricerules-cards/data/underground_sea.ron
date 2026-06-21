@@ -1,0 +1,13 @@
+(
+  id: "underground_sea",
+  name: "Underground Sea",
+  mana_cost: "",
+  types: ["Land", "Island", "Swamp"],
+  activated_abilities: [
+    (
+      cost: Tap,
+      effect: ProduceMana(options: [(u: 1), (b: 1)]),
+      text: "{T}: Add {U} or {B}.",
+    ),
+  ],
+)
