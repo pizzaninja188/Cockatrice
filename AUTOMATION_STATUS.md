@@ -21,3 +21,4 @@ Line format (one per issue the automation has touched):
 #7 status=in-review branch=fix/issue-7 attempts=1 session=427839e9-7d82-4e87-b04a-0bb812a86f93 started=2026-06-20 notes="add else-if(is_copy) branch in StackPushed handler to call createSyntheticAbilityStackCard for copies; 14 C++ + 200 Rust tests pass"
 #8 status=in-review branch=fix/issue-8 attempts=1 session=5aa0cd9b-4428-4050-94c6-28d1ece46892 started=2026-06-20 notes="CR 707.10c: copy controller prompted for new targets via ResolutionChoiceRequired/__copy_targets before StackPushed; 201 Rust + 14 C++ tests pass"
 #4 status=in-review branch=fix/issue-4 attempts=1 session=820e5503-dde4-491c-98f6-89afd2d453a2 started=2026-06-20 notes="Brainstorm ordering fix (last-chosen=top) + hand-click UI via server card id mapping; proto field 11 candidate_server_card_ids; 201+14 tests pass"
+#5 status=in-progress branch=fix/issue-5 attempts=1 session=c00b6254-f1e7-412b-8f5b-19e40efc96e6 started=2026-06-20
