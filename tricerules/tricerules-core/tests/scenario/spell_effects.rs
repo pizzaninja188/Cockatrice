@@ -858,3 +858,97 @@ fn draw_spell_decking_out_loses_without_erroring() {
     );
     assert_eq!(e.state.winner, Some(1), "P1 wins once P0 decks out");
 }
+
+#[test]
+fn shock_deals_two_damage_to_target_creature() {
+    let decks = Some(vec![deck_with("mountain", &["shock"]), forest_only_deck()]);
+    let mut e = GameEngine::new(2620, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    relocate_to_hand(&mut e, 0, "shock");
+    let bear = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+    let shock_idx = hand_index_for_card(&e, 0, "shock");
+    e.apply_command(
+        0,
+        &cast_spell(shock_idx, vec![TargetRef { object_id: bear }]),
+    )
+    .expect("cast shock on grizzly bears");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass()).expect("p1 pass");
+
+    // 2/2 creature takes 2 damage — exactly lethal (CR 704.5g).
+    assert_eq!(
+        e.state.objects.get(&bear).expect("bear").zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert!(e.state.players[1].graveyard.contains(&bear));
+}
+
+#[test]
+fn shock_deals_two_damage_to_target_player() {
+    let decks = Some(vec![deck_with("mountain", &["shock"]), forest_only_deck()]);
+    let mut e = GameEngine::new(2621, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    relocate_to_hand(&mut e, 0, "shock");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+    let shock_idx = hand_index_for_card(&e, 0, "shock");
+    let p1_life_before = e.state.players[1].life;
+    e.apply_command(0, &cast_spell(shock_idx, target_player(1)))
+        .expect("cast shock targeting opponent");
+    let batch = {
+        e.apply_command(0, &pass()).expect("p0 pass");
+        e.apply_command(1, &pass()).expect("p1 pass")
+    };
+
+    assert_eq!(
+        e.state.players[1].life,
+        p1_life_before - 2,
+        "opponent loses 2 life"
+    );
+    let life = life_changes_in(&batch);
+    assert!(
+        life.iter().any(|lc| lc.player_id == 1 && lc.delta == -2),
+        "LifeChanged(-2) on P1 expected, got {life:?}"
+    );
+}
+
+#[test]
+fn shock_requires_a_target() {
+    let decks = Some(vec![deck_with("mountain", &["shock"]), forest_only_deck()]);
+    let mut e = GameEngine::new(2622, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    relocate_to_hand(&mut e, 0, "shock");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+    let shock_idx = hand_index_for_card(&e, 0, "shock");
+    let err = e
+        .apply_command(0, &cast_spell(shock_idx, vec![]))
+        .expect_err("shock requires exactly one target");
+    assert!(
+        err.to_string().contains("target"),
+        "unexpected error: {err}"
+    );
+}
