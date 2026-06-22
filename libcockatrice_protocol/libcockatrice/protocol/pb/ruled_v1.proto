@@ -294,6 +294,9 @@ message ResolutionChoiceRequired {
   // player's client renders the choice without a card-id lookup. For HandCards (choice_kind 0)
   // these are private; Servatrice redacts candidate_* for everyone but the deciding player.
   repeated string candidate_names = 10;
+  // When true, all chosen candidates must have distinct card names (Gifts Ungiven: "four cards
+  // with different names"). The client enforces this before submission; the engine re-validates.
+  bool unique_names = 11;
 }
 
 // A token entered the battlefield (CR 111). Unlike a resolved permanent spell, a token has no
@@ -369,6 +372,10 @@ message StackPushed {
   // object. Like an ability it has no physical card on the shared stack; the client shows it via
   // card_id + the "(copy)" ability_annotation and expects no permanent/graveyard card on resolve.
   bool is_copy = 6;
+  // For copies (is_copy == true): the object_id of the original stack item being copied. The
+  // client uses this to inherit the original spell's Oracle printing (set/provider) so the copy
+  // displays the same card art instead of defaulting to the newest printing.
+  uint32 copy_source_object_id = 7;
 }
 
 message ActivateAbility {

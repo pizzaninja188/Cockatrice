@@ -79,6 +79,7 @@ impl GameEngine {
                 ability_annotation: ability_text,
                 card_id: String::new(),
                 is_copy: false,
+                copy_source_object_id: 0,
             })),
         });
 
@@ -162,6 +163,28 @@ impl GameEngine {
                 return Err(EngineError::Illegal("invalid resolution choice"));
             }
         }
+        if pending.unique_names {
+            let mut name_seen: HashSet<String> = HashSet::new();
+            for &oid in chosen {
+                let card_id = self
+                    .state
+                    .objects
+                    .get(&oid)
+                    .map(|o| o.card_id.clone())
+                    .unwrap_or_default();
+                let name = self
+                    .registry
+                    .get(&card_id)
+                    .map(|d| d.name.clone())
+                    .unwrap_or(card_id);
+                if !name_seen.insert(name) {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "chosen cards must have different names",
+                    ));
+                }
+            }
+        }
 
         // CR 707.10c: copy target choice is not a tier-3 CardEffect; handle it directly.
         if pending.custom_key == "__copy_targets" {
@@ -219,6 +242,7 @@ impl GameEngine {
         let card_id = pending.item.card_id.clone();
         let face_index = pending.item.face_index;
         let controller = pending.item.controller;
+        let copy_source_object_id = pending.copy_source_object_id;
 
         let mut copy_item = pending.item;
         copy_item.targets = chosen.to_vec();
@@ -246,6 +270,7 @@ impl GameEngine {
                     ability_annotation: "(copy)".to_string(),
                     card_id: card_id.clone(),
                     is_copy: true,
+                    copy_source_object_id,
                 })),
             },
             ev_log(format!(
@@ -307,6 +332,7 @@ impl GameEngine {
                     min: interrupt.min,
                     max: interrupt.max,
                     ordered: interrupt.ordered,
+                    unique_names: interrupt.unique_names,
                 },
             )),
         });
@@ -321,8 +347,10 @@ impl GameEngine {
             min: interrupt.min,
             max: interrupt.max,
             ordered: interrupt.ordered,
+            unique_names: interrupt.unique_names,
             prompt: interrupt.prompt,
             choice_kind: interrupt.choice_kind.as_proto(),
+            copy_source_object_id: 0,
         });
     }
 }

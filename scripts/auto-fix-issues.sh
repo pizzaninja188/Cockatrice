@@ -171,7 +171,7 @@ for (( i=1; i<=MAX_ISSUES; i++ )); do
     if [[ -n "$resume_sid" ]]; then
       echo "resuming session $resume_sid for interrupted issue #$resume_id"
       timeout "$PER_ISSUE_TIMEOUT" "$CLAUDE_BIN" -p \
-"Your previous session was interrupted (usage window ended). You were working issue #$resume_id on branch fix/issue-$resume_id. Re-check git state and continue to completion, following the workflow and output discipline you were given. Keep \`session=$resume_sid\` on that issue's line in AUTOMATION_STATUS.md. Finish with the required AUTOFIX_RESULT line." \
+"Your previous session was interrupted (usage window ended). You were working issue #$resume_id on branch fix/issue-$resume_id. Re-check git state and continue to completion, following the workflow and output discipline you were given. Keep \`session=$resume_sid\` on that issue's line in AUTOMATION_STATUS.md. Your VERY LAST line of output must be exactly (bare text, no markdown): AUTOFIX_RESULT: RESOLVED #$resume_id  — or AUTOFIX_RESULT: BLOCKED #$resume_id - <reason> if stuck." \
           --resume "$resume_sid" "${model_args[@]}" \
           --dangerously-skip-permissions --output-format text >"$TASK_LOG" 2>&1
       rc=$?
@@ -209,8 +209,9 @@ resume), set \`session=$new_sid\` so a future interrupted run can resume it." \
   # dirty. Preserve that WIP on its task branch so (a) the tree returns clean and
   # future runs aren't blocked, and (b) a resume continues from the committed
   # state. NEVER discard: stash anything that isn't on a task branch.
+  agent_branch="$(git branch --show-current)"
   if [[ -n "$(git status --porcelain)" ]]; then
-    cur="$(git branch --show-current)"
+    cur="$agent_branch"
     if [[ "$cur" == fix/* || "$cur" == cards/* ]]; then
       git add -A && git commit -q -m "wip: auto-preserved (interrupted run)" \
         && echo "  preserved interrupted WIP on $cur"
@@ -223,6 +224,23 @@ resume), set \`session=$new_sid\` so a future interrupted run can resume it." \
 
   # Flush any AUTOMATION_STATUS.md commits the agent made on master.
   git checkout "$BASE_BRANCH" >/dev/null 2>&1
+
+  # Drift check: if the agent accidentally committed AUTOMATION_STATUS.md onto the
+  # task branch instead of master, apply it here before pushing. This happens when
+  # the agent bundles the status update with the code commit rather than switching
+  # to master first.
+  if [[ "$agent_branch" == fix/* || "$agent_branch" == cards/* ]]; then
+    if git rev-parse --verify "$agent_branch" >/dev/null 2>&1; then
+      branch_status="$(git show "$agent_branch:AUTOMATION_STATUS.md" 2>/dev/null || true)"
+      master_status="$(cat "$STATUS_FILE" 2>/dev/null || true)"
+      if [[ -n "$branch_status" && "$branch_status" != "$master_status" ]]; then
+        echo "  WARNING: AUTOMATION_STATUS.md drifted onto $agent_branch; recovering to $BASE_BRANCH."
+        printf '%s' "$branch_status" > "$STATUS_FILE"
+        git add "$STATUS_FILE" && git commit -q -m "automation: recover status from $agent_branch (drift fix)"
+      fi
+    fi
+  fi
+
   push_master
 
   if [[ $rc -eq 124 ]]; then echo "task hit ${PER_ISSUE_TIMEOUT}s timeout; stopping."; break; fi
@@ -231,12 +249,16 @@ resume), set \`session=$new_sid\` so a future interrupted run can resume it." \
   # Match anywhere on the line (not just column 0) and normalize from the keyword
   # onward, stripping any backticks an agent wrapped it in (a common markdown habit).
   # `tail -n 1` keeps the genuine final line from beating an earlier prose mention.
-  result_line="$(grep -aoE 'AUTOFIX_RESULT:.*' "$TASK_LOG" | tail -n 1 | tr -d '`')"
+  # Accept both `AUTOFIX_RESULT:` and `AUTOFIX_RESULT ` — resumed agents sometimes
+  # omit the colon and emit a status-file-style line instead of the sentinel.
+  result_line="$(grep -aoE 'AUTOFIX_RESULT[: ].*' "$TASK_LOG" | tail -n 1 | tr -d '`')"
   echo "result: ${result_line:-<none>}"
 
   if [[ "$mode" == "issues" ]]; then
     case "$result_line" in
-      *"RESOLVED"*)        resolved=$(( resolved + 1 )); echo "issue resolved; continuing." ;;
+      # `status=in-review` is the fallback when a resumed agent prints the
+      # AUTOMATION_STATUS.md line format instead of the proper sentinel.
+      *"RESOLVED"*|*"status=in-review"*) resolved=$(( resolved + 1 )); echo "issue resolved; continuing." ;;
       *"NO_ELIGIBLE_ISSUES"*)
         if [[ "$CARDS_ENABLED" == "1" && -n "$PROMPT_CARDS" ]]; then
           echo "no eligible issues; switching to card mode."; mode="cards"

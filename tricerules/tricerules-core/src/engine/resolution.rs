@@ -455,6 +455,7 @@ impl GameEngine {
                                                 min: 1,
                                                 max: 1,
                                                 ordered: false,
+                                                unique_names: false,
                                             },
                                         )),
                                     });
@@ -471,6 +472,8 @@ impl GameEngine {
                                         ordered: false,
                                         prompt,
                                         choice_kind: 1,
+                                        unique_names: false,
+                                        copy_source_object_id: src.id,
                                     });
                                     // Copy will be pushed to the stack after target is submitted.
                                 } else {
@@ -488,6 +491,7 @@ impl GameEngine {
                                                 ability_annotation: "(copy)".to_string(),
                                                 card_id: src.card_id.clone(),
                                                 is_copy: true,
+                                                copy_source_object_id: src.id,
                                             },
                                         )),
                                     });

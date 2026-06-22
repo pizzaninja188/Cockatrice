@@ -12,8 +12,9 @@
 //!   `resume` (1)   — record them (revealed, still in the library), ask the *opponent* to choose two.
 //!   `resume` (2)   — opponent's choices to the controller's graveyard, the rest to hand, then shuffle.
 //!
-//! Simplification (tracked via `partial`): the search does not enforce the "different names"
-//! restriction, and in 1v1 the single opponent is the automatic target (no separate target step).
+//! Simplification (tracked via `partial`): in 1v1 the single opponent is the automatic target
+//! (no separate target step). The "different names" restriction is enforced at search submission
+//! via [`ResolutionInterrupt::unique_names`].
 
 use super::{
     CardEffect, ChoiceKind, ResolutionChoice, ResolutionCtx, ResolutionInterrupt, ResolutionStep,
@@ -43,6 +44,8 @@ impl CardEffect for GiftsUngiven {
             min: 0,
             max,
             ordered: false,
+            // Enforce Oracle "different names" restriction at submission.
+            unique_names: true,
         })
     }
 
@@ -84,6 +87,7 @@ impl CardEffect for GiftsUngiven {
                     min: pick,
                     max: pick,
                     ordered: false,
+                    unique_names: false,
                 })
             }
             // Step 2: the opponent has chosen which revealed cards go to the graveyard; the

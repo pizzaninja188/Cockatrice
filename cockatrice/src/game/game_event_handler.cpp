@@ -80,10 +80,14 @@ static QVector<quint32> askRuledResolutionChoice(const QString &prompt,
                                                   const QStringList &names,
                                                   int minN,
                                                   int maxN,
-                                                  bool ordered)
+                                                  bool ordered,
+                                                  bool uniqueNames)
 {
     QDialog dlg;
     dlg.setWindowTitle(QObject::tr("Resolve"));
+    // Resolution is mandatory (CR 608); disable the X button so the player
+    // cannot dismiss the dialog without submitting a legal selection.
+    dlg.setWindowFlags(dlg.windowFlags() & ~Qt::WindowCloseButtonHint);
     auto *layout = new QVBoxLayout(&dlg);
     layout->addWidget(new QLabel(prompt, &dlg));
     auto *list = new QListWidget(&dlg);
@@ -96,14 +100,28 @@ static QVector<quint32> askRuledResolutionChoice(const QString &prompt,
 
     auto chosen = std::make_shared<QVector<int>>(); // selected rows, in click order
     auto refresh = [=]() {
+        // Collect names already chosen (for uniqueNames enforcement).
+        QSet<QString> chosenNameSet;
+        if (uniqueNames) {
+            for (int r : *chosen) {
+                chosenNameSet.insert(names.value(r));
+            }
+        }
         for (int r = 0; r < list->count(); ++r) {
             const int pos = chosen->indexOf(r);
             if (pos < 0) {
+                // Not yet chosen — grey out if it would violate unique-names.
+                const bool blocked = uniqueNames && chosenNameSet.contains(names.value(r));
                 list->item(r)->setText(names.value(r));
+                list->item(r)->setFlags(blocked
+                    ? list->item(r)->flags() & ~Qt::ItemIsEnabled
+                    : list->item(r)->flags() | Qt::ItemIsEnabled);
             } else if (ordered) {
                 list->item(r)->setText(QStringLiteral("%1. %2").arg(pos + 1).arg(names.value(r)));
+                list->item(r)->setFlags(list->item(r)->flags() | Qt::ItemIsEnabled);
             } else {
                 list->item(r)->setText(QStringLiteral("✓ %1").arg(names.value(r)));
+                list->item(r)->setFlags(list->item(r)->flags() | Qt::ItemIsEnabled);
             }
         }
         buttons->button(QDialogButtonBox::Ok)
@@ -115,7 +133,20 @@ static QVector<quint32> askRuledResolutionChoice(const QString &prompt,
         if (pos >= 0) {
             chosen->remove(pos);
         } else if (chosen->size() < maxN) {
-            chosen->append(r);
+            // itemClicked fires even for visually-disabled items, so re-check uniqueness here.
+            bool nameTaken = false;
+            if (uniqueNames) {
+                const QString clickedName = names.value(r);
+                for (int cr : *chosen) {
+                    if (names.value(cr) == clickedName) {
+                        nameTaken = true;
+                        break;
+                    }
+                }
+            }
+            if (!nameTaken) {
+                chosen->append(r);
+            }
         }
         refresh();
     });
@@ -1348,9 +1379,9 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                     ruledStackAnnotationByOid.insert(
                                         sp.object_id(),
                                         QString::fromStdString(sp.ability_annotation()));
-                                    // Only abilities (no physical card_id) need a synthetic stack card
-                                    // and clear the pending trigger — a spell (incl. a cast split half)
-                                    // already has a real CardItem on the stack, so skip that path for it.
+                                    // Abilities (no card_id) and spell copies (is_copy) both lack a
+                                    // physical CardItem on the stack and need a synthetic one. A normal
+                                    // spell (non-empty card_id, not a copy) already has a real card.
                                     if (sp.card_id().empty()) {
                                         // A triggered ability was just placed on the stack — the pending
                                         // trigger target has been chosen and is no longer pending.
@@ -1363,6 +1394,36 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                             sp.object_id(),
                                             QString::fromStdString(sp.description()),
                                             pendingTriggerControllerPlayerId);
+                                    } else if (sp.is_copy()) {
+                                        // CR 707.10: a spell copy (Twincast/Fork) has no physical card;
+                                        // create a synthetic stack card so the copy is visible.
+                                        // Inherit the original spell's printing so the copy shows the
+                                        // same card art rather than defaulting to the newest printing.
+                                        QString copySetName;
+                                        const quint32 srcOid = sp.copy_source_object_id();
+                                        if (srcOid != 0) {
+                                            TabGame *tab = game->getTab();
+                                            if (CardItem *srcCard = resolveStackCardItemByEngineOid(
+                                                    game, tab, this, game->getPlayerManager(), srcOid)) {
+                                                copySetName = srcCard->getCardRef().providerId;
+                                            }
+                                        }
+                                        createSyntheticAbilityStackCard(
+                                            sp.object_id(),
+                                            QString::fromStdString(sp.description()),
+                                            -1,
+                                            copySetName);
+                                        // The StackResolved for the copy-maker (Twincast/Fork)
+                                        // uses counterspell cleanup logic that removes targets from
+                                        // ruledStackOidOrder — but the source spell was NOT removed
+                                        // from the engine stack, so restore it here.
+                                        const quint32 copySrcOid =
+                                            static_cast<quint32>(sp.copy_source_object_id());
+                                        if (copySrcOid != 0
+                                                && !ruledStackOidOrder.contains(copySrcOid)
+                                                && ruledStackTargetsByStackOid.contains(copySrcOid)) {
+                                            ruledStackOidOrder.insert(1, copySrcOid);
+                                        }
                                     }
                                 }
                                 ruledStackTrackingDirty = true;
@@ -1416,15 +1477,16 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                     const int minN = static_cast<int>(rcr.min());
                                     const int maxN = static_cast<int>(rcr.max());
                                     const bool ordered = rcr.ordered();
+                                    const bool uniqueNames = rcr.unique_names();
                                     // Defer the modal dialog until after this batch finishes processing
                                     // (avoid re-entering event handling while a modal loop is open).
                                     QPointer<GameEventHandler> self(this);
-                                    QTimer::singleShot(0, this, [self, prompt, oids, names, minN, maxN, ordered]() {
+                                    QTimer::singleShot(0, this, [self, prompt, oids, names, minN, maxN, ordered, uniqueNames]() {
                                         if (!self) {
                                             return;
                                         }
                                         const QVector<quint32> chosen =
-                                            askRuledResolutionChoice(prompt, oids, names, minN, maxN, ordered);
+                                            askRuledResolutionChoice(prompt, oids, names, minN, maxN, ordered, uniqueNames);
                                         if (chosen.size() < minN) {
                                             return; // dialog closed without a legal selection
                                         }
@@ -2482,7 +2544,10 @@ void GameEventHandler::clearRuledSessionState()
     emit ruledSessionReset();
 }
 
-void GameEventHandler::createSyntheticAbilityStackCard(quint32 virtualOid, const QString &cardName, int controllerPlayerId)
+void GameEventHandler::createSyntheticAbilityStackCard(quint32 virtualOid,
+                                                        const QString &cardName,
+                                                        int controllerPlayerId,
+                                                        const QString &setName)
 {
     (void)controllerPlayerId;
     // Idempotent: StackPushed may be rebroadcast; a second card for the same OID would corrupt the zone.
@@ -2508,7 +2573,7 @@ void GameEventHandler::createSyntheticAbilityStackCard(quint32 virtualOid, const
     }
     // Assign a fake card ID well outside the range Servatrice assigns (small positive ints).
     const int fakeId = static_cast<int>(0x70000000u | (virtualOid & 0x0FFFFFFFu));
-    CardRef ref{cardName, QString()};
+    CardRef ref{cardName, setName};
     auto *card = new CardItem(zonePlayer, nullptr, ref, fakeId);
     // Register the OID mapping so card_item.cpp paint() can show the italic ability annotation.
     // BattlefieldObjectMap clears ownerCardIdToEngineOid on every priority change, so we keep

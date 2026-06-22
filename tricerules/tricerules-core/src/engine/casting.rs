@@ -308,6 +308,7 @@ impl GameEngine {
                 ability_annotation: stack_annotation,
                 card_id: cast_card_id.clone(),
                 is_copy: false,
+                copy_source_object_id: 0,
             })),
         });
         self.fire_triggers(
@@ -450,6 +451,7 @@ impl GameEngine {
                 ability_annotation: ability_text,
                 card_id: String::new(),
                 is_copy: false,
+                copy_source_object_id: 0,
             })),
         });
         batch.events.push(ev_priority_changed(self));
