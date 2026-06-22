@@ -20,10 +20,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
 
 ## Open
 
-- [ ] #3 [bug] Gifts Ungiven allows a player to choose 2 cards with the same name
-  - Details: Card says choose 4 cards with different names, but in current implementation cards with the same name can be chosen
-  - Priority: Medium
-
 - [ ] #4 [feature] Using Cockatrice UI elements when possible
   - Details: For Brainstorm, when choosing cards to put on top, a popup shows up with a list of cards in hand. This can be improved visually by just having the user click cards in hand and numbering them like when putting cards on top after mulliganing. Also, it has the first chosen go to the top, which is the opposite of what should happen intuitively. Similarly, Gifts Ungiven has the player searching for cards in library choose from a similar text list, when Cockatrice already has search library functionality. The player choosing cards to go to the graveyard could also get a custom zone view that shows the card images instead of just text (like what we did with the stack). I want this train of thought to be used for other custom resolution + custom zone cards in the future as well.
   - Priority: Low
