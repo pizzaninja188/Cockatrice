@@ -7,5 +7,5 @@
   // opponent chooses two of those cards. Put the chosen cards into your graveyard and the rest into
   // your hand. Then shuffle." The opponent decides part of resolution (see custom/gifts_ungiven.rs).
   custom_effect: "gifts_ungiven",
-  partial: "search does not enforce the different-names restriction; 1v1 opponent is the automatic target",
+  partial: "1v1 opponent is the automatic target (no separate target step for multi-player)",
 )

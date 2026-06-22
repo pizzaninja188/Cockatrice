@@ -80,7 +80,8 @@ static QVector<quint32> askRuledResolutionChoice(const QString &prompt,
                                                   const QStringList &names,
                                                   int minN,
                                                   int maxN,
-                                                  bool ordered)
+                                                  bool ordered,
+                                                  bool uniqueNames)
 {
     QDialog dlg;
     dlg.setWindowTitle(QObject::tr("Resolve"));
@@ -96,14 +97,28 @@ static QVector<quint32> askRuledResolutionChoice(const QString &prompt,
 
     auto chosen = std::make_shared<QVector<int>>(); // selected rows, in click order
     auto refresh = [=]() {
+        // Collect names already chosen (for uniqueNames enforcement).
+        QSet<QString> chosenNameSet;
+        if (uniqueNames) {
+            for (int r : *chosen) {
+                chosenNameSet.insert(names.value(r));
+            }
+        }
         for (int r = 0; r < list->count(); ++r) {
             const int pos = chosen->indexOf(r);
             if (pos < 0) {
+                // Not yet chosen — grey out if it would violate unique-names.
+                const bool blocked = uniqueNames && chosenNameSet.contains(names.value(r));
                 list->item(r)->setText(names.value(r));
+                list->item(r)->setFlags(blocked
+                    ? list->item(r)->flags() & ~Qt::ItemIsEnabled
+                    : list->item(r)->flags() | Qt::ItemIsEnabled);
             } else if (ordered) {
                 list->item(r)->setText(QStringLiteral("%1. %2").arg(pos + 1).arg(names.value(r)));
+                list->item(r)->setFlags(list->item(r)->flags() | Qt::ItemIsEnabled);
             } else {
                 list->item(r)->setText(QStringLiteral("✓ %1").arg(names.value(r)));
+                list->item(r)->setFlags(list->item(r)->flags() | Qt::ItemIsEnabled);
             }
         }
         buttons->button(QDialogButtonBox::Ok)
@@ -115,7 +130,20 @@ static QVector<quint32> askRuledResolutionChoice(const QString &prompt,
         if (pos >= 0) {
             chosen->remove(pos);
         } else if (chosen->size() < maxN) {
-            chosen->append(r);
+            // itemClicked fires even for visually-disabled items, so re-check uniqueness here.
+            bool nameTaken = false;
+            if (uniqueNames) {
+                const QString clickedName = names.value(r);
+                for (int cr : *chosen) {
+                    if (names.value(cr) == clickedName) {
+                        nameTaken = true;
+                        break;
+                    }
+                }
+            }
+            if (!nameTaken) {
+                chosen->append(r);
+            }
         }
         refresh();
     });
@@ -1416,15 +1444,16 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                     const int minN = static_cast<int>(rcr.min());
                                     const int maxN = static_cast<int>(rcr.max());
                                     const bool ordered = rcr.ordered();
+                                    const bool uniqueNames = rcr.unique_names();
                                     // Defer the modal dialog until after this batch finishes processing
                                     // (avoid re-entering event handling while a modal loop is open).
                                     QPointer<GameEventHandler> self(this);
-                                    QTimer::singleShot(0, this, [self, prompt, oids, names, minN, maxN, ordered]() {
+                                    QTimer::singleShot(0, this, [self, prompt, oids, names, minN, maxN, ordered, uniqueNames]() {
                                         if (!self) {
                                             return;
                                         }
                                         const QVector<quint32> chosen =
-                                            askRuledResolutionChoice(prompt, oids, names, minN, maxN, ordered);
+                                            askRuledResolutionChoice(prompt, oids, names, minN, maxN, ordered, uniqueNames);
                                         if (chosen.size() < minN) {
                                             return; // dialog closed without a legal selection
                                         }

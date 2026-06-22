@@ -294,6 +294,9 @@ message ResolutionChoiceRequired {
   // player's client renders the choice without a card-id lookup. For HandCards (choice_kind 0)
   // these are private; Servatrice redacts candidate_* for everyone but the deciding player.
   repeated string candidate_names = 10;
+  // When true, all chosen candidates must have distinct card names (Gifts Ungiven: "four cards
+  // with different names"). The client enforces this before submission; the engine re-validates.
+  bool unique_names = 11;
 }
 
 // A token entered the battlefield (CR 111). Unlike a resolved permanent spell, a token has no

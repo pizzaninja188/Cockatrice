@@ -205,6 +205,9 @@ pub struct PendingResolution {
     pub prompt: String,
     /// `ChoiceKind` proto discriminant for the client (0 = hand cards, 1 = revealed cards).
     pub choice_kind: i32,
+    /// Mirror of [`ResolutionInterrupt::unique_names`]: the engine rejects submissions where two
+    /// chosen object ids map to the same card name (Gifts Ungiven: "different names").
+    pub unique_names: bool,
 }
 
 #[derive(Debug, Clone)]

@@ -61,6 +61,9 @@ pub struct ResolutionInterrupt {
     pub max: u32,
     /// True when the chosen order is significant (Brainstorm: order the cards put back on top).
     pub ordered: bool,
+    /// True when all chosen objects must have distinct card names (Gifts Ungiven: "different names").
+    /// The engine enforces this at choice submission; the card effect does not need to re-check.
+    pub unique_names: bool,
 }
 
 /// What the candidate object ids in a [`ResolutionInterrupt`] are, for client presentation and,
