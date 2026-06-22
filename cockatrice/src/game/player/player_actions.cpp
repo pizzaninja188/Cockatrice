@@ -1314,7 +1314,7 @@ bool PlayerActions::isAwaitingRuledAbilityOrTriggerPlayerTarget() const
         return true;
     }
     auto *handler = player->getGame()->getGameEventHandler();
-    return handler && handler->hasPendingTriggerTarget();
+    return handler && (handler->hasPendingTriggerTarget() || handler->hasPendingCopyTargetChoice());
 }
 
 bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
@@ -3522,8 +3522,29 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
 
 bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
 {
-    // Check pending trigger first (higher priority).
     auto *handler = player->getGame()->getGameEventHandler();
+
+    // Check pending copy target choice first (CR 707.10c: redirect targets for a spell copy).
+    if (handler && handler->hasPendingCopyTargetChoice()) {
+        if (!card || !card->getZone()) {
+            return false;
+        }
+        const QString zoneName = card->getZone()->getName();
+        if (zoneName != ZoneNames::TABLE && zoneName != ZoneNames::STACK) {
+            handler->emitLocalRuledLog(tr("Select a target on the battlefield or stack for the copy."));
+            return true;
+        }
+        const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
+        const quint32 targetOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
+        if (targetOid == 0 || !handler->isValidCopyTarget(targetOid)) {
+            handler->emitLocalRuledLog(tr("That is not a valid target for the copy."));
+            return true;
+        }
+        handler->submitCopyTargetChoice(targetOid);
+        return true;
+    }
+
+    // Check pending trigger first (higher priority).
     if (handler && handler->hasPendingTriggerTarget()) {
         if (!card || !card->getZone()) {
             return false;
@@ -3595,6 +3616,21 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
 bool PlayerActions::tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer)
 {
     auto *handler = player->getGame()->getGameEventHandler();
+
+    // Check pending copy target choice first (CR 707.10c: redirect targets for a spell copy).
+    if (handler && handler->hasPendingCopyTargetChoice()) {
+        if (!targetPlayer) {
+            return false;
+        }
+        const quint32 targetOid = static_cast<quint32>(targetPlayer->getPlayerInfo()->getId());
+        if (!handler->isValidCopyTarget(targetOid)) {
+            handler->emitLocalRuledLog(tr("That player is not a valid target for the copy."));
+            return true;
+        }
+        handler->submitCopyTargetChoice(targetOid);
+        return true;
+    }
+
     if (handler && handler->hasPendingTriggerTarget()) {
         if (!targetPlayer) {
             return false;

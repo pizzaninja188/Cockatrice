@@ -276,9 +276,12 @@ message ResolutionChoiceRequired {
   uint32 source_object_id = 2;
   // Display-only prompt (server-only; the relay does not look up Oracle text for this).
   string prompt_text = 3;
-  // What the candidate ids refer to: 0 = cards in the deciding player's hand (private), 1 = revealed
-  // cards (public), 2 = cards being searched out of the deciding player's library (private). Private
-  // kinds (0, 2) are redacted from every player but the decider by Servatrice.
+  // What the candidate ids refer to:
+  //   0 = cards in the deciding player's hand (private — redacted from opponents by Servatrice)
+  //   1 = revealed cards (public)
+  //   2 = cards being searched out of the deciding player's library (private — redacted)
+  //   3 = target objects (battlefield permanents, stack spells, or players — public).
+  //       The client uses click-to-target mode instead of a list dialog for this kind.
   int32 choice_kind = 4;
   // Candidate object ids to choose among (engine ObjectIds).
   repeated uint32 candidate_object_ids = 5;

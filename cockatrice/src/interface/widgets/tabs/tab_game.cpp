@@ -240,6 +240,7 @@ void TabGame::connectToGameEventHandler()
     connect(game->getGameEventHandler(), &GameEventHandler::ruledSessionReset, this, [this] {
         if (gamePromptWidget) {
             gamePromptWidget->setTriggerTargetPending(false);
+            gamePromptWidget->setCopyTargetPending(false);
             gamePromptWidget->setRuledStackHasItems(false);
             gamePromptWidget->setSpellCastPending(false);
         }
@@ -308,6 +309,15 @@ void TabGame::connectToGameEventHandler()
                             gamePromptWidget->setPromptText(abilityPrompt);
                             return;
                         }
+                    }
+                    // If a copy is waiting for the local player to choose new targets (CR 707.10c),
+                    // show that prompt using click-to-target mode.
+                    const bool copyTargetPending = handler && handler->hasPendingCopyTargetChoice();
+                    gamePromptWidget->setCopyTargetPending(copyTargetPending);
+                    if (copyTargetPending) {
+                        gamePromptWidget->setPromptText(handler->pendingCopyTargetPromptText() +
+                                                        tr("\nClick a target, or click the original target to keep it."));
+                        return;
                     }
                     // If a triggered ability is waiting for the local player to choose a target,
                     // show that prompt and suppress the pass-priority button.

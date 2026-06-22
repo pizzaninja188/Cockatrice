@@ -448,7 +448,9 @@ impl GameEngine {
                                                 deciding_player_id: controller,
                                                 source_object_id: copy_id,
                                                 prompt_text: prompt.clone(),
-                                                choice_kind: 1,
+                                                // choice_kind 3 = target objects: client uses
+                                                // click-to-target instead of a list dialog.
+                                                choice_kind: 3,
                                                 candidate_object_ids: candidates.clone(),
                                                 candidate_card_ids,
                                                 candidate_names,
@@ -471,7 +473,7 @@ impl GameEngine {
                                         max: 1,
                                         ordered: false,
                                         prompt,
-                                        choice_kind: 1,
+                                        choice_kind: 3,
                                         unique_names: false,
                                         copy_source_object_id: src.id,
                                     });

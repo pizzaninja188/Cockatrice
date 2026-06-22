@@ -183,6 +183,16 @@ private:
     QString pendingTriggerAbilityText;
     int pendingTriggerControllerPlayerId = -1;
     bool hasPendingTrigger = false;
+    // Pending copy target choice (choice_kind 3): set when ResolutionChoiceRequired arrives for a
+    // spell copy whose controller may redirect targets (CR 707.10c). Uses click-to-target mode
+    // instead of the modal list dialog used for Brainstorm / Gifts Ungiven.
+    struct PendingCopyTargetChoice
+    {
+        bool valid = false;
+        QVector<quint32> candidateOids;
+        QString promptText;
+    };
+    PendingCopyTargetChoice pendingCopyTargetChoice;
     // Maps trigger stack OID → source permanent OID, for drawing the ability arrow from the source.
     QHash<quint32, quint32> ruledStackSourceOidByStackOid;
     QList<QPair<Player *, int>> ruledSpellTargetSyntheticArrows;
@@ -411,6 +421,13 @@ public:
     [[nodiscard]] QString pendingTriggerText() const { return pendingTriggerAbilityText; }
     [[nodiscard]] quint32 pendingTriggerSource() const { return pendingTriggerSourceOid; }
     [[nodiscard]] int pendingTriggerController() const { return pendingTriggerControllerPlayerId; }
+    [[nodiscard]] bool hasPendingCopyTargetChoice() const { return pendingCopyTargetChoice.valid; }
+    [[nodiscard]] bool isValidCopyTarget(quint32 oid) const
+    {
+        return pendingCopyTargetChoice.candidateOids.contains(oid);
+    }
+    [[nodiscard]] QString pendingCopyTargetPromptText() const { return pendingCopyTargetChoice.promptText; }
+    void submitCopyTargetChoice(quint32 oid);
     [[nodiscard]] bool isRuledFirstStrikeStepPending() const
     {
         return ruledFirstStrikeStepPending;
