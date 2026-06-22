@@ -151,6 +151,8 @@ fi
 resolved=0
 cards_added=0
 mode="issues"
+run_tok_in=0; run_tok_out=0; run_tok_cache_r=0; run_tok_cache_w=0
+TOK_LOG="$LOG_DIR/tokens.log"
 
 for (( i=1; i<=MAX_ISSUES; i++ )); do
   echo
@@ -168,12 +170,16 @@ for (( i=1; i<=MAX_ISSUES; i++ )); do
     resume_id=""; resume_sid=""
     [[ "$RESUME_ENABLED" == "1" ]] && read -r resume_id resume_sid < <(find_resumable_session) || true
 
+    # Snapshot in-review lines before the agent runs so we can infer resolution
+    # if the agent forgets to emit AUTOFIX_RESULT (has happened).
+    status_before="$(grep 'status=in-review' "$STATUS_FILE" 2>/dev/null | sort || true)"
+
     if [[ -n "$resume_sid" ]]; then
       echo "resuming session $resume_sid for interrupted issue #$resume_id"
       timeout "$PER_ISSUE_TIMEOUT" "$CLAUDE_BIN" -p \
 "Your previous session was interrupted (usage window ended). You were working issue #$resume_id on branch fix/issue-$resume_id. Re-check git state and continue to completion, following the workflow and output discipline you were given. Keep \`session=$resume_sid\` on that issue's line in AUTOMATION_STATUS.md. Your VERY LAST line of output must be exactly (bare text, no markdown): AUTOFIX_RESULT: RESOLVED #$resume_id  — or AUTOFIX_RESULT: BLOCKED #$resume_id - <reason> if stuck." \
           --resume "$resume_sid" "${model_args[@]}" \
-          --dangerously-skip-permissions --output-format text >"$TASK_LOG" 2>&1
+          --dangerously-skip-permissions --output-format json >"$TASK_LOG" 2>&1
       rc=$?
       if [[ $rc -ne 0 ]] && grep -qiE "session.*(not found|does not exist|invalid|unknown|expired)|no such session|could not.*resume" "$TASK_LOG"; then
         echo "resume failed (stale session); falling back to a fresh agent."; resume_sid=""
@@ -191,7 +197,7 @@ This run's session id is: $new_sid
 When you create or update this issue's line in AUTOMATION_STATUS.md (claim OR
 resume), set \`session=$new_sid\` so a future interrupted run can resume it." \
           --session-id "$new_sid" "${model_args[@]}" \
-          --dangerously-skip-permissions --output-format text >"$TASK_LOG" 2>&1
+          --dangerously-skip-permissions --output-format json >"$TASK_LOG" 2>&1
       rc=$?
     fi
   else
@@ -199,11 +205,34 @@ resume), set \`session=$new_sid\` so a future interrupted run can resume it." \
     echo "fresh card agent, session $new_sid"
     timeout "$PER_ISSUE_TIMEOUT" "$CLAUDE_BIN" -p "$PROMPT_CARDS" \
         --session-id "$new_sid" "${model_args[@]}" \
-        --dangerously-skip-permissions --output-format text >"$TASK_LOG" 2>&1
+        --dangerously-skip-permissions --output-format json >"$TASK_LOG" 2>&1
     rc=$?
   fi
 
-  tail -n 40 "$TASK_LOG"
+  # Extract text result and token stats from JSON output.
+  # Falls back to raw log content if claude exited non-zero (plain-text error).
+  TASK_TEXT=""
+  tok_in=0; tok_out=0; tok_cache_r=0; tok_cache_w=0; tok_turns="?"; tok_cost="?"
+  if command -v jq >/dev/null 2>&1 && jq -e . "$TASK_LOG" >/dev/null 2>&1; then
+    TASK_TEXT="$(jq -r '.result // ""' "$TASK_LOG" 2>/dev/null || true)"
+    tok_in="$(jq -r '.usage.input_tokens // 0' "$TASK_LOG" 2>/dev/null || echo 0)"
+    tok_out="$(jq -r '.usage.output_tokens // 0' "$TASK_LOG" 2>/dev/null || echo 0)"
+    tok_cache_r="$(jq -r '.usage.cache_read_input_tokens // 0' "$TASK_LOG" 2>/dev/null || echo 0)"
+    tok_cache_w="$(jq -r '.usage.cache_creation_input_tokens // 0' "$TASK_LOG" 2>/dev/null || echo 0)"
+    tok_turns="$(jq -r '.num_turns // "?"' "$TASK_LOG" 2>/dev/null || echo '?')"
+    tok_cost="$(jq -r '.total_cost_usd // "?"' "$TASK_LOG" 2>/dev/null || echo '?')"
+  fi
+  [[ -z "$TASK_TEXT" ]] && TASK_TEXT="$(cat "$TASK_LOG" 2>/dev/null || true)"
+  echo "$TASK_TEXT" | tail -n 40
+  echo "  tokens: in=$tok_in out=$tok_out cache_read=$tok_cache_r cache_write=$tok_cache_w turns=$tok_turns cost_usd=$tok_cost"
+  run_tok_in=$(( run_tok_in + tok_in ))
+  run_tok_out=$(( run_tok_out + tok_out ))
+  run_tok_cache_r=$(( run_tok_cache_r + tok_cache_r ))
+  run_tok_cache_w=$(( run_tok_cache_w + tok_cache_w ))
+  printf '%s run=%s task=%02d mode=%s turns=%s in=%s out=%s cache_read=%s cache_write=%s cost_usd=%s\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$RUN_TS" "$i" "$mode" \
+    "$tok_turns" "$tok_in" "$tok_out" "$tok_cache_r" "$tok_cache_w" "$tok_cost" \
+    >> "$TOK_LOG"
 
   # If the agent was interrupted (e.g. usage limit) mid-work, it leaves the tree
   # dirty. Preserve that WIP on its task branch so (a) the tree returns clean and
@@ -251,7 +280,20 @@ resume), set \`session=$new_sid\` so a future interrupted run can resume it." \
   # `tail -n 1` keeps the genuine final line from beating an earlier prose mention.
   # Accept both `AUTOFIX_RESULT:` and `AUTOFIX_RESULT ` — resumed agents sometimes
   # omit the colon and emit a status-file-style line instead of the sentinel.
-  result_line="$(grep -aoE 'AUTOFIX_RESULT[: ].*' "$TASK_LOG" | tail -n 1 | tr -d '`')"
+  result_line="$(echo "$TASK_TEXT" | grep -aoE 'AUTOFIX_RESULT[: ].*' | tail -n 1 | tr -d '`')"
+
+  # Fallback: if the agent exited cleanly but omitted the sentinel, infer from
+  # AUTOMATION_STATUS.md — any issue that newly appeared as in-review counts as resolved.
+  if [[ -z "$result_line" && $rc -eq 0 && "$mode" == "issues" ]]; then
+    status_after="$(grep 'status=in-review' "$STATUS_FILE" 2>/dev/null | sort || true)"
+    inferred_id="$(comm -13 <(echo "$status_before") <(echo "$status_after") \
+                   | grep -oE '#[0-9]+' | head -1 || true)"
+    if [[ -n "$inferred_id" ]]; then
+      result_line="AUTOFIX_RESULT: RESOLVED $inferred_id (inferred from AUTOMATION_STATUS.md)"
+      echo "  (no AUTOFIX_RESULT sentinel; inferred resolution from status file)"
+    fi
+  fi
+
   echo "result: ${result_line:-<none>}"
 
   if [[ "$mode" == "issues" ]]; then
@@ -287,6 +329,7 @@ echo
 echo "================================================================"
 echo "auto-fix run end: $(date)"
 echo "  issues resolved: $resolved    card branches added: $cards_added"
+echo "  tokens this run: in=$run_tok_in out=$run_tok_out cache_read=$run_tok_cache_r cache_write=$run_tok_cache_w"
 echo "  fix branches:";  git branch --list 'fix/issue-*' | sed 's/^/    /'
 echo "  card branches:"; git branch --list 'cards/*'     | sed 's/^/    /'
 echo "================================================================"
