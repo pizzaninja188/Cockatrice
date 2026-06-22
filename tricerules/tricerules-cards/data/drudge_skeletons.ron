@@ -1,0 +1,15 @@
+(
+  id: "drudge_skeletons",
+  name: "Drudge Skeletons",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Skeleton"],
+  power: 1,
+  toughness: 1,
+  activated_abilities: [
+    (
+      cost: Mana("{B}"),
+      effect: Regenerate(target: (kind: Self_)),
+      text: "{B}: Regenerate Drudge Skeletons.",
+    ),
+  ],
+)

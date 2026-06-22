@@ -258,7 +258,8 @@ fn effect_target_legal_at_resolution(
         }
         SpellEffectKind::DestroyTarget { target }
         | SpellEffectKind::PumpTarget { target, .. }
-        | SpellEffectKind::PutCounters { target, .. } => {
+        | SpellEffectKind::PutCounters { target, .. }
+        | SpellEffectKind::Regenerate { target } => {
             target_filter_legal(state, registry, target, tid, caster)
         }
         SpellEffectKind::ExileTarget
@@ -289,7 +290,8 @@ pub(super) fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
         // A `Self_`-filtered pump or counter-placement is auto-bound to its source (CR 115) — it
         // takes no chosen target and prompts nobody; any other filter requires a selected target.
         SpellEffectKind::PumpTarget { target, .. }
-        | SpellEffectKind::PutCounters { target, .. } => !matches!(target.kind, TargetKind::Self_),
+        | SpellEffectKind::PutCounters { target, .. }
+        | SpellEffectKind::Regenerate { target } => !matches!(target.kind, TargetKind::Self_),
         SpellEffectKind::DamageTarget { .. }
         | SpellEffectKind::DestroyTarget { .. }
         | SpellEffectKind::ExileTarget
@@ -344,8 +346,9 @@ pub(super) fn validate_effect_targets(
             }
         }
         SpellEffectKind::PumpTarget { target: filter, .. }
-        | SpellEffectKind::PutCounters { target: filter, .. } => {
-            // `Self_` pumps / counter placements are auto-bound and take no chosen target.
+        | SpellEffectKind::PutCounters { target: filter, .. }
+        | SpellEffectKind::Regenerate { target: filter } => {
+            // `Self_` pumps / counter placements / regen are auto-bound and take no chosen target.
             if matches!(filter.kind, TargetKind::Self_) {
                 if !targets.is_empty() {
                     return Err(EngineError::Illegal("this effect takes no targets"));

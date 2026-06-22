@@ -57,6 +57,10 @@ pub struct GameObject {
     /// in pairs as a state-based action (CR 122.3). Unlike continuous effects, counters persist
     /// across cleanup — they are not until-end-of-turn effects.
     pub counters: BTreeMap<CounterKind, u32>,
+    /// CR 701.15: number of regeneration shields on this permanent. Each shield is a replacement
+    /// effect: the next time this permanent would be destroyed, instead tap it, remove it from
+    /// combat, and clear all damage from it. Shields expire at the cleanup step (like damage).
+    pub regeneration_shields: u32,
 }
 
 impl GameObject {

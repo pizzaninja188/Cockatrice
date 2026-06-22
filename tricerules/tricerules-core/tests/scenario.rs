@@ -25,6 +25,8 @@ mod multi_face;
 mod opening;
 #[path = "scenario/priority_and_turns.rs"]
 mod priority_and_turns;
+#[path = "scenario/regenerate.rs"]
+mod regenerate;
 #[path = "scenario/spell_effects.rs"]
 mod spell_effects;
 #[path = "scenario/stack_and_counterspells.rs"]

@@ -567,6 +567,7 @@ fn tome_scour_mills_five_cards_from_target_player() {
                 damage: 0,
                 deathtouch_damage: false,
                 counters: std::collections::BTreeMap::new(),
+                regeneration_shields: 0,
             },
         );
         e.state.players[0].hand.push(id);
@@ -642,6 +643,7 @@ fn tome_scour_caps_at_library_size() {
                 damage: 0,
                 deathtouch_damage: false,
                 counters: std::collections::BTreeMap::new(),
+                regeneration_shields: 0,
             },
         );
         e.state.players[0].hand.push(id);
@@ -691,6 +693,7 @@ fn tome_scour_can_target_controller() {
                 damage: 0,
                 deathtouch_damage: false,
                 counters: std::collections::BTreeMap::new(),
+                regeneration_shields: 0,
             },
         );
         e.state.players[0].hand.push(id);
