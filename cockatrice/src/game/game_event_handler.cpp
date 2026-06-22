@@ -1470,6 +1470,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                         ResolutionHandPick pick;
                                         pick.min = static_cast<int>(rcr.min());
                                         pick.max = static_cast<int>(rcr.max());
+                                        pick.promptText = QString::fromStdString(rcr.prompt_text());
                                         for (int i = 0; i < rcr.candidate_object_ids_size(); ++i) {
                                             const quint32 oid = rcr.candidate_object_ids(i);
                                             const int scid = rcr.candidate_server_card_ids(i);

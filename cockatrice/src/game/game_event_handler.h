@@ -88,6 +88,7 @@ public:
         QList<int> selectedServerCardIds;
         int min = 0;
         int max = 0;
+        QString promptText;
     };
     [[nodiscard]] bool isResolutionHandPickActive() const
     {
@@ -119,6 +120,10 @@ public:
     [[nodiscard]] int resolutionHandPickSelected() const
     {
         return resolutionHandPick.has_value() ? resolutionHandPick->selectedServerCardIds.size() : 0;
+    }
+    [[nodiscard]] QString resolutionHandPickPromptText() const
+    {
+        return resolutionHandPick.has_value() ? resolutionHandPick->promptText : QString{};
     }
     void toggleResolutionHandPickCard(int serverCardId);
     void submitResolutionHandPick();
