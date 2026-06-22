@@ -79,6 +79,7 @@ impl GameEngine {
                 ability_annotation: ability_text,
                 card_id: String::new(),
                 is_copy: false,
+                copy_source_object_id: 0,
             })),
         });
 

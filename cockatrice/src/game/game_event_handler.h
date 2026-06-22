@@ -451,7 +451,10 @@ public:
     /// Rebuild ruled spell→target arrows (stack window layout / map updates may require a refresh).
     void refreshRuledSpellTargetArrows();
 
-    void createSyntheticAbilityStackCard(quint32 virtualOid, const QString &cardName, int controllerPlayerId = -1);
+    void createSyntheticAbilityStackCard(quint32 virtualOid,
+                                          const QString &cardName,
+                                          int controllerPlayerId = -1,
+                                          const QString &setName = {});
     void removeSyntheticAbilityStackCard(quint32 virtualOid);
 
     void togglePendingAttacker(quint32 engineOid);
