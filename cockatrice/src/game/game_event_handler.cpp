@@ -766,6 +766,62 @@ int GameEventHandler::ruledOpeningBottomClickOrderFor(int handIndex) const
     return pos + 1; // 1-based; returns 0 if not selected
 }
 
+void GameEventHandler::toggleResolutionHandPickCard(int serverCardId)
+{
+    if (!resolutionHandPick.has_value()) {
+        return;
+    }
+    if (!resolutionHandPick->serverCardIdToOid.contains(serverCardId)) {
+        return;
+    }
+    const int pos = resolutionHandPick->selectedServerCardIds.indexOf(serverCardId);
+    if (pos >= 0) {
+        resolutionHandPick->selectedServerCardIds.removeAt(pos);
+    } else if (resolutionHandPick->selectedServerCardIds.size() < resolutionHandPick->max) {
+        resolutionHandPick->selectedServerCardIds.append(serverCardId);
+    }
+    emit ruledResolutionHandPickUiChanged(resolutionHandPick->min,
+                                          resolutionHandPick->selectedServerCardIds.size());
+    emit ruledCombatStateChanged();
+}
+
+void GameEventHandler::submitResolutionHandPick()
+{
+    if (!resolutionHandPick.has_value()) {
+        return;
+    }
+    const int n = resolutionHandPick->selectedServerCardIds.size();
+    if (n < resolutionHandPick->min || n > resolutionHandPick->max) {
+        return;
+    }
+    QVector<quint32> chosen;
+    chosen.reserve(n);
+    for (int scid : resolutionHandPick->selectedServerCardIds) {
+        const quint32 oid = resolutionHandPick->serverCardIdToOid.value(scid, 0);
+        if (oid != 0) {
+            chosen.append(oid);
+        }
+    }
+    resolutionHandPick.reset();
+    emit ruledResolutionHandPickUiChanged(0, 0);
+    emit ruledCombatStateChanged();
+
+    if (chosen.size() < 1) {
+        return;
+    }
+    ruled::v1::RuledCommand cmd;
+    auto *sub = cmd.mutable_submit_resolution_choice();
+    for (quint32 o : chosen) {
+        sub->add_chosen_object_ids(o);
+    }
+    std::string payload;
+    if (cmd.SerializeToString(&payload)) {
+        Command_RuledPayload ruledPayload;
+        ruledPayload.set_payload(payload);
+        sendGameCommand(ruledPayload);
+    }
+}
+
 void GameEventHandler::pruneCleanupDiscardSelectionAndEmitUi()
 {
     if (legalRuledCleanupDiscardHandIndices.isEmpty()) {
@@ -1467,6 +1523,8 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 const auto &rcr = e.resolution_choice_required();
                                 const int localId = game->getPlayerManager()->getLocalPlayerId();
                                 promptFeed += QString::fromStdString(rcr.prompt_text()) + QStringLiteral("\n");
+                                // Clear any stale hand-pick state from a previous resolution step.
+                                resolutionHandPick.reset();
                                 if (rcr.deciding_player_id() == localId && rcr.candidate_object_ids_size() > 0) {
                                     if (rcr.choice_kind() == 3) {
                                         // choice_kind 3 = target objects (CR 707.10c copy retarget):
@@ -1479,8 +1537,27 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                             pendingCopyTargetChoice.candidateOids.append(
                                                 rcr.candidate_object_ids(i));
                                         }
+                                    } else if (rcr.choice_kind() == 0 &&
+                                               rcr.candidate_server_card_ids_size() == rcr.candidate_object_ids_size()) {
+                                        // HandCards (choice_kind 0) with server card ids: use the hand-click UI.
+                                        ResolutionHandPick pick;
+                                        pick.min = static_cast<int>(rcr.min());
+                                        pick.max = static_cast<int>(rcr.max());
+                                        pick.promptText = QString::fromStdString(rcr.prompt_text());
+                                        for (int i = 0; i < rcr.candidate_object_ids_size(); ++i) {
+                                            const quint32 oid = rcr.candidate_object_ids(i);
+                                            const int scid = rcr.candidate_server_card_ids(i);
+                                            if (scid >= 0) {
+                                                pick.serverCardIdToOid.insert(scid, oid);
+                                            }
+                                        }
+                                        resolutionHandPick = std::move(pick);
+                                        emit ruledResolutionHandPickUiChanged(
+                                            resolutionHandPick->min, 0);
+                                        emit ruledCombatStateChanged();
                                     } else {
-                                        // Brainstorm, Gifts Ungiven, etc.: show the modal list dialog.
+                                        // Fallback: modal dialog for LibrarySearch, RevealedCards, or
+                                        // HandCards without server card ids.
                                         QVector<quint32> oids;
                                         for (int i = 0; i < rcr.candidate_object_ids_size(); ++i) {
                                             oids.append(rcr.candidate_object_ids(i));
@@ -2557,6 +2634,9 @@ void GameEventHandler::clearRuledSessionState()
     ruledOpeningMulliganCount = 0;
     ruledOpeningPickSeatIds.clear();
     ruledOpeningBottomSelectedIndices.clear();
+
+    // Resolution hand-pick
+    resolutionHandPick.reset();
 
     clearRuledSpellTargetArrows();
 

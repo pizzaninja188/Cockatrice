@@ -118,6 +118,7 @@ public:
     [[nodiscard]] QString pendingRuledAbilityPromptText() const;
     bool tryToggleRuledCleanupDiscard(CardItem *card);
     bool tryRuledOpeningBottomCard(CardItem *card);
+    bool tryRuledResolutionHandPickCard(CardItem *card);
     bool sendRuledCleanupDiscardBatchIfComplete();
 
     void recordLandTapUndo(int cardId, const QString &counterName, int counterId);

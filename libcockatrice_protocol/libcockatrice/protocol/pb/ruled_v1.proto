@@ -297,9 +297,14 @@ message ResolutionChoiceRequired {
   // player's client renders the choice without a card-id lookup. For HandCards (choice_kind 0)
   // these are private; Servatrice redacts candidate_* for everyone but the deciding player.
   repeated string candidate_names = 10;
+  // Parallel to candidate_object_ids: Servatrice's physical card id (Server_Card::getId()) for
+  // each candidate, injected by the relay so the client can map engine OIDs to physical hand
+  // CardItems without a separate OID→serverCardId table. Only populated for private HandCards
+  // (choice_kind 0) on the deciding player's copy; empty for other players and other kinds.
+  repeated int32 candidate_server_card_ids = 11;
   // When true, all chosen candidates must have distinct card names (Gifts Ungiven: "four cards
   // with different names"). The client enforces this before submission; the engine re-validates.
-  bool unique_names = 11;
+  bool unique_names = 12;
 }
 
 // A token entered the battlefield (CR 111). Unlike a resolved permanent spell, a token has no

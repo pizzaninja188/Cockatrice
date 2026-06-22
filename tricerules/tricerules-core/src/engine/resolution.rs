@@ -458,6 +458,7 @@ impl GameEngine {
                                                 max: 1,
                                                 ordered: false,
                                                 unique_names: false,
+                                                candidate_server_card_ids: Vec::new(),
                                             },
                                         )),
                                     });

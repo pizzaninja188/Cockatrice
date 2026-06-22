@@ -328,6 +328,11 @@ void TabGame::connectToGameEventHandler()
                             tr("Choose a target for: %1").arg(handler->pendingTriggerText()));
                         return;
                     }
+                    // Hand-pick mode (Brainstorm etc.): show the engine's prompt text directly.
+                    if (handler && handler->isResolutionHandPickActive()) {
+                        gamePromptWidget->setPromptText(handler->resolutionHandPickPromptText());
+                        return;
+                    }
                     // Refresh after the full batch has settled (state is complete here).
                     gamePromptWidget->refreshPromptLabel();
                 });
@@ -403,6 +408,14 @@ void TabGame::connectToGameEventHandler()
                         gamePromptWidget->setRuledOpeningBottomProgress(required, selected);
                     }
                 });
+        connect(game->getGameEventHandler(), &GameEventHandler::ruledResolutionHandPickUiChanged, this,
+                [this](int required, int selected) {
+                    if (gamePromptWidget) {
+                        gamePromptWidget->setResolutionHandPickMode(required, selected);
+                    }
+                });
+        connect(gamePromptWidget, &GamePromptWidget::ruledResolutionHandPickConfirmRequested,
+                game->getGameEventHandler(), &GameEventHandler::submitResolutionHandPick);
         connect(game->getGameState(), &GameState::activePhaseChanged, gamePromptWidget, &GamePromptWidget::setActivePhase);
         connect(game->getGameEventHandler(), &GameEventHandler::logActivePlayer, gamePromptWidget, [this](Player *player) {
             if (player) {

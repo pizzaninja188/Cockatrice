@@ -976,6 +976,29 @@ bool PlayerActions::tryRuledOpeningBottomCard(CardItem *card)
     return true;
 }
 
+bool PlayerActions::tryRuledResolutionHandPickCard(CardItem *card)
+{
+    if (!card || !player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+        return false;
+    }
+    if (!player->getPlayerInfo()->getLocal()) {
+        return false;
+    }
+    if (card->getZone()->getName() != ZoneNames::HAND || card->getZone()->getPlayer() != player) {
+        return false;
+    }
+    GameEventHandler *handler = player->getGame()->getGameEventHandler();
+    if (!handler || !handler->isResolutionHandPickActive()) {
+        return false;
+    }
+    const int serverCardId = card->getId();
+    if (!handler->isResolutionHandPickCardSelectable(serverCardId)) {
+        return false;
+    }
+    handler->toggleResolutionHandPickCard(serverCardId);
+    return true;
+}
+
 bool PlayerActions::tryToggleRuledCleanupDiscard(CardItem *card)
 {
     if (!card || !player->getGame()->getGameMetaInfo()->proto().ruled_game()) {

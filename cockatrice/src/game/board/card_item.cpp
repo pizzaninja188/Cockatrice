@@ -301,6 +301,35 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
                 }
             }
         }
+        // Resolution hand-pick (Brainstorm etc.): number selected cards in click order using cyan.
+        if (zone && zone->getName() == ZoneNames::HAND && owner && owner->getPlayerInfo()->getLocal() &&
+            ruledHandler->isResolutionHandPickActive()) {
+            const int scid = getId();
+            if (ruledHandler->isResolutionHandPickCardSelectable(scid)) {
+                const int clickOrder = ruledHandler->resolutionHandPickClickOrderFor(scid);
+                if (clickOrder > 0) {
+                    painter->save();
+                    painter->setRenderHint(QPainter::Antialiasing, true);
+                    QPen pen;
+                    pen.setColor(QColor(0, 200, 200)); // cyan: distinct from mulligan bottom (purple)
+                    pen.setWidth(4);
+                    painter->setPen(pen);
+                    painter->drawPath(shape());
+                    painter->restore();
+                    paintNumberEllipse(clickOrder, 14, QColor(0, 200, 200), -1, 1, painter);
+                } else {
+                    // Selectable but not yet selected: draw subtle outline
+                    painter->save();
+                    painter->setRenderHint(QPainter::Antialiasing, true);
+                    QPen pen;
+                    pen.setColor(QColor(0, 200, 200, 90));
+                    pen.setWidth(2);
+                    painter->setPen(pen);
+                    painter->drawPath(shape());
+                    painter->restore();
+                }
+            }
+        }
     }
 
     painter->restore();
@@ -977,6 +1006,12 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
             auto *playerManager = game ? game->getPlayerManager() : nullptr;
             auto *localPlayer = playerManager ? playerManager->getPlayers().value(playerManager->getLocalPlayerId()) : nullptr;
             auto *actions = localPlayer ? localPlayer->getPlayerActions() : nullptr;
+            if (stationaryLeft && owner->getPlayerInfo()->getLocal() && actions && zone &&
+                zone->getName() == ZoneNames::HAND && actions->tryRuledResolutionHandPickCard(this)) {
+                update();
+                AbstractCardItem::mouseReleaseEvent(event);
+                return;
+            }
             if (stationaryLeft && owner->getPlayerInfo()->getLocal() && actions && zone &&
                 zone->getName() == ZoneNames::HAND && actions->tryRuledOpeningBottomCard(this)) {
                 update();

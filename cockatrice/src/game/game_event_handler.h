@@ -19,6 +19,7 @@
 #include <QSet>
 #include <QVector>
 #include <QtGlobal>
+#include <optional>
 #include <libcockatrice/protocol/pb/event_leave.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_player.pb.h>
 
@@ -77,6 +78,55 @@ public:
         MulliganChoice,
         BottomLibrary,
     };
+
+    /// Tier-3 resolution hand-pick: hand cards clicked in order, numbered like mulligan bottom.
+    struct ResolutionHandPick
+    {
+        // Mapping from server card id -> engine OID for all candidate hand cards.
+        QHash<int, quint32> serverCardIdToOid;
+        // Selected server card ids in click order (first click = index 0 = placed first = bottom).
+        QList<int> selectedServerCardIds;
+        int min = 0;
+        int max = 0;
+        QString promptText;
+    };
+    [[nodiscard]] bool isResolutionHandPickActive() const
+    {
+        return resolutionHandPick.has_value();
+    }
+    [[nodiscard]] bool isResolutionHandPickCardSelectable(int serverCardId) const
+    {
+        return resolutionHandPick.has_value() &&
+               resolutionHandPick->serverCardIdToOid.contains(serverCardId);
+    }
+    [[nodiscard]] bool isResolutionHandPickCardSelected(int serverCardId) const
+    {
+        return resolutionHandPick.has_value() &&
+               resolutionHandPick->selectedServerCardIds.contains(serverCardId);
+    }
+    /// 1-based click order for the selected card (0 if not selected).
+    [[nodiscard]] int resolutionHandPickClickOrderFor(int serverCardId) const
+    {
+        if (!resolutionHandPick.has_value()) {
+            return 0;
+        }
+        const int pos = resolutionHandPick->selectedServerCardIds.indexOf(serverCardId);
+        return pos + 1;
+    }
+    [[nodiscard]] int resolutionHandPickRequired() const
+    {
+        return resolutionHandPick.has_value() ? resolutionHandPick->min : 0;
+    }
+    [[nodiscard]] int resolutionHandPickSelected() const
+    {
+        return resolutionHandPick.has_value() ? resolutionHandPick->selectedServerCardIds.size() : 0;
+    }
+    [[nodiscard]] QString resolutionHandPickPromptText() const
+    {
+        return resolutionHandPick.has_value() ? resolutionHandPick->promptText : QString{};
+    }
+    void toggleResolutionHandPickCard(int serverCardId);
+    void submitResolutionHandPick();
 
 private:
     AbstractGame *game;
@@ -210,6 +260,10 @@ private:
     QHash<quint32, QList<quint32>> committedBlockerGroups; // attackerOid → [blockerOids]
     /// Blocker engine oid → pending damage from the current attacker (local UI until OK).
     QHash<quint32, quint32> pendingCombatDamageByBlocker;
+
+    // Tier-3 resolution hand-pick state (Brainstorm, and any future HandCards resolution).
+    // nullopt when no hand-pick is in progress.
+    std::optional<ResolutionHandPick> resolutionHandPick;
 
 public:
     explicit GameEventHandler(AbstractGame *_game);
@@ -615,6 +669,9 @@ signals:
     void ruledCleanupDiscardUiChanged(int required, int selected);
     void ruledOpeningUiChanged();
     void ruledOpeningBottomUiChanged(int required, int selected);
+    /// Emitted when resolution hand-pick mode starts, progresses (card toggled), or ends.
+    /// required == 0 and selected == 0 means mode is cleared.
+    void ruledResolutionHandPickUiChanged(int required, int selected);
 
 private:
     /// ZoneView is stripped on client broadcasts; fall back to CardItem P/T when maps are empty.

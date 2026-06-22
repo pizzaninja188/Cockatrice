@@ -43,6 +43,8 @@ public slots:
     void setCleanupDiscardMode(bool active, int cardsRequired, int cardsSelected);
     /// `kind`: 0 none, 1 choose first seat, 2 mulligan choice, 3 bottom cards (hand clicks).
     void setRuledOpeningUi(int kind, QVector<int> pickSeatIds, int mulliganCount = 0);
+    /// Tier-3 hand-pick mode (Brainstorm etc.): required == 0 clears the mode.
+    void setResolutionHandPickMode(int required, int selected);
     void setRuledOpeningBottomProgress(int required, int selected);
     void setLandTapUndoAvailable(bool available);
     void setSpellCastPending(bool pending);
@@ -81,6 +83,7 @@ signals:
     void ruledOpeningBottomCancelRequested();
     void ruledOpeningBottomDoneRequested();
     void undoLandTapRequested();
+    void ruledResolutionHandPickConfirmRequested();
 
 private:
     void updatePassPriorityButtonText();
@@ -126,6 +129,11 @@ private:
     QPushButton *openingBottomCancelButton = nullptr;
     QPushButton *openingBottomDoneButton = nullptr;
     int ruledOpeningBottomSelected = 0;
+
+    // Resolution hand-pick (Brainstorm etc.)
+    QPushButton *resolutionHandPickConfirmButton = nullptr;
+    int resolutionHandPickRequired = 0;
+    int resolutionHandPickSelected = 0;
 };
 
 #endif // COCKATRICE_GAME_PROMPT_WIDGET_H

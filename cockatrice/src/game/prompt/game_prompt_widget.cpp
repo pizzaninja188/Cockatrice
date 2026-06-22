@@ -144,6 +144,13 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     connect(openingBottomDoneButton, &QPushButton::clicked,
             this, &GamePromptWidget::ruledOpeningBottomDoneRequested);
 
+    resolutionHandPickConfirmButton = new QPushButton(this);
+    resolutionHandPickConfirmButton->setObjectName("resolutionHandPickConfirmButton");
+    resolutionHandPickConfirmButton->hide();
+    connect(resolutionHandPickConfirmButton, &QPushButton::clicked, this,
+            &GamePromptWidget::ruledResolutionHandPickConfirmRequested);
+    layout->addWidget(resolutionHandPickConfirmButton);
+
     passPriorityButton = new QPushButton(this);
     passPriorityButton->setObjectName("passPriorityButton");
     connect(passPriorityButton, &QPushButton::clicked, this, &GamePromptWidget::passPriorityRequested);
@@ -216,6 +223,14 @@ void GamePromptWidget::retranslateUi()
         openingPickSeatButton1->setText(tr("You"));
         openingPickSeatButton2->setText(tr("Opponent"));
     }
+    resolutionHandPickConfirmButton->setText(tr("Confirm"));
+}
+
+void GamePromptWidget::setResolutionHandPickMode(int required, int selected)
+{
+    resolutionHandPickRequired = required;
+    resolutionHandPickSelected = selected;
+    updateCombatButtonsVisibility();
 }
 
 void GamePromptWidget::setPromptText(const QString &promptText)
@@ -455,6 +470,27 @@ void GamePromptWidget::setCombatDamageStatus(const QString &attackerName, int as
 
 void GamePromptWidget::updateCombatButtonsVisibility()
 {
+    // Resolution hand-pick (Brainstorm etc.): show only the Confirm button.
+    if (resolutionHandPickRequired > 0) {
+        passPriorityButton->setVisible(false);
+        confirmAttackersButton->setVisible(false);
+        confirmBlockersButton->setVisible(false);
+        resetBlockersButton->setVisible(false);
+        confirmCombatDamageButton->setVisible(false);
+        cancelTargetingButton->setVisible(false);
+        undoLandTapButton->setVisible(false);
+        openingPickSeatButton1->hide();
+        openingPickSeatButton2->hide();
+        openingKeepButton->hide();
+        openingMulliganButton->hide();
+        openingBottomCancelButton->hide();
+        openingBottomDoneButton->hide();
+        resolutionHandPickConfirmButton->setVisible(true);
+        resolutionHandPickConfirmButton->setEnabled(resolutionHandPickSelected >= resolutionHandPickRequired);
+        return;
+    }
+    resolutionHandPickConfirmButton->setVisible(false);
+
     if (ruledOpeningUiKind != 0) {
         passPriorityButton->setVisible(false);
         confirmAttackersButton->setVisible(false);
@@ -575,7 +611,7 @@ void GamePromptWidget::setLocalPlayerIsActive(bool isActive)
 void GamePromptWidget::refreshPromptLabel()
 {
     if (targetingModeEnabled || spellCastPending || activatedAbilityTargetPending || triggerTargetPending ||
-        copyTargetPending || cleanupDiscardMode || ruledOpeningUiKind != 0) {
+        copyTargetPending || cleanupDiscardMode || ruledOpeningUiKind != 0 || resolutionHandPickRequired > 0) {
         return;
     }
     if (currentCombatMode == CombatMode::AssignCombatDamage) {
