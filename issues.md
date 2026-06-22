@@ -28,10 +28,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Lands used to have a quick animation when tapping, but this stopped working after the engine-owned mana update and lands tap instantly. Animations also never worked for untapping.
   - Priority: Low
 
-- [ ] #7 [bug] Copying a spell with Twincast causes two copies in the engine, but the copy doesn't show up on the stack visually
-  - Details: After resolving Twincast, only a single copy of the spell remains on the stack. There should be two of the same spell on the stack after resolution, and the copy should have an annotation that says "Copy".
-  - Priority: Medium
-
 - [ ] #8 [bug] Copying a spell that targets with Twincast uses same targets instead of having Twincast's controller choose new ones
   - Details: After casting Twincast on a Lightning Bolt, both bolts will damage the same target. There should be a targeting prompt for the Twincast player to choose their own targets for the copy
   - Priority: Medium
