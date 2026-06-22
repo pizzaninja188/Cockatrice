@@ -219,40 +219,20 @@ impl GameEngine {
                 battlefield_haste: p
                     .battlefield
                     .iter()
-                    .map(|&oid| {
-                        self.state
-                            .objects
-                            .get(&oid)
-                            .map(|o| o.has_keyword(self.registry, tricerules_cards::Keyword::Haste))
-                            .unwrap_or(false)
-                    })
+                    .map(|&oid| self.effective_has_keyword(oid, tricerules_cards::Keyword::Haste))
                     .collect(),
                 // CR 702.19: clients use this to enable trample damage assignment UI.
                 battlefield_trample: p
                     .battlefield
                     .iter()
-                    .map(|&oid| {
-                        self.state
-                            .objects
-                            .get(&oid)
-                            .map(|o| {
-                                o.has_keyword(self.registry, tricerules_cards::Keyword::Trample)
-                            })
-                            .unwrap_or(false)
-                    })
+                    .map(|&oid| self.effective_has_keyword(oid, tricerules_cards::Keyword::Trample))
                     .collect(),
                 // CR 702.7: informational flag for the client UI (independent of pending state).
                 battlefield_first_strike: p
                     .battlefield
                     .iter()
                     .map(|&oid| {
-                        self.state
-                            .objects
-                            .get(&oid)
-                            .map(|o| {
-                                o.has_keyword(self.registry, tricerules_cards::Keyword::FirstStrike)
-                            })
-                            .unwrap_or(false)
+                        self.effective_has_keyword(oid, tricerules_cards::Keyword::FirstStrike)
                     })
                     .collect(),
                 // CR 702.4: informational flag for the client UI.
@@ -260,16 +240,7 @@ impl GameEngine {
                     .battlefield
                     .iter()
                     .map(|&oid| {
-                        self.state
-                            .objects
-                            .get(&oid)
-                            .map(|o| {
-                                o.has_keyword(
-                                    self.registry,
-                                    tricerules_cards::Keyword::DoubleStrike,
-                                )
-                            })
-                            .unwrap_or(false)
+                        self.effective_has_keyword(oid, tricerules_cards::Keyword::DoubleStrike)
                     })
                     .collect(),
                 // CR 510.4: true while combat is set up with at least one attacker or blocker
@@ -280,7 +251,7 @@ impl GameEngine {
                     .as_ref()
                     .map(|c| {
                         !c.first_strike_damage_done
-                            && combat::combat_needs_first_strike_step(&self.state, self.registry, c)
+                            && combat::combat_needs_first_strike_step(self, c)
                     })
                     .unwrap_or(false),
                 // Pipe-delimited activated ability texts per battlefield permanent (empty if none).

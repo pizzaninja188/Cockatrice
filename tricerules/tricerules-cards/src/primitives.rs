@@ -335,6 +335,15 @@ pub enum SpellEffectKind {
         power: i32,
         toughness: i32,
     },
+    /// CR 613 layer 6: grant one or more keyword abilities to every creature matching `filter`
+    /// until end of turn. Untargeted — the one-shot keyword-grant sibling of
+    /// [`StaticAbilityDef::AnthemKeyword`]. Covers Overrun (Trample to all your creatures) and
+    /// Trumpet Blast (First Strike to attacking creatures you control until EOT).
+    GrantKeywordsAll {
+        #[serde(default)]
+        filter: AnthemFilter,
+        keywords: Vec<Keyword>,
+    },
     GainLife {
         amount: Amount,
     },
@@ -703,7 +712,11 @@ pub enum ContinuousEffectKind {
         delta_power: i32,
         delta_toughness: i32,
     },
-    // Future: Layer6AddKeyword(Keyword), Layer7bSetPt { power: i32, toughness: i32 }, …
+    /// CR 613 layer 6 — grant a keyword ability to affected permanents. Covers lords
+    /// (Goblin Chieftain → Haste), pump sorceries (Overrun → Trample), and any
+    /// "creatures you control gain [keyword] until end of turn" effect.
+    Layer6AddKeyword(Keyword),
+    // Future: Layer7bSetPt { power: i32, toughness: i32 }, …
 }
 
 // ---------------------------------------------------------------------------
@@ -749,13 +762,20 @@ pub struct AnthemFilter {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StaticAbilityDef {
     /// CR 613.4 layer 7c: every creature matching `filter` gets +`delta_power`/+`delta_toughness`
-    /// (negative values for a debuff anthem). Anthems (Glorious Anthem) and lords (Crusade, Bad
-    /// Moon). Keyword-granting anthems (layer 6) are a separate future variant.
+    /// (negative values for a debuff anthem). Anthems (Glorious Anthem) and lords (Crusade, Bad Moon).
     AnthemPt {
         #[serde(default)]
         filter: AnthemFilter,
         delta_power: i32,
         delta_toughness: i32,
+    },
+    /// CR 613 layer 6: every creature matching `filter` gains `keyword` while the source is on the
+    /// battlefield. Covers lords (Goblin Chieftain, Captain of the Watch) and keyword-granting
+    /// enchantments. Pairs with `AnthemPt` on the same card for combined "+1/+1 and haste" effects.
+    AnthemKeyword {
+        #[serde(default)]
+        filter: AnthemFilter,
+        keyword: Keyword,
     },
 }
 

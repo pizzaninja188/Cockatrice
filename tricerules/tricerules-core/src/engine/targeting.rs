@@ -418,6 +418,7 @@ pub(super) fn validate_effect_targets(
         | SpellEffectKind::DestroyAll { .. }
         | SpellEffectKind::DamageAll { .. }
         | SpellEffectKind::PumpAll { .. }
+        | SpellEffectKind::GrantKeywordsAll { .. }
         | SpellEffectKind::CreateTokens { .. }
         // CR 605.1a: a mana ability is untargeted by definition.
         | SpellEffectKind::ProduceMana { .. }

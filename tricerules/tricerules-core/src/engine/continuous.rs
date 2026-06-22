@@ -80,6 +80,15 @@ impl GameEngine {
                         timestamp,
                     });
                 }
+                StaticAbilityDef::AnthemKeyword { filter, keyword } => {
+                    self.state.continuous_effects.push(ContinuousEffect {
+                        source_id: Some(object_id),
+                        affected: resolve_anthem_scope(&filter, controller, object_id),
+                        kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
+                        duration: EffectDuration::WhileSourceOnBattlefield,
+                        timestamp,
+                    });
+                }
             }
         }
     }
@@ -97,6 +106,7 @@ impl GameEngine {
             .filter(|e| self.effect_affects(e, oid))
             .map(|e| match &e.kind {
                 ContinuousEffectKind::PtModify { delta_power, .. } => *delta_power,
+                ContinuousEffectKind::Layer6AddKeyword(_) => 0,
             })
             .sum();
         // Layer 7d: counters apply after all layer-7c modifying effects (CR 613.4d).
@@ -117,9 +127,26 @@ impl GameEngine {
                 ContinuousEffectKind::PtModify {
                     delta_toughness, ..
                 } => *delta_toughness,
+                ContinuousEffectKind::Layer6AddKeyword(_) => 0,
             })
             .sum();
         Some((base + delta + obj.counter_pt_delta()).max(0) as u32)
+    }
+
+    /// Effective keyword check: true if `oid` has `kw` either from its card definition (static)
+    /// or from an active `Layer6AddKeyword` continuous effect (CR 613 layer 6). Use this instead
+    /// of `GameObject::has_keyword` wherever granted keywords must be respected (combat legality,
+    /// SBA checks, damage resolution).
+    pub fn effective_has_keyword(&self, oid: ObjectId, kw: Keyword) -> bool {
+        if let Some(obj) = self.state.objects.get(&oid) {
+            if obj.has_keyword(self.registry, kw) {
+                return true;
+            }
+        }
+        self.state.continuous_effects.iter().any(|e| {
+            matches!(&e.kind, ContinuousEffectKind::Layer6AddKeyword(k) if *k == kw)
+                && self.effect_affects(e, oid)
+        })
     }
 
     /// CR 514.2: drain all UntilEndOfTurn continuous effects. Called from
@@ -181,10 +208,10 @@ impl GameEngine {
             let Some(eff_t) = self.effective_toughness(id) else {
                 continue;
             };
+            let indestructible = self.effective_has_keyword(id, Keyword::Indestructible);
             let Some(o) = self.state.objects.get(&id) else {
                 continue;
             };
-            let indestructible = o.has_keyword(self.registry, Keyword::Indestructible);
             // CR 704.5f: toughness 0 — still dies even with indestructible.
             if eff_t == 0 {
                 to_destroy.push(id);
