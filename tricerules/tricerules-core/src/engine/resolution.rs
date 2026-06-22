@@ -393,6 +393,9 @@ impl GameEngine {
                                         ability_annotation: "(copy)".to_string(),
                                         card_id: src.card_id.clone(),
                                         is_copy: true,
+                                        // Carry the source OID so the client can inherit the original
+                                        // spell's Oracle printing (set/provider) for the copy visual.
+                                        copy_source_object_id: src.id,
                                     })),
                                 });
                                 events.push(ev_log(format!(

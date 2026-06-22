@@ -369,6 +369,10 @@ message StackPushed {
   // object. Like an ability it has no physical card on the shared stack; the client shows it via
   // card_id + the "(copy)" ability_annotation and expects no permanent/graveyard card on resolve.
   bool is_copy = 6;
+  // For copies (is_copy == true): the object_id of the original stack item being copied. The
+  // client uses this to inherit the original spell's Oracle printing (set/provider) so the copy
+  // displays the same card art instead of defaulting to the newest printing.
+  uint32 copy_source_object_id = 7;
 }
 
 message ActivateAbility {

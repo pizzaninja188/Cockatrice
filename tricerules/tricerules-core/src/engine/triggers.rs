@@ -313,6 +313,7 @@ impl GameEngine {
                     ability_annotation: ability_text.clone(),
                     card_id: String::new(),
                     is_copy: false,
+                    copy_source_object_id: 0,
                 })),
             });
             events.push(ev_log(format!("Triggered: {card_name} — {ability_text}")));

@@ -1366,10 +1366,33 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                     } else if (sp.is_copy()) {
                                         // CR 707.10: a spell copy (Twincast/Fork) has no physical card;
                                         // create a synthetic stack card so the copy is visible.
+                                        // Inherit the original spell's printing so the copy shows the
+                                        // same card art rather than defaulting to the newest printing.
+                                        QString copySetName;
+                                        const quint32 srcOid = sp.copy_source_object_id();
+                                        if (srcOid != 0) {
+                                            TabGame *tab = game->getTab();
+                                            if (CardItem *srcCard = resolveStackCardItemByEngineOid(
+                                                    game, tab, this, game->getPlayerManager(), srcOid)) {
+                                                copySetName = srcCard->getCardRef().providerId;
+                                            }
+                                        }
                                         createSyntheticAbilityStackCard(
                                             sp.object_id(),
                                             QString::fromStdString(sp.description()),
-                                            -1);
+                                            -1,
+                                            copySetName);
+                                        // The StackResolved for the copy-maker (Twincast/Fork)
+                                        // uses counterspell cleanup logic that removes targets from
+                                        // ruledStackOidOrder — but the source spell was NOT removed
+                                        // from the engine stack, so restore it here.
+                                        const quint32 copySrcOid =
+                                            static_cast<quint32>(sp.copy_source_object_id());
+                                        if (copySrcOid != 0
+                                                && !ruledStackOidOrder.contains(copySrcOid)
+                                                && ruledStackTargetsByStackOid.contains(copySrcOid)) {
+                                            ruledStackOidOrder.insert(1, copySrcOid);
+                                        }
                                     }
                                 }
                                 ruledStackTrackingDirty = true;
@@ -2489,7 +2512,10 @@ void GameEventHandler::clearRuledSessionState()
     emit ruledSessionReset();
 }
 
-void GameEventHandler::createSyntheticAbilityStackCard(quint32 virtualOid, const QString &cardName, int controllerPlayerId)
+void GameEventHandler::createSyntheticAbilityStackCard(quint32 virtualOid,
+                                                        const QString &cardName,
+                                                        int controllerPlayerId,
+                                                        const QString &setName)
 {
     (void)controllerPlayerId;
     // Idempotent: StackPushed may be rebroadcast; a second card for the same OID would corrupt the zone.
@@ -2515,7 +2541,7 @@ void GameEventHandler::createSyntheticAbilityStackCard(quint32 virtualOid, const
     }
     // Assign a fake card ID well outside the range Servatrice assigns (small positive ints).
     const int fakeId = static_cast<int>(0x70000000u | (virtualOid & 0x0FFFFFFFu));
-    CardRef ref{cardName, QString()};
+    CardRef ref{cardName, setName};
     auto *card = new CardItem(zonePlayer, nullptr, ref, fakeId);
     // Register the OID mapping so card_item.cpp paint() can show the italic ability annotation.
     // BattlefieldObjectMap clears ownerCardIdToEngineOid on every priority change, so we keep
