@@ -28,10 +28,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Lands used to have a quick animation when tapping, but this stopped working after the engine-owned mana update and lands tap instantly. Animations also never worked for untapping.
   - Priority: Low
 
-- [ ] #8 [bug] Copying a spell that targets with Twincast uses same targets instead of having Twincast's controller choose new ones
-  - Details: After casting Twincast on a Lightning Bolt, both bolts will damage the same target. There should be a targeting prompt for the Twincast player to choose their own targets for the copy
-  - Priority: Medium
-
 - [ ] #9 [feature] Dual lands
   - Details: Right now, basic lands are the only implemented lands. I want to implement the 10 original dual lands. These lands should have the context menu open on left or right click to choose which mana ability to activate.
   - Priority: Medium
