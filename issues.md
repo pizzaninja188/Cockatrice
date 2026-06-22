@@ -20,10 +20,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
 
 ## Open
 
-- [ ] #4 [feature] Using Cockatrice UI elements when possible
-  - Details: For Brainstorm, when choosing cards to put on top, a popup shows up with a list of cards in hand. This can be improved visually by just having the user click cards in hand and numbering them like when putting cards on top after mulliganing. Also, it has the first chosen go to the top, which is the opposite of what should happen intuitively. Similarly, Gifts Ungiven has the player searching for cards in library choose from a similar text list, when Cockatrice already has search library functionality. The player choosing cards to go to the graveyard could also get a custom zone view that shows the card images instead of just text (like what we did with the stack). I want this train of thought to be used for other custom resolution + custom zone cards in the future as well.
-  - Priority: Low
-
 - [ ] #5 [bug] Tap/Untap animations not working
   - Details: Lands used to have a quick animation when tapping, but this stopped working after the engine-owned mana update and lands tap instantly. Animations also never worked for untapping.
   - Priority: Low
@@ -34,6 +30,10 @@ it records progress in `AUTOMATION_STATUS.md` instead.
 
 - [ ] #10 [feature] Auras
   - Details: Implement basic auras. Choose some effects that already exist from the engine and implement auras that use those effects. Auras should stack underneath the permanent they are enchanting in the client, and should die when the permanent is removed.
+  - Priority: Medium
+
+- [ ] #11 [feature] Gifts Ungiven UI improvement
+  - Details: Brainstorm was recently updated to have the player click cards in hand to put them to top instead of the text popup. Similarly, I want Gifts Ungiven to also get a UI overhaul. When tutoring cards, the player should choose cards from the library search window, which already exists in non ruled games. For when the other player chooses cards to go to the graveyard, I want that player to get a custom zone popup, similar to what the stack popup looks like, where they choose the cards instead of the text list.
   - Priority: Medium
 
 ---
