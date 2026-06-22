@@ -271,6 +271,7 @@ impl GameEngine {
                     min: interrupt.min,
                     max: interrupt.max,
                     ordered: interrupt.ordered,
+                    unique_names: interrupt.unique_names,
                 },
             )),
         });
