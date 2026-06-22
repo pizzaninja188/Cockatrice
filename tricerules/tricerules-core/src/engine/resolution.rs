@@ -779,6 +779,77 @@ impl GameEngine {
                 // resolved immediately in `resolve_mana_ability` and can never reach this generic
                 // stack-resolution path. Defensive no-op (registry validation also forbids it on
                 // spells); producing mana here would be off-stack-timing and is intentionally not done.
+                SpellEffectKind::ReturnFromGraveyard {
+                    filter,
+                    destination,
+                } => {
+                    if let Some(&tid) = targets.first() {
+                        let tgt = object_display_name(&self.state, self.registry, tid);
+                        let is_legal = {
+                            use tricerules_cards::primitives::{GraveyardCardType, GraveyardOwner};
+                            let obj = self.state.objects.get(&tid);
+                            let in_graveyard = obj.is_some_and(|o| o.zone == Zone::Graveyard);
+                            let owner_ok = obj.is_some_and(|o| match filter.owner {
+                                GraveyardOwner::Controller => o.owner == controller,
+                                GraveyardOwner::AnyPlayer => true,
+                            });
+                            let type_ok = if let Some(ct) = filter.card_type {
+                                obj.and_then(|o| self.registry.get(&o.card_id))
+                                    .is_some_and(|def| match ct {
+                                        GraveyardCardType::Creature => {
+                                            def.is_creature
+                                                || def.faces.iter().any(|f| f.is_creature)
+                                        }
+                                    })
+                            } else {
+                                true
+                            };
+                            in_graveyard && owner_ok && type_ok
+                        };
+                        if !is_legal {
+                            events.push(ev_log(format!(
+                                "{spell_label} fizzles: {tgt} is no longer a legal graveyard target."
+                            )));
+                        } else {
+                            let owner = self.state.objects.get(&tid).map(|o| o.owner);
+                            use tricerules_cards::primitives::GraveyardDestination;
+                            let dest_zone = match destination {
+                                GraveyardDestination::Hand => Zone::Hand,
+                                GraveyardDestination::Battlefield => Zone::Battlefield,
+                            };
+                            let dest_proto = match destination {
+                                GraveyardDestination::Hand => {
+                                    rv1::permanent_moved::Destination::Hand
+                                }
+                                GraveyardDestination::Battlefield => {
+                                    rv1::permanent_moved::Destination::Battlefield
+                                }
+                            };
+                            move_object_to_zone(&mut self.state, tid, dest_zone)?;
+                            let dest_name = match destination {
+                                GraveyardDestination::Hand => "hand",
+                                GraveyardDestination::Battlefield => "battlefield",
+                            };
+                            events.push(ev_log(format!(
+                                "{spell_label} returns {tgt} from graveyard to {dest_name}."
+                            )));
+                            if let Some(owner_id) = owner {
+                                events.push(permanent_moved_event(
+                                    &self.state,
+                                    tid,
+                                    owner_id,
+                                    dest_proto,
+                                ));
+                            }
+                            if dest_zone == Zone::Battlefield {
+                                self.fire_triggers(
+                                    GameEvent::EntersBattlefield { object_id: tid },
+                                    events,
+                                );
+                            }
+                        }
+                    }
+                }
                 SpellEffectKind::ProduceMana { .. } => {}
                 SpellEffectKind::None => {}
             }

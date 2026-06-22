@@ -1262,25 +1262,34 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
     const QString zoneName = card->getZone()->getName();
     const bool isOnBattlefield = (zoneName == ZoneNames::TABLE);
     const bool isOnStack = (zoneName == ZoneNames::STACK);
-    if (!isOnBattlefield && !isOnStack) {
+    const bool isOnGraveyard = (zoneName == ZoneNames::GRAVE);
+    if (!isOnBattlefield && !isOnStack && !isOnGraveyard) {
         player->getGame()->getGameEventHandler()->emitLocalRuledLog(
             tr("Select a target on the battlefield (or stack), or press Cancel."));
         return true;
     }
 
     auto *handler = player->getGame()->getGameEventHandler();
-    const int ownerPlayerId = card && card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
-    const quint32 targetOid = handler ? handler->engineOidForCardId(ownerPlayerId, card->getId()) : 0;
+    const int slot = pendingRuledSpellCast.handIndex;
+    const int face = pendingRuledSpellCast.faceIndex;
+
+    quint32 targetOid = 0;
+    if (isOnGraveyard) {
+        // Graveyard cards are tracked via the GraveyardObjectMap (not the battlefield OID map).
+        targetOid = handler ? handler->graveyardEngineOidForServerCardId(card->getId()) : 0;
+    } else {
+        const int ownerPlayerId = card && card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
+        targetOid = handler ? handler->engineOidForCardId(ownerPlayerId, card->getId()) : 0;
+    }
     if (targetOid == 0) {
         player->getGame()->getGameEventHandler()->emitLocalRuledLog(
             tr("That target is not selectable yet. Select another target or cancel %1.")
                 .arg(pendingRuledSpellCast.cardName));
         return true;
     }
-    const int slot = pendingRuledSpellCast.handIndex;
-    const int face = pendingRuledSpellCast.faceIndex;
-    const bool valid = isOnBattlefield ? handler->isValidSpellTarget(slot, face, targetOid)
-                                       : handler->isValidSpellStackTarget(slot, face, targetOid);
+    const bool valid = isOnBattlefield  ? handler->isValidSpellTarget(slot, face, targetOid)
+                       : isOnGraveyard  ? handler->isValidSpellGraveyardTarget(slot, face, targetOid)
+                                        : handler->isValidSpellStackTarget(slot, face, targetOid);
     if (!valid) {
         player->getGame()->getGameEventHandler()->emitLocalRuledLog(
             tr("That is not a legal target for %1.").arg(pendingRuledSpellCast.cardName));
@@ -3573,11 +3582,17 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
             return false;
         }
         const QString zoneName = card->getZone()->getName();
-        if (zoneName != ZoneNames::TABLE && zoneName != ZoneNames::STACK) {
+        const bool triggerIsGraveyard = (zoneName == ZoneNames::GRAVE);
+        if (zoneName != ZoneNames::TABLE && zoneName != ZoneNames::STACK && !triggerIsGraveyard) {
             return false;
         }
-        const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
-        const quint32 targetOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
+        quint32 targetOid = 0;
+        if (triggerIsGraveyard) {
+            targetOid = handler->graveyardEngineOidForServerCardId(card->getId());
+        } else {
+            const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
+            targetOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
+        }
         if (targetOid == 0) {
             return false;
         }

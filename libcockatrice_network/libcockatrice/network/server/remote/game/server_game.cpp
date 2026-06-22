@@ -1379,6 +1379,15 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
                 }
             }
         }
+        // ReturnFromGraveyard: the card may be in the graveyard zone, not in the battlefield/hand
+        // OID map. Try the graveyard map maintained by Server_Player.
+        if (!card) {
+            if (auto *sp = qobject_cast<Server_Player *>(owner)) {
+                if (Server_Card *c = sp->findGraveyardCardByEngineOid(oid)) {
+                    card = c;
+                }
+            }
+        }
         if (!card) {
             // A spell leaving the stack (e.g. countered) physically lives on the single shared
             // canonical stack zone (owned by the lowest player-id), not in this owner's own zones,
@@ -1443,6 +1452,9 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
                 break;
             case ruled::v1::PermanentMoved::DESTINATION_EXILE:
                 destZone = ZoneNames::EXILE;
+                break;
+            case ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD:
+                destZone = ZoneNames::TABLE;
                 break;
             case ruled::v1::PermanentMoved::DESTINATION_GRAVEYARD:
             default:
@@ -1855,6 +1867,28 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
             }
         }
         *toSend.mutable_batch()->add_events() = handEv;
+    }
+    // Graveyard OID map: lets the client map engine OIDs in valid_graveyard_ids to
+    // server card ids so graveyard cards can be clicked as spell targets.
+    {
+        ruled::v1::RuledEvent graveyardEv;
+        auto *gm = graveyardEv.mutable_graveyard_object_map();
+        for (Server_AbstractPlayer *ab : getPlayers().values()) {
+            if (!ab) {
+                continue;
+            }
+            auto *pl = static_cast<Server_Player *>(ab);
+            const QHash<quint32, int> gravOidMap = pl->getGraveyardEngineOidToServerCardId();
+            for (auto it = gravOidMap.constBegin(); it != gravOidMap.constEnd(); ++it) {
+                auto *entry = gm->add_entries();
+                entry->set_player_id(pl->getPlayerId());
+                entry->set_engine_object_id(it.key());
+                entry->set_server_card_id(it.value());
+            }
+        }
+        if (gm->entries_size() > 0) {
+            *toSend.mutable_batch()->add_events() = graveyardEv;
+        }
     }
     const ruled::v1::RuledEventBatch &batch = toSend.batch();
     for (auto *participant : participants) {

@@ -176,6 +176,9 @@ message SpellTargets {
   bool can_target_self = 3;
   // Whether each opponent is a legal player target.
   bool can_target_opponent = 4;
+  // Graveyard card OIDs valid for ReturnFromGraveyard (and future graveyard-targeting effects).
+  // The relay maps these engine OIDs to server card ids via the graveyard OID map.
+  repeated uint32 valid_graveyard_ids = 5;
 }
 
 message LegalActions {
@@ -250,6 +253,9 @@ message RuledEvent {
     // produced mana, a cost was paid, or the pool emptied on a step/phase change. The relay
     // mirrors it onto that player's ruled mana-pool counters (Event_SetCounter).
     ManaPoolUpdated mana_pool_updated = 24;
+    // Server-built graveyard OID map (parallel to battlefield_object_map) so clients can
+    // resolve ReturnFromGraveyard valid_graveyard_ids to physical CardItems.
+    GraveyardObjectMap graveyard_object_map = 25;
   }
 }
 
@@ -491,6 +497,11 @@ message RuledPerPlayerView {
   // (e.g. "1 +1/+1 counter(s)"), one line per counter kind. Empty string for permanents with
   // no counters. Clients overlay this on the card annotation alongside ruled damage.
   repeated string battlefield_counters_annotation = 22;
+  // Engine ObjectIds for cards in this player's graveyard, in graveyard order.
+  // Parallel to the graveyard content the relay already tracks via PermanentMoved.
+  // Used by the relay and client to build the graveyard OID→server-card-id map so
+  // ReturnFromGraveyard targets can be resolved client-side.
+  repeated uint32 graveyard_object_id = 23;
 }
 
 message ZoneViewSync {
@@ -521,6 +532,8 @@ message PermanentMoved {
     DESTINATION_HAND = 2;
     DESTINATION_LIBRARY = 3;
     DESTINATION_EXILE = 4;
+    // Used by ReturnFromGraveyard with GraveyardDestination::Battlefield (reanimation).
+    DESTINATION_BATTLEFIELD = 5;
   }
   Destination destination = 3;
   // tricerules card id (lowercase_underscore). Lets servers resolve cards that
@@ -533,6 +546,20 @@ message LifeChanged {
   int32 player_id = 1;
   int32 new_total = 2;
   int32 delta = 3;
+}
+
+// Server-built mapping so clients can map graveyard CardItems to engine ObjectIds for
+// ReturnFromGraveyard targeting. Sent alongside BattlefieldObjectMap whenever graveyard
+// membership changes. Only engine_object_id and server_card_id are needed here (player_id
+// is implicit from the zone the card is in on the client).
+message GraveyardObjectMap {
+  message Entry {
+    int32 player_id = 1;
+    uint32 engine_object_id = 2;
+    // Server_Card.id for the graveyard card; -1 if unknown.
+    int32 server_card_id = 3;
+  }
+  repeated Entry entries = 1;
 }
 
 // Server-built mapping (not engine-emitted) so clients can map a CardItem (whose

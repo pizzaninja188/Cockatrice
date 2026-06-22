@@ -368,6 +368,9 @@ impl GameEngine {
                             .unwrap_or_default()
                     })
                     .collect(),
+                // Engine ObjectIds for each card in this player's graveyard (in graveyard order).
+                // Relay uses these to build the graveyard OID→server-card-id map for targeting.
+                graveyard_object_id: p.graveyard.clone(),
             })
             .collect();
         RuledEvent {

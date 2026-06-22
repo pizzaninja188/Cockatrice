@@ -1674,6 +1674,14 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                         static_cast<int>(ent.hand_index()));
                                 }
                             }
+                            if (e.has_graveyard_object_map()) {
+                                ruledGraveyardEngineOidToServerCardId.clear();
+                                for (int gi = 0; gi < e.graveyard_object_map().entries_size(); ++gi) {
+                                    const auto &ent = e.graveyard_object_map().entries(gi);
+                                    ruledGraveyardEngineOidToServerCardId.insert(
+                                        static_cast<quint32>(ent.engine_object_id()), ent.server_card_id());
+                                }
+                            }
                             if (e.has_zone_view()) {
                                 engineOidMarkedDamage.clear();
                                 engineOidBattlefieldPower.clear();
@@ -1857,6 +1865,9 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 }
                                 for (const quint32 oid : src.valid_stack_ids()) {
                                     data.validStackIds.insert(oid);
+                                }
+                                for (const quint32 oid : src.valid_graveyard_ids()) {
+                                    data.validGraveyardIds.insert(oid);
                                 }
                                 data.canTargetSelf = src.can_target_self();
                                 data.canTargetOpponent = src.can_target_opponent();
