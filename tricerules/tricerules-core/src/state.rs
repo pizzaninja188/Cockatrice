@@ -208,6 +208,9 @@ pub struct PendingResolution {
     /// Mirror of [`ResolutionInterrupt::unique_names`]: the engine rejects submissions where two
     /// chosen object ids map to the same card name (Gifts Ungiven: "different names").
     pub unique_names: bool,
+    /// For `__copy_targets` only: the object id of the spell being copied, so `StackPushed` can
+    /// carry `copy_source_object_id` for the client's printing-inheritance logic.
+    pub copy_source_object_id: ObjectId,
 }
 
 #[derive(Debug, Clone)]

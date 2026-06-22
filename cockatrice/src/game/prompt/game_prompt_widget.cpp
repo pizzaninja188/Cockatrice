@@ -407,6 +407,16 @@ void GamePromptWidget::setTriggerTargetPending(bool pending)
     refreshPromptLabel();
 }
 
+void GamePromptWidget::setCopyTargetPending(bool pending)
+{
+    if (copyTargetPending == pending) {
+        return;
+    }
+    copyTargetPending = pending;
+    updateCombatButtonsVisibility();
+    refreshPromptLabel();
+}
+
 void GamePromptWidget::setActivatedAbilityTargetPending(bool pending, const QString &abilityText)
 {
     if (activatedAbilityTargetPending == pending) {
@@ -490,7 +500,7 @@ void GamePromptWidget::updateCombatButtonsVisibility()
         undoLandTapButton->setVisible(false);
         return;
     }
-    if (triggerTargetPending) {
+    if (triggerTargetPending || copyTargetPending) {
         passPriorityButton->setVisible(false);
         confirmAttackersButton->setVisible(false);
         confirmBlockersButton->setVisible(false);
@@ -564,7 +574,8 @@ void GamePromptWidget::setLocalPlayerIsActive(bool isActive)
 
 void GamePromptWidget::refreshPromptLabel()
 {
-    if (targetingModeEnabled || spellCastPending || activatedAbilityTargetPending || triggerTargetPending || cleanupDiscardMode || ruledOpeningUiKind != 0) {
+    if (targetingModeEnabled || spellCastPending || activatedAbilityTargetPending || triggerTargetPending ||
+        copyTargetPending || cleanupDiscardMode || ruledOpeningUiKind != 0) {
         return;
     }
     if (currentCombatMode == CombatMode::AssignCombatDamage) {

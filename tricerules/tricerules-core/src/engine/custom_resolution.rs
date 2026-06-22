@@ -186,6 +186,11 @@ impl GameEngine {
             }
         }
 
+        // CR 707.10c: copy target choice is not a tier-3 CardEffect; handle it directly.
+        if pending.custom_key == "__copy_targets" {
+            return self.finish_copy_target_choice(pending, chosen);
+        }
+
         let effect = match custom::lookup(&pending.custom_key) {
             Some(e) => e,
             None => {
@@ -223,6 +228,61 @@ impl GameEngine {
             }
             ev.push(ev_priority_changed(self));
         }
+        Ok(finish_with_events(self, ev))
+    }
+
+    /// CR 707.10c: the copy's controller has chosen new targets for the copy. Push the copy to
+    /// the stack with the chosen targets and hand priority back to the active player.
+    fn finish_copy_target_choice(
+        &mut self,
+        pending: PendingResolution,
+        chosen: &[u32],
+    ) -> Result<RuledEventBatch, EngineError> {
+        let copy_id = pending.item.id;
+        let card_id = pending.item.card_id.clone();
+        let face_index = pending.item.face_index;
+        let controller = pending.item.controller;
+        let copy_source_object_id = pending.copy_source_object_id;
+
+        let mut copy_item = pending.item;
+        copy_item.targets = chosen.to_vec();
+
+        let copied_name = self
+            .registry
+            .get(&card_id)
+            .and_then(|d| d.face(face_index))
+            .map(|f| f.name.to_string())
+            .unwrap_or_else(|| card_id.clone());
+
+        self.state.stack.push(copy_item);
+        self.state.passes_since_stack_change = 0;
+
+        let tgt_log = format_spell_targets_log(&self.state, self.registry, chosen);
+        let mut ev = vec![
+            rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
+                    object_id: copy_id,
+                    description: copied_name.clone(),
+                    targets: chosen
+                        .iter()
+                        .map(|&o| rv1::TargetRef { object_id: o })
+                        .collect(),
+                    ability_annotation: "(copy)".to_string(),
+                    card_id: card_id.clone(),
+                    is_copy: true,
+                    copy_source_object_id,
+                })),
+            },
+            ev_log(format!(
+                "{copied_name} copy targeting{tgt_log} (P{controller})"
+            )),
+        ];
+
+        if let Some(i) = self.state.player_idx(self.state.active_player_id()) {
+            self.state.priority_idx = i;
+        }
+        ev.push(ev_priority_changed(self));
+
         Ok(finish_with_events(self, ev))
     }
 
@@ -290,6 +350,7 @@ impl GameEngine {
             unique_names: interrupt.unique_names,
             prompt: interrupt.prompt,
             choice_kind: interrupt.choice_kind.as_proto(),
+            copy_source_object_id: 0,
         });
     }
 }
