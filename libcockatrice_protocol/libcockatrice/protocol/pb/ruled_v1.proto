@@ -491,6 +491,11 @@ message RuledPerPlayerView {
   // (e.g. "1 +1/+1 counter(s)"), one line per counter kind. Empty string for permanents with
   // no counters. Clients overlay this on the card annotation alongside ruled damage.
   repeated string battlefield_counters_annotation = 22;
+  // Parallel array to `battlefield`: for Aura/Equipment permanents, the ObjectId of the
+  // permanent they are currently attached to, or 0 if unattached. Used by the C++ relay
+  // to issue Event_AttachCard after every zone-view sync so clients stack attached permanents
+  // visually. Non-aura / non-equipment permanents always carry 0.
+  repeated uint32 battlefield_attached_to_oid = 23;
 }
 
 message ZoneViewSync {

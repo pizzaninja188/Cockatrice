@@ -26,6 +26,7 @@
 #include "../server_response_containers.h"
 #include "../server_room.h"
 #include "libcockatrice/protocol/pb/command_move_card.pb.h"
+#include <libcockatrice/protocol/pb/event_attach_card.pb.h>
 #include "server_abstract_player.h"
 #include "server_arrow.h"
 #include "server_card.h"
@@ -1601,6 +1602,70 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
     }
     if (result.tapStateEventsQueued) {
         tapSyncGes.sendToGame(this);
+    }
+
+    // Attachment-restore pass: for each zone_view event, emit Event_AttachCard for every
+    // permanent whose battlefield_attached_to_oid[i] != 0 so clients stack the card visually
+    // under its host. Covers both Equipment (equip) and Auras. Runs after applyRuledEngineZoneView
+    // so engine OIDs are up to date in the player's OID->ServerCard map.
+    {
+        GameEventStorage attachGes;
+        bool attachGesHasEvents = false;
+        for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
+            const auto &e = resp.batch().events(ei);
+            if (!e.has_zone_view()) {
+                continue;
+            }
+            for (const auto &p : e.zone_view().per_player()) {
+                Server_AbstractPlayer *ab = getPlayer(p.player_id());
+                if (!ab) {
+                    continue;
+                }
+                auto *ownerPlayer = static_cast<Server_Player *>(ab);
+                const int n = p.battlefield_object_id_size();
+                for (int i = 0; i < n && i < p.battlefield_attached_to_oid_size(); ++i) {
+                    const quint32 attachedOid = static_cast<quint32>(p.battlefield_object_id(i));
+                    const quint32 targetOid = static_cast<quint32>(p.battlefield_attached_to_oid(i));
+                    if (targetOid == 0) {
+                        continue;
+                    }
+                    Server_Card *attachedCard = ownerPlayer->findCardByEngineOid(attachedOid);
+                    if (!attachedCard) {
+                        continue;
+                    }
+                    // Target creature may belong to any player (equipment attaches to creatures
+                    // you control; for now both are the same player, but be generic).
+                    Server_Card *targetCard = nullptr;
+                    for (Server_AbstractPlayer *any : getPlayers().values()) {
+                        if (!any) {
+                            continue;
+                        }
+                        targetCard = static_cast<Server_Player *>(any)->findCardByEngineOid(targetOid);
+                        if (targetCard) {
+                            break;
+                        }
+                    }
+                    if (!targetCard) {
+                        continue;
+                    }
+                    // Avoid redundant events when the attachment is already in place.
+                    if (attachedCard->getParentCard() == targetCard) {
+                        continue;
+                    }
+                    Event_AttachCard attachEv;
+                    attachEv.set_start_zone(attachedCard->getZone()->getName().toStdString());
+                    attachEv.set_card_id(attachedCard->getId());
+                    attachEv.set_target_player_id(targetCard->getZone()->getPlayer()->getPlayerId());
+                    attachEv.set_target_zone(targetCard->getZone()->getName().toStdString());
+                    attachEv.set_target_card_id(targetCard->getId());
+                    attachGes.enqueueGameEvent(attachEv, ownerPlayer->getPlayerId());
+                    attachGesHasEvents = true;
+                }
+            }
+        }
+        if (attachGesHasEvents) {
+            attachGes.sendToGame(this);
+        }
     }
 
     // Second pass: combat-related events that depend on the engine OID map (LifeChanged,

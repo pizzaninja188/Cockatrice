@@ -494,6 +494,7 @@ fn haste_creature_can_attack_same_turn_it_enters() {
             damage: 0,
             deathtouch_damage: false,
             counters: std::collections::BTreeMap::new(),
+            attached_to: None,
         },
     );
     e.state.players[0].battlefield.push(goblin);
@@ -532,6 +533,7 @@ fn non_haste_summoning_sick_creature_cannot_attack() {
             damage: 0,
             deathtouch_damage: false,
             counters: std::collections::BTreeMap::new(),
+            attached_to: None,
         },
     );
     e.state.players[0].battlefield.push(bears);

@@ -240,6 +240,9 @@ fn default_creature_filter() -> TargetFilter {
 /// - `(kind: Creature, tapped: true)` — tapped creature (for future use)
 /// - `(kind: Creature, not_color: Black)` — nonblack creature (Doom Blade, Terror)
 /// - `(kind: Creature, attacking_or_blocking: true)` — Divine Verdict, Hunt Down
+/// - `(kind: Creature, only_controller: true)` — "target creature you control" (Equip,
+///   Regenerate, many activated abilities). Enforced at targeting time; the controller
+///   is the activating player.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct TargetFilter {
     #[serde(default)]
@@ -258,12 +261,27 @@ pub struct TargetFilter {
     /// Doom Blade ("nonblack creature"), Terror ("nonblack" — paired with `not_artifact`).
     #[serde(default)]
     pub not_color: Option<Color>,
+    /// "target creature you control" restriction (CR 702.6a / 701.15 regenerate / various
+    /// activated abilities). The target must be owned/controlled by the activating player.
+    /// Covers Equipment equip (Bonesplitter, Vulshok Morningstar) and Regenerate (Drudge
+    /// Skeletons, Cudgel Troll) without a new variant.
+    #[serde(default)]
+    pub only_controller: bool,
 }
 
 impl TargetFilter {
     /// Default: any creature (the most common implicit filter).
     pub fn default_creature() -> Self {
         default_creature_filter()
+    }
+
+    /// Default filter for the equip ability: "target creature you control" (CR 702.6a).
+    pub fn default_equip() -> Self {
+        TargetFilter {
+            kind: TargetKind::Creature,
+            only_controller: true,
+            ..TargetFilter::default()
+        }
     }
 
     /// True for player-only kinds (used by startup validation).
@@ -406,6 +424,17 @@ pub enum SpellEffectKind {
     ProduceMana {
         options: Vec<ManaAmount>,
     },
+    /// CR 301.5 / 702.6: the equip activated ability — attach this equipment to `target` creature
+    /// you control. At resolution the engine moves `attached_to` on the equipment's `GameObject`
+    /// to the new target (detaching from any previous creature automatically). The P/T bonus
+    /// (if any) is a separate [`StaticAbilityDef::EquippedBonus`] that reads `attached_to`
+    /// dynamically, so no continuous effect is updated on re-equip. Legal only as an activated
+    /// ability's `effect`, never a spell effect; equip only as a sorcery (CR 702.6a).
+    /// Covers Bonesplitter (equip {1}) and Vulshok Morningstar (equip {2}).
+    Equip {
+        #[serde(default = "TargetFilter::default_equip")]
+        target: TargetFilter,
+    },
     None,
 }
 
@@ -454,7 +483,8 @@ impl SpellEffectKind {
             | SpellEffectKind::TargetPlayerGainsLife { target, .. }
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
             | SpellEffectKind::MillTargetPlayer { target, .. }
-            | SpellEffectKind::PutCounters { target, .. } => vec![target],
+            | SpellEffectKind::PutCounters { target, .. }
+            | SpellEffectKind::Equip { target } => vec![target],
             _ => vec![],
         }
     }
@@ -530,6 +560,20 @@ impl SpellEffectKind {
                     Err("ProduceMana is only valid on a mana ability, not a spell".into())
                 } else if options.is_empty() {
                     Err("ProduceMana requires at least one mana option".into())
+                } else {
+                    Ok(())
+                }
+            }
+            // CR 702.6a: equip is an activated ability that only attaches to creatures you
+            // control — never a spell effect, and the filter must be creature-typed.
+            SpellEffectKind::Equip { target } => {
+                if context == EffectContext::Spell {
+                    Err("Equip is only valid on an activated ability, not a spell".into())
+                } else if target.is_player() {
+                    Err(format!(
+                        "Equip cannot target players, got {:?}",
+                        target.kind
+                    ))
                 } else {
                     Ok(())
                 }
@@ -754,6 +798,16 @@ pub enum StaticAbilityDef {
     AnthemPt {
         #[serde(default)]
         filter: AnthemFilter,
+        delta_power: i32,
+        delta_toughness: i32,
+    },
+    /// CR 301.5b / 702.6: while this equipment is attached to a creature (i.e.
+    /// `attached_to` is `Some`), that creature gets +`delta_power`/+`delta_toughness`
+    /// (layer 7c). The scope is `AffectedScope::EquippedBy(equipment_oid)` — it reads
+    /// `attached_to` dynamically at P/T query time, so re-equipping shifts the bonus
+    /// without recreating the continuous effect. Covers Bonesplitter (+2/+0) and
+    /// Vulshok Morningstar (+2/+2); any equipment with a stat boost uses this variant.
+    EquippedBonus {
         delta_power: i32,
         delta_toughness: i32,
     },

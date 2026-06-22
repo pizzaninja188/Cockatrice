@@ -144,6 +144,7 @@ impl GameEngine {
                         damage: 0,
                         deathtouch_damage: false,
                         counters: BTreeMap::new(),
+                        attached_to: None,
                     },
                 );
                 p.library.push_back(oid);

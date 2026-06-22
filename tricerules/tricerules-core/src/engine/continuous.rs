@@ -9,6 +9,13 @@ impl GameEngine {
         match &e.affected {
             AffectedScope::Single(id) => *id == oid,
             AffectedScope::AllCreatures => true,
+            // Dynamic scope: true if the equipment `equip_oid` is currently attached to `oid`.
+            AffectedScope::EquippedBy(equip_oid) => self
+                .state
+                .objects
+                .get(equip_oid)
+                .map(|eq| eq.zone == Zone::Battlefield && eq.attached_to == Some(oid))
+                .unwrap_or(false),
             AffectedScope::CreaturesMatching {
                 controller,
                 subtype,
@@ -72,6 +79,23 @@ impl GameEngine {
                     self.state.continuous_effects.push(ContinuousEffect {
                         source_id: Some(object_id),
                         affected: resolve_anthem_scope(&filter, controller, object_id),
+                        kind: ContinuousEffectKind::PtModify {
+                            delta_power,
+                            delta_toughness,
+                        },
+                        duration: EffectDuration::WhileSourceOnBattlefield,
+                        timestamp,
+                    });
+                }
+                // CR 301.5b / 702.6: equipment P/T bonus — scope is EquippedBy(equipment_oid)
+                // so the boost follows re-equip without recreating the continuous effect.
+                StaticAbilityDef::EquippedBonus {
+                    delta_power,
+                    delta_toughness,
+                } => {
+                    self.state.continuous_effects.push(ContinuousEffect {
+                        source_id: Some(object_id),
+                        affected: AffectedScope::EquippedBy(object_id),
                         kind: ContinuousEffectKind::PtModify {
                             delta_power,
                             delta_toughness,
@@ -219,6 +243,33 @@ impl GameEngine {
             }
         }
 
+        // CR 704.5p: equipment falls off if the attached creature is no longer on the battlefield.
+        let equipment_to_unattach: Vec<ObjectId> = self
+            .state
+            .objects
+            .iter()
+            .filter(|(_, eq)| {
+                eq.zone == Zone::Battlefield
+                    && eq
+                        .attached_to
+                        .map(|target_id| {
+                            self.state
+                                .objects
+                                .get(&target_id)
+                                .map(|t| t.zone != Zone::Battlefield)
+                                .unwrap_or(true)
+                        })
+                        .unwrap_or(false)
+            })
+            .map(|(id, _)| *id)
+            .collect();
+        for eq_id in equipment_to_unattach {
+            if let Some(eq) = self.state.objects.get_mut(&eq_id) {
+                eq.attached_to = None;
+                changed = true;
+            }
+        }
+
         // CR 111.7/111.8: tokens that have left the battlefield cease to exist.
         let vanished: Vec<ObjectId> = self
             .state
@@ -318,6 +369,7 @@ mod sba_tests {
                 damage,
                 deathtouch_damage: false,
                 counters: Default::default(),
+                attached_to: None,
             },
         );
         let idx = e.state.player_idx(owner).unwrap();

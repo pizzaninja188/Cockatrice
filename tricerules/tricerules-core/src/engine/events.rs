@@ -368,6 +368,20 @@ impl GameEngine {
                             .unwrap_or_default()
                     })
                     .collect(),
+                // Parallel to `battlefield`: the ObjectId of the permanent this aura/equipment
+                // is attached to, or 0 if not attached. C++ relay uses this to issue
+                // Event_AttachCard so clients stack attached permanents visually.
+                battlefield_attached_to_oid: p
+                    .battlefield
+                    .iter()
+                    .map(|&oid| {
+                        self.state
+                            .objects
+                            .get(&oid)
+                            .and_then(|o| o.attached_to)
+                            .unwrap_or(0)
+                    })
+                    .collect(),
             })
             .collect();
         RuledEvent {

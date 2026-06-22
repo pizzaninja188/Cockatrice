@@ -179,6 +179,17 @@ fn target_filter_legal(
         if filter.attacking_or_blocking && !is_attacking_or_blocking(state, tid) {
             return false;
         }
+        // "target creature you control" (equip, regenerate, …). Ownership == control until
+        // control-changing effects exist (CR 109.4).
+        if filter.only_controller {
+            if let Some(obj) = state.objects.get(&tid) {
+                if obj.owner != caster {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
     }
     true
 }
@@ -258,7 +269,8 @@ fn effect_target_legal_at_resolution(
         }
         SpellEffectKind::DestroyTarget { target }
         | SpellEffectKind::PumpTarget { target, .. }
-        | SpellEffectKind::PutCounters { target, .. } => {
+        | SpellEffectKind::PutCounters { target, .. }
+        | SpellEffectKind::Equip { target } => {
             target_filter_legal(state, registry, target, tid, caster)
         }
         SpellEffectKind::ExileTarget
@@ -301,7 +313,9 @@ pub(super) fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
         | SpellEffectKind::MillTargetPlayer { .. }
         | SpellEffectKind::TapTarget { .. }
         | SpellEffectKind::CounterTargetSpell { .. }
-        | SpellEffectKind::CopyTargetSpell { .. } => true,
+        | SpellEffectKind::CopyTargetSpell { .. }
+        // CR 702.6a: equip targets "target creature you control" — always targeted.
+        | SpellEffectKind::Equip { .. } => true,
         _ => false,
     }
 }
@@ -404,6 +418,16 @@ pub(super) fn validate_effect_targets(
                 && targets[0].object_id as i32 == caster
             {
                 return Err(EngineError::Illegal("cannot target yourself"));
+            }
+        }
+        SpellEffectKind::Equip { target: filter } => {
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal("requires exactly one target"));
+            }
+            if !target_filter_legal(state, registry, filter, targets[0].object_id, caster) {
+                return Err(EngineError::Illegal(
+                    "equip target must be a creature you control on the battlefield",
+                ));
             }
         }
         // Non-targeted effects require no targets.
