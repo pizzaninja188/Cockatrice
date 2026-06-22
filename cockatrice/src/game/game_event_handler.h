@@ -79,20 +79,34 @@ public:
         BottomLibrary,
     };
 
-    /// Tier-3 resolution hand-pick: hand cards clicked in order, numbered like mulligan bottom.
+    /// Which zone the pending pick operates on.
+    enum class PickZone { Hand, Deck, Revealed };
+
+    /// Tier-3 resolution pick: hand/deck/revealed cards clicked to build a selection.
+    /// PickZone::Hand = Brainstorm (cards in hand zone).
+    /// PickZone::Deck = Gifts Ungiven search step (cards in deck zone view).
+    /// PickZone::Revealed = Gifts Ungiven opponent-pick step (cards in revealed popup).
     struct ResolutionHandPick
     {
-        // Mapping from server card id -> engine OID for all candidate hand cards.
+        // Mapping from server card id -> engine OID for all candidate cards.
         QHash<int, quint32> serverCardIdToOid;
-        // Selected server card ids in click order (first click = index 0 = placed first = bottom).
+        // Selected server card ids in click order.
         QList<int> selectedServerCardIds;
         int min = 0;
         int max = 0;
         QString promptText;
+        PickZone pickZone = PickZone::Hand;
+        // For Deck / Revealed picks: oracle card names parallel to serverCardIdToOid keys,
+        // used to populate the deck zone view prompt and the revealed-cards popup.
+        QStringList candidateNames;
     };
     [[nodiscard]] bool isResolutionHandPickActive() const
     {
         return resolutionHandPick.has_value();
+    }
+    [[nodiscard]] PickZone resolutionHandPickZone() const
+    {
+        return resolutionHandPick.has_value() ? resolutionHandPick->pickZone : PickZone::Hand;
     }
     [[nodiscard]] bool isResolutionHandPickCardSelectable(int serverCardId) const
     {
@@ -124,6 +138,17 @@ public:
     [[nodiscard]] QString resolutionHandPickPromptText() const
     {
         return resolutionHandPick.has_value() ? resolutionHandPick->promptText : QString{};
+    }
+    [[nodiscard]] QStringList resolutionHandPickCandidateNames() const
+    {
+        return resolutionHandPick.has_value() ? resolutionHandPick->candidateNames : QStringList{};
+    }
+    [[nodiscard]] QVector<int> resolutionHandPickCandidateServerCardIds() const
+    {
+        if (!resolutionHandPick.has_value())
+            return {};
+        return QVector<int>(resolutionHandPick->serverCardIdToOid.keys().begin(),
+                            resolutionHandPick->serverCardIdToOid.keys().end());
     }
     void toggleResolutionHandPickCard(int serverCardId);
     void submitResolutionHandPick();
@@ -672,6 +697,14 @@ signals:
     /// Emitted when resolution hand-pick mode starts, progresses (card toggled), or ends.
     /// required == 0 and selected == 0 means mode is cleared.
     void ruledResolutionHandPickUiChanged(int required, int selected);
+    /// Emitted when a LibrarySearch (Gifts Ungiven step 1) pick starts so the receiving
+    /// tab_game can auto-open the local player's deck zone view.
+    void ruledLibrarySearchPickStarted();
+    /// Emitted when a RevealedCards (Gifts Ungiven step 2) pick starts or ends.
+    /// started=true: the opponent (deciding player) should see a revealed-cards popup.
+    /// cardNames: oracle names; serverCardIds: IDs used for click-to-pick (parallel).
+    void ruledRevealedPickChanged(bool started, QStringList cardNames, QVector<int> serverCardIds,
+                                  int min, int max);
 
 private:
     /// ZoneView is stripped on client broadcasts; fall back to CardItem P/T when maps are empty.

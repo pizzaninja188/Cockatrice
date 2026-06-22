@@ -1872,6 +1872,10 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
         // sees the candidate object ids / names; RevealedCards (1) are public and pass through.
         // For HandCards (choice_kind 0), inject candidate_server_card_ids for the deciding player
         // so the client can map engine OIDs to physical hand CardItems for the hand-click UI.
+        // For LibrarySearch (choice_kind 2), inject by name-matching from the decider's deck zone
+        // so the client can open the deck zone view and use deck-card click-to-pick (like Gifts Ungiven
+        // search step). For RevealedCards (choice_kind 1), inject from the non-deciding player's deck
+        // so the client can render the revealed cards in a zone popup for the opponent's pick step.
         for (int ei = 0; ei < filtered.events_size(); ++ei) {
             if (!filtered.events(ei).has_resolution_choice_required()) {
                 continue;
@@ -1894,6 +1898,53 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
                         Server_Card *sc = deciderPlayer->findCardByEngineOid(oid);
                         rcr->add_candidate_server_card_ids(sc ? sc->getId() : -1);
                     }
+                }
+            } else if (rcr->choice_kind() == 2) {
+                // LibrarySearch (private, decider = searcher): match candidate names to deck cards.
+                // unique_names is always true for current LibrarySearch (Gifts Ungiven step 1).
+                const int deciderId = rcr->deciding_player_id();
+                auto *deciderPlayer = static_cast<Server_Player *>(getPlayers().value(deciderId));
+                if (deciderPlayer) {
+                    Server_CardZone *deckZone = deciderPlayer->getZones().value(ZoneNames::DECK);
+                    if (deckZone) {
+                        QHash<QString, int> nameToScid;
+                        for (Server_Card *c : deckZone->getCards()) {
+                            const QString lname = c->getName().toLower();
+                            if (!nameToScid.contains(lname))
+                                nameToScid.insert(lname, c->getId());
+                        }
+                        for (int ci = 0; ci < rcr->candidate_names_size(); ++ci) {
+                            const QString name =
+                                QString::fromStdString(rcr->candidate_names(ci)).toLower();
+                            rcr->add_candidate_server_card_ids(nameToScid.value(name, -1));
+                        }
+                    }
+                }
+            } else if (rcr->choice_kind() == 1 &&
+                       rcr->candidate_server_card_ids_size() == 0) {
+                // RevealedCards (public, decider = opponent): inject server card IDs from the
+                // non-deciding player's deck zone so the deciding-player client can render a
+                // zone popup for the pick step (Gifts Ungiven step 2: opponent chooses two).
+                const int deciderId = rcr->deciding_player_id();
+                for (Server_AbstractPlayer *pl : getPlayers().values()) {
+                    if (pl->getPlayerId() == deciderId)
+                        continue;
+                    auto *casterPlayer = static_cast<Server_Player *>(pl);
+                    Server_CardZone *deckZone = casterPlayer->getZones().value(ZoneNames::DECK);
+                    if (!deckZone)
+                        break;
+                    QHash<QString, int> nameToScid;
+                    for (Server_Card *c : deckZone->getCards()) {
+                        const QString lname = c->getName().toLower();
+                        if (!nameToScid.contains(lname))
+                            nameToScid.insert(lname, c->getId());
+                    }
+                    for (int ci = 0; ci < rcr->candidate_names_size(); ++ci) {
+                        const QString name =
+                            QString::fromStdString(rcr->candidate_names(ci)).toLower();
+                        rcr->add_candidate_server_card_ids(nameToScid.value(name, -1));
+                    }
+                    break; // 1v1: only one caster
                 }
             }
         }

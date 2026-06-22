@@ -802,8 +802,13 @@ void GameEventHandler::submitResolutionHandPick()
             chosen.append(oid);
         }
     }
+    const bool wasRevealed = resolutionHandPick.has_value() &&
+                             resolutionHandPick->pickZone == PickZone::Revealed;
     resolutionHandPick.reset();
     emit ruledResolutionHandPickUiChanged(0, 0);
+    if (wasRevealed) {
+        emit ruledRevealedPickChanged(false, {}, {}, 0, 0);
+    }
     emit ruledCombatStateChanged();
 
     if (chosen.size() < 1) {
@@ -1524,6 +1529,10 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 const int localId = game->getPlayerManager()->getLocalPlayerId();
                                 promptFeed += QString::fromStdString(rcr.prompt_text()) + QStringLiteral("\n");
                                 // Clear any stale hand-pick state from a previous resolution step.
+                                if (resolutionHandPick.has_value() &&
+                                    resolutionHandPick->pickZone == PickZone::Revealed) {
+                                    emit ruledRevealedPickChanged(false, {}, {}, 0, 0);
+                                }
                                 resolutionHandPick.reset();
                                 if (rcr.deciding_player_id() == localId && rcr.candidate_object_ids_size() > 0) {
                                     if (rcr.choice_kind() == 3) {
@@ -1544,20 +1553,83 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                         pick.min = static_cast<int>(rcr.min());
                                         pick.max = static_cast<int>(rcr.max());
                                         pick.promptText = QString::fromStdString(rcr.prompt_text());
+                                        pick.pickZone = PickZone::Hand;
                                         for (int i = 0; i < rcr.candidate_object_ids_size(); ++i) {
                                             const quint32 oid = rcr.candidate_object_ids(i);
                                             const int scid = rcr.candidate_server_card_ids(i);
                                             if (scid >= 0) {
                                                 pick.serverCardIdToOid.insert(scid, oid);
+                                                if (i < rcr.candidate_names_size()) {
+                                                    pick.candidateNames.append(
+                                                        QString::fromStdString(rcr.candidate_names(i)));
+                                                }
                                             }
                                         }
                                         resolutionHandPick = std::move(pick);
                                         emit ruledResolutionHandPickUiChanged(
                                             resolutionHandPick->min, 0);
                                         emit ruledCombatStateChanged();
+                                    } else if (rcr.choice_kind() == 2 &&
+                                               rcr.candidate_server_card_ids_size() == rcr.candidate_names_size() &&
+                                               rcr.candidate_names_size() > 0) {
+                                        // LibrarySearch (choice_kind 2) with server card ids: deck zone-view pick.
+                                        // unique_names is always true for Gifts Ungiven step 1.
+                                        ResolutionHandPick pick;
+                                        pick.min = static_cast<int>(rcr.min());
+                                        pick.max = static_cast<int>(rcr.max());
+                                        pick.promptText = QString::fromStdString(rcr.prompt_text());
+                                        pick.pickZone = PickZone::Deck;
+                                        for (int i = 0; i < rcr.candidate_names_size(); ++i) {
+                                            const quint32 oid = (i < rcr.candidate_object_ids_size())
+                                                                    ? rcr.candidate_object_ids(i)
+                                                                    : 0;
+                                            const int scid = rcr.candidate_server_card_ids(i);
+                                            if (scid >= 0) {
+                                                pick.serverCardIdToOid.insert(scid, oid);
+                                            }
+                                            pick.candidateNames.append(
+                                                QString::fromStdString(rcr.candidate_names(i)));
+                                        }
+                                        resolutionHandPick = std::move(pick);
+                                        emit ruledResolutionHandPickUiChanged(
+                                            resolutionHandPick->min, 0);
+                                        emit ruledLibrarySearchPickStarted();
+                                        emit ruledCombatStateChanged();
+                                    } else if (rcr.choice_kind() == 1 &&
+                                               rcr.candidate_server_card_ids_size() == rcr.candidate_names_size() &&
+                                               rcr.candidate_names_size() > 0) {
+                                        // RevealedCards (choice_kind 1) with server card ids: zone popup pick.
+                                        // The deciding player (opponent) chooses from the revealed cards.
+                                        ResolutionHandPick pick;
+                                        pick.min = static_cast<int>(rcr.min());
+                                        pick.max = static_cast<int>(rcr.max());
+                                        pick.promptText = QString::fromStdString(rcr.prompt_text());
+                                        pick.pickZone = PickZone::Revealed;
+                                        QStringList names;
+                                        QVector<int> scids;
+                                        for (int i = 0; i < rcr.candidate_names_size(); ++i) {
+                                            const quint32 oid = (i < rcr.candidate_object_ids_size())
+                                                                    ? rcr.candidate_object_ids(i)
+                                                                    : 0;
+                                            const int scid = rcr.candidate_server_card_ids(i);
+                                            if (scid >= 0) {
+                                                pick.serverCardIdToOid.insert(scid, oid);
+                                            }
+                                            const QString name =
+                                                QString::fromStdString(rcr.candidate_names(i));
+                                            pick.candidateNames.append(name);
+                                            names.append(name);
+                                            scids.append(scid);
+                                        }
+                                        resolutionHandPick = std::move(pick);
+                                        emit ruledResolutionHandPickUiChanged(
+                                            resolutionHandPick->min, 0);
+                                        emit ruledRevealedPickChanged(true, names, scids,
+                                                                      resolutionHandPick->min,
+                                                                      resolutionHandPick->max);
+                                        emit ruledCombatStateChanged();
                                     } else {
-                                        // Fallback: modal dialog for LibrarySearch, RevealedCards, or
-                                        // HandCards without server card ids.
+                                        // Fallback: modal dialog for unrecognised kinds or missing server card ids.
                                         QVector<quint32> oids;
                                         for (int i = 0; i < rcr.candidate_object_ids_size(); ++i) {
                                             oids.append(rcr.candidate_object_ids(i));
@@ -2636,6 +2708,9 @@ void GameEventHandler::clearRuledSessionState()
     ruledOpeningBottomSelectedIndices.clear();
 
     // Resolution hand-pick
+    if (resolutionHandPick.has_value() && resolutionHandPick->pickZone == PickZone::Revealed) {
+        emit ruledRevealedPickChanged(false, {}, {}, 0, 0);
+    }
     resolutionHandPick.reset();
 
     clearRuledSpellTargetArrows();

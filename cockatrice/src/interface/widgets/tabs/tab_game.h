@@ -87,6 +87,12 @@ private:
     QList<QPointer<ArrowItem>> ruledCombatArrows;
     QPointer<ZoneViewWidget> stackView;
     CardZoneLogic *stackViewZone = nullptr;
+    // Deck zone view auto-opened for LibrarySearch (Gifts Ungiven search step).
+    QPointer<ZoneViewWidget> librarySearchView;
+    // Revealed-cards popup shown during RevealedCards pick (Gifts Ungiven opponent step).
+    QPointer<ZoneViewWidget> revealedPickView;
+    // ServerInfo_Card storage for the revealed-cards popup (owned by this instance).
+    QList<ServerInfo_Card *> revealedPickCards;
     QPointF stackWindowPos = QPointF(340, 80);
     QSizeF stackWindowSize;
     QAction *playersSeparator;
@@ -188,6 +194,12 @@ private slots:
     void actResetLayout();
 
     void hideEvent(QHideEvent *event) override;
+
+    /// Opens the local player's deck zone view for the LibrarySearch pick (Gifts Ungiven step 1).
+    void onRuledLibrarySearchPickStarted();
+    /// Creates or closes the revealed-cards popup for RevealedCards pick (Gifts Ungiven step 2).
+    void onRuledRevealedPickChanged(bool started, QStringList cardNames, QVector<int> serverCardIds,
+                                    int min, int max);
 
 protected slots:
     void closeEvent(QCloseEvent *event) override;
