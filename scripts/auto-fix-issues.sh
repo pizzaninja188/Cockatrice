@@ -38,7 +38,7 @@ RESUME_CAP="${RESUME_CAP:-3}"             # max attempts before an issue needs a
 CARDS_ENABLED="${CARDS_ENABLED:-1}"       # when no issues remain, implement no-new-logic cards
 SYNC_REMOTE="${SYNC_REMOTE:-1}"           # 1 = pull/push origin/master each run (origin-authoritative)
 # Card changes may only touch these paths ("no new logic" guardrail):
-ALLOWED_CARD_PATHS='^(tricerules/tricerules-cards/data/|tricerules/CARDS\.md$|tricerules/tricerules-core/tests/scenario\.rs$)'
+ALLOWED_CARD_PATHS='^(tricerules/tricerules-cards/data/|tricerules/CARDS\.md$|tricerules/tricerules-core/tests/scenario\.rs$|tricerules/tricerules-core/tests/scenario/)'
 # CLAUDE_MODEL is read from the environment (set in the crontab).
 # ----------------------------------------------------------------------------
 

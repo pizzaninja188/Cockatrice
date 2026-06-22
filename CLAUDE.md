@@ -64,7 +64,7 @@ Rules logic for a card lives in `tricerules-cards`, validated at startup (`regis
 
 When in doubt: *can I describe this completely with `(effect_kind, parameters)`?* If yes, it's a primitive.
 
-**Tier-3 review rule (the gate that keeps `custom/` from becoming a scripting dump):** a card may land in `custom/` only if a reviewer agrees **no `(effect_kind, parameters)` description exists** — prefer widening a primitive every time it's close. Custom code never touches `&mut GameState`; it drives `ResolutionCtx` (audited, zone-integrity-preserving mutators only). The generic `resolution_choice_required` / `SubmitResolutionChoice` proto pair is reused by *every* tier-3 card (and later X-spells / modal spells), so a new custom card adds **no** per-card proto. Each `CardEffect` impl cites its Oracle text + CR in a header comment and carries happy + illegal `scenario.rs` coverage (same standard as engine changes).
+**Tier-3 review rule (the gate that keeps `custom/` from becoming a scripting dump):** a card may land in `custom/` only if a reviewer agrees **no `(effect_kind, parameters)` description exists** — prefer widening a primitive every time it's close. Custom code never touches `&mut GameState`; it drives `ResolutionCtx` (audited, zone-integrity-preserving mutators only). The generic `resolution_choice_required` / `SubmitResolutionChoice` proto pair is reused by *every* tier-3 card (and later X-spells / modal spells), so a new custom card adds **no** per-card proto. Each `CardEffect` impl cites its Oracle text + CR in a header comment and carries happy + illegal scenario coverage in the appropriate `tests/scenario/<themed>.rs` submodule (same standard as engine changes).
 
 ### Design for reuse — the one rule
 
@@ -90,7 +90,7 @@ If the fetch fails or the name is ambiguous, **surface that before writing any R
 
 **2. Drop the RON anywhere under `tricerules-cards/data/`** — `build.rs` embeds it automatically (no `registry.rs` edit). Touch `primitives.rs` only when adding a new primitive.
 
-**3. Build + test** (see below). For `tricerules/**/*.rs`: server-authoritative, return `EngineError::Illegal` (never panic), reject ambiguous combat, keep priority/steps explicit, and add/update `tricerules-core/tests/scenario.rs` (happy + illegal path; assert steps/priority/zones).
+**3. Build + test** (see below). For `tricerules/**/*.rs`: server-authoritative, return `EngineError::Illegal` (never panic), reject ambiguous combat, keep priority/steps explicit, and add/update tests in `tricerules-core/tests/scenario/` (happy + illegal path; assert steps/priority/zones). Add to the best-fit existing submodule (e.g. `combat.rs`, `spell_effects.rs`, `triggers.rs`), or create a new file if the topic warrants it — the existing split is a starting point, not a constraint. When creating a new file, add a matching `#[path = "scenario/<name>.rs"] mod <name>;` entry to the root `tests/scenario.rs`.
 
 **4. Regenerate the card tracker** so `tricerules/CARDS.md` stays accurate, and commit it with the card change:
 ```bash
