@@ -397,6 +397,13 @@ pub enum SpellEffectKind {
         #[serde(default = "TargetFilter::default_creature")]
         target: TargetFilter,
     },
+    /// CR 119 + 119.4: drain `amount` life from a target player and give that much life to the
+    /// controller ("target player loses N life and you gain N life"). Covered by Blood Artist,
+    /// Falkenrath Noble, and drain-life spells like Vampire's Kiss. The target must be a player.
+    DrainTarget {
+        amount: u32,
+        target: TargetFilter,
+    },
     /// CR 605 mana ability: add mana to the activating player's pool. Legal only as an
     /// activated ability's `effect` (never a spell `spell_effect`) — the engine classifies an
     /// ability with this effect as a mana ability (CR 605.1a), so it doesn't use the stack and
@@ -453,6 +460,7 @@ impl SpellEffectKind {
             | SpellEffectKind::TapTarget { target }
             | SpellEffectKind::TargetPlayerGainsLife { target, .. }
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
+            | SpellEffectKind::DrainTarget { target, .. }
             | SpellEffectKind::MillTargetPlayer { target, .. }
             | SpellEffectKind::PutCounters { target, .. } => vec![target],
             _ => vec![],
@@ -480,6 +488,7 @@ impl SpellEffectKind {
         match self {
             SpellEffectKind::TargetPlayerGainsLife { target, .. }
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
+            | SpellEffectKind::DrainTarget { target, .. }
             | SpellEffectKind::MillTargetPlayer { target, .. } => {
                 if target.is_player() {
                     Ok(())
@@ -614,6 +623,22 @@ pub enum TriggerCondition {
         permanent_type: Option<PermanentTypeFilter>,
         /// If true, the source permanent's own entry does not trigger it (the "another" clause,
         /// e.g. Soul Warden). If false, the source can trigger off itself entering.
+        #[serde(default)]
+        exclude_self: bool,
+    },
+    /// Whenever a creature is put into a graveyard from the battlefield (CR 603.6). Observer
+    /// variant of `WhenSelfDies` that watches *any* creature die. Covers Blood Artist, Falkenrath
+    /// Noble ("whenever a creature dies, target player loses 1 life…"), Grim Haruspex
+    /// ("whenever another nontoken creature you control dies, draw a card"), and similar
+    /// "death matters" triggers. `controller` filters whose creatures dying count (relative to
+    /// the source permanent's controller); `exclude_self` suppresses the source's own death.
+    WheneverCreatureDies {
+        /// Whose creatures dying trigger this, relative to the source permanent's controller.
+        /// Defaults to `AnyPlayer` ("whenever a creature dies").
+        #[serde(default = "any_player_trigger")]
+        controller: CastTriggerPlayer,
+        /// If true, the source permanent dying does not trigger it (the "another" clause,
+        /// e.g. Grim Haruspex). If false, the source can trigger off its own death.
         #[serde(default)]
         exclude_self: bool,
     },

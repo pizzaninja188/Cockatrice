@@ -98,12 +98,79 @@ impl GameEngine {
                 out
             }
             GameEvent::Dies {
-                object_id,
-                card_id,
-                controller,
-            } => self.matching_triggered_abilities(card_id, *object_id, *controller, |tc| {
-                *tc == TriggerCondition::WhenSelfDies
-            }),
+                object_id: dying_id,
+                card_id: dying_card_id,
+                controller: dying_controller,
+            } => {
+                let mut out = self.matching_triggered_abilities(
+                    dying_card_id,
+                    *dying_id,
+                    *dying_controller,
+                    |tc| *tc == TriggerCondition::WhenSelfDies,
+                );
+                // Observer triggers: check all battlefield permanents for WheneverCreatureDies.
+                let ap = self.state.active_player_id();
+                let mut ordered: Vec<usize> = (0..self.state.players.len()).collect();
+                ordered.sort_by_key(|&i| (self.state.players[i].id != ap) as u8);
+                let mut sources: Vec<(ObjectId, String, PlayerId)> = Vec::new();
+                for pi in ordered {
+                    for &sid in &self.state.players[pi].battlefield {
+                        if let Some(o) = self.state.objects.get(&sid) {
+                            sources.push((sid, o.card_id.clone(), o.owner));
+                        }
+                    }
+                }
+                let dying_is_creature = self
+                    .registry
+                    .get(dying_card_id)
+                    .map(|d| d.is_creature)
+                    .unwrap_or(false);
+                if dying_is_creature {
+                    // Check the dying creature itself for WheneverCreatureDies (exclude_self: false).
+                    // It has already left the battlefield, so it won't appear in `sources`, but its
+                    // card definition is still in the registry — same path as WhenSelfDies.
+                    out.extend(self.matching_triggered_abilities(
+                        dying_card_id,
+                        *dying_id,
+                        *dying_controller,
+                        |tc| {
+                            matches!(
+                                tc,
+                                TriggerCondition::WheneverCreatureDies {
+                                    exclude_self: false,
+                                    ..
+                                }
+                            )
+                        },
+                    ));
+                    // Check all remaining battlefield permanents (observer triggers).
+                    for (src_id, src_card, src_ctrl) in sources {
+                        out.extend(self.matching_triggered_abilities(
+                            &src_card,
+                            src_id,
+                            src_ctrl,
+                            |tc| {
+                                let TriggerCondition::WheneverCreatureDies {
+                                    controller,
+                                    exclude_self,
+                                } = tc
+                                else {
+                                    return false;
+                                };
+                                if *exclude_self && src_id == *dying_id {
+                                    return false;
+                                }
+                                match controller {
+                                    CastTriggerPlayer::Controller => *dying_controller == src_ctrl,
+                                    CastTriggerPlayer::Opponent => *dying_controller != src_ctrl,
+                                    CastTriggerPlayer::AnyPlayer => true,
+                                }
+                            },
+                        ));
+                    }
+                }
+                out
+            }
             GameEvent::Attacks { attacker_ids } => {
                 let mut sorted = attacker_ids.clone();
                 sorted.sort_by_key(|&oid| {

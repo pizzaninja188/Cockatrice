@@ -298,6 +298,7 @@ pub(super) fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
         | SpellEffectKind::ReturnTargetPermanentToHand
         | SpellEffectKind::TargetPlayerGainsLife { .. }
         | SpellEffectKind::TargetPlayerLosesLife { .. }
+        | SpellEffectKind::DrainTarget { .. }
         | SpellEffectKind::MillTargetPlayer { .. }
         | SpellEffectKind::TapTarget { .. }
         | SpellEffectKind::CounterTargetSpell { .. }
@@ -393,6 +394,7 @@ pub(super) fn validate_effect_targets(
         }
         SpellEffectKind::TargetPlayerGainsLife { target: filter, .. }
         | SpellEffectKind::TargetPlayerLosesLife { target: filter, .. }
+        | SpellEffectKind::DrainTarget { target: filter, .. }
         | SpellEffectKind::MillTargetPlayer { target: filter, .. } => {
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one player target"));
@@ -507,6 +509,7 @@ pub(super) fn spell_target_legality_error(
         }
         SpellEffectKind::TargetPlayerGainsLife { target: filter, .. }
         | SpellEffectKind::TargetPlayerLosesLife { target: filter, .. }
+        | SpellEffectKind::DrainTarget { target: filter, .. }
         | SpellEffectKind::MillTargetPlayer { target: filter, .. } => {
             if !player_target_legal(state, tid) {
                 return Err(EngineError::Illegal("target must be a player in the game"));

@@ -1,0 +1,21 @@
+(
+  id: "blood_artist",
+  name: "Blood Artist",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Vampire"],
+  power: 0,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      trigger: WheneverCreatureDies(
+        controller: AnyPlayer,
+        exclude_self: false,
+      ),
+      effect: DrainTarget(
+        amount: 1,
+        target: (kind: AnyPlayer),
+      ),
+      text: "Whenever this creature or another creature dies, target player loses 1 life and you gain 1 life.",
+    ),
+  ],
+)
