@@ -3,6 +3,6 @@
   name: "Healing Salve",
   mana_cost: "{W}",
   types: ["Instant"],
-  spell_effect: [TargetPlayerGainsLife(amount: 3, target: (kind: AnyPlayer))],
-  partial: "only the 'target player gains 3 life' mode; the 'prevent the next 3 damage to any target' mode is not implemented",
+  spell_effect: [PreventNextDamage(amount: 3, target: (kind: AnyTarget))],
+  partial: "only the 'prevent the next 3 damage to any target' mode; the 'target player gains 3 life' mode requires modal spell support (issue #19)",
 )

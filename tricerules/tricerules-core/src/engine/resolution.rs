@@ -132,6 +132,13 @@ impl GameEngine {
                     // CR 107.3: `amount` may be the cast-time X (Fireball) or a literal (Bolt).
                     let amount = amount.resolve(top.chosen_x);
                     if let Some(&tid) = targets.first() {
+                        // CR 614.1a: consume prevention shield before recording damage.
+                        let amount = apply_prevention_shield(
+                            &mut self.state.damage_prevention_shields,
+                            tid,
+                            amount,
+                            events,
+                        );
                         if let Some(pi) = self.state.player_idx(tid as i32) {
                             let pid = self.state.players[pi].id;
                             self.state.players[pi].life -= amount as i32;
@@ -142,17 +149,21 @@ impl GameEngine {
                                     delta: -(amount as i32),
                                 })),
                             });
-                            events.push(ev_log(format!(
-                                "{spell_label} deals {amount} damage to P{pid}"
-                            )));
+                            if amount > 0 {
+                                events.push(ev_log(format!(
+                                    "{spell_label} deals {amount} damage to P{pid}"
+                                )));
+                            }
                         } else {
                             let tgt = object_display_name(&self.state, self.registry, tid);
                             if let Some(t) = self.state.objects.get_mut(&tid) {
                                 if t.zone == Zone::Battlefield && t.is_creature(self.registry) {
                                     t.damage += amount;
-                                    events.push(ev_log(format!(
-                                        "{spell_label} deals {amount} damage to {tgt}"
-                                    )));
+                                    if amount > 0 {
+                                        events.push(ev_log(format!(
+                                            "{spell_label} deals {amount} damage to {tgt}"
+                                        )));
+                                    }
                                 }
                             }
                         }
@@ -775,6 +786,28 @@ impl GameEngine {
                 } => {
                     self.create_tokens(&token, count, who, controller, &spell_label, events);
                 }
+                SpellEffectKind::PreventNextDamage { amount, .. } => {
+                    // CR 614.1a: place a damage prevention shield on the target object or player.
+                    if let Some(&tid) = targets.first() {
+                        let shield = self.state.damage_prevention_shields.entry(tid).or_insert(0);
+                        *shield = shield.saturating_add(amount);
+                        let tgt_name = if let Some(pi) = self.state.player_idx(tid as i32) {
+                            format!("P{}", self.state.players[pi].id)
+                        } else {
+                            object_display_name(&self.state, self.registry, tid)
+                        };
+                        events.push(ev_log(format!(
+                            "Prevention shield: the next {amount} damage to {tgt_name} is prevented."
+                        )));
+                    }
+                }
+                SpellEffectKind::PreventAllCombatDamageTurn => {
+                    // CR 614.1a: prevent all combat damage this turn (Fog, Holy Day).
+                    self.state.prevent_all_combat_damage_this_turn = true;
+                    events.push(ev_log(
+                        "All combat damage is prevented this turn.".to_string(),
+                    ));
+                }
                 // CR 605.3b: a mana ability never uses the stack, so a ProduceMana effect is
                 // resolved immediately in `resolve_mana_ability` and can never reach this generic
                 // stack-resolution path. Defensive no-op (registry validation also forbids it on
@@ -1036,4 +1069,32 @@ fn counter_label(kind: CounterKind) -> &'static str {
         CounterKind::PlusOnePlusOne => "+1/+1",
         CounterKind::MinusOneMinusOne => "-1/-1",
     }
+}
+
+/// CR 614.1a: consume damage from `shields` for target `tid`, returning the net damage after
+/// prevention. Emits a log event for any prevented amount. `amount` is the incoming damage.
+pub(super) fn apply_prevention_shield(
+    shields: &mut std::collections::HashMap<crate::state::ObjectId, u32>,
+    tid: crate::state::ObjectId,
+    amount: u32,
+    events: &mut Vec<rv1::RuledEvent>,
+) -> u32 {
+    if amount == 0 {
+        return 0;
+    }
+    let shield = shields.get(&tid).copied().unwrap_or(0);
+    if shield == 0 {
+        return amount;
+    }
+    let prevented = amount.min(shield);
+    let remaining = shield - prevented;
+    if remaining == 0 {
+        shields.remove(&tid);
+    } else {
+        shields.insert(tid, remaining);
+    }
+    if prevented > 0 {
+        events.push(ev_log(format!("{prevented} damage prevented (shield).")));
+    }
+    amount - prevented
 }

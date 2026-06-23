@@ -406,6 +406,19 @@ pub enum SpellEffectKind {
     ProduceMana {
         options: Vec<ManaAmount>,
     },
+    /// CR 614.1a: place a prevention shield on the target (creature or player) that will absorb
+    /// the next `amount` damage dealt to it this turn. Healing Salve mode 2 (`amount: 3,
+    /// target: AnyTarget`); Circle of Protection variants use `amount: 1` and repeat.
+    /// When damage would be dealt to a shielded object, subtract up to `amount` from the shield
+    /// before recording the damage; the shield expires when fully consumed or at cleanup.
+    PreventNextDamage {
+        amount: u32,
+        target: TargetFilter,
+    },
+    /// CR 614.1a: prevent all combat damage that would be dealt this turn (Fog, Holy Day,
+    /// Safe Passage partial). Untargeted — sets a global flag checked when combat damage resolves.
+    /// Cleared at the cleanup step alongside marked damage.
+    PreventAllCombatDamageTurn,
     None,
 }
 
@@ -454,7 +467,8 @@ impl SpellEffectKind {
             | SpellEffectKind::TargetPlayerGainsLife { target, .. }
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
             | SpellEffectKind::MillTargetPlayer { target, .. }
-            | SpellEffectKind::PutCounters { target, .. } => vec![target],
+            | SpellEffectKind::PutCounters { target, .. }
+            | SpellEffectKind::PreventNextDamage { target, .. } => vec![target],
             _ => vec![],
         }
     }
