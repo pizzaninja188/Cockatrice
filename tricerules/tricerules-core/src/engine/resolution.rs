@@ -477,6 +477,9 @@ impl GameEngine {
                                         choice_kind: 3,
                                         unique_names: false,
                                         copy_source_object_id: src.id,
+                                        search_destination: SearchDestination::Hand,
+                                        search_shuffle: false,
+                                        search_reveal: false,
                                     });
                                     // Copy will be pushed to the stack after target is submitted.
                                 } else {
@@ -780,6 +783,100 @@ impl GameEngine {
                 // stack-resolution path. Defensive no-op (registry validation also forbids it on
                 // spells); producing mana here would be off-stack-timing and is intentionally not done.
                 SpellEffectKind::ProduceMana { .. } => {}
+                // CR 701.18: pause resolution and ask the controller to choose from their library.
+                // Uses choice_kind 2 (LibrarySearch) so the relay redacts candidates from opponents.
+                SpellEffectKind::SearchLibrary {
+                    filter,
+                    destination,
+                    shuffle,
+                    reveal,
+                } => {
+                    let candidates: Vec<ObjectId> = {
+                        let Some(idx) = self.state.player_idx(controller) else {
+                            events.push(ev_log(format!("{spell_label} resolves (no library).")));
+                            return Ok(());
+                        };
+                        self.state.players[idx]
+                            .library
+                            .iter()
+                            .copied()
+                            .filter(|&oid| {
+                                library_card_matches_filter(
+                                    &self.state,
+                                    self.registry,
+                                    oid,
+                                    filter.as_ref(),
+                                )
+                            })
+                            .collect()
+                    };
+                    let min = if candidates.is_empty() { 0u32 } else { 1u32 };
+                    let prompt = match &filter {
+                        None => format!("P{controller}: search your library for a card."),
+                        Some(f) => format!(
+                            "P{controller}: search your library for a {} card.",
+                            spell_type_filter_desc(f)
+                        ),
+                    };
+                    let candidate_card_ids: Vec<String> = candidates
+                        .iter()
+                        .map(|&oid| {
+                            self.state
+                                .objects
+                                .get(&oid)
+                                .map(|o| o.card_id.clone())
+                                .unwrap_or_default()
+                        })
+                        .collect();
+                    let candidate_names: Vec<String> = candidate_card_ids
+                        .iter()
+                        .map(|cid| {
+                            self.registry
+                                .get(cid)
+                                .map(|d| d.name.clone())
+                                .unwrap_or_else(|| cid.clone())
+                        })
+                        .collect();
+                    events.push(rv1::RuledEvent {
+                        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                            rv1::ResolutionChoiceRequired {
+                                deciding_player_id: controller,
+                                source_object_id: top.id,
+                                prompt_text: prompt.clone(),
+                                choice_kind: custom::ChoiceKind::LibrarySearch.as_proto(),
+                                candidate_object_ids: candidates.clone(),
+                                candidate_card_ids,
+                                candidate_names,
+                                min,
+                                max: 1,
+                                ordered: false,
+                                unique_names: false,
+                                candidate_server_card_ids: Vec::new(),
+                            },
+                        )),
+                    });
+                    events.push(ev_log(prompt.clone()));
+                    self.state.pending_resolution = Some(PendingResolution {
+                        item: top.clone(),
+                        custom_key: "__search_library".to_string(),
+                        step: 0,
+                        scratch: vec![],
+                        deciding_player: controller,
+                        candidates,
+                        min,
+                        max: 1,
+                        ordered: false,
+                        unique_names: false,
+                        prompt,
+                        choice_kind: custom::ChoiceKind::LibrarySearch.as_proto(),
+                        copy_source_object_id: 0,
+                        search_destination: destination,
+                        search_shuffle: shuffle,
+                        search_reveal: reveal,
+                    });
+                    // Resolution is now parked; the "resolves." log is emitted by finish_library_search.
+                    return Ok(());
+                }
                 SpellEffectKind::None => {}
             }
         }
@@ -1035,5 +1132,46 @@ fn counter_label(kind: CounterKind) -> &'static str {
     match kind {
         CounterKind::PlusOnePlusOne => "+1/+1",
         CounterKind::MinusOneMinusOne => "-1/-1",
+    }
+}
+
+/// Return true if the library card `oid` satisfies `filter` (None = any card).
+/// Uses the card's derived type flags from `CardDefinition`.
+pub(super) fn library_card_matches_filter(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    oid: ObjectId,
+    filter: Option<&SpellTypeFilter>,
+) -> bool {
+    let Some(filter) = filter else {
+        return true;
+    };
+    let Some(obj) = state.objects.get(&oid) else {
+        return false;
+    };
+    let Some(def) = registry.get(&obj.card_id) else {
+        return false;
+    };
+    match filter {
+        SpellTypeFilter::Instant => def.is_instant,
+        SpellTypeFilter::Sorcery => def.is_sorcery,
+        SpellTypeFilter::InstantOrSorcery => def.is_instant || def.is_sorcery,
+        SpellTypeFilter::Creature => def.is_creature,
+        SpellTypeFilter::Artifact => def.is_artifact,
+        SpellTypeFilter::Enchantment => def.is_enchantment,
+        SpellTypeFilter::Noncreature => !def.is_creature,
+    }
+}
+
+/// Human-readable description of a [`SpellTypeFilter`] for prompt text.
+fn spell_type_filter_desc(f: &SpellTypeFilter) -> &'static str {
+    match f {
+        SpellTypeFilter::Instant => "instant",
+        SpellTypeFilter::Sorcery => "sorcery",
+        SpellTypeFilter::InstantOrSorcery => "instant or sorcery",
+        SpellTypeFilter::Creature => "creature",
+        SpellTypeFilter::Artifact => "artifact",
+        SpellTypeFilter::Enchantment => "enchantment",
+        SpellTypeFilter::Noncreature => "noncreature",
     }
 }

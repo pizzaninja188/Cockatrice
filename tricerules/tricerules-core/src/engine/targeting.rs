@@ -421,6 +421,9 @@ pub(super) fn validate_effect_targets(
         | SpellEffectKind::CreateTokens { .. }
         // CR 605.1a: a mana ability is untargeted by definition.
         | SpellEffectKind::ProduceMana { .. }
+        // CR 701.18: library search is untargeted; the library card is chosen via a pending
+        // interrupt, not a target declared at cast time.
+        | SpellEffectKind::SearchLibrary { .. }
         | SpellEffectKind::None => {
             if !targets.is_empty() {
                 return Err(EngineError::Illegal("this effect takes no targets"));

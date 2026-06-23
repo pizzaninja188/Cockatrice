@@ -1,0 +1,14 @@
+(
+    id: "mystical_tutor",
+    name: "Mystical Tutor",
+    mana_cost: "{U}",
+    types: ["Instant"],
+    spell_effect: [
+        SearchLibrary(
+            filter: Some(InstantOrSorcery),
+            destination: TopOfLibrary,
+            shuffle: true,
+            reveal: true,
+        ),
+    ],
+)

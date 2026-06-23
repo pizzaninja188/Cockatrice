@@ -190,6 +190,11 @@ impl GameEngine {
         if pending.custom_key == "__copy_targets" {
             return self.finish_copy_target_choice(pending, chosen);
         }
+        // CR 701.18: library search completion (SearchLibrary primitive) — move the chosen card
+        // to the declared destination and optionally shuffle.
+        if pending.custom_key == "__search_library" {
+            return self.finish_library_search(pending, chosen);
+        }
 
         let effect = match custom::lookup(&pending.custom_key) {
             Some(e) => e,
@@ -353,6 +358,114 @@ impl GameEngine {
             prompt: interrupt.prompt,
             choice_kind: interrupt.choice_kind.as_proto(),
             copy_source_object_id: 0,
+            search_destination: SearchDestination::Hand,
+            search_shuffle: false,
+            search_reveal: false,
         });
+    }
+
+    /// CR 701.18: the controller submitted their library search choice. Move the found card to
+    /// the declared destination, optionally reveal it publicly, then optionally shuffle.
+    fn finish_library_search(
+        &mut self,
+        pending: PendingResolution,
+        chosen: &[u32],
+    ) -> Result<RuledEventBatch, EngineError> {
+        let controller = pending.item.controller;
+        let face_index = pending.item.face_index;
+        let spell_name = self
+            .registry
+            .get(&pending.item.card_id)
+            .and_then(|d| d.face(face_index))
+            .map(|f| f.name.to_string())
+            .unwrap_or_else(|| pending.item.card_id.clone());
+
+        let mut ev = vec![];
+
+        if chosen.is_empty() {
+            ev.push(ev_log(format!("P{controller} finds no card.")));
+            if pending.search_shuffle {
+                let mix = self
+                    .state
+                    .seed
+                    .wrapping_add(self.state.command_index.wrapping_mul(0x9E37_79B9_7F4A_7C15))
+                    ^ (controller as u64);
+                if let Some(idx) = self.state.player_idx(controller) {
+                    crate::engine::shuffle_player_library(&mut self.state, idx, mix);
+                }
+                ev.push(ev_log(format!("P{controller} shuffles their library.")));
+            }
+        } else {
+            let oid = chosen[0];
+            let card_name = self
+                .state
+                .objects
+                .get(&oid)
+                .and_then(|o| self.registry.get(&o.card_id))
+                .map(|d| d.name.clone())
+                .unwrap_or_else(|| "card".to_string());
+
+            match pending.search_destination {
+                SearchDestination::Hand => {
+                    // Move to hand first, then shuffle.
+                    if let Some(idx) = self.state.player_idx(controller) {
+                        self.state.players[idx].library.retain(|&x| x != oid);
+                        self.state.players[idx].hand.push(oid);
+                    }
+                    if let Some(o) = self.state.objects.get_mut(&oid) {
+                        o.zone = Zone::Hand;
+                    }
+                    if pending.search_reveal {
+                        ev.push(ev_log(format!("P{controller} reveals {card_name}.")));
+                    }
+                    ev.push(ev_log(format!("P{controller} puts {card_name} into hand.")));
+                    if pending.search_shuffle {
+                        let mix = self.state.seed.wrapping_add(
+                            self.state.command_index.wrapping_mul(0x9E37_79B9_7F4A_7C15),
+                        ) ^ (controller as u64);
+                        if let Some(idx) = self.state.player_idx(controller) {
+                            crate::engine::shuffle_player_library(&mut self.state, idx, mix);
+                        }
+                        ev.push(ev_log(format!("P{controller} shuffles their library.")));
+                    }
+                }
+                SearchDestination::TopOfLibrary => {
+                    // Oracle: "then shuffle and put that card on top" — shuffle first, then put on top.
+                    if let Some(idx) = self.state.player_idx(controller) {
+                        self.state.players[idx].library.retain(|&x| x != oid);
+                    }
+                    if pending.search_shuffle {
+                        let mix = self.state.seed.wrapping_add(
+                            self.state.command_index.wrapping_mul(0x9E37_79B9_7F4A_7C15),
+                        ) ^ (controller as u64);
+                        if let Some(idx) = self.state.player_idx(controller) {
+                            crate::engine::shuffle_player_library(&mut self.state, idx, mix);
+                        }
+                        ev.push(ev_log(format!("P{controller} shuffles their library.")));
+                    }
+                    if let Some(idx) = self.state.player_idx(controller) {
+                        self.state.players[idx].library.push_front(oid);
+                    }
+                    if let Some(o) = self.state.objects.get_mut(&oid) {
+                        o.zone = Zone::Library;
+                    }
+                    if pending.search_reveal {
+                        ev.push(ev_log(format!("P{controller} reveals {card_name}.")));
+                    }
+                    ev.push(ev_log(format!(
+                        "P{controller} puts {card_name} on top of their library."
+                    )));
+                }
+            }
+        }
+
+        ev.push(ev_log(format!("{spell_name} resolves.")));
+
+        if let Some(i) = self.state.player_idx(self.state.active_player_id()) {
+            self.state.priority_idx = i;
+        }
+        ev.push(ev_priority_changed(self));
+
+        Ok(finish_with_events(self, ev))
     }
 }
