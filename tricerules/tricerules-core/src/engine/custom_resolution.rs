@@ -1,4 +1,6 @@
-use super::events::{ev_log, ev_priority_changed, finish_with_events, format_spell_targets_log};
+use super::events::{
+    ev_log, ev_priority_changed, finish_with_events, format_spell_targets_log, object_display_name,
+};
 use super::legal_actions::fill_legal;
 use super::targeting::validate_effect_targets;
 use super::*;
@@ -191,6 +193,11 @@ impl GameEngine {
             return self.finish_copy_target_choice(pending, chosen);
         }
 
+        // DiscardCards (caster-chooses): move each chosen card from the target's hand to graveyard.
+        if pending.custom_key == "__discard_chosen" {
+            return self.finish_discard_chosen(pending, chosen);
+        }
+
         let effect = match custom::lookup(&pending.custom_key) {
             Some(e) => e,
             None => {
@@ -354,5 +361,50 @@ impl GameEngine {
             choice_kind: interrupt.choice_kind.as_proto(),
             copy_source_object_id: 0,
         });
+    }
+
+    /// Resolve a caster-chooses DiscardCards interrupt: move chosen cards from the target's hand
+    /// to their graveyard, then restore priority to the active player.
+    fn finish_discard_chosen(
+        &mut self,
+        pending: PendingResolution,
+        chosen: &[u32],
+    ) -> Result<RuledEventBatch, EngineError> {
+        let card_name = self
+            .registry
+            .get(&pending.item.card_id)
+            .and_then(|d| d.face(pending.item.face_index))
+            .map(|f| f.name.to_string())
+            .unwrap_or_else(|| pending.item.card_id.clone());
+
+        let mut ev = vec![];
+        for &oid in chosen {
+            // Owner is the target player (the one whose hand these cards came from).
+            let owner = self
+                .state
+                .objects
+                .get(&oid)
+                .map(|o| o.owner)
+                .ok_or(EngineError::Illegal("chosen card object not found"))?;
+            let discard_name = object_display_name(&self.state, self.registry, oid);
+            move_object_to_zone(&mut self.state, oid, Zone::Graveyard)?;
+            ev.push(permanent_moved_event(
+                &self.state,
+                oid,
+                owner,
+                rv1::permanent_moved::Destination::Graveyard,
+            ));
+            ev.push(ev_log(format!(
+                "P{owner} discards {discard_name} ({card_name})."
+            )));
+        }
+        ev.push(ev_log(format!("{card_name} resolves.")));
+
+        if let Some(i) = self.state.player_idx(self.state.active_player_id()) {
+            self.state.priority_idx = i;
+        }
+        ev.push(ev_priority_changed(self));
+
+        Ok(finish_with_events(self, ev))
     }
 }
