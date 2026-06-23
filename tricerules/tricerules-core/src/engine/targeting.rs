@@ -63,7 +63,7 @@ fn object_targetable_by(
 /// (DestroyAll / DamageAll). Unlike [`target_filter_legal`] this is **not** targeting: it
 /// ignores hexproof/shroud (CR 702.11e — untargeted effects affect them normally) and only
 /// honors the object kinds and characteristic constraints the filter carries.
-fn object_matches_mass_filter(
+pub(super) fn object_matches_mass_filter(
     state: &GameState,
     registry: &CardRegistry,
     oid: ObjectId,
@@ -301,7 +301,8 @@ pub(super) fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
         | SpellEffectKind::MillTargetPlayer { .. }
         | SpellEffectKind::TapTarget { .. }
         | SpellEffectKind::CounterTargetSpell { .. }
-        | SpellEffectKind::CopyTargetSpell { .. } => true,
+        | SpellEffectKind::CopyTargetSpell { .. }
+        | SpellEffectKind::TargetPlayerSacrifices { .. } => true,
         _ => false,
     }
 }
@@ -393,7 +394,8 @@ pub(super) fn validate_effect_targets(
         }
         SpellEffectKind::TargetPlayerGainsLife { target: filter, .. }
         | SpellEffectKind::TargetPlayerLosesLife { target: filter, .. }
-        | SpellEffectKind::MillTargetPlayer { target: filter, .. } => {
+        | SpellEffectKind::MillTargetPlayer { target: filter, .. }
+        | SpellEffectKind::TargetPlayerSacrifices { target: filter, .. } => {
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one player target"));
             }
@@ -507,7 +509,8 @@ pub(super) fn spell_target_legality_error(
         }
         SpellEffectKind::TargetPlayerGainsLife { target: filter, .. }
         | SpellEffectKind::TargetPlayerLosesLife { target: filter, .. }
-        | SpellEffectKind::MillTargetPlayer { target: filter, .. } => {
+        | SpellEffectKind::MillTargetPlayer { target: filter, .. }
+        | SpellEffectKind::TargetPlayerSacrifices { target: filter, .. } => {
             if !player_target_legal(state, tid) {
                 return Err(EngineError::Illegal("target must be a player in the game"));
             }

@@ -1,6 +1,7 @@
 use super::events::{color_string, ev_log, object_display_name};
 use super::targeting::{
-    battlefield_objects_matching, compute_spell_targets, spell_has_no_legal_targets_at_resolution,
+    battlefield_objects_matching, compute_spell_targets, object_matches_mass_filter,
+    spell_has_no_legal_targets_at_resolution,
 };
 use super::*;
 
@@ -692,6 +693,92 @@ impl GameEngine {
                             events.push(ev_log(format!(
                                 "{spell_label} mills {milled} card(s) from P{pid}"
                             )));
+                        }
+                    }
+                }
+                SpellEffectKind::TargetPlayerSacrifices { filter, .. } => {
+                    if let Some(&tid) = targets.first() {
+                        if let Some(pi) = self.state.player_idx(tid as i32) {
+                            let pid = self.state.players[pi].id;
+                            // Collect matching permanents on the target player's battlefield.
+                            let qualifying: Vec<ObjectId> = self.state.players[pi]
+                                .battlefield
+                                .iter()
+                                .copied()
+                                .filter(|&oid| {
+                                    object_matches_mass_filter(
+                                        &self.state,
+                                        self.registry,
+                                        oid,
+                                        &filter,
+                                    )
+                                })
+                                .collect();
+                            if qualifying.is_empty() {
+                                events.push(ev_log(format!(
+                                    "P{pid} has no valid permanents to sacrifice ({spell_label})."
+                                )));
+                            } else {
+                                let candidate_card_ids: Vec<String> = qualifying
+                                    .iter()
+                                    .map(|&oid| {
+                                        self.state
+                                            .objects
+                                            .get(&oid)
+                                            .map(|o| o.card_id.clone())
+                                            .unwrap_or_default()
+                                    })
+                                    .collect();
+                                let candidate_names: Vec<String> = candidate_card_ids
+                                    .iter()
+                                    .map(|cid| {
+                                        self.registry
+                                            .get(cid)
+                                            .map(|d| d.name.clone())
+                                            .unwrap_or_else(|| cid.clone())
+                                    })
+                                    .collect();
+                                let prompt = format!(
+                                    "P{pid}: choose a permanent to sacrifice ({spell_label})."
+                                );
+                                events.push(rv1::RuledEvent {
+                                    ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                                        rv1::ResolutionChoiceRequired {
+                                            deciding_player_id: pid,
+                                            source_object_id: top.id,
+                                            prompt_text: prompt.clone(),
+                                            // choice_kind 1 = RevealedCards: the battlefield is
+                                            // public so no hidden-zone redaction is needed.
+                                            choice_kind: 1,
+                                            candidate_object_ids: qualifying.clone(),
+                                            candidate_card_ids,
+                                            candidate_names,
+                                            min: 1,
+                                            max: 1,
+                                            ordered: false,
+                                            unique_names: false,
+                                            candidate_server_card_ids: Vec::new(),
+                                        },
+                                    )),
+                                });
+                                events.push(ev_log(prompt.clone()));
+                                self.state.pending_resolution = Some(PendingResolution {
+                                    item: top.clone(),
+                                    custom_key: "__sacrifice_chosen".to_string(),
+                                    step: 0,
+                                    scratch: vec![],
+                                    deciding_player: pid,
+                                    candidates: qualifying,
+                                    min: 1,
+                                    max: 1,
+                                    ordered: false,
+                                    unique_names: false,
+                                    prompt,
+                                    choice_kind: 1,
+                                    copy_source_object_id: 0,
+                                });
+                                return Ok(());
+                            }
                         }
                     }
                 }

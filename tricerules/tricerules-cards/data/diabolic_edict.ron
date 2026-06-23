@@ -1,0 +1,12 @@
+(
+  id: "diabolic_edict",
+  name: "Diabolic Edict",
+  mana_cost: "{1}{B}",
+  types: ["Instant"],
+  spell_effect: [
+    TargetPlayerSacrifices(
+      target: (kind: AnyPlayer),
+      filter: (kind: Creature),
+    ),
+  ],
+)
