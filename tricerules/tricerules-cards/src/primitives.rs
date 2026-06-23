@@ -703,6 +703,9 @@ pub enum ContinuousEffectKind {
         delta_power: i32,
         delta_toughness: i32,
     },
+    /// CR 305.2b / layer 5 (rule-change): controller may play `count` additional lands per turn.
+    /// Covers Exploration, Oracle of Mul Daya, and similar enchantments/permanents.
+    ExtraLandPlays(u32),
     // Future: Layer6AddKeyword(Keyword), Layer7bSetPt { power: i32, toughness: i32 }, …
 }
 
@@ -757,6 +760,9 @@ pub enum StaticAbilityDef {
         delta_power: i32,
         delta_toughness: i32,
     },
+    /// CR 305.2b / layer 5: controller may play `count` additional lands per turn while this
+    /// permanent is on the battlefield. Exploration, Oracle of Mul Daya.
+    ExtraLandPlays { count: u32 },
 }
 
 #[cfg(test)]

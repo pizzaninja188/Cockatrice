@@ -683,8 +683,11 @@ impl GameEngine {
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("not your priority"));
         }
-        if self.state.land_dropped_this_turn {
-            return Err(EngineError::Illegal("one land per turn"));
+        let max_lands = 1 + self.extra_land_plays_for(player);
+        if self.state.lands_played_this_turn >= max_lands {
+            return Err(EngineError::Illegal(
+                "land play limit reached for this turn",
+            ));
         }
         if !super::priority::sorcery_speed_available(&self.state, player) {
             return Err(EngineError::Illegal("play land only at sorcery speed"));
@@ -702,7 +705,7 @@ impl GameEngine {
         if !def.is_land {
             return Err(EngineError::Illegal("not a land"));
         }
-        self.state.land_dropped_this_turn = true;
+        self.state.lands_played_this_turn += 1;
         self.state.players[idx].hand.retain(|&x| x != oid);
         self.state.players[idx].battlefield.push(oid);
         if let Some(o) = self.state.objects.get_mut(&oid) {

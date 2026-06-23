@@ -3,5 +3,7 @@
   name: "Exploration",
   mana_cost: "{G}",
   types: ["Enchantment"],
-  partial: "layer-5 continuous effect (extra land per turn) not yet implemented",
+  static_abilities: [
+    ExtraLandPlays(count: 1),
+  ],
 )

@@ -545,7 +545,7 @@ impl GameEngine {
         self.cleanup_until_end_of_turn_creature_pt();
         self.cleanup_marked_damage();
         self.clear_all_mana_pools();
-        self.state.land_dropped_this_turn = false;
+        self.state.lands_played_this_turn = 0;
         let n = self.state.players.len();
         if n >= 1 {
             self.state.active_player_idx = (self.state.active_player_idx + 1) % n;

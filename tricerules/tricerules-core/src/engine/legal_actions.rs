@@ -188,7 +188,8 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
             for face in def.faces_iter() {
                 let name = face.name;
                 if face.is_land {
-                    if sorcery_ok && !eng.state.land_dropped_this_turn {
+                    let max_lands = 1 + eng.extra_land_plays_for(pid);
+                    if sorcery_ok && eng.state.lands_played_this_turn < max_lands {
                         v.push(format!("Play land {name} (hand idx {i})"));
                     }
                 } else if !combat_decl_lock {
