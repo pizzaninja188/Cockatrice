@@ -210,17 +210,22 @@ resume), set \`session=$new_sid\` so a future interrupted run can resume it." \
   fi
 
   # Extract text result and token stats from JSON output.
-  # Falls back to raw log content if claude exited non-zero (plain-text error).
+  # The claude CLI may prefix the JSON with non-JSON lines (e.g. MCP connector
+  # messages), so extract the last line starting with '{' rather than treating
+  # the whole file as JSON. Falls back to raw log content on parse failure.
   TASK_TEXT=""
   tok_in=0; tok_out=0; tok_cache_r=0; tok_cache_w=0; tok_turns="?"; tok_cost="?"
-  if command -v jq >/dev/null 2>&1 && jq -e . "$TASK_LOG" >/dev/null 2>&1; then
-    TASK_TEXT="$(jq -r '.result // ""' "$TASK_LOG" 2>/dev/null || true)"
-    tok_in="$(jq -r '.usage.input_tokens // 0' "$TASK_LOG" 2>/dev/null || echo 0)"
-    tok_out="$(jq -r '.usage.output_tokens // 0' "$TASK_LOG" 2>/dev/null || echo 0)"
-    tok_cache_r="$(jq -r '.usage.cache_read_input_tokens // 0' "$TASK_LOG" 2>/dev/null || echo 0)"
-    tok_cache_w="$(jq -r '.usage.cache_creation_input_tokens // 0' "$TASK_LOG" 2>/dev/null || echo 0)"
-    tok_turns="$(jq -r '.num_turns // "?"' "$TASK_LOG" 2>/dev/null || echo '?')"
-    tok_cost="$(jq -r '.total_cost_usd // "?"' "$TASK_LOG" 2>/dev/null || echo '?')"
+  if command -v jq >/dev/null 2>&1; then
+    _json="$(grep '^{' "$TASK_LOG" 2>/dev/null | tail -1)"
+    if [[ -n "$_json" ]] && echo "$_json" | jq -e . >/dev/null 2>&1; then
+      TASK_TEXT="$(echo "$_json" | jq -r '.result // ""' 2>/dev/null || true)"
+      tok_in="$(echo "$_json" | jq -r '.usage.input_tokens // 0' 2>/dev/null || echo 0)"
+      tok_out="$(echo "$_json" | jq -r '.usage.output_tokens // 0' 2>/dev/null || echo 0)"
+      tok_cache_r="$(echo "$_json" | jq -r '.usage.cache_read_input_tokens // 0' 2>/dev/null || echo 0)"
+      tok_cache_w="$(echo "$_json" | jq -r '.usage.cache_creation_input_tokens // 0' 2>/dev/null || echo 0)"
+      tok_turns="$(echo "$_json" | jq -r '.num_turns // "?"' 2>/dev/null || echo '?')"
+      tok_cost="$(echo "$_json" | jq -r '.total_cost_usd // "?"' 2>/dev/null || echo '?')"
+    fi
   fi
   [[ -z "$TASK_TEXT" ]] && TASK_TEXT="$(cat "$TASK_LOG" 2>/dev/null || true)"
   echo "$TASK_TEXT" | tail -n 40
