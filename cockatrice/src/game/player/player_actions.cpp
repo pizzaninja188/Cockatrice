@@ -3450,19 +3450,54 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         return false;
     }
 
-    // CR 605: a left-click on a permanent whose *only* activated ability is a mana ability skips the
-    // menu and floats the mana directly (the engine taps the source and adds the mana; it comes back
-    // via ManaPoolUpdated). Right-click (leftClick == false) always opens the full menu. A permanent
-    // with more than one ability, or whose single ability is not a mana ability, also uses the menu.
+    // CR 605: a permanent whose *only* activated ability is a mana ability gets the fast path —
+    // no pending-ability state, just send activate_ability. Two sub-cases:
+    //   • Single option (basic land): left-click auto-activates; right-click falls through to the
+    //     full menu (keeps the existing "right-click = see text" behavior).
+    //   • Multiple options (dual land): both left and right click show a compact color-picker menu
+    //     so the player can choose which color to produce.
     const QStringList manaProduced = handler->activatedAbilityManaProducedForOid(oid);
-    if (leftClick && abilityTexts.size() == 1 && !manaProduced.value(0).isEmpty()) {
-        Command_RuledPayload *activate = newRuledPayloadActivateManaAbilityForLand(card, QChar());
-        if (!activate) {
-            return false; // not a mana source the engine recognizes; let normal handling continue
+    const QStringList costLabels = handler->activatedAbilityCostLabelsForOid(oid);
+    if (abilityTexts.size() == 1 && !manaProduced.value(0).isEmpty()) {
+        const QStringList colorOptions = manaProduced.value(0).split(QChar('/'));
+        if (colorOptions.size() > 1) {
+            // Dual land: show a compact color-picker on both left and right click.
+            const QString costPrefix = costLabels.value(0);
+            QMenu colorMenu;
+            colorMenu.setTitle(card->getName());
+            for (const QString &opt : colorOptions) {
+                const QString label = costPrefix.isEmpty()
+                    ? tr("Add {%1}").arg(opt)
+                    : tr("%1: Add {%2}").arg(costPrefix, opt);
+                colorMenu.addAction(label);
+            }
+            QAction *chosen = colorMenu.exec(QCursor::pos());
+            if (!chosen) {
+                return true; // player dismissed the picker
+            }
+            const int sel = colorMenu.actions().indexOf(chosen);
+            const QChar desiredColor =
+                (sel >= 0 && sel < colorOptions.size() && !colorOptions.at(sel).isEmpty())
+                    ? colorOptions.at(sel).at(0).toUpper()
+                    : QChar();
+            Command_RuledPayload *activate = newRuledPayloadActivateManaAbilityForLand(card, desiredColor);
+            if (!activate) {
+                return false;
+            }
+            sendGameCommand(*activate);
+            delete activate;
+            return true;
         }
-        sendGameCommand(*activate);
-        delete activate;
-        return true;
+        // Single-option mana ability: left-click auto-activates, right-click falls through.
+        if (leftClick) {
+            Command_RuledPayload *activate = newRuledPayloadActivateManaAbilityForLand(card, QChar());
+            if (!activate) {
+                return false; // not a mana source the engine recognizes; let normal handling continue
+            }
+            sendGameCommand(*activate);
+            delete activate;
+            return true;
+        }
     }
 
     // Past the direct mana-float fast path: opening the full activation menu now would overwrite an
@@ -3472,18 +3507,25 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         return false;
     }
 
-    // Build and show the context menu.
+    // Build and show the context menu with full "cost: text" labels (Oracle format).
     QMenu menu;
     menu.setTitle(card->getName());
+    QVector<QString> menuLabels;
+    menuLabels.reserve(abilityTexts.size());
     for (int i = 0; i < abilityTexts.size(); ++i) {
-        menu.addAction(abilityTexts[i]);
+        const QString costLabel = costLabels.value(i);
+        const QString label = costLabel.isEmpty()
+            ? abilityTexts[i]
+            : tr("%1: %2").arg(costLabel, abilityTexts[i]);
+        menuLabels.append(label);
+        menu.addAction(label);
     }
     QAction *chosen = menu.exec(QCursor::pos());
     if (!chosen) {
         return true; // menu was shown, player cancelled
     }
 
-    const int abilityIndex = abilityTexts.indexOf(chosen->text());
+    const int abilityIndex = menuLabels.indexOf(chosen->text());
     if (abilityIndex < 0) {
         return true;
     }

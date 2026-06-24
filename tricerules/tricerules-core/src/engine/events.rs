@@ -355,6 +355,34 @@ impl GameEngine {
                             .unwrap_or_default()
                     })
                     .collect(),
+                // Parallel to `battlefield_activated_ability_texts`: pipe-delimited display-cost
+                // labels for each ability (e.g. "{T}", "{4}", "{T}, {4}", "Sacrifice this").
+                // Used by the client to build "cost: text" labels in the activation context menu.
+                battlefield_activated_ability_cost_labels: p
+                    .battlefield
+                    .iter()
+                    .map(|&oid| {
+                        self.state
+                            .objects
+                            .get(&oid)
+                            .and_then(|o| self.registry.get(&o.card_id))
+                            .map(|def| {
+                                def.activated_abilities
+                                    .iter()
+                                    .map(|a| match &a.cost {
+                                        AbilityCost::Tap => "{T}".to_string(),
+                                        AbilityCost::Mana(c) => c.to_string(),
+                                        AbilityCost::TapAndMana(c) => {
+                                            format!("{{T}}, {c}")
+                                        }
+                                        AbilityCost::Sacrifice => "Sacrifice this".to_string(),
+                                    })
+                                    .collect::<Vec<_>>()
+                                    .join("|")
+                            })
+                            .unwrap_or_default()
+                    })
+                    .collect(),
                 // Parallel to `battlefield`: per-permanent counter annotation for client display
                 // (e.g. "1 +1/+1 counter(s)"). Empty when the permanent has no counters.
                 battlefield_counters_annotation: p
