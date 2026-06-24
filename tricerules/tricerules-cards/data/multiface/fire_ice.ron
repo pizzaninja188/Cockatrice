@@ -10,7 +10,13 @@
             mana_cost: "{1}{R}",
             types: ["Instant"],
             // Oracle: "Fire deals 2 damage divided as you choose among one or two targets."
-            spell_effect: [DamageTarget(amount: 2, target: (kind: AnyTarget))],
+            // CR 601.2d: fixed total (2), no per-target surcharge, max 2 targets.
+            spell_effect: [DamageTargets(
+                amount: 2,
+                target: (kind: AnyTarget),
+                extra_mana_per_target: 0,
+                max_targets: Some(2),
+            )],
         ),
         (
             name: "Ice",
@@ -20,5 +26,4 @@
             spell_effect: [TapTarget(target: (kind: AnyPermanent)), Draw(count: 1)],
         ),
     ],
-    partial: "Fire deals its 2 damage to a single target; dividing among two targets is not modeled",
 )

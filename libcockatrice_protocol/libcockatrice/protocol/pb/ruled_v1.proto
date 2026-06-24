@@ -111,6 +111,8 @@ message FlexPipPayment {
 
 message TargetRef {
   uint32 object_id = 1;
+  // Per-target damage amount for DamageTargets (Fireball, Fire); 0 = unused.
+  uint32 damage_amount = 2;
 }
 
 message PlayLand {

@@ -303,6 +303,7 @@ impl GameEngine {
                 is_copy: false,
                 chosen_x: 0,
                 face_index: 0,
+                target_damage: vec![],
             });
             self.state.passes_since_stack_change = 0;
             events.push(rv1::RuledEvent {

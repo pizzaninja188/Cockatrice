@@ -281,6 +281,21 @@ pub enum SpellEffectKind {
         amount: Amount,
         target: TargetFilter,
     },
+    /// Divide `amount` damage among any number of targets (CR 601.2d). Costs
+    /// `extra_mana_per_target` additional generic mana per target beyond the first (Fireball = 1,
+    /// Fire = 0). `max_targets` caps the count (Fire = `Some(2)`; `None` = unlimited).
+    /// At cast time the player submits `(target, damage_amount)` pairs via `TargetRef`; the sum
+    /// must equal `amount.resolve(x_value)`. Covers Fireball (X divided unlimited) and Fire
+    /// (fixed 2 divided among ≤ 2 targets). CR 608.2b: if some targets become illegal at
+    /// resolution, damage is applied only to the remaining legal targets (partial fizzle).
+    DamageTargets {
+        amount: Amount,
+        target: TargetFilter,
+        #[serde(default)]
+        extra_mana_per_target: u32,
+        #[serde(default)]
+        max_targets: Option<u32>,
+    },
     Draw {
         count: Amount,
     },
@@ -448,6 +463,7 @@ impl SpellEffectKind {
     pub fn target_filters(&self) -> Vec<&TargetFilter> {
         match self {
             SpellEffectKind::DamageTarget { target, .. }
+            | SpellEffectKind::DamageTargets { target, .. }
             | SpellEffectKind::DestroyTarget { target }
             | SpellEffectKind::PumpTarget { target, .. }
             | SpellEffectKind::TapTarget { target }

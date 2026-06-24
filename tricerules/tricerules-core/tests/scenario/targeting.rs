@@ -36,6 +36,7 @@ fn lightning_bolt_rejects_basic_land_target() {
                 bolt_idx,
                 vec![TargetRef {
                     object_id: land_oid,
+                    damage_amount: 0,
                 }],
             ),
         )
@@ -116,6 +117,7 @@ fn giant_growth_rejects_land_target() {
                 growth_idx,
                 vec![TargetRef {
                     object_id: land_oid,
+                    damage_amount: 0,
                 }],
             ),
         )
@@ -168,7 +170,13 @@ fn giant_growth_fizzles_if_creature_target_dies_before_resolution() {
     let growth_idx = hand_index_for_card(&e, 0, "giant_growth");
     e.apply_command(
         0,
-        &cast_spell(growth_idx, vec![TargetRef { object_id: bear }]),
+        &cast_spell(
+            growth_idx,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
     )
     .expect("cast growth");
 
@@ -183,7 +191,13 @@ fn giant_growth_fizzles_if_creature_target_dies_before_resolution() {
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(
         0,
-        &cast_spell(bolt_idx, vec![TargetRef { object_id: bear }]),
+        &cast_spell(
+            bolt_idx,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
     )
     .expect("cast bolt on top of growth");
 
@@ -256,8 +270,17 @@ fn lightning_bolt_fizzles_when_creature_target_left_battlefield() {
         },
     );
     let bolt_a = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_a, vec![TargetRef { object_id: bear }]))
-        .expect("first bolt");
+    e.apply_command(
+        0,
+        &cast_spell(
+            bolt_a,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("first bolt");
     give_mana(
         &mut e,
         0,
@@ -267,8 +290,17 @@ fn lightning_bolt_fizzles_when_creature_target_left_battlefield() {
         },
     );
     let bolt_b = hand_index_for_card(&e, 0, "lightning_bolt");
-    e.apply_command(0, &cast_spell(bolt_b, vec![TargetRef { object_id: bear }]))
-        .expect("second bolt on top");
+    e.apply_command(
+        0,
+        &cast_spell(
+            bolt_b,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("second bolt on top");
 
     resolve_entire_stack_two_player(&mut e);
 
@@ -332,7 +364,13 @@ fn go_for_the_throat_fizzles_when_creature_target_left_battlefield() {
     let gfth_idx = hand_index_for_card(&e, 0, "go_for_the_throat");
     e.apply_command(
         0,
-        &cast_spell(gfth_idx, vec![TargetRef { object_id: bear }]),
+        &cast_spell(
+            gfth_idx,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
     )
     .expect("go for the throat");
 
@@ -347,7 +385,13 @@ fn go_for_the_throat_fizzles_when_creature_target_left_battlefield() {
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(
         0,
-        &cast_spell(bolt_idx, vec![TargetRef { object_id: bear }]),
+        &cast_spell(
+            bolt_idx,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
     )
     .expect("bolt on top");
 
@@ -440,6 +484,7 @@ fn go_for_the_throat_rejects_artifact_creature_target() {
                 gftt_idx,
                 vec![TargetRef {
                     object_id: ornithopter_oid,
+                    damage_amount: 0,
                 }],
             ),
         )
@@ -481,7 +526,13 @@ fn bump_in_the_night_rejects_creature_target() {
     let err = e
         .apply_command(
             0,
-            &cast_spell(bump_idx, vec![TargetRef { object_id: bear }]),
+            &cast_spell(
+                bump_idx,
+                vec![TargetRef {
+                    object_id: bear,
+                    damage_amount: 0,
+                }],
+            ),
         )
         .expect_err("bump cannot target creature");
     assert!(format!("{err:?}").contains("player"), "unexpected: {err:?}");
@@ -551,13 +602,25 @@ fn swords_to_plowshares_fizzles_if_target_dies_before_resolution() {
     let swords_idx = hand_index_for_card(&e, 0, "swords_to_plowshares");
     e.apply_command(
         0,
-        &cast_spell(swords_idx, vec![TargetRef { object_id: bear }]),
+        &cast_spell(
+            swords_idx,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
     )
     .expect("cast swords");
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(
         0,
-        &cast_spell(bolt_idx, vec![TargetRef { object_id: bear }]),
+        &cast_spell(
+            bolt_idx,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
     )
     .expect("cast bolt on top");
     assert_eq!(e.state.stack.len(), 2);
@@ -621,6 +684,7 @@ fn unsummon_rejects_land_target() {
                 idx,
                 vec![TargetRef {
                     object_id: island_oid,
+                    damage_amount: 0,
                 }],
             ),
         )
@@ -728,7 +792,13 @@ fn hexproof_opponent_cannot_target_with_spell() {
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     let result = e.apply_command(
         0,
-        &cast_spell(bolt_idx, vec![TargetRef { object_id: scout }]),
+        &cast_spell(
+            bolt_idx,
+            vec![TargetRef {
+                object_id: scout,
+                damage_amount: 0,
+            }],
+        ),
     );
     assert!(
         result.is_err(),
@@ -773,8 +843,17 @@ fn hexproof_controller_can_target_own_permanent() {
     }
 
     let gg_idx = hand_index_for_card(&e, 0, "giant_growth");
-    e.apply_command(0, &cast_spell(gg_idx, vec![TargetRef { object_id: scout }]))
-        .expect("CR 702.18: controller can target own hexproof creature");
+    e.apply_command(
+        0,
+        &cast_spell(
+            gg_idx,
+            vec![TargetRef {
+                object_id: scout,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("CR 702.18: controller can target own hexproof creature");
 
     // Resolve the pump.
     pass_both_players(&mut e);
@@ -829,6 +908,7 @@ fn shroud_controller_cannot_target_own_permanent() {
             gg_idx,
             vec![TargetRef {
                 object_id: enchantress,
+                damage_amount: 0,
             }],
         ),
     );
@@ -855,7 +935,14 @@ fn royal_assassin_destroys_tapped_creature() {
 
     e.apply_command(
         0,
-        &activate_ability(assassin, 0, vec![TargetRef { object_id: bears }]),
+        &activate_ability(
+            assassin,
+            0,
+            vec![TargetRef {
+                object_id: bears,
+                damage_amount: 0,
+            }],
+        ),
     )
     .expect("activate Royal Assassin on tapped creature");
 
@@ -888,7 +975,14 @@ fn royal_assassin_cannot_target_untapped_creature() {
 
     let err = e.apply_command(
         0,
-        &activate_ability(assassin, 0, vec![TargetRef { object_id: bears }]),
+        &activate_ability(
+            assassin,
+            0,
+            vec![TargetRef {
+                object_id: bears,
+                damage_amount: 0,
+            }],
+        ),
     );
     assert!(err.is_err(), "untapped creature is not a legal target");
     // Cost untouched: source stays untapped, nothing on the stack.

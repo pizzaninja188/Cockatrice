@@ -79,6 +79,7 @@ fn non_active_player_with_priority_pays_mana_for_counterspell() {
             counter_idx,
             vec![TargetRef {
                 object_id: bolt_oid,
+                damage_amount: 0,
             }],
         ),
     )
@@ -140,7 +141,13 @@ fn giant_growth_pump_expires_after_active_turn_ends() {
     let growth_idx = hand_index_for_card(&e, 0, "giant_growth");
     e.apply_command(
         0,
-        &cast_spell(growth_idx, vec![TargetRef { object_id: bear }]),
+        &cast_spell(
+            growth_idx,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
     )
     .expect("cast growth");
     pass_both_players(&mut e);
@@ -283,7 +290,13 @@ fn two_giant_growths_stack_correctly() {
         let growth_idx = hand_index_for_card(&e, 0, "giant_growth");
         e.apply_command(
             0,
-            &cast_spell(growth_idx, vec![TargetRef { object_id: bear }]),
+            &cast_spell(
+                growth_idx,
+                vec![TargetRef {
+                    object_id: bear,
+                    damage_amount: 0,
+                }],
+            ),
         )
         .expect("cast growth");
         pass_both_players(&mut e);
@@ -342,8 +355,17 @@ fn battlegrowth_counter_raises_pt_and_persists() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "battlegrowth");
-    e.apply_command(0, &cast_spell(idx, vec![TargetRef { object_id: bear }]))
-        .expect("cast battlegrowth");
+    e.apply_command(
+        0,
+        &cast_spell(
+            idx,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast battlegrowth");
     pass_both_players(&mut e);
 
     assert_eq!(e.effective_power(bear), Some(3), "2/2 + one +1/+1 counter");
@@ -408,8 +430,17 @@ fn zone_view_reports_counter_annotation() {
         },
     );
     let bg = hand_index_for_card(&e, 0, "battlegrowth");
-    e.apply_command(0, &cast_spell(bg, vec![TargetRef { object_id: bear }]))
-        .expect("cast battlegrowth");
+    e.apply_command(
+        0,
+        &cast_spell(
+            bg,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast battlegrowth");
     let first = e.state.priority_player_id();
     e.apply_command(first, &pass()).expect("first pass");
     let second = if first == 0 { 1 } else { 0 };
@@ -487,8 +518,17 @@ fn plus_and_minus_counters_annihilate() {
         },
     );
     let bg = hand_index_for_card(&e, 0, "battlegrowth");
-    e.apply_command(0, &cast_spell(bg, vec![TargetRef { object_id: bear }]))
-        .expect("cast battlegrowth");
+    e.apply_command(
+        0,
+        &cast_spell(
+            bg,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast battlegrowth");
     pass_both_players(&mut e);
     assert_eq!(e.effective_toughness(bear), Some(3));
 
@@ -505,8 +545,17 @@ fn plus_and_minus_counters_annihilate() {
         },
     );
     let ii = hand_index_for_card(&e, 0, "instill_infection");
-    e.apply_command(0, &cast_spell(ii, vec![TargetRef { object_id: bear }]))
-        .expect("cast instill infection");
+    e.apply_command(
+        0,
+        &cast_spell(
+            ii,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast instill infection");
     pass_both_players(&mut e);
 
     assert_eq!(
@@ -556,8 +605,17 @@ fn minus_counter_to_zero_toughness_kills_via_sba() {
         },
     );
     let ii = hand_index_for_card(&e, 0, "instill_infection");
-    e.apply_command(0, &cast_spell(ii, vec![TargetRef { object_id: sorc }]))
-        .expect("cast instill infection");
+    e.apply_command(
+        0,
+        &cast_spell(
+            ii,
+            vec![TargetRef {
+                object_id: sorc,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast instill infection");
     pass_both_players(&mut e);
 
     assert!(
@@ -604,7 +662,13 @@ fn marked_damage_clears_at_cleanup() {
     let growth_idx = hand_index_for_card(&e, 0, "giant_growth");
     e.apply_command(
         0,
-        &cast_spell(growth_idx, vec![TargetRef { object_id: bear }]),
+        &cast_spell(
+            growth_idx,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
     )
     .expect("cast growth");
     pass_both_players(&mut e);
@@ -664,8 +728,17 @@ fn bounce_clears_counters_and_marked_damage() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "unsummon");
-    e.apply_command(0, &cast_spell(idx, vec![TargetRef { object_id: bear }]))
-        .expect("cast unsummon");
+    e.apply_command(
+        0,
+        &cast_spell(
+            idx,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast unsummon");
     e.apply_command(0, &pass()).expect("p0 pass");
     e.apply_command(1, &pass()).expect("p1 pass");
     let returned = e.state.objects.get(&bear).expect("bear");
@@ -794,8 +867,17 @@ fn anthem_buff_drains_when_source_leaves_battlefield() {
         },
     );
     let b_idx = hand_index_for_card(&e, 0, "boomerang");
-    e.apply_command(0, &cast_spell(b_idx, vec![TargetRef { object_id: anthem }]))
-        .expect("cast boomerang at own anthem");
+    e.apply_command(
+        0,
+        &cast_spell(
+            b_idx,
+            vec![TargetRef {
+                object_id: anthem,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast boomerang at own anthem");
     resolve_entire_stack_two_player(&mut e);
 
     assert_eq!(

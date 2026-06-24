@@ -240,6 +240,10 @@ pub struct StackItem {
     /// `{X}` pip (and for abilities). On the stack the spell's mana value is `fixed_mv + chosen_x`;
     /// at resolution this feeds [`Amount::X`](tricerules_cards::Amount) effect amounts.
     pub chosen_x: u32,
+    /// Per-target damage amounts for `DamageTargets` (Fireball, Fire). Parallel to `targets`:
+    /// `target_damage[i]` is the damage allocated to `targets[i]` by the casting player.
+    /// Empty for all other effects (no overhead for non-Fireball spells).
+    pub target_damage: Vec<u32>,
 }
 
 /// Pre-game: choose first player, then London-style mulligans (redraw to 7, then put N on bottom).

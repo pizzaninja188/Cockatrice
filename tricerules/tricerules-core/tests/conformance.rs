@@ -64,7 +64,10 @@ fn activate_ability(
 }
 
 fn tref(object_id: u32) -> TargetRef {
-    TargetRef { object_id }
+    TargetRef {
+        object_id,
+        damage_amount: 0,
+    }
 }
 
 /// Drive a freshly created game to P0's first main phase, where both sorcery- and instant-speed

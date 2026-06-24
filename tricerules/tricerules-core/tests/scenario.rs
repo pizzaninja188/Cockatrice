@@ -35,3 +35,5 @@ mod targeting;
 mod tokens;
 #[path = "scenario/triggers.rs"]
 mod triggers;
+#[path = "scenario/x_multi_target.rs"]
+mod x_multi_target;

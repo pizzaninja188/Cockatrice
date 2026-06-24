@@ -171,7 +171,13 @@ fn token_dies_and_ceases_to_exist() {
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(
         0,
-        &cast_spell(bolt_idx, vec![TargetRef { object_id: victim }]),
+        &cast_spell(
+            bolt_idx,
+            vec![TargetRef {
+                object_id: victim,
+                damage_amount: 0,
+            }],
+        ),
     )
     .expect("bolt the token");
     e.apply_command(0, &pass()).expect("pass");
@@ -226,7 +232,13 @@ fn bounced_token_ceases_to_exist() {
     let uns_idx = hand_index_for_card(&e, 0, "unsummon");
     e.apply_command(
         0,
-        &cast_spell(uns_idx, vec![TargetRef { object_id: victim }]),
+        &cast_spell(
+            uns_idx,
+            vec![TargetRef {
+                object_id: victim,
+                damage_amount: 0,
+            }],
+        ),
     )
     .expect("unsummon the token");
     e.apply_command(0, &pass()).expect("pass");

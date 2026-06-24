@@ -118,6 +118,17 @@ pub(super) fn battlefield_objects_matching(
     out
 }
 
+/// Public wrapper used by resolution for per-target legality checks in `DamageTargets`.
+pub(super) fn target_filter_legal_at_resolution(
+    state: &GameState,
+    registry: &CardRegistry,
+    filter: &TargetFilter,
+    tid: ObjectId,
+    caster: PlayerId,
+) -> bool {
+    target_filter_legal(state, registry, filter, tid, caster)
+}
+
 fn target_filter_legal(
     state: &GameState,
     registry: &CardRegistry,
@@ -221,7 +232,8 @@ fn stack_spell_target_legal(
 }
 
 /// CR 608.2b-style: if any targeted effect has no legal target, the whole spell fizzles.
-/// (With a shared single-target list this is equivalent to "all targets illegal".)
+/// For `DamageTargets`, the spell fizzles only when ALL chosen targets are gone (partial-fizzle
+/// per CR 608.2b — if at least one is still legal, the spell still resolves for it).
 pub(super) fn spell_has_no_legal_targets_at_resolution(
     state: &GameState,
     registry: &CardRegistry,
@@ -232,6 +244,15 @@ pub(super) fn spell_has_no_legal_targets_at_resolution(
     effects.iter().any(|effect| {
         if !spell_effect_kind_needs_target(effect) {
             return false; // untargeted effects never fizzle
+        }
+        // DamageTargets: spell fizzles only if ALL targets are now illegal.
+        if matches!(effect, SpellEffectKind::DamageTargets { .. }) {
+            if targets.is_empty() {
+                return true;
+            }
+            return targets.iter().all(|&tid| {
+                !effect_target_legal_at_resolution(state, registry, effect, tid, caster)
+            });
         }
         let Some(&tid) = targets.first() else {
             return true; // needs target but none provided
@@ -250,6 +271,7 @@ fn effect_target_legal_at_resolution(
 ) -> bool {
     match effect {
         SpellEffectKind::DamageTarget { target, .. }
+        | SpellEffectKind::DamageTargets { target, .. }
         | SpellEffectKind::TargetPlayerGainsLife { target, .. }
         | SpellEffectKind::TargetPlayerLosesLife { target, .. }
         | SpellEffectKind::MillTargetPlayer { target, .. }
@@ -291,6 +313,7 @@ pub(super) fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
         SpellEffectKind::PumpTarget { target, .. }
         | SpellEffectKind::PutCounters { target, .. } => !matches!(target.kind, TargetKind::Self_),
         SpellEffectKind::DamageTarget { .. }
+        | SpellEffectKind::DamageTargets { .. }
         | SpellEffectKind::DestroyTarget { .. }
         | SpellEffectKind::ExileTarget
         | SpellEffectKind::ExileTargetGainLifeEqualToPower
@@ -341,6 +364,25 @@ pub(super) fn validate_effect_targets(
             }
             if !target_filter_legal(state, registry, filter, targets[0].object_id, caster) {
                 return Err(EngineError::Illegal("illegal target for damage effect"));
+            }
+        }
+        SpellEffectKind::DamageTargets { target: filter, max_targets, .. } => {
+            if targets.is_empty() {
+                return Err(EngineError::Illegal("requires at least one target"));
+            }
+            if let Some(max) = max_targets {
+                if targets.len() > *max as usize {
+                    return Err(EngineError::Illegal("too many targets for this effect"));
+                }
+            }
+            let mut seen = std::collections::HashSet::new();
+            for t in targets {
+                if !seen.insert(t.object_id) {
+                    return Err(EngineError::Illegal("duplicate target"));
+                }
+                if !target_filter_legal(state, registry, filter, t.object_id, caster) {
+                    return Err(EngineError::Illegal("illegal target for damage effect"));
+                }
             }
         }
         SpellEffectKind::PumpTarget { target: filter, .. }
@@ -437,6 +479,20 @@ pub(super) fn validate_spell_targets(
     effects: &[SpellEffectKind],
     targets: &[rv1::TargetRef],
 ) -> Result<(), EngineError> {
+    // DamageTargets needs multi-target validation (1..=max_targets) — handled via
+    // validate_effect_targets, which already supports variable count.
+    let has_multi_target = effects
+        .iter()
+        .any(|e| matches!(e, SpellEffectKind::DamageTargets { .. }));
+    if has_multi_target {
+        for effect in effects {
+            if matches!(effect, SpellEffectKind::DamageTargets { .. }) {
+                validate_effect_targets(state, registry, caster, effect, targets)?;
+            }
+        }
+        return Ok(());
+    }
+
     let needs_target = effects.iter().any(spell_effect_kind_needs_target);
     if needs_target {
         if targets.len() != 1 {
@@ -468,6 +524,7 @@ pub(super) fn spell_target_legality_error(
         // characteristic restriction (creature/player, `tapped`, `not_artifact`, hexproof/shroud).
         SpellEffectKind::DestroyTarget { target: filter }
         | SpellEffectKind::DamageTarget { target: filter, .. }
+        | SpellEffectKind::DamageTargets { target: filter, .. }
         | SpellEffectKind::TapTarget { target: filter }
         | SpellEffectKind::PumpTarget { target: filter, .. }
         | SpellEffectKind::PutCounters { target: filter, .. }

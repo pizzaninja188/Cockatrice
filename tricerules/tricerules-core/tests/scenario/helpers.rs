@@ -198,7 +198,27 @@ pub(crate) fn deploy_to_battlefield(
 pub(crate) fn target_player(pid: i32) -> Vec<TargetRef> {
     vec![TargetRef {
         object_id: pid as u32,
+        damage_amount: 0,
     }]
+}
+
+/// Player target with explicit damage allocation, for `DamageTargets` spells (Fireball, Fire).
+pub(crate) fn target_player_damage(pid: i32, damage: u32) -> Vec<TargetRef> {
+    vec![TargetRef {
+        object_id: pid as u32,
+        damage_amount: damage,
+    }]
+}
+
+/// Multiple targets with explicit damage allocations for `DamageTargets`.
+pub(crate) fn targets_with_damage(pairs: Vec<(u32, u32)>) -> Vec<TargetRef> {
+    pairs
+        .into_iter()
+        .map(|(oid, dmg)| TargetRef {
+            object_id: oid,
+            damage_amount: dmg,
+        })
+        .collect()
 }
 
 pub(crate) fn declare_attackers(creature_ids: Vec<u32>) -> RuledCommand {

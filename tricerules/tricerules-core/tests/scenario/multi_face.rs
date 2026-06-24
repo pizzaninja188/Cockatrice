@@ -30,8 +30,9 @@ fn fire_ice_fire_half_deals_two_and_shows_face_name() {
     );
 
     let idx = hand_index_for_card(&e, 0, "fire_ice");
+    // Fire is a DamageTargets effect; damage_amount must be specified (all 2 to player 1).
     let pushed = e
-        .apply_command(0, &cast_spell_face(idx, target_player(1), 0))
+        .apply_command(0, &cast_spell_face(idx, target_player_damage(1, 2), 0))
         .expect("cast Fire");
     let spell_oid = e.state.stack.last().expect("spell on stack").id;
     let push = pushed
@@ -95,6 +96,7 @@ fn fire_ice_ice_half_taps_and_draws() {
                 idx,
                 vec![TargetRef {
                     object_id: land_oid,
+                    damage_amount: 0,
                 }],
                 1,
             ),

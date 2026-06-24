@@ -1428,7 +1428,13 @@ fn indestructible_survives_destroy_spell() {
     let murder_idx = hand_index_for_card(&e, 0, "murder");
     e.apply_command(
         0,
-        &cast_spell(murder_idx, vec![TargetRef { object_id: myr }]),
+        &cast_spell(
+            murder_idx,
+            vec![TargetRef {
+                object_id: myr,
+                damage_amount: 0,
+            }],
+        ),
     )
     .expect("cast murder");
     e.apply_command(0, &pass()).expect("p0 pass");
