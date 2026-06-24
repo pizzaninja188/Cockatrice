@@ -360,6 +360,7 @@ pub(crate) fn inject_creature_on_battlefield(
             damage: 0,
             deathtouch_damage: false,
             counters: std::collections::BTreeMap::new(),
+            attached_to: None,
         },
     );
     e.state.players[player].battlefield.push(id);
@@ -390,6 +391,7 @@ pub(crate) fn inject_permanent_on_battlefield(
             damage: 0,
             deathtouch_damage: false,
             counters: std::collections::BTreeMap::new(),
+            attached_to: None,
         },
     );
     e.state.players[player].battlefield.push(id);
@@ -416,6 +418,7 @@ pub(crate) fn inject_library_card(e: &mut GameEngine, player: usize, card_id: &s
             damage: 0,
             deathtouch_damage: false,
             counters: std::collections::BTreeMap::new(),
+            attached_to: None,
         },
     );
     e.state.players[player].library.push_back(id);
@@ -616,6 +619,7 @@ pub(crate) fn inject_creature_with_stats(
             damage: 0,
             deathtouch_damage: false,
             counters: std::collections::BTreeMap::new(),
+            attached_to: None,
         },
     );
     e.state.players[player].battlefield.push(id);

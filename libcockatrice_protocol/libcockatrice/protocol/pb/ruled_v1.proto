@@ -250,7 +250,18 @@ message RuledEvent {
     // produced mana, a cost was paid, or the pool emptied on a step/phase change. The relay
     // mirrors it onto that player's ruled mana-pool counters (Event_SetCounter).
     ManaPoolUpdated mana_pool_updated = 24;
+    // An Aura permanent entered the battlefield and attached to an enchanted permanent (CR 303.4).
+    // The relay translates this into Event_AttachCard so the client stacks the aura under the
+    // enchanted permanent. Also emitted on zone-view reconnect to restore the attachment.
+    AuraAttached aura_attached = 25;
   }
+}
+
+// An Aura spell resolved and attached to a permanent on the battlefield (CR 303.4).
+// The relay calls Event_AttachCard: aura_object_id attaches to enchanted_object_id.
+message AuraAttached {
+  uint32 aura_object_id = 1;
+  uint32 enchanted_object_id = 2;
 }
 
 // Engine-authoritative mana pool snapshot for one player (CR 106). Absolute counts (not deltas),
@@ -496,6 +507,10 @@ message RuledPerPlayerView {
   // (e.g. "1 +1/+1 counter(s)"), one line per counter kind. Empty string for permanents with
   // no counters. Clients overlay this on the card annotation alongside ruled damage.
   repeated string battlefield_counters_annotation = 22;
+  // Parallel array to `battlefield`: for Aura permanents, the engine ObjectId of the
+  // permanent this aura is attached to; 0 for non-aura permanents or unattached auras.
+  // The relay uses this to call Event_AttachCard on zone-view reconnect.
+  repeated uint32 battlefield_attached_to_oid = 23;
 }
 
 message ZoneViewSync {

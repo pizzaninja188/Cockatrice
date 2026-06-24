@@ -80,6 +80,33 @@ impl GameEngine {
                         timestamp,
                     });
                 }
+                // CR 303.4c / CR 613.1b: an aura's P/T modification applies continuously while it
+                // is attached to the enchanted permanent. Scoped to `Single(enchanted_oid)` and
+                // drained at LTB (WhileSourceOnBattlefield) by the existing move_object_to_zone
+                // drain. `attached_to` is set before fire_triggers so this reads the correct target.
+                StaticAbilityDef::AuraPtModify {
+                    delta_power,
+                    delta_toughness,
+                } => {
+                    let Some(enchanted_oid) = self
+                        .state
+                        .objects
+                        .get(&object_id)
+                        .and_then(|o| o.attached_to)
+                    else {
+                        continue;
+                    };
+                    self.state.continuous_effects.push(ContinuousEffect {
+                        source_id: Some(object_id),
+                        affected: AffectedScope::Single(enchanted_oid),
+                        kind: ContinuousEffectKind::PtModify {
+                            delta_power,
+                            delta_toughness,
+                        },
+                        duration: EffectDuration::WhileSourceOnBattlefield,
+                        timestamp,
+                    });
+                }
             }
         }
     }
@@ -241,6 +268,58 @@ impl GameEngine {
             }
         }
 
+        // CR 704.5m: an aura that is on the battlefield but not attached to a valid permanent is
+        // put into its owner's graveyard. Checked after creature deaths so that the enchanted
+        // permanent dying triggers this SBA on the re-check (CR 704.4).
+        let orphaned_auras: Vec<ObjectId> = self
+            .state
+            .objects
+            .iter()
+            .filter(|(_, o)| {
+                o.zone == Zone::Battlefield
+                    && self
+                        .registry
+                        .get(&o.card_id)
+                        .map(|d| d.is_aura)
+                        .unwrap_or(false)
+                    && o.attached_to
+                        .map(|eid| {
+                            self.state
+                                .objects
+                                .get(&eid)
+                                .map(|e| e.zone != Zone::Battlefield)
+                                .unwrap_or(true)
+                        })
+                        .unwrap_or(true)
+            })
+            .map(|(id, _)| *id)
+            .collect();
+        for id in orphaned_auras {
+            let owner = self.state.objects.get(&id).map(|o| o.owner);
+            let card_id_for_trigger = self.state.objects.get(&id).map(|o| o.card_id.clone());
+            if destroy_permanent(&mut self.state, id).is_ok() {
+                changed = true;
+                if let Some(owner_id) = owner {
+                    out.push(permanent_moved_event(
+                        &self.state,
+                        id,
+                        owner_id,
+                        rv1::permanent_moved::Destination::Graveyard,
+                    ));
+                }
+                if let (Some(cid), Some(ctrl)) = (card_id_for_trigger, owner) {
+                    self.fire_triggers(
+                        GameEvent::Dies {
+                            object_id: id,
+                            card_id: cid,
+                            controller: ctrl,
+                        },
+                        out,
+                    );
+                }
+            }
+        }
+
         let legend_events = self.apply_legend_sbas()?;
         if !legend_events.is_empty() {
             changed = true;
@@ -318,6 +397,7 @@ mod sba_tests {
                 damage,
                 deathtouch_damage: false,
                 counters: Default::default(),
+                attached_to: None,
             },
         );
         let idx = e.state.player_idx(owner).unwrap();

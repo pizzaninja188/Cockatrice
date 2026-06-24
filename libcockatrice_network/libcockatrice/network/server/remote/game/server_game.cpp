@@ -47,6 +47,7 @@
 #include <libcockatrice/deck_list/tree/deck_list_card_node.h>
 #include <libcockatrice/protocol/pb/context_connection_state_changed.pb.h>
 #include <libcockatrice/protocol/pb/context_ping_changed.pb.h>
+#include <libcockatrice/protocol/pb/event_attach_card.pb.h>
 #include <libcockatrice/protocol/pb/event_delete_arrow.pb.h>
 #include <libcockatrice/protocol/pb/event_game_closed.pb.h>
 #include <libcockatrice/protocol/pb/event_game_host_changed.pb.h>
@@ -1603,6 +1604,66 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
         tapSyncGes.sendToGame(this);
     }
 
+    // Post-zone-view pass: restore aura attach state from battlefield_attached_to_oid parallel
+    // array. The engine OID maps are fresh after the zone-view loop above, so cross-player
+    // lookups work. A non-zero attached_to_oid means the card at that slot is an aura currently
+    // enchanting that target — issue Event_AttachCard to bring client visual state into sync.
+    // This handles reconnect (initial_response_batch) and any batch that delivers a zone_view.
+    GameEventStorage attachRestoreGes;
+    bool attachRestoreGesHasEvents = false;
+    for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
+        const auto &e = resp.batch().events(ei);
+        if (!e.has_zone_view()) {
+            continue;
+        }
+        for (const auto &p : e.zone_view().per_player()) {
+            if (p.battlefield_attached_to_oid_size() == 0) {
+                continue;
+            }
+            Server_AbstractPlayer *auraOwner = getPlayer(p.player_id());
+            if (!auraOwner) {
+                continue;
+            }
+            auto *auraOwnerPlayer = static_cast<Server_Player *>(auraOwner);
+            for (int i = 0; i < p.battlefield_attached_to_oid_size() && i < p.battlefield_object_id_size(); ++i) {
+                const quint32 enchantedOid = static_cast<quint32>(p.battlefield_attached_to_oid(i));
+                if (enchantedOid == 0) {
+                    continue;
+                }
+                const quint32 auraOid = static_cast<quint32>(p.battlefield_object_id(i));
+                Server_Card *auraCard = auraOwnerPlayer->findCardByEngineOid(auraOid);
+                if (!auraCard || !auraCard->getZone()) {
+                    continue;
+                }
+                Server_Card *enchantedCard = nullptr;
+                for (Server_AbstractPlayer *ab : getPlayers().values()) {
+                    if (!ab) {
+                        continue;
+                    }
+                    enchantedCard = static_cast<Server_Player *>(ab)->findCardByEngineOid(enchantedOid);
+                    if (enchantedCard) {
+                        break;
+                    }
+                }
+                if (!enchantedCard || !enchantedCard->getZone()) {
+                    continue;
+                }
+                auraCard->setParentCard(enchantedCard);
+                Event_AttachCard attachEv;
+                attachEv.set_start_zone(auraCard->getZone()->getName().toStdString());
+                attachEv.set_card_id(auraCard->getId());
+                attachEv.set_target_player_id(enchantedCard->getZone()->getPlayer()->getPlayerId());
+                attachEv.set_target_zone(enchantedCard->getZone()->getName().toStdString());
+                attachEv.set_target_card_id(enchantedCard->getId());
+                attachRestoreGes.enqueueGameEvent(attachEv, auraCard->getZone()->getPlayer()->getPlayerId());
+                attachRestoreGesHasEvents = true;
+            }
+        }
+    }
+    if (attachRestoreGesHasEvents) {
+        attachRestoreGes.sendToGame(this);
+    }
+
     // Second pass: combat-related events that depend on the engine OID map (LifeChanged,
     // AttackersDeclared) and stack resolution side effects that synthesize standard
     // Cockatrice events for clients. PermanentMoved is handled earlier (before zone_view).
@@ -1722,6 +1783,41 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
             ruledStackObjectIdToServerCardId.remove(resolvedOid);
             ruledStackObjectIdToCasterPlayerId.remove(resolvedOid);
             ruledEngineStackPushDescriptionsByObjectId.remove(resolvedOid);
+        }
+        // CR 303.4: an aura entering the battlefield attaches to its enchant target. Translate the
+        // engine AuraAttached event into Event_AttachCard so the Cockatrice client stacks the aura
+        // underneath the enchanted permanent (the visual layout used in freeform too).
+        if (e.has_aura_attached()) {
+            const auto &aa = e.aura_attached();
+            const quint32 auraOid = static_cast<quint32>(aa.aura_object_id());
+            const quint32 enchantedOid = static_cast<quint32>(aa.enchanted_object_id());
+            Server_Card *auraCard = nullptr;
+            Server_Card *enchantedCard = nullptr;
+            for (Server_AbstractPlayer *ab : getPlayers().values()) {
+                if (!ab) {
+                    continue;
+                }
+                auto *pl = static_cast<Server_Player *>(ab);
+                if (!auraCard) {
+                    auraCard = pl->findCardByEngineOid(auraOid);
+                }
+                if (!enchantedCard) {
+                    enchantedCard = pl->findCardByEngineOid(enchantedOid);
+                }
+            }
+            if (auraCard && enchantedCard && auraCard->getZone()) {
+                auraCard->setParentCard(enchantedCard);
+                Event_AttachCard attachEv;
+                attachEv.set_start_zone(auraCard->getZone()->getName().toStdString());
+                attachEv.set_card_id(auraCard->getId());
+                if (enchantedCard->getZone()) {
+                    attachEv.set_target_player_id(enchantedCard->getZone()->getPlayer()->getPlayerId());
+                    attachEv.set_target_zone(enchantedCard->getZone()->getName().toStdString());
+                    attachEv.set_target_card_id(enchantedCard->getId());
+                }
+                combatGes.enqueueGameEvent(attachEv, auraCard->getZone()->getPlayer()->getPlayerId());
+                combatGesHasEvents = true;
+            }
         }
     }
     if (combatGesHasEvents) {

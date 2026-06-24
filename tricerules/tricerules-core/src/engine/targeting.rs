@@ -280,6 +280,9 @@ fn effect_target_legal_at_resolution(
         SpellEffectKind::CopyTargetSpell { spell_filter, .. } => {
             stack_spell_target_legal(state, registry, tid, *spell_filter)
         }
+        SpellEffectKind::AuraAttach { target } => {
+            target_filter_legal(state, registry, target, tid, caster)
+        }
         _ => true,
     }
 }
@@ -301,7 +304,8 @@ pub(super) fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
         | SpellEffectKind::MillTargetPlayer { .. }
         | SpellEffectKind::TapTarget { .. }
         | SpellEffectKind::CounterTargetSpell { .. }
-        | SpellEffectKind::CopyTargetSpell { .. } => true,
+        | SpellEffectKind::CopyTargetSpell { .. }
+        | SpellEffectKind::AuraAttach { .. } => true,
         _ => false,
     }
 }
@@ -404,6 +408,16 @@ pub(super) fn validate_effect_targets(
                 && targets[0].object_id as i32 == caster
             {
                 return Err(EngineError::Illegal("cannot target yourself"));
+            }
+        }
+        SpellEffectKind::AuraAttach { target: filter } => {
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal("aura requires exactly one enchant target"));
+            }
+            if !target_filter_legal(state, registry, filter, targets[0].object_id, caster) {
+                return Err(EngineError::Illegal(
+                    "enchant target must be a valid permanent on the battlefield",
+                ));
             }
         }
         // Non-targeted effects require no targets.
@@ -531,6 +545,13 @@ pub(super) fn spell_target_legality_error(
         {
             return Err(EngineError::Illegal(
                 "target must be a spell of the required type on the stack",
+            ));
+        }
+        SpellEffectKind::AuraAttach { target: filter }
+            if !target_filter_legal(state, registry, filter, tid, caster) =>
+        {
+            return Err(EngineError::Illegal(
+                "enchant target must be a valid permanent on the battlefield",
             ));
         }
         _ => {}

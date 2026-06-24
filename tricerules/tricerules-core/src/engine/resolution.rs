@@ -35,12 +35,29 @@ impl GameEngine {
         } else {
             // CR 709/712/715: permanence is the *cast face's* (Ice resolves to graveyard; an MDFC
             // permanent face resolves to the battlefield as that face).
-            let resolves_to_battlefield = self
+            let resolves_to_battlefield_raw = self
                 .registry
                 .get(&card_id)
                 .and_then(|d| d.face(top.face_index))
                 .map(|f| f.is_permanent())
                 .unwrap_or(false);
+            // CR 303.4f: an aura whose enchant target is no longer on the battlefield at resolution
+            // is countered (goes to owner's graveyard) rather than entering the battlefield orphaned.
+            let is_aura = resolves_to_battlefield_raw
+                && self
+                    .registry
+                    .get(&card_id)
+                    .map(|d| d.is_aura)
+                    .unwrap_or(false);
+            let aura_target_valid = !is_aura
+                || targets.first().is_some_and(|&tid| {
+                    self.state
+                        .objects
+                        .get(&tid)
+                        .map(|o| o.zone == Zone::Battlefield)
+                        .unwrap_or(false)
+                });
+            let resolves_to_battlefield = resolves_to_battlefield_raw && aura_target_valid;
             let destination = if resolves_to_battlefield {
                 rv1::StackResolveDestination::Battlefield as i32
             } else {
@@ -62,7 +79,25 @@ impl GameEngine {
                 },
             )?;
             if resolves_to_battlefield {
+                // Set attached_to before ETB triggers so emit_static_abilities_on_enter can read it.
+                if is_aura {
+                    if let (Some(aura_obj), Some(&enchanted_oid)) =
+                        (self.state.objects.get_mut(&top.id), targets.first())
+                    {
+                        aura_obj.attached_to = Some(enchanted_oid);
+                    }
+                }
                 self.fire_triggers(GameEvent::EntersBattlefield { object_id: top.id }, events);
+            } else if is_aura {
+                let aura_name = self
+                    .registry
+                    .get(&card_id)
+                    .map(|d| d.name.as_str())
+                    .unwrap_or("Aura");
+                events.push(ev_log(format!(
+                    "{aura_name} fizzles (enchant target left the battlefield)."
+                )));
+                return Ok(());
             }
         }
 
@@ -781,6 +816,26 @@ impl GameEngine {
                 // spells); producing mana here would be off-stack-timing and is intentionally not done.
                 SpellEffectKind::ProduceMana { .. } => {}
                 SpellEffectKind::None => {}
+                // CR 303.4: the AuraAttach effect is the "Enchant <type>" clause of an aura spell.
+                // The attached_to field was already set before fire_triggers; emit the proto event
+                // so the relay can issue Event_AttachCard to connected clients.
+                SpellEffectKind::AuraAttach { .. } => {
+                    if let (Some(enchanted_oid), Some(obj)) =
+                        (targets.first().copied(), self.state.objects.get(&top.id))
+                    {
+                        if obj.zone == Zone::Battlefield {
+                            let tgt =
+                                object_display_name(&self.state, self.registry, enchanted_oid);
+                            events.push(rv1::RuledEvent {
+                                ev: Some(rv1::ruled_event::Ev::AuraAttached(rv1::AuraAttached {
+                                    aura_object_id: top.id,
+                                    enchanted_object_id: enchanted_oid,
+                                })),
+                            });
+                            events.push(ev_log(format!("{spell_label} attaches to {tgt}.")));
+                        }
+                    }
+                }
             }
         }
         events.push(ev_log(format!("{spell_label} resolves.")));
@@ -862,6 +917,7 @@ impl GameEngine {
                         damage: 0,
                         deathtouch_damage: false,
                         counters: BTreeMap::new(),
+                        attached_to: None,
                     },
                 );
                 self.state.players[pidx].battlefield.push(oid);
@@ -988,6 +1044,7 @@ pub(super) fn move_object_to_zone(
             o.deathtouch_damage = false;
             o.tapped = false;
             o.counters.clear();
+            o.attached_to = None;
         }
     }
 

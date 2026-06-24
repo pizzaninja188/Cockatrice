@@ -396,6 +396,19 @@ impl GameEngine {
                             .unwrap_or_default()
                     })
                     .collect(),
+                // Parallel to `battlefield`: for auras, the object id of the permanent they are
+                // attached to (0 when not an aura or not attached). Used for reconnect state restore.
+                battlefield_attached_to_oid: p
+                    .battlefield
+                    .iter()
+                    .map(|&oid| {
+                        self.state
+                            .objects
+                            .get(&oid)
+                            .and_then(|o| o.attached_to)
+                            .unwrap_or(0)
+                    })
+                    .collect(),
             })
             .collect();
         RuledEvent {

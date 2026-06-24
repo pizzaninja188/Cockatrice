@@ -75,6 +75,10 @@ pub struct CardFace {
     pub is_enchantment: bool,
     #[serde(skip)]
     pub is_legendary: bool,
+    /// CR 303.4: true when "Aura" appears in the subtype list. Auras must enchant a permanent when
+    /// they enter the battlefield; they die if their enchanted permanent leaves (SBA CR 704.5m).
+    #[serde(skip)]
+    pub is_aura: bool,
 }
 
 impl CardFace {
@@ -89,6 +93,7 @@ impl CardFace {
         self.is_enchantment = has(&self.types, "Enchantment");
         self.is_land = has(&self.types, "Land");
         self.is_legendary = has(&self.supertypes, "Legendary");
+        self.is_aura = has(&self.types, "Aura");
     }
 }
 
@@ -191,6 +196,9 @@ pub struct CardDefinition {
     /// Legendary supertype (for SBA: legend rule)
     #[serde(skip)]
     pub is_legendary: bool,
+    /// CR 303.4: "Aura" subtype — enters attached to a permanent, dies if enchanted leaves.
+    #[serde(skip)]
+    pub is_aura: bool,
     /// Activated abilities (cost + effect pairs). Omit or leave empty for cards with none.
     #[serde(default)]
     pub activated_abilities: Vec<ActivatedAbilityDef>,
@@ -228,6 +236,7 @@ impl CardDefinition {
         self.is_enchantment = has(&self.types, "Enchantment");
         self.is_land = has(&self.types, "Land");
         self.is_legendary = has(&self.supertypes, "Legendary");
+        self.is_aura = has(&self.types, "Aura");
         for face in &mut self.faces {
             face.derive_type_flags();
         }
