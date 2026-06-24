@@ -1,0 +1,16 @@
+(
+  id: "bonesplitter",
+  name: "Bonesplitter",
+  mana_cost: "{1}",
+  types: ["Artifact", "Equipment"],
+  static_abilities: [
+    EquippedBonus(delta_power: 2, delta_toughness: 0),
+  ],
+  activated_abilities: [
+    (
+      cost: Mana("{1}"),
+      effect: Equip(target: (kind: Creature, only_controller: true)),
+      text: "Equip {1}",
+    ),
+  ],
+)

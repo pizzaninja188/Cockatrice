@@ -810,6 +810,45 @@ impl GameEngine {
                 } => {
                     self.create_tokens(&token, count, who, controller, &spell_label, events);
                 }
+                // CR 702.6a: the equip activated ability resolves — move the equipment's
+                // `attached_to` pointer to the chosen creature (detaching from any previous one
+                // automatically). P/T bonus follows dynamically via `AffectedScope::EquippedBy`.
+                SpellEffectKind::Equip { .. } => {
+                    let equip_oid = match top.source_permanent_id {
+                        Some(id) => id,
+                        None => {
+                            events.push(ev_log(format!(
+                                "{spell_label}: equip ability has no source permanent."
+                            )));
+                            continue;
+                        }
+                    };
+                    if let Some(&target_id) = targets.first() {
+                        let valid = self
+                            .state
+                            .objects
+                            .get(&target_id)
+                            .map(|t| t.zone == Zone::Battlefield && t.is_creature(self.registry))
+                            .unwrap_or(false);
+                        let equip_on_battlefield = self
+                            .state
+                            .objects
+                            .get(&equip_oid)
+                            .map(|e| e.zone == Zone::Battlefield)
+                            .unwrap_or(false);
+                        if valid && equip_on_battlefield {
+                            let tgt = object_display_name(&self.state, self.registry, target_id);
+                            let eq_name =
+                                object_display_name(&self.state, self.registry, equip_oid);
+                            if let Some(eq) = self.state.objects.get_mut(&equip_oid) {
+                                eq.attached_to = Some(target_id);
+                            }
+                            events.push(ev_log(format!(
+                                "{spell_label} attaches {eq_name} to {tgt}."
+                            )));
+                        }
+                    }
+                }
                 // CR 605.3b: a mana ability never uses the stack, so a ProduceMana effect is
                 // resolved immediately in `resolve_mana_ability` and can never reach this generic
                 // stack-resolution path. Defensive no-op (registry validation also forbids it on

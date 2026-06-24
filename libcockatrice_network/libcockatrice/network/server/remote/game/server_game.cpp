@@ -1604,64 +1604,70 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
         tapSyncGes.sendToGame(this);
     }
 
-    // Post-zone-view pass: restore aura attach state from battlefield_attached_to_oid parallel
-    // array. The engine OID maps are fresh after the zone-view loop above, so cross-player
-    // lookups work. A non-zero attached_to_oid means the card at that slot is an aura currently
-    // enchanting that target — issue Event_AttachCard to bring client visual state into sync.
-    // This handles reconnect (initial_response_batch) and any batch that delivers a zone_view.
-    GameEventStorage attachRestoreGes;
-    bool attachRestoreGesHasEvents = false;
-    for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
-        const auto &e = resp.batch().events(ei);
-        if (!e.has_zone_view()) {
-            continue;
-        }
-        for (const auto &p : e.zone_view().per_player()) {
-            if (p.battlefield_attached_to_oid_size() == 0) {
+    // Post-zone-view pass: restore attach state from battlefield_attached_to_oid for both
+    // Auras and Equipment. The engine OID maps are fresh after the zone-view loop above, so
+    // cross-player lookups work. A non-zero attached_to_oid means the card at that slot is
+    // currently attached to that target — issue Event_AttachCard to bring client visual state
+    // into sync. This handles reconnect (initial_response_batch) and any batch with a zone_view.
+    {
+        GameEventStorage attachRestoreGes;
+        bool attachRestoreGesHasEvents = false;
+        for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
+            const auto &e = resp.batch().events(ei);
+            if (!e.has_zone_view()) {
                 continue;
             }
-            Server_AbstractPlayer *auraOwner = getPlayer(p.player_id());
-            if (!auraOwner) {
-                continue;
-            }
-            auto *auraOwnerPlayer = static_cast<Server_Player *>(auraOwner);
-            for (int i = 0; i < p.battlefield_attached_to_oid_size() && i < p.battlefield_object_id_size(); ++i) {
-                const quint32 enchantedOid = static_cast<quint32>(p.battlefield_attached_to_oid(i));
-                if (enchantedOid == 0) {
+            for (const auto &p : e.zone_view().per_player()) {
+                if (p.battlefield_attached_to_oid_size() == 0) {
                     continue;
                 }
-                const quint32 auraOid = static_cast<quint32>(p.battlefield_object_id(i));
-                Server_Card *auraCard = auraOwnerPlayer->findCardByEngineOid(auraOid);
-                if (!auraCard || !auraCard->getZone()) {
+                Server_AbstractPlayer *ownerAb = getPlayer(p.player_id());
+                if (!ownerAb) {
                     continue;
                 }
-                Server_Card *enchantedCard = nullptr;
-                for (Server_AbstractPlayer *ab : getPlayers().values()) {
-                    if (!ab) {
+                auto *ownerPlayer = static_cast<Server_Player *>(ownerAb);
+                for (int i = 0; i < p.battlefield_attached_to_oid_size() && i < p.battlefield_object_id_size(); ++i) {
+                    const quint32 targetOid = static_cast<quint32>(p.battlefield_attached_to_oid(i));
+                    if (targetOid == 0) {
                         continue;
                     }
-                    enchantedCard = static_cast<Server_Player *>(ab)->findCardByEngineOid(enchantedOid);
-                    if (enchantedCard) {
-                        break;
+                    const quint32 attachedOid = static_cast<quint32>(p.battlefield_object_id(i));
+                    Server_Card *attachedCard = ownerPlayer->findCardByEngineOid(attachedOid);
+                    if (!attachedCard || !attachedCard->getZone()) {
+                        continue;
                     }
+                    Server_Card *targetCard = nullptr;
+                    for (Server_AbstractPlayer *ab : getPlayers().values()) {
+                        if (!ab) {
+                            continue;
+                        }
+                        targetCard = static_cast<Server_Player *>(ab)->findCardByEngineOid(targetOid);
+                        if (targetCard) {
+                            break;
+                        }
+                    }
+                    if (!targetCard || !targetCard->getZone()) {
+                        continue;
+                    }
+                    // Avoid redundant events when the server already knows about this attachment.
+                    if (attachedCard->getParentCard() == targetCard) {
+                        continue;
+                    }
+                    attachedCard->setParentCard(targetCard);
+                    Event_AttachCard attachEv;
+                    attachEv.set_start_zone(attachedCard->getZone()->getName().toStdString());
+                    attachEv.set_card_id(attachedCard->getId());
+                    attachEv.set_target_player_id(targetCard->getZone()->getPlayer()->getPlayerId());
+                    attachEv.set_target_zone(targetCard->getZone()->getName().toStdString());
+                    attachEv.set_target_card_id(targetCard->getId());
+                    attachRestoreGes.enqueueGameEvent(attachEv, attachedCard->getZone()->getPlayer()->getPlayerId());
+                    attachRestoreGesHasEvents = true;
                 }
-                if (!enchantedCard || !enchantedCard->getZone()) {
-                    continue;
-                }
-                auraCard->setParentCard(enchantedCard);
-                Event_AttachCard attachEv;
-                attachEv.set_start_zone(auraCard->getZone()->getName().toStdString());
-                attachEv.set_card_id(auraCard->getId());
-                attachEv.set_target_player_id(enchantedCard->getZone()->getPlayer()->getPlayerId());
-                attachEv.set_target_zone(enchantedCard->getZone()->getName().toStdString());
-                attachEv.set_target_card_id(enchantedCard->getId());
-                attachRestoreGes.enqueueGameEvent(attachEv, auraCard->getZone()->getPlayer()->getPlayerId());
-                attachRestoreGesHasEvents = true;
             }
         }
-    }
-    if (attachRestoreGesHasEvents) {
-        attachRestoreGes.sendToGame(this);
+        if (attachRestoreGesHasEvents) {
+            attachRestoreGes.sendToGame(this);
+        }
     }
 
     // Second pass: combat-related events that depend on the engine OID map (LifeChanged,

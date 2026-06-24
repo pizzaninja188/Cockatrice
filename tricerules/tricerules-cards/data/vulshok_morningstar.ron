@@ -1,0 +1,16 @@
+(
+  id: "vulshok_morningstar",
+  name: "Vulshok Morningstar",
+  mana_cost: "{2}",
+  types: ["Artifact", "Equipment"],
+  static_abilities: [
+    EquippedBonus(delta_power: 2, delta_toughness: 2),
+  ],
+  activated_abilities: [
+    (
+      cost: Mana("{2}"),
+      effect: Equip(target: (kind: Creature, only_controller: true)),
+      text: "Equip {2}",
+    ),
+  ],
+)

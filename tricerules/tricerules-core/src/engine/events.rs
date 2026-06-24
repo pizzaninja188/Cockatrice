@@ -396,8 +396,9 @@ impl GameEngine {
                             .unwrap_or_default()
                     })
                     .collect(),
-                // Parallel to `battlefield`: for auras, the object id of the permanent they are
-                // attached to (0 when not an aura or not attached). Used for reconnect state restore.
+                // Parallel to `battlefield`: the ObjectId of the permanent this aura/equipment
+                // is attached to, or 0 if not attached. C++ relay uses this to issue
+                // Event_AttachCard so clients stack attached permanents visually.
                 battlefield_attached_to_oid: p
                     .battlefield
                     .iter()
