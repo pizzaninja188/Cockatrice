@@ -279,7 +279,11 @@ pub enum AffectedScope {
         color: Option<Color>,
         exclude: Option<ObjectId>,
     },
-    // Future: CreaturesWithPower(u32), …
+    /// All battlefield permanents controlled by `pid` — regardless of type. Used by Boros Charm
+    /// mode 2 ("permanents you control gain indestructible until end of turn") and Teferi's
+    /// Protection-style effects. Evaluated dynamically so permanents entering after the effect
+    /// are still affected.
+    AllPermanentsControlledBy(PlayerId),
 }
 
 /// A single active continuous effect (CR 611/613).

@@ -406,6 +406,28 @@ pub enum SpellEffectKind {
     ProduceMana {
         options: Vec<ManaAmount>,
     },
+    /// CR 613 layer 6: grant `keyword` to a single creature matching `target` until end of turn
+    /// (CR 611.2g — independent of its source once created, drains at cleanup). Reused by Boros
+    /// Charm (DoubleStrike), Temur Battle Rage (DoubleStrike), and Warlord's Fury (FirstStrike).
+    /// For mass keyword grants see [`Self::GrantKeywordsAll`].
+    GrantKeywordTarget {
+        keyword: Keyword,
+        #[serde(default = "TargetFilter::default_creature")]
+        target: TargetFilter,
+    },
+    /// CR 613 layer 6: grant `keyword` to every permanent matching `filter` until end of turn.
+    /// Untargeted, like [`Self::PumpAll`]. `all_permanents` broadens the scope from "creatures"
+    /// to all battlefield permanents (Boros Charm mode 2: "permanents you control gain
+    /// indestructible"; Overrun adds Trample to creatures only, `all_permanents: false`).
+    GrantKeywordsAll {
+        keyword: Keyword,
+        #[serde(default)]
+        filter: AnthemFilter,
+        /// If true, the effect applies to all permanents (not just creatures) matching `filter`.
+        /// Named cards: Boros Charm mode 2 (true), Overrun Trample grant (false).
+        #[serde(default)]
+        all_permanents: bool,
+    },
     None,
 }
 
@@ -454,7 +476,8 @@ impl SpellEffectKind {
             | SpellEffectKind::TargetPlayerGainsLife { target, .. }
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
             | SpellEffectKind::MillTargetPlayer { target, .. }
-            | SpellEffectKind::PutCounters { target, .. } => vec![target],
+            | SpellEffectKind::PutCounters { target, .. }
+            | SpellEffectKind::GrantKeywordTarget { target, .. } => vec![target],
             _ => vec![],
         }
     }
@@ -703,7 +726,12 @@ pub enum ContinuousEffectKind {
         delta_power: i32,
         delta_toughness: i32,
     },
-    // Future: Layer6AddKeyword(Keyword), Layer7bSetPt { power: i32, toughness: i32 }, …
+    /// CR 613 layer 6 — keyword-granting effects (Giant Growth's first-strike subpart, Overrun's
+    /// trample grant, Boros Charm's indestructible/double-strike grants). Reused by both
+    /// [`SpellEffectKind::GrantKeywordTarget`] (single object) and
+    /// [`SpellEffectKind::GrantKeywordsAll`] (broad scope). Applies to the objects in
+    /// [`ContinuousEffect::affected`], regardless of whether they are creatures or permanents.
+    Layer6AddKeyword(Keyword),
 }
 
 // ---------------------------------------------------------------------------
