@@ -3434,14 +3434,19 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     //   • Multiple options (dual land): both left and right click show a compact color-picker menu
     //     so the player can choose which color to produce.
     const QStringList manaProduced = handler->activatedAbilityManaProducedForOid(oid);
+    const QStringList costLabels = handler->activatedAbilityCostLabelsForOid(oid);
     if (abilityTexts.size() == 1 && !manaProduced.value(0).isEmpty()) {
         const QStringList colorOptions = manaProduced.value(0).split(QChar('/'));
         if (colorOptions.size() > 1) {
             // Dual land: show a compact color-picker on both left and right click.
+            const QString costPrefix = costLabels.value(0);
             QMenu colorMenu;
             colorMenu.setTitle(card->getName());
             for (const QString &opt : colorOptions) {
-                colorMenu.addAction(tr("Add {%1}").arg(opt));
+                const QString label = costPrefix.isEmpty()
+                    ? tr("Add {%1}").arg(opt)
+                    : tr("%1: Add {%2}").arg(costPrefix, opt);
+                colorMenu.addAction(label);
             }
             QAction *chosen = colorMenu.exec(QCursor::pos());
             if (!chosen) {
@@ -3479,18 +3484,25 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         return false;
     }
 
-    // Build and show the context menu.
+    // Build and show the context menu with full "cost: text" labels (Oracle format).
     QMenu menu;
     menu.setTitle(card->getName());
+    QVector<QString> menuLabels;
+    menuLabels.reserve(abilityTexts.size());
     for (int i = 0; i < abilityTexts.size(); ++i) {
-        menu.addAction(abilityTexts[i]);
+        const QString costLabel = costLabels.value(i);
+        const QString label = costLabel.isEmpty()
+            ? abilityTexts[i]
+            : tr("%1: %2").arg(costLabel, abilityTexts[i]);
+        menuLabels.append(label);
+        menu.addAction(label);
     }
     QAction *chosen = menu.exec(QCursor::pos());
     if (!chosen) {
         return true; // menu was shown, player cancelled
     }
 
-    const int abilityIndex = abilityTexts.indexOf(chosen->text());
+    const int abilityIndex = menuLabels.indexOf(chosen->text());
     if (abilityIndex < 0) {
         return true;
     }

@@ -1562,6 +1562,13 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                             engineOidToActivatedAbilityManaProduced.insert(
                                                 oid, producedStr.split(QChar('|')));
                                         }
+                                        if (oid != 0 && ai < p.battlefield_activated_ability_cost_labels_size()) {
+                                            const QString labelsStr = QString::fromStdString(
+                                                p.battlefield_activated_ability_cost_labels(ai));
+                                            // Split on '|'; each entry is a display cost string.
+                                            engineOidToActivatedAbilityCostLabels.insert(
+                                                oid, labelsStr.split(QChar('|')));
+                                        }
                                     }
                                     const int nPow = std::min(p.battlefield_object_id_size(), p.battlefield_power_size());
                                     for (int pi = 0; pi < nPow; ++pi) {
