@@ -57,6 +57,13 @@ pub struct GameObject {
     /// in pairs as a state-based action (CR 122.3). Unlike continuous effects, counters persist
     /// across cleanup — they are not until-end-of-turn effects.
     pub counters: BTreeMap<CounterKind, u32>,
+    /// CR 508.1d: this creature must be declared as an attacker whenever it is a legal attacker
+    /// ("attacks each combat if able"). Set from card data at object creation; may be overridden
+    /// by continuous effects. Cards: Crazed Goblin, Goblin Brigand.
+    pub must_attack_if_able: bool,
+    /// CR 509.1c: this creature must be declared as a blocker whenever it could legally block
+    /// ("blocks each combat if able"). Set from card data; may be overridden by continuous effects.
+    pub must_block_if_able: bool,
 }
 
 impl GameObject {

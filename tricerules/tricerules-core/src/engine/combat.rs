@@ -137,6 +137,44 @@ impl GameEngine {
             return Err(EngineError::Illegal("not your priority"));
         }
         let ap = self.state.active_player_id();
+
+        // CR 508.1d: must-attack enforcement. A creature that must attack if able must be declared
+        // as an attacker whenever it is a legal attacker (untapped, not summoning-sick (unless
+        // haste), not Defender) and there is a defending player to attack.
+        if self.state.defending_player_id_1v1().is_some() {
+            let ap_idx = self
+                .state
+                .player_idx(ap)
+                .ok_or(EngineError::Illegal("ap missing"))?;
+            let bf: Vec<ObjectId> = self.state.players[ap_idx].battlefield.clone();
+            for &oid in &bf {
+                let Some(obj) = self.state.objects.get(&oid) else {
+                    continue;
+                };
+                if !obj.must_attack_if_able {
+                    continue;
+                }
+                if !obj.is_creature(self.registry) {
+                    continue;
+                }
+                if obj.tapped {
+                    continue;
+                }
+                if obj.summoning_sick && !obj.has_keyword(self.registry, Keyword::Haste) {
+                    continue;
+                }
+                if obj.has_keyword(self.registry, Keyword::Defender) {
+                    continue;
+                }
+                // This creature is a legal attacker and must attack.
+                if !ids.contains(&oid) {
+                    return Err(EngineError::Illegal(
+                        "must-attack creature not declared as attacker",
+                    ));
+                }
+            }
+        }
+
         if ids.is_empty() {
             self.clear_all_mana_pools();
             self.state.combat = None;
@@ -316,6 +354,46 @@ impl GameEngine {
                 .or_default()
                 .push(p.blocker_id);
         }
+        // CR 509.1c: must-block enforcement. A creature that must block if able must be declared
+        // as a blocker whenever it is untapped and could legally block at least one attacker.
+        {
+            let seen_blockers: HashSet<ObjectId> = pairs.iter().map(|p| p.blocker_id).collect();
+            let attacking: Vec<ObjectId> = self
+                .state
+                .combat
+                .as_ref()
+                .map(|c| c.attacking.clone())
+                .unwrap_or_default();
+            let dp_idx = self
+                .state
+                .player_idx(defending_player)
+                .ok_or(EngineError::Illegal("dp missing"))?;
+            let df_bf: Vec<ObjectId> = self.state.players[dp_idx].battlefield.clone();
+            for &oid in &df_bf {
+                let Some(obj) = self.state.objects.get(&oid) else {
+                    continue;
+                };
+                if !obj.must_block_if_able {
+                    continue;
+                }
+                if !obj.is_creature(self.registry) {
+                    continue;
+                }
+                if obj.tapped {
+                    continue;
+                }
+                if seen_blockers.contains(&oid) {
+                    continue; // already blocking
+                }
+                let can_block_someone = attacking.iter().any(|&aid| self.can_block(aid, oid));
+                if can_block_someone {
+                    return Err(EngineError::Illegal(
+                        "must-block creature not declared as blocker",
+                    ));
+                }
+            }
+        }
+
         // CR 702.111: menace — a creature with menace can't be blocked except by two or more
         // creatures. A menace creature with zero blockers is fine (it's unblocked); one blocker
         // is the illegal case. Return a prompt-friendly message so the UI can surface it.

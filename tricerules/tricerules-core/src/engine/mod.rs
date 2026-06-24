@@ -144,6 +144,8 @@ impl GameEngine {
                         damage: 0,
                         deathtouch_damage: false,
                         counters: BTreeMap::new(),
+                        must_attack_if_able: def.must_attack_if_able,
+                        must_block_if_able: def.must_block_if_able,
                     },
                 );
                 p.library.push_back(oid);

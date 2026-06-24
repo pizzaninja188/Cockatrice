@@ -1781,3 +1781,133 @@ fn divine_verdict_targets_only_combatants() {
         "the attacking creature is destroyed"
     );
 }
+
+// ── Must-attack enforcement (CR 508.1d) ──────────────────────────────────────
+
+/// Happy path: a must-attack creature (Crazed Goblin) declared as an attacker is accepted.
+#[test]
+fn must_attack_creature_declared_as_attacker_is_legal() {
+    let decks = Some(vec![
+        vec!["mountain".into(); 10],
+        vec!["forest".into(); 10],
+    ]);
+    let mut e = GameEngine::new(5500, &[0, 1], 20, decks, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let goblin = deploy_to_battlefield(&mut e, 0, "mountain");
+    // Manually set the card to crazed_goblin so must_attack_if_able applies.
+    {
+        let obj = e.state.objects.get_mut(&goblin).unwrap();
+        obj.card_id = "crazed_goblin".to_string();
+        obj.must_attack_if_able = true;
+        obj.power = Some(1);
+        obj.toughness = Some(1);
+    }
+    // Declaring it as an attacker must succeed.
+    e.apply_command(0, &declare_attackers(vec![goblin]))
+        .expect("must-attack creature can be declared as attacker");
+    assert!(
+        e.state.combat.as_ref().unwrap().attacking.contains(&goblin),
+        "Crazed Goblin is attacking"
+    );
+}
+
+/// Illegal path: omitting a must-attack creature when it could legally attack returns Illegal.
+#[test]
+fn must_attack_creature_omitted_from_attackers_is_illegal() {
+    let decks = Some(vec![
+        vec!["mountain".into(); 10],
+        vec!["forest".into(); 10],
+    ]);
+    let mut e = GameEngine::new(5501, &[0, 1], 20, decks, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let goblin = deploy_to_battlefield(&mut e, 0, "mountain");
+    {
+        let obj = e.state.objects.get_mut(&goblin).unwrap();
+        obj.card_id = "crazed_goblin".to_string();
+        obj.must_attack_if_able = true;
+        obj.power = Some(1);
+        obj.toughness = Some(1);
+    }
+    // Declaring no attackers (omitting the must-attack creature) must fail.
+    let result = e.apply_command(0, &declare_attackers(vec![]));
+    assert!(
+        result.is_err(),
+        "omitting must-attack creature from attackers should be illegal"
+    );
+}
+
+/// CR 508.1d "if able": a must-attack creature that is summoning-sick is NOT required to attack.
+#[test]
+fn must_attack_creature_summoning_sick_may_skip() {
+    let decks = Some(vec![
+        vec!["mountain".into(); 10],
+        vec!["forest".into(); 10],
+    ]);
+    let mut e = GameEngine::new(5502, &[0, 1], 20, decks, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let goblin = deploy_to_battlefield(&mut e, 0, "mountain");
+    {
+        let obj = e.state.objects.get_mut(&goblin).unwrap();
+        obj.card_id = "crazed_goblin".to_string();
+        obj.must_attack_if_able = true;
+        obj.summoning_sick = true; // not yet able to attack
+        obj.power = Some(1);
+        obj.toughness = Some(1);
+    }
+    // A second, non-must-attack creature is also on the battlefield but tapped.
+    let bears = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    e.state.objects.get_mut(&bears).unwrap().tapped = true;
+    // No eligible must-attack creature → declaring no attackers is legal.
+    e.apply_command(0, &declare_attackers(vec![]))
+        .expect("summoning-sick must-attack creature does not force an attack");
+}
+
+/// CR 508.1d "if able": a must-attack creature that is tapped cannot legally attack, so skip is OK.
+#[test]
+fn must_attack_creature_tapped_may_skip() {
+    let decks = Some(vec![
+        vec!["mountain".into(); 10],
+        vec!["forest".into(); 10],
+    ]);
+    let mut e = GameEngine::new(5503, &[0, 1], 20, decks, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let goblin = deploy_to_battlefield(&mut e, 0, "mountain");
+    {
+        let obj = e.state.objects.get_mut(&goblin).unwrap();
+        obj.card_id = "crazed_goblin".to_string();
+        obj.must_attack_if_able = true;
+        obj.tapped = true; // already tapped — cannot attack
+        obj.power = Some(1);
+        obj.toughness = Some(1);
+    }
+    e.apply_command(0, &declare_attackers(vec![]))
+        .expect("tapped must-attack creature does not force an attack");
+}
+
+/// CR 509.1c: a must-block creature that omits a legal block returns Illegal.
+#[test]
+fn must_block_creature_omitted_from_blockers_is_illegal() {
+    let decks = Some(vec![
+        vec!["mountain".into(); 10],
+        vec!["forest".into(); 10],
+    ]);
+    let mut e = GameEngine::new(5504, &[0, 1], 20, decks, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let attacker = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let blocker = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    e.state.objects.get_mut(&blocker).unwrap().must_block_if_able = true;
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass()).expect("active pass attackers");
+    e.apply_command(1, &pass()).expect("defender pass attackers");
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareBlockers
+    );
+    // Declaring no blockers while must-block creature can block must be illegal.
+    let result = e.apply_command(1, &declare_blockers(vec![]));
+    assert!(
+        result.is_err(),
+        "omitting must-block creature while it can legally block should be illegal"
+    );
+}

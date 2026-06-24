@@ -1,0 +1,10 @@
+(
+  id: "juggernaut",
+  name: "Juggernaut",
+  mana_cost: "{4}",
+  types: ["Artifact", "Creature", "Juggernaut"],
+  power: 5,
+  toughness: 3,
+  must_attack_if_able: true,
+  partial: "can't be blocked by Walls not enforced",
+)

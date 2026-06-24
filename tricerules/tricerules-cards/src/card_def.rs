@@ -60,6 +60,12 @@ pub struct CardFace {
     /// Static abilities (CR 604): anthems/lords. Omit or leave empty for cards with none.
     #[serde(default)]
     pub static_abilities: Vec<StaticAbilityDef>,
+    /// CR 508.1d: "attacks each combat if able". See [`CardDefinition::must_attack_if_able`].
+    #[serde(default)]
+    pub must_attack_if_able: bool,
+    /// CR 509.1c: "blocks each combat if able". See [`CardDefinition::must_block_if_able`].
+    #[serde(default)]
+    pub must_block_if_able: bool,
     // Derived type/supertype flags — same convention as CardDefinition (never authored in RON).
     #[serde(skip)]
     pub is_land: bool,
@@ -201,6 +207,14 @@ pub struct CardDefinition {
     /// leave empty for cards with none. Emitted as a continuous effect on ETB, drained at LTB.
     #[serde(default)]
     pub static_abilities: Vec<StaticAbilityDef>,
+    /// CR 508.1d: "attacks each combat if able". This creature must be declared as an attacker
+    /// whenever it is a legal attacker. Cards: Crazed Goblin, Goblin Brigand, Juggernaut.
+    #[serde(default)]
+    pub must_attack_if_able: bool,
+    /// CR 509.1c: "blocks each combat if able". This creature must be declared as a blocker
+    /// whenever it could legally block an attacking creature.
+    #[serde(default)]
+    pub must_block_if_able: bool,
     /// Implementation tracking only (ignored by the engine):
     /// `Some("what's missing")` = partially implemented; `None` = fully implemented.
     #[serde(default)]

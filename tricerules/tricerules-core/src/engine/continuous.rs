@@ -318,6 +318,8 @@ mod sba_tests {
                 damage,
                 deathtouch_damage: false,
                 counters: Default::default(),
+                must_attack_if_able: false,
+                must_block_if_able: false,
             },
         );
         let idx = e.state.player_idx(owner).unwrap();

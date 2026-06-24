@@ -862,6 +862,8 @@ impl GameEngine {
                         damage: 0,
                         deathtouch_damage: false,
                         counters: BTreeMap::new(),
+                        must_attack_if_able: false,
+                        must_block_if_able: false,
                     },
                 );
                 self.state.players[pidx].battlefield.push(oid);
