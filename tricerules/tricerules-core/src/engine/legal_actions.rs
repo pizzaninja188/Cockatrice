@@ -38,7 +38,12 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 let Some(pdef) = eng.registry.get(&pobj.card_id) else {
                     continue;
                 };
-                for (ai, ability) in pdef.activated_abilities.iter().enumerate() {
+                // CR 712.4: read abilities from the active face (face_up_index) so multi-face
+                // permanents expose the correct ability set when on the battlefield.
+                let Some(face) = pdef.face(pobj.face_up_index) else {
+                    continue;
+                };
+                for (ai, ability) in face.activated_abilities.iter().enumerate() {
                     if spell_effect_kind_needs_target(&ability.effect) {
                         let targets = compute_spell_targets(
                             &eng.state,
@@ -185,11 +190,17 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
     for (i, &oid) in eng.state.players[idx].hand.iter().enumerate() {
         let cid = &eng.state.objects.get(&oid).unwrap().card_id;
         if let Some(def) = eng.registry.get(cid) {
-            for face in def.faces_iter() {
+            for (face_index, face) in def.faces_iter().enumerate() {
                 let name = face.name;
                 if face.is_land {
                     if sorcery_ok && !eng.state.land_dropped_this_turn {
-                        v.push(format!("Play land {name} (hand idx {i})"));
+                        if def.is_multiface() {
+                            v.push(format!(
+                                "Play land {name} (hand idx {i}, face {face_index})"
+                            ));
+                        } else {
+                            v.push(format!("Play land {name} (hand idx {i})"));
+                        }
                     }
                 } else if !combat_decl_lock {
                     let cast_ok = if castable_at_instant_speed(&face) {
@@ -210,6 +221,24 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
             }
         } else if !combat_decl_lock && (instant_ok || sorcery_ok) {
             v.push(format!("Play unknown card (hand idx {i})"));
+        }
+    }
+    // Transform right-click action for Transform/Flip layout permanents the priority player controls.
+    if eng.state.priority_player_id() == pid {
+        for &poid in &eng.state.players[idx].battlefield {
+            let Some(pobj) = eng.state.objects.get(&poid) else {
+                continue;
+            };
+            let Some(pdef) = eng.registry.get(&pobj.card_id) else {
+                continue;
+            };
+            if matches!(
+                pdef.layout,
+                tricerules_cards::Layout::Transform | tricerules_cards::Layout::Flip
+            ) {
+                let name = pdef.name.as_str();
+                v.push(format!("Transform {name} (oid {poid})"));
+            }
         }
     }
     v

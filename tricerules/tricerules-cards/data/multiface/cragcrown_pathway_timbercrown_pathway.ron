@@ -1,0 +1,38 @@
+// Cragcrown Pathway // Timbercrown Pathway (Zendikar Rising) — modal DFC (CR 712).
+// A pathway land: choose which face to play; it enters as that land and produces that color.
+// Scryfall: https://api.scryfall.com/cards/named?exact=Cragcrown+Pathway
+(
+    id: "cragcrown_pathway_timbercrown_pathway",
+    name: "Cragcrown Pathway // Timbercrown Pathway",
+    layout: ModalDfc,
+    faces: [
+        (
+            name: "Cragcrown Pathway",
+            mana_cost: "",
+            types: ["Land"],
+            supertypes: [],
+            // Oracle: "{T}: Add {R}."
+            activated_abilities: [
+                (
+                    cost: Tap,
+                    effect: ProduceMana(options: [(r: 1)]),
+                    text: "{T}: Add {R}.",
+                ),
+            ],
+        ),
+        (
+            name: "Timbercrown Pathway",
+            mana_cost: "",
+            types: ["Land"],
+            supertypes: [],
+            // Oracle: "{T}: Add {G}."
+            activated_abilities: [
+                (
+                    cost: Tap,
+                    effect: ProduceMana(options: [(g: 1)]),
+                    text: "{T}: Add {G}.",
+                ),
+            ],
+        ),
+    ],
+)

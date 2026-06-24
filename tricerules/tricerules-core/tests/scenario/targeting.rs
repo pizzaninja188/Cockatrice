@@ -663,6 +663,7 @@ fn mind_sculpt_rejects_self_target() {
                 damage: 0,
                 deathtouch_damage: false,
                 counters: std::collections::BTreeMap::new(),
+                face_up_index: 0,
             },
         );
         e.state.players[0].hand.push(id);

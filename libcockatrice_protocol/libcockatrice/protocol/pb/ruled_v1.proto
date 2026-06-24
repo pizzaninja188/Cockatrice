@@ -49,6 +49,9 @@ message RuledCommand {
     // strictly inconsequential — no mana spent, no spell/ability cast, priority not passed).
     // The engine untaps the source and removes the produced mana; rejected once consequential.
     UndoManaAbility undo_mana_ability = 20;
+    // Flip the active face of a Transform/Flip layout permanent (CR 710/712.8). The controller
+    // sends this; the engine validates layout and emits FaceChanged.
+    TransformPermanent transform_permanent = 21;
   }
 }
 
@@ -115,6 +118,15 @@ message TargetRef {
 
 message PlayLand {
   uint32 hand_card_index = 1;
+  // CR 712: for MDFC land cards, which face to enter the battlefield as (0 = front face,
+  // 1 = back face). 0 for single-face lands (field absent or default is always front).
+  uint32 face_index = 2;
+}
+
+// Controller requests a Transform/Flip layout permanent change its active face (CR 710/712.8).
+// Only valid for permanents with layout Transform or Flip. Servatrice forwards to the engine.
+message TransformPermanent {
+  uint32 permanent_id = 1;
 }
 
 message MulliganDecision {
@@ -250,7 +262,17 @@ message RuledEvent {
     // produced mana, a cost was paid, or the pool emptied on a step/phase change. The relay
     // mirrors it onto that player's ruled mana-pool counters (Event_SetCounter).
     ManaPoolUpdated mana_pool_updated = 24;
+    // A Transform/Flip layout permanent changed its active face (CR 710/712.8). The relay
+    // updates the client's card face display. face_up_index 0 = front, 1 = back.
+    FaceChanged face_changed = 25;
   }
+}
+
+// A permanent changed its active face (CR 710/712.8: transform does not trigger ETB).
+message FaceChanged {
+  uint32 object_id = 1;
+  int32 owner_player_id = 2;
+  uint32 face_up_index = 3;
 }
 
 // Engine-authoritative mana pool snapshot for one player (CR 106). Absolute counts (not deltas),
@@ -491,6 +513,10 @@ message RuledPerPlayerView {
   // (e.g. "1 +1/+1 counter(s)"), one line per counter kind. Empty string for permanents with
   // no counters. Clients overlay this on the card annotation alongside ruled damage.
   repeated string battlefield_counters_annotation = 22;
+  // Parallel array to `battlefield`: which face is currently showing (0 = front face). Always 0
+  // for Normal single-face cards. Non-zero only for MDFC/Transform/Flip permanents after a face
+  // change. The relay uses this to display the correct face image from cards.xml.
+  repeated uint32 battlefield_face_up_index = 23;
 }
 
 message ZoneViewSync {

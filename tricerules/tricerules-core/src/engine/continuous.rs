@@ -30,11 +30,15 @@ impl GameEngine {
                 let Some(def) = self.registry.get(&obj.card_id) else {
                     return false;
                 };
-                if !def.is_creature {
+                // CR 712.4: read creature/types from the active face for multi-face cards.
+                let Some(face) = def.face(obj.face_up_index) else {
+                    return false;
+                };
+                if !face.is_creature {
                     return false;
                 }
                 if let Some(sub) = subtype {
-                    if !def.types.iter().any(|t| t == sub) {
+                    if !face.types.iter().any(|t| t == sub) {
                         return false;
                     }
                 }
@@ -57,8 +61,13 @@ impl GameEngine {
         };
         let controller = obj.owner;
         let card_id = obj.card_id.clone();
+        let face_up_index = obj.face_up_index;
+        // CR 712.4: static abilities are read from the active face (face_up_index).
         let statics: Vec<StaticAbilityDef> = match self.registry.get(&card_id) {
-            Some(def) => def.primary_face().static_abilities.to_vec(),
+            Some(def) => def
+                .face(face_up_index)
+                .map(|f| f.static_abilities.to_vec())
+                .unwrap_or_default(),
             None => return,
         };
         let timestamp = self.state.command_index;
@@ -84,12 +93,22 @@ impl GameEngine {
         }
     }
 
-    /// Effective (rules-visible) power of `oid`: base from card definition, then CR 613.4
-    /// layer 7c modifying continuous effects, then layer 7d +1/+1 / -1/-1 counters. Returns
-    /// `None` for non-creatures (no base power).
+    /// Effective (rules-visible) power of `oid`: base from the active face (CR 712.4), then
+    /// CR 613.4 layer 7c modifying continuous effects, then layer 7d +1/+1 / -1/-1 counters.
+    /// Returns `None` for non-creatures (no base power on the active face).
     pub fn effective_power(&self, oid: ObjectId) -> Option<u32> {
         let obj = self.state.objects.get(&oid)?;
-        let base = obj.power? as i32;
+        // CR 712.4: for multi-face permanents (obj.power == None), read base P/T from the active
+        // face in the registry.  For normal cards obj.power caches the definition value and is
+        // always Some; prefer it so test overrides and token snapshots are respected.
+        let base = if let Some(p) = obj.power {
+            p as i32
+        } else {
+            self.registry
+                .get(&obj.card_id)
+                .and_then(|d| d.face(obj.face_up_index))
+                .and_then(|f| f.power)? as i32
+        };
         let delta: i32 = self
             .state
             .continuous_effects
@@ -103,11 +122,21 @@ impl GameEngine {
         Some((base + delta + obj.counter_pt_delta()).max(0) as u32)
     }
 
-    /// Effective (rules-visible) toughness of `oid`: base, then layer-7c continuous effects,
-    /// then layer-7d counters (CR 613.4).
+    /// Effective (rules-visible) toughness of `oid`: base from the active face (CR 712.4),
+    /// then layer-7c continuous effects, then layer-7d counters (CR 613.4).
     pub fn effective_toughness(&self, oid: ObjectId) -> Option<u32> {
         let obj = self.state.objects.get(&oid)?;
-        let base = obj.toughness? as i32;
+        // CR 712.4: for multi-face permanents (obj.toughness == None), read base toughness from
+        // the active face in the registry.  For normal cards obj.toughness caches the definition
+        // value and is always Some; prefer it so test overrides and token snapshots are respected.
+        let base = if let Some(t) = obj.toughness {
+            t as i32
+        } else {
+            self.registry
+                .get(&obj.card_id)
+                .and_then(|d| d.face(obj.face_up_index))
+                .and_then(|f| f.toughness)? as i32
+        };
         let delta: i32 = self
             .state
             .continuous_effects
@@ -318,6 +347,7 @@ mod sba_tests {
                 damage,
                 deathtouch_damage: false,
                 counters: Default::default(),
+                face_up_index: 0,
             },
         );
         let idx = e.state.player_idx(owner).unwrap();

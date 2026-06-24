@@ -62,6 +62,12 @@ impl GameEngine {
                 },
             )?;
             if resolves_to_battlefield {
+                // CR 712.4: a permanent enters the battlefield showing the face that was cast.
+                // Set face_up_index from the stack item so characteristic queries (types, keywords,
+                // P/T, mana abilities) read from the correct face while on the battlefield.
+                if let Some(o) = self.state.objects.get_mut(&top.id) {
+                    o.face_up_index = top.face_index;
+                }
                 self.fire_triggers(GameEvent::EntersBattlefield { object_id: top.id }, events);
             }
         }
@@ -862,6 +868,7 @@ impl GameEngine {
                         damage: 0,
                         deathtouch_damage: false,
                         counters: BTreeMap::new(),
+                        face_up_index: 0,
                     },
                 );
                 self.state.players[pidx].battlefield.push(oid);

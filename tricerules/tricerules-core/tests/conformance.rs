@@ -28,7 +28,10 @@ fn pass() -> RuledCommand {
 
 fn play_land(hand_card_index: u32) -> RuledCommand {
     RuledCommand {
-        cmd: Some(Cmd::PlayLand(PlayLand { hand_card_index })),
+        cmd: Some(Cmd::PlayLand(PlayLand {
+            hand_card_index,
+            face_index: 0,
+        })),
     }
 }
 
