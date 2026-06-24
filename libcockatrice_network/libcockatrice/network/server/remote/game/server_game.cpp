@@ -1660,6 +1660,10 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
                     attachEv.set_target_card_id(targetCard->getId());
                     attachGes.enqueueGameEvent(attachEv, ownerPlayer->getPlayerId());
                     attachGesHasEvents = true;
+                    // Keep server-side parent/child state in sync so that when the host
+                    // permanent later leaves the battlefield, moveCard finds the equipment
+                    // in its attachedCards list and calls unattachCard automatically.
+                    attachedCard->setParentCard(targetCard);
                 }
             }
         }
