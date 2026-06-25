@@ -24,10 +24,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Lands used to have a quick animation when tapping, but this stopped working after the engine-owned mana update and lands tap instantly. Animations also never worked for untapping.
   - Priority: Low
 
-- [ ] #11 [feature] Gifts Ungiven UI improvement
-  - Details: Brainstorm was recently updated to have the player click cards in hand to put them to top instead of the text popup. Similarly, I want Gifts Ungiven to also get a UI overhaul. When tutoring cards, the player should choose cards from the library search window, which already exists in non ruled games. For when the other player chooses cards to go to the graveyard, I want that player to get a custom zone popup, similar to what the stack popup looks like, where they choose the cards instead of the text list.
-  - Priority: Medium
-
 - [ ] #12 [feature] Keyword-granting continuous effects (Layer 6)
   - Details: Cards like Captain of the Watch (Soldiers get Vigilance), Goblin Chieftain (other Goblins get Haste), and Overrun (creatures get Trample until end of turn) grant keywords via continuous effects. The current layer system only models Layer 7c P/T modification. Add a `Layer6AddKeyword(Keyword)` variant to `ContinuousEffectKind`, wire it into ETB anthem emission alongside existing `Layer7cPtModify`, and query it when computing effective keywords for legal-actions checks (blocking, attacking, targeting). This fixes the Captain of the Watch partial and unblocks Goblin Chieftain, Overrun, and similar lord/anthem cards. A reserved enum slot already exists in the engine.
   - Priority: Medium
