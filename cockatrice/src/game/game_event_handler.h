@@ -90,10 +90,13 @@ public:
     {
         // Mapping from server card id -> engine OID for all candidate cards.
         QHash<int, quint32> serverCardIdToOid;
+        // Mapping from server card id -> oracle name (for unique-name enforcement).
+        QHash<int, QString> serverCardIdToName;
         // Selected server card ids in click order.
         QList<int> selectedServerCardIds;
         int min = 0;
         int max = 0;
+        bool uniqueNames = false;
         QString promptText;
         PickZone pickZone = PickZone::Hand;
         // For Deck / Revealed picks: oracle card names parallel to serverCardIdToOid keys,
@@ -110,8 +113,19 @@ public:
     }
     [[nodiscard]] bool isResolutionHandPickCardSelectable(int serverCardId) const
     {
-        return resolutionHandPick.has_value() &&
-               resolutionHandPick->serverCardIdToOid.contains(serverCardId);
+        if (!resolutionHandPick.has_value()) return false;
+        if (!resolutionHandPick->serverCardIdToOid.contains(serverCardId)) return false;
+        // Already selected: always show its highlight/number.
+        if (resolutionHandPick->selectedServerCardIds.contains(serverCardId)) return true;
+        // When unique-names is on, exclude candidates whose name is already taken by a
+        // different selected card — they lose the faint outline and become unclickable.
+        if (resolutionHandPick->uniqueNames) {
+            const QString &name = resolutionHandPick->serverCardIdToName.value(serverCardId);
+            for (int selId : resolutionHandPick->selectedServerCardIds) {
+                if (resolutionHandPick->serverCardIdToName.value(selId) == name) return false;
+            }
+        }
+        return true;
     }
     [[nodiscard]] bool isResolutionHandPickCardSelected(int serverCardId) const
     {
@@ -695,11 +709,11 @@ signals:
     void ruledOpeningUiChanged();
     void ruledOpeningBottomUiChanged(int required, int selected);
     /// Emitted when resolution hand-pick mode starts, progresses (card toggled), or ends.
-    /// required == 0 and selected == 0 means mode is cleared.
+    /// required >= 0 means the mode is active; required == -1 (selected == -1) means cleared.
     void ruledResolutionHandPickUiChanged(int required, int selected);
     /// Emitted when a LibrarySearch (Gifts Ungiven step 1) pick starts so the receiving
-    /// tab_game can auto-open the local player's deck zone view.
-    void ruledLibrarySearchPickStarted();
+    /// tab_game can auto-open the local player's deck zone view populated with the candidates.
+    void ruledLibrarySearchPickStarted(QStringList candidateNames, QVector<int> serverCardIds);
     /// Emitted when a RevealedCards (Gifts Ungiven step 2) pick starts or ends.
     /// started=true: the opponent (deciding player) should see a revealed-cards popup.
     /// cardNames: oracle names; serverCardIds: IDs used for click-to-pick (parallel).

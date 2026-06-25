@@ -45,13 +45,17 @@ ZoneViewWidget::ZoneViewWidget(Player *_player,
                                const QList<const ServerInfo_Card *> &cardList,
                                bool _isReversed,
                                bool _showControls,
-                               bool forStackWindow)
-    : QGraphicsWidget(0, Qt::Window), canBeShuffled(_origZone->getIsShufflable()), player(_player)
+                               bool forStackWindow,
+                               bool _closeable)
+    : QGraphicsWidget(0, Qt::Window), canBeShuffled(_origZone->getIsShufflable()), closeable(_closeable), player(_player)
 {
     setAcceptHoverEvents(true);
     setAttribute(Qt::WA_DeleteOnClose);
     setZValue(ZValues::ZONE_VIEW_WIDGET);
     setFlag(ItemIgnoresTransformations);
+    if (!closeable) {
+        setWindowFlags(windowFlags() & ~Qt::WindowCloseButtonHint);
+    }
 
     QGraphicsLinearLayout *vbox = new QGraphicsLinearLayout(Qt::Vertical);
     vbox->setSpacing(2);
@@ -363,7 +367,9 @@ bool ZoneViewWidget::windowFrameEvent(QEvent *event)
                 // avoid drag on close button
                 if (closeButtonRect(me->widget()).contains(me->pos())) {
                     me->accept();
-                    close();
+                    if (closeable) {
+                        close();
+                    }
                     return true;
                 }
 

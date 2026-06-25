@@ -1900,51 +1900,19 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
                     }
                 }
             } else if (rcr->choice_kind() == 2) {
-                // LibrarySearch (private, decider = searcher): match candidate names to deck cards.
-                // unique_names is always true for current LibrarySearch (Gifts Ungiven step 1).
-                const int deciderId = rcr->deciding_player_id();
-                auto *deciderPlayer = static_cast<Server_Player *>(getPlayers().value(deciderId));
-                if (deciderPlayer) {
-                    Server_CardZone *deckZone = deciderPlayer->getZones().value(ZoneNames::DECK);
-                    if (deckZone) {
-                        QHash<QString, int> nameToScid;
-                        for (Server_Card *c : deckZone->getCards()) {
-                            const QString lname = c->getName().toLower();
-                            if (!nameToScid.contains(lname))
-                                nameToScid.insert(lname, c->getId());
-                        }
-                        for (int ci = 0; ci < rcr->candidate_names_size(); ++ci) {
-                            const QString name =
-                                QString::fromStdString(rcr->candidate_names(ci)).toLower();
-                            rcr->add_candidate_server_card_ids(nameToScid.value(name, -1));
-                        }
-                    }
+                // LibrarySearch: assign each candidate a sequential index as its server card ID.
+                // Deck cards are not in engineOidToServerCardId (only battlefield/hand/stack are),
+                // so there is no server-side lookup available. Sequential indices give every
+                // physical card (including duplicate-named ones) a unique client-side ID.
+                // The client maps index i → engine OID via candidate_object_ids[i].
+                for (int ci = 0; ci < rcr->candidate_names_size(); ++ci) {
+                    rcr->add_candidate_server_card_ids(ci);
                 }
             } else if (rcr->choice_kind() == 1 &&
                        rcr->candidate_server_card_ids_size() == 0) {
-                // RevealedCards (public, decider = opponent): inject server card IDs from the
-                // non-deciding player's deck zone so the deciding-player client can render a
-                // zone popup for the pick step (Gifts Ungiven step 2: opponent chooses two).
-                const int deciderId = rcr->deciding_player_id();
-                for (Server_AbstractPlayer *pl : getPlayers().values()) {
-                    if (pl->getPlayerId() == deciderId)
-                        continue;
-                    auto *casterPlayer = static_cast<Server_Player *>(pl);
-                    Server_CardZone *deckZone = casterPlayer->getZones().value(ZoneNames::DECK);
-                    if (!deckZone)
-                        break;
-                    QHash<QString, int> nameToScid;
-                    for (Server_Card *c : deckZone->getCards()) {
-                        const QString lname = c->getName().toLower();
-                        if (!nameToScid.contains(lname))
-                            nameToScid.insert(lname, c->getId());
-                    }
-                    for (int ci = 0; ci < rcr->candidate_names_size(); ++ci) {
-                        const QString name =
-                            QString::fromStdString(rcr->candidate_names(ci)).toLower();
-                        rcr->add_candidate_server_card_ids(nameToScid.value(name, -1));
-                    }
-                    break; // 1v1: only one caster
+                // RevealedCards: same sequential-index scheme for the same reason.
+                for (int ci = 0; ci < rcr->candidate_names_size(); ++ci) {
+                    rcr->add_candidate_server_card_ids(ci);
                 }
             }
         }

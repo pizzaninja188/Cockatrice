@@ -470,8 +470,8 @@ void GamePromptWidget::setCombatDamageStatus(const QString &attackerName, int as
 
 void GamePromptWidget::updateCombatButtonsVisibility()
 {
-    // Resolution hand-pick (Brainstorm etc.): show only the Confirm button.
-    if (resolutionHandPickRequired > 0) {
+    // Resolution hand-pick: show only the Confirm button when a pick is active (required >= 0).
+    if (resolutionHandPickRequired >= 0) {
         passPriorityButton->setVisible(false);
         confirmAttackersButton->setVisible(false);
         confirmBlockersButton->setVisible(false);

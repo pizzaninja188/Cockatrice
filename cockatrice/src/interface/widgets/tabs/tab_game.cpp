@@ -246,6 +246,7 @@ void TabGame::connectToGameEventHandler()
             gamePromptWidget->setCopyTargetPending(false);
             gamePromptWidget->setRuledStackHasItems(false);
             gamePromptWidget->setSpellCastPending(false);
+            gamePromptWidget->setResolutionHandPickMode(-1, -1);
         }
     });
     connect(game->getGameEventHandler(), &GameEventHandler::gameClosed, this, &TabGame::closeGame);
@@ -416,8 +417,8 @@ void TabGame::connectToGameEventHandler()
                     if (gamePromptWidget) {
                         gamePromptWidget->setResolutionHandPickMode(required, selected);
                     }
-                    // When library-search pick ends (required == 0), close the deck zone view.
-                    if (required == 0 && librarySearchView) {
+                    // When library-search pick ends (required < 0 = cleared), close the deck zone view.
+                    if (required < 0 && librarySearchView) {
                         librarySearchView->close();
                         librarySearchView = nullptr;
                     }
@@ -2097,7 +2098,7 @@ void TabGame::hideEvent(QHideEvent *event)
     Tab::hideEvent(event);
 }
 
-void TabGame::onRuledLibrarySearchPickStarted()
+void TabGame::onRuledLibrarySearchPickStarted(QStringList candidateNames, QVector<int> serverCardIds)
 {
     if (!game || !scene) {
         return;
@@ -2115,16 +2116,28 @@ void TabGame::onRuledLibrarySearchPickStarted()
     if (librarySearchView) {
         librarySearchView->close();
     }
-    // Open the deck zone view (full library view: numberCards = -1, not reversed).
-    // revealZone = false lets the zone dump reveal cards to the owner only (private).
+    // Build synthetic cards from the engine's candidate list so the view shows named cards.
+    // These are stored alongside the view; cleared when the view closes.
+    qDeleteAll(librarySearchCards);
+    librarySearchCards.clear();
+    QList<const ServerInfo_Card *> cardList;
+    for (int i = 0; i < candidateNames.size(); ++i) {
+        auto *sic = new ServerInfo_Card;
+        sic->set_name(candidateNames.at(i).toStdString());
+        sic->set_id(i < serverCardIds.size() ? serverCardIds.at(i) : -1);
+        sic->set_face_down(false);
+        librarySearchCards.append(sic);
+        cardList.append(sic);
+    }
+    // Open revealed, not closeable (resolution is mandatory per CR 608).
     librarySearchView =
-        new ZoneViewWidget(localPlayer, deckZone, -1, false, false, {}, false, true, false);
+        new ZoneViewWidget(localPlayer, deckZone, -1, true, false, cardList, false, true, false, false);
     scene->addItem(librarySearchView);
     librarySearchView->setPos(340, 80);
-    // Auto-close when pick ends (ruledResolutionHandPickUiChanged(0,0) → prompt clears,
-    // and we clean up here when the widget is closed by the user or by pick completion).
     connect(librarySearchView, &ZoneViewWidget::closePressed, this, [this](ZoneViewWidget *) {
         librarySearchView = nullptr;
+        qDeleteAll(librarySearchCards);
+        librarySearchCards.clear();
     });
 }
 
@@ -2165,8 +2178,9 @@ void TabGame::onRuledRevealedPickChanged(bool started, QStringList cardNames,
     }
     // Create a revealed zone view (stack-window style: fan layout, no sort controls).
     // revealZone = true shows cards face-up; _showControls = false omits search/sort.
+    // Not closeable: resolution is mandatory per CR 608.
     revealedPickView = new ZoneViewWidget(localPlayer, deckZone, -1, true, false, cardList,
-                                          false, false, true);
+                                          false, false, true, false);
     scene->addItem(revealedPickView);
     revealedPickView->setPos(340, 80);
     connect(revealedPickView, &ZoneViewWidget::closePressed, this, [this](ZoneViewWidget *) {

@@ -778,6 +778,19 @@ void GameEventHandler::toggleResolutionHandPickCard(int serverCardId)
     if (pos >= 0) {
         resolutionHandPick->selectedServerCardIds.removeAt(pos);
     } else if (resolutionHandPick->selectedServerCardIds.size() < resolutionHandPick->max) {
+        if (resolutionHandPick->uniqueNames) {
+            const QString clickedName = resolutionHandPick->serverCardIdToName.value(serverCardId);
+            bool nameTaken = false;
+            for (int selId : resolutionHandPick->selectedServerCardIds) {
+                if (resolutionHandPick->serverCardIdToName.value(selId) == clickedName) {
+                    nameTaken = true;
+                    break;
+                }
+            }
+            if (nameTaken) {
+                return;
+            }
+        }
         resolutionHandPick->selectedServerCardIds.append(serverCardId);
     }
     emit ruledResolutionHandPickUiChanged(resolutionHandPick->min,
@@ -805,15 +818,12 @@ void GameEventHandler::submitResolutionHandPick()
     const bool wasRevealed = resolutionHandPick.has_value() &&
                              resolutionHandPick->pickZone == PickZone::Revealed;
     resolutionHandPick.reset();
-    emit ruledResolutionHandPickUiChanged(0, 0);
+    emit ruledResolutionHandPickUiChanged(-1, -1);
     if (wasRevealed) {
         emit ruledRevealedPickChanged(false, {}, {}, 0, 0);
     }
     emit ruledCombatStateChanged();
 
-    if (chosen.size() < 1) {
-        return;
-    }
     ruled::v1::RuledCommand cmd;
     auto *sub = cmd.mutable_submit_resolution_choice();
     for (quint32 o : chosen) {
@@ -1577,6 +1587,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                         ResolutionHandPick pick;
                                         pick.min = static_cast<int>(rcr.min());
                                         pick.max = static_cast<int>(rcr.max());
+                                        pick.uniqueNames = rcr.unique_names();
                                         pick.promptText = QString::fromStdString(rcr.prompt_text());
                                         pick.pickZone = PickZone::Deck;
                                         for (int i = 0; i < rcr.candidate_names_size(); ++i) {
@@ -1584,16 +1595,23 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                                                     ? rcr.candidate_object_ids(i)
                                                                     : 0;
                                             const int scid = rcr.candidate_server_card_ids(i);
+                                            const QString name =
+                                                QString::fromStdString(rcr.candidate_names(i));
                                             if (scid >= 0) {
                                                 pick.serverCardIdToOid.insert(scid, oid);
+                                                pick.serverCardIdToName.insert(scid, name);
                                             }
-                                            pick.candidateNames.append(
-                                                QString::fromStdString(rcr.candidate_names(i)));
+                                            pick.candidateNames.append(name);
                                         }
                                         resolutionHandPick = std::move(pick);
+                                        const QStringList libNames = resolutionHandPick->candidateNames;
+                                        QVector<int> libScids;
+                                        for (int i = 0; i < rcr.candidate_server_card_ids_size(); ++i) {
+                                            libScids.append(static_cast<int>(rcr.candidate_server_card_ids(i)));
+                                        }
                                         emit ruledResolutionHandPickUiChanged(
                                             resolutionHandPick->min, 0);
-                                        emit ruledLibrarySearchPickStarted();
+                                        emit ruledLibrarySearchPickStarted(libNames, libScids);
                                         emit ruledCombatStateChanged();
                                     } else if (rcr.choice_kind() == 1 &&
                                                rcr.candidate_server_card_ids_size() == rcr.candidate_names_size() &&
@@ -2712,6 +2730,7 @@ void GameEventHandler::clearRuledSessionState()
         emit ruledRevealedPickChanged(false, {}, {}, 0, 0);
     }
     resolutionHandPick.reset();
+    emit ruledResolutionHandPickUiChanged(-1, -1);
 
     clearRuledSpellTargetArrows();
 
