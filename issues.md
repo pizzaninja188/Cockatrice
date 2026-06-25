@@ -24,14 +24,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Lands used to have a quick animation when tapping, but this stopped working after the engine-owned mana update and lands tap instantly. Animations also never worked for untapping.
   - Priority: Low
 
-- [ ] #9 [feature] Dual lands
-  - Details: Right now, basic lands are the only implemented lands. I want to implement the 10 original dual lands. These lands should have the context menu open on left or right click to choose which mana ability to activate.
-  - Priority: Medium
-
-- [ ] #10 [feature] Auras
-  - Details: Implement basic auras. Choose some effects that already exist from the engine and implement auras that use those effects. Auras should stack underneath the permanent they are enchanting in the client, and should die when the permanent is removed.
-  - Priority: Medium
-
 - [ ] #11 [feature] Gifts Ungiven UI improvement
   - Details: Brainstorm was recently updated to have the player click cards in hand to put them to top instead of the text popup. Similarly, I want Gifts Ungiven to also get a UI overhaul. When tutoring cards, the player should choose cards from the library search window, which already exists in non ruled games. For when the other player chooses cards to go to the graveyard, I want that player to get a custom zone popup, similar to what the stack popup looks like, where they choose the cards instead of the text list.
   - Priority: Medium
@@ -95,10 +87,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
 - [ ] #26 [feature] Untap-target and untap-all effects
   - Details: No untap-effect variants exist in `SpellEffectKind`. Add `UntapTarget { target: TargetFilter }` (Twiddle, Aphetto Alchemist) and `UntapAll { filter: TargetFilter }` (Turnabout, Dramatic Reversal). `UntapTarget` reuses the existing targeting machinery; `UntapAll` is untargeted like `DestroyAll`. The engine's zone-move path already handles `tapped` state — untap just clears the flag and emits a `PermanentMoved`/`TapState` event. Add scenario tests for: untap tapped permanent, untap already-untapped permanent (no-op), untap-all with mixed tapped state.
   - Priority: Low
-
-- [ ] #27 [feature] Equipment mechanic (equip cost, attach, equipped continuous bonus)
-  - Details: Equipment is entirely absent from the engine. Equipment permanents are Artifacts with an equip activated ability (`AbilityCost::Mana`, effect: move the equipment to attach to a target creature you control) plus a static ability granting a bonus while attached. Needed additions: (1) `attached_to: Option<ObjectId>` field on `GameObject` (an equipment "attaches" rather than stacking like auras); (2) `Equip { filter: TargetFilter }` SpellEffectKind (moves the equipment's attachment pointer; existing equipment detaches automatically); (3) `StaticAbilityDef::EquippedBonus { delta_power, delta_toughness }` (applies a layer-7c boost to the currently-attached creature while on the battlefield); (4) SBA: equipment falls off if the attached creature leaves (move to `attached_to: None`). Implement Bonesplitter (+2/+0, equip {2}) and Vulshok Morningstar (+2/+2, equip {2}) with tests for: equip, re-equip to a different creature, creature dies and equipment unattaches.
-  - Priority: High
 
 - [ ] #28 [feature] "Whenever a creature dies" observer trigger (Blood Artist, Grim Haruspex)
   - Details: `TriggerCondition::WhenSelfDies` fires only on the card with the ability itself. No observer variant exists for watching other creatures die, which blocks the entire "death matters" archetype (Blood Artist, Zulaport Cutthroat, Grim Haruspex, Butcher of the Horde). Add `WheneverCreatureDies { controller: CastTriggerPlayer, exclude_self: bool }` to `TriggerCondition` in `tricerules-cards/src/primitives.rs`, mirroring the existing `WheneverPermanentEntersBattlefield` structure. The engine's `fire_triggers(GameEvent::Dies …)` path in `resolution.rs` must be extended to check all battlefield permanents for this new condition. Implement Blood Artist (whenever a creature dies, target player loses 1 life and you gain 1 life) and add scenario tests for: own creature dies, opponent's creature dies, source permanent itself dying.
