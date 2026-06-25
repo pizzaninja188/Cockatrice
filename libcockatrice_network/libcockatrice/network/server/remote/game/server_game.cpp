@@ -522,6 +522,12 @@ void Server_Game::doStartGameIfReady(bool forceStartGame)
     ruledStackTargetsByObjectId.clear();
     ruledStackCopyObjectIds.clear();
     ruledPendingCastVisualQueue.clear();
+    // Reset the connection-lost flag so that a back-to-back second game can report and
+    // handle a fresh engine disconnect correctly. Without this reset, if game 1 lost the
+    // engine connection the flag stays true, handleRuledEngineConnectionLost() returns early
+    // for game 2, no notification is sent, and rulesRelay is never dropped — causing every
+    // subsequent ruled command in game 2 to time out rather than fail fast.
+    ruledEngineConnectionLost = false;
 
     gameStarted = true;
     for (auto *player : players.values()) {
