@@ -1974,6 +1974,10 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
         // sees the candidate object ids / names; RevealedCards (1) are public and pass through.
         // For HandCards (choice_kind 0), inject candidate_server_card_ids for the deciding player
         // so the client can map engine OIDs to physical hand CardItems for the hand-click UI.
+        // For LibrarySearch (choice_kind 2), inject by name-matching from the decider's deck zone
+        // so the client can open the deck zone view and use deck-card click-to-pick (like Gifts Ungiven
+        // search step). For RevealedCards (choice_kind 1), inject from the non-deciding player's deck
+        // so the client can render the revealed cards in a zone popup for the opponent's pick step.
         for (int ei = 0; ei < filtered.events_size(); ++ei) {
             if (!filtered.events(ei).has_resolution_choice_required()) {
                 continue;
@@ -1996,6 +2000,21 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
                         Server_Card *sc = deciderPlayer->findCardByEngineOid(oid);
                         rcr->add_candidate_server_card_ids(sc ? sc->getId() : -1);
                     }
+                }
+            } else if (rcr->choice_kind() == 2) {
+                // LibrarySearch: assign each candidate a sequential index as its server card ID.
+                // Deck cards are not in engineOidToServerCardId (only battlefield/hand/stack are),
+                // so there is no server-side lookup available. Sequential indices give every
+                // physical card (including duplicate-named ones) a unique client-side ID.
+                // The client maps index i → engine OID via candidate_object_ids[i].
+                for (int ci = 0; ci < rcr->candidate_names_size(); ++ci) {
+                    rcr->add_candidate_server_card_ids(ci);
+                }
+            } else if (rcr->choice_kind() == 1 &&
+                       rcr->candidate_server_card_ids_size() == 0) {
+                // RevealedCards: same sequential-index scheme for the same reason.
+                for (int ci = 0; ci < rcr->candidate_names_size(); ++ci) {
+                    rcr->add_candidate_server_card_ids(ci);
                 }
             }
         }

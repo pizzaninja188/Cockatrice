@@ -64,6 +64,7 @@ private:
     QCheckBox pileViewCheckBox;
 
     bool canBeShuffled;
+    bool closeable;
     int extraHeight;
     Player *player;
 
@@ -116,7 +117,8 @@ public:
                    const QList<const ServerInfo_Card *> &cardList = QList<const ServerInfo_Card *>(),
                    bool _isReversed = false,
                    bool _showControls = true,
-                   bool forStackWindow = false);
+                   bool forStackWindow = false,
+                   bool _closeable = true);
     ZoneViewZone *getZone() const
     {
         return zone;

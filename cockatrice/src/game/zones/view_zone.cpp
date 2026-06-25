@@ -92,6 +92,13 @@ void ZoneViewZone::initializeCards(const QList<const ServerInfo_Card *> &cardLis
 
             getLogic()->addCard(copy, false, i);
         }
+        // addCard triggers updateCardIds on every call, which rewrites all card IDs to sequential
+        // position indices for unknown zones. Re-apply the server-supplied IDs so that pick-selectable
+        // checks (which key on server card ID) work correctly for library search / revealed-card popups.
+        const CardList &zoneCards = getLogic()->getCards();
+        for (int i = 0; i < cardList.size() && i < zoneCards.size(); ++i) {
+            zoneCards[i]->setId(cardList[i]->id());
+        }
         reorganizeCards();
     } else if (!qobject_cast<ZoneViewZoneLogic *>(getLogic())->getOriginalZone()->contentsKnown()) {
         Command_DumpZone cmd;
