@@ -24,10 +24,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Lands used to have a quick animation when tapping, but this stopped working after the engine-owned mana update and lands tap instantly. Animations also never worked for untapping.
   - Priority: Low
 
-- [ ] #12 [feature] Keyword-granting continuous effects (Layer 6)
-  - Details: Cards like Captain of the Watch (Soldiers get Vigilance), Goblin Chieftain (other Goblins get Haste), and Overrun (creatures get Trample until end of turn) grant keywords via continuous effects. The current layer system only models Layer 7c P/T modification. Add a `Layer6AddKeyword(Keyword)` variant to `ContinuousEffectKind`, wire it into ETB anthem emission alongside existing `Layer7cPtModify`, and query it when computing effective keywords for legal-actions checks (blocking, attacking, targeting). This fixes the Captain of the Watch partial and unblocks Goblin Chieftain, Overrun, and similar lord/anthem cards. A reserved enum slot already exists in the engine.
-  - Priority: Medium
-
 - [ ] #13 [feature] Regenerate mechanic
   - Details: Regenerate (CR 701.15) places a shield on a creature: the next time it would be destroyed that turn, the shield is consumed instead — the creature is tapped, removed from combat, and has its damage cleared. Add `regeneration_shields: u32` to `GameObject`, modify the destroy SBA to consume a shield before moving the creature to the graveyard, and add `SpellEffectKind::Regenerate` and an activated-ability `AbilityCost` path. This also fixes the Wrath of God "can't be regenerated" partial (add a `prevent_regeneration` flag to `DestroyAll`). Implement Cudgel Troll and Drudge Skeletons with test coverage for: shield consumed on lethal damage, shield not present on second lethal, Wrath ignoring shields.
   - Priority: Medium
