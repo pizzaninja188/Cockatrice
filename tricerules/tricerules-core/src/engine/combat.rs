@@ -15,16 +15,16 @@ impl GameEngine {
         };
 
         // CR 702.9b — flying: can only be blocked by creatures with flying or reach.
-        if att.has_keyword(self.registry, Keyword::Flying)
-            && !blk.has_keyword(self.registry, Keyword::Flying)
-            && !blk.has_keyword(self.registry, Keyword::Reach)
+        if self.effective_has_keyword(attacker_id, Keyword::Flying)
+            && !self.effective_has_keyword(blocker_id, Keyword::Flying)
+            && !self.effective_has_keyword(blocker_id, Keyword::Reach)
         {
             return false;
         }
 
         // CR 702.13b — intimidate: can only be blocked by artifact creatures and/or
         // creatures that share a color with the intimidate creature.
-        if att.has_keyword(self.registry, Keyword::Intimidate) {
+        if self.effective_has_keyword(attacker_id, Keyword::Intimidate) {
             let blk_def = self.registry.get(&blk.card_id);
             let blk_is_artifact = blk_def.map(|d| d.is_artifact).unwrap_or(false);
             if !blk_is_artifact {
@@ -54,10 +54,10 @@ impl GameEngine {
                 // CR 702.10b: Haste lets a creature attack (and use {T} abilities) even if it
                 // just entered the battlefield this turn (i.e. ignore summoning sickness).
                 let effectively_sick = o.summoning_sick
-                    && !o.has_keyword(self.registry, tricerules_cards::Keyword::Haste);
+                    && !self.effective_has_keyword(*oid, tricerules_cards::Keyword::Haste);
                 // CR 702.3b: defenders can't attack, so they don't count as eligible attackers.
                 let has_defender =
-                    o.has_keyword(self.registry, tricerules_cards::Keyword::Defender);
+                    self.effective_has_keyword(*oid, tricerules_cards::Keyword::Defender);
                 o.zone == Zone::Battlefield
                     && o.owner == ap
                     && o.is_creature(self.registry)
@@ -110,12 +110,7 @@ impl GameEngine {
                 if !self.can_block(aid, cid) {
                     return false;
                 }
-                let has_menace = self
-                    .state
-                    .objects
-                    .get(&aid)
-                    .map(|o| o.has_keyword(self.registry, Keyword::Menace))
-                    .unwrap_or(false);
+                let has_menace = self.effective_has_keyword(aid, Keyword::Menace);
                 if has_menace {
                     // Need at least one other defender that can also block this attacker.
                     defenders
@@ -171,12 +166,12 @@ impl GameEngine {
                 return Err(EngineError::Illegal("not creature"));
             }
             // CR 702.3b: a creature with defender can't attack.
-            if o.has_keyword(self.registry, tricerules_cards::Keyword::Defender) {
+            if self.effective_has_keyword(oid, tricerules_cards::Keyword::Defender) {
                 return Err(EngineError::Illegal("creature has defender"));
             }
             // CR 702.10b: Haste bypasses summoning sickness — the creature may attack even
             // if it entered the battlefield this turn.
-            let has_haste = o.has_keyword(self.registry, tricerules_cards::Keyword::Haste);
+            let has_haste = self.effective_has_keyword(oid, tricerules_cards::Keyword::Haste);
             if o.summoning_sick && !has_haste {
                 return Err(EngineError::Illegal("summoning sick"));
             }
@@ -187,12 +182,8 @@ impl GameEngine {
         }
         for &oid in &list {
             // CR 702.20b — Vigilance: attacking doesn't cause this creature to tap.
-            let has_vigilance = self
-                .state
-                .objects
-                .get(&oid)
-                .map(|o| o.has_keyword(self.registry, tricerules_cards::Keyword::Vigilance))
-                .unwrap_or(false);
+            let has_vigilance =
+                self.effective_has_keyword(oid, tricerules_cards::Keyword::Vigilance);
             if !has_vigilance {
                 if let Some(c) = self.state.objects.get_mut(&oid) {
                     c.tapped = true;
@@ -321,12 +312,8 @@ impl GameEngine {
         // is the illegal case. Return a prompt-friendly message so the UI can surface it.
         for (&att_id, blk_ids) in &attacker_to_blockers {
             if blk_ids.len() < 2 {
-                let has_menace = self
-                    .state
-                    .objects
-                    .get(&att_id)
-                    .map(|o| o.has_keyword(self.registry, tricerules_cards::Keyword::Menace))
-                    .unwrap_or(false);
+                let has_menace =
+                    self.effective_has_keyword(att_id, tricerules_cards::Keyword::Menace);
                 if has_menace {
                     return Err(EngineError::Illegal("Illegal blocks."));
                 }
@@ -334,17 +321,11 @@ impl GameEngine {
         }
         // CR 702.19: trample attackers with 1+ blockers also require explicit damage assignment
         // (to split damage between blockers and the defending player).
-        let damage_assignment_needed = {
-            let objects = &self.state.objects;
-            let registry = &self.registry;
-            attacker_to_blockers.iter().any(|(atk_id, blks)| {
-                let has_trample = objects
-                    .get(atk_id)
-                    .map(|o| o.has_keyword(registry, tricerules_cards::Keyword::Trample))
-                    .unwrap_or(false);
-                blks.len() > 1 || (blks.len() == 1 && has_trample)
-            })
-        };
+        let damage_assignment_needed = attacker_to_blockers.iter().any(|(atk_id, blks)| {
+            let has_trample =
+                self.effective_has_keyword(*atk_id, tricerules_cards::Keyword::Trample);
+            blks.len() > 1 || (blks.len() == 1 && has_trample)
+        });
         if let Some(c) = self.state.combat.as_mut() {
             c.blockers = attacker_to_blockers;
             c.damage_assignments.clear();
@@ -410,20 +391,12 @@ impl GameEngine {
         }
 
         // Phase 2: compute trample flag and expected blockers before any borrow of combat.
-        let att_has_trample = self
-            .state
-            .objects
-            .get(&attacker_id)
-            .map(|o| o.has_keyword(self.registry, tricerules_cards::Keyword::Trample))
-            .unwrap_or(false);
+        let att_has_trample =
+            self.effective_has_keyword(attacker_id, tricerules_cards::Keyword::Trample);
         // CR 702.2b: any nonzero damage from a deathtouch source is lethal, which lowers the
         // per-blocker lethal amount the trample assignment must cover (CR 702.19e) to 1.
-        let att_has_deathtouch = self
-            .state
-            .objects
-            .get(&attacker_id)
-            .map(|o| o.has_keyword(self.registry, tricerules_cards::Keyword::Deathtouch))
-            .unwrap_or(false);
+        let att_has_deathtouch =
+            self.effective_has_keyword(attacker_id, tricerules_cards::Keyword::Deathtouch);
 
         // Clone expected blockers to free the immutable borrow on combat before the mutable one.
         let expected_blockers: Vec<ObjectId> = self
@@ -513,28 +486,23 @@ impl GameEngine {
 
         // Phase 5: store the assignment and check completion (mutable borrow).
         // Pre-compute which attackers need assignment to avoid borrowing self inside the closure.
-        let needs_assignment: Vec<ObjectId> = {
-            let objects = &self.state.objects;
-            let registry = &self.registry;
-            self.state
-                .combat
-                .as_ref()
-                .unwrap()
-                .blockers
-                .iter()
-                .filter_map(|(atk_id, blks)| {
-                    let has_trample = objects
-                        .get(atk_id)
-                        .map(|o| o.has_keyword(registry, tricerules_cards::Keyword::Trample))
-                        .unwrap_or(false);
-                    if blks.len() > 1 || (blks.len() == 1 && has_trample) {
-                        Some(*atk_id)
-                    } else {
-                        None
-                    }
-                })
-                .collect()
-        };
+        let needs_assignment: Vec<ObjectId> = self
+            .state
+            .combat
+            .as_ref()
+            .unwrap()
+            .blockers
+            .iter()
+            .filter_map(|(atk_id, blks)| {
+                let has_trample =
+                    self.effective_has_keyword(*atk_id, tricerules_cards::Keyword::Trample);
+                if blks.len() > 1 || (blks.len() == 1 && has_trample) {
+                    Some(*atk_id)
+                } else {
+                    None
+                }
+            })
+            .collect();
 
         let mut b = RuledEventBatch::default();
         let c = self.state.combat.as_mut().unwrap();
@@ -592,20 +560,16 @@ impl GameEngine {
             .combat
             .clone()
             .ok_or(EngineError::Illegal("combat?"))?;
-        let needs_first_strike = !c_init.first_strike_damage_done
-            && combat_needs_first_strike_step(&self.state, self.registry, &c_init);
+        let needs_first_strike =
+            !c_init.first_strike_damage_done && combat_needs_first_strike_step(self, &c_init);
 
         if needs_first_strike {
             // Snapshot which creatures had FS/DS at the start of the first-strike step. This is
             // the canonical CR 510.4 "participation list" used to exclude them from the regular
             // step (unless they have DoubleStrike).
-            let registry = &self.registry;
-            let objects = &self.state.objects;
             let is_fs_or_ds = |id: ObjectId| {
-                objects.get(&id).is_some_and(|o| {
-                    o.has_keyword(registry, Keyword::FirstStrike)
-                        || o.has_keyword(registry, Keyword::DoubleStrike)
-                })
+                self.effective_has_keyword(id, Keyword::FirstStrike)
+                    || self.effective_has_keyword(id, Keyword::DoubleStrike)
             };
             let fs_attackers: Vec<ObjectId> = c_init
                 .attacking
@@ -704,29 +668,13 @@ impl GameEngine {
             if self.state.objects.get(&att).map(|a| a.zone) != Some(Zone::Battlefield) {
                 continue;
             }
-            let attacker_participates =
-                object_participates_in_pass(&self.state, self.registry, c, pass, att, true);
+            let attacker_participates = object_participates_in_pass(self, c, pass, att, true);
             // Capture attacker properties before any mutation.
             let att_power = self.effective_power(att).unwrap_or(0);
-            let att_has_lifelink = self
-                .state
-                .objects
-                .get(&att)
-                .map(|o| o.has_keyword(self.registry, Keyword::Lifelink))
-                .unwrap_or(false);
-            let att_has_deathtouch = self
-                .state
-                .objects
-                .get(&att)
-                .map(|o| o.has_keyword(self.registry, Keyword::Deathtouch))
-                .unwrap_or(false);
+            let att_has_lifelink = self.effective_has_keyword(att, Keyword::Lifelink);
+            let att_has_deathtouch = self.effective_has_keyword(att, Keyword::Deathtouch);
             let att_owner = self.state.objects.get(&att).map(|o| o.owner).unwrap_or(ap);
-            let att_has_trample = self
-                .state
-                .objects
-                .get(&att)
-                .map(|o| o.has_keyword(self.registry, Keyword::Trample))
-                .unwrap_or(false);
+            let att_has_trample = self.effective_has_keyword(att, Keyword::Trample);
 
             let blockers = c.blockers.get(&att).map(|v| v.as_slice()).unwrap_or(&[]);
 
@@ -752,22 +700,11 @@ impl GameEngine {
                 // its sole blocker (since we're in the attacker's participation loop), but the
                 // blocker only deals damage back if it participates in this pass (CR 510.4).
                 let blk = blockers[0];
-                let blocker_participates =
-                    object_participates_in_pass(&self.state, self.registry, c, pass, blk, false)
-                        && self.state.objects.get(&blk).map(|o| o.zone) == Some(Zone::Battlefield);
+                let blocker_participates = object_participates_in_pass(self, c, pass, blk, false)
+                    && self.state.objects.get(&blk).map(|o| o.zone) == Some(Zone::Battlefield);
                 let bpw = self.effective_power(blk).unwrap_or(0);
-                let blk_has_lifelink = self
-                    .state
-                    .objects
-                    .get(&blk)
-                    .map(|o| o.has_keyword(self.registry, Keyword::Lifelink))
-                    .unwrap_or(false);
-                let blk_has_deathtouch = self
-                    .state
-                    .objects
-                    .get(&blk)
-                    .map(|o| o.has_keyword(self.registry, Keyword::Deathtouch))
-                    .unwrap_or(false);
+                let blk_has_lifelink = self.effective_has_keyword(blk, Keyword::Lifelink);
+                let blk_has_deathtouch = self.effective_has_keyword(blk, Keyword::Deathtouch);
                 let blk_owner = self.state.objects.get(&blk).map(|o| o.owner).unwrap_or(dfd);
                 if blocker_participates {
                     if let Some(af) = self.state.objects.get_mut(&att) {
@@ -805,28 +742,12 @@ impl GameEngine {
                     .iter()
                     .map(|&blk| {
                         let pw = self.effective_power(blk).unwrap_or(0);
-                        let has_ll = self
-                            .state
-                            .objects
-                            .get(&blk)
-                            .map(|o| o.has_keyword(self.registry, Keyword::Lifelink))
-                            .unwrap_or(false);
-                        let has_dt = self
-                            .state
-                            .objects
-                            .get(&blk)
-                            .map(|o| o.has_keyword(self.registry, Keyword::Deathtouch))
-                            .unwrap_or(false);
+                        let has_ll = self.effective_has_keyword(blk, Keyword::Lifelink);
+                        let has_dt = self.effective_has_keyword(blk, Keyword::Deathtouch);
                         let owner = self.state.objects.get(&blk).map(|o| o.owner).unwrap_or(dfd);
-                        let participates = object_participates_in_pass(
-                            &self.state,
-                            self.registry,
-                            c,
-                            pass,
-                            blk,
-                            false,
-                        ) && self.state.objects.get(&blk).map(|o| o.zone)
-                            == Some(Zone::Battlefield);
+                        let participates = object_participates_in_pass(self, c, pass, blk, false)
+                            && self.state.objects.get(&blk).map(|o| o.zone)
+                                == Some(Zone::Battlefield);
                         (blk, pw, has_ll, has_dt, owner, participates)
                     })
                     .collect();
@@ -951,19 +872,15 @@ pub(super) enum DamagePass {
 /// DoubleStrike. When no first-strike step occurred, every creature participates in the
 /// regular pass (vanilla combat).
 pub(super) fn object_participates_in_pass(
-    state: &GameState,
-    registry: &tricerules_cards::CardRegistry,
+    engine: &GameEngine,
     c: &CombatState,
     pass: DamagePass,
     obj_id: ObjectId,
     is_attacker: bool,
 ) -> bool {
     use tricerules_cards::Keyword;
-    let Some(obj) = state.objects.get(&obj_id) else {
-        return false;
-    };
-    let has_fs = obj.has_keyword(registry, Keyword::FirstStrike);
-    let has_ds = obj.has_keyword(registry, Keyword::DoubleStrike);
+    let has_fs = engine.effective_has_keyword(obj_id, Keyword::FirstStrike);
+    let has_ds = engine.effective_has_keyword(obj_id, Keyword::DoubleStrike);
     match pass {
         DamagePass::FirstStrike => has_fs || has_ds,
         DamagePass::Normal => {
@@ -981,17 +898,11 @@ pub(super) fn object_participates_in_pass(
 
 /// True iff any current attacker or blocker has FirstStrike or DoubleStrike — used to decide
 /// whether the combat phase needs a first-strike damage substep (CR 510.4).
-pub(super) fn combat_needs_first_strike_step(
-    state: &GameState,
-    registry: &tricerules_cards::CardRegistry,
-    c: &CombatState,
-) -> bool {
+pub(super) fn combat_needs_first_strike_step(engine: &GameEngine, c: &CombatState) -> bool {
     use tricerules_cards::Keyword;
     let has_fs_or_ds = |id: ObjectId| {
-        state.objects.get(&id).is_some_and(|o| {
-            o.has_keyword(registry, Keyword::FirstStrike)
-                || o.has_keyword(registry, Keyword::DoubleStrike)
-        })
+        engine.effective_has_keyword(id, Keyword::FirstStrike)
+            || engine.effective_has_keyword(id, Keyword::DoubleStrike)
     };
     c.attacking.iter().copied().any(has_fs_or_ds)
         || c.blockers.values().flatten().copied().any(has_fs_or_ds)

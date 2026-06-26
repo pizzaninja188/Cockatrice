@@ -282,6 +282,25 @@ impl GameEngine {
                         "{spell_label} gives +{power}/+{toughness} to each affected creature"
                     )));
                 }
+                SpellEffectKind::GrantKeywordsAll { filter, keywords } => {
+                    // CR 613 layer 6, one-shot: add a Layer6AddKeyword continuous effect for each
+                    // granted keyword. Overrun → Trample; Trumpet Blast → First Strike; etc.
+                    let scope = resolve_anthem_scope(&filter, controller, top.id);
+                    let kw_names: Vec<&str> = keywords.iter().map(|k| k.as_str()).collect();
+                    for kw in keywords {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            source_id: Some(top.id),
+                            affected: scope.clone(),
+                            kind: ContinuousEffectKind::Layer6AddKeyword(kw),
+                            duration: EffectDuration::UntilEndOfTurn,
+                            timestamp: self.state.command_index,
+                        });
+                    }
+                    events.push(ev_log(format!(
+                        "{spell_label} grants {} to each affected creature until end of turn",
+                        kw_names.join(", ")
+                    )));
+                }
                 SpellEffectKind::PutCounters {
                     counter,
                     count,
@@ -319,12 +338,8 @@ impl GameEngine {
                 SpellEffectKind::DestroyTarget { .. } => {
                     if let Some(&tid) = targets.first() {
                         let tgt = object_display_name(&self.state, self.registry, tid);
-                        let indestructible = self
-                            .state
-                            .objects
-                            .get(&tid)
-                            .map(|o| o.has_keyword(self.registry, Keyword::Indestructible))
-                            .unwrap_or(false);
+                        let indestructible =
+                            self.effective_has_keyword(tid, Keyword::Indestructible);
                         if indestructible {
                             events.push(ev_log(format!(
                                 "{spell_label} has no effect: {tgt} is indestructible."
@@ -748,12 +763,8 @@ impl GameEngine {
                     let victims = battlefield_objects_matching(&self.state, self.registry, &kind);
                     let mut destroyed: Vec<(ObjectId, String, PlayerId)> = Vec::new();
                     for tid in victims {
-                        let indestructible = self
-                            .state
-                            .objects
-                            .get(&tid)
-                            .map(|o| o.has_keyword(self.registry, Keyword::Indestructible))
-                            .unwrap_or(false);
+                        let indestructible =
+                            self.effective_has_keyword(tid, Keyword::Indestructible);
                         let tgt = object_display_name(&self.state, self.registry, tid);
                         if indestructible {
                             events.push(ev_log(format!(

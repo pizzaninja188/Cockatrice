@@ -314,14 +314,10 @@ impl GameEngine {
                     .combat
                     .clone()
                     .ok_or(EngineError::Illegal("combat?"))?;
-                let objects = &self.state.objects;
-                let registry = &self.registry;
                 let multiblock_missing = c.blockers.iter().any(|(atk, blks)| {
                     // Trample with 1+ blockers also requires explicit damage assignment (CR 702.19).
-                    let has_trample = objects
-                        .get(atk)
-                        .map(|o| o.has_keyword(registry, tricerules_cards::Keyword::Trample))
-                        .unwrap_or(false);
+                    let has_trample =
+                        self.effective_has_keyword(*atk, tricerules_cards::Keyword::Trample);
                     let needs_assign = blks.len() > 1 || (blks.len() == 1 && has_trample);
                     needs_assign && !c.damage_assignments.contains_key(atk)
                 });

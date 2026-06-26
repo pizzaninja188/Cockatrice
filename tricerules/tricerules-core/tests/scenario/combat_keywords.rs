@@ -1605,3 +1605,236 @@ fn flash_creature_castable_at_instant_speed_unlike_flashless() {
         "ambush_viper"
     );
 }
+
+// ── Keyword-Granting Continuous Effects (Layer 6) ────────────────────────────
+//
+// Tests for CR 613 layer 6: keywords granted by static abilities (lords) and
+// one-shot sorceries. Uses `effective_has_keyword` — the rules-visible check
+// that considers both card-def keywords and Layer6AddKeyword continuous effects.
+
+/// Goblin Chieftain grants Haste to other Goblins you control (static AnthemKeyword).
+/// A freshly-injected Goblin Trailblazer (summoning-sick, no innate Haste) must be
+/// able to attack once the Chieftain is on the battlefield.
+#[test]
+fn goblin_chieftain_grants_haste_to_other_goblins() {
+    let decks = Some(vec![
+        deck_with("mountain", &["goblin_chieftain"]),
+        deck_with("island", &[]),
+    ]);
+    let mut e = GameEngine::new(6100, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    // Guarantee the card is in hand regardless of shuffle order.
+    take_card_from_library_to_hand(&mut e, 0, "goblin_chieftain");
+
+    // Inject a goblin trailblazer for P0 that is summoning-sick (no innate Haste).
+    let trailblazer = inject_creature_on_battlefield(&mut e, 0, "goblin_trailblazer");
+    if let Some(obj) = e.state.objects.get_mut(&trailblazer) {
+        obj.summoning_sick = true;
+    }
+
+    // Without Goblin Chieftain the trailblazer cannot attack.
+    assert!(
+        !e.effective_has_keyword(trailblazer, tricerules_cards::Keyword::Haste),
+        "goblin trailblazer has no haste before chieftain enters"
+    );
+
+    // Cast Goblin Chieftain ({1}{R}{R}).
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 3,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "goblin_chieftain");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast goblin chieftain");
+    resolve_entire_stack_two_player(&mut e);
+
+    // After Chieftain resolves, its static AnthemKeyword(Haste) fires for other Goblins.
+    let chieftain = battlefield_object_for_card(&e, 0, "goblin_chieftain");
+    assert!(
+        e.effective_has_keyword(trailblazer, tricerules_cards::Keyword::Haste),
+        "trailblazer gains haste from goblin chieftain's layer-6 continuous effect"
+    );
+    // Chieftain does NOT grant haste to itself (exclude_self = true).
+    assert!(
+        e.effective_has_keyword(chieftain, tricerules_cards::Keyword::Haste),
+        "chieftain has haste from its own card definition (not self-grant)"
+    );
+}
+
+/// Goblin Chieftain's Haste grant lets a summoning-sick Goblin attack legally.
+#[test]
+fn goblin_chieftain_haste_grant_allows_sick_goblin_to_attack() {
+    let decks = Some(vec![
+        deck_with("mountain", &["goblin_chieftain"]),
+        deck_with("island", &[]),
+    ]);
+    let mut e = GameEngine::new(6101, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    take_card_from_library_to_hand(&mut e, 0, "goblin_chieftain");
+
+    // Cast Goblin Chieftain first.
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 3,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "goblin_chieftain");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast goblin chieftain");
+    resolve_entire_stack_two_player(&mut e);
+
+    // Inject a summoning-sick Goblin Trailblazer for P0.
+    let trailblazer = inject_creature_on_battlefield(&mut e, 0, "goblin_trailblazer");
+    if let Some(obj) = e.state.objects.get_mut(&trailblazer) {
+        obj.summoning_sick = true;
+    }
+
+    // Advance to DeclareAttackers; the trailblazer should be eligible due to granted haste.
+    e.apply_command(0, &primitive_yield()).expect("main1 yield");
+    e.apply_command(0, &pass()).expect("ap pass begin_combat");
+    e.apply_command(1, &pass()).expect("nap pass begin_combat");
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareAttackers
+    );
+
+    // Goblin Trailblazer (summoning-sick) should be able to attack — Chieftain grants Haste.
+    e.apply_command(0, &declare_attackers(vec![trailblazer]))
+        .expect("summoning-sick goblin attacks due to haste grant from chieftain");
+}
+
+/// Goblin Chieftain does NOT grant Haste to non-Goblin creatures.
+#[test]
+fn goblin_chieftain_does_not_grant_haste_to_non_goblins() {
+    let decks = Some(vec![
+        deck_with("mountain", &["goblin_chieftain"]),
+        deck_with("island", &[]),
+    ]);
+    let mut e = GameEngine::new(6102, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    ensure_card_in_hand(&mut e, 0, "goblin_chieftain");
+
+    // Inject a non-goblin creature (Grizzly Bears).
+    let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    if let Some(obj) = e.state.objects.get_mut(&bear) {
+        obj.summoning_sick = true;
+    }
+
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 3,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "goblin_chieftain");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast goblin chieftain");
+    resolve_entire_stack_two_player(&mut e);
+
+    // Bear is not a Goblin — chieftain's haste grant doesn't apply.
+    assert!(
+        !e.effective_has_keyword(bear, tricerules_cards::Keyword::Haste),
+        "non-goblin bear must not gain haste from goblin chieftain"
+    );
+}
+
+/// Overrun grants Trample to all your creatures until end of turn (GrantKeywordsAll).
+#[test]
+fn overrun_grants_trample_until_end_of_turn() {
+    let decks = Some(vec![
+        deck_with("forest", &["overrun"]),
+        deck_with("island", &[]),
+    ]);
+    let mut e = GameEngine::new(6103, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    take_card_from_library_to_hand(&mut e, 0, "overrun");
+
+    let creature = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let opponent_creature = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+
+    assert!(
+        !e.effective_has_keyword(creature, tricerules_cards::Keyword::Trample),
+        "creature has no trample before overrun"
+    );
+
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            g: 5,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "overrun");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast overrun");
+    resolve_entire_stack_two_player(&mut e);
+
+    // Your creature gains Trample from GrantKeywordsAll.
+    assert!(
+        e.effective_has_keyword(creature, tricerules_cards::Keyword::Trample),
+        "your creature gains trample from overrun"
+    );
+    // Opponent's creature is unaffected (YouControl filter).
+    assert!(
+        !e.effective_has_keyword(opponent_creature, tricerules_cards::Keyword::Trample),
+        "opponent's creature does not gain trample from overrun"
+    );
+}
+
+/// Captain of the Watch grants Vigilance to other Soldiers you control.
+/// Soldiers it creates should not tap when attacking.
+#[test]
+fn captain_of_the_watch_grants_vigilance_to_soldiers() {
+    let decks = Some(vec![
+        deck_with("plains", &["captain_of_the_watch"]),
+        deck_with("island", &[]),
+    ]);
+    let mut e = GameEngine::new(6105, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Inject a Soldier token placeholder: use the generated 1/1 soldier type.
+    // We'll use a savannah_lions (not a Soldier) vs soldier_w_1_1 injection.
+    // The Captain's ETB trigger creates three soldier tokens, so use those.
+
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            w: 6,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "captain_of_the_watch");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast captain of the watch");
+    // Captain enters; its ETB trigger (create 3 soldier tokens) is on the stack.
+    // Resolve the stack entirely (ETB trigger + spell resolution).
+    resolve_entire_stack_two_player(&mut e);
+
+    let captain = battlefield_object_for_card(&e, 0, "captain_of_the_watch");
+
+    // The captain's AnthemKeyword grants Vigilance to other Soldiers you control.
+    // Inject a soldier token manually and verify the grant applies.
+    let soldier = inject_creature_on_battlefield(&mut e, 0, "soldier_w_1_1");
+    assert!(
+        e.effective_has_keyword(soldier, tricerules_cards::Keyword::Vigilance),
+        "soldier token gains vigilance from captain of the watch"
+    );
+    // Captain itself has Vigilance from card definition (not self-grant since exclude_self=true,
+    // but the captain IS in the Soldier subtype, so the effect would apply if not excluded).
+    // Verify that the captain still has vigilance (from its own card def).
+    assert!(
+        e.effective_has_keyword(captain, tricerules_cards::Keyword::Vigilance),
+        "captain retains vigilance from its own keyword list"
+    );
+}

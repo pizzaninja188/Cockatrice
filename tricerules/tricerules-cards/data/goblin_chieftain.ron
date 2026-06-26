@@ -1,0 +1,21 @@
+(
+  id: "goblin_chieftain",
+  name: "Goblin Chieftain",
+  mana_cost: "{1}{R}{R}",
+  types: ["Creature", "Goblin"],
+  power: 2,
+  toughness: 2,
+  keywords: [Haste],
+  // "Other Goblin creatures you control get +1/+1 and have haste." CR 604/613 layer 7c + layer 6.
+  static_abilities: [
+    AnthemPt(
+      filter: (controller: YouControl, subtype: "Goblin", exclude_self: true),
+      delta_power: 1,
+      delta_toughness: 1,
+    ),
+    AnthemKeyword(
+      filter: (controller: YouControl, subtype: "Goblin", exclude_self: true),
+      keyword: Haste,
+    ),
+  ],
+)
