@@ -397,9 +397,21 @@ pub enum SpellEffectKind {
     /// ignores hexproof/shroud and never fizzles. `kind` selects the affected set — `Creature`
     /// for Wrath of God / Day of Judgment, `AnyPermanent` for "destroy all permanents". Only
     /// object kinds are legal (validated at load); player kinds make no sense here.
+    /// `prevent_regeneration: true` means regeneration shields are bypassed (Wrath of God:
+    /// "they can't be regenerated", CR 701.15b).
     DestroyAll {
         #[serde(default = "TargetFilter::default_creature")]
         kind: TargetFilter,
+        #[serde(default)]
+        prevent_regeneration: bool,
+    },
+    /// CR 701.15: put a regeneration shield on target creature. The next time that creature would
+    /// be destroyed this turn, instead tap it, remove it from combat, and clear all damage from it.
+    /// Legal only as an activated ability effect — never a spell (validated at load). Covers
+    /// Cudgel Troll (`{G}: Regenerate`) and Drudge Skeletons (`{B}: Regenerate`).
+    Regenerate {
+        #[serde(default = "TargetFilter::default_creature")]
+        target: TargetFilter,
     },
     /// Deal `amount` damage to every battlefield permanent matching `kind` (CR 119). Untargeted.
     /// `Creature` covers Pyroclasm / Pestilence-style sweeps; `AnyPermanent` is reserved for
@@ -503,7 +515,8 @@ impl SpellEffectKind {
             | SpellEffectKind::MillTargetPlayer { target, .. }
             | SpellEffectKind::PutCounters { target, .. }
             | SpellEffectKind::AuraAttach { target }
-            | SpellEffectKind::Equip { target } => vec![target],
+            | SpellEffectKind::Equip { target }
+            | SpellEffectKind::Regenerate { target } => vec![target],
             _ => vec![],
         }
     }
@@ -562,7 +575,7 @@ impl SpellEffectKind {
             }
             // Mass effects select objects, not players, and never use Self_/AnyTarget (which
             // include players). Only Creature / AnyPermanent are honored by the engine.
-            SpellEffectKind::DestroyAll { kind } | SpellEffectKind::DamageAll { kind, .. } => {
+            SpellEffectKind::DestroyAll { kind, .. } | SpellEffectKind::DamageAll { kind, .. } => {
                 if matches!(kind.kind, TargetKind::Creature | TargetKind::AnyPermanent) {
                     Ok(())
                 } else {
@@ -604,6 +617,17 @@ impl SpellEffectKind {
                         "Equip cannot target players, got {:?}",
                         target.kind
                     ))
+                } else {
+                    Ok(())
+                }
+            }
+            // CR 701.15: Regenerate puts a shield on the target; it is an activated ability, not
+            // a spell. Applying a regeneration shield via a spell would have no source permanent
+            // to attach the replacement to and is a nonsensical card design — reject early.
+            SpellEffectKind::Regenerate { .. } => {
+                if context == EffectContext::Spell {
+                    Err("Regenerate is only valid on an activated or triggered ability, not a spell"
+                        .into())
                 } else {
                     Ok(())
                 }

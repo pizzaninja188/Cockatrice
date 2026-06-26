@@ -1923,6 +1923,26 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 }
                                 combatStateDirty = true;
                             }
+                            if (e.has_removed_from_combat()) {
+                                for (const auto rawOid : e.removed_from_combat().object_ids()) {
+                                    const quint32 oid = static_cast<quint32>(rawOid);
+                                    currentAttackerOids.remove(oid);
+                                    // Clean up attacker-side of blocker groups.
+                                    committedBlockerGroups.remove(oid);
+                                    // Clean up blocker-side: remove this blocker from any group.
+                                    committedBlocks.remove(oid);
+                                    for (auto git = committedBlockerGroups.begin();
+                                         git != committedBlockerGroups.end();) {
+                                        git.value().removeAll(oid);
+                                        if (git.value().isEmpty()) {
+                                            git = committedBlockerGroups.erase(git);
+                                        } else {
+                                            ++git;
+                                        }
+                                    }
+                                }
+                                combatStateDirty = true;
+                            }
                             if (e.has_life_changed()) {
                                 const auto &lc = e.life_changed();
                                 const QString lifeLine = QStringLiteral("Life: P%1 is now %2 (%3)\n")

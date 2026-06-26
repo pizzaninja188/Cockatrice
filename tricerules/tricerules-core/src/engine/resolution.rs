@@ -344,6 +344,8 @@ impl GameEngine {
                             events.push(ev_log(format!(
                                 "{spell_label} has no effect: {tgt} is indestructible."
                             )));
+                        } else if consume_regen_shield(&mut self.state, tid, events) {
+                            events.push(ev_log(format!("{tgt} regenerates.")));
                         } else {
                             events.push(ev_log(format!("{spell_label} destroys {tgt}")));
                             let owner = self.state.objects.get(&tid).map(|o| o.owner);
@@ -756,10 +758,14 @@ impl GameEngine {
                         }
                     }
                 }
-                SpellEffectKind::DestroyAll { kind } => {
+                SpellEffectKind::DestroyAll {
+                    kind,
+                    prevent_regeneration,
+                } => {
                     // CR 701.7 / 704.4: all matching permanents are destroyed simultaneously,
                     // then their "dies" triggers fire together. Indestructible permanents survive
-                    // (CR 702.12b). Untargeted, so hexproof/shroud are irrelevant.
+                    // (CR 702.12b). `prevent_regeneration` bypasses shields (Wrath of God).
+                    // Untargeted, so hexproof/shroud are irrelevant.
                     let victims = battlefield_objects_matching(&self.state, self.registry, &kind);
                     let mut destroyed: Vec<(ObjectId, String, PlayerId)> = Vec::new();
                     for tid in victims {
@@ -770,6 +776,13 @@ impl GameEngine {
                             events.push(ev_log(format!(
                                 "{tgt} is indestructible and survives {spell_label}."
                             )));
+                            continue;
+                        }
+                        // CR 701.15b: "can't be regenerated" bypasses shields.
+                        if !prevent_regeneration
+                            && consume_regen_shield(&mut self.state, tid, events)
+                        {
+                            events.push(ev_log(format!("{tgt} regenerates.")));
                             continue;
                         }
                         let owner = self.state.objects.get(&tid).map(|o| o.owner);
@@ -865,6 +878,33 @@ impl GameEngine {
                 // stack-resolution path. Defensive no-op (registry validation also forbids it on
                 // spells); producing mana here would be off-stack-timing and is intentionally not done.
                 SpellEffectKind::ProduceMana { .. } => {}
+                // CR 701.15: put a regeneration shield on the target. Resolved only as an
+                // activated ability (`Self_` auto-bound to the source permanent). Each activation
+                // adds one shield; shields expire at cleanup (like marked damage).
+                SpellEffectKind::Regenerate { target } => {
+                    let tid = if matches!(target.kind, TargetKind::Self_) {
+                        top.source_permanent_id
+                    } else {
+                        targets.first().copied()
+                    };
+                    if let Some(tid) = tid {
+                        let is_creature = self
+                            .state
+                            .objects
+                            .get(&tid)
+                            .map(|o| o.zone == Zone::Battlefield && o.is_creature(self.registry))
+                            .unwrap_or(false);
+                        if is_creature {
+                            let tgt = object_display_name(&self.state, self.registry, tid);
+                            if let Some(o) = self.state.objects.get_mut(&tid) {
+                                o.regeneration_shields += 1;
+                            }
+                            events.push(ev_log(format!(
+                                "{tgt} has a regeneration shield ({spell_label})."
+                            )));
+                        }
+                    }
+                }
                 SpellEffectKind::None => {}
                 // CR 303.4: the AuraAttach effect is the "Enchant <type>" clause of an aura spell.
                 // The attached_to field was already set before fire_triggers; emit the proto event
@@ -968,6 +1008,7 @@ impl GameEngine {
                         deathtouch_damage: false,
                         counters: BTreeMap::new(),
                         attached_to: None,
+                        regeneration_shields: 0,
                     },
                 );
                 self.state.players[pidx].battlefield.push(oid);
@@ -1085,16 +1126,16 @@ pub(super) fn move_object_to_zone(
             !single_on_this && !static_from_this
         });
         // CR 400.7 / 121.2: a zone change makes this a new game object — transient
-        // battlefield-only state (marked damage, deathtouch marking, tap status) and all
-        // counters do not carry over. Centralized here so every leave path (SBA destroy,
-        // sacrifice, bounce, discard, mill, exile) is correct by construction; otherwise a
-        // creature bounced and recast would keep its +1/+1 counters or stale combat damage.
+        // battlefield-only state (marked damage, deathtouch marking, tap status, regeneration
+        // shields) and all counters do not carry over. Centralized here so every leave path
+        // (SBA destroy, sacrifice, bounce, discard, mill, exile) is correct by construction.
         if let Some(o) = state.objects.get_mut(&oid) {
             o.damage = 0;
             o.deathtouch_damage = false;
             o.tapped = false;
             o.counters.clear();
             o.attached_to = None;
+            o.regeneration_shields = 0;
         }
     }
 
@@ -1143,4 +1184,51 @@ fn counter_label(kind: CounterKind) -> &'static str {
         CounterKind::PlusOnePlusOne => "+1/+1",
         CounterKind::MinusOneMinusOne => "-1/-1",
     }
+}
+
+/// CR 701.15: attempt to consume one regeneration shield from `oid`. If a shield is present,
+/// taps the creature, removes it from combat, clears all marked damage, and returns `true`.
+/// The caller is responsible for not destroying the creature. Returns `false` if no shield exists.
+/// Does NOT emit a zone-change event (the creature stays on the battlefield).
+pub(super) fn consume_regen_shield(
+    state: &mut GameState,
+    oid: ObjectId,
+    events: &mut Vec<rv1::RuledEvent>,
+) -> bool {
+    let shields = state
+        .objects
+        .get(&oid)
+        .map(|o| o.regeneration_shields)
+        .unwrap_or(0);
+    if shields == 0 {
+        return false;
+    }
+    if let Some(o) = state.objects.get_mut(&oid) {
+        o.regeneration_shields -= 1;
+        o.damage = 0;
+        o.deathtouch_damage = false;
+        o.tapped = true;
+    }
+    // CR 701.15a: remove from combat (attacker/blocker lists). This mirrors what happens when
+    // a creature is removed from combat by a tap effect.
+    if let Some(combat) = state.combat.as_mut() {
+        let was_in_combat = combat.attacking.contains(&oid)
+            || combat.blockers.contains_key(&oid)
+            || combat.blockers.values().any(|v| v.contains(&oid));
+        combat.attacking.retain(|&id| id != oid);
+        combat.blockers.remove(&oid);
+        for v in combat.blockers.values_mut() {
+            v.retain(|&id| id != oid);
+        }
+        if was_in_combat {
+            events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::RemovedFromCombat(
+                    rv1::CreaturesRemovedFromCombat {
+                        object_ids: vec![oid],
+                    },
+                )),
+            });
+        }
+    }
+    true
 }

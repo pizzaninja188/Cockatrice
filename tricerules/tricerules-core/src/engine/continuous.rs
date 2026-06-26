@@ -1,4 +1,6 @@
-use super::resolution::{destroy_permanent, permanent_moved_event, resolve_anthem_scope};
+use super::resolution::{
+    consume_regen_shield, destroy_permanent, permanent_moved_event, resolve_anthem_scope,
+};
 use super::*;
 
 impl GameEngine {
@@ -208,12 +210,14 @@ impl GameEngine {
             .retain(|e| e.duration != EffectDuration::UntilEndOfTurn);
     }
 
-    /// CR 514.2: damage marked on permanents is removed during cleanup.
+    /// CR 514.2: damage marked on permanents is removed during cleanup. Regeneration shields
+    /// also expire at end of turn (CR 701.15a "this turn").
     pub(super) fn cleanup_marked_damage(&mut self) {
         for o in self.state.objects.values_mut() {
-            if o.zone == Zone::Battlefield && (o.damage != 0 || o.deathtouch_damage) {
+            if o.zone == Zone::Battlefield {
                 o.damage = 0;
                 o.deathtouch_damage = false;
+                o.regeneration_shields = 0;
             }
         }
     }
@@ -254,7 +258,10 @@ impl GameEngine {
             .map(|(id, _)| *id)
             .collect();
 
-        let mut to_destroy = Vec::new();
+        // CR 704.5f: toughness-0 deaths — not regeneratable (this is a different SBA from destroy).
+        let mut to_destroy_t0 = Vec::new();
+        // CR 704.5g/704.5h: lethal-damage deaths — regeneration shields apply here.
+        let mut to_destroy_lethal = Vec::new();
         for id in candidate_ids {
             let Some(eff_t) = self.effective_toughness(id) else {
                 continue;
@@ -265,16 +272,46 @@ impl GameEngine {
             };
             // CR 704.5f: toughness 0 — still dies even with indestructible.
             if eff_t == 0 {
-                to_destroy.push(id);
-            // CR 704.5g / 704.5h: lethal damage or deathtouch — blocked by indestructible.
+                to_destroy_t0.push(id);
             } else if !indestructible && (o.damage >= eff_t || o.deathtouch_damage) {
-                to_destroy.push(id);
+                to_destroy_lethal.push(id);
             }
         }
-        for id in to_destroy {
+        // Toughness-0: bypass regeneration (CR 704.5f — not a "destroy" trigger).
+        for id in to_destroy_t0 {
             let owner = self.state.objects.get(&id).map(|o| o.owner);
             let card_id_for_trigger = self.state.objects.get(&id).map(|o| o.card_id.clone());
             if destroy_permanent(&mut self.state, id).is_ok() {
+                changed = true;
+                if let Some(owner_id) = owner {
+                    out.push(permanent_moved_event(
+                        &self.state,
+                        id,
+                        owner_id,
+                        rv1::permanent_moved::Destination::Graveyard,
+                    ));
+                }
+                if let (Some(cid), Some(ctrl)) = (card_id_for_trigger, owner) {
+                    self.fire_triggers(
+                        GameEvent::Dies {
+                            object_id: id,
+                            card_id: cid,
+                            controller: ctrl,
+                        },
+                        out,
+                    );
+                }
+            }
+        }
+        // Lethal-damage destroy: CR 701.15 regeneration shields apply before destruction.
+        for id in to_destroy_lethal {
+            let owner = self.state.objects.get(&id).map(|o| o.owner);
+            let card_id_for_trigger = self.state.objects.get(&id).map(|o| o.card_id.clone());
+            if consume_regen_shield(&mut self.state, id, out) {
+                changed = true;
+                let name = card_id_for_trigger.as_deref().unwrap_or("creature");
+                out.push(super::events::ev_log(format!("{name} regenerates.")));
+            } else if destroy_permanent(&mut self.state, id).is_ok() {
                 changed = true;
                 if let Some(owner_id) = owner {
                     out.push(permanent_moved_event(
@@ -476,6 +513,7 @@ mod sba_tests {
                 deathtouch_damage: false,
                 counters: Default::default(),
                 attached_to: None,
+                regeneration_shields: 0,
             },
         );
         let idx = e.state.player_idx(owner).unwrap();

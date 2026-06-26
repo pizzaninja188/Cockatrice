@@ -254,6 +254,9 @@ message RuledEvent {
     // The relay translates this into Event_AttachCard so the client stacks the aura under the
     // enchanted permanent. Also emitted on zone-view reconnect to restore the attachment.
     AuraAttached aura_attached = 25;
+    // One or more creatures were removed from combat mid-step (CR 701.15a: regeneration; also
+    // covers future tap-out-of-combat effects). Clients remove the corresponding arrows.
+    CreaturesRemovedFromCombat removed_from_combat = 26;
   }
 }
 
@@ -609,6 +612,13 @@ message BlockersPreview {
 message AttackersPreview {
   int32 declaring_player_id = 1;
   repeated uint32 attacker_object_ids = 2;
+}
+
+// Engine-emitted when one or more creatures are removed from combat mid-step (CR 701.15a).
+// Covers regeneration and any future effect that taps or otherwise ejects a creature from combat.
+// Clients remove the corresponding attacker/blocker arrows for the listed engine object ids.
+message CreaturesRemovedFromCombat {
+  repeated uint32 object_ids = 1;
 }
 
 // --- Sidecar TCP framing (length-prefixed IpcEnvelope) ---

@@ -1,0 +1,15 @@
+(
+  id: "cudgel_troll",
+  name: "Cudgel Troll",
+  mana_cost: "{2}{G}{G}",
+  types: ["Creature", "Troll"],
+  power: 4,
+  toughness: 3,
+  activated_abilities: [
+    (
+      cost: Mana("{G}"),
+      effect: Regenerate(target: (kind: Self_)),
+      text: "{G}: Regenerate Cudgel Troll.",
+    ),
+  ],
+)

@@ -61,6 +61,10 @@ pub struct GameObject {
     /// permanent this card is attached to. `None` for non-aura, non-equipment permanents or
     /// before attachment is established. Cleared on zone change (auras die; equipment falls off).
     pub attached_to: Option<ObjectId>,
+    /// CR 701.15: number of regeneration shields on this permanent. Each shield is a replacement
+    /// effect: the next time this permanent would be destroyed, instead tap it, remove it from
+    /// combat, and clear all damage from it. Shields expire at the cleanup step (like damage).
+    pub regeneration_shields: u32,
 }
 
 impl GameObject {
