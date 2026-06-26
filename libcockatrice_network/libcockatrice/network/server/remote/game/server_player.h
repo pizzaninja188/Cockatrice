@@ -21,6 +21,9 @@ private:
     QHash<quint32, bool> engineOidToHaste;
     QHash<quint32, bool> engineOidToTrample;
     QHash<quint32, bool> engineOidToCreature;
+    // Parallel to engineOidToServerCardId but scoped to the graveyard zone.
+    // Updated from RuledPerPlayerView::graveyard_object_id each zone-view sync.
+    QHash<quint32, int> graveyardEngineOidToServerCardId;
 
 public:
     struct RuledZoneSyncResult
@@ -36,6 +39,10 @@ public:
     QHash<quint32, int> getEngineOidToServerCardId() const
     {
         return engineOidToServerCardId;
+    }
+    QHash<quint32, int> getGraveyardEngineOidToServerCardId() const
+    {
+        return graveyardEngineOidToServerCardId;
     }
     bool isEngineOidSummoningSick(quint32 engineOid) const
     {
@@ -54,6 +61,7 @@ public:
         return engineOidToCreature.value(engineOid, false);
     }
     Server_Card *findCardByEngineOid(quint32 engineOid) const;
+    Server_Card *findGraveyardCardByEngineOid(quint32 engineOid) const;
 
     Server_Player(Server_Game *_game,
                   int _playerId,

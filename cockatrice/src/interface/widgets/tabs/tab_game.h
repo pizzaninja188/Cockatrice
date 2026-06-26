@@ -85,6 +85,7 @@ private:
     QDockWidget *cardInfoDock, *messageLayoutDock, *playerListDock, *replayDock;
     GamePromptWidget *gamePromptWidget;
     QList<QPointer<ArrowItem>> ruledCombatArrows;
+    bool ruledGraveyardAutoOpened = false;
     QPointer<ZoneViewWidget> stackView;
     CardZoneLogic *stackViewZone = nullptr;
     // Deck zone view auto-opened for LibrarySearch (Gifts Ungiven search step).

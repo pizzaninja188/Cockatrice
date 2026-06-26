@@ -1,0 +1,7 @@
+(
+  id: "disentomb",
+  name: "Disentomb",
+  mana_cost: "{B}",
+  types: ["Sorcery"],
+  spell_effect: [ReturnFromGraveyard(filter: (owner: Controller, card_type: Some(Creature)), destination: Hand)],
+)

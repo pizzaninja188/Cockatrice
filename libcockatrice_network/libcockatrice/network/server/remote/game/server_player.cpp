@@ -538,6 +538,19 @@ Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const
         }
     }
 
+    // Graveyard OIDs: build position-based map from graveyard_object_id parallel array.
+    // The engine's graveyard and the relay graveyard zone both maintain insertion order, so
+    // position matching is correct as long as the sizes agree.
+    Server_CardZone *graveZone = zones.value(ZoneNames::GRAVE);
+    if (graveZone && v.graveyard_object_id_size() == graveZone->getCards().size()) {
+        graveyardEngineOidToServerCardId.clear();
+        for (int i = 0; i < v.graveyard_object_id_size(); ++i) {
+            const quint32 oid = static_cast<quint32>(v.graveyard_object_id(i));
+            Server_Card *card = graveZone->getCards().at(i);
+            graveyardEngineOidToServerCardId.insert(oid, card->getId());
+        }
+    }
+
     result.engineOidToServerCardId = engineOidToServerCardId;
     return result;
 }
@@ -555,6 +568,19 @@ Server_Card *Server_Player::findCardByEngineOid(quint32 engineOid) const
                 return c;
             }
         }
+    }
+    return nullptr;
+}
+
+Server_Card *Server_Player::findGraveyardCardByEngineOid(quint32 engineOid) const
+{
+    const auto it = graveyardEngineOidToServerCardId.constFind(engineOid);
+    if (it == graveyardEngineOidToServerCardId.constEnd()) {
+        return nullptr;
+    }
+    const int serverCardId = *it;
+    if (Server_CardZone *z = zones.value(ZoneNames::GRAVE)) {
+        return z->getCard(serverCardId, nullptr, false);
     }
     return nullptr;
 }

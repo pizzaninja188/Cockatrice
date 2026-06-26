@@ -213,6 +213,45 @@ pub enum TargetKind {
     Self_,
 }
 
+/// Which player's graveyard a [`GraveyardFilter`] targets. Defaults to [`Controller`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum GraveyardOwner {
+    /// Only the effect controller's own graveyard ("your graveyard" — Raise Dead, Disentomb).
+    #[default]
+    Controller,
+    /// Any player's graveyard ("a graveyard" — Grim Return, Beacon of Unrest).
+    AnyPlayer,
+}
+
+/// Which card types in a graveyard qualify for [`ReturnFromGraveyard`][SpellEffectKind::ReturnFromGraveyard].
+/// `None` means any card type (no type restriction).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GraveyardCardType {
+    /// Only creature cards (Raise Dead, Disentomb, Gravedigger ETB).
+    Creature,
+}
+
+/// Filter for graveyard-zone targets (cards in a graveyard, not battlefield permanents).
+/// Parallel to [`TargetFilter`] but for a different zone.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct GraveyardFilter {
+    /// Which player's graveyard. Defaults to the caster's own graveyard.
+    #[serde(default)]
+    pub owner: GraveyardOwner,
+    /// Optional card-type restriction. `None` = any card.
+    #[serde(default)]
+    pub card_type: Option<GraveyardCardType>,
+}
+
+/// Where a card returned from the graveyard lands (CR 400.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GraveyardDestination {
+    /// The card goes to its owner's hand (Raise Dead, Disentomb, Gravedigger ETB).
+    Hand,
+    /// The card enters the battlefield under the caster's control (reanimation spells).
+    Battlefield,
+}
+
 /// Where an effect is being resolved from. Controls validation that depends on context —
 /// e.g. [`TargetKind::Self_`] is only meaningful for an ability bound to a source permanent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -389,6 +428,14 @@ pub enum SpellEffectKind {
     ExileTargetGainLifeEqualToPower,
     ReturnTargetCreatureToHand,
     ReturnTargetPermanentToHand,
+    /// Move a card from a graveyard to hand or battlefield (CR 400.1: graveyard is public).
+    /// Raise Dead / Disentomb (creature → hand); future reanimation (creature → battlefield).
+    /// The `filter` selects which graveyard and which card types are legal targets; the engine
+    /// validates this at cast time and again at resolution (fizzle if no longer legal).
+    ReturnFromGraveyard {
+        filter: GraveyardFilter,
+        destination: GraveyardDestination,
+    },
     MillTargetPlayer {
         count: u32,
         target: TargetFilter,

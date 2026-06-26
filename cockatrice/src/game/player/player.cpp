@@ -129,16 +129,22 @@ void Player::processPlayerInfo(const ServerInfo_Player &info)
     clearCounters();
     clearArrows();
 
-    // In ruled mode the stack zone is authoritative from Event_MoveCard events and the
-    // engine's synthetic ability system. Clearing and repopulating it from the game-state
-    // snapshot (sent on hand/battlefield-order changes) causes visual duplicates: the old
-    // card is still alive (deleteLater) while the repopulated card is immediately added.
+    // In ruled mode the stack and graveyard zones are authoritative from Event_MoveCard events
+    // and the engine's synthetic ability system. Clearing and repopulating them from the
+    // game-state snapshot (sent on hand/battlefield-order changes) causes visual duplicates:
+    // open zone views are not cleared by clearContents(), so each repopulation adds another
+    // copy of every card on top of the ones the view already holds.
     const bool ruledMode = game && game->getGameMetaInfo()->proto().ruled_game();
+    auto skipInRuledMode = [&](const QString &zoneName) {
+        return ruledMode &&
+               (zoneName == QLatin1String(ZoneNames::STACK) ||
+                zoneName == QLatin1String(ZoneNames::GRAVE));
+    };
 
     QMutableMapIterator<QString, CardZoneLogic *> zoneIt(zones);
     while (zoneIt.hasNext()) {
         zoneIt.next();
-        if (ruledMode && zoneIt.key() == QLatin1String(ZoneNames::STACK)) {
+        if (skipInRuledMode(zoneIt.key())) {
             if (!builtinZones.contains(zoneIt.key())) {
                 zoneIt.remove();
             }
@@ -158,7 +164,7 @@ void Player::processPlayerInfo(const ServerInfo_Player &info)
         const ServerInfo_Zone &zoneInfo = info.zone_list(i);
 
         QString zoneName = QString::fromStdString(zoneInfo.name());
-        if (ruledMode && zoneName == QLatin1String(ZoneNames::STACK)) {
+        if (skipInRuledMode(zoneName)) {
             continue;
         }
         CardZoneLogic *zone = zones.value(zoneName, 0);

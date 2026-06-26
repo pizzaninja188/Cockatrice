@@ -1,5 +1,6 @@
 use super::combat::is_attacking_or_blocking;
 use super::*;
+use tricerules_cards::primitives::{GraveyardCardType, GraveyardFilter, GraveyardOwner};
 
 /// Player or creature permanent on the battlefield (matches cast validation for `bolt`).
 fn damage_spell_target_legal(state: &GameState, registry: &CardRegistry, tid: ObjectId) -> bool {
@@ -32,6 +33,48 @@ fn any_battlefield_permanent_target_legal(state: &GameState, tid: ObjectId) -> b
         .objects
         .get(&tid)
         .is_some_and(|o| o.zone == Zone::Battlefield)
+}
+
+/// Check if `oid` is a legal graveyard target for a [`GraveyardFilter`].
+/// Graveyard cards have no Hexproof/Shroud (those keywords only apply on the battlefield).
+pub(super) fn graveyard_target_legal(
+    state: &GameState,
+    registry: &CardRegistry,
+    filter: &GraveyardFilter,
+    oid: ObjectId,
+    caster: PlayerId,
+) -> bool {
+    let Some(obj) = state.objects.get(&oid) else {
+        return false;
+    };
+    if obj.zone != Zone::Graveyard {
+        return false;
+    }
+    // Owner restriction: "your graveyard" vs. any player's graveyard.
+    match filter.owner {
+        GraveyardOwner::Controller => {
+            if obj.owner != caster {
+                return false;
+            }
+        }
+        GraveyardOwner::AnyPlayer => {}
+    }
+    // Card-type restriction.
+    if let Some(card_type) = filter.card_type {
+        let Some(def) = registry.get(&obj.card_id) else {
+            return false;
+        };
+        match card_type {
+            GraveyardCardType::Creature => {
+                // A card is a creature card if it has "Creature" in its type line on any face.
+                let is_creature = def.is_creature || def.faces.iter().any(|f| f.is_creature);
+                if !is_creature {
+                    return false;
+                }
+            }
+        }
+    }
+    true
 }
 
 /// CR 702.16 / CR 702.18: returns false when `tid` is a permanent that the `caster` cannot
@@ -296,6 +339,9 @@ fn effect_target_legal_at_resolution(
         SpellEffectKind::AuraAttach { target } => {
             target_filter_legal(state, registry, target, tid, caster)
         }
+        SpellEffectKind::ReturnFromGraveyard { filter, .. } => {
+            graveyard_target_legal(state, registry, filter, tid, caster)
+        }
         _ => true,
     }
 }
@@ -313,6 +359,7 @@ pub(super) fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
         | SpellEffectKind::ExileTargetGainLifeEqualToPower
         | SpellEffectKind::ReturnTargetCreatureToHand
         | SpellEffectKind::ReturnTargetPermanentToHand
+        | SpellEffectKind::ReturnFromGraveyard { .. }
         | SpellEffectKind::TargetPlayerGainsLife { .. }
         | SpellEffectKind::TargetPlayerLosesLife { .. }
         | SpellEffectKind::MillTargetPlayer { .. }
@@ -444,6 +491,16 @@ pub(super) fn validate_effect_targets(
             if !target_filter_legal(state, registry, filter, targets[0].object_id, caster) {
                 return Err(EngineError::Illegal(
                     "equip target must be a creature you control on the battlefield",
+                ));
+            }
+        }
+        SpellEffectKind::ReturnFromGraveyard { filter, .. } => {
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal("requires exactly one graveyard card target"));
+            }
+            if !graveyard_target_legal(state, registry, filter, targets[0].object_id, caster) {
+                return Err(EngineError::Illegal(
+                    "target must be a matching card in the correct graveyard",
                 ));
             }
         }
@@ -582,6 +639,13 @@ pub(super) fn spell_target_legality_error(
                 "enchant target must be a valid permanent on the battlefield",
             ));
         }
+        SpellEffectKind::ReturnFromGraveyard { filter, .. }
+            if !graveyard_target_legal(state, registry, filter, tid, caster) =>
+        {
+            return Err(EngineError::Illegal(
+                "target must be a matching card in the correct graveyard",
+            ));
+        }
         _ => {}
     }
     Ok(())
@@ -598,6 +662,7 @@ pub(super) fn compute_spell_targets(
 ) -> rv1::SpellTargets {
     let mut valid_permanent_ids = Vec::new();
     let mut valid_stack_ids = Vec::new();
+    let mut valid_graveyard_ids = Vec::new();
     let mut can_target_self = false;
     let mut can_target_opponent = false;
 
@@ -610,6 +675,7 @@ pub(super) fn compute_spell_targets(
             match obj.zone {
                 Zone::Battlefield => valid_permanent_ids.push(obj.id),
                 Zone::Stack => valid_stack_ids.push(obj.id),
+                Zone::Graveyard => valid_graveyard_ids.push(obj.id),
                 _ => {}
             }
         }
@@ -636,6 +702,7 @@ pub(super) fn compute_spell_targets(
     rv1::SpellTargets {
         valid_permanent_ids,
         valid_stack_ids,
+        valid_graveyard_ids,
         can_target_self,
         can_target_opponent,
     }

@@ -205,6 +205,7 @@ private:
     struct SpellTargetData {
         QSet<quint32> validPermanentIds;
         QSet<quint32> validStackIds;
+        QSet<quint32> validGraveyardIds;
         bool canTargetSelf = false;
         bool canTargetOpponent = false;
     };
@@ -220,6 +221,9 @@ private:
     QHash<quint32, int> engineOidBattlefieldToughness;
     // Servatrice HandSlotMap: (owner player id, Server_Card.id) -> engine hand index for ruled commands.
     QHash<quint64, int> ruledOwnedCardToEngineHandSlot;
+    // Servatrice GraveyardObjectMap: engine OID -> Server_Card.id for graveyard cards (all players).
+    // Used by tryHandleRuledSpellTargetClick to resolve graveyard card clicks as engine OIDs.
+    QHash<quint32, int> ruledGraveyardEngineOidToServerCardId;
 
     // Latest combat phase derived from PhaseChanged events.
     RuledCombatPhase currentRuledCombatPhase = RuledCombatPhase::None;
@@ -361,6 +365,17 @@ public:
     {
         return ownerCardIdToEngineOid.value(makeOwnedCardKey(ownerPlayerId, cardId), 0);
     }
+    // Returns the engine OID for a graveyard card given its Server_Card.id, or 0 if not found.
+    [[nodiscard]] quint32 graveyardEngineOidForServerCardId(int serverCardId) const
+    {
+        for (auto it = ruledGraveyardEngineOidToServerCardId.constBegin();
+             it != ruledGraveyardEngineOidToServerCardId.constEnd(); ++it) {
+            if (it.value() == serverCardId) {
+                return it.key();
+            }
+        }
+        return 0;
+    }
     [[nodiscard]] int cardIdForEngineOid(quint32 engineOid) const
     {
         return engineOidToCardId.value(engineOid, -1);
@@ -402,6 +417,11 @@ public:
     {
         const auto it = ruledValidTargetsByHandSlot.constFind(spellTargetKey(handSlot, faceIndex));
         return it != ruledValidTargetsByHandSlot.constEnd() && it->validStackIds.contains(oid);
+    }
+    [[nodiscard]] bool isValidSpellGraveyardTarget(int handSlot, int faceIndex, quint32 oid) const
+    {
+        const auto it = ruledValidTargetsByHandSlot.constFind(spellTargetKey(handSlot, faceIndex));
+        return it != ruledValidTargetsByHandSlot.constEnd() && it->validGraveyardIds.contains(oid);
     }
     [[nodiscard]] bool canSpellTargetSelf(int handSlot, int faceIndex) const
     {
@@ -709,6 +729,9 @@ signals:
     void ruledStackOrderChanged(const QList<quint32> &orderedOids);
     /// Emitted when a triggered ability fires and needs the local player to choose a target.
     void ruledTriggerNeedsTarget(QString abilityText);
+    /// Emitted each ruled batch to notify whether a pending trigger requires a graveyard target
+    /// (e.g. Gravedigger ETB). `true` = graveyard window should be open; `false` = may close.
+    void ruledTriggerGraveyardNeedsTarget(bool needed);
     /// Emitted when the engine's `first_strike_step_pending` flag flips. Drives the
     /// "First Strike Damage" vs "Combat Damage" pass-priority button label on the prompt widget.
     void ruledFirstStrikeStepPendingChanged(bool pending);
