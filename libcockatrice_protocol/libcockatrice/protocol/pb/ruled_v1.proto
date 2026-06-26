@@ -250,6 +250,9 @@ message RuledEvent {
     // produced mana, a cost was paid, or the pool emptied on a step/phase change. The relay
     // mirrors it onto that player's ruled mana-pool counters (Event_SetCounter).
     ManaPoolUpdated mana_pool_updated = 24;
+    // One or more creatures were removed from combat mid-step (CR 701.15a: regeneration; also
+    // covers future tap-out-of-combat effects). Clients remove the corresponding arrows.
+    CreaturesRemovedFromCombat removed_from_combat = 25;
   }
 }
 
@@ -588,6 +591,13 @@ message BlockersPreview {
 message AttackersPreview {
   int32 declaring_player_id = 1;
   repeated uint32 attacker_object_ids = 2;
+}
+
+// Engine-emitted when one or more creatures are removed from combat mid-step (CR 701.15a).
+// Covers regeneration and any future effect that taps or otherwise ejects a creature from combat.
+// Clients remove the corresponding attacker/blocker arrows for the listed engine object ids.
+message CreaturesRemovedFromCombat {
+  repeated uint32 object_ids = 1;
 }
 
 // --- Sidecar TCP framing (length-prefixed IpcEnvelope) ---

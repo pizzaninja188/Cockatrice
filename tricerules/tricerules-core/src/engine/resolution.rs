@@ -1086,7 +1086,7 @@ fn counter_label(kind: CounterKind) -> &'static str {
 pub(super) fn consume_regen_shield(
     state: &mut GameState,
     oid: ObjectId,
-    _events: &mut Vec<rv1::RuledEvent>,
+    events: &mut Vec<rv1::RuledEvent>,
 ) -> bool {
     let shields = state
         .objects
@@ -1105,10 +1105,22 @@ pub(super) fn consume_regen_shield(
     // CR 701.15a: remove from combat (attacker/blocker lists). This mirrors what happens when
     // a creature is removed from combat by a tap effect.
     if let Some(combat) = state.combat.as_mut() {
+        let was_in_combat = combat.attacking.contains(&oid)
+            || combat.blockers.contains_key(&oid)
+            || combat.blockers.values().any(|v| v.contains(&oid));
         combat.attacking.retain(|&id| id != oid);
         combat.blockers.remove(&oid);
         for v in combat.blockers.values_mut() {
             v.retain(|&id| id != oid);
+        }
+        if was_in_combat {
+            events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::RemovedFromCombat(
+                    rv1::CreaturesRemovedFromCombat {
+                        object_ids: vec![oid],
+                    },
+                )),
+            });
         }
     }
     true
