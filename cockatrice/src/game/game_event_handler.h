@@ -679,6 +679,9 @@ signals:
     void ruledStackOrderChanged(const QList<quint32> &orderedOids);
     /// Emitted when a triggered ability fires and needs the local player to choose a target.
     void ruledTriggerNeedsTarget(QString abilityText);
+    /// Emitted each ruled batch to notify whether a pending trigger requires a graveyard target
+    /// (e.g. Gravedigger ETB). `true` = graveyard window should be open; `false` = may close.
+    void ruledTriggerGraveyardNeedsTarget(bool needed);
     /// Emitted when the engine's `first_strike_step_pending` flag flips. Drives the
     /// "First Strike Damage" vs "Combat Damage" pass-priority button label on the prompt widget.
     void ruledFirstStrikeStepPendingChanged(bool pending);

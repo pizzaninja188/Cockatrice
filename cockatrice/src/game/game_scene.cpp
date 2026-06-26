@@ -394,6 +394,32 @@ CardItem *GameScene::findTopmostCardInZone(const QList<QGraphicsItem *> &items, 
  * If an identical view exists, it is closed. Otherwise, a new ZoneViewWidget is created
  * and positioned based on zone type.
  */
+bool GameScene::isZoneViewOpen(Player *player, const QString &zoneName, int numberCards) const
+{
+    for (const ZoneViewWidget *view : zoneViews) {
+        const ZoneViewZone *z = view->getZone();
+        if (z->getLogic()->getName() == zoneName && z->getLogic()->getPlayer() == player &&
+            qobject_cast<const ZoneViewZoneLogic *>(z->getLogic())->getNumberCards() == numberCards) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void GameScene::closeZoneView(Player *player, const QString &zoneName, int numberCards)
+{
+    // Iterate a copy so that view->close() modifying zoneViews is safe.
+    const QList<ZoneViewWidget *> viewsCopy = zoneViews;
+    for (ZoneViewWidget *view : viewsCopy) {
+        ZoneViewZone *z = view->getZone();
+        if (z->getLogic()->getName() == zoneName && z->getLogic()->getPlayer() == player &&
+            qobject_cast<ZoneViewZoneLogic *>(z->getLogic())->getNumberCards() == numberCards) {
+            view->close();
+            return;
+        }
+    }
+}
+
 void GameScene::toggleZoneView(Player *player, const QString &zoneName, int numberCards, bool isReversed)
 {
     for (auto &view : zoneViews) {

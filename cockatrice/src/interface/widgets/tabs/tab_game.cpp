@@ -278,6 +278,27 @@ void TabGame::connectToGameEventHandler()
                     }
                 }
             });
+    connect(game->getGameEventHandler(), &GameEventHandler::ruledTriggerGraveyardNeedsTarget, this,
+            [this](bool needed) {
+                if (!game || !scene) {
+                    return;
+                }
+                const int localId = game->getPlayerManager()->getLocalPlayerId();
+                Player *localPlayer = game->getPlayerManager()->getPlayer(localId);
+                if (!localPlayer) {
+                    return;
+                }
+                const QString graveName = QStringLiteral("grave");
+                if (needed) {
+                    if (!scene->isZoneViewOpen(localPlayer, graveName)) {
+                        scene->toggleZoneView(localPlayer, graveName, -1);
+                        ruledGraveyardAutoOpened = true;
+                    }
+                } else if (ruledGraveyardAutoOpened) {
+                    scene->closeZoneView(localPlayer, graveName);
+                    ruledGraveyardAutoOpened = false;
+                }
+            });
     if (gamePromptWidget) {
         connect(game->getGameEventHandler(), &GameEventHandler::ruledBlockerRejected, gamePromptWidget,
                 [this]() {

@@ -85,6 +85,7 @@ private:
     QDockWidget *cardInfoDock, *messageLayoutDock, *playerListDock, *replayDock;
     GamePromptWidget *gamePromptWidget;
     QList<QPointer<ArrowItem>> ruledCombatArrows;
+    bool ruledGraveyardAutoOpened = false;
     QPointer<ZoneViewWidget> stackView;
     CardZoneLogic *stackViewZone = nullptr;
     QPointF stackWindowPos = QPointF(340, 80);
