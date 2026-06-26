@@ -24,10 +24,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Lands used to have a quick animation when tapping, but this stopped working after the engine-owned mana update and lands tap instantly. Animations also never worked for untapping.
   - Priority: Low
 
-- [ ] #13 [feature] Regenerate mechanic
-  - Details: Regenerate (CR 701.15) places a shield on a creature: the next time it would be destroyed that turn, the shield is consumed instead — the creature is tapped, removed from combat, and has its damage cleared. Add `regeneration_shields: u32` to `GameObject`, modify the destroy SBA to consume a shield before moving the creature to the graveyard, and add `SpellEffectKind::Regenerate` and an activated-ability `AbilityCost` path. This also fixes the Wrath of God "can't be regenerated" partial (add a `prevent_regeneration` flag to `DestroyAll`). Implement Cudgel Troll and Drudge Skeletons with test coverage for: shield consumed on lethal damage, shield not present on second lethal, Wrath ignoring shields.
-  - Priority: Medium
-
 - [ ] #14 [feature] Graveyard-return spells (Phase 3 zone-sourced effects)
   - Details: Add a `ReturnFromGraveyard { filter, destination }` tier-1 `SpellEffectKind` primitive that moves a permanent card from a graveyard to hand (or battlefield). The graveyard is public so no hidden-zone redaction is needed. Implement Disentomb and Raise Dead (graveyard → hand). Also implement Gravedigger, which uses an ETB trigger wrapping the same primitive. This is the first Phase 3 zone-sourced effect and lays the structural groundwork for reanimation and tutors. Add scenario tests covering: return own card, return opponent card, empty graveyard fizzle.
   - Priority: Medium
