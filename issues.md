@@ -24,10 +24,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Lands used to have a quick animation when tapping, but this stopped working after the engine-owned mana update and lands tap instantly. Animations also never worked for untapping.
   - Priority: Low
 
-- [ ] #14 [feature] Graveyard-return spells (Phase 3 zone-sourced effects)
-  - Details: Add a `ReturnFromGraveyard { filter, destination }` tier-1 `SpellEffectKind` primitive that moves a permanent card from a graveyard to hand (or battlefield). The graveyard is public so no hidden-zone redaction is needed. Implement Disentomb and Raise Dead (graveyard → hand). Also implement Gravedigger, which uses an ETB trigger wrapping the same primitive. This is the first Phase 3 zone-sourced effect and lays the structural groundwork for reanimation and tutors. Add scenario tests covering: return own card, return opponent card, empty graveyard fizzle.
-  - Priority: Medium
-
 - [ ] #15 [feature] Library search / tutor effects
   - Details: Implement `SearchLibrary { filter, destination, shuffle }` as a tier-1 `SpellEffectKind` primitive (CR 701.18). The relay already has a `LibrarySearch` choice-kind discriminant in ruled_v1.proto for hidden-zone redaction — the engine needs to pause resolution, emit a `resolution_choice_required` with matching library cards visible only to the searching player (opponents see a count or face-down list), resume on `SubmitResolutionChoice`, move the card to destination, then shuffle the library. Implement Demonic Tutor (any card → hand) and Mystical Tutor (instant or sorcery → top of library). Add scenario tests for: successful search, shuffle verification, empty library, relay redaction (opponent sees no card names).
   - Priority: Medium
