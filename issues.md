@@ -24,10 +24,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Lands used to have a quick animation when tapping, but this stopped working after the engine-owned mana update and lands tap instantly. Animations also never worked for untapping.
   - Priority: Low
 
-- [ ] #15 [feature] Library search / tutor effects
-  - Details: Implement `SearchLibrary { filter, destination, shuffle }` as a tier-1 `SpellEffectKind` primitive (CR 701.18). The relay already has a `LibrarySearch` choice-kind discriminant in ruled_v1.proto for hidden-zone redaction — the engine needs to pause resolution, emit a `resolution_choice_required` with matching library cards visible only to the searching player (opponents see a count or face-down list), resume on `SubmitResolutionChoice`, move the card to destination, then shuffle the library. Implement Demonic Tutor (any card → hand) and Mystical Tutor (instant or sorcery → top of library). Add scenario tests for: successful search, shuffle verification, empty library, relay redaction (opponent sees no card names).
-  - Priority: Medium
-
 - [ ] #16 [feature] Multi-target damage distribution for X spells (Fireball)
   - Details: Fireball's full Oracle text allows any number of targets with X damage divided among them (paying 1 extra generic mana per target beyond the first). The current Fireball RON is partial (single target only). Add a `DamageTargets { amount: Amount, extra_mana_per_target: u32 }` `SpellEffectKind` variant that accepts a variable-length target list at cast time and distributes the declared X value. The cast UI needs to collect (target, amount) pairs. Also fixes the Fire half of Fire // Ice (split 2 damage between any number of targets). Add scenario tests for: single target full damage, split between two, illegal over-allocation, fizzle when all targets gone.
   - Priority: Low
