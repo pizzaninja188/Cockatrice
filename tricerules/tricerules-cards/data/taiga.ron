@@ -1,0 +1,13 @@
+(
+  id: "taiga",
+  name: "Taiga",
+  mana_cost: "",
+  types: ["Land", "Mountain", "Forest"],
+  activated_abilities: [
+    (
+      cost: Tap,
+      effect: ProduceMana(options: [(r: 1), (g: 1)]),
+      text: "{T}: Add {R} or {G}.",
+    ),
+  ],
+)

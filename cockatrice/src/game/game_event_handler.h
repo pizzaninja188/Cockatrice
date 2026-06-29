@@ -79,25 +79,53 @@ public:
         BottomLibrary,
     };
 
-    /// Tier-3 resolution hand-pick: hand cards clicked in order, numbered like mulligan bottom.
+    /// Which zone the pending pick operates on.
+    enum class PickZone { Hand, Deck, Revealed };
+
+    /// Tier-3 resolution pick: hand/deck/revealed cards clicked to build a selection.
+    /// PickZone::Hand = Brainstorm (cards in hand zone).
+    /// PickZone::Deck = Gifts Ungiven search step (cards in deck zone view).
+    /// PickZone::Revealed = Gifts Ungiven opponent-pick step (cards in revealed popup).
     struct ResolutionHandPick
     {
-        // Mapping from server card id -> engine OID for all candidate hand cards.
+        // Mapping from server card id -> engine OID for all candidate cards.
         QHash<int, quint32> serverCardIdToOid;
-        // Selected server card ids in click order (first click = index 0 = placed first = bottom).
+        // Mapping from server card id -> oracle name (for unique-name enforcement).
+        QHash<int, QString> serverCardIdToName;
+        // Selected server card ids in click order.
         QList<int> selectedServerCardIds;
         int min = 0;
         int max = 0;
+        bool uniqueNames = false;
         QString promptText;
+        PickZone pickZone = PickZone::Hand;
+        // For Deck / Revealed picks: oracle card names parallel to serverCardIdToOid keys,
+        // used to populate the deck zone view prompt and the revealed-cards popup.
+        QStringList candidateNames;
     };
     [[nodiscard]] bool isResolutionHandPickActive() const
     {
         return resolutionHandPick.has_value();
     }
+    [[nodiscard]] PickZone resolutionHandPickZone() const
+    {
+        return resolutionHandPick.has_value() ? resolutionHandPick->pickZone : PickZone::Hand;
+    }
     [[nodiscard]] bool isResolutionHandPickCardSelectable(int serverCardId) const
     {
-        return resolutionHandPick.has_value() &&
-               resolutionHandPick->serverCardIdToOid.contains(serverCardId);
+        if (!resolutionHandPick.has_value()) return false;
+        if (!resolutionHandPick->serverCardIdToOid.contains(serverCardId)) return false;
+        // Already selected: always show its highlight/number.
+        if (resolutionHandPick->selectedServerCardIds.contains(serverCardId)) return true;
+        // When unique-names is on, exclude candidates whose name is already taken by a
+        // different selected card — they lose the faint outline and become unclickable.
+        if (resolutionHandPick->uniqueNames) {
+            const QString &name = resolutionHandPick->serverCardIdToName.value(serverCardId);
+            for (int selId : resolutionHandPick->selectedServerCardIds) {
+                if (resolutionHandPick->serverCardIdToName.value(selId) == name) return false;
+            }
+        }
+        return true;
     }
     [[nodiscard]] bool isResolutionHandPickCardSelected(int serverCardId) const
     {
@@ -124,6 +152,17 @@ public:
     [[nodiscard]] QString resolutionHandPickPromptText() const
     {
         return resolutionHandPick.has_value() ? resolutionHandPick->promptText : QString{};
+    }
+    [[nodiscard]] QStringList resolutionHandPickCandidateNames() const
+    {
+        return resolutionHandPick.has_value() ? resolutionHandPick->candidateNames : QStringList{};
+    }
+    [[nodiscard]] QVector<int> resolutionHandPickCandidateServerCardIds() const
+    {
+        if (!resolutionHandPick.has_value())
+            return {};
+        return QVector<int>(resolutionHandPick->serverCardIdToOid.keys().begin(),
+                            resolutionHandPick->serverCardIdToOid.keys().end());
     }
     void toggleResolutionHandPickCard(int serverCardId);
     void submitResolutionHandPick();
@@ -166,6 +205,7 @@ private:
     struct SpellTargetData {
         QSet<quint32> validPermanentIds;
         QSet<quint32> validStackIds;
+        QSet<quint32> validGraveyardIds;
         bool canTargetSelf = false;
         bool canTargetOpponent = false;
     };
@@ -181,6 +221,9 @@ private:
     QHash<quint32, int> engineOidBattlefieldToughness;
     // Servatrice HandSlotMap: (owner player id, Server_Card.id) -> engine hand index for ruled commands.
     QHash<quint64, int> ruledOwnedCardToEngineHandSlot;
+    // Servatrice GraveyardObjectMap: engine OID -> Server_Card.id for graveyard cards (all players).
+    // Used by tryHandleRuledSpellTargetClick to resolve graveyard card clicks as engine OIDs.
+    QHash<quint32, int> ruledGraveyardEngineOidToServerCardId;
 
     // Latest combat phase derived from PhaseChanged events.
     RuledCombatPhase currentRuledCombatPhase = RuledCombatPhase::None;
@@ -227,6 +270,10 @@ private:
     // is empty for a non-mana ability, or its options joined by "/" (each a symbol run like "G",
     // "WU"), so the client can identify mana abilities and their colors without Oracle lookups.
     QHash<quint32, QStringList> engineOidToActivatedAbilityManaProduced;
+    // Engine ObjectId -> cost-label string per ability, parallel to the texts list. Each entry is
+    // a display string like "{T}", "{4}", "{T}, {4}", "Sacrifice this". Used to prefix ability
+    // text in the context menu so the player sees the full "cost: text" Oracle format.
+    QHash<quint32, QStringList> engineOidToActivatedAbilityCostLabels;
     // Pending trigger: set when engine emits TriggerNeedsTarget, cleared on ChooseTriggerTarget.
     quint32 pendingTriggerSourceOid = 0;
     quint32 pendingTriggerAbilityIndex = 0;
@@ -318,6 +365,17 @@ public:
     {
         return ownerCardIdToEngineOid.value(makeOwnedCardKey(ownerPlayerId, cardId), 0);
     }
+    // Returns the engine OID for a graveyard card given its Server_Card.id, or 0 if not found.
+    [[nodiscard]] quint32 graveyardEngineOidForServerCardId(int serverCardId) const
+    {
+        for (auto it = ruledGraveyardEngineOidToServerCardId.constBegin();
+             it != ruledGraveyardEngineOidToServerCardId.constEnd(); ++it) {
+            if (it.value() == serverCardId) {
+                return it.key();
+            }
+        }
+        return 0;
+    }
     [[nodiscard]] int cardIdForEngineOid(quint32 engineOid) const
     {
         return engineOidToCardId.value(engineOid, -1);
@@ -359,6 +417,11 @@ public:
     {
         const auto it = ruledValidTargetsByHandSlot.constFind(spellTargetKey(handSlot, faceIndex));
         return it != ruledValidTargetsByHandSlot.constEnd() && it->validStackIds.contains(oid);
+    }
+    [[nodiscard]] bool isValidSpellGraveyardTarget(int handSlot, int faceIndex, quint32 oid) const
+    {
+        const auto it = ruledValidTargetsByHandSlot.constFind(spellTargetKey(handSlot, faceIndex));
+        return it != ruledValidTargetsByHandSlot.constEnd() && it->validGraveyardIds.contains(oid);
     }
     [[nodiscard]] bool canSpellTargetSelf(int handSlot, int faceIndex) const
     {
@@ -470,6 +533,13 @@ public:
     [[nodiscard]] QStringList activatedAbilityManaProducedForOid(quint32 oid) const
     {
         return engineOidToActivatedAbilityManaProduced.value(oid);
+    }
+    /// Cost-label strings per activated ability, in ability-index order. Each entry is a display
+    /// string like "{T}", "{4}", "{T}, {4}", "Sacrifice this". Used to prefix ability text in the
+    /// activation context menu so the player sees the full "cost: text" Oracle format.
+    [[nodiscard]] QStringList activatedAbilityCostLabelsForOid(quint32 oid) const
+    {
+        return engineOidToActivatedAbilityCostLabels.value(oid);
     }
     [[nodiscard]] bool hasPendingTriggerTarget() const { return hasPendingTrigger; }
     [[nodiscard]] QString pendingTriggerText() const { return pendingTriggerAbilityText; }
@@ -659,6 +729,9 @@ signals:
     void ruledStackOrderChanged(const QList<quint32> &orderedOids);
     /// Emitted when a triggered ability fires and needs the local player to choose a target.
     void ruledTriggerNeedsTarget(QString abilityText);
+    /// Emitted each ruled batch to notify whether a pending trigger requires a graveyard target
+    /// (e.g. Gravedigger ETB). `true` = graveyard window should be open; `false` = may close.
+    void ruledTriggerGraveyardNeedsTarget(bool needed);
     /// Emitted when the engine's `first_strike_step_pending` flag flips. Drives the
     /// "First Strike Damage" vs "Combat Damage" pass-priority button label on the prompt widget.
     void ruledFirstStrikeStepPendingChanged(bool pending);
@@ -670,8 +743,16 @@ signals:
     void ruledOpeningUiChanged();
     void ruledOpeningBottomUiChanged(int required, int selected);
     /// Emitted when resolution hand-pick mode starts, progresses (card toggled), or ends.
-    /// required == 0 and selected == 0 means mode is cleared.
+    /// required >= 0 means the mode is active; required == -1 (selected == -1) means cleared.
     void ruledResolutionHandPickUiChanged(int required, int selected);
+    /// Emitted when a LibrarySearch (Gifts Ungiven step 1) pick starts so the receiving
+    /// tab_game can auto-open the local player's deck zone view populated with the candidates.
+    void ruledLibrarySearchPickStarted(QStringList candidateNames, QVector<int> serverCardIds);
+    /// Emitted when a RevealedCards (Gifts Ungiven step 2) pick starts or ends.
+    /// started=true: the opponent (deciding player) should see a revealed-cards popup.
+    /// cardNames: oracle names; serverCardIds: IDs used for click-to-pick (parallel).
+    void ruledRevealedPickChanged(bool started, QStringList cardNames, QVector<int> serverCardIds,
+                                  int min, int max);
 
 private:
     /// ZoneView is stripped on client broadcasts; fall back to CardItem P/T when maps are empty.

@@ -47,6 +47,7 @@
 #include <libcockatrice/deck_list/tree/deck_list_card_node.h>
 #include <libcockatrice/protocol/pb/context_connection_state_changed.pb.h>
 #include <libcockatrice/protocol/pb/context_ping_changed.pb.h>
+#include <libcockatrice/protocol/pb/event_attach_card.pb.h>
 #include <libcockatrice/protocol/pb/event_delete_arrow.pb.h>
 #include <libcockatrice/protocol/pb/event_game_closed.pb.h>
 #include <libcockatrice/protocol/pb/event_game_host_changed.pb.h>
@@ -521,6 +522,12 @@ void Server_Game::doStartGameIfReady(bool forceStartGame)
     ruledStackTargetsByObjectId.clear();
     ruledStackCopyObjectIds.clear();
     ruledPendingCastVisualQueue.clear();
+    // Reset the connection-lost flag so that a back-to-back second game can report and
+    // handle a fresh engine disconnect correctly. Without this reset, if game 1 lost the
+    // engine connection the flag stays true, handleRuledEngineConnectionLost() returns early
+    // for game 2, no notification is sent, and rulesRelay is never dropped — causing every
+    // subsequent ruled command in game 2 to time out rather than fail fast.
+    ruledEngineConnectionLost = false;
 
     gameStarted = true;
     for (auto *player : players.values()) {
@@ -1379,6 +1386,15 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
                 }
             }
         }
+        // ReturnFromGraveyard: the card may be in the graveyard zone, not in the battlefield/hand
+        // OID map. Try the graveyard map maintained by Server_Player.
+        if (!card) {
+            if (auto *sp = qobject_cast<Server_Player *>(owner)) {
+                if (Server_Card *c = sp->findGraveyardCardByEngineOid(oid)) {
+                    card = c;
+                }
+            }
+        }
         if (!card) {
             // A spell leaving the stack (e.g. countered) physically lives on the single shared
             // canonical stack zone (owned by the lowest player-id), not in this owner's own zones,
@@ -1443,6 +1459,9 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
                 break;
             case ruled::v1::PermanentMoved::DESTINATION_EXILE:
                 destZone = ZoneNames::EXILE;
+                break;
+            case ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD:
+                destZone = ZoneNames::TABLE;
                 break;
             case ruled::v1::PermanentMoved::DESTINATION_GRAVEYARD:
             default:
@@ -1603,6 +1622,72 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
         tapSyncGes.sendToGame(this);
     }
 
+    // Post-zone-view pass: restore attach state from battlefield_attached_to_oid for both
+    // Auras and Equipment. The engine OID maps are fresh after the zone-view loop above, so
+    // cross-player lookups work. A non-zero attached_to_oid means the card at that slot is
+    // currently attached to that target — issue Event_AttachCard to bring client visual state
+    // into sync. This handles reconnect (initial_response_batch) and any batch with a zone_view.
+    {
+        GameEventStorage attachRestoreGes;
+        bool attachRestoreGesHasEvents = false;
+        for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
+            const auto &e = resp.batch().events(ei);
+            if (!e.has_zone_view()) {
+                continue;
+            }
+            for (const auto &p : e.zone_view().per_player()) {
+                if (p.battlefield_attached_to_oid_size() == 0) {
+                    continue;
+                }
+                Server_AbstractPlayer *ownerAb = getPlayer(p.player_id());
+                if (!ownerAb) {
+                    continue;
+                }
+                auto *ownerPlayer = static_cast<Server_Player *>(ownerAb);
+                for (int i = 0; i < p.battlefield_attached_to_oid_size() && i < p.battlefield_object_id_size(); ++i) {
+                    const quint32 targetOid = static_cast<quint32>(p.battlefield_attached_to_oid(i));
+                    if (targetOid == 0) {
+                        continue;
+                    }
+                    const quint32 attachedOid = static_cast<quint32>(p.battlefield_object_id(i));
+                    Server_Card *attachedCard = ownerPlayer->findCardByEngineOid(attachedOid);
+                    if (!attachedCard || !attachedCard->getZone()) {
+                        continue;
+                    }
+                    Server_Card *targetCard = nullptr;
+                    for (Server_AbstractPlayer *ab : getPlayers().values()) {
+                        if (!ab) {
+                            continue;
+                        }
+                        targetCard = static_cast<Server_Player *>(ab)->findCardByEngineOid(targetOid);
+                        if (targetCard) {
+                            break;
+                        }
+                    }
+                    if (!targetCard || !targetCard->getZone()) {
+                        continue;
+                    }
+                    // Avoid redundant events when the server already knows about this attachment.
+                    if (attachedCard->getParentCard() == targetCard) {
+                        continue;
+                    }
+                    attachedCard->setParentCard(targetCard);
+                    Event_AttachCard attachEv;
+                    attachEv.set_start_zone(attachedCard->getZone()->getName().toStdString());
+                    attachEv.set_card_id(attachedCard->getId());
+                    attachEv.set_target_player_id(targetCard->getZone()->getPlayer()->getPlayerId());
+                    attachEv.set_target_zone(targetCard->getZone()->getName().toStdString());
+                    attachEv.set_target_card_id(targetCard->getId());
+                    attachRestoreGes.enqueueGameEvent(attachEv, attachedCard->getZone()->getPlayer()->getPlayerId());
+                    attachRestoreGesHasEvents = true;
+                }
+            }
+        }
+        if (attachRestoreGesHasEvents) {
+            attachRestoreGes.sendToGame(this);
+        }
+    }
+
     // Second pass: combat-related events that depend on the engine OID map (LifeChanged,
     // AttackersDeclared) and stack resolution side effects that synthesize standard
     // Cockatrice events for clients. PermanentMoved is handled earlier (before zone_view).
@@ -1722,6 +1807,41 @@ Server_Game::RuledBatchApplyResult Server_Game::applyRuledBatch(const ruled::v1:
             ruledStackObjectIdToServerCardId.remove(resolvedOid);
             ruledStackObjectIdToCasterPlayerId.remove(resolvedOid);
             ruledEngineStackPushDescriptionsByObjectId.remove(resolvedOid);
+        }
+        // CR 303.4: an aura entering the battlefield attaches to its enchant target. Translate the
+        // engine AuraAttached event into Event_AttachCard so the Cockatrice client stacks the aura
+        // underneath the enchanted permanent (the visual layout used in freeform too).
+        if (e.has_aura_attached()) {
+            const auto &aa = e.aura_attached();
+            const quint32 auraOid = static_cast<quint32>(aa.aura_object_id());
+            const quint32 enchantedOid = static_cast<quint32>(aa.enchanted_object_id());
+            Server_Card *auraCard = nullptr;
+            Server_Card *enchantedCard = nullptr;
+            for (Server_AbstractPlayer *ab : getPlayers().values()) {
+                if (!ab) {
+                    continue;
+                }
+                auto *pl = static_cast<Server_Player *>(ab);
+                if (!auraCard) {
+                    auraCard = pl->findCardByEngineOid(auraOid);
+                }
+                if (!enchantedCard) {
+                    enchantedCard = pl->findCardByEngineOid(enchantedOid);
+                }
+            }
+            if (auraCard && enchantedCard && auraCard->getZone()) {
+                auraCard->setParentCard(enchantedCard);
+                Event_AttachCard attachEv;
+                attachEv.set_start_zone(auraCard->getZone()->getName().toStdString());
+                attachEv.set_card_id(auraCard->getId());
+                if (enchantedCard->getZone()) {
+                    attachEv.set_target_player_id(enchantedCard->getZone()->getPlayer()->getPlayerId());
+                    attachEv.set_target_zone(enchantedCard->getZone()->getName().toStdString());
+                    attachEv.set_target_card_id(enchantedCard->getId());
+                }
+                combatGes.enqueueGameEvent(attachEv, auraCard->getZone()->getPlayer()->getPlayerId());
+                combatGesHasEvents = true;
+            }
         }
     }
     if (combatGesHasEvents) {
@@ -1856,6 +1976,28 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
         }
         *toSend.mutable_batch()->add_events() = handEv;
     }
+    // Graveyard OID map: lets the client map engine OIDs in valid_graveyard_ids to
+    // server card ids so graveyard cards can be clicked as spell targets.
+    {
+        ruled::v1::RuledEvent graveyardEv;
+        auto *gm = graveyardEv.mutable_graveyard_object_map();
+        for (Server_AbstractPlayer *ab : getPlayers().values()) {
+            if (!ab) {
+                continue;
+            }
+            auto *pl = static_cast<Server_Player *>(ab);
+            const QHash<quint32, int> gravOidMap = pl->getGraveyardEngineOidToServerCardId();
+            for (auto it = gravOidMap.constBegin(); it != gravOidMap.constEnd(); ++it) {
+                auto *entry = gm->add_entries();
+                entry->set_player_id(pl->getPlayerId());
+                entry->set_engine_object_id(it.key());
+                entry->set_server_card_id(it.value());
+            }
+        }
+        if (gm->entries_size() > 0) {
+            *toSend.mutable_batch()->add_events() = graveyardEv;
+        }
+    }
     const ruled::v1::RuledEventBatch &batch = toSend.batch();
     for (auto *participant : participants) {
         GameEventStorage ges;
@@ -1872,6 +2014,10 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
         // sees the candidate object ids / names; RevealedCards (1) are public and pass through.
         // For HandCards (choice_kind 0), inject candidate_server_card_ids for the deciding player
         // so the client can map engine OIDs to physical hand CardItems for the hand-click UI.
+        // For LibrarySearch (choice_kind 2), inject by name-matching from the decider's deck zone
+        // so the client can open the deck zone view and use deck-card click-to-pick (like Gifts Ungiven
+        // search step). For RevealedCards (choice_kind 1), inject from the non-deciding player's deck
+        // so the client can render the revealed cards in a zone popup for the opponent's pick step.
         for (int ei = 0; ei < filtered.events_size(); ++ei) {
             if (!filtered.events(ei).has_resolution_choice_required()) {
                 continue;
@@ -1894,6 +2040,21 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
                         Server_Card *sc = deciderPlayer->findCardByEngineOid(oid);
                         rcr->add_candidate_server_card_ids(sc ? sc->getId() : -1);
                     }
+                }
+            } else if (rcr->choice_kind() == 2) {
+                // LibrarySearch: assign each candidate a sequential index as its server card ID.
+                // Deck cards are not in engineOidToServerCardId (only battlefield/hand/stack are),
+                // so there is no server-side lookup available. Sequential indices give every
+                // physical card (including duplicate-named ones) a unique client-side ID.
+                // The client maps index i → engine OID via candidate_object_ids[i].
+                for (int ci = 0; ci < rcr->candidate_names_size(); ++ci) {
+                    rcr->add_candidate_server_card_ids(ci);
+                }
+            } else if (rcr->choice_kind() == 1 &&
+                       rcr->candidate_server_card_ids_size() == 0) {
+                // RevealedCards: same sequential-index scheme for the same reason.
+                for (int ci = 0; ci < rcr->candidate_names_size(); ++ci) {
+                    rcr->add_candidate_server_card_ids(ci);
                 }
             }
         }

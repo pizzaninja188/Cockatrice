@@ -166,6 +166,11 @@ public:
     void resizeRubberBand(const QPointF &cursorPoint, int selectedCount);
     void stopRubberBand();
 
+    /** Returns true if a zone view matching player/zoneName/numberCards is currently open. */
+    bool isZoneViewOpen(Player *player, const QString &zoneName, int numberCards = -1) const;
+    /** Closes the matching zone view if it is open. Does nothing if not found. */
+    void closeZoneView(Player *player, const QString &zoneName, int numberCards = -1);
+
 public slots:
     /** Toggles a zone view for a player. */
     void toggleZoneView(Player *player, const QString &zoneName, int numberCards, bool isReversed = false);

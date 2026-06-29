@@ -1,0 +1,11 @@
+(
+  id: "holy_strength",
+  name: "Holy Strength",
+  mana_cost: "{W}",
+  // Oracle: Enchant creature. Enchanted creature gets +1/+2.
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach(target: (kind: Creature))],
+  static_abilities: [
+    AuraPtModify(delta_power: 1, delta_toughness: 2),
+  ],
+)

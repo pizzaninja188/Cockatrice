@@ -1,4 +1,6 @@
-use super::resolution::{destroy_permanent, permanent_moved_event, resolve_anthem_scope};
+use super::resolution::{
+    consume_regen_shield, destroy_permanent, permanent_moved_event, resolve_anthem_scope,
+};
 use super::*;
 
 impl GameEngine {
@@ -9,6 +11,13 @@ impl GameEngine {
         match &e.affected {
             AffectedScope::Single(id) => *id == oid,
             AffectedScope::AllCreatures => true,
+            // Dynamic scope: true if the equipment `equip_oid` is currently attached to `oid`.
+            AffectedScope::EquippedBy(equip_oid) => self
+                .state
+                .objects
+                .get(equip_oid)
+                .map(|eq| eq.zone == Zone::Battlefield && eq.attached_to == Some(oid))
+                .unwrap_or(false),
             AffectedScope::CreaturesMatching {
                 controller,
                 subtype,
@@ -80,6 +89,59 @@ impl GameEngine {
                         timestamp,
                     });
                 }
+                // CR 303.4c / CR 613.1b: an aura's P/T modification applies continuously while it
+                // is attached to the enchanted permanent. Scoped to `Single(enchanted_oid)` and
+                // drained at LTB (WhileSourceOnBattlefield) by the existing move_object_to_zone
+                // drain. `attached_to` is set before fire_triggers so this reads the correct target.
+                StaticAbilityDef::AuraPtModify {
+                    delta_power,
+                    delta_toughness,
+                } => {
+                    let Some(enchanted_oid) = self
+                        .state
+                        .objects
+                        .get(&object_id)
+                        .and_then(|o| o.attached_to)
+                    else {
+                        continue;
+                    };
+                    self.state.continuous_effects.push(ContinuousEffect {
+                        source_id: Some(object_id),
+                        affected: AffectedScope::Single(enchanted_oid),
+                        kind: ContinuousEffectKind::PtModify {
+                            delta_power,
+                            delta_toughness,
+                        },
+                        duration: EffectDuration::WhileSourceOnBattlefield,
+                        timestamp,
+                    });
+                }
+                // CR 301.5b / 702.6: equipment P/T bonus — scope is EquippedBy(equipment_oid)
+                // so the boost follows re-equip without recreating the continuous effect.
+                StaticAbilityDef::EquippedBonus {
+                    delta_power,
+                    delta_toughness,
+                } => {
+                    self.state.continuous_effects.push(ContinuousEffect {
+                        source_id: Some(object_id),
+                        affected: AffectedScope::EquippedBy(object_id),
+                        kind: ContinuousEffectKind::PtModify {
+                            delta_power,
+                            delta_toughness,
+                        },
+                        duration: EffectDuration::WhileSourceOnBattlefield,
+                        timestamp,
+                    });
+                }
+                StaticAbilityDef::AnthemKeyword { filter, keyword } => {
+                    self.state.continuous_effects.push(ContinuousEffect {
+                        source_id: Some(object_id),
+                        affected: resolve_anthem_scope(&filter, controller, object_id),
+                        kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
+                        duration: EffectDuration::WhileSourceOnBattlefield,
+                        timestamp,
+                    });
+                }
             }
         }
     }
@@ -97,6 +159,7 @@ impl GameEngine {
             .filter(|e| self.effect_affects(e, oid))
             .map(|e| match &e.kind {
                 ContinuousEffectKind::PtModify { delta_power, .. } => *delta_power,
+                ContinuousEffectKind::Layer6AddKeyword(_) => 0,
             })
             .sum();
         // Layer 7d: counters apply after all layer-7c modifying effects (CR 613.4d).
@@ -117,9 +180,26 @@ impl GameEngine {
                 ContinuousEffectKind::PtModify {
                     delta_toughness, ..
                 } => *delta_toughness,
+                ContinuousEffectKind::Layer6AddKeyword(_) => 0,
             })
             .sum();
         Some((base + delta + obj.counter_pt_delta()).max(0) as u32)
+    }
+
+    /// Effective keyword check: true if `oid` has `kw` either from its card definition (static)
+    /// or from an active `Layer6AddKeyword` continuous effect (CR 613 layer 6). Use this instead
+    /// of `GameObject::has_keyword` wherever granted keywords must be respected (combat legality,
+    /// SBA checks, damage resolution).
+    pub fn effective_has_keyword(&self, oid: ObjectId, kw: Keyword) -> bool {
+        if let Some(obj) = self.state.objects.get(&oid) {
+            if obj.has_keyword(self.registry, kw) {
+                return true;
+            }
+        }
+        self.state.continuous_effects.iter().any(|e| {
+            matches!(&e.kind, ContinuousEffectKind::Layer6AddKeyword(k) if *k == kw)
+                && self.effect_affects(e, oid)
+        })
     }
 
     /// CR 514.2: drain all UntilEndOfTurn continuous effects. Called from
@@ -130,12 +210,14 @@ impl GameEngine {
             .retain(|e| e.duration != EffectDuration::UntilEndOfTurn);
     }
 
-    /// CR 514.2: damage marked on permanents is removed during cleanup.
+    /// CR 514.2: damage marked on permanents is removed during cleanup. Regeneration shields
+    /// also expire at end of turn (CR 701.15a "this turn").
     pub(super) fn cleanup_marked_damage(&mut self) {
         for o in self.state.objects.values_mut() {
-            if o.zone == Zone::Battlefield && (o.damage != 0 || o.deathtouch_damage) {
+            if o.zone == Zone::Battlefield {
                 o.damage = 0;
                 o.deathtouch_damage = false;
+                o.regeneration_shields = 0;
             }
         }
     }
@@ -176,24 +258,27 @@ impl GameEngine {
             .map(|(id, _)| *id)
             .collect();
 
-        let mut to_destroy = Vec::new();
+        // CR 704.5f: toughness-0 deaths — not regeneratable (this is a different SBA from destroy).
+        let mut to_destroy_t0 = Vec::new();
+        // CR 704.5g/704.5h: lethal-damage deaths — regeneration shields apply here.
+        let mut to_destroy_lethal = Vec::new();
         for id in candidate_ids {
             let Some(eff_t) = self.effective_toughness(id) else {
                 continue;
             };
+            let indestructible = self.effective_has_keyword(id, Keyword::Indestructible);
             let Some(o) = self.state.objects.get(&id) else {
                 continue;
             };
-            let indestructible = o.has_keyword(self.registry, Keyword::Indestructible);
             // CR 704.5f: toughness 0 — still dies even with indestructible.
             if eff_t == 0 {
-                to_destroy.push(id);
-            // CR 704.5g / 704.5h: lethal damage or deathtouch — blocked by indestructible.
+                to_destroy_t0.push(id);
             } else if !indestructible && (o.damage >= eff_t || o.deathtouch_damage) {
-                to_destroy.push(id);
+                to_destroy_lethal.push(id);
             }
         }
-        for id in to_destroy {
+        // Toughness-0: bypass regeneration (CR 704.5f — not a "destroy" trigger).
+        for id in to_destroy_t0 {
             let owner = self.state.objects.get(&id).map(|o| o.owner);
             let card_id_for_trigger = self.state.objects.get(&id).map(|o| o.card_id.clone());
             if destroy_permanent(&mut self.state, id).is_ok() {
@@ -218,6 +303,63 @@ impl GameEngine {
                 }
             }
         }
+        // Lethal-damage destroy: CR 701.15 regeneration shields apply before destruction.
+        for id in to_destroy_lethal {
+            let owner = self.state.objects.get(&id).map(|o| o.owner);
+            let card_id_for_trigger = self.state.objects.get(&id).map(|o| o.card_id.clone());
+            if consume_regen_shield(&mut self.state, id, out) {
+                changed = true;
+                let name = card_id_for_trigger.as_deref().unwrap_or("creature");
+                out.push(super::events::ev_log(format!("{name} regenerates.")));
+            } else if destroy_permanent(&mut self.state, id).is_ok() {
+                changed = true;
+                if let Some(owner_id) = owner {
+                    out.push(permanent_moved_event(
+                        &self.state,
+                        id,
+                        owner_id,
+                        rv1::permanent_moved::Destination::Graveyard,
+                    ));
+                }
+                if let (Some(cid), Some(ctrl)) = (card_id_for_trigger, owner) {
+                    self.fire_triggers(
+                        GameEvent::Dies {
+                            object_id: id,
+                            card_id: cid,
+                            controller: ctrl,
+                        },
+                        out,
+                    );
+                }
+            }
+        }
+
+        // CR 704.5p: equipment falls off if the attached creature is no longer on the battlefield.
+        let equipment_to_unattach: Vec<ObjectId> = self
+            .state
+            .objects
+            .iter()
+            .filter(|(_, eq)| {
+                eq.zone == Zone::Battlefield
+                    && eq
+                        .attached_to
+                        .map(|target_id| {
+                            self.state
+                                .objects
+                                .get(&target_id)
+                                .map(|t| t.zone != Zone::Battlefield)
+                                .unwrap_or(true)
+                        })
+                        .unwrap_or(false)
+            })
+            .map(|(id, _)| *id)
+            .collect();
+        for eq_id in equipment_to_unattach {
+            if let Some(eq) = self.state.objects.get_mut(&eq_id) {
+                eq.attached_to = None;
+                changed = true;
+            }
+        }
 
         // CR 111.7/111.8: tokens that have left the battlefield cease to exist.
         let vanished: Vec<ObjectId> = self
@@ -237,6 +379,58 @@ impl GameEngine {
                     p.graveyard.retain(|&x| x != id);
                     p.exile.retain(|&x| x != id);
                     p.library.retain(|&x| x != id);
+                }
+            }
+        }
+
+        // CR 704.5m: an aura that is on the battlefield but not attached to a valid permanent is
+        // put into its owner's graveyard. Checked after creature deaths so that the enchanted
+        // permanent dying triggers this SBA on the re-check (CR 704.4).
+        let orphaned_auras: Vec<ObjectId> = self
+            .state
+            .objects
+            .iter()
+            .filter(|(_, o)| {
+                o.zone == Zone::Battlefield
+                    && self
+                        .registry
+                        .get(&o.card_id)
+                        .map(|d| d.is_aura)
+                        .unwrap_or(false)
+                    && o.attached_to
+                        .map(|eid| {
+                            self.state
+                                .objects
+                                .get(&eid)
+                                .map(|e| e.zone != Zone::Battlefield)
+                                .unwrap_or(true)
+                        })
+                        .unwrap_or(true)
+            })
+            .map(|(id, _)| *id)
+            .collect();
+        for id in orphaned_auras {
+            let owner = self.state.objects.get(&id).map(|o| o.owner);
+            let card_id_for_trigger = self.state.objects.get(&id).map(|o| o.card_id.clone());
+            if destroy_permanent(&mut self.state, id).is_ok() {
+                changed = true;
+                if let Some(owner_id) = owner {
+                    out.push(permanent_moved_event(
+                        &self.state,
+                        id,
+                        owner_id,
+                        rv1::permanent_moved::Destination::Graveyard,
+                    ));
+                }
+                if let (Some(cid), Some(ctrl)) = (card_id_for_trigger, owner) {
+                    self.fire_triggers(
+                        GameEvent::Dies {
+                            object_id: id,
+                            card_id: cid,
+                            controller: ctrl,
+                        },
+                        out,
+                    );
                 }
             }
         }
@@ -318,6 +512,8 @@ mod sba_tests {
                 damage,
                 deathtouch_damage: false,
                 counters: Default::default(),
+                attached_to: None,
+                regeneration_shields: 0,
             },
         );
         let idx = e.state.player_idx(owner).unwrap();

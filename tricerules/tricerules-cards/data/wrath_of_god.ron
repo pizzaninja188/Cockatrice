@@ -3,6 +3,5 @@
   name: "Wrath of God",
   mana_cost: "{2}{W}{W}",
   types: ["Sorcery"],
-  spell_effect: [DestroyAll(kind: (kind: Creature))],
-  partial: "regeneration not modeled (\"can't be regenerated\" has no effect yet)",
+  spell_effect: [DestroyAll(kind: (kind: Creature), prevent_regeneration: true)],
 )

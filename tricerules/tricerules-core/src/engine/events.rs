@@ -219,40 +219,20 @@ impl GameEngine {
                 battlefield_haste: p
                     .battlefield
                     .iter()
-                    .map(|&oid| {
-                        self.state
-                            .objects
-                            .get(&oid)
-                            .map(|o| o.has_keyword(self.registry, tricerules_cards::Keyword::Haste))
-                            .unwrap_or(false)
-                    })
+                    .map(|&oid| self.effective_has_keyword(oid, tricerules_cards::Keyword::Haste))
                     .collect(),
                 // CR 702.19: clients use this to enable trample damage assignment UI.
                 battlefield_trample: p
                     .battlefield
                     .iter()
-                    .map(|&oid| {
-                        self.state
-                            .objects
-                            .get(&oid)
-                            .map(|o| {
-                                o.has_keyword(self.registry, tricerules_cards::Keyword::Trample)
-                            })
-                            .unwrap_or(false)
-                    })
+                    .map(|&oid| self.effective_has_keyword(oid, tricerules_cards::Keyword::Trample))
                     .collect(),
                 // CR 702.7: informational flag for the client UI (independent of pending state).
                 battlefield_first_strike: p
                     .battlefield
                     .iter()
                     .map(|&oid| {
-                        self.state
-                            .objects
-                            .get(&oid)
-                            .map(|o| {
-                                o.has_keyword(self.registry, tricerules_cards::Keyword::FirstStrike)
-                            })
-                            .unwrap_or(false)
+                        self.effective_has_keyword(oid, tricerules_cards::Keyword::FirstStrike)
                     })
                     .collect(),
                 // CR 702.4: informational flag for the client UI.
@@ -260,16 +240,7 @@ impl GameEngine {
                     .battlefield
                     .iter()
                     .map(|&oid| {
-                        self.state
-                            .objects
-                            .get(&oid)
-                            .map(|o| {
-                                o.has_keyword(
-                                    self.registry,
-                                    tricerules_cards::Keyword::DoubleStrike,
-                                )
-                            })
-                            .unwrap_or(false)
+                        self.effective_has_keyword(oid, tricerules_cards::Keyword::DoubleStrike)
                     })
                     .collect(),
                 // CR 510.4: true while combat is set up with at least one attacker or blocker
@@ -280,7 +251,7 @@ impl GameEngine {
                     .as_ref()
                     .map(|c| {
                         !c.first_strike_damage_done
-                            && combat::combat_needs_first_strike_step(&self.state, self.registry, c)
+                            && combat::combat_needs_first_strike_step(self, c)
                     })
                     .unwrap_or(false),
                 // Pipe-delimited activated ability texts per battlefield permanent (empty if none).
@@ -355,6 +326,34 @@ impl GameEngine {
                             .unwrap_or_default()
                     })
                     .collect(),
+                // Parallel to `battlefield_activated_ability_texts`: pipe-delimited display-cost
+                // labels for each ability (e.g. "{T}", "{4}", "{T}, {4}", "Sacrifice this").
+                // Used by the client to build "cost: text" labels in the activation context menu.
+                battlefield_activated_ability_cost_labels: p
+                    .battlefield
+                    .iter()
+                    .map(|&oid| {
+                        self.state
+                            .objects
+                            .get(&oid)
+                            .and_then(|o| self.registry.get(&o.card_id))
+                            .map(|def| {
+                                def.activated_abilities
+                                    .iter()
+                                    .map(|a| match &a.cost {
+                                        AbilityCost::Tap => "{T}".to_string(),
+                                        AbilityCost::Mana(c) => c.to_string(),
+                                        AbilityCost::TapAndMana(c) => {
+                                            format!("{{T}}, {c}")
+                                        }
+                                        AbilityCost::Sacrifice => "Sacrifice this".to_string(),
+                                    })
+                                    .collect::<Vec<_>>()
+                                    .join("|")
+                            })
+                            .unwrap_or_default()
+                    })
+                    .collect(),
                 // Parallel to `battlefield`: per-permanent counter annotation for client display
                 // (e.g. "1 +1/+1 counter(s)"). Empty when the permanent has no counters.
                 battlefield_counters_annotation: p
@@ -368,6 +367,23 @@ impl GameEngine {
                             .unwrap_or_default()
                     })
                     .collect(),
+                // Parallel to `battlefield`: the ObjectId of the permanent this aura/equipment
+                // is attached to, or 0 if not attached. C++ relay uses this to issue
+                // Event_AttachCard so clients stack attached permanents visually.
+                battlefield_attached_to_oid: p
+                    .battlefield
+                    .iter()
+                    .map(|&oid| {
+                        self.state
+                            .objects
+                            .get(&oid)
+                            .and_then(|o| o.attached_to)
+                            .unwrap_or(0)
+                    })
+                    .collect(),
+                // Engine ObjectIds for each card in this player's graveyard (in graveyard order).
+                // Relay uses these to build the graveyard OID→server-card-id map for targeting.
+                graveyard_object_id: p.graveyard.clone(),
             })
             .collect();
         RuledEvent {

@@ -236,6 +236,17 @@ pub(crate) fn count_card_id_in_graveyard(e: &GameEngine, player: usize, card_id:
         .count()
 }
 
+/// Ensures `card_id` is in the player's hand — no-op if already there, otherwise moves it from library.
+pub(crate) fn ensure_card_in_hand(e: &mut GameEngine, player: usize, card_id: &str) {
+    let already_in_hand = e.state.players[player]
+        .hand
+        .iter()
+        .any(|oid| e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some(card_id));
+    if !already_in_hand {
+        take_card_from_library_to_hand(e, player, card_id);
+    }
+}
+
 pub(crate) fn take_card_from_library_to_hand(e: &mut GameEngine, player: usize, card_id: &str) {
     let pos = e.state.players[player]
         .library
@@ -360,6 +371,8 @@ pub(crate) fn inject_creature_on_battlefield(
             damage: 0,
             deathtouch_damage: false,
             counters: std::collections::BTreeMap::new(),
+            attached_to: None,
+            regeneration_shields: 0,
         },
     );
     e.state.players[player].battlefield.push(id);
@@ -390,6 +403,8 @@ pub(crate) fn inject_permanent_on_battlefield(
             damage: 0,
             deathtouch_damage: false,
             counters: std::collections::BTreeMap::new(),
+            attached_to: None,
+            regeneration_shields: 0,
         },
     );
     e.state.players[player].battlefield.push(id);
@@ -416,6 +431,8 @@ pub(crate) fn inject_library_card(e: &mut GameEngine, player: usize, card_id: &s
             damage: 0,
             deathtouch_damage: false,
             counters: std::collections::BTreeMap::new(),
+            attached_to: None,
+            regeneration_shields: 0,
         },
     );
     e.state.players[player].library.push_back(id);
@@ -616,6 +633,8 @@ pub(crate) fn inject_creature_with_stats(
             damage: 0,
             deathtouch_damage: false,
             counters: std::collections::BTreeMap::new(),
+            attached_to: None,
+            regeneration_shields: 0,
         },
     );
     e.state.players[player].battlefield.push(id);

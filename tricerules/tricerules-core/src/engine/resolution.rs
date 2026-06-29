@@ -35,12 +35,29 @@ impl GameEngine {
         } else {
             // CR 709/712/715: permanence is the *cast face's* (Ice resolves to graveyard; an MDFC
             // permanent face resolves to the battlefield as that face).
-            let resolves_to_battlefield = self
+            let resolves_to_battlefield_raw = self
                 .registry
                 .get(&card_id)
                 .and_then(|d| d.face(top.face_index))
                 .map(|f| f.is_permanent())
                 .unwrap_or(false);
+            // CR 303.4f: an aura whose enchant target is no longer on the battlefield at resolution
+            // is countered (goes to owner's graveyard) rather than entering the battlefield orphaned.
+            let is_aura = resolves_to_battlefield_raw
+                && self
+                    .registry
+                    .get(&card_id)
+                    .map(|d| d.is_aura)
+                    .unwrap_or(false);
+            let aura_target_valid = !is_aura
+                || targets.first().is_some_and(|&tid| {
+                    self.state
+                        .objects
+                        .get(&tid)
+                        .map(|o| o.zone == Zone::Battlefield)
+                        .unwrap_or(false)
+                });
+            let resolves_to_battlefield = resolves_to_battlefield_raw && aura_target_valid;
             let destination = if resolves_to_battlefield {
                 rv1::StackResolveDestination::Battlefield as i32
             } else {
@@ -62,7 +79,25 @@ impl GameEngine {
                 },
             )?;
             if resolves_to_battlefield {
+                // Set attached_to before ETB triggers so emit_static_abilities_on_enter can read it.
+                if is_aura {
+                    if let (Some(aura_obj), Some(&enchanted_oid)) =
+                        (self.state.objects.get_mut(&top.id), targets.first())
+                    {
+                        aura_obj.attached_to = Some(enchanted_oid);
+                    }
+                }
                 self.fire_triggers(GameEvent::EntersBattlefield { object_id: top.id }, events);
+            } else if is_aura {
+                let aura_name = self
+                    .registry
+                    .get(&card_id)
+                    .map(|d| d.name.as_str())
+                    .unwrap_or("Aura");
+                events.push(ev_log(format!(
+                    "{aura_name} fizzles (enchant target left the battlefield)."
+                )));
+                return Ok(());
             }
         }
 
@@ -247,6 +282,25 @@ impl GameEngine {
                         "{spell_label} gives +{power}/+{toughness} to each affected creature"
                     )));
                 }
+                SpellEffectKind::GrantKeywordsAll { filter, keywords } => {
+                    // CR 613 layer 6, one-shot: add a Layer6AddKeyword continuous effect for each
+                    // granted keyword. Overrun → Trample; Trumpet Blast → First Strike; etc.
+                    let scope = resolve_anthem_scope(&filter, controller, top.id);
+                    let kw_names: Vec<&str> = keywords.iter().map(|k| k.as_str()).collect();
+                    for kw in keywords {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            source_id: Some(top.id),
+                            affected: scope.clone(),
+                            kind: ContinuousEffectKind::Layer6AddKeyword(kw),
+                            duration: EffectDuration::UntilEndOfTurn,
+                            timestamp: self.state.command_index,
+                        });
+                    }
+                    events.push(ev_log(format!(
+                        "{spell_label} grants {} to each affected creature until end of turn",
+                        kw_names.join(", ")
+                    )));
+                }
                 SpellEffectKind::PutCounters {
                     counter,
                     count,
@@ -284,16 +338,14 @@ impl GameEngine {
                 SpellEffectKind::DestroyTarget { .. } => {
                     if let Some(&tid) = targets.first() {
                         let tgt = object_display_name(&self.state, self.registry, tid);
-                        let indestructible = self
-                            .state
-                            .objects
-                            .get(&tid)
-                            .map(|o| o.has_keyword(self.registry, Keyword::Indestructible))
-                            .unwrap_or(false);
+                        let indestructible =
+                            self.effective_has_keyword(tid, Keyword::Indestructible);
                         if indestructible {
                             events.push(ev_log(format!(
                                 "{spell_label} has no effect: {tgt} is indestructible."
                             )));
+                        } else if consume_regen_shield(&mut self.state, tid, events) {
+                            events.push(ev_log(format!("{tgt} regenerates.")));
                         } else {
                             events.push(ev_log(format!("{spell_label} destroys {tgt}")));
                             let owner = self.state.objects.get(&tid).map(|o| o.owner);
@@ -709,24 +761,31 @@ impl GameEngine {
                         }
                     }
                 }
-                SpellEffectKind::DestroyAll { kind } => {
+                SpellEffectKind::DestroyAll {
+                    kind,
+                    prevent_regeneration,
+                } => {
                     // CR 701.7 / 704.4: all matching permanents are destroyed simultaneously,
                     // then their "dies" triggers fire together. Indestructible permanents survive
-                    // (CR 702.12b). Untargeted, so hexproof/shroud are irrelevant.
+                    // (CR 702.12b). `prevent_regeneration` bypasses shields (Wrath of God).
+                    // Untargeted, so hexproof/shroud are irrelevant.
                     let victims = battlefield_objects_matching(&self.state, self.registry, &kind);
                     let mut destroyed: Vec<(ObjectId, String, PlayerId)> = Vec::new();
                     for tid in victims {
-                        let indestructible = self
-                            .state
-                            .objects
-                            .get(&tid)
-                            .map(|o| o.has_keyword(self.registry, Keyword::Indestructible))
-                            .unwrap_or(false);
+                        let indestructible =
+                            self.effective_has_keyword(tid, Keyword::Indestructible);
                         let tgt = object_display_name(&self.state, self.registry, tid);
                         if indestructible {
                             events.push(ev_log(format!(
                                 "{tgt} is indestructible and survives {spell_label}."
                             )));
+                            continue;
+                        }
+                        // CR 701.15b: "can't be regenerated" bypasses shields.
+                        if !prevent_regeneration
+                            && consume_regen_shield(&mut self.state, tid, events)
+                        {
+                            events.push(ev_log(format!("{tgt} regenerates.")));
                             continue;
                         }
                         let owner = self.state.objects.get(&tid).map(|o| o.owner);
@@ -778,10 +837,120 @@ impl GameEngine {
                 } => {
                     self.create_tokens(&token, count, who, controller, &spell_label, events);
                 }
+                // CR 702.6a: the equip activated ability resolves — move the equipment's
+                // `attached_to` pointer to the chosen creature (detaching from any previous one
+                // automatically). P/T bonus follows dynamically via `AffectedScope::EquippedBy`.
+                SpellEffectKind::Equip { .. } => {
+                    let equip_oid = match top.source_permanent_id {
+                        Some(id) => id,
+                        None => {
+                            events.push(ev_log(format!(
+                                "{spell_label}: equip ability has no source permanent."
+                            )));
+                            continue;
+                        }
+                    };
+                    if let Some(&target_id) = targets.first() {
+                        let valid = self
+                            .state
+                            .objects
+                            .get(&target_id)
+                            .map(|t| t.zone == Zone::Battlefield && t.is_creature(self.registry))
+                            .unwrap_or(false);
+                        let equip_on_battlefield = self
+                            .state
+                            .objects
+                            .get(&equip_oid)
+                            .map(|e| e.zone == Zone::Battlefield)
+                            .unwrap_or(false);
+                        if valid && equip_on_battlefield {
+                            let tgt = object_display_name(&self.state, self.registry, target_id);
+                            let eq_name =
+                                object_display_name(&self.state, self.registry, equip_oid);
+                            if let Some(eq) = self.state.objects.get_mut(&equip_oid) {
+                                eq.attached_to = Some(target_id);
+                            }
+                            events.push(ev_log(format!(
+                                "{spell_label} attaches {eq_name} to {tgt}."
+                            )));
+                        }
+                    }
+                }
                 // CR 605.3b: a mana ability never uses the stack, so a ProduceMana effect is
                 // resolved immediately in `resolve_mana_ability` and can never reach this generic
                 // stack-resolution path. Defensive no-op (registry validation also forbids it on
                 // spells); producing mana here would be off-stack-timing and is intentionally not done.
+                SpellEffectKind::ReturnFromGraveyard {
+                    filter,
+                    destination,
+                } => {
+                    if let Some(&tid) = targets.first() {
+                        let tgt = object_display_name(&self.state, self.registry, tid);
+                        let is_legal = {
+                            use tricerules_cards::primitives::{GraveyardCardType, GraveyardOwner};
+                            let obj = self.state.objects.get(&tid);
+                            let in_graveyard = obj.is_some_and(|o| o.zone == Zone::Graveyard);
+                            let owner_ok = obj.is_some_and(|o| match filter.owner {
+                                GraveyardOwner::Controller => o.owner == controller,
+                                GraveyardOwner::AnyPlayer => true,
+                            });
+                            let type_ok = if let Some(ct) = filter.card_type {
+                                obj.and_then(|o| self.registry.get(&o.card_id))
+                                    .is_some_and(|def| match ct {
+                                        GraveyardCardType::Creature => {
+                                            def.is_creature
+                                                || def.faces.iter().any(|f| f.is_creature)
+                                        }
+                                    })
+                            } else {
+                                true
+                            };
+                            in_graveyard && owner_ok && type_ok
+                        };
+                        if !is_legal {
+                            events.push(ev_log(format!(
+                                "{spell_label} fizzles: {tgt} is no longer a legal graveyard target."
+                            )));
+                        } else {
+                            let owner = self.state.objects.get(&tid).map(|o| o.owner);
+                            use tricerules_cards::primitives::GraveyardDestination;
+                            let dest_zone = match destination {
+                                GraveyardDestination::Hand => Zone::Hand,
+                                GraveyardDestination::Battlefield => Zone::Battlefield,
+                            };
+                            let dest_proto = match destination {
+                                GraveyardDestination::Hand => {
+                                    rv1::permanent_moved::Destination::Hand
+                                }
+                                GraveyardDestination::Battlefield => {
+                                    rv1::permanent_moved::Destination::Battlefield
+                                }
+                            };
+                            move_object_to_zone(&mut self.state, tid, dest_zone)?;
+                            let dest_name = match destination {
+                                GraveyardDestination::Hand => "hand",
+                                GraveyardDestination::Battlefield => "battlefield",
+                            };
+                            events.push(ev_log(format!(
+                                "{spell_label} returns {tgt} from graveyard to {dest_name}."
+                            )));
+                            if let Some(owner_id) = owner {
+                                events.push(permanent_moved_event(
+                                    &self.state,
+                                    tid,
+                                    owner_id,
+                                    dest_proto,
+                                ));
+                            }
+                            if dest_zone == Zone::Battlefield {
+                                self.fire_triggers(
+                                    GameEvent::EntersBattlefield { object_id: tid },
+                                    events,
+                                );
+                            }
+                        }
+                    }
+                }
                 SpellEffectKind::ProduceMana { .. } => {}
                 // CR 701.18: pause resolution and ask the controller to choose from their library.
                 // Uses choice_kind 2 (LibrarySearch) so the relay redacts candidates from opponents.
@@ -877,7 +1046,54 @@ impl GameEngine {
                     // Resolution is now parked; the "resolves." log is emitted by finish_library_search.
                     return Ok(());
                 }
+                // CR 701.15: put a regeneration shield on the target. Resolved only as an
+                // activated ability (`Self_` auto-bound to the source permanent). Each activation
+                // adds one shield; shields expire at cleanup (like marked damage).
+                SpellEffectKind::Regenerate { target } => {
+                    let tid = if matches!(target.kind, TargetKind::Self_) {
+                        top.source_permanent_id
+                    } else {
+                        targets.first().copied()
+                    };
+                    if let Some(tid) = tid {
+                        let is_creature = self
+                            .state
+                            .objects
+                            .get(&tid)
+                            .map(|o| o.zone == Zone::Battlefield && o.is_creature(self.registry))
+                            .unwrap_or(false);
+                        if is_creature {
+                            let tgt = object_display_name(&self.state, self.registry, tid);
+                            if let Some(o) = self.state.objects.get_mut(&tid) {
+                                o.regeneration_shields += 1;
+                            }
+                            events.push(ev_log(format!(
+                                "{tgt} has a regeneration shield ({spell_label})."
+                            )));
+                        }
+                    }
+                }
                 SpellEffectKind::None => {}
+                // CR 303.4: the AuraAttach effect is the "Enchant <type>" clause of an aura spell.
+                // The attached_to field was already set before fire_triggers; emit the proto event
+                // so the relay can issue Event_AttachCard to connected clients.
+                SpellEffectKind::AuraAttach { .. } => {
+                    if let (Some(enchanted_oid), Some(obj)) =
+                        (targets.first().copied(), self.state.objects.get(&top.id))
+                    {
+                        if obj.zone == Zone::Battlefield {
+                            let tgt =
+                                object_display_name(&self.state, self.registry, enchanted_oid);
+                            events.push(rv1::RuledEvent {
+                                ev: Some(rv1::ruled_event::Ev::AuraAttached(rv1::AuraAttached {
+                                    aura_object_id: top.id,
+                                    enchanted_object_id: enchanted_oid,
+                                })),
+                            });
+                            events.push(ev_log(format!("{spell_label} attaches to {tgt}.")));
+                        }
+                    }
+                }
             }
         }
         events.push(ev_log(format!("{spell_label} resolves.")));
@@ -959,6 +1175,8 @@ impl GameEngine {
                         damage: 0,
                         deathtouch_damage: false,
                         counters: BTreeMap::new(),
+                        attached_to: None,
+                        regeneration_shields: 0,
                     },
                 );
                 self.state.players[pidx].battlefield.push(oid);
@@ -1076,15 +1294,16 @@ pub(super) fn move_object_to_zone(
             !single_on_this && !static_from_this
         });
         // CR 400.7 / 121.2: a zone change makes this a new game object — transient
-        // battlefield-only state (marked damage, deathtouch marking, tap status) and all
-        // counters do not carry over. Centralized here so every leave path (SBA destroy,
-        // sacrifice, bounce, discard, mill, exile) is correct by construction; otherwise a
-        // creature bounced and recast would keep its +1/+1 counters or stale combat damage.
+        // battlefield-only state (marked damage, deathtouch marking, tap status, regeneration
+        // shields) and all counters do not carry over. Centralized here so every leave path
+        // (SBA destroy, sacrifice, bounce, discard, mill, exile) is correct by construction.
         if let Some(o) = state.objects.get_mut(&oid) {
             o.damage = 0;
             o.deathtouch_damage = false;
             o.tapped = false;
             o.counters.clear();
+            o.attached_to = None;
+            o.regeneration_shields = 0;
         }
     }
 
@@ -1174,4 +1393,51 @@ fn spell_type_filter_desc(f: &SpellTypeFilter) -> &'static str {
         SpellTypeFilter::Enchantment => "enchantment",
         SpellTypeFilter::Noncreature => "noncreature",
     }
+}
+
+/// CR 701.15: attempt to consume one regeneration shield from `oid`. If a shield is present,
+/// taps the creature, removes it from combat, clears all marked damage, and returns `true`.
+/// The caller is responsible for not destroying the creature. Returns `false` if no shield exists.
+/// Does NOT emit a zone-change event (the creature stays on the battlefield).
+pub(super) fn consume_regen_shield(
+    state: &mut GameState,
+    oid: ObjectId,
+    events: &mut Vec<rv1::RuledEvent>,
+) -> bool {
+    let shields = state
+        .objects
+        .get(&oid)
+        .map(|o| o.regeneration_shields)
+        .unwrap_or(0);
+    if shields == 0 {
+        return false;
+    }
+    if let Some(o) = state.objects.get_mut(&oid) {
+        o.regeneration_shields -= 1;
+        o.damage = 0;
+        o.deathtouch_damage = false;
+        o.tapped = true;
+    }
+    // CR 701.15a: remove from combat (attacker/blocker lists). This mirrors what happens when
+    // a creature is removed from combat by a tap effect.
+    if let Some(combat) = state.combat.as_mut() {
+        let was_in_combat = combat.attacking.contains(&oid)
+            || combat.blockers.contains_key(&oid)
+            || combat.blockers.values().any(|v| v.contains(&oid));
+        combat.attacking.retain(|&id| id != oid);
+        combat.blockers.remove(&oid);
+        for v in combat.blockers.values_mut() {
+            v.retain(|&id| id != oid);
+        }
+        if was_in_combat {
+            events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::RemovedFromCombat(
+                    rv1::CreaturesRemovedFromCombat {
+                        object_ids: vec![oid],
+                    },
+                )),
+            });
+        }
+    }
+    true
 }

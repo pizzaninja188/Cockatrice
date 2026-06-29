@@ -984,11 +984,33 @@ bool PlayerActions::tryRuledResolutionHandPickCard(CardItem *card)
     if (!player->getPlayerInfo()->getLocal()) {
         return false;
     }
-    if (card->getZone()->getName() != ZoneNames::HAND || card->getZone()->getPlayer() != player) {
-        return false;
-    }
     GameEventHandler *handler = player->getGame()->getGameEventHandler();
     if (!handler || !handler->isResolutionHandPickActive()) {
+        return false;
+    }
+    const GameEventHandler::PickZone pz = handler->resolutionHandPickZone();
+    CardZoneLogic *zone = card->getZone();
+    if (pz == GameEventHandler::PickZone::Hand) {
+        // Standard hand-click pick (Brainstorm).
+        if (zone->getName() != ZoneNames::HAND || zone->getPlayer() != player) {
+            return false;
+        }
+    } else if (pz == GameEventHandler::PickZone::Deck) {
+        // Deck zone-view pick (Gifts Ungiven search step): accept cards in a ZoneViewZone
+        // whose original zone is the deck. The view zone has name "deck" (inherited).
+        auto *zvl = qobject_cast<ZoneViewZoneLogic *>(zone);
+        if (!zvl || zvl->getName() != ZoneNames::DECK || zone->getPlayer() != player) {
+            return false;
+        }
+    } else if (pz == GameEventHandler::PickZone::Revealed) {
+        // Revealed-cards popup pick (Gifts Ungiven opponent step): accept cards from any
+        // ZoneViewZone whose original zone name is the revealed-pick marker "deck".
+        // The popup is attached to the deciding player; gate on local player match.
+        auto *zvl = qobject_cast<ZoneViewZoneLogic *>(zone);
+        if (!zvl || zvl->getName() != ZoneNames::DECK) {
+            return false;
+        }
+    } else {
         return false;
     }
     const int serverCardId = card->getId();
@@ -1262,25 +1284,34 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
     const QString zoneName = card->getZone()->getName();
     const bool isOnBattlefield = (zoneName == ZoneNames::TABLE);
     const bool isOnStack = (zoneName == ZoneNames::STACK);
-    if (!isOnBattlefield && !isOnStack) {
+    const bool isOnGraveyard = (zoneName == ZoneNames::GRAVE);
+    if (!isOnBattlefield && !isOnStack && !isOnGraveyard) {
         player->getGame()->getGameEventHandler()->emitLocalRuledLog(
             tr("Select a target on the battlefield (or stack), or press Cancel."));
         return true;
     }
 
     auto *handler = player->getGame()->getGameEventHandler();
-    const int ownerPlayerId = card && card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
-    const quint32 targetOid = handler ? handler->engineOidForCardId(ownerPlayerId, card->getId()) : 0;
+    const int slot = pendingRuledSpellCast.handIndex;
+    const int face = pendingRuledSpellCast.faceIndex;
+
+    quint32 targetOid = 0;
+    if (isOnGraveyard) {
+        // Graveyard cards are tracked via the GraveyardObjectMap (not the battlefield OID map).
+        targetOid = handler ? handler->graveyardEngineOidForServerCardId(card->getId()) : 0;
+    } else {
+        const int ownerPlayerId = card && card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
+        targetOid = handler ? handler->engineOidForCardId(ownerPlayerId, card->getId()) : 0;
+    }
     if (targetOid == 0) {
         player->getGame()->getGameEventHandler()->emitLocalRuledLog(
             tr("That target is not selectable yet. Select another target or cancel %1.")
                 .arg(pendingRuledSpellCast.cardName));
         return true;
     }
-    const int slot = pendingRuledSpellCast.handIndex;
-    const int face = pendingRuledSpellCast.faceIndex;
-    const bool valid = isOnBattlefield ? handler->isValidSpellTarget(slot, face, targetOid)
-                                       : handler->isValidSpellStackTarget(slot, face, targetOid);
+    const bool valid = isOnBattlefield  ? handler->isValidSpellTarget(slot, face, targetOid)
+                       : isOnGraveyard  ? handler->isValidSpellGraveyardTarget(slot, face, targetOid)
+                                        : handler->isValidSpellStackTarget(slot, face, targetOid);
     if (!valid) {
         player->getGame()->getGameEventHandler()->emitLocalRuledLog(
             tr("That is not a legal target for %1.").arg(pendingRuledSpellCast.cardName));
@@ -3450,19 +3481,54 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         return false;
     }
 
-    // CR 605: a left-click on a permanent whose *only* activated ability is a mana ability skips the
-    // menu and floats the mana directly (the engine taps the source and adds the mana; it comes back
-    // via ManaPoolUpdated). Right-click (leftClick == false) always opens the full menu. A permanent
-    // with more than one ability, or whose single ability is not a mana ability, also uses the menu.
+    // CR 605: a permanent whose *only* activated ability is a mana ability gets the fast path —
+    // no pending-ability state, just send activate_ability. Two sub-cases:
+    //   • Single option (basic land): left-click auto-activates; right-click falls through to the
+    //     full menu (keeps the existing "right-click = see text" behavior).
+    //   • Multiple options (dual land): both left and right click show a compact color-picker menu
+    //     so the player can choose which color to produce.
     const QStringList manaProduced = handler->activatedAbilityManaProducedForOid(oid);
-    if (leftClick && abilityTexts.size() == 1 && !manaProduced.value(0).isEmpty()) {
-        Command_RuledPayload *activate = newRuledPayloadActivateManaAbilityForLand(card, QChar());
-        if (!activate) {
-            return false; // not a mana source the engine recognizes; let normal handling continue
+    const QStringList costLabels = handler->activatedAbilityCostLabelsForOid(oid);
+    if (abilityTexts.size() == 1 && !manaProduced.value(0).isEmpty()) {
+        const QStringList colorOptions = manaProduced.value(0).split(QChar('/'));
+        if (colorOptions.size() > 1) {
+            // Dual land: show a compact color-picker on both left and right click.
+            const QString costPrefix = costLabels.value(0);
+            QMenu colorMenu;
+            colorMenu.setTitle(card->getName());
+            for (const QString &opt : colorOptions) {
+                const QString label = costPrefix.isEmpty()
+                    ? tr("Add {%1}").arg(opt)
+                    : tr("%1: Add {%2}").arg(costPrefix, opt);
+                colorMenu.addAction(label);
+            }
+            QAction *chosen = colorMenu.exec(QCursor::pos());
+            if (!chosen) {
+                return true; // player dismissed the picker
+            }
+            const int sel = colorMenu.actions().indexOf(chosen);
+            const QChar desiredColor =
+                (sel >= 0 && sel < colorOptions.size() && !colorOptions.at(sel).isEmpty())
+                    ? colorOptions.at(sel).at(0).toUpper()
+                    : QChar();
+            Command_RuledPayload *activate = newRuledPayloadActivateManaAbilityForLand(card, desiredColor);
+            if (!activate) {
+                return false;
+            }
+            sendGameCommand(*activate);
+            delete activate;
+            return true;
         }
-        sendGameCommand(*activate);
-        delete activate;
-        return true;
+        // Single-option mana ability: left-click auto-activates, right-click falls through.
+        if (leftClick) {
+            Command_RuledPayload *activate = newRuledPayloadActivateManaAbilityForLand(card, QChar());
+            if (!activate) {
+                return false; // not a mana source the engine recognizes; let normal handling continue
+            }
+            sendGameCommand(*activate);
+            delete activate;
+            return true;
+        }
     }
 
     // Past the direct mana-float fast path: opening the full activation menu now would overwrite an
@@ -3472,18 +3538,25 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         return false;
     }
 
-    // Build and show the context menu.
+    // Build and show the context menu with full "cost: text" labels (Oracle format).
     QMenu menu;
     menu.setTitle(card->getName());
+    QVector<QString> menuLabels;
+    menuLabels.reserve(abilityTexts.size());
     for (int i = 0; i < abilityTexts.size(); ++i) {
-        menu.addAction(abilityTexts[i]);
+        const QString costLabel = costLabels.value(i);
+        const QString label = costLabel.isEmpty()
+            ? abilityTexts[i]
+            : tr("%1: %2").arg(costLabel, abilityTexts[i]);
+        menuLabels.append(label);
+        menu.addAction(label);
     }
     QAction *chosen = menu.exec(QCursor::pos());
     if (!chosen) {
         return true; // menu was shown, player cancelled
     }
 
-    const int abilityIndex = abilityTexts.indexOf(chosen->text());
+    const int abilityIndex = menuLabels.indexOf(chosen->text());
     if (abilityIndex < 0) {
         return true;
     }
@@ -3573,11 +3646,17 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
             return false;
         }
         const QString zoneName = card->getZone()->getName();
-        if (zoneName != ZoneNames::TABLE && zoneName != ZoneNames::STACK) {
+        const bool triggerIsGraveyard = (zoneName == ZoneNames::GRAVE);
+        if (zoneName != ZoneNames::TABLE && zoneName != ZoneNames::STACK && !triggerIsGraveyard) {
             return false;
         }
-        const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
-        const quint32 targetOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
+        quint32 targetOid = 0;
+        if (triggerIsGraveyard) {
+            targetOid = handler->graveyardEngineOidForServerCardId(card->getId());
+        } else {
+            const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
+            targetOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
+        }
         if (targetOid == 0) {
             return false;
         }

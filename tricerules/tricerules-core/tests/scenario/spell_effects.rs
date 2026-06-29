@@ -567,6 +567,8 @@ fn tome_scour_mills_five_cards_from_target_player() {
                 damage: 0,
                 deathtouch_damage: false,
                 counters: std::collections::BTreeMap::new(),
+                attached_to: None,
+                regeneration_shields: 0,
             },
         );
         e.state.players[0].hand.push(id);
@@ -642,6 +644,8 @@ fn tome_scour_caps_at_library_size() {
                 damage: 0,
                 deathtouch_damage: false,
                 counters: std::collections::BTreeMap::new(),
+                attached_to: None,
+                regeneration_shields: 0,
             },
         );
         e.state.players[0].hand.push(id);
@@ -691,6 +695,8 @@ fn tome_scour_can_target_controller() {
                 damage: 0,
                 deathtouch_damage: false,
                 counters: std::collections::BTreeMap::new(),
+                attached_to: None,
+                regeneration_shields: 0,
             },
         );
         e.state.players[0].hand.push(id);
@@ -798,6 +804,348 @@ fn pyroclasm_deals_two_damage_to_each_creature() {
         "4-toughness creature survives"
     );
     assert_eq!(e.state.objects.get(&spider).expect("spider").damage, 2);
+}
+
+/// Disentomb (or Raise Dead) returns a creature card from the controller's graveyard to hand.
+#[test]
+fn disentomb_returns_creature_from_graveyard_to_hand() {
+    let decks = Some(vec![vec!["swamp".into(); 10], vec!["forest".into(); 10]]);
+    let mut e = GameEngine::new(1401, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Inject Disentomb into P0's hand and Grizzly Bears into P0's graveyard.
+    let bears_oid = {
+        let id = e.state.next_object_id;
+        e.state.next_object_id += 1;
+        e.state.objects.insert(
+            id,
+            tricerules_core::state::GameObject {
+                id,
+                owner: 0,
+                card_id: "grizzly_bears".into(),
+                zone: tricerules_core::Zone::Graveyard,
+                tapped: false,
+                summoning_sick: false,
+                power: None,
+                toughness: None,
+                damage: 0,
+                deathtouch_damage: false,
+                counters: std::collections::BTreeMap::new(),
+                attached_to: None,
+                regeneration_shields: 0,
+            },
+        );
+        e.state.players[0].graveyard.push(id);
+        id
+    };
+    let disentomb_oid = {
+        let id = e.state.next_object_id;
+        e.state.next_object_id += 1;
+        e.state.objects.insert(
+            id,
+            tricerules_core::state::GameObject {
+                id,
+                owner: 0,
+                card_id: "disentomb".into(),
+                zone: tricerules_core::Zone::Hand,
+                tapped: false,
+                summoning_sick: false,
+                power: None,
+                toughness: None,
+                damage: 0,
+                deathtouch_damage: false,
+                counters: std::collections::BTreeMap::new(),
+                attached_to: None,
+                regeneration_shields: 0,
+            },
+        );
+        e.state.players[0].hand.push(id);
+        id
+    };
+
+    assert!(
+        e.state.players[0].graveyard.contains(&bears_oid),
+        "bears in graveyard"
+    );
+
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            ..Default::default()
+        },
+    );
+    let disentomb_idx = e.state.players[0]
+        .hand
+        .iter()
+        .position(|&oid| oid == disentomb_oid)
+        .expect("disentomb in hand");
+    let hand_before = e.state.players[0].hand.len();
+    e.apply_command(
+        0,
+        &cast_spell(
+            disentomb_idx,
+            vec![TargetRef {
+                object_id: bears_oid,
+            }],
+        ),
+    )
+    .expect("cast disentomb");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass())
+        .expect("p1 pass resolves disentomb");
+
+    // Grizzly Bears should now be in P0's hand, not the graveyard.
+    assert!(
+        !e.state.players[0].graveyard.contains(&bears_oid),
+        "bears must have left graveyard"
+    );
+    assert!(
+        e.state.players[0].hand.contains(&bears_oid),
+        "bears must be in P0's hand"
+    );
+    // Hand size: disentomb left (-1), bears returned (+1) → net unchanged.
+    assert_eq!(
+        e.state.players[0].hand.len(),
+        hand_before,
+        "net hand size unchanged"
+    );
+    assert_eq!(
+        e.state.objects.get(&bears_oid).expect("obj").zone,
+        tricerules_core::Zone::Hand
+    );
+}
+
+/// ReturnFromGraveyard fizzles cleanly when the graveyard target is no longer legal at resolution
+/// (e.g., the target was the only creature and the graveyard is now empty of valid targets).
+#[test]
+fn return_from_graveyard_fizzles_when_target_removed_before_resolution() {
+    let decks = Some(vec![vec!["swamp".into(); 10], vec!["forest".into(); 10]]);
+    let mut e = GameEngine::new(1402, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Inject Disentomb directly into P0's hand.
+    let disentomb_oid = {
+        let id = e.state.next_object_id;
+        e.state.next_object_id += 1;
+        e.state.objects.insert(
+            id,
+            tricerules_core::state::GameObject {
+                id,
+                owner: 0,
+                card_id: "disentomb".into(),
+                zone: tricerules_core::Zone::Hand,
+                tapped: false,
+                summoning_sick: false,
+                power: None,
+                toughness: None,
+                damage: 0,
+                deathtouch_damage: false,
+                counters: std::collections::BTreeMap::new(),
+                attached_to: None,
+                regeneration_shields: 0,
+            },
+        );
+        e.state.players[0].hand.push(id);
+        id
+    };
+
+    // Inject a creature into P0's graveyard.
+    let dummy_oid = {
+        let id = e.state.next_object_id;
+        e.state.next_object_id += 1;
+        e.state.objects.insert(
+            id,
+            tricerules_core::state::GameObject {
+                id,
+                owner: 0,
+                card_id: "grizzly_bears".into(),
+                zone: tricerules_core::Zone::Graveyard,
+                tapped: false,
+                summoning_sick: false,
+                power: None,
+                toughness: None,
+                damage: 0,
+                deathtouch_damage: false,
+                counters: std::collections::BTreeMap::new(),
+                attached_to: None,
+                regeneration_shields: 0,
+            },
+        );
+        e.state.players[0].graveyard.push(id);
+        id
+    };
+
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            ..Default::default()
+        },
+    );
+    let disentomb_idx = e.state.players[0]
+        .hand
+        .iter()
+        .position(|&oid| oid == disentomb_oid)
+        .expect("disentomb in hand");
+    e.apply_command(
+        0,
+        &cast_spell(
+            disentomb_idx,
+            vec![TargetRef {
+                object_id: dummy_oid,
+            }],
+        ),
+    )
+    .expect("cast disentomb");
+
+    // Before resolution, move dummy OID off the graveyard (simulate exile).
+    let pos = e.state.players[0]
+        .graveyard
+        .iter()
+        .position(|&oid| oid == dummy_oid)
+        .unwrap();
+    e.state.players[0].graveyard.remove(pos);
+    if let Some(o) = e.state.objects.get_mut(&dummy_oid) {
+        o.zone = tricerules_core::Zone::Battlefield;
+    }
+
+    // Resolution should fizzle gracefully (no panic, no error).
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass()).expect("p1 pass — fizzle");
+
+    // The dummy OID must NOT be in hand (fizzle = no move).
+    assert!(
+        !e.state.players[0].hand.contains(&dummy_oid),
+        "fizzled return must not move the card to hand"
+    );
+}
+
+/// Gravedigger ETB trigger: entering the battlefield causes a targeted trigger that returns a
+/// creature card from the controller's graveyard to hand.
+#[test]
+fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
+    let decks = Some(vec![vec!["swamp".into(); 10], vec!["forest".into(); 10]]);
+    let mut e = GameEngine::new(1403, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Inject Grizzly Bears into P0's graveyard and Gravedigger into P0's hand.
+    let bears_oid = {
+        let id = e.state.next_object_id;
+        e.state.next_object_id += 1;
+        e.state.objects.insert(
+            id,
+            tricerules_core::state::GameObject {
+                id,
+                owner: 0,
+                card_id: "grizzly_bears".into(),
+                zone: tricerules_core::Zone::Graveyard,
+                tapped: false,
+                summoning_sick: false,
+                power: None,
+                toughness: None,
+                damage: 0,
+                deathtouch_damage: false,
+                counters: std::collections::BTreeMap::new(),
+                attached_to: None,
+                regeneration_shields: 0,
+            },
+        );
+        e.state.players[0].graveyard.push(id);
+        id
+    };
+    let gd_oid = {
+        let id = e.state.next_object_id;
+        e.state.next_object_id += 1;
+        e.state.objects.insert(
+            id,
+            tricerules_core::state::GameObject {
+                id,
+                owner: 0,
+                card_id: "gravedigger".into(),
+                zone: tricerules_core::Zone::Hand,
+                tapped: false,
+                summoning_sick: false,
+                power: None,
+                toughness: None,
+                damage: 0,
+                deathtouch_damage: false,
+                counters: std::collections::BTreeMap::new(),
+                attached_to: None,
+                regeneration_shields: 0,
+            },
+        );
+        e.state.players[0].hand.push(id);
+        id
+    };
+
+    // Pay {3}{B} and cast Gravedigger.
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    let gd_idx = e.state.players[0]
+        .hand
+        .iter()
+        .position(|&oid| oid == gd_oid)
+        .expect("gravedigger in hand");
+    e.apply_command(0, &cast_spell(gd_idx, vec![]))
+        .expect("cast gravedigger");
+
+    // Both players pass; Gravedigger resolves and ETB trigger fires.
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass())
+        .expect("p1 pass resolves gravedigger");
+
+    // Gravedigger ETB trigger requires a target from the graveyard.
+    assert_eq!(
+        e.state.pending_triggers.len(),
+        1,
+        "Gravedigger ETB trigger must be queued"
+    );
+
+    // P0 chooses Grizzly Bears as the graveyard target.
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                target_object_id: bears_oid,
+            })),
+        },
+    )
+    .expect("choose trigger target — bears from graveyard");
+
+    // Trigger resolves: bears should move from graveyard to hand.
+    e.apply_command(0, &pass())
+        .expect("p0 pass trigger on stack");
+    e.apply_command(1, &pass())
+        .expect("p1 pass resolves trigger");
+
+    assert!(
+        !e.state.players[0].graveyard.contains(&bears_oid),
+        "bears must have left graveyard after trigger"
+    );
+    assert!(
+        e.state.players[0].hand.contains(&bears_oid),
+        "bears must be in P0's hand after trigger"
+    );
+    assert_eq!(
+        e.state.objects.get(&bears_oid).expect("obj").zone,
+        tricerules_core::Zone::Hand
+    );
+    // Gravedigger itself should be on the battlefield.
+    let gd_on_bf = e.state.players[0]
+        .battlefield
+        .iter()
+        .any(|oid| e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some("gravedigger"));
+    assert!(gd_on_bf, "Gravedigger must be on P0's battlefield");
 }
 
 /// Regression: a Draw spell that empties the library must NOT error out of resolution (the old

@@ -301,8 +301,11 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
                 }
             }
         }
-        // Resolution hand-pick (Brainstorm etc.): number selected cards in click order using cyan.
-        if (zone && zone->getName() == ZoneNames::HAND && owner && owner->getPlayerInfo()->getLocal() &&
+        // Resolution pick (Brainstorm hand, Gifts Ungiven deck search, Gifts Ungiven opponent popup):
+        // number selected cards in click order using cyan.
+        const bool inPickZone = zone &&
+                                (zone->getName() == ZoneNames::HAND || zone->getName() == ZoneNames::DECK);
+        if (inPickZone && owner && owner->getPlayerInfo()->getLocal() &&
             ruledHandler->isResolutionHandPickActive()) {
             const int scid = getId();
             if (ruledHandler->isResolutionHandPickCardSelectable(scid)) {
@@ -1006,8 +1009,11 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
             auto *playerManager = game ? game->getPlayerManager() : nullptr;
             auto *localPlayer = playerManager ? playerManager->getPlayers().value(playerManager->getLocalPlayerId()) : nullptr;
             auto *actions = localPlayer ? localPlayer->getPlayerActions() : nullptr;
+            // Tier-3 resolution pick: hand cards (Brainstorm), deck zone-view cards (Gifts Ungiven
+            // search), and revealed popup cards (Gifts Ungiven opponent pick).
             if (stationaryLeft && owner->getPlayerInfo()->getLocal() && actions && zone &&
-                zone->getName() == ZoneNames::HAND && actions->tryRuledResolutionHandPickCard(this)) {
+                (zone->getName() == ZoneNames::HAND || zone->getName() == ZoneNames::DECK) &&
+                actions->tryRuledResolutionHandPickCard(this)) {
                 update();
                 AbstractCardItem::mouseReleaseEvent(event);
                 return;

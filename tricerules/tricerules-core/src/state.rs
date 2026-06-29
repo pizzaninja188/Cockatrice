@@ -57,6 +57,14 @@ pub struct GameObject {
     /// in pairs as a state-based action (CR 122.3). Unlike continuous effects, counters persist
     /// across cleanup — they are not until-end-of-turn effects.
     pub counters: BTreeMap<CounterKind, u32>,
+    /// CR 303.4 / CR 301.5 / 702.6: for Aura or Equipment permanents, the `ObjectId` of the
+    /// permanent this card is attached to. `None` for non-aura, non-equipment permanents or
+    /// before attachment is established. Cleared on zone change (auras die; equipment falls off).
+    pub attached_to: Option<ObjectId>,
+    /// CR 701.15: number of regeneration shields on this permanent. Each shield is a replacement
+    /// effect: the next time this permanent would be destroyed, instead tap it, remove it from
+    /// combat, and clear all damage from it. Shields expire at the cleanup step (like damage).
+    pub regeneration_shields: u32,
 }
 
 impl GameObject {
@@ -285,7 +293,13 @@ pub enum AffectedScope {
         color: Option<Color>,
         exclude: Option<ObjectId>,
     },
-    // Future: CreaturesWithPower(u32), …
+    /// CR 613.4 layer 7c: the creature currently equipped by the equipment with ObjectId
+    /// `equipment_oid`. Resolved dynamically — reads `attached_to` on the equipment's
+    /// `GameObject` each time P/T is queried, so re-equipping to a different creature
+    /// immediately shifts the bonus without recreating the continuous effect. The effect exists
+    /// only while the equipment is on the battlefield (`WhileSourceOnBattlefield`) and is drained
+    /// normally when the equipment leaves (CR 611.3).
+    EquippedBy(ObjectId),
 }
 
 /// A single active continuous effect (CR 611/613).

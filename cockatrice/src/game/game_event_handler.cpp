@@ -778,6 +778,19 @@ void GameEventHandler::toggleResolutionHandPickCard(int serverCardId)
     if (pos >= 0) {
         resolutionHandPick->selectedServerCardIds.removeAt(pos);
     } else if (resolutionHandPick->selectedServerCardIds.size() < resolutionHandPick->max) {
+        if (resolutionHandPick->uniqueNames) {
+            const QString clickedName = resolutionHandPick->serverCardIdToName.value(serverCardId);
+            bool nameTaken = false;
+            for (int selId : resolutionHandPick->selectedServerCardIds) {
+                if (resolutionHandPick->serverCardIdToName.value(selId) == clickedName) {
+                    nameTaken = true;
+                    break;
+                }
+            }
+            if (nameTaken) {
+                return;
+            }
+        }
         resolutionHandPick->selectedServerCardIds.append(serverCardId);
     }
     emit ruledResolutionHandPickUiChanged(resolutionHandPick->min,
@@ -802,13 +815,15 @@ void GameEventHandler::submitResolutionHandPick()
             chosen.append(oid);
         }
     }
+    const bool wasRevealed = resolutionHandPick.has_value() &&
+                             resolutionHandPick->pickZone == PickZone::Revealed;
     resolutionHandPick.reset();
-    emit ruledResolutionHandPickUiChanged(0, 0);
+    emit ruledResolutionHandPickUiChanged(-1, -1);
+    if (wasRevealed) {
+        emit ruledRevealedPickChanged(false, {}, {}, 0, 0);
+    }
     emit ruledCombatStateChanged();
 
-    if (chosen.size() < 1) {
-        return;
-    }
     ruled::v1::RuledCommand cmd;
     auto *sub = cmd.mutable_submit_resolution_choice();
     for (quint32 o : chosen) {
@@ -1524,6 +1539,10 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 const int localId = game->getPlayerManager()->getLocalPlayerId();
                                 promptFeed += QString::fromStdString(rcr.prompt_text()) + QStringLiteral("\n");
                                 // Clear any stale hand-pick state from a previous resolution step.
+                                if (resolutionHandPick.has_value() &&
+                                    resolutionHandPick->pickZone == PickZone::Revealed) {
+                                    emit ruledRevealedPickChanged(false, {}, {}, 0, 0);
+                                }
                                 resolutionHandPick.reset();
                                 if (rcr.deciding_player_id() == localId && rcr.candidate_object_ids_size() > 0) {
                                     if (rcr.choice_kind() == 3) {
@@ -1544,20 +1563,91 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                         pick.min = static_cast<int>(rcr.min());
                                         pick.max = static_cast<int>(rcr.max());
                                         pick.promptText = QString::fromStdString(rcr.prompt_text());
+                                        pick.pickZone = PickZone::Hand;
                                         for (int i = 0; i < rcr.candidate_object_ids_size(); ++i) {
                                             const quint32 oid = rcr.candidate_object_ids(i);
                                             const int scid = rcr.candidate_server_card_ids(i);
                                             if (scid >= 0) {
                                                 pick.serverCardIdToOid.insert(scid, oid);
+                                                if (i < rcr.candidate_names_size()) {
+                                                    pick.candidateNames.append(
+                                                        QString::fromStdString(rcr.candidate_names(i)));
+                                                }
                                             }
                                         }
                                         resolutionHandPick = std::move(pick);
                                         emit ruledResolutionHandPickUiChanged(
                                             resolutionHandPick->min, 0);
                                         emit ruledCombatStateChanged();
+                                    } else if (rcr.choice_kind() == 2 &&
+                                               rcr.candidate_server_card_ids_size() == rcr.candidate_names_size() &&
+                                               rcr.candidate_names_size() > 0) {
+                                        // LibrarySearch (choice_kind 2) with server card ids: deck zone-view pick.
+                                        // unique_names is always true for Gifts Ungiven step 1.
+                                        ResolutionHandPick pick;
+                                        pick.min = static_cast<int>(rcr.min());
+                                        pick.max = static_cast<int>(rcr.max());
+                                        pick.uniqueNames = rcr.unique_names();
+                                        pick.promptText = QString::fromStdString(rcr.prompt_text());
+                                        pick.pickZone = PickZone::Deck;
+                                        for (int i = 0; i < rcr.candidate_names_size(); ++i) {
+                                            const quint32 oid = (i < rcr.candidate_object_ids_size())
+                                                                    ? rcr.candidate_object_ids(i)
+                                                                    : 0;
+                                            const int scid = rcr.candidate_server_card_ids(i);
+                                            const QString name =
+                                                QString::fromStdString(rcr.candidate_names(i));
+                                            if (scid >= 0) {
+                                                pick.serverCardIdToOid.insert(scid, oid);
+                                                pick.serverCardIdToName.insert(scid, name);
+                                            }
+                                            pick.candidateNames.append(name);
+                                        }
+                                        resolutionHandPick = std::move(pick);
+                                        const QStringList libNames = resolutionHandPick->candidateNames;
+                                        QVector<int> libScids;
+                                        for (int i = 0; i < rcr.candidate_server_card_ids_size(); ++i) {
+                                            libScids.append(static_cast<int>(rcr.candidate_server_card_ids(i)));
+                                        }
+                                        emit ruledResolutionHandPickUiChanged(
+                                            resolutionHandPick->min, 0);
+                                        emit ruledLibrarySearchPickStarted(libNames, libScids);
+                                        emit ruledCombatStateChanged();
+                                    } else if (rcr.choice_kind() == 1 &&
+                                               rcr.candidate_server_card_ids_size() == rcr.candidate_names_size() &&
+                                               rcr.candidate_names_size() > 0) {
+                                        // RevealedCards (choice_kind 1) with server card ids: zone popup pick.
+                                        // The deciding player (opponent) chooses from the revealed cards.
+                                        ResolutionHandPick pick;
+                                        pick.min = static_cast<int>(rcr.min());
+                                        pick.max = static_cast<int>(rcr.max());
+                                        pick.promptText = QString::fromStdString(rcr.prompt_text());
+                                        pick.pickZone = PickZone::Revealed;
+                                        QStringList names;
+                                        QVector<int> scids;
+                                        for (int i = 0; i < rcr.candidate_names_size(); ++i) {
+                                            const quint32 oid = (i < rcr.candidate_object_ids_size())
+                                                                    ? rcr.candidate_object_ids(i)
+                                                                    : 0;
+                                            const int scid = rcr.candidate_server_card_ids(i);
+                                            if (scid >= 0) {
+                                                pick.serverCardIdToOid.insert(scid, oid);
+                                            }
+                                            const QString name =
+                                                QString::fromStdString(rcr.candidate_names(i));
+                                            pick.candidateNames.append(name);
+                                            names.append(name);
+                                            scids.append(scid);
+                                        }
+                                        resolutionHandPick = std::move(pick);
+                                        emit ruledResolutionHandPickUiChanged(
+                                            resolutionHandPick->min, 0);
+                                        emit ruledRevealedPickChanged(true, names, scids,
+                                                                      resolutionHandPick->min,
+                                                                      resolutionHandPick->max);
+                                        emit ruledCombatStateChanged();
                                     } else {
-                                        // Fallback: modal dialog for LibrarySearch, RevealedCards, or
-                                        // HandCards without server card ids.
+                                        // Fallback: modal dialog for unrecognised kinds or missing server card ids.
                                         QVector<quint32> oids;
                                         for (int i = 0; i < rcr.candidate_object_ids_size(); ++i) {
                                             oids.append(rcr.candidate_object_ids(i));
@@ -1674,6 +1764,14 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                         static_cast<int>(ent.hand_index()));
                                 }
                             }
+                            if (e.has_graveyard_object_map()) {
+                                ruledGraveyardEngineOidToServerCardId.clear();
+                                for (int gi = 0; gi < e.graveyard_object_map().entries_size(); ++gi) {
+                                    const auto &ent = e.graveyard_object_map().entries(gi);
+                                    ruledGraveyardEngineOidToServerCardId.insert(
+                                        static_cast<quint32>(ent.engine_object_id()), ent.server_card_id());
+                                }
+                            }
                             if (e.has_zone_view()) {
                                 engineOidMarkedDamage.clear();
                                 engineOidBattlefieldPower.clear();
@@ -1718,6 +1816,13 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                             // Split on '|'; empty entry = non-mana ability (CR 605).
                                             engineOidToActivatedAbilityManaProduced.insert(
                                                 oid, producedStr.split(QChar('|')));
+                                        }
+                                        if (oid != 0 && ai < p.battlefield_activated_ability_cost_labels_size()) {
+                                            const QString labelsStr = QString::fromStdString(
+                                                p.battlefield_activated_ability_cost_labels(ai));
+                                            // Split on '|'; each entry is a display cost string.
+                                            engineOidToActivatedAbilityCostLabels.insert(
+                                                oid, labelsStr.split(QChar('|')));
                                         }
                                     }
                                     const int nPow = std::min(p.battlefield_object_id_size(), p.battlefield_power_size());
@@ -1826,6 +1931,26 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 }
                                 combatStateDirty = true;
                             }
+                            if (e.has_removed_from_combat()) {
+                                for (const auto rawOid : e.removed_from_combat().object_ids()) {
+                                    const quint32 oid = static_cast<quint32>(rawOid);
+                                    currentAttackerOids.remove(oid);
+                                    // Clean up attacker-side of blocker groups.
+                                    committedBlockerGroups.remove(oid);
+                                    // Clean up blocker-side: remove this blocker from any group.
+                                    committedBlocks.remove(oid);
+                                    for (auto git = committedBlockerGroups.begin();
+                                         git != committedBlockerGroups.end();) {
+                                        git.value().removeAll(oid);
+                                        if (git.value().isEmpty()) {
+                                            git = committedBlockerGroups.erase(git);
+                                        } else {
+                                            ++git;
+                                        }
+                                    }
+                                }
+                                combatStateDirty = true;
+                            }
                             if (e.has_life_changed()) {
                                 const auto &lc = e.life_changed();
                                 const QString lifeLine = QStringLiteral("Life: P%1 is now %2 (%3)\n")
@@ -1858,6 +1983,9 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 for (const quint32 oid : src.valid_stack_ids()) {
                                     data.validStackIds.insert(oid);
                                 }
+                                for (const quint32 oid : src.valid_graveyard_ids()) {
+                                    data.validGraveyardIds.insert(oid);
+                                }
                                 data.canTargetSelf = src.can_target_self();
                                 data.canTargetOpponent = src.can_target_opponent();
                                 ruledValidTargetsByHandSlot.insert(key, std::move(data));
@@ -1869,6 +1997,9 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 SpellTargetData data;
                                 for (const quint32 oid : src.valid_permanent_ids()) {
                                     data.validPermanentIds.insert(oid);
+                                }
+                                for (const quint32 oid : src.valid_graveyard_ids()) {
+                                    data.validGraveyardIds.insert(oid);
                                 }
                                 data.canTargetSelf = src.can_target_self();
                                 data.canTargetOpponent = src.can_target_opponent();
@@ -1950,6 +2081,14 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                         }
                         if (combatStateDirty) {
                             emit ruledCombatStateChanged();
+                        }
+                        // Emit graveyard-open signal for triggers whose valid targets are in the graveyard
+                        // (e.g. Gravedigger ETB). ruledValidTargetsByAbility is populated in this same batch.
+                        {
+                            const quint64 abilityKey = abilityTargetKey(pendingTriggerSourceOid, pendingTriggerAbilityIndex);
+                            const bool graveyardNeeded = hasPendingTrigger &&
+                                !ruledValidTargetsByAbility.value(abilityKey).validGraveyardIds.isEmpty();
+                            emit ruledTriggerGraveyardNeedsTarget(graveyardNeeded);
                         }
                         // Defer so stack window / zone views finish layout before we resolve CardItem positions.
                         QTimer::singleShot(0, this, [this] { syncRuledSpellTargetingArrows(); });
@@ -2636,7 +2775,11 @@ void GameEventHandler::clearRuledSessionState()
     ruledOpeningBottomSelectedIndices.clear();
 
     // Resolution hand-pick
+    if (resolutionHandPick.has_value() && resolutionHandPick->pickZone == PickZone::Revealed) {
+        emit ruledRevealedPickChanged(false, {}, {}, 0, 0);
+    }
     resolutionHandPick.reset();
+    emit ruledResolutionHandPickUiChanged(-1, -1);
 
     clearRuledSpellTargetArrows();
 

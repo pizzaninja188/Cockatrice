@@ -102,7 +102,7 @@ find_resumable_session() {
     }' "$STATUS_FILE"
 }
 
-# Mark in-review issues whose branch has merged into origin/master as done.
+# Remove in-review issues whose branch has merged into origin/master.
 mark_done_merged() {
   [[ -f "$STATUS_FILE" ]] || return 0
   local id br changed=0
@@ -110,8 +110,8 @@ mark_done_merged() {
     [[ -z "$br" ]] && continue
     if git rev-parse --verify "origin/$br" >/dev/null 2>&1 \
        && git merge-base --is-ancestor "origin/$br" "origin/$BASE_BRANCH" 2>/dev/null; then
-      sed -i "s|^#${id} status=in-review|#${id} status=done merged=$(date +%F)|" "$STATUS_FILE"
-      echo "  #$id ($br) merged -> marked done"
+      sed -i "/^#${id} status=in-review/d" "$STATUS_FILE"
+      echo "  #$id ($br) merged -> removed from status"
       changed=1
     fi
   done < <(awk '/^#[0-9]+ / {
@@ -120,7 +120,7 @@ mark_done_merged() {
       if (st=="in-review" && br!="") print id, br
     }' "$STATUS_FILE")
   if [[ $changed -eq 1 ]]; then
-    git add "$STATUS_FILE" && git commit -q -m "automation: mark merged issues done" && push_master
+    git add "$STATUS_FILE" && git commit -q -m "automation: remove merged issues from status" && push_master
   fi
 }
 

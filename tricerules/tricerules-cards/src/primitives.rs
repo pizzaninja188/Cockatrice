@@ -213,6 +213,45 @@ pub enum TargetKind {
     Self_,
 }
 
+/// Which player's graveyard a [`GraveyardFilter`] targets. Defaults to [`Controller`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum GraveyardOwner {
+    /// Only the effect controller's own graveyard ("your graveyard" — Raise Dead, Disentomb).
+    #[default]
+    Controller,
+    /// Any player's graveyard ("a graveyard" — Grim Return, Beacon of Unrest).
+    AnyPlayer,
+}
+
+/// Which card types in a graveyard qualify for [`ReturnFromGraveyard`][SpellEffectKind::ReturnFromGraveyard].
+/// `None` means any card type (no type restriction).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GraveyardCardType {
+    /// Only creature cards (Raise Dead, Disentomb, Gravedigger ETB).
+    Creature,
+}
+
+/// Filter for graveyard-zone targets (cards in a graveyard, not battlefield permanents).
+/// Parallel to [`TargetFilter`] but for a different zone.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct GraveyardFilter {
+    /// Which player's graveyard. Defaults to the caster's own graveyard.
+    #[serde(default)]
+    pub owner: GraveyardOwner,
+    /// Optional card-type restriction. `None` = any card.
+    #[serde(default)]
+    pub card_type: Option<GraveyardCardType>,
+}
+
+/// Where a card returned from the graveyard lands (CR 400.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GraveyardDestination {
+    /// The card goes to its owner's hand (Raise Dead, Disentomb, Gravedigger ETB).
+    Hand,
+    /// The card enters the battlefield under the caster's control (reanimation spells).
+    Battlefield,
+}
+
 /// Where an effect is being resolved from. Controls validation that depends on context —
 /// e.g. [`TargetKind::Self_`] is only meaningful for an ability bound to a source permanent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -240,6 +279,9 @@ fn default_creature_filter() -> TargetFilter {
 /// - `(kind: Creature, tapped: true)` — tapped creature (for future use)
 /// - `(kind: Creature, not_color: Black)` — nonblack creature (Doom Blade, Terror)
 /// - `(kind: Creature, attacking_or_blocking: true)` — Divine Verdict, Hunt Down
+/// - `(kind: Creature, only_controller: true)` — "target creature you control" (Equip,
+///   Regenerate, many activated abilities). Enforced at targeting time; the controller
+///   is the activating player.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct TargetFilter {
     #[serde(default)]
@@ -258,12 +300,27 @@ pub struct TargetFilter {
     /// Doom Blade ("nonblack creature"), Terror ("nonblack" — paired with `not_artifact`).
     #[serde(default)]
     pub not_color: Option<Color>,
+    /// "target creature you control" restriction (CR 702.6a / 701.15 regenerate / various
+    /// activated abilities). The target must be owned/controlled by the activating player.
+    /// Covers Equipment equip (Bonesplitter, Vulshok Morningstar) and Regenerate (Drudge
+    /// Skeletons, Cudgel Troll) without a new variant.
+    #[serde(default)]
+    pub only_controller: bool,
 }
 
 impl TargetFilter {
     /// Default: any creature (the most common implicit filter).
     pub fn default_creature() -> Self {
         default_creature_filter()
+    }
+
+    /// Default filter for the equip ability: "target creature you control" (CR 702.6a).
+    pub fn default_equip() -> Self {
+        TargetFilter {
+            kind: TargetKind::Creature,
+            only_controller: true,
+            ..TargetFilter::default()
+        }
     }
 
     /// True for player-only kinds (used by startup validation).
@@ -335,6 +392,24 @@ pub enum SpellEffectKind {
         power: i32,
         toughness: i32,
     },
+    /// CR 303.4: the aura's "Enchant [type]" clause. Authored in `spell_effect` of every Aura
+    /// enchantment — it is the sole effect that requires a target during casting, and at resolution
+    /// it records the attachment (engine sets `attached_to` before processing this effect). The
+    /// `target` filter mirrors the card's "Enchant [type]" line; default is any creature. Validated
+    /// at registry load to reject player-kind filters (auras enchant permanents, CR 303.4a).
+    AuraAttach {
+        #[serde(default = "TargetFilter::default_creature")]
+        target: TargetFilter,
+    },
+    /// CR 613 layer 6: grant one or more keyword abilities to every creature matching `filter`
+    /// until end of turn. Untargeted — the one-shot keyword-grant sibling of
+    /// [`StaticAbilityDef::AnthemKeyword`]. Covers Overrun (Trample to all your creatures) and
+    /// Trumpet Blast (First Strike to attacking creatures you control until EOT).
+    GrantKeywordsAll {
+        #[serde(default)]
+        filter: AnthemFilter,
+        keywords: Vec<Keyword>,
+    },
     GainLife {
         amount: Amount,
     },
@@ -353,6 +428,14 @@ pub enum SpellEffectKind {
     ExileTargetGainLifeEqualToPower,
     ReturnTargetCreatureToHand,
     ReturnTargetPermanentToHand,
+    /// Move a card from a graveyard to hand or battlefield (CR 400.1: graveyard is public).
+    /// Raise Dead / Disentomb (creature → hand); future reanimation (creature → battlefield).
+    /// The `filter` selects which graveyard and which card types are legal targets; the engine
+    /// validates this at cast time and again at resolution (fizzle if no longer legal).
+    ReturnFromGraveyard {
+        filter: GraveyardFilter,
+        destination: GraveyardDestination,
+    },
     MillTargetPlayer {
         count: u32,
         target: TargetFilter,
@@ -361,9 +444,21 @@ pub enum SpellEffectKind {
     /// ignores hexproof/shroud and never fizzles. `kind` selects the affected set — `Creature`
     /// for Wrath of God / Day of Judgment, `AnyPermanent` for "destroy all permanents". Only
     /// object kinds are legal (validated at load); player kinds make no sense here.
+    /// `prevent_regeneration: true` means regeneration shields are bypassed (Wrath of God:
+    /// "they can't be regenerated", CR 701.15b).
     DestroyAll {
         #[serde(default = "TargetFilter::default_creature")]
         kind: TargetFilter,
+        #[serde(default)]
+        prevent_regeneration: bool,
+    },
+    /// CR 701.15: put a regeneration shield on target creature. The next time that creature would
+    /// be destroyed this turn, instead tap it, remove it from combat, and clear all damage from it.
+    /// Legal only as an activated ability effect — never a spell (validated at load). Covers
+    /// Cudgel Troll (`{G}: Regenerate`) and Drudge Skeletons (`{B}: Regenerate`).
+    Regenerate {
+        #[serde(default = "TargetFilter::default_creature")]
+        target: TargetFilter,
     },
     /// Deal `amount` damage to every battlefield permanent matching `kind` (CR 119). Untargeted.
     /// `Creature` covers Pyroclasm / Pestilence-style sweeps; `AnyPermanent` is reserved for
@@ -425,6 +520,17 @@ pub enum SpellEffectKind {
         /// Reveal the found card publicly (Mystical Tutor reveals to both players). Default: false.
         #[serde(default)]
         reveal: bool,
+    },
+    /// CR 301.5 / 702.6: the equip activated ability — attach this equipment to `target` creature
+    /// you control. At resolution the engine moves `attached_to` on the equipment's `GameObject`
+    /// to the new target (detaching from any previous creature automatically). The P/T bonus
+    /// (if any) is a separate [`StaticAbilityDef::EquippedBonus`] that reads `attached_to`
+    /// dynamically, so no continuous effect is updated on re-equip. Legal only as an activated
+    /// ability's `effect`, never a spell effect; equip only as a sorcery (CR 702.6a).
+    /// Covers Bonesplitter (equip {1}) and Vulshok Morningstar (equip {2}).
+    Equip {
+        #[serde(default = "TargetFilter::default_equip")]
+        target: TargetFilter,
     },
     None,
 }
@@ -488,7 +594,10 @@ impl SpellEffectKind {
             | SpellEffectKind::TargetPlayerGainsLife { target, .. }
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
             | SpellEffectKind::MillTargetPlayer { target, .. }
-            | SpellEffectKind::PutCounters { target, .. } => vec![target],
+            | SpellEffectKind::PutCounters { target, .. }
+            | SpellEffectKind::AuraAttach { target }
+            | SpellEffectKind::Equip { target }
+            | SpellEffectKind::Regenerate { target } => vec![target],
             _ => vec![],
         }
     }
@@ -547,7 +656,7 @@ impl SpellEffectKind {
             }
             // Mass effects select objects, not players, and never use Self_/AnyTarget (which
             // include players). Only Creature / AnyPermanent are honored by the engine.
-            SpellEffectKind::DestroyAll { kind } | SpellEffectKind::DamageAll { kind, .. } => {
+            SpellEffectKind::DestroyAll { kind, .. } | SpellEffectKind::DamageAll { kind, .. } => {
                 if matches!(kind.kind, TargetKind::Creature | TargetKind::AnyPermanent) {
                     Ok(())
                 } else {
@@ -573,6 +682,42 @@ impl SpellEffectKind {
             SpellEffectKind::SearchLibrary { .. } => {
                 if context != EffectContext::Spell {
                     Err("SearchLibrary is only valid on a spell, not a mana ability".into())
+                } else {
+                    Ok(())
+                }
+            }
+            // CR 303.4a: an aura enchants a permanent (never a player).
+            SpellEffectKind::AuraAttach { target } => {
+                if target.is_player() {
+                    Err(
+                        "AuraAttach cannot target players; auras enchant permanents (CR 303.4a)"
+                            .into(),
+                    )
+                } else {
+                    Ok(())
+                }
+            }
+            // CR 702.6a: equip is an activated ability that only attaches to creatures you
+            // control — never a spell effect, and the filter must be creature-typed.
+            SpellEffectKind::Equip { target } => {
+                if context == EffectContext::Spell {
+                    Err("Equip is only valid on an activated ability, not a spell".into())
+                } else if target.is_player() {
+                    Err(format!(
+                        "Equip cannot target players, got {:?}",
+                        target.kind
+                    ))
+                } else {
+                    Ok(())
+                }
+            }
+            // CR 701.15: Regenerate puts a shield on the target; it is an activated ability, not
+            // a spell. Applying a regeneration shield via a spell would have no source permanent
+            // to attach the replacement to and is a nonsensical card design — reject early.
+            SpellEffectKind::Regenerate { .. } => {
+                if context == EffectContext::Spell {
+                    Err("Regenerate is only valid on an activated or triggered ability, not a spell"
+                        .into())
                 } else {
                     Ok(())
                 }
@@ -746,7 +891,11 @@ pub enum ContinuousEffectKind {
         delta_power: i32,
         delta_toughness: i32,
     },
-    // Future: Layer6AddKeyword(Keyword), Layer7bSetPt { power: i32, toughness: i32 }, …
+    /// CR 613 layer 6 — grant a keyword ability to affected permanents. Covers lords
+    /// (Goblin Chieftain → Haste), pump sorceries (Overrun → Trample), and any
+    /// "creatures you control gain [keyword] until end of turn" effect.
+    Layer6AddKeyword(Keyword),
+    // Future: Layer7bSetPt { power: i32, toughness: i32 }, …
 }
 
 // ---------------------------------------------------------------------------
@@ -792,13 +941,39 @@ pub struct AnthemFilter {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StaticAbilityDef {
     /// CR 613.4 layer 7c: every creature matching `filter` gets +`delta_power`/+`delta_toughness`
-    /// (negative values for a debuff anthem). Anthems (Glorious Anthem) and lords (Crusade, Bad
-    /// Moon). Keyword-granting anthems (layer 6) are a separate future variant.
+    /// (negative values for a debuff anthem). Anthems (Glorious Anthem) and lords (Crusade, Bad Moon).
     AnthemPt {
         #[serde(default)]
         filter: AnthemFilter,
         delta_power: i32,
         delta_toughness: i32,
+    },
+    /// CR 613.4 layer 7c + CR 303.4: the enchanted creature (stored as `attached_to` on the aura's
+    /// `GameObject`) gets +`delta_power`/+`delta_toughness` as long as the aura remains attached.
+    /// The effect drains via `WhileSourceOnBattlefield` (source = the aura permanent); it is
+    /// scoped to a single permanent (`AffectedScope::Single`) so it disappears the moment the aura
+    /// leaves. Holy Strength (+1/+2), Unholy Strength (+2/+1).
+    AuraPtModify {
+        delta_power: i32,
+        delta_toughness: i32,
+    },
+    /// CR 301.5b / 702.6: while this equipment is attached to a creature (i.e.
+    /// `attached_to` is `Some`), that creature gets +`delta_power`/+`delta_toughness`
+    /// (layer 7c). The scope is `AffectedScope::EquippedBy(equipment_oid)` — it reads
+    /// `attached_to` dynamically at P/T query time, so re-equipping shifts the bonus
+    /// without recreating the continuous effect. Covers Bonesplitter (+2/+0) and
+    /// Vulshok Morningstar (+2/+2); any equipment with a stat boost uses this variant.
+    EquippedBonus {
+        delta_power: i32,
+        delta_toughness: i32,
+    },
+    /// CR 613 layer 6: every creature matching `filter` gains `keyword` while the source is on the
+    /// battlefield. Covers lords (Goblin Chieftain, Captain of the Watch) and keyword-granting
+    /// enchantments. Pairs with `AnthemPt` on the same card for combined "+1/+1 and haste" effects.
+    AnthemKeyword {
+        #[serde(default)]
+        filter: AnthemFilter,
+        keyword: Keyword,
     },
 }
 

@@ -27,6 +27,9 @@
 #include "../utility/visibility_change_listener.h"
 #include "tab_supervisor.h"
 
+#include <libcockatrice/protocol/pb/serverinfo_card.pb.h>
+#include <libcockatrice/utility/zone_names.h>
+
 #include <QAction>
 #include <QCompleter>
 #include <QDateTime>
@@ -243,6 +246,7 @@ void TabGame::connectToGameEventHandler()
             gamePromptWidget->setCopyTargetPending(false);
             gamePromptWidget->setRuledStackHasItems(false);
             gamePromptWidget->setSpellCastPending(false);
+            gamePromptWidget->setResolutionHandPickMode(-1, -1);
         }
     });
     connect(game->getGameEventHandler(), &GameEventHandler::gameClosed, this, &TabGame::closeGame);
@@ -276,6 +280,27 @@ void TabGame::connectToGameEventHandler()
                     if (ZoneViewZone *zv = stackView->getZone()) {
                         zv->reorganizeCards();
                     }
+                }
+            });
+    connect(game->getGameEventHandler(), &GameEventHandler::ruledTriggerGraveyardNeedsTarget, this,
+            [this](bool needed) {
+                if (!game || !scene) {
+                    return;
+                }
+                const int localId = game->getPlayerManager()->getLocalPlayerId();
+                Player *localPlayer = game->getPlayerManager()->getPlayer(localId);
+                if (!localPlayer) {
+                    return;
+                }
+                const QString graveName = QStringLiteral("grave");
+                if (needed) {
+                    if (!scene->isZoneViewOpen(localPlayer, graveName)) {
+                        scene->toggleZoneView(localPlayer, graveName, -1);
+                        ruledGraveyardAutoOpened = true;
+                    }
+                } else if (ruledGraveyardAutoOpened) {
+                    scene->closeZoneView(localPlayer, graveName);
+                    ruledGraveyardAutoOpened = false;
                 }
             });
     if (gamePromptWidget) {
@@ -413,9 +438,18 @@ void TabGame::connectToGameEventHandler()
                     if (gamePromptWidget) {
                         gamePromptWidget->setResolutionHandPickMode(required, selected);
                     }
+                    // When library-search pick ends (required < 0 = cleared), close the deck zone view.
+                    if (required < 0 && librarySearchView) {
+                        librarySearchView->close();
+                        librarySearchView = nullptr;
+                    }
                 });
         connect(gamePromptWidget, &GamePromptWidget::ruledResolutionHandPickConfirmRequested,
                 game->getGameEventHandler(), &GameEventHandler::submitResolutionHandPick);
+        connect(game->getGameEventHandler(), &GameEventHandler::ruledLibrarySearchPickStarted,
+                this, &TabGame::onRuledLibrarySearchPickStarted);
+        connect(game->getGameEventHandler(), &GameEventHandler::ruledRevealedPickChanged,
+                this, &TabGame::onRuledRevealedPickChanged);
         connect(game->getGameState(), &GameState::activePhaseChanged, gamePromptWidget, &GamePromptWidget::setActivePhase);
         connect(game->getGameEventHandler(), &GameEventHandler::logActivePlayer, gamePromptWidget, [this](Player *player) {
             if (player) {
@@ -2083,4 +2117,96 @@ void TabGame::hideEvent(QHideEvent *event)
     }
 
     Tab::hideEvent(event);
+}
+
+void TabGame::onRuledLibrarySearchPickStarted(QStringList candidateNames, QVector<int> serverCardIds)
+{
+    if (!game || !scene) {
+        return;
+    }
+    const int localId = game->getPlayerManager()->getLocalPlayerId();
+    Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+    if (!localPlayer) {
+        return;
+    }
+    CardZoneLogic *deckZone = localPlayer->getZones().value(ZoneNames::DECK);
+    if (!deckZone) {
+        return;
+    }
+    // Close any stale library search view from a prior step.
+    if (librarySearchView) {
+        librarySearchView->close();
+    }
+    // Build synthetic cards from the engine's candidate list so the view shows named cards.
+    // These are stored alongside the view; cleared when the view closes.
+    qDeleteAll(librarySearchCards);
+    librarySearchCards.clear();
+    QList<const ServerInfo_Card *> cardList;
+    for (int i = 0; i < candidateNames.size(); ++i) {
+        auto *sic = new ServerInfo_Card;
+        sic->set_name(candidateNames.at(i).toStdString());
+        sic->set_id(i < serverCardIds.size() ? serverCardIds.at(i) : -1);
+        sic->set_face_down(false);
+        librarySearchCards.append(sic);
+        cardList.append(sic);
+    }
+    // Open revealed, not closeable (resolution is mandatory per CR 608).
+    librarySearchView =
+        new ZoneViewWidget(localPlayer, deckZone, -1, true, false, cardList, false, true, false, false);
+    scene->addItem(librarySearchView);
+    librarySearchView->setPos(340, 80);
+    connect(librarySearchView, &ZoneViewWidget::closePressed, this, [this](ZoneViewWidget *) {
+        librarySearchView = nullptr;
+        qDeleteAll(librarySearchCards);
+        librarySearchCards.clear();
+    });
+}
+
+void TabGame::onRuledRevealedPickChanged(bool started, QStringList cardNames,
+                                         QVector<int> serverCardIds, int /*min*/, int /*max*/)
+{
+    // Clean up any prior revealed pick view and synthetic card objects.
+    if (revealedPickView) {
+        revealedPickView->close();
+        revealedPickView = nullptr;
+    }
+    qDeleteAll(revealedPickCards);
+    revealedPickCards.clear();
+
+    if (!started || cardNames.isEmpty() || !game || !scene) {
+        return;
+    }
+    const int localId = game->getPlayerManager()->getLocalPlayerId();
+    Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+    if (!localPlayer) {
+        return;
+    }
+    // Use the local player's deck zone as the "origin" zone for the view widget.
+    // The actual cards shown are overridden by the cardList parameter below.
+    CardZoneLogic *deckZone = localPlayer->getZones().value(ZoneNames::DECK);
+    if (!deckZone) {
+        return;
+    }
+    // Build synthetic ServerInfo_Card objects from the candidate names + server card IDs.
+    QList<const ServerInfo_Card *> cardList;
+    for (int i = 0; i < cardNames.size(); ++i) {
+        auto *sic = new ServerInfo_Card;
+        sic->set_name(cardNames.at(i).toStdString());
+        sic->set_id(i < serverCardIds.size() ? serverCardIds.at(i) : -1);
+        sic->set_face_down(false);
+        revealedPickCards.append(sic);
+        cardList.append(sic);
+    }
+    // Create a revealed zone view (stack-window style: fan layout, no sort controls).
+    // revealZone = true shows cards face-up; _showControls = false omits search/sort.
+    // Not closeable: resolution is mandatory per CR 608.
+    revealedPickView = new ZoneViewWidget(localPlayer, deckZone, -1, true, false, cardList,
+                                          false, false, true, false);
+    scene->addItem(revealedPickView);
+    revealedPickView->setPos(340, 80);
+    connect(revealedPickView, &ZoneViewWidget::closePressed, this, [this](ZoneViewWidget *) {
+        revealedPickView = nullptr;
+        qDeleteAll(revealedPickCards);
+        revealedPickCards.clear();
+    });
 }

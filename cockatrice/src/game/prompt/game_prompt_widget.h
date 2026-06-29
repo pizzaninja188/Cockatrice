@@ -130,10 +130,10 @@ private:
     QPushButton *openingBottomDoneButton = nullptr;
     int ruledOpeningBottomSelected = 0;
 
-    // Resolution hand-pick (Brainstorm etc.)
+    // Resolution hand-pick (Brainstorm etc.); -1 means not active.
     QPushButton *resolutionHandPickConfirmButton = nullptr;
-    int resolutionHandPickRequired = 0;
-    int resolutionHandPickSelected = 0;
+    int resolutionHandPickRequired = -1;
+    int resolutionHandPickSelected = -1;
 };
 
 #endif // COCKATRICE_GAME_PROMPT_WIDGET_H

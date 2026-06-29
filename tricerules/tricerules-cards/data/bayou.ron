@@ -1,0 +1,13 @@
+(
+  id: "bayou",
+  name: "Bayou",
+  mana_cost: "",
+  types: ["Land", "Swamp", "Forest"],
+  activated_abilities: [
+    (
+      cost: Tap,
+      effect: ProduceMana(options: [(b: 1), (g: 1)]),
+      text: "{T}: Add {B} or {G}.",
+    ),
+  ],
+)
