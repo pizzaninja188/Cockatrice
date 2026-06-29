@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use tricerules_cards::primitives::{
-    Color, ContinuousEffectKind, CounterKind, EffectDuration, ManaAmount,
+    Color, ContinuousEffectKind, CounterKind, EffectDuration, ManaAmount, SearchDestination,
 };
 
 pub type PlayerId = i32;
@@ -219,6 +219,12 @@ pub struct PendingResolution {
     /// For `__copy_targets` only: the object id of the spell being copied, so `StackPushed` can
     /// carry `copy_source_object_id` for the client's printing-inheritance logic.
     pub copy_source_object_id: ObjectId,
+    /// For `__search_library` only: where the found card goes (Hand or TopOfLibrary).
+    pub search_destination: SearchDestination,
+    /// For `__search_library` only: whether to shuffle the library after the search.
+    pub search_shuffle: bool,
+    /// For `__search_library` only: whether to publicly log the found card's name (reveal).
+    pub search_reveal: bool,
 }
 
 #[derive(Debug, Clone)]

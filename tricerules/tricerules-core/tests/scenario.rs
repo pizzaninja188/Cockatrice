@@ -41,3 +41,5 @@ mod targeting;
 mod tokens;
 #[path = "scenario/triggers.rs"]
 mod triggers;
+#[path = "scenario/tutor_search.rs"]
+mod tutor_search;

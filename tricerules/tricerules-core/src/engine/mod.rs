@@ -15,8 +15,8 @@ use thiserror::Error;
 use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
     AbilityCost, AnthemController, AnthemFilter, CastTriggerPlayer, Color, ContinuousEffectKind,
-    CounterKind, EffectDuration, Keyword, SpellEffectKind, SpellTypeFilter, StaticAbilityDef,
-    TargetFilter, TargetKind, TokenController, TriggerCondition,
+    CounterKind, EffectDuration, Keyword, SearchDestination, SpellEffectKind, SpellTypeFilter,
+    StaticAbilityDef, TargetFilter, TargetKind, TokenController, TriggerCondition,
 };
 use tricerules_cards::CardRegistry;
 use tricerules_proto::ruled::v1 as rv1;

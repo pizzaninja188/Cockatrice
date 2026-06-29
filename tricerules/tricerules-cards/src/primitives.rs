@@ -501,6 +501,26 @@ pub enum SpellEffectKind {
     ProduceMana {
         options: Vec<ManaAmount>,
     },
+    /// CR 701.18: pause resolution, let the casting player search their library for a card
+    /// matching `filter` (None = any card; Some = only cards of that spell type), move it to
+    /// `destination`, then shuffle if `shuffle` is true. Uses the tier-3 interrupt mechanism
+    /// (`ResolutionChoiceRequired` / `SubmitResolutionChoice`) with `ChoiceKind::LibrarySearch`
+    /// (choice_kind 2, private to the searching player). Named two: Demonic Tutor (any → hand),
+    /// Mystical Tutor (instant or sorcery → top of library).
+    SearchLibrary {
+        /// `None` = any card is valid; `Some(f)` = only cards of this type qualify.
+        #[serde(default)]
+        filter: Option<SpellTypeFilter>,
+        /// Where the found card goes. Default: Hand.
+        #[serde(default)]
+        destination: SearchDestination,
+        /// Shuffle the library after searching. Default: true (all canonical tutors shuffle).
+        #[serde(default = "default_true")]
+        shuffle: bool,
+        /// Reveal the found card publicly (Mystical Tutor reveals to both players). Default: false.
+        #[serde(default)]
+        reveal: bool,
+    },
     /// CR 301.5 / 702.6: the equip activated ability — attach this equipment to `target` creature
     /// you control. At resolution the engine moves `attached_to` on the equipment's `GameObject`
     /// to the new target (detaching from any previous creature automatically). The P/T bonus
@@ -513,6 +533,20 @@ pub enum SpellEffectKind {
         target: TargetFilter,
     },
     None,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// Where a searched-out card goes (for [`SpellEffectKind::SearchLibrary`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum SearchDestination {
+    /// The card goes to the searching player's hand (Demonic Tutor, Cultivate).
+    #[default]
+    Hand,
+    /// The card is placed on top of the searching player's library (Mystical Tutor).
+    TopOfLibrary,
 }
 
 /// One bag of mana a mana ability can produce (CR 106): a count per mana type. A mana ability's
@@ -639,6 +673,15 @@ impl SpellEffectKind {
                     Err("ProduceMana is only valid on a mana ability, not a spell".into())
                 } else if options.is_empty() {
                     Err("ProduceMana requires at least one mana option".into())
+                } else {
+                    Ok(())
+                }
+            }
+            // CR 701.18: library search uses the stack interrupt machinery; it is a spell effect
+            // only — using it on a mana ability makes no sense.
+            SpellEffectKind::SearchLibrary { .. } => {
+                if context != EffectContext::Spell {
+                    Err("SearchLibrary is only valid on a spell, not a mana ability".into())
                 } else {
                     Ok(())
                 }
