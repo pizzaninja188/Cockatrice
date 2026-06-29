@@ -1,4 +1,7 @@
-use super::events::{ev_log, ev_priority_changed, finish_with_events, format_spell_targets_log};
+use super::events::{
+    ev_log, ev_log_hidden_from, ev_log_private, ev_priority_changed, finish_with_events,
+    format_spell_targets_log,
+};
 use super::legal_actions::fill_legal;
 use super::targeting::validate_effect_targets;
 use super::*;
@@ -417,8 +420,19 @@ impl GameEngine {
                     }
                     if pending.search_reveal {
                         ev.push(ev_log(format!("P{controller} reveals {card_name}.")));
+                        ev.push(ev_log(format!(
+                            "P{controller} puts {card_name} into their hand."
+                        )));
+                    } else {
+                        ev.push(ev_log_private(
+                            format!("P{controller} puts {card_name} into their hand."),
+                            controller,
+                        ));
+                        ev.push(ev_log_hidden_from(
+                            format!("P{controller} puts a card into their hand."),
+                            controller,
+                        ));
                     }
-                    ev.push(ev_log(format!("P{controller} puts {card_name} into hand.")));
                     if pending.search_shuffle {
                         let mix = self.state.seed.wrapping_add(
                             self.state.command_index.wrapping_mul(0x9E37_79B9_7F4A_7C15),
@@ -451,10 +465,19 @@ impl GameEngine {
                     }
                     if pending.search_reveal {
                         ev.push(ev_log(format!("P{controller} reveals {card_name}.")));
+                        ev.push(ev_log(format!(
+                            "P{controller} puts {card_name} on top of their library."
+                        )));
+                    } else {
+                        ev.push(ev_log_private(
+                            format!("P{controller} puts {card_name} on top of their library."),
+                            controller,
+                        ));
+                        ev.push(ev_log_hidden_from(
+                            format!("P{controller} puts a card on top of their library."),
+                            controller,
+                        ));
                     }
-                    ev.push(ev_log(format!(
-                        "P{controller} puts {card_name} on top of their library."
-                    )));
                 }
             }
         }

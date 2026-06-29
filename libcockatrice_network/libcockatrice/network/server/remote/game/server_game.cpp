@@ -2008,6 +2008,21 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
         if (it != batch.legal_by_player().end()) {
             (*filtered.mutable_legal_by_player())[participant->getPlayerId()] = it->second;
         }
+        // Drop LogMessage events directed at a different player or explicitly hidden from this one.
+        for (int ei = filtered.events_size() - 1; ei >= 0; --ei) {
+            const auto &ev = filtered.events(ei);
+            if (!ev.has_log()) {
+                continue;
+            }
+            const auto &log = ev.log();
+            if (log.has_visible_to_player_id() &&
+                log.visible_to_player_id() != participant->getPlayerId()) {
+                filtered.mutable_events()->DeleteSubrange(ei, 1);
+            } else if (log.has_hidden_from_player_id() &&
+                       log.hidden_from_player_id() == participant->getPlayerId()) {
+                filtered.mutable_events()->DeleteSubrange(ei, 1);
+            }
+        }
         // Redact private candidates of a tier-3 resolution choice (CR 608) from everyone but the
         // deciding player. Private kinds expose a concealed zone: HandCards (choice_kind 0) reveal a
         // player's hand and LibrarySearch (choice_kind 2) reveal their library, so only the decider

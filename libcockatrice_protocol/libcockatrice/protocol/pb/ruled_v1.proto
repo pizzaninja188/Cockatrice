@@ -543,6 +543,10 @@ message ReplayState {
 
 message LogMessage {
   string text = 1;
+  // If set, the relay delivers this message only to that player. Absent = broadcast to all.
+  optional int32 visible_to_player_id = 2;
+  // If set, the relay drops this message for that player and delivers it to everyone else.
+  optional int32 hidden_from_player_id = 3;
 }
 
 // A permanent left the battlefield (currently only graveyard via SBAs / destroy effects).

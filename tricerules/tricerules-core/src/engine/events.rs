@@ -34,6 +34,8 @@ impl GameEngine {
         b.events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::Log(rv1::LogMessage {
                 text: format!("Game over. Winner: {w}"),
+                visible_to_player_id: None,
+                hidden_from_player_id: None,
             })),
         });
         b
@@ -494,7 +496,31 @@ fn mana_amount_symbols(a: &tricerules_cards::ManaAmount) -> String {
 
 pub(super) fn ev_log(text: String) -> RuledEvent {
     RuledEvent {
-        ev: Some(rv1::ruled_event::Ev::Log(rv1::LogMessage { text })),
+        ev: Some(rv1::ruled_event::Ev::Log(rv1::LogMessage {
+            text,
+            visible_to_player_id: None,
+            hidden_from_player_id: None,
+        })),
+    }
+}
+
+pub(super) fn ev_log_private(text: String, player_id: i32) -> RuledEvent {
+    RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::Log(rv1::LogMessage {
+            text,
+            visible_to_player_id: Some(player_id),
+            hidden_from_player_id: None,
+        })),
+    }
+}
+
+pub(super) fn ev_log_hidden_from(text: String, player_id: i32) -> RuledEvent {
+    RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::Log(rv1::LogMessage {
+            text,
+            visible_to_player_id: None,
+            hidden_from_player_id: Some(player_id),
+        })),
     }
 }
 

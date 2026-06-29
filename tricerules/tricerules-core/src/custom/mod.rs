@@ -300,6 +300,8 @@ impl<'a> ResolutionCtx<'a> {
         self.events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::Log(rv1::LogMessage {
                 text: text.into(),
+                visible_to_player_id: None,
+                hidden_from_player_id: None,
             })),
         });
     }
