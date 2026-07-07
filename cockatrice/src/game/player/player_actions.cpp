@@ -38,8 +38,6 @@
 #include <libcockatrice/utility/zone_names.h>
 
 #include <QComboBox>
-#include <QDialog>
-#include <QDialogButtonBox>
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QLabel>
@@ -362,7 +360,8 @@ int PlayerActions::totalRemainingForCost(const QMap<QChar, int> &fixed, const QV
 
 QString PlayerActions::pendingRuledSpellPromptText() const
 {
-    if (!pendingRuledSpellCast.valid || pendingRuledSpellCast.waitingForTarget) {
+    if (!pendingRuledSpellCast.valid || pendingRuledSpellCast.waitingForTarget ||
+        pendingRuledSpellCast.inDamageAllocationMode) {
         return {};
     }
     if (totalRemainingForCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips) == 0) {
@@ -376,13 +375,19 @@ QString PlayerActions::pendingRuledSpellPromptText() const
 void PlayerActions::clearPendingRuledSpellCast()
 {
     const bool hadTargeting = pendingRuledSpellCast.valid && pendingRuledSpellCast.waitingForTarget;
+    const bool hadAllocation = pendingRuledSpellCast.valid && pendingRuledSpellCast.inDamageAllocationMode;
     const bool hadPending = pendingRuledSpellCast.valid;
     pendingRuledSpellCast = PendingRuledSpellCast{};
     if (hadTargeting) {
         emit ruledSpellTargetingChanged(false, {});
+        emit ruledMultiTargetSelectionUpdated(0, -1);
+    }
+    if (hadAllocation) {
+        player->getGame()->getGameEventHandler()->emitSpellDamageAllocationUiChanged();
     }
     if (hadPending) {
         emit ruledSpellCastPendingChanged(false);
+        player->getGame()->getGameEventHandler()->emitSpellTargetSelectionChanged();
     }
 }
 
@@ -585,9 +590,12 @@ bool PlayerActions::completePendingRuledSpellCast()
     cast->set_x_value(static_cast<quint32>(pendingRuledSpellCast.xValue));
     // CR 709/712/715: which face of a multi-face card to cast (0 for single-face cards).
     cast->set_face_index(static_cast<quint32>(pendingRuledSpellCast.faceIndex));
-    for (const quint32 targetOid : pendingRuledSpellCast.selectedTargetOids) {
+    for (int i = 0; i < pendingRuledSpellCast.selectedTargetOids.size(); ++i) {
         auto *target = cast->add_targets();
-        target->set_object_id(targetOid);
+        target->set_object_id(pendingRuledSpellCast.selectedTargetOids.at(i));
+        if (i < pendingRuledSpellCast.selectedTargetDamages.size()) {
+            target->set_damage_amount(pendingRuledSpellCast.selectedTargetDamages.at(i));
+        }
     }
     // CR 107.4f: Phyrexian pips the player chose to pay with life.
     for (const quint32 pipIndex : pendingRuledSpellCast.lifePipIndices) {
@@ -1105,6 +1113,11 @@ bool PlayerActions::beginRuledSpellCast(CardItem *card,
     }
     if (pendingRuledSpellCast.valid && pendingRuledSpellCast.waitingForTarget &&
         pendingRuledSpellCast.handIndex == ruledHandIndex && pendingRuledSpellCast.faceIndex == faceIndex) {
+        // For multi-target spells, clicking the spell again while 1+ targets are chosen confirms
+        // the selection (instead of canceling); clicking with 0 targets cancels as before.
+        if (pendingRuledSpellCast.isDamageTargets && !pendingRuledSpellCast.selectedTargetOids.isEmpty()) {
+            return finalizeTargetSelectionAndContinue();
+        }
         cancelPendingRuledSpellCast();
         return true;
     }
@@ -1126,8 +1139,8 @@ bool PlayerActions::beginRuledSpellCast(CardItem *card,
     pendingRuledSpellCast.cardName = castName;
     pendingRuledSpellCast.remainingCost = parseSimpleManaCost(castCost);
 
-    // CR 107.3: record how many X pips the cost has; the value of X is chosen later, after a
-    // target is picked (see promptForRuledSpellXIfNeeded). parseSimpleManaCost folds each X pip
+    // CR 107.3: record how many X pips the cost has; X is chosen before target selection
+    // (see promptForRuledSpellXIfNeeded). parseSimpleManaCost folds each X pip
     // into the generic bucket as a single pip, so once X is chosen we top that bucket up to
     // xPips * X generic. The cost may be unbraced ("XR", Oracle single-face) or braced ("{X}{R}",
     // split faces), so count the X symbol directly — X is only ever the variable pip in a cost.
@@ -1141,8 +1154,17 @@ bool PlayerActions::beginRuledSpellCast(CardItem *card,
     pendingRuledSpellCast.flexPips = parseFlexPips(rawCost);
 
     pendingRuledSpellCast.waitingForTarget = geh->isRuledSpellCastNeedsTargetForHandIndex(ruledHandIndex);
+    pendingRuledSpellCast.isDamageTargets = geh->ruledSpellIsDamageTargets(ruledHandIndex, faceIndex);
+    pendingRuledSpellCast.maxTargets = geh->ruledSpellMaxTargets(ruledHandIndex, faceIndex);
+    pendingRuledSpellCast.fixedDamage = geh->ruledSpellFixedDamage(ruledHandIndex, faceIndex);
+    pendingRuledSpellCast.extraManaPerTarget = geh->ruledSpellExtraManaPerTarget(ruledHandIndex, faceIndex);
     emit landTapUndoAvailableChanged(false);
     emit ruledSpellCastPendingChanged(true);
+
+    // CR 601.2b: choose X before selecting targets and before paying mana.
+    if (!promptForRuledSpellXIfNeeded()) {
+        return true; // cancelled at the X prompt; cast aborted
+    }
 
     if (pendingRuledSpellCast.waitingForTarget) {
         emit ruledSpellTargetingChanged(true, pendingRuledSpellCast.cardName);
@@ -1155,11 +1177,6 @@ bool PlayerActions::beginRuledSpellCast(CardItem *card,
                 tr("Cast %1 selected. Select a target card, or press Cancel.").arg(pendingRuledSpellCast.cardName));
         }
         return true;
-    }
-
-    // No target needed: choose X now (still before paying mana), then size the payment.
-    if (!promptForRuledSpellXIfNeeded()) {
-        return true; // cancelled at the X prompt; cast aborted
     }
 
     // CR 107.4d–f: front-load hybrid/Phyrexian choices before paying, so the player picks one side
@@ -1287,35 +1304,64 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
         return true;
     }
 
-    pendingRuledSpellCast.selectedTargetOids = {targetOid};
-    pendingRuledSpellCast.waitingForTarget = false;
-    emit ruledSpellTargetingChanged(false, {});
-
-    // CR 601.2b: choose X after the target is locked in, before paying mana.
-    if (!promptForRuledSpellXIfNeeded()) {
-        return true; // cancelled at the X prompt; cast aborted
+    if (pendingRuledSpellCast.selectedTargetOids.contains(targetOid)) {
+        pendingRuledSpellCast.selectedTargetOids.removeOne(targetOid);
+        const int chosen = pendingRuledSpellCast.selectedTargetOids.size();
+        player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+            tr("Target deselected. %1 target(s) chosen for %2.")
+                .arg(chosen)
+                .arg(pendingRuledSpellCast.cardName));
+        emit ruledMultiTargetSelectionUpdated(chosen, effectiveDamageTargetsMax());
+        player->getGame()->getGameEventHandler()->emitSpellTargetSelectionChanged();
+        return true;
     }
 
-    // CR 107.4d–f: front-load hybrid/Phyrexian choices before paying, so the player picks one side
-    // of each flexible pip and the mana prompt then shows only the resolved (fixed) cost.
-    if (!resolvePendingSpellFlexiblePips()) {
-        return true; // cancelled at the flexible-pip dialog; cast aborted
+    pendingRuledSpellCast.selectedTargetOids.append(targetOid);
+
+    // For DamageTargets with room for more targets, stay in targeting mode.
+    // CR 601.2d: each target must receive >= 1 damage, so the true cap is the total damage (or
+    // the engine's max_targets, whichever is smaller). Reaching it auto-advances to damage
+    // allocation — matching Fire's fixed 2-target cap, so Fireball no longer needs a re-click.
+    const int effMax = effectiveDamageTargetsMax();
+    const int chosen = pendingRuledSpellCast.selectedTargetOids.size();
+    if (pendingRuledSpellCast.isDamageTargets && chosen < effMax) {
+        player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+            tr("Target %1%2 chosen for %3. Click another target, or click %3 again to confirm.")
+                .arg(chosen)
+                .arg(effMax > 0 ? QStringLiteral("/%1").arg(effMax) : QString())
+                .arg(pendingRuledSpellCast.cardName));
+        emit ruledMultiTargetSelectionUpdated(chosen, effMax);
+        player->getGame()->getGameEventHandler()->emitSpellTargetSelectionChanged();
+        return true;
     }
 
-    if (totalRemainingForCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips) == 0) {
-        return completePendingRuledSpellCast();
-    }
-
-    player->getGame()->getGameEventHandler()->emitLocalRuledLog(
-        tr("Target selected for %1. Pay mana by clicking counters: %2.")
-            .arg(pendingRuledSpellCast.cardName,
-                 formatRemainingCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips)));
-    return true;
+    return finalizeTargetSelectionAndContinue();
 }
 
 namespace
 {
 } // namespace
+
+bool PlayerActions::isTargetSelectedForPendingSpell(quint32 oid) const
+{
+    return pendingRuledSpellCast.valid &&
+           pendingRuledSpellCast.selectedTargetOids.contains(oid);
+}
+
+bool PlayerActions::isPlayerSelectedAsPendingSpellTarget(int playerId) const
+{
+    return pendingRuledSpellCast.valid &&
+           pendingRuledSpellCast.selectedTargetOids.contains(static_cast<quint32>(playerId));
+}
+
+void PlayerActions::confirmMultiTargetSelection()
+{
+    if (!pendingRuledSpellCast.valid || !pendingRuledSpellCast.waitingForTarget ||
+        !pendingRuledSpellCast.isDamageTargets || pendingRuledSpellCast.selectedTargetOids.isEmpty()) {
+        return;
+    }
+    finalizeTargetSelectionAndContinue();
+}
 
 bool PlayerActions::isAwaitingRuledPlayerTargetSelection() const
 {
@@ -1377,19 +1423,114 @@ bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
     }
 
     const quint32 targetOid = static_cast<quint32>(targetPlayerId);
-    pendingRuledSpellCast.selectedTargetOids = {targetOid};
-    pendingRuledSpellCast.waitingForTarget = false;
-    emit ruledSpellTargetingChanged(false, {});
-
-    // CR 601.2b: choose X after the target is locked in, before paying mana.
-    if (!promptForRuledSpellXIfNeeded()) {
-        return true; // cancelled at the X prompt; cast aborted
+    if (pendingRuledSpellCast.selectedTargetOids.contains(targetOid)) {
+        pendingRuledSpellCast.selectedTargetOids.removeOne(targetOid);
+        const int chosen = pendingRuledSpellCast.selectedTargetOids.size();
+        player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+            tr("Target deselected. %1 target(s) chosen for %2.")
+                .arg(chosen)
+                .arg(pendingRuledSpellCast.cardName));
+        emit ruledMultiTargetSelectionUpdated(chosen, effectiveDamageTargetsMax());
+        player->getGame()->getGameEventHandler()->emitSpellTargetSelectionChanged();
+        return true;
     }
 
-    // CR 107.4d–f: front-load hybrid/Phyrexian choices before paying, so the player picks one side
-    // of each flexible pip and the mana prompt then shows only the resolved (fixed) cost.
+    pendingRuledSpellCast.selectedTargetOids.append(targetOid);
+
+    // CR 601.2d: each target must receive >= 1 damage, so the true cap is the total damage (or
+    // the engine's max_targets, whichever is smaller). Reaching it auto-advances to damage
+    // allocation — matching Fire's fixed 2-target cap, so Fireball no longer needs a re-click.
+    const int effMax = effectiveDamageTargetsMax();
+    const int chosen = pendingRuledSpellCast.selectedTargetOids.size();
+    if (pendingRuledSpellCast.isDamageTargets && chosen < effMax) {
+        player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+            tr("Target %1%2 chosen for %3. Click another target, or click %3 again to confirm.")
+                .arg(chosen)
+                .arg(effMax > 0 ? QStringLiteral("/%1").arg(effMax) : QString())
+                .arg(pendingRuledSpellCast.cardName));
+        emit ruledMultiTargetSelectionUpdated(chosen, effMax);
+        player->getGame()->getGameEventHandler()->emitSpellTargetSelectionChanged();
+        return true;
+    }
+
+    return finalizeTargetSelectionAndContinue();
+}
+
+int PlayerActions::pendingDamageTargetsTotal() const
+{
+    return pendingRuledSpellCast.fixedDamage > 0 ? pendingRuledSpellCast.fixedDamage
+                                                 : pendingRuledSpellCast.xValue;
+}
+
+int PlayerActions::effectiveDamageTargetsMax() const
+{
+    if (!pendingRuledSpellCast.isDamageTargets) {
+        return pendingRuledSpellCast.maxTargets;
+    }
+    const int total = pendingDamageTargetsTotal();
+    // CR 601.2d: at least 1 damage per target caps the count at the total damage. Fireball's
+    // engine max_targets is 0 (unlimited) so the total is the only cap; Fire caps at min(2, total).
+    if (pendingRuledSpellCast.maxTargets > 0) {
+        return qMin(pendingRuledSpellCast.maxTargets, total);
+    }
+    return total;
+}
+
+bool PlayerActions::finalizeTargetSelectionAndContinue()
+{
+    pendingRuledSpellCast.waitingForTarget = false;
+    emit ruledSpellTargetingChanged(false, {});
+    emit ruledMultiTargetSelectionUpdated(0, -1);
+    player->getGameScene()->update();
+
+    // CR 601.2f: DamageTargets surcharge — extra generic mana per target beyond the first
+    // (Fireball costs {1} more per extra target). Fold it into the generic bucket now that the
+    // target count is fixed, so the mana prompt matches the engine's real cost. The engine
+    // recomputes this independently in cast_spell; this only keeps the local display honest.
+    if (pendingRuledSpellCast.isDamageTargets && pendingRuledSpellCast.extraManaPerTarget > 0) {
+        const int extra =
+            pendingRuledSpellCast.extraManaPerTarget * qMax(0, pendingRuledSpellCast.selectedTargetOids.size() - 1);
+        if (extra > 0) {
+            pendingRuledSpellCast.remainingCost[QChar('X')] += extra;
+        }
+    }
+
+    // DamageTargets: allocate damage among chosen targets interactively.
+    if (pendingRuledSpellCast.isDamageTargets) {
+        const int total = pendingRuledSpellCast.fixedDamage > 0
+            ? pendingRuledSpellCast.fixedDamage
+            : pendingRuledSpellCast.xValue;
+        const int numTargets = pendingRuledSpellCast.selectedTargetOids.size();
+        if (numTargets > total) {
+            player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+                tr("Cannot assign at least 1 damage to each target (%1 targets, %2 total). Cast cancelled.")
+                    .arg(numTargets).arg(total));
+            clearPendingRuledSpellCast();
+            return true;
+        }
+        if (numTargets == 1) {
+            pendingRuledSpellCast.selectedTargetDamages.clear();
+            pendingRuledSpellCast.selectedTargetDamages.append(static_cast<quint32>(total));
+            // Single target: skip interactive allocation, fall through to mana payment.
+        } else {
+            // Multiple targets: initialize each to 1 and enter interactive allocation mode.
+            pendingRuledSpellCast.targetDamageAllocations.clear();
+            for (int i = 0; i < numTargets; ++i)
+                pendingRuledSpellCast.targetDamageAllocations.append(1);
+            pendingRuledSpellCast.damageAllocationTotal = total;
+            pendingRuledSpellCast.inDamageAllocationMode = true;
+            player->getGame()->getGameEventHandler()->emitSpellDamageAllocationUiChanged();
+            player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+                tr("Assign %1 damage among %2 targets (min 1 each). "
+                   "Click to add, right-click to reduce. Confirm when done.")
+                    .arg(total).arg(numTargets));
+            return true; // wait for the player to confirm via the prompt button
+        }
+    }
+
+    // CR 107.4d–f: front-load hybrid/Phyrexian choices.
     if (!resolvePendingSpellFlexiblePips()) {
-        return true; // cancelled at the flexible-pip dialog; cast aborted
+        return true;
     }
 
     if (totalRemainingForCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips) == 0) {
@@ -1397,10 +1538,114 @@ bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
     }
 
     player->getGame()->getGameEventHandler()->emitLocalRuledLog(
-        tr("Target selected for %1. Pay mana by clicking counters: %2.")
+        tr("Target(s) selected for %1. Pay mana by clicking counters: %2.")
             .arg(pendingRuledSpellCast.cardName,
                  formatRemainingCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips)));
     return true;
+}
+
+bool PlayerActions::isInSpellDamageAllocationMode() const
+{
+    return pendingRuledSpellCast.valid && pendingRuledSpellCast.inDamageAllocationMode;
+}
+
+bool PlayerActions::isSpellDamageAllocationDisplayActive() const
+{
+    return pendingRuledSpellCast.valid && pendingRuledSpellCast.isDamageTargets &&
+           !pendingRuledSpellCast.selectedTargetOids.isEmpty();
+}
+
+int PlayerActions::spellDamageAllocationForOid(quint32 oid) const
+{
+    if (!isSpellDamageAllocationDisplayActive()) return 0;
+    const int idx = pendingRuledSpellCast.selectedTargetOids.indexOf(oid);
+    if (idx < 0) return 0;
+    // While interactively allocating, show the in-progress split; once confirmed (and through
+    // mana payment) show the amount that will actually be sent with the cast.
+    if (pendingRuledSpellCast.inDamageAllocationMode) {
+        return idx < pendingRuledSpellCast.targetDamageAllocations.size()
+                   ? pendingRuledSpellCast.targetDamageAllocations.at(idx)
+                   : 0;
+    }
+    return idx < pendingRuledSpellCast.selectedTargetDamages.size()
+               ? static_cast<int>(pendingRuledSpellCast.selectedTargetDamages.at(idx))
+               : 0;
+}
+
+int PlayerActions::spellDamageAllocationForPlayerId(int playerId) const
+{
+    return spellDamageAllocationForOid(static_cast<quint32>(playerId));
+}
+
+int PlayerActions::spellDamageAllocationAssignedTotal() const
+{
+    int sum = 0;
+    for (int v : pendingRuledSpellCast.targetDamageAllocations)
+        sum += v;
+    return sum;
+}
+
+int PlayerActions::spellDamageAllocationMaxTotal() const
+{
+    return pendingRuledSpellCast.damageAllocationTotal;
+}
+
+bool PlayerActions::spellDamageAllocationIsLegal() const
+{
+    return isInSpellDamageAllocationMode() &&
+           spellDamageAllocationAssignedTotal() == pendingRuledSpellCast.damageAllocationTotal;
+}
+
+bool PlayerActions::tryBumpSpellDamageAllocationForOid(quint32 oid, int delta)
+{
+    if (!isInSpellDamageAllocationMode()) return false;
+    const int idx = pendingRuledSpellCast.selectedTargetOids.indexOf(oid);
+    if (idx < 0 || idx >= pendingRuledSpellCast.targetDamageAllocations.size()) return false;
+    const int cur = pendingRuledSpellCast.targetDamageAllocations.at(idx);
+    const int total = pendingRuledSpellCast.damageAllocationTotal;
+    const int othersSum = spellDamageAllocationAssignedTotal() - cur;
+    const int next = qBound(1, cur + delta, total - othersSum);
+    if (next == cur) return true; // legal target but no change possible
+    pendingRuledSpellCast.targetDamageAllocations[idx] = next;
+    player->getGame()->getGameEventHandler()->emitSpellDamageAllocationUiChanged();
+    return true;
+}
+
+bool PlayerActions::tryBumpSpellDamageAllocationForCard(CardItem *card, int delta)
+{
+    if (!isInSpellDamageAllocationMode() || !card) return false;
+    auto *handler = player->getGame()->getGameEventHandler();
+    if (!handler) return false;
+    const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
+    const quint32 oid = handler->engineOidForCardId(ownerPlayerId, card->getId());
+    if (oid == 0) return false;
+    return tryBumpSpellDamageAllocationForOid(oid, delta);
+}
+
+bool PlayerActions::tryBumpSpellDamageAllocationForPlayer(Player *targetPlayer, int delta)
+{
+    if (!isInSpellDamageAllocationMode() || !targetPlayer) return false;
+    return tryBumpSpellDamageAllocationForOid(static_cast<quint32>(targetPlayer->getPlayerInfo()->getId()), delta);
+}
+
+void PlayerActions::confirmSpellDamageAllocation()
+{
+    if (!spellDamageAllocationIsLegal()) return;
+    pendingRuledSpellCast.selectedTargetDamages.clear();
+    for (int v : pendingRuledSpellCast.targetDamageAllocations)
+        pendingRuledSpellCast.selectedTargetDamages.append(static_cast<quint32>(v));
+    pendingRuledSpellCast.inDamageAllocationMode = false;
+    player->getGame()->getGameEventHandler()->emitSpellDamageAllocationUiChanged();
+
+    if (!resolvePendingSpellFlexiblePips()) return;
+    if (totalRemainingForCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips) == 0) {
+        completePendingRuledSpellCast();
+        return;
+    }
+    player->getGame()->getGameEventHandler()->emitLocalRuledLog(
+        tr("Target(s) selected for %1. Pay mana by clicking counters: %2.")
+            .arg(pendingRuledSpellCast.cardName,
+                 formatRemainingCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips)));
 }
 
 void PlayerActions::playCard(CardItem *card, bool faceDown)

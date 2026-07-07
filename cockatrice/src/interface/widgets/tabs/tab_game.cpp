@@ -475,6 +475,18 @@ void TabGame::connectToGameEventHandler()
                                                     handler->localCombatDamagePlayerDamage(),
                                                     handler->localCombatDamageAssignmentLegal());
         });
+        connect(game->getGameEventHandler(), &GameEventHandler::ruledSpellDamageAllocationUiChanged, this, [this]() {
+            if (!gamePromptWidget || !game->getGameMetaInfo()->proto().ruled_game()) return;
+            const int localId = game->getPlayerManager()->getLocalPlayerId();
+            Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+            auto *actions = local ? local->getPlayerActions() : nullptr;
+            if (!actions) return;
+            const bool active = actions->isInSpellDamageAllocationMode();
+            gamePromptWidget->setSpellDamageAllocationStatus(
+                active,
+                active ? actions->spellDamageAllocationAssignedTotal() : 0,
+                active ? actions->spellDamageAllocationMaxTotal() : 0);
+        });
         connect(gamePromptWidget, &GamePromptWidget::confirmAttackersRequested, game->getGameEventHandler(),
                 &GameEventHandler::handleConfirmRuledAttackers);
         connect(gamePromptWidget, &GamePromptWidget::confirmBlockersRequested, game->getGameEventHandler(),
@@ -1327,6 +1339,12 @@ void TabGame::addLocalPlayer(Player *newPlayer, int playerId)
     if (gamePromptWidget && newPlayer->getPlayerActions()) {
         connect(newPlayer->getPlayerActions(), &PlayerActions::ruledSpellTargetingChanged, gamePromptWidget,
                 &GamePromptWidget::setTargetingMode);
+        connect(gamePromptWidget, &GamePromptWidget::confirmSpellDamageRequested,
+                newPlayer->getPlayerActions(), &PlayerActions::confirmSpellDamageAllocation);
+        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledMultiTargetSelectionUpdated, gamePromptWidget,
+                &GamePromptWidget::setMultiTargetSelectionCount);
+        connect(gamePromptWidget, &GamePromptWidget::confirmTargetsRequested,
+                newPlayer->getPlayerActions(), &PlayerActions::confirmMultiTargetSelection);
         connect(newPlayer->getPlayerActions(), &PlayerActions::landTapUndoAvailableChanged, gamePromptWidget,
                 &GamePromptWidget::setLandTapUndoAvailable);
         connect(newPlayer->getPlayerActions(), &PlayerActions::ruledSpellCastPendingChanged, gamePromptWidget,

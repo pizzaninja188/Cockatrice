@@ -641,10 +641,37 @@ pub(super) fn compute_spell_targets(
         }
     }
 
+    // DamageTargets: expose max_targets / fixed_damage / is_damage_targets so the client can
+    // collect multiple targets and prompt for the per-target damage split.
+    let mut max_targets: u32 = 0;
+    let mut fixed_damage: u32 = 0;
+    let mut is_damage_targets = false;
+    let mut extra_mana_per_target: u32 = 0;
+    for effect in effects {
+        if let SpellEffectKind::DamageTargets {
+            amount,
+            max_targets: mt,
+            extra_mana_per_target: empt,
+            ..
+        } = effect
+        {
+            is_damage_targets = true;
+            max_targets = mt.unwrap_or(0);
+            // resolve(0) gives the fixed total for Fixed amounts; X amounts resolve to 0
+            // (the client will use the player's chosen x_value instead).
+            fixed_damage = amount.resolve(0);
+            extra_mana_per_target = *empt;
+        }
+    }
+
     rv1::SpellTargets {
         valid_permanent_ids,
         valid_stack_ids,
         can_target_self,
         can_target_opponent,
+        max_targets,
+        fixed_damage,
+        is_damage_targets,
+        extra_mana_per_target,
     }
 }

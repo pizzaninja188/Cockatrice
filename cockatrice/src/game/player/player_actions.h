@@ -45,6 +45,7 @@ signals:
     void logSetDoesntUntap(Player *player, CardItem *card, bool doesntUntap);
     void logSetPT(Player *player, CardItem *card, QString newPT);
     void ruledSpellTargetingChanged(bool active, const QString &cardName);
+    void ruledMultiTargetSelectionUpdated(int selectedCount, int maxTargets);
     void landTapUndoAvailableChanged(bool available);
     void ruledSpellCastPendingChanged(bool pending);
     /// Emitted when `remainingCost` changes during ruled spell payment (land or counter).
@@ -86,6 +87,9 @@ public:
     [[nodiscard]] Command_RuledPayload *newRuledPayloadActivateManaAbilityForLand(CardItem *card, QChar desiredColor);
     bool tryHandleRuledSpellTargetClick(CardItem *card);
     bool tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer);
+    [[nodiscard]] bool isTargetSelectedForPendingSpell(quint32 oid) const;
+    [[nodiscard]] bool isPlayerSelectedAsPendingSpellTarget(int playerId) const;
+    void confirmMultiTargetSelection();
     /// True when the local player must pick a player (not permanent) for the pending ruled cast.
     [[nodiscard]] bool isAwaitingRuledPlayerTargetSelection() const;
     /// True when an activated ability or triggered ability is waiting for a target (player click allowed).
@@ -120,6 +124,21 @@ public:
     bool tryRuledOpeningBottomCard(CardItem *card);
     bool tryRuledResolutionHandPickCard(CardItem *card);
     bool sendRuledCleanupDiscardBatchIfComplete();
+
+    [[nodiscard]] bool isInSpellDamageAllocationMode() const;
+    /// True from the moment targets are chosen for a DamageTargets spell (Fire, Fireball) through
+    /// mana payment, until the cast is sent or cancelled — unlike isInSpellDamageAllocationMode(),
+    /// which is only true during the interactive per-target allocation step. Used to keep damage
+    /// counters visible on the board for the rest of the cast, not just while allocating.
+    [[nodiscard]] bool isSpellDamageAllocationDisplayActive() const;
+    [[nodiscard]] int spellDamageAllocationForOid(quint32 oid) const;
+    [[nodiscard]] int spellDamageAllocationForPlayerId(int playerId) const;
+    [[nodiscard]] bool spellDamageAllocationIsLegal() const;
+    [[nodiscard]] int spellDamageAllocationAssignedTotal() const;
+    [[nodiscard]] int spellDamageAllocationMaxTotal() const;
+    bool tryBumpSpellDamageAllocationForCard(CardItem *card, int delta);
+    bool tryBumpSpellDamageAllocationForPlayer(Player *targetPlayer, int delta);
+    void confirmSpellDamageAllocation();
 
     void recordLandTapUndo(int cardId, const QString &counterName, int counterId);
     void undoLastLandTap();
@@ -276,8 +295,23 @@ private:
         QString cardName;
         QMap<QChar, int> remainingCost;
         QVector<quint32> selectedTargetOids;
+        // Per-target damage allocation parallel to selectedTargetOids; populated for DamageTargets.
+        QVector<quint32> selectedTargetDamages;
         bool waitingForTarget = false;
         bool valid = false;
+        // DamageTargets: max targets (0 = unlimited/Fireball), fixed total damage (0 = X-spell).
+        int maxTargets = 0;
+        int fixedDamage = 0;
+        bool isDamageTargets = false;
+        // CR 601.2f: extra generic mana per target beyond the first (Fireball = 1, Fire = 0).
+        // Added to remainingCost once the target count is known so the mana prompt matches the
+        // engine's real cost.
+        int extraManaPerTarget = 0;
+        // Interactive damage allocation mode: entered after targets are chosen for multi-target
+        // DamageTargets spells. Each entry is parallel to selectedTargetOids (min 1 each).
+        bool inDamageAllocationMode = false;
+        int damageAllocationTotal = 0;
+        QVector<int> targetDamageAllocations;
         // CR 107.3: value chosen for X when the cost has an X pip; 0 otherwise. The number of
         // X pips in the cost (folded into remainingCost's generic bucket at parse time); 0 when
         // the cost has no X. Used to defer the X prompt until after targeting.
@@ -343,6 +377,16 @@ private:
                                            bool colorlessMana,
                                            QChar coloredMana);
     void clearPendingRuledSpellCast();
+    // Called after all targets are chosen for the pending cast. Handles the X prompt,
+    // DamageTargets allocation dialog, flex-pip resolution, and mana payment.
+    bool finalizeTargetSelectionAndContinue();
+    bool tryBumpSpellDamageAllocationForOid(quint32 oid, int delta);
+    // Total damage the pending DamageTargets spell distributes (fixed, or the chosen X).
+    [[nodiscard]] int pendingDamageTargetsTotal() const;
+    // Effective target cap for the pending DamageTargets spell: the engine's max_targets (Fire = 2)
+    // clamped by the total damage, since each target needs >= 1 damage (Fireball = X targets max).
+    // Reaching it auto-advances from targeting to damage allocation (like Fire's 2-target cap).
+    [[nodiscard]] int effectiveDamageTargetsMax() const;
     // Prompts for the value of X when the pending spell's cost has X pips, tops up the generic
     // mana bucket, and records xValue. Returns false if the player cancelled (cast is aborted).
     bool promptForRuledSpellXIfNeeded();

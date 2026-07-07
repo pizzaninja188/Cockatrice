@@ -168,6 +168,12 @@ private:
         QSet<quint32> validStackIds;
         bool canTargetSelf = false;
         bool canTargetOpponent = false;
+        // DamageTargets only: max targets (0 = unlimited/Fireball), fixed total damage (0 = X-spell).
+        int maxTargets = 0;
+        int fixedDamage = 0;
+        bool isDamageTargets = false;
+        // DamageTargets only: extra generic mana per target beyond the first (Fireball = 1, Fire = 0).
+        int extraManaPerTarget = 0;
     };
     // Key = (engine hand slot << 8 | face index); see spellTargetKey(). One entry per castable
     // face of a hand card that needs a target (single-face cards use face 0).
@@ -368,6 +374,23 @@ public:
     {
         return ruledValidTargetsByHandSlot.value(spellTargetKey(handSlot, faceIndex)).canTargetOpponent;
     }
+    // DamageTargets: max targets (0 = unlimited), fixed damage total (0 = X-spell), and flag.
+    [[nodiscard]] int ruledSpellMaxTargets(int handSlot, int faceIndex) const
+    {
+        return ruledValidTargetsByHandSlot.value(spellTargetKey(handSlot, faceIndex)).maxTargets;
+    }
+    [[nodiscard]] int ruledSpellFixedDamage(int handSlot, int faceIndex) const
+    {
+        return ruledValidTargetsByHandSlot.value(spellTargetKey(handSlot, faceIndex)).fixedDamage;
+    }
+    [[nodiscard]] bool ruledSpellIsDamageTargets(int handSlot, int faceIndex) const
+    {
+        return ruledValidTargetsByHandSlot.value(spellTargetKey(handSlot, faceIndex)).isDamageTargets;
+    }
+    [[nodiscard]] int ruledSpellExtraManaPerTarget(int handSlot, int faceIndex) const
+    {
+        return ruledValidTargetsByHandSlot.value(spellTargetKey(handSlot, faceIndex)).extraManaPerTarget;
+    }
     // Activated ability targeting queries. Key encodes (permanentOid << 32 | abilityIndex).
     static quint64 abilityTargetKey(quint32 permanentOid, int abilityIndex)
     {
@@ -440,6 +463,14 @@ public:
     }
     [[nodiscard]] bool localPlayerIsRuledActive() const;
     [[nodiscard]] bool localPlayerIsRuledDefender() const;
+    [[nodiscard]] bool isSelectedSpellTarget(quint32 oid) const;
+    [[nodiscard]] bool isPlayerSelectedAsSpellTarget(int playerId) const;
+    void emitSpellTargetSelectionChanged() { emit ruledSpellTargetSelectionChanged(); }
+    void emitSpellDamageAllocationUiChanged() { emit ruledSpellDamageAllocationUiChanged(); }
+    [[nodiscard]] bool isSpellDamageAllocationMode() const;
+    [[nodiscard]] bool isSpellDamageAllocationDisplayActive() const;
+    [[nodiscard]] int spellDamageAllocationForOid(quint32 oid) const;
+    [[nodiscard]] int spellDamageAllocationForPlayerId(int playerId) const;
     [[nodiscard]] bool hasAttackersSubmittedThisStep() const { return attackersSubmittedThisStep; }
     [[nodiscard]] bool hasBlockersSubmittedThisStep() const { return blockersSubmittedThisStep; }
     [[nodiscard]] bool hasRuledStackItems() const
@@ -646,6 +677,8 @@ signals:
     /// next refreshPromptLabel() call overwrites it.
     void ruledBlockerRejected();
     void ruledCombatStateChanged();
+    void ruledSpellTargetSelectionChanged();
+    void ruledSpellDamageAllocationUiChanged();
     void ruledCombatDamageUiChanged();
     void ruledBattlefieldMapUpdated();
     void ruledStackHasItemsChanged(bool hasItems);

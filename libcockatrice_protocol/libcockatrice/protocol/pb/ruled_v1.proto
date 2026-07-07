@@ -178,6 +178,19 @@ message SpellTargets {
   bool can_target_self = 3;
   // Whether each opponent is a legal player target.
   bool can_target_opponent = 4;
+  // DamageTargets spells only (Fireball, Fire): client must collect up to this many targets and
+  // prompt for per-target damage allocation. 0 means no cap (Fireball). Absent for non-DamageTargets.
+  uint32 max_targets = 5;
+  // DamageTargets spells only: fixed total damage to distribute among chosen targets.
+  // 0 when the amount is determined by {X} chosen at cast time; client uses its chosen x_value instead.
+  uint32 fixed_damage = 6;
+  // True when this spell uses DamageTargets (requires per-target damage_amount on TargetRef).
+  bool is_damage_targets = 7;
+  // DamageTargets spells only: extra generic mana per target beyond the first (CR 601.2f).
+  // Fireball = 1 ("{1} more for each target beyond the first"); Fire = 0. The client adds
+  // (targets - 1) * this to the generic mana it collects so the local prompt matches the
+  // engine's real cost (the engine independently recomputes this — this is display parity only).
+  uint32 extra_mana_per_target = 8;
 }
 
 message LegalActions {
