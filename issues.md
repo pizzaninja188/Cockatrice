@@ -24,10 +24,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Lands used to have a quick animation when tapping, but this stopped working after the engine-owned mana update and lands tap instantly. Animations also never worked for untapping.
   - Priority: Low
 
-- [ ] #16 [feature] Multi-target damage distribution for X spells (Fireball)
-  - Details: Fireball's full Oracle text allows any number of targets with X damage divided among them (paying 1 extra generic mana per target beyond the first). The current Fireball RON is partial (single target only). Add a `DamageTargets { amount: Amount, extra_mana_per_target: u32 }` `SpellEffectKind` variant that accepts a variable-length target list at cast time and distributes the declared X value. The cast UI needs to collect (target, amount) pairs. Also fixes the Fire half of Fire // Ice (split 2 damage between any number of targets). Add scenario tests for: single target full damage, split between two, illegal over-allocation, fizzle when all targets gone.
-  - Priority: Low
-
 - [ ] #17 [feature] "Attacks/blocks each combat if able" combat requirement
   - Details: Some creatures are required to attack or block each combat if they legally can (CR 508.1d, 509.1c — "must attack/block" requirements). Add a `must_attack: bool` and `must_block: bool` field to `GameObject` (settable by continuous effects or card data), and enforce them during declare-attackers and declare-blockers legality: the engine should return `EngineError::Illegal` if the player tries to end declaration while a must-attack creature is idle and a legal attack exists, or a must-block creature is idle while a legal block exists. Add scenario tests covering: must-attack creature blocked from skipping, must-attack creature can still skip if no legal attack target exists.
   - Priority: Low
