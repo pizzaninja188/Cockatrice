@@ -277,11 +277,13 @@ void GamePromptWidget::setLocalPlayerHasPriority(bool hasPriority)
     refreshPromptLabel();
 }
 
-void GamePromptWidget::setCombatMode(CombatMode mode, bool localPlayerHasButtons)
+void GamePromptWidget::setCombatMode(CombatMode mode, bool localPlayerHasButtons, bool declarationSatisfied)
 {
-    if (mode == currentCombatMode && localPlayerHasButtons == localPlayerHasCombatButtons) {
+    if (mode == currentCombatMode && localPlayerHasButtons == localPlayerHasCombatButtons &&
+        declarationSatisfied == combatDeclarationSatisfied) {
         return;
     }
+    combatDeclarationSatisfied = declarationSatisfied;
     // Clear the sticky rejection label whenever we leave the "defender has buttons" state:
     // either the phase advanced past declare-blockers, or legal blocks were accepted and the
     // local player no longer has blocker buttons (blockersSubmittedThisStep flipped true).
@@ -560,6 +562,22 @@ void GamePromptWidget::updateCombatButtonsVisibility()
                                    !waitingOnOpponentCombatDamage);
     confirmAttackersButton->setVisible(showAttackers);
     confirmBlockersButton->setVisible(showBlockers);
+    // CR 508.1d / 509.1c: gray out OK while a required attacker/blocker is still unstaged, so the
+    // player cannot submit a declaration the engine would reject (which softlocks the combat step).
+    confirmAttackersButton->setEnabled(combatDeclarationSatisfied);
+    confirmBlockersButton->setEnabled(combatDeclarationSatisfied);
+    if (showAttackers) {
+        confirmAttackersButton->setToolTip(
+            combatDeclarationSatisfied
+                ? QString()
+                : tr("You must attack with all creatures that are required to attack."));
+    }
+    if (showBlockers) {
+        confirmBlockersButton->setToolTip(
+            combatDeclarationSatisfied
+                ? QString()
+                : tr("You must block with all creatures that are required to block."));
+    }
     resetBlockersButton->setVisible(showBlockers);
     confirmCombatDamageButton->setVisible(showCombatDamage);
     cancelTargetingButton->setVisible(false);
@@ -622,7 +640,13 @@ void GamePromptWidget::refreshPromptLabel()
 
     if (currentCombatMode == CombatMode::DeclareAttackers) {
         if (localPlayerHasCombatButtons) {
-            promptLabel->setText(tr("%1's Declare Attackers step. Choose attackers.").arg(activePlayerName));
+            if (!combatDeclarationSatisfied) {
+                promptLabel->setText(
+                    tr("%1's Declare Attackers step. Some creatures must attack — declare them to continue.")
+                        .arg(activePlayerName));
+            } else {
+                promptLabel->setText(tr("%1's Declare Attackers step. Choose attackers.").arg(activePlayerName));
+            }
         } else if (localPlayerHasPriority) {
             promptLabel->setText(
                 tr("%1's Declare Attackers step. Cast instants and activate abilities.").arg(activePlayerName));
@@ -635,6 +659,10 @@ void GamePromptWidget::refreshPromptLabel()
         if (localPlayerHasCombatButtons) {
             if (!stickyBlockerError.isEmpty()) {
                 promptLabel->setText(stickyBlockerError);
+            } else if (!combatDeclarationSatisfied) {
+                promptLabel->setText(
+                    tr("%1's Declare Blockers step. Some creatures must block — declare them to continue.")
+                        .arg(activePlayerName));
             } else {
                 promptLabel->setText(tr("%1's Declare Blockers step. Choose blockers.").arg(activePlayerName));
             }

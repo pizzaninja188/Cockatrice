@@ -200,6 +200,12 @@ private:
     QHash<quint32, quint32> committedBlocks;
     // Opponent's in-progress pairs from BlockersPreview (Servatrice); cleared on declare / phase reset.
     QHash<quint32, quint32> remoteBlockPreviewPairs;
+    // CR 508.1d: engine-reported creatures the local active player MUST declare as attackers this
+    // combat (LegalActions.required_attacker_ids). Confirm-attackers is disabled until all are staged.
+    QSet<quint32> ruledRequiredAttackerOids;
+    // CR 509.1c: engine-reported creatures the local defending player MUST declare as blockers this
+    // combat (LegalActions.required_blocker_ids). Confirm-blockers is disabled until all are staged.
+    QSet<quint32> ruledRequiredBlockerOids;
     // Rule-engine stack object ids in push order: front = most recently pushed = resolves first (LIFO).
     QList<quint32> ruledStackOidOrder;
     // CR 510.4: true while the engine reports a pending first-strike damage substep — i.e.
@@ -440,6 +446,12 @@ public:
     }
     [[nodiscard]] bool localPlayerIsRuledActive() const;
     [[nodiscard]] bool localPlayerIsRuledDefender() const;
+    /// CR 508.1d / 509.1c: true when the local player's staged combat declaration satisfies every
+    /// must-attack / must-block requirement the engine reported for the current step — i.e. the
+    /// engine would accept a confirm now. Drives the confirm-attackers / confirm-blockers enabled
+    /// state so the UI cannot submit an illegal declaration and softlock. Vacuously true when there
+    /// are no requirements (the common case).
+    [[nodiscard]] bool ruledCombatDeclarationSatisfied() const;
     [[nodiscard]] bool hasAttackersSubmittedThisStep() const { return attackersSubmittedThisStep; }
     [[nodiscard]] bool hasBlockersSubmittedThisStep() const { return blockersSubmittedThisStep; }
     [[nodiscard]] bool hasRuledStackItems() const

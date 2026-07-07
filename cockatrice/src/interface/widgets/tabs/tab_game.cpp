@@ -442,7 +442,10 @@ void TabGame::connectToGameEventHandler()
                         mode = GamePromptWidget::CombatMode::AssignCombatDamage;
                         localHasButtons = handler->localPlayerIsRuledActive();
                     }
-                    gamePromptWidget->setCombatMode(mode, localHasButtons);
+                    // CR 508.1d / 509.1c: disable the confirm (OK) button while a required
+                    // attacker/blocker is still unstaged, so an illegal declaration can't be sent.
+                    const bool declarationSatisfied = handler->ruledCombatDeclarationSatisfied();
+                    gamePromptWidget->setCombatMode(mode, localHasButtons, declarationSatisfied);
                     if (!game->getGameMetaInfo()->proto().ruled_game()) {
                         return;
                     }

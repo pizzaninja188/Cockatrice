@@ -1891,3 +1891,75 @@ fn must_block_creature_omitted_from_blockers_is_illegal() {
         "omitting must-block creature while it can legally block should be illegal"
     );
 }
+
+/// CR 508.1d: the active player's LegalActions must surface the must-attack creature id so the
+/// client can gate its confirm-attackers control identically to the engine's set_attackers check.
+#[test]
+fn legal_actions_surface_required_attacker_to_active_player() {
+    let mut e = GameEngine::new(5510, &[0, 1], 20, None, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    e.apply_command(0, &primitive_yield())
+        .expect("main1 to begin combat");
+    // An eligible ordinary attacker so BeginCombat enters DeclareAttackers.
+    inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    // A must-attack creature that is itself a legal attacker (untapped, not summoning-sick).
+    let goblin = inject_creature_on_battlefield(&mut e, 0, "crazed_goblin");
+    e.state
+        .objects
+        .get_mut(&goblin)
+        .unwrap()
+        .must_attack_if_able = true;
+    e.apply_command(0, &pass()).expect("ap pass begin combat");
+    let batch = e.apply_command(1, &pass()).expect("nap pass begin combat");
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareAttackers
+    );
+    let legal = batch.legal_by_player.get(&0).expect("legal for P0");
+    assert!(
+        legal.required_attacker_ids.contains(&goblin),
+        "active player's LegalActions must list the must-attack Crazed Goblin"
+    );
+    // The non-active player is never asked to declare attackers.
+    let legal_nap = batch.legal_by_player.get(&1).expect("legal for P1");
+    assert!(
+        legal_nap.required_attacker_ids.is_empty(),
+        "defender has no required attackers"
+    );
+}
+
+/// CR 509.1c: the defending player's LegalActions must surface the must-block creature id so the
+/// client can gate its confirm-blockers control identically to the engine's set_blockers check.
+#[test]
+fn legal_actions_surface_required_blocker_to_defender() {
+    let mut e = GameEngine::new(5511, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let attacker = battlefield_object_for_card(&e, 0, "grizzly_bears");
+    let blocker = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    e.state
+        .objects
+        .get_mut(&blocker)
+        .unwrap()
+        .must_block_if_able = true;
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass()).expect("active pass attackers");
+    let batch = e
+        .apply_command(1, &pass())
+        .expect("defender pass attackers");
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareBlockers
+    );
+    let legal = batch.legal_by_player.get(&1).expect("legal for P1");
+    assert!(
+        legal.required_blocker_ids.contains(&blocker),
+        "defender's LegalActions must list the must-block creature"
+    );
+    // The active player is never asked to declare blockers.
+    let legal_ap = batch.legal_by_player.get(&0).expect("legal for P0");
+    assert!(
+        legal_ap.required_blocker_ids.is_empty(),
+        "active player has no required blockers"
+    );
+}
