@@ -468,14 +468,32 @@ fn doom_blade_targets_only_nonblack_creatures() {
     let idx = hand_index_for_card(&e, 0, "doom_blade");
     // Black creature is an illegal target (nonblack restriction).
     assert!(
-        e.apply_command(0, &cast_spell(idx, vec![TargetRef { object_id: black }]))
-            .is_err(),
+        e.apply_command(
+            0,
+            &cast_spell(
+                idx,
+                vec![TargetRef {
+                    object_id: black,
+                    damage_amount: 0
+                }]
+            )
+        )
+        .is_err(),
         "Doom Blade cannot target a black creature"
     );
     // Nonblack creature is legal; it resolves and dies.
     let idx = hand_index_for_card(&e, 0, "doom_blade");
-    e.apply_command(0, &cast_spell(idx, vec![TargetRef { object_id: green }]))
-        .expect("Doom Blade targets a nonblack creature");
+    e.apply_command(
+        0,
+        &cast_spell(
+            idx,
+            vec![TargetRef {
+                object_id: green,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("Doom Blade targets a nonblack creature");
     resolve_entire_stack_two_player(&mut e);
     assert!(
         e.state.objects.get(&green).map(|o| o.zone) != Some(tricerules_core::Zone::Battlefield),
@@ -542,7 +560,8 @@ fn essence_scatter_and_negate_respect_spell_type() {
             &cast_spell(
                 neg_idx,
                 vec![TargetRef {
-                    object_id: bears_spell
+                    object_id: bears_spell,
+                    damage_amount: 0,
                 }]
             )
         )
@@ -557,6 +576,7 @@ fn essence_scatter_and_negate_respect_spell_type() {
             es_idx,
             vec![TargetRef {
                 object_id: bears_spell,
+                damage_amount: 0,
             }],
         ),
     )
@@ -590,7 +610,8 @@ fn essence_scatter_and_negate_respect_spell_type() {
             &cast_spell(
                 es2,
                 vec![TargetRef {
-                    object_id: bolt_spell
+                    object_id: bolt_spell,
+                    damage_amount: 0,
                 }]
             )
         )
@@ -604,6 +625,7 @@ fn essence_scatter_and_negate_respect_spell_type() {
             neg2,
             vec![TargetRef {
                 object_id: bolt_spell,
+                damage_amount: 0,
             }],
         ),
     )

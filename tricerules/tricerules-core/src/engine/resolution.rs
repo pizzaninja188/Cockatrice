@@ -193,6 +193,53 @@ impl GameEngine {
                         }
                     }
                 }
+                SpellEffectKind::DamageTargets { target: filter, .. } => {
+                    // CR 608.2b: skip targets that became illegal at resolution; apply damage
+                    // to each remaining legal target using its allocated amount.
+                    for (i, &tid) in targets.iter().enumerate() {
+                        let damage_amount = top.target_damage.get(i).copied().unwrap_or(0);
+                        if damage_amount == 0 {
+                            continue;
+                        }
+                        if !super::targeting::target_filter_legal_at_resolution(
+                            &self.state,
+                            self.registry,
+                            &filter,
+                            tid,
+                            controller,
+                        ) {
+                            events.push(ev_log(format!(
+                                "{spell_label}: target {} is no longer legal, skipping.",
+                                tid
+                            )));
+                            continue;
+                        }
+                        if let Some(pi) = self.state.player_idx(tid as i32) {
+                            let pid = self.state.players[pi].id;
+                            self.state.players[pi].life -= damage_amount as i32;
+                            events.push(rv1::RuledEvent {
+                                ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                                    player_id: pid,
+                                    new_total: self.state.players[pi].life,
+                                    delta: -(damage_amount as i32),
+                                })),
+                            });
+                            events.push(ev_log(format!(
+                                "{spell_label} deals {damage_amount} damage to P{pid}"
+                            )));
+                        } else {
+                            let tgt = object_display_name(&self.state, self.registry, tid);
+                            if let Some(t) = self.state.objects.get_mut(&tid) {
+                                if t.zone == Zone::Battlefield && t.is_creature(self.registry) {
+                                    t.damage += damage_amount;
+                                    events.push(ev_log(format!(
+                                        "{spell_label} deals {damage_amount} damage to {tgt}"
+                                    )));
+                                }
+                            }
+                        }
+                    }
+                }
                 SpellEffectKind::Draw { count } => {
                     // Blue Sun's Zenith / Braingeyser: `count` may be the cast-time X.
                     let count = count.resolve(top.chosen_x);
@@ -441,6 +488,7 @@ impl GameEngine {
                                     is_copy: true,
                                     chosen_x: src.chosen_x,
                                     face_index: src.face_index,
+                                    target_damage: src.target_damage.clone(),
                                 };
                                 // CR 707.10c: prompt for new targets on the first copy; push any
                                 // additional copies immediately with the original targets.
@@ -544,7 +592,10 @@ impl GameEngine {
                                                 targets: src
                                                     .targets
                                                     .iter()
-                                                    .map(|&o| rv1::TargetRef { object_id: o })
+                                                    .map(|&o| rv1::TargetRef {
+                                                        object_id: o,
+                                                        damage_amount: 0,
+                                                    })
                                                     .collect(),
                                                 ability_annotation: "(copy)".to_string(),
                                                 card_id: src.card_id.clone(),

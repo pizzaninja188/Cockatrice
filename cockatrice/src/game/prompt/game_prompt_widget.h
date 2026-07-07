@@ -46,6 +46,9 @@ public slots:
     /// Tier-3 hand-pick mode (Brainstorm etc.): required == 0 clears the mode.
     void setResolutionHandPickMode(int required, int selected);
     void setRuledOpeningBottomProgress(int required, int selected);
+    void setMultiTargetSelectionCount(int selected, int maxTargets);
+    /// Spell damage allocation mode (multi-target DamageTargets). `active` false clears the mode.
+    void setSpellDamageAllocationStatus(bool active, int assigned, int total);
     void setLandTapUndoAvailable(bool available);
     void setSpellCastPending(bool pending);
     void setTriggerTargetPending(bool pending);
@@ -76,7 +79,9 @@ signals:
     void confirmBlockersRequested();
     void resetBlockersRequested();
     void confirmCombatDamageRequested();
+    void confirmSpellDamageRequested();
     void cancelTargetingRequested();
+    void confirmTargetsRequested();
     void ruledOpeningPickSeatRequested(int seatId);
     void ruledOpeningMulliganKeepRequested();
     void ruledOpeningMulliganRedrawRequested();
@@ -95,8 +100,12 @@ private:
     QPushButton *confirmBlockersButton;
     QPushButton *resetBlockersButton;
     QPushButton *confirmCombatDamageButton;
+    QPushButton *confirmSpellDamageButton = nullptr;
     QPushButton *cancelTargetingButton;
+    QPushButton *confirmTargetsButton = nullptr;
     QPushButton *undoLandTapButton;
+    int multiTargetSelectedCount = 0;
+    int multiTargetMaxCount = -1;
     QString fallbackPromptText;
     bool landTapUndoAvailable = false;
     bool spellCastPending = false;
@@ -107,6 +116,7 @@ private:
     CombatMode currentCombatMode = CombatMode::None;
     bool localPlayerHasCombatButtons = false;
     bool targetingModeEnabled = false;
+    bool spellDamageAllocationMode = false;
     bool activatedAbilityTargetPending = false;
     bool ruledStackHasItems = false;
     bool firstStrikeStepPending = false;

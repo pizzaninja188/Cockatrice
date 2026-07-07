@@ -720,7 +720,13 @@ fn giant_growth_changes_combat_outcome() {
     let growth_batch = e
         .apply_command(
             0,
-            &cast_spell(growth_idx, vec![TargetRef { object_id: p0_bear }]),
+            &cast_spell(
+                growth_idx,
+                vec![TargetRef {
+                    object_id: p0_bear,
+                    damage_amount: 0,
+                }],
+            ),
         )
         .expect("cast growth");
     let growth_push = growth_batch
@@ -870,6 +876,7 @@ fn cannot_cast_spell_until_blockers_declared() {
                 growth_idx,
                 vec![TargetRef {
                     object_id: attacker,
+                    damage_amount: 0,
                 }],
             ),
         )
@@ -899,6 +906,7 @@ fn cannot_cast_spell_until_blockers_declared() {
             growth_idx2,
             vec![TargetRef {
                 object_id: attacker,
+                damage_amount: 0,
             }],
         ),
     )
@@ -1757,7 +1765,8 @@ fn divine_verdict_targets_only_combatants() {
             &cast_spell(
                 idx,
                 vec![TargetRef {
-                    object_id: bystander
+                    object_id: bystander,
+                    damage_amount: 0,
                 }]
             )
         )
@@ -1771,6 +1780,7 @@ fn divine_verdict_targets_only_combatants() {
             idx,
             vec![TargetRef {
                 object_id: attacker,
+                damage_amount: 0,
             }],
         ),
     )

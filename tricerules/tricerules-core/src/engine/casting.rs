@@ -89,12 +89,15 @@ pub(super) fn solve_flex(
     }
 }
 
-/// Pays `cost` and returns the amount of life spent on Phyrexian pips (CR 107.4f).
+/// Pays `cost` (plus `extra_generic` additional generic mana) and returns the amount of life
+/// spent on Phyrexian pips (CR 107.4f). `extra_generic` is used for per-target surcharges such
+/// as Fireball's "{1} per target beyond the first" (CR 601.2f).
 pub(super) fn pay_mana(
     state: &mut GameState,
     player_idx: usize,
     cost: &ManaCost,
     x_value: u32,
+    extra_generic: u32,
     flex_payments: &[rv1::FlexPipPayment],
 ) -> Result<u32, EngineError> {
     if player_idx != state.priority_idx {
@@ -109,7 +112,7 @@ pub(super) fn pay_mana(
         .collect();
 
     let mut need_color: PoolVec = [0; 6];
-    let mut need_generic = 0u32;
+    let mut need_generic = extra_generic;
     let mut life_cost = 0u32;
     let mut flex: Vec<FlexPip> = Vec::new();
     for (i, pip) in cost.pips.iter().enumerate() {
@@ -245,10 +248,57 @@ impl GameEngine {
             return Err(EngineError::Illegal("x_value given but cost has no {X}"));
         }
         let chosen_x = if has_x { x_value } else { 0 };
-        let life_paid = pay_mana(&mut self.state, idx, &face_mana, chosen_x, flex_payments)?;
+        // Validate DamageTargets damage allocation: sum of per-target amounts must equal total.
+        for effect in &face_effects {
+            if let SpellEffectKind::DamageTargets { amount, .. } = effect {
+                let total = amount.resolve(chosen_x);
+                let allocated: u32 = targets.iter().map(|t| t.damage_amount).sum();
+                if allocated != total {
+                    return Err(EngineError::Illegal(
+                        "damage amounts must sum to the total damage (X)",
+                    ));
+                }
+            }
+        }
+        // Compute extra mana for DamageTargets (e.g. Fireball: {1} per target beyond first).
+        let extra_generic = face_effects
+            .iter()
+            .find_map(|e| {
+                if let SpellEffectKind::DamageTargets {
+                    extra_mana_per_target,
+                    ..
+                } = e
+                {
+                    if *extra_mana_per_target > 0 && targets.len() > 1 {
+                        Some(*extra_mana_per_target * (targets.len() as u32 - 1))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(0);
+        let life_paid = pay_mana(
+            &mut self.state,
+            idx,
+            &face_mana,
+            chosen_x,
+            extra_generic,
+            flex_payments,
+        )?;
 
         self.state.players[idx].hand.retain(|&x| x != oid);
         let trefs: Vec<ObjectId> = targets.iter().map(|t| t.object_id).collect();
+        // For DamageTargets, store per-target damage allocations parallel to targets.
+        let target_damage: Vec<u32> = if face_effects
+            .iter()
+            .any(|e| matches!(e, SpellEffectKind::DamageTargets { .. }))
+        {
+            targets.iter().map(|t| t.damage_amount).collect()
+        } else {
+            vec![]
+        };
         let tgt_line = format_spell_targets_log(&self.state, self.registry, &trefs);
 
         self.state.stack.push(StackItem {
@@ -263,6 +313,7 @@ impl GameEngine {
             is_copy: false,
             chosen_x,
             face_index,
+            target_damage,
         });
         if let Some(o) = self.state.objects.get_mut(&oid) {
             o.zone = Zone::Stack;
@@ -419,6 +470,7 @@ impl GameEngine {
             is_copy: false,
             chosen_x: 0,
             face_index: 0,
+            target_damage: vec![],
         });
         self.state.passes_since_stack_change = 0;
         self.state.priority_idx = idx;
@@ -474,12 +526,12 @@ impl GameEngine {
                 Ok((None, 0))
             }
             AbilityCost::Mana(cost) => {
-                let life_paid = pay_mana(&mut self.state, idx, cost, 0, flex_payments)?;
+                let life_paid = pay_mana(&mut self.state, idx, cost, 0, 0, flex_payments)?;
                 Ok((None, life_paid))
             }
             AbilityCost::TapAndMana(cost) => {
                 self.check_tappable(permanent_id, card_id)?;
-                let life_paid = pay_mana(&mut self.state, idx, cost, 0, flex_payments)?;
+                let life_paid = pay_mana(&mut self.state, idx, cost, 0, 0, flex_payments)?;
                 self.tap_for_cost(permanent_id, card_id)?;
                 Ok((None, life_paid))
             }
@@ -742,7 +794,7 @@ mod mana_payment_tests {
         let cost = ManaCost {
             pips: vec![ManaSymbol::Generic(15)],
         };
-        assert!(pay_mana(&mut e.state, 0, &cost, 0, &[]).is_ok());
+        assert!(pay_mana(&mut e.state, 0, &cost, 0, 0, &[]).is_ok());
         assert_eq!(e.state.players[0].mana_pool.colorless, 0);
     }
 
@@ -754,7 +806,7 @@ mod mana_payment_tests {
             pips: vec![ManaSymbol::Generic(15)],
         };
         assert!(matches!(
-            pay_mana(&mut e.state, 0, &cost, 0, &[]),
+            pay_mana(&mut e.state, 0, &cost, 0, 0, &[]),
             Err(EngineError::Illegal(_))
         ));
     }
@@ -768,11 +820,11 @@ mod mana_payment_tests {
             pips: vec![ManaSymbol::C],
         };
         assert!(matches!(
-            pay_mana(&mut e.state, 0, &cost, 0, &[]),
+            pay_mana(&mut e.state, 0, &cost, 0, 0, &[]),
             Err(EngineError::Illegal(_))
         ));
         e.state.players[0].mana_pool.colorless = 1;
-        assert!(pay_mana(&mut e.state, 0, &cost, 0, &[]).is_ok());
+        assert!(pay_mana(&mut e.state, 0, &cost, 0, 0, &[]).is_ok());
     }
 
     #[test]
@@ -784,7 +836,7 @@ mod mana_payment_tests {
         let cost = ManaCost {
             pips: vec![ManaSymbol::X, ManaSymbol::R],
         };
-        assert!(pay_mana(&mut e.state, 0, &cost, 4, &[]).is_ok());
+        assert!(pay_mana(&mut e.state, 0, &cost, 4, 0, &[]).is_ok());
         assert_eq!(e.state.players[0].mana_pool.colorless, 0);
         assert_eq!(e.state.players[0].mana_pool.red, 0);
     }
@@ -797,7 +849,7 @@ mod mana_payment_tests {
         let cost = ManaCost {
             pips: vec![ManaSymbol::X, ManaSymbol::R],
         };
-        assert!(pay_mana(&mut e.state, 0, &cost, 0, &[]).is_ok());
+        assert!(pay_mana(&mut e.state, 0, &cost, 0, 0, &[]).is_ok());
     }
 
     #[test]
@@ -810,7 +862,7 @@ mod mana_payment_tests {
             pips: vec![ManaSymbol::X, ManaSymbol::R],
         };
         assert!(matches!(
-            pay_mana(&mut e.state, 0, &cost, 4, &[]),
+            pay_mana(&mut e.state, 0, &cost, 4, 0, &[]),
             Err(EngineError::Illegal(_))
         ));
     }
@@ -823,12 +875,12 @@ mod mana_payment_tests {
         };
         let mut e = engine_with_priority();
         e.state.players[0].mana_pool.green = 1;
-        assert!(pay_mana(&mut e.state, 0, &cost, 0, &[]).is_ok());
+        assert!(pay_mana(&mut e.state, 0, &cost, 0, 0, &[]).is_ok());
         assert_eq!(e.state.players[0].mana_pool.green, 0);
 
         let mut e = engine_with_priority();
         e.state.players[0].mana_pool.blue = 1;
-        assert!(pay_mana(&mut e.state, 0, &cost, 0, &[]).is_ok());
+        assert!(pay_mana(&mut e.state, 0, &cost, 0, 0, &[]).is_ok());
         assert_eq!(e.state.players[0].mana_pool.blue, 0);
     }
 
@@ -841,7 +893,7 @@ mod mana_payment_tests {
         let mut e = engine_with_priority();
         e.state.players[0].mana_pool.green = 1;
         e.state.players[0].mana_pool.blue = 1;
-        assert!(pay_mana(&mut e.state, 0, &cost, 0, &[]).is_ok());
+        assert!(pay_mana(&mut e.state, 0, &cost, 0, 0, &[]).is_ok());
         assert_eq!(e.state.players[0].mana_pool.green, 0);
         assert_eq!(e.state.players[0].mana_pool.blue, 0);
     }
@@ -854,14 +906,14 @@ mod mana_payment_tests {
         };
         let mut e = engine_with_priority();
         e.state.players[0].mana_pool.red = 2;
-        assert!(pay_mana(&mut e.state, 0, &cost, 0, &[]).is_ok());
+        assert!(pay_mana(&mut e.state, 0, &cost, 0, 0, &[]).is_ok());
         assert_eq!(e.state.players[0].mana_pool.red, 0);
 
         // ...or by one white (the cheaper alternative is preferred, leaving generic mana spare).
         let mut e = engine_with_priority();
         e.state.players[0].mana_pool.white = 1;
         e.state.players[0].mana_pool.red = 2;
-        assert!(pay_mana(&mut e.state, 0, &cost, 0, &[]).is_ok());
+        assert!(pay_mana(&mut e.state, 0, &cost, 0, 0, &[]).is_ok());
         assert_eq!(e.state.players[0].mana_pool.white, 0);
         assert_eq!(e.state.players[0].mana_pool.red, 2);
     }
@@ -875,7 +927,7 @@ mod mana_payment_tests {
         let mut e = engine_with_priority();
         e.state.players[0].mana_pool.red = 1;
         assert!(matches!(
-            pay_mana(&mut e.state, 0, &cost, 0, &[]),
+            pay_mana(&mut e.state, 0, &cost, 0, 0, &[]),
             Err(EngineError::Illegal(_))
         ));
     }
@@ -889,7 +941,7 @@ mod mana_payment_tests {
         let mut e = engine_with_priority();
         e.state.players[0].mana_pool.black = 1;
         let life = e.state.players[0].life;
-        assert!(pay_mana(&mut e.state, 0, &cost, 0, &[]).is_ok());
+        assert!(pay_mana(&mut e.state, 0, &cost, 0, 0, &[]).is_ok());
         assert_eq!(e.state.players[0].mana_pool.black, 0);
         assert_eq!(e.state.players[0].life, life); // no life paid
     }
@@ -906,7 +958,7 @@ mod mana_payment_tests {
             pip_index: 0,
             pay_life: true,
         }];
-        assert!(pay_mana(&mut e.state, 0, &cost, 0, &flex).is_ok());
+        assert!(pay_mana(&mut e.state, 0, &cost, 0, 0, &flex).is_ok());
         assert_eq!(e.state.players[0].life, life - 2);
     }
 
@@ -923,7 +975,7 @@ mod mana_payment_tests {
             pay_life: true,
         }];
         assert!(matches!(
-            pay_mana(&mut e.state, 0, &cost, 0, &flex),
+            pay_mana(&mut e.state, 0, &cost, 0, 0, &flex),
             Err(EngineError::Illegal(_))
         ));
         assert_eq!(e.state.players[0].life, 1); // unchanged on failure

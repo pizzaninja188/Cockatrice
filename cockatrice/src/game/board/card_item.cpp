@@ -45,6 +45,8 @@ CardItem::CardItem(Player *_owner, QGraphicsItem *parent, const CardRef &cardRef
             connect(handler, &GameEventHandler::ruledCombatStateChanged, this, [this]() { update(); });
             connect(handler, &GameEventHandler::ruledBattlefieldMapUpdated, this, [this]() { update(); });
             connect(handler, &GameEventHandler::ruledCombatDamageUiChanged, this, [this]() { update(); });
+            connect(handler, &GameEventHandler::ruledSpellTargetSelectionChanged, this, [this]() { update(); });
+            connect(handler, &GameEventHandler::ruledSpellDamageAllocationUiChanged, this, [this]() { update(); });
         }
     }
 }
@@ -246,6 +248,9 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
                 // may not have arrived yet — draw a faint marker.
                 outlineColor = QColor(255, 80, 80, 200); // red-ish
             }
+            if (ruledHandler->isSelectedSpellTarget(ruledOid)) {
+                outlineColor = QColor(220, 40, 40);
+            }
             if (outlineColor.isValid()) {
                 painter->save();
                 painter->setRenderHint(QPainter::Antialiasing, true);
@@ -255,6 +260,12 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
                 painter->setPen(pen);
                 painter->drawPath(shape());
                 painter->restore();
+            }
+            if (ruledHandler->isSpellDamageAllocationDisplayActive()) {
+                const int alloc = ruledHandler->spellDamageAllocationForOid(ruledOid);
+                if (alloc > 0) {
+                    paintNumberEllipse(alloc, 14, QColor(255, 120, 0), 0, 1, painter);
+                }
             }
             if (ruledPhase == RuledPhase::AssignCombatDamage) {
                 const quint32 curAtt = ruledHandler->currentCombatDamageAttackerOid();
@@ -986,6 +997,13 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
             auto *playerManager = game ? game->getPlayerManager() : nullptr;
             auto *localPlayer = playerManager ? playerManager->getPlayers().value(playerManager->getLocalPlayerId()) : nullptr;
             auto *actions = localPlayer ? localPlayer->getPlayerActions() : nullptr;
+            // Spell damage allocation: right-click decrements this target's allocation.
+            if (actions && zone && zone->getName() == ZoneNames::TABLE &&
+                actions->tryBumpSpellDamageAllocationForCard(this, -1)) {
+                update();
+                AbstractCardItem::mouseReleaseEvent(event);
+                return;
+            }
             if (owner->getPlayerInfo()->getLocal() && actions && actions->tryRuledActivateAbilityMenu(this, false)) {
                 AbstractCardItem::mouseReleaseEvent(event);
                 return;
@@ -1046,6 +1064,14 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
             // the activation menu (leftClick = true selects that fast path).
             if (stationaryLeft && owner->getPlayerInfo()->getLocal() && actions && zone &&
                 zone->getName() == ZoneNames::TABLE && actions->tryRuledActivateAbilityMenu(this, true)) {
+                setCursor(Qt::OpenHandCursor);
+                AbstractCardItem::mouseReleaseEvent(event);
+                return;
+            }
+            // Spell damage allocation: left-click increments this target's allocation.
+            if (stationaryLeft && actions && zone && zone->getName() == ZoneNames::TABLE &&
+                actions->tryBumpSpellDamageAllocationForCard(this, +1)) {
+                update();
                 setCursor(Qt::OpenHandCursor);
                 AbstractCardItem::mouseReleaseEvent(event);
                 return;

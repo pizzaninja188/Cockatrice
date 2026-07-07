@@ -8,6 +8,7 @@
 #include "abstract_game.h"
 #include "log/message_log_widget.h"
 #include "player/player.h"
+#include "player/player_actions.h"
 #include "player/player_manager.h"
 
 #include <libcockatrice/network/client/abstract/abstract_client.h>
@@ -883,6 +884,62 @@ bool GameEventHandler::localPlayerIsRuledDefender() const
         return localId != currentRuledActivePlayerId && !blockersSubmittedThisStep;
     }
     return localId != currentRuledActivePlayerId;
+}
+
+bool GameEventHandler::isSelectedSpellTarget(quint32 oid) const
+{
+    const int localId = game->getPlayerManager()->getLocalPlayerId();
+    if (localId < 0) {
+        return false;
+    }
+    Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+    return local && local->getPlayerActions() &&
+           local->getPlayerActions()->isTargetSelectedForPendingSpell(oid);
+}
+
+bool GameEventHandler::isPlayerSelectedAsSpellTarget(int playerId) const
+{
+    const int localId = game->getPlayerManager()->getLocalPlayerId();
+    if (localId < 0) {
+        return false;
+    }
+    Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+    return local && local->getPlayerActions() &&
+           local->getPlayerActions()->isPlayerSelectedAsPendingSpellTarget(playerId);
+}
+
+bool GameEventHandler::isSpellDamageAllocationMode() const
+{
+    const int localId = game->getPlayerManager()->getLocalPlayerId();
+    if (localId < 0) return false;
+    Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+    return local && local->getPlayerActions() && local->getPlayerActions()->isInSpellDamageAllocationMode();
+}
+
+bool GameEventHandler::isSpellDamageAllocationDisplayActive() const
+{
+    const int localId = game->getPlayerManager()->getLocalPlayerId();
+    if (localId < 0) return false;
+    Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+    return local && local->getPlayerActions() && local->getPlayerActions()->isSpellDamageAllocationDisplayActive();
+}
+
+int GameEventHandler::spellDamageAllocationForOid(quint32 oid) const
+{
+    const int localId = game->getPlayerManager()->getLocalPlayerId();
+    if (localId < 0) return 0;
+    Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+    if (!local || !local->getPlayerActions()) return 0;
+    return local->getPlayerActions()->spellDamageAllocationForOid(oid);
+}
+
+int GameEventHandler::spellDamageAllocationForPlayerId(int playerId) const
+{
+    const int localId = game->getPlayerManager()->getLocalPlayerId();
+    if (localId < 0) return 0;
+    Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+    if (!local || !local->getPlayerActions()) return 0;
+    return local->getPlayerActions()->spellDamageAllocationForPlayerId(playerId);
 }
 
 void GameEventHandler::togglePendingAttacker(quint32 engineOid)
@@ -1988,6 +2045,10 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                 }
                                 data.canTargetSelf = src.can_target_self();
                                 data.canTargetOpponent = src.can_target_opponent();
+                                data.maxTargets = static_cast<int>(src.max_targets());
+                                data.fixedDamage = static_cast<int>(src.fixed_damage());
+                                data.isDamageTargets = src.is_damage_targets();
+                                data.extraManaPerTarget = static_cast<int>(src.extra_mana_per_target());
                                 ruledValidTargetsByHandSlot.insert(key, std::move(data));
                             }
                             ruledValidTargetsByAbility.clear();

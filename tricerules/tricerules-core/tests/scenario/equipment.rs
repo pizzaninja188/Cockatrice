@@ -74,6 +74,7 @@ fn bonesplitter_equip_adds_bonus() {
             0,
             vec![TargetRef {
                 object_id: creature,
+                damage_amount: 0,
             }],
         ),
     )
@@ -135,7 +136,14 @@ fn bonesplitter_reequip_shifts_bonus() {
     );
     e.apply_command(
         0,
-        &activate_ability(splitter, 0, vec![TargetRef { object_id: bear1 }]),
+        &activate_ability(
+            splitter,
+            0,
+            vec![TargetRef {
+                object_id: bear1,
+                damage_amount: 0,
+            }],
+        ),
     )
     .expect("first equip");
     pass_both_players(&mut e);
@@ -154,7 +162,14 @@ fn bonesplitter_reequip_shifts_bonus() {
     );
     e.apply_command(
         0,
-        &activate_ability(splitter, 0, vec![TargetRef { object_id: bear2 }]),
+        &activate_ability(
+            splitter,
+            0,
+            vec![TargetRef {
+                object_id: bear2,
+                damage_amount: 0,
+            }],
+        ),
     )
     .expect("re-equip");
     pass_both_players(&mut e);
@@ -205,7 +220,14 @@ fn equipment_falls_off_when_creature_dies() {
     );
     e.apply_command(
         0,
-        &activate_ability(splitter, 0, vec![TargetRef { object_id: bear }]),
+        &activate_ability(
+            splitter,
+            0,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
     )
     .expect("equip");
     pass_both_players(&mut e);
@@ -282,6 +304,7 @@ fn equip_cannot_target_opponent_creature() {
             0,
             vec![TargetRef {
                 object_id: opp_bear,
+                damage_amount: 0,
             }],
         ),
     );
@@ -326,7 +349,14 @@ fn vulshok_morningstar_adds_power_and_toughness() {
     );
     e.apply_command(
         0,
-        &activate_ability(star, 0, vec![TargetRef { object_id: bear }]),
+        &activate_ability(
+            star,
+            0,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
     )
     .expect("equip Vulshok Morningstar");
     pass_both_players(&mut e);

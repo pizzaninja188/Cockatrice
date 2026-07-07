@@ -121,7 +121,13 @@ fn go_for_the_throat_destroys_target_creature() {
     let gftt_idx = hand_index_for_card(&e, 0, "go_for_the_throat");
     e.apply_command(
         0,
-        &cast_spell(gftt_idx, vec![TargetRef { object_id: p1_bear }]),
+        &cast_spell(
+            gftt_idx,
+            vec![TargetRef {
+                object_id: p1_bear,
+                damage_amount: 0,
+            }],
+        ),
     )
     .expect("cast go for the throat");
     e.apply_command(0, &pass()).expect("p0 pass");
@@ -357,8 +363,17 @@ fn eyeblights_ending_destroys_target_creature() {
         },
     );
     let idx = hand_index_for_card(&e, 0, "eyeblights_ending");
-    e.apply_command(0, &cast_spell(idx, vec![TargetRef { object_id: bear }]))
-        .expect("cast eyeblight");
+    e.apply_command(
+        0,
+        &cast_spell(
+            idx,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast eyeblight");
     let batch = {
         e.apply_command(0, &pass()).expect("p0 pass");
         e.apply_command(1, &pass()).expect("p1 pass")
@@ -406,8 +421,17 @@ fn swords_to_plowshares_exiles_and_gains_life_equal_to_power() {
     );
     let idx = hand_index_for_card(&e, 0, "swords_to_plowshares");
     let p1_life_before = e.state.players[1].life;
-    e.apply_command(0, &cast_spell(idx, vec![TargetRef { object_id: bear }]))
-        .expect("cast swords");
+    e.apply_command(
+        0,
+        &cast_spell(
+            idx,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast swords");
     e.apply_command(0, &pass()).expect("p0 pass");
     e.apply_command(1, &pass()).expect("p1 pass");
 
@@ -450,8 +474,17 @@ fn unsummon_returns_target_creature_to_owner_hand() {
     );
     let idx = hand_index_for_card(&e, 0, "unsummon");
     let p1_hand_before = e.state.players[1].hand.len();
-    e.apply_command(0, &cast_spell(idx, vec![TargetRef { object_id: bear }]))
-        .expect("cast unsummon");
+    e.apply_command(
+        0,
+        &cast_spell(
+            idx,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast unsummon");
     let batch = {
         e.apply_command(0, &pass()).expect("p0 pass");
         e.apply_command(1, &pass()).expect("p1 pass")
@@ -514,6 +547,7 @@ fn boomerang_returns_target_land_to_owner_hand() {
             idx,
             vec![TargetRef {
                 object_id: island_oid,
+                damage_amount: 0,
             }],
         ),
     )
@@ -888,6 +922,7 @@ fn disentomb_returns_creature_from_graveyard_to_hand() {
             disentomb_idx,
             vec![TargetRef {
                 object_id: bears_oid,
+                damage_amount: 0,
             }],
         ),
     )
@@ -996,6 +1031,7 @@ fn return_from_graveyard_fizzles_when_target_removed_before_resolution() {
             disentomb_idx,
             vec![TargetRef {
                 object_id: dummy_oid,
+                damage_amount: 0,
             }],
         ),
     )

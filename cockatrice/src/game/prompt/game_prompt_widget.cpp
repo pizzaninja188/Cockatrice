@@ -184,6 +184,15 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     cancelTargetingButton->setObjectName("cancelTargetingButton");
     connect(cancelTargetingButton, &QPushButton::clicked, this, &GamePromptWidget::cancelTargetingRequested);
 
+    confirmSpellDamageButton = new QPushButton(this);
+    confirmSpellDamageButton->setObjectName("confirmSpellDamageButton");
+    confirmSpellDamageButton->hide();
+    connect(confirmSpellDamageButton, &QPushButton::clicked, this, &GamePromptWidget::confirmSpellDamageRequested);
+
+    confirmTargetsButton = new QPushButton(this);
+    confirmTargetsButton->setObjectName("confirmTargetsButton");
+    connect(confirmTargetsButton, &QPushButton::clicked, this, &GamePromptWidget::confirmTargetsRequested);
+
     undoLandTapButton = new QPushButton(this);
     undoLandTapButton->setObjectName("undoLandTapButton");
     connect(undoLandTapButton, &QPushButton::clicked, this, &GamePromptWidget::undoLandTapRequested);
@@ -192,6 +201,8 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     actionRow->setContentsMargins(0, 0, 0, 0);
     actionRow->setSpacing(4);
     actionRow->addWidget(cancelTargetingButton);
+    actionRow->addWidget(confirmTargetsButton);
+    actionRow->addWidget(confirmSpellDamageButton);
     actionRow->addWidget(undoLandTapButton);
     layout->addLayout(actionRow);
 
@@ -214,6 +225,8 @@ void GamePromptWidget::retranslateUi()
     resetBlockersButton->setText(tr("Reset Blockers"));
     confirmCombatDamageButton->setText(tr("OK"));
     cancelTargetingButton->setText(tr("Cancel"));
+    confirmTargetsButton->setText(tr("Confirm Targets"));
+    confirmSpellDamageButton->setText(tr("Confirm Damage"));
     undoLandTapButton->setText(tr("Undo"));
     openingKeepButton->setText(tr("Keep"));
     openingMulliganButton->setText(tr("Mulligan"));
@@ -230,6 +243,26 @@ void GamePromptWidget::setResolutionHandPickMode(int required, int selected)
 {
     resolutionHandPickRequired = required;
     resolutionHandPickSelected = selected;
+    updateCombatButtonsVisibility();
+}
+
+void GamePromptWidget::setMultiTargetSelectionCount(int selected, int maxTargets)
+{
+    multiTargetSelectedCount = selected;
+    multiTargetMaxCount = maxTargets;
+    updateCombatButtonsVisibility();
+}
+
+void GamePromptWidget::setSpellDamageAllocationStatus(bool active, int assigned, int total)
+{
+    spellDamageAllocationMode = active;
+    if (active) {
+        const bool legal = (total > 0 && assigned == total);
+        setPromptText(tr("Assign %1 damage — %2/%3 assigned. "
+                         "Click targets to add, right-click to reduce.")
+                          .arg(total).arg(assigned).arg(total));
+        confirmSpellDamageButton->setEnabled(legal);
+    }
     updateCombatButtonsVisibility();
 }
 
@@ -470,6 +503,8 @@ void GamePromptWidget::setCombatDamageStatus(const QString &attackerName, int as
 
 void GamePromptWidget::updateCombatButtonsVisibility()
 {
+    confirmSpellDamageButton->setVisible(false);
+
     // Resolution hand-pick: show only the Confirm button when a pick is active (required >= 0).
     if (resolutionHandPickRequired >= 0) {
         passPriorityButton->setVisible(false);
@@ -478,6 +513,7 @@ void GamePromptWidget::updateCombatButtonsVisibility()
         resetBlockersButton->setVisible(false);
         confirmCombatDamageButton->setVisible(false);
         cancelTargetingButton->setVisible(false);
+        confirmTargetsButton->setVisible(false);
         undoLandTapButton->setVisible(false);
         openingPickSeatButton1->hide();
         openingPickSeatButton2->hide();
@@ -498,6 +534,7 @@ void GamePromptWidget::updateCombatButtonsVisibility()
         resetBlockersButton->setVisible(false);
         confirmCombatDamageButton->setVisible(false);
         cancelTargetingButton->setVisible(false);
+        confirmTargetsButton->setVisible(false);
         undoLandTapButton->setVisible(false);
         const bool showPick = ruledOpeningUiKind == 1 && !ruledOpeningPickSeatIds.isEmpty();
         openingPickSeatButton1->setVisible(showPick && ruledOpeningPickSeatIds.size() >= 1);
@@ -523,6 +560,7 @@ void GamePromptWidget::updateCombatButtonsVisibility()
         resetBlockersButton->setVisible(false);
         confirmCombatDamageButton->setVisible(false);
         cancelTargetingButton->setVisible(false);
+        confirmTargetsButton->setVisible(false);
         undoLandTapButton->setVisible(false);
         return;
     }
@@ -532,8 +570,18 @@ void GamePromptWidget::updateCombatButtonsVisibility()
         confirmBlockersButton->setVisible(false);
         resetBlockersButton->setVisible(false);
         confirmCombatDamageButton->setVisible(false);
-        cancelTargetingButton->setVisible(true);
         undoLandTapButton->setVisible(false);
+        if (spellDamageAllocationMode) {
+            cancelTargetingButton->setVisible(true);
+            confirmTargetsButton->setVisible(false);
+            confirmSpellDamageButton->setVisible(true);
+            // enabled state is managed by setSpellDamageAllocationStatus
+            return;
+        }
+        cancelTargetingButton->setVisible(true);
+        const bool showConfirm = targetingModeEnabled && multiTargetMaxCount >= 0 && multiTargetSelectedCount >= 1;
+        confirmTargetsButton->setVisible(showConfirm);
+        confirmSpellDamageButton->setVisible(false);
         return;
     }
     if (triggerTargetPending || copyTargetPending) {
@@ -543,6 +591,7 @@ void GamePromptWidget::updateCombatButtonsVisibility()
         resetBlockersButton->setVisible(false);
         confirmCombatDamageButton->setVisible(false);
         cancelTargetingButton->setVisible(false);
+        confirmTargetsButton->setVisible(false);
         undoLandTapButton->setVisible(false);
         return;
     }
@@ -563,6 +612,7 @@ void GamePromptWidget::updateCombatButtonsVisibility()
     resetBlockersButton->setVisible(showBlockers);
     confirmCombatDamageButton->setVisible(showCombatDamage);
     cancelTargetingButton->setVisible(false);
+    confirmTargetsButton->setVisible(false);
     undoLandTapButton->setVisible(localPlayerHasPriority && landTapUndoAvailable && !showAttackers && !showBlockers &&
                                    !showCombatDamage && !waitingOnOpponentCombatDamage);
 }

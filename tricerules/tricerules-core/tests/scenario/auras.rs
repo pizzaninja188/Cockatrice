@@ -30,8 +30,17 @@ fn holy_strength_buffs_enchanted_creature() {
         },
     );
     let hs_idx = hand_index_for_card(&e, 0, "holy_strength");
-    e.apply_command(0, &cast_spell(hs_idx, vec![TargetRef { object_id: bear }]))
-        .expect("cast Holy Strength targeting bear");
+    e.apply_command(
+        0,
+        &cast_spell(
+            hs_idx,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast Holy Strength targeting bear");
     e.apply_command(0, &pass()).expect("p0 pass");
     e.apply_command(1, &pass()).expect("p1 pass");
 
@@ -87,7 +96,13 @@ fn unholy_strength_buffs_enchanted_creature() {
     let us_idx = hand_index_for_card(&e, 0, "unholy_strength");
     e.apply_command(
         0,
-        &cast_spell(us_idx, vec![TargetRef { object_id: corpse }]),
+        &cast_spell(
+            us_idx,
+            vec![TargetRef {
+                object_id: corpse,
+                damage_amount: 0,
+            }],
+        ),
     )
     .expect("cast Unholy Strength");
     e.apply_command(0, &pass()).expect("p0 pass");
@@ -126,8 +141,17 @@ fn aura_pt_buff_removed_when_aura_leaves_battlefield() {
         },
     );
     let hs_idx = hand_index_for_card(&e, 0, "holy_strength");
-    e.apply_command(0, &cast_spell(hs_idx, vec![TargetRef { object_id: bear }]))
-        .expect("cast Holy Strength");
+    e.apply_command(
+        0,
+        &cast_spell(
+            hs_idx,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast Holy Strength");
     e.apply_command(0, &pass()).expect("p0 pass");
     e.apply_command(1, &pass()).expect("p1 pass");
 
@@ -189,8 +213,17 @@ fn aura_dies_when_enchanted_creature_dies_sba() {
         },
     );
     let hs_idx = hand_index_for_card(&e, 0, "holy_strength");
-    e.apply_command(0, &cast_spell(hs_idx, vec![TargetRef { object_id: bear }]))
-        .expect("cast Holy Strength");
+    e.apply_command(
+        0,
+        &cast_spell(
+            hs_idx,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast Holy Strength");
     e.apply_command(0, &pass()).expect("p0 pass");
     e.apply_command(1, &pass()).expect("p1 pass");
 
@@ -249,8 +282,17 @@ fn aura_spell_fizzles_when_target_leaves_before_resolution() {
         },
     );
     let hs_idx = hand_index_for_card(&e, 0, "holy_strength");
-    e.apply_command(0, &cast_spell(hs_idx, vec![TargetRef { object_id: bear }]))
-        .expect("cast Holy Strength");
+    e.apply_command(
+        0,
+        &cast_spell(
+            hs_idx,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast Holy Strength");
 
     // Aura is on the stack; now remove the target creature before resolution.
     let hs_stack_id = e.state.stack.last().expect("hs on stack").id;

@@ -385,7 +385,13 @@ fn recast_bounced_creature_is_summoning_sick() {
     let unsummon_idx = hand_index_for_card(&e, 0, "unsummon");
     e.apply_command(
         0,
-        &cast_spell(unsummon_idx, vec![TargetRef { object_id: grizzly }]),
+        &cast_spell(
+            unsummon_idx,
+            vec![TargetRef {
+                object_id: grizzly,
+                damage_amount: 0,
+            }],
+        ),
     )
     .expect("cast unsummon at own grizzly");
     resolve_entire_stack_two_player(&mut e);

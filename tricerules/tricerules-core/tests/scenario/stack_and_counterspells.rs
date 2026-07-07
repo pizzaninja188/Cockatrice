@@ -74,6 +74,7 @@ fn countered_spell_moves_to_its_owners_graveyard() {
             counter_idx,
             vec![TargetRef {
                 object_id: bolt_oid,
+                damage_amount: 0,
             }],
         ),
     )
@@ -187,6 +188,7 @@ fn counterspell_fizzles_when_original_target_already_left_stack() {
             cs1,
             vec![TargetRef {
                 object_id: bolt_oid,
+                damage_amount: 0,
             }],
         ),
     )
@@ -207,6 +209,7 @@ fn counterspell_fizzles_when_original_target_already_left_stack() {
             cs2,
             vec![TargetRef {
                 object_id: bolt_oid,
+                damage_amount: 0,
             }],
         ),
     )
@@ -304,6 +307,7 @@ fn counterspell_counters_a_spell_on_stack() {
                 cs_idx,
                 vec![TargetRef {
                     object_id: bolt_oid,
+                    damage_amount: 0,
                 }],
             ),
         )
@@ -786,6 +790,7 @@ fn counterspell_on_top_bolt_fizzles_second_leaves_bottom_bolt() {
             cs_idx,
             vec![TargetRef {
                 object_id: top_bolt_oid,
+                damage_amount: 0,
             }],
         ),
     )
@@ -887,6 +892,7 @@ fn twincast_copies_bolt_both_deal_damage() {
                 twincast_idx,
                 vec![TargetRef {
                     object_id: bolt_oid,
+                    damage_amount: 0,
                 }],
             ),
         )
@@ -947,7 +953,10 @@ fn twincast_copies_bolt_both_deal_damage() {
     assert_eq!(copy_push.ability_annotation, "(copy)");
     assert_eq!(
         copy_push.targets,
-        vec![TargetRef { object_id: 1 }],
+        vec![TargetRef {
+            object_id: 1,
+            damage_amount: 0
+        }],
         "copy has the chosen target (P1)"
     );
 
@@ -1038,6 +1047,7 @@ fn twincast_rejects_non_spell_target() {
             twincast_idx,
             vec![TargetRef {
                 object_id: bears_oid,
+                damage_amount: 0,
             }],
         ),
     );
@@ -1112,6 +1122,7 @@ fn countering_a_spell_copy_removes_it_without_error() {
             twincast_idx,
             vec![TargetRef {
                 object_id: bolt_oid,
+                damage_amount: 0,
             }],
         ),
     )
@@ -1145,7 +1156,13 @@ fn countering_a_spell_copy_removes_it_without_error() {
     let counter_idx = hand_index_for_card(&e, 0, "counterspell");
     e.apply_command(
         0,
-        &cast_spell(counter_idx, vec![TargetRef { object_id: copy_id }]),
+        &cast_spell(
+            counter_idx,
+            vec![TargetRef {
+                object_id: copy_id,
+                damage_amount: 0,
+            }],
+        ),
     )
     .expect("p0 counter the copy");
     e.apply_command(0, &pass()).expect("p0 pass");
@@ -1236,6 +1253,7 @@ fn twincast_copy_controller_chooses_new_target() {
             twincast_idx,
             vec![TargetRef {
                 object_id: bolt_oid,
+                damage_amount: 0,
             }],
         ),
     )
@@ -1273,7 +1291,10 @@ fn twincast_copy_controller_chooses_new_target() {
         .expect("copy StackPushed after target choice");
     assert_eq!(
         copy_push.targets,
-        vec![TargetRef { object_id: 0 }],
+        vec![TargetRef {
+            object_id: 0,
+            damage_amount: 0
+        }],
         "copy targets P0"
     );
 

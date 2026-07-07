@@ -35,6 +35,7 @@ impl GameEngine {
 
         let target_ref = &[rv1::TargetRef {
             object_id: target_object_id,
+            damage_amount: 0,
         }];
         if let Some(kind) = effect {
             validate_effect_targets(&self.state, self.registry, player, kind, target_ref)?;
@@ -65,6 +66,7 @@ impl GameEngine {
             is_copy: false,
             chosen_x: 0,
             face_index: 0,
+            target_damage: vec![],
         });
         self.state.passes_since_stack_change = 0;
 
@@ -78,6 +80,7 @@ impl GameEngine {
                 description: card_name,
                 targets: vec![rv1::TargetRef {
                     object_id: target_object_id,
+                    damage_amount: 0,
                 }],
                 ability_annotation: ability_text,
                 card_id: String::new(),
@@ -273,7 +276,10 @@ impl GameEngine {
                     description: copied_name.clone(),
                     targets: chosen
                         .iter()
-                        .map(|&o| rv1::TargetRef { object_id: o })
+                        .map(|&o| rv1::TargetRef {
+                            object_id: o,
+                            damage_amount: 0,
+                        })
                         .collect(),
                     ability_annotation: "(copy)".to_string(),
                     card_id: card_id.clone(),

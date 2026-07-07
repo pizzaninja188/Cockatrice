@@ -56,6 +56,13 @@ PlayerTarget::PlayerTarget(Player *_owner, QGraphicsItem *parentItem)
 {
     setCacheMode(DeviceCoordinateCache);
 
+    if (auto *game = _owner ? _owner->getGame() : nullptr) {
+        if (auto *handler = game->getGameEventHandler()) {
+            connect(handler, &GameEventHandler::ruledSpellTargetSelectionChanged, this, [this]() { update(); });
+            connect(handler, &GameEventHandler::ruledSpellDamageAllocationUiChanged, this, [this]() { update(); });
+        }
+    }
+
     const std::string &bmp = _owner->getPlayerInfo()->getUserInfo()->avatar_bmp();
     if (!fullPixmap.loadFromData((const uchar *)bmp.data(), static_cast<uint>(bmp.size()))) {
         fullPixmap = QPixmap();
@@ -160,6 +167,28 @@ void PlayerTarget::paint(QPainter *painter, const QStyleOptionGraphicsItem * /*o
         painter->drawRoundedRect(highlightRect, 4.0, 4.0);
     }
 
+    if (owner && owner->getGame()) {
+        auto *gameHandler = owner->getGame()->getGameEventHandler();
+        const int ownerId = owner->getPlayerInfo()->getId();
+        if (gameHandler && gameHandler->isPlayerSelectedAsSpellTarget(ownerId)) {
+            const qreal selWidth = 3.0;
+            const qreal selInset = border + 3.0;
+            QRectF selRect = avatarBoundingRect.adjusted(selInset, selInset, -selInset, -selInset);
+            QPen selPen(QColor(220, 40, 40));
+            selPen.setWidthF(selWidth);
+            selPen.setJoinStyle(Qt::RoundJoin);
+            painter->setPen(selPen);
+            painter->setBrush(Qt::NoBrush);
+            painter->drawRoundedRect(selRect, 4.0, 4.0);
+        }
+        if (gameHandler && gameHandler->isSpellDamageAllocationDisplayActive()) {
+            const int alloc = gameHandler->spellDamageAllocationForPlayerId(ownerId);
+            if (alloc > 0) {
+                paintNumberEllipse(alloc, 14, QColor(255, 120, 0), 0, 1, painter);
+            }
+        }
+    }
+
     if (getBeingPointedAt())
         painter->fillRect(boundingRect(), QBrush(QColor(255, 0, 0, 100)));
 }
@@ -195,14 +224,24 @@ void PlayerTarget::counterDeleted()
 
 void PlayerTarget::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
-    if (event->button() == Qt::LeftButton && owner && owner->getGame()) {
+    if (owner && owner->getGame()) {
         auto *playerManager = owner->getGame()->getPlayerManager();
         if (playerManager) {
             Player *localPlayer = playerManager->getPlayers().value(playerManager->getLocalPlayerId(), nullptr);
             if (localPlayer && localPlayer->getPlayerActions()) {
                 PlayerActions *actions = localPlayer->getPlayerActions();
-                if (actions->isAwaitingRuledPlayerTargetSelection() ||
-                    actions->isAwaitingRuledAbilityOrTriggerPlayerTarget()) {
+                // Right-click reduces this player's damage allocation. Qt only routes the release
+                // to the item that accepted the matching press, so the right press must be accepted
+                // here or the decrement release in mouseReleaseEvent would never arrive (a context
+                // menu would grab it instead — the reason creatures decremented but players didn't).
+                if (event->button() == Qt::RightButton && actions->isInSpellDamageAllocationMode()) {
+                    event->accept();
+                    return;
+                }
+                if (event->button() == Qt::LeftButton &&
+                    (actions->isInSpellDamageAllocationMode() ||
+                     actions->isAwaitingRuledPlayerTargetSelection() ||
+                     actions->isAwaitingRuledAbilityOrTriggerPlayerTarget())) {
                     event->accept();
                     return;
                 }
@@ -214,16 +253,29 @@ void PlayerTarget::mousePressEvent(QGraphicsSceneMouseEvent *event)
 
 void PlayerTarget::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
-    if (event->button() == Qt::LeftButton && owner && owner->getGame()) {
+    if (owner && owner->getGame()) {
         auto *playerManager = owner->getGame()->getPlayerManager();
         if (playerManager) {
             Player *localPlayer = playerManager->getPlayers().value(playerManager->getLocalPlayerId(), nullptr);
-            if (localPlayer && localPlayer->getPlayerActions()) {
-                if (localPlayer->getPlayerActions()->tryHandleRuledAbilityTargetPlayerClick(owner)) {
+            PlayerActions *actions = localPlayer ? localPlayer->getPlayerActions() : nullptr;
+            if (event->button() == Qt::LeftButton && actions) {
+                // Spell damage allocation takes priority: left-click increments this player's allocation.
+                if (actions->tryBumpSpellDamageAllocationForPlayer(owner, +1)) {
                     event->accept();
                     return;
                 }
-                if (localPlayer->getPlayerActions()->tryHandleRuledSpellTargetPlayerClick(owner)) {
+                if (actions->tryHandleRuledAbilityTargetPlayerClick(owner)) {
+                    event->accept();
+                    return;
+                }
+                if (actions->tryHandleRuledSpellTargetPlayerClick(owner)) {
+                    event->accept();
+                    return;
+                }
+            }
+            if (event->button() == Qt::RightButton && actions) {
+                // Spell damage allocation: right-click decrements this player's allocation.
+                if (actions->tryBumpSpellDamageAllocationForPlayer(owner, -1)) {
                     event->accept();
                     return;
                 }
