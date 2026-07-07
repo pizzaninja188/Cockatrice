@@ -393,6 +393,8 @@ pub(crate) fn inject_creature_on_battlefield(
             counters: std::collections::BTreeMap::new(),
             attached_to: None,
             regeneration_shields: 0,
+            must_attack_if_able: false,
+            must_block_if_able: false,
         },
     );
     e.state.players[player].battlefield.push(id);
@@ -425,6 +427,8 @@ pub(crate) fn inject_permanent_on_battlefield(
             counters: std::collections::BTreeMap::new(),
             attached_to: None,
             regeneration_shields: 0,
+            must_attack_if_able: false,
+            must_block_if_able: false,
         },
     );
     e.state.players[player].battlefield.push(id);
@@ -453,6 +457,8 @@ pub(crate) fn inject_library_card(e: &mut GameEngine, player: usize, card_id: &s
             counters: std::collections::BTreeMap::new(),
             attached_to: None,
             regeneration_shields: 0,
+            must_attack_if_able: false,
+            must_block_if_able: false,
         },
     );
     e.state.players[player].library.push_back(id);
@@ -655,6 +661,8 @@ pub(crate) fn inject_creature_with_stats(
             counters: std::collections::BTreeMap::new(),
             attached_to: None,
             regeneration_shields: 0,
+            must_attack_if_able: false,
+            must_block_if_able: false,
         },
     );
     e.state.players[player].battlefield.push(id);

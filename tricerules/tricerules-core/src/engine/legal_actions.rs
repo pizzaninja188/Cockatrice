@@ -60,6 +60,28 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
             .filter(|e| e.player == p.id)
             .count() as u32;
 
+        // CR 508.1d / 509.1c: surface must-attack / must-block sets so the client can gate its
+        // combat confirm controls exactly as the engine enforces (see combat.rs). Only the player
+        // making that declaration gets the ids: the active player is given required attackers while
+        // attackers are still open; the defending player is given required blockers after attackers
+        // are declared and before blocks are locked in.
+        let combat = eng.state.combat.as_ref();
+        let attackers_open = eng.state.turn_step == TurnStep::DeclareAttackers
+            && !combat.map(|c| c.attackers_declared).unwrap_or(false);
+        let required_attacker_ids = if attackers_open && p.id == eng.state.active_player_id() {
+            eng.required_attacker_ids()
+        } else {
+            Vec::new()
+        };
+        let blocks_open = eng.state.turn_step == TurnStep::DeclareBlockers
+            && !combat.map(|c| c.blockers_declared).unwrap_or(false);
+        let required_blocker_ids =
+            if blocks_open && Some(p.id) == eng.state.defending_player_id_1v1() {
+                eng.required_blocker_ids()
+            } else {
+                Vec::new()
+            };
+
         batch.legal_by_player.insert(
             p.id,
             LegalActions {
@@ -67,6 +89,8 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 valid_targets_by_hand_slot,
                 valid_targets_by_ability,
                 undoable_mana_abilities,
+                required_attacker_ids,
+                required_blocker_ids,
             },
         );
     }

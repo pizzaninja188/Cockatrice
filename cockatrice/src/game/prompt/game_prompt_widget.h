@@ -29,7 +29,10 @@ public slots:
     void setPassPriorityEnabled(bool enabled);
     void setActivePhase(int phase);
     void setLocalPlayerHasPriority(bool hasPriority);
-    void setCombatMode(CombatMode mode, bool localPlayerHasButtons);
+    /// `declarationSatisfied` (CR 508.1d / 509.1c): when false, the local player still has a
+    /// must-attack / must-block creature that isn't staged, so the confirm (OK) button is disabled
+    /// to prevent submitting an illegal declaration that the engine would reject (softlock).
+    void setCombatMode(CombatMode mode, bool localPlayerHasButtons, bool declarationSatisfied = true);
     void setTargetingMode(bool enabled, const QString &cardName = {});
     void setRuledStackHasItems(bool hasItems);
     /// CR 510.4: true while the engine reports a pending first-strike damage substep.
@@ -115,6 +118,8 @@ private:
     bool localPlayerHasPriority = false;
     CombatMode currentCombatMode = CombatMode::None;
     bool localPlayerHasCombatButtons = false;
+    /// CR 508.1d / 509.1c: false while a required attacker/blocker is still unstaged; disables OK.
+    bool combatDeclarationSatisfied = true;
     bool targetingModeEnabled = false;
     bool spellDamageAllocationMode = false;
     bool activatedAbilityTargetPending = false;

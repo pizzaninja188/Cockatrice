@@ -1,0 +1,9 @@
+(
+  id: "goblin_brigand",
+  name: "Goblin Brigand",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Goblin", "Warrior"],
+  power: 2,
+  toughness: 2,
+  must_attack_if_able: true,
+)

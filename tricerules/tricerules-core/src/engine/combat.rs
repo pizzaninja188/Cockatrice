@@ -123,6 +123,85 @@ impl GameEngine {
         })
     }
 
+    /// CR 508.1d: the active player's creatures that MUST be declared as attackers this combat —
+    /// untapped, not summoning-sick (unless Haste), non-Defender creatures with `must_attack_if_able`,
+    /// when a defending player exists to attack. Single source of truth shared by `set_attackers`
+    /// enforcement and the client-facing `LegalActions` gate (Juggernaut, Goblin Brigand, Crazed Goblin).
+    pub(super) fn required_attacker_ids(&self) -> Vec<ObjectId> {
+        use tricerules_cards::Keyword;
+        if self.state.defending_player_id_1v1().is_none() {
+            return Vec::new();
+        }
+        let ap = self.state.active_player_id();
+        let Some(ap_idx) = self.state.player_idx(ap) else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        for &oid in &self.state.players[ap_idx].battlefield {
+            let Some(obj) = self.state.objects.get(&oid) else {
+                continue;
+            };
+            if !obj.must_attack_if_able {
+                continue;
+            }
+            if !obj.is_creature(self.registry) {
+                continue;
+            }
+            if obj.tapped {
+                continue;
+            }
+            if obj.summoning_sick && !obj.has_keyword(self.registry, Keyword::Haste) {
+                continue;
+            }
+            if obj.has_keyword(self.registry, Keyword::Defender) {
+                continue;
+            }
+            out.push(oid);
+        }
+        out
+    }
+
+    /// CR 509.1c: the defending player's creatures that MUST be declared as blockers this combat —
+    /// untapped creatures with `must_block_if_able` that can legally block at least one declared
+    /// attacker. Single source of truth shared by `set_blockers` enforcement and the client-facing
+    /// `LegalActions` gate. Empty until attackers are declared.
+    pub(super) fn required_blocker_ids(&self) -> Vec<ObjectId> {
+        let Some(defending_player) = self.state.defending_player_id_1v1() else {
+            return Vec::new();
+        };
+        let attacking: Vec<ObjectId> = self
+            .state
+            .combat
+            .as_ref()
+            .map(|c| c.attacking.clone())
+            .unwrap_or_default();
+        if attacking.is_empty() {
+            return Vec::new();
+        }
+        let Some(dp_idx) = self.state.player_idx(defending_player) else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        for &oid in &self.state.players[dp_idx].battlefield {
+            let Some(obj) = self.state.objects.get(&oid) else {
+                continue;
+            };
+            if !obj.must_block_if_able {
+                continue;
+            }
+            if !obj.is_creature(self.registry) {
+                continue;
+            }
+            if obj.tapped {
+                continue;
+            }
+            if attacking.iter().any(|&aid| self.can_block(aid, oid)) {
+                out.push(oid);
+            }
+        }
+        out
+    }
+
     pub(super) fn set_attackers(
         &mut self,
         ids: &[u32],
@@ -132,6 +211,18 @@ impl GameEngine {
             return Err(EngineError::Illegal("not your priority"));
         }
         let ap = self.state.active_player_id();
+
+        // CR 508.1d: must-attack enforcement. A creature that must attack if able must be declared
+        // as an attacker whenever it is a legal attacker. Same set the client is given via
+        // LegalActions.required_attacker_ids, so the UI can gate its confirm control identically.
+        for oid in self.required_attacker_ids() {
+            if !ids.contains(&oid) {
+                return Err(EngineError::Illegal(
+                    "must-attack creature not declared as attacker",
+                ));
+            }
+        }
+
         if ids.is_empty() {
             self.clear_all_mana_pools();
             self.state.combat = None;
@@ -307,6 +398,18 @@ impl GameEngine {
                 .or_default()
                 .push(p.blocker_id);
         }
+        // CR 509.1c: must-block enforcement. A creature that must block if able must be declared
+        // as a blocker whenever it is untapped and could legally block at least one attacker.
+        // `seen_blockers` already holds every declared blocker; `required_blocker_ids` is the same
+        // set surfaced to the client via LegalActions so the UI can gate its confirm control.
+        for oid in self.required_blocker_ids() {
+            if !seen_blockers.contains(&oid) {
+                return Err(EngineError::Illegal(
+                    "must-block creature not declared as blocker",
+                ));
+            }
+        }
+
         // CR 702.111: menace — a creature with menace can't be blocked except by two or more
         // creatures. A menace creature with zero blockers is fine (it's unblocked); one blocker
         // is the illegal case. Return a prompt-friendly message so the UI can surface it.

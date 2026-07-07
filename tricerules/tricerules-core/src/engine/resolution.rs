@@ -1228,6 +1228,8 @@ impl GameEngine {
                         counters: BTreeMap::new(),
                         attached_to: None,
                         regeneration_shields: 0,
+                        must_attack_if_able: false,
+                        must_block_if_able: false,
                     },
                 );
                 self.state.players[pidx].battlefield.push(oid);

@@ -65,6 +65,13 @@ pub struct GameObject {
     /// effect: the next time this permanent would be destroyed, instead tap it, remove it from
     /// combat, and clear all damage from it. Shields expire at the cleanup step (like damage).
     pub regeneration_shields: u32,
+    /// CR 508.1d: this creature must be declared as an attacker whenever it is a legal attacker
+    /// ("attacks each combat if able"). Set from card data at object creation; may be overridden
+    /// by continuous effects. Cards: Crazed Goblin, Goblin Brigand.
+    pub must_attack_if_able: bool,
+    /// CR 509.1c: this creature must be declared as a blocker whenever it could legally block
+    /// ("blocks each combat if able"). Set from card data; may be overridden by continuous effects.
+    pub must_block_if_able: bool,
 }
 
 impl GameObject {

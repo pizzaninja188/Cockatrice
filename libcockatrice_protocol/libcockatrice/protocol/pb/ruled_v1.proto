@@ -211,6 +211,17 @@ message LegalActions {
   // float courtesy). Non-zero only while strictly inconsequential; clients show an Undo affordance
   // when > 0. Drops to 0 the moment mana is spent, a spell/ability is cast, or priority passes.
   uint32 undoable_mana_abilities = 5;
+  // CR 508.1d: battlefield creatures this player MUST declare as attackers this combat ("attacks
+  // if able" — untapped, not summoning-sick unless Haste, non-Defender, with a defending player).
+  // Populated only for the active player during declare-attackers, before attackers are locked in.
+  // The engine rejects a declaration that omits any of these, so clients disable the confirm-
+  // attackers control until every id is among the staged attackers (mirrors set_attackers).
+  repeated uint32 required_attacker_ids = 6;
+  // CR 509.1c: battlefield creatures this player MUST declare as blockers this combat ("blocks if
+  // able" — untapped and able to legally block at least one declared attacker). Populated only for
+  // the defending player after attackers are declared and before blocks are locked in. Clients
+  // disable the confirm-blockers control until every id is staged as a blocker (mirrors set_blockers).
+  repeated uint32 required_blocker_ids = 7;
 }
 
 // Servatrice-injected each ruled broadcast: engine hand slot index -> Server_Card.id for that player,

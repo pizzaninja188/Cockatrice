@@ -85,6 +85,29 @@ TEST_F(GamePromptWidgetTest, ConfirmAttackersSignalEmitted)
     EXPECT_EQ(spy.count(), 1);
 }
 
+// CR 508.1d: OK is disabled (but still shown) while a required attacker is unstaged.
+TEST_F(GamePromptWidgetTest, DeclareAttackersDisablesConfirmWhenRequirementUnmet)
+{
+    widget->setLocalPlayerHasPriority(true);
+    widget->setCombatMode(GamePromptWidget::CombatMode::DeclareAttackers, true, /*declarationSatisfied=*/false);
+    EXPECT_FALSE(btn("confirmAttackersButton")->isHidden());
+    EXPECT_FALSE(btn("confirmAttackersButton")->isEnabled());
+    // Staging the required attacker satisfies the requirement and re-enables OK.
+    widget->setCombatMode(GamePromptWidget::CombatMode::DeclareAttackers, true, /*declarationSatisfied=*/true);
+    EXPECT_TRUE(btn("confirmAttackersButton")->isEnabled());
+}
+
+// CR 509.1c: OK is disabled (but still shown) while a required blocker is unstaged.
+TEST_F(GamePromptWidgetTest, DeclareBlockersDisablesConfirmWhenRequirementUnmet)
+{
+    widget->setLocalPlayerHasPriority(true);
+    widget->setCombatMode(GamePromptWidget::CombatMode::DeclareBlockers, true, /*declarationSatisfied=*/false);
+    EXPECT_FALSE(btn("confirmBlockersButton")->isHidden());
+    EXPECT_FALSE(btn("confirmBlockersButton")->isEnabled());
+    widget->setCombatMode(GamePromptWidget::CombatMode::DeclareBlockers, true, /*declarationSatisfied=*/true);
+    EXPECT_TRUE(btn("confirmBlockersButton")->isEnabled());
+}
+
 TEST_F(GamePromptWidgetTest, DeclareBlockersShowsConfirmAndResetButtons)
 {
     widget->setLocalPlayerHasPriority(true);

@@ -942,6 +942,30 @@ int GameEventHandler::spellDamageAllocationForPlayerId(int playerId) const
     return local->getPlayerActions()->spellDamageAllocationForPlayerId(playerId);
 }
 
+bool GameEventHandler::ruledCombatDeclarationSatisfied() const
+{
+    // CR 508.1d: every must-attack creature must be among the staged attackers.
+    if (currentRuledCombatPhase == RuledCombatPhase::DeclareAttackers) {
+        for (const quint32 oid : ruledRequiredAttackerOids) {
+            if (!pendingAttackerOids.contains(oid)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    // CR 509.1c: every must-block creature must be staged as a blocker of some attacker. The engine
+    // still validates the specific pairing (evasion); here we only require it be blocking something.
+    if (currentRuledCombatPhase == RuledCombatPhase::DeclareBlockers) {
+        for (const quint32 oid : ruledRequiredBlockerOids) {
+            if (!pendingBlocks.contains(oid) && !committedBlocks.contains(oid)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    return true;
+}
+
 void GameEventHandler::togglePendingAttacker(quint32 engineOid)
 {
     if (engineOid == 0) {
@@ -2115,6 +2139,16 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             // client can offer/retract the Undo affordance authoritatively.
                             emit ruledUndoableManaAbilitiesChanged(
                                 static_cast<int>(lit->second.undoable_mana_abilities()));
+                            // CR 508.1d / 509.1c: engine-reported must-attack / must-block sets that
+                            // gate the combat confirm controls (see ruledCombatDeclarationSatisfied).
+                            ruledRequiredAttackerOids.clear();
+                            for (const quint32 oid : lit->second.required_attacker_ids()) {
+                                ruledRequiredAttackerOids.insert(oid);
+                            }
+                            ruledRequiredBlockerOids.clear();
+                            for (const quint32 oid : lit->second.required_blocker_ids()) {
+                                ruledRequiredBlockerOids.insert(oid);
+                            }
                         } else {
                             legalRuledLandPlayHandIndices.clear();
                             legalRuledLandPlayIndicesByCardName.clear();
@@ -2127,6 +2161,13 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             ruledOpeningBottomSelectedIndices.clear();
                             ruledOpeningPickSeatIds.clear();
                             ruledOpeningUiKind = RuledOpeningUiKind::None;
+                            // NB: do NOT clear ruledRequiredAttackerOids / ruledRequiredBlockerOids here.
+                            // Servatrice-synthesized combat preview batches (AttackersPreview /
+                            // BlockersPreview, emitted while the local player stages attackers/blocks)
+                            // carry no legal_by_player entry and land in this branch. The must-attack /
+                            // must-block sets are engine-authoritative and only change when a real engine
+                            // batch (with legal_by_player) arrives, so they must survive preview echoes —
+                            // otherwise deselecting a staged required creature couldn't re-disable OK.
                             emit ruledUndoableManaAbilitiesChanged(0);
                         }
                         pruneCleanupDiscardSelectionAndEmitUi();

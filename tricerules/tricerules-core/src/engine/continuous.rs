@@ -514,6 +514,8 @@ mod sba_tests {
                 counters: Default::default(),
                 attached_to: None,
                 regeneration_shields: 0,
+                must_attack_if_able: false,
+                must_block_if_able: false,
             },
         );
         let idx = e.state.player_idx(owner).unwrap();

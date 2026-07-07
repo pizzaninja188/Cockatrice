@@ -603,6 +603,8 @@ fn tome_scour_mills_five_cards_from_target_player() {
                 counters: std::collections::BTreeMap::new(),
                 attached_to: None,
                 regeneration_shields: 0,
+                must_attack_if_able: false,
+                must_block_if_able: false,
             },
         );
         e.state.players[0].hand.push(id);
@@ -680,6 +682,8 @@ fn tome_scour_caps_at_library_size() {
                 counters: std::collections::BTreeMap::new(),
                 attached_to: None,
                 regeneration_shields: 0,
+                must_attack_if_able: false,
+                must_block_if_able: false,
             },
         );
         e.state.players[0].hand.push(id);
@@ -731,6 +735,8 @@ fn tome_scour_can_target_controller() {
                 counters: std::collections::BTreeMap::new(),
                 attached_to: None,
                 regeneration_shields: 0,
+                must_attack_if_able: false,
+                must_block_if_able: false,
             },
         );
         e.state.players[0].hand.push(id);
@@ -867,6 +873,8 @@ fn disentomb_returns_creature_from_graveyard_to_hand() {
                 counters: std::collections::BTreeMap::new(),
                 attached_to: None,
                 regeneration_shields: 0,
+                must_attack_if_able: false,
+                must_block_if_able: false,
             },
         );
         e.state.players[0].graveyard.push(id);
@@ -891,6 +899,8 @@ fn disentomb_returns_creature_from_graveyard_to_hand() {
                 counters: std::collections::BTreeMap::new(),
                 attached_to: None,
                 regeneration_shields: 0,
+                must_attack_if_able: false,
+                must_block_if_able: false,
             },
         );
         e.state.players[0].hand.push(id);
@@ -980,6 +990,8 @@ fn return_from_graveyard_fizzles_when_target_removed_before_resolution() {
                 counters: std::collections::BTreeMap::new(),
                 attached_to: None,
                 regeneration_shields: 0,
+                must_attack_if_able: false,
+                must_block_if_able: false,
             },
         );
         e.state.players[0].hand.push(id);
@@ -1006,6 +1018,8 @@ fn return_from_graveyard_fizzles_when_target_removed_before_resolution() {
                 counters: std::collections::BTreeMap::new(),
                 attached_to: None,
                 regeneration_shields: 0,
+                must_attack_if_able: false,
+                must_block_if_able: false,
             },
         );
         e.state.players[0].graveyard.push(id);
@@ -1087,6 +1101,8 @@ fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
                 counters: std::collections::BTreeMap::new(),
                 attached_to: None,
                 regeneration_shields: 0,
+                must_attack_if_able: false,
+                must_block_if_able: false,
             },
         );
         e.state.players[0].graveyard.push(id);
@@ -1111,6 +1127,8 @@ fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
                 counters: std::collections::BTreeMap::new(),
                 attached_to: None,
                 regeneration_shields: 0,
+                must_attack_if_able: false,
+                must_block_if_able: false,
             },
         );
         e.state.players[0].hand.push(id);

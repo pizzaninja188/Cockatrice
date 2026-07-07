@@ -146,6 +146,8 @@ impl GameEngine {
                         counters: BTreeMap::new(),
                         attached_to: None,
                         regeneration_shields: 0,
+                        must_attack_if_able: def.must_attack_if_able,
+                        must_block_if_able: def.must_block_if_able,
                     },
                 );
                 p.library.push_back(oid);

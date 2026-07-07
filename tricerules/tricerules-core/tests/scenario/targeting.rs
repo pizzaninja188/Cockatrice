@@ -729,6 +729,8 @@ fn mind_sculpt_rejects_self_target() {
                 counters: std::collections::BTreeMap::new(),
                 attached_to: None,
                 regeneration_shields: 0,
+                must_attack_if_able: false,
+                must_block_if_able: false,
             },
         );
         e.state.players[0].hand.push(id);

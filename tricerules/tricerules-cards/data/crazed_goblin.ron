@@ -1,0 +1,9 @@
+(
+  id: "crazed_goblin",
+  name: "Crazed Goblin",
+  mana_cost: "{R}",
+  types: ["Creature", "Goblin", "Warrior"],
+  power: 1,
+  toughness: 1,
+  must_attack_if_able: true,
+)
