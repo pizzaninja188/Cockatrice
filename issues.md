@@ -24,10 +24,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Lands used to have a quick animation when tapping, but this stopped working after the engine-owned mana update and lands tap instantly. Animations also never worked for untapping.
   - Priority: Low
 
-- [ ] #17 [feature] "Attacks/blocks each combat if able" combat requirement
-  - Details: Some creatures are required to attack or block each combat if they legally can (CR 508.1d, 509.1c — "must attack/block" requirements). Add a `must_attack: bool` and `must_block: bool` field to `GameObject` (settable by continuous effects or card data), and enforce them during declare-attackers and declare-blockers legality: the engine should return `EngineError::Illegal` if the player tries to end declaration while a must-attack creature is idle and a legal attack exists, or a must-block creature is idle while a legal block exists. Add scenario tests covering: must-attack creature blocked from skipping, must-attack creature can still skip if no legal attack target exists.
-  - Priority: Low
-
 - [ ] #18 [feature] MDFC battlefield face state (plan-multiface-cards.md Phase 1)
   - Details: The multi-face card substrate is done (split layout, `face_index` on `StackItem`, `face_names` in `CardCatalog`) but MDFCs (modal double-faced cards), transforming DFCs, and Adventure cards need `GameObject.face_up_index: Option<usize>` to track which face is showing on the battlefield. Add this field, wire it into all permanent characteristic queries (card_id, P/T, keywords, types, mana cost), emit a `FaceChanged` event in the proto on transform, and expose a "Transform" right-click action gated to applicable layouts. On entry to the battlefield, set `face_up_index` per layout rules (MDFCs enter on front face; day/night DFCs start as specified). This completes Phase 1 of plan-multiface-cards.md and unblocks Adventure casting-from-exile and MDFC land backs.
   - Priority: Low
