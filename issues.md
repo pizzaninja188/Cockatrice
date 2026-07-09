@@ -24,10 +24,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Lands used to have a quick animation when tapping, but this stopped working after the engine-owned mana update and lands tap instantly. Animations also never worked for untapping.
   - Priority: Low
 
-- [ ] #18 [feature] MDFC battlefield face state (plan-multiface-cards.md Phase 1)
-  - Details: The multi-face card substrate is done (split layout, `face_index` on `StackItem`, `face_names` in `CardCatalog`) but MDFCs (modal double-faced cards), transforming DFCs, and Adventure cards need `GameObject.face_up_index: Option<usize>` to track which face is showing on the battlefield. Add this field, wire it into all permanent characteristic queries (card_id, P/T, keywords, types, mana cost), emit a `FaceChanged` event in the proto on transform, and expose a "Transform" right-click action gated to applicable layouts. On entry to the battlefield, set `face_up_index` per layout rules (MDFCs enter on front face; day/night DFCs start as specified). This completes Phase 1 of plan-multiface-cards.md and unblocks Adventure casting-from-exile and MDFC land backs.
-  - Priority: Low
-
 - [ ] #19 [feature] Modal spell mode selection (Charm cycles, Cryptic Command)
   - Details: Modal spells (CR 700.2) require the casting player to choose one or more modes at cast time. Add a `modes: Vec<Vec<SpellEffectKind>>` field to `CardFace` as a tier-1 primitive; during spell casting, if a card has modes, emit a `resolution_choice_required` interrupt (reusing the existing proto pair) before targeting to collect the mode selection. The chosen mode's effects are then treated exactly like the card's `spell_effect` list for targeting and resolution. Implement Boros Charm (indestructible / double strike / 3 damage to player) as the reference card, and add scenario tests for each mode. This machinery also covers Entwine (pay extra to get all modes) and future Charm cycles with minimal additions.
   - Priority: Low
@@ -78,6 +74,18 @@ it records progress in `AUTOMATION_STATUS.md` instead.
 
 - [ ] #32 [feature] "Whenever you gain life" trigger (Ajani's Pridemate, Heliod, Sun-Crowned)
   - Details: No `WheneverControllerGainsLife` trigger condition exists. Add `WheneverControllerGainsLife` to `TriggerCondition` in `tricerules-cards/src/primitives.rs`. The engine's life-gain paths — `GainLife` effect resolution, `TargetPlayerGainsLife`, and lifelink combat gains — must each fire `GameEvent::LifeGained { player, amount }` and `fire_triggers` must check permanents for this condition. Implement Ajani's Pridemate (whenever you gain life, put a +1/+1 counter on Ajani's Pridemate) reusing the existing `PutCounters` effect. Add scenario tests for: Pridemate grows on spell life-gain, Pridemate grows on lifelink combat damage, multiple life-gain events in one turn each trigger separately.
+  - Priority: Low
+
+- [ ] #33 [feature] Adventure cards — cast the creature half from exile (plan-multiface-cards.md §3)
+  - Details: Adventure (CR 715) is the most stateful multi-face layout and builds on the shipped `faces` model + `face_index` plumbing (§1/§2 done via #18). Casting the adventure (spell) half resolves the card into **exile with permission** to later cast the creature half from exile. Add an "exiled with adventure" marker on the object (or an exile sub-zone) plus a cast-from-exile permission keyed to the creature face; `cast_spell` must accept casting a face from exile when that permission is present (today it only reads from hand). First card: Bonecrusher Giant // Stomp. Relay/client: surface the exiled adventure card as castable (the physical card sits in exile). Add scenario tests: adventure half resolves to exile, the creature is then castable from exile, casting the creature normally from hand still works, and the permission is one-shot.
+  - Priority: Low
+
+- [ ] #34 [feature] Transform / Flip permanents — TDFC + werewolves (plan-multiface-cards.md §4)
+  - Details: With `GameObject.face_up_index` (#18) and the `FaceChanged` proto event already in place, implement **in-place** face changes. A `TransformPermanent` effect/keyword flips `face_up_index`; characteristic queries already read the active face. **CR 712.8: transforming does NOT trigger ETB.** Flip (CR 710) uses the same mechanism. Wire the engine's `transform_permanent()` (Transform/Flip layouts only — ModalDfc is rejected) to a trigger/effect, implement werewolf day/night transform triggers, and add the client display: the proto field `battlefield_face_up_index` is emitted but **not yet consumed by any C++** — consume it and add a card name-change path (there is no `AttrCardName`, so a rename-in-place mechanism or card re-send is needed; the play-land entry rename in `Server_Game` is the reference). Add scenario tests: transform swaps P/T/types/keywords in place without firing ETB; flip works; werewolf day/night triggers flip correctly. Lowest priority of the multiface phases.
+  - Priority: Low
+
+- [ ] #35 [chore] Multi-face card generator ingestion (plan-multiface-cards.md §5)
+  - Details: The batch generator (`gen-cards`, `scripts/gen-cards.*`) currently filters `layout == "normal"` only, so no multi-face vanilla/keyword cards are ingested. Extend the filter to author a `faces` vec from Scryfall's `card_faces` array for split / MDFC / transform / adventure cards where **every** face is vanilla or uses only supported keywords, reusing the existing per-face supported-keyword and `ManaSymbol` checks; skip (and report) any card with unsupported text on any face. After generating, `cargo test` (registry load + `conformance` validate every generated face) then the checklist `--check`. Add a `--dry-run` count of qualifying multi-face cards and skip reasons.
   - Priority: Low
 
 ---
