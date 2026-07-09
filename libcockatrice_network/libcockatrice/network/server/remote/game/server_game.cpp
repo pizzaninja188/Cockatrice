@@ -1100,6 +1100,19 @@ Response::ResponseCode Server_Game::processRuledPayload(int playerId, const Comm
                 const int handIndex = static_cast<int>(ruledCmd.play_land().hand_card_index());
                 if (handZone && tableZone && handIndex >= 0 && handIndex < handZone->getCards().size()) {
                     Server_Card *card = handZone->getCards().at(handIndex);
+                    // CR 712: an MDFC land (a pathway) enters as the chosen face. Rename the physical
+                    // card to that face's Oracle name before it moves to the battlefield, so the
+                    // move event reveals the active face and the client shows its art (cards.xml has
+                    // a separate entry per face). The catalog maps both face names to the same engine
+                    // id, so later zone-view reconciliation still resolves this permanent.
+                    const int faceIndex = static_cast<int>(ruledCmd.play_land().face_index());
+                    if (faceIndex > 0) {
+                        const QString activeName =
+                            ruledActiveFaceName(ruledCardIdForName(card->getName()), faceIndex);
+                        if (!activeName.isEmpty() && activeName != card->getName()) {
+                            card->setCardRef(CardRef{activeName});
+                        }
+                    }
                     CardToMove cardToMove;
                     cardToMove.set_card_id(card->getId());
                     GameEventStorage moveGes;
@@ -2114,6 +2127,19 @@ QString Server_Game::ruledCardNameForId(const QString &cardId) const
 {
     const auto it = ruledCardCatalogById.constFind(cardId);
     return it == ruledCardCatalogById.constEnd() ? QString() : QString::fromStdString(it->name());
+}
+
+QString Server_Game::ruledActiveFaceName(const QString &cardId, int faceIndex) const
+{
+    const auto it = ruledCardCatalogById.constFind(cardId);
+    if (it == ruledCardCatalogById.constEnd()) {
+        return QString();
+    }
+    // face_names is empty for single-face cards; the front face (0) uses the combined/base name.
+    if (faceIndex > 0 && faceIndex < it->face_names_size()) {
+        return QString::fromStdString(it->face_names(faceIndex));
+    }
+    return QString::fromStdString(it->name());
 }
 
 void Server_Game::applyRuledStartupBatch(const ruled::v1::IpcResponse &resp,

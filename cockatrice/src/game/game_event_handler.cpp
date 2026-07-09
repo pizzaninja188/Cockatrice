@@ -166,6 +166,10 @@ struct ParsedRuledLandActions
 {
     QSet<int> handIndices;
     QMultiHash<QString, int> handIndicesByCardName;
+    // CR 712: engine hand slot -> the faces the engine offers as a land play there. A multi-face
+    // (MDFC) land yields more than one entry for the same slot (front + back), each with its own
+    // face index for PlayLand.face_index and Oracle face name for the side-picker menu.
+    QHash<int, QVector<RuledLandFaceOption>> faceOptionsByHandIndex;
 };
 
 struct ParsedRuledCastActions
@@ -264,7 +268,9 @@ int mapRuledPhaseSlugToToolbarPhase(const QString &slug)
 
 ParsedRuledLandActions parseRuledLandActions(const ruled::v1::LegalActions &actions)
 {
-    static const QRegularExpression labelRegex(QStringLiteral(R"(^Play land (.*) \(hand idx (\d+)\)$)"));
+    // CR 712: multi-face (MDFC) land labels append ", face N"; single-face lands omit it (face 0).
+    static const QRegularExpression labelRegex(
+        QStringLiteral(R"(^Play land (.*) \(hand idx (\d+)(?:, face (\d+))?\)$)"));
     ParsedRuledLandActions parsed;
 
     for (const auto &label : actions.labels()) {
@@ -278,6 +284,9 @@ ParsedRuledLandActions parseRuledLandActions(const ruled::v1::LegalActions &acti
         if (ok) {
             parsed.handIndices.insert(handIndex);
             parsed.handIndicesByCardName.insert(match.captured(1), handIndex);
+            bool faceOk = false;
+            const int faceIndex = match.captured(3).toInt(&faceOk);
+            parsed.faceOptionsByHandIndex[handIndex].append({faceOk ? faceIndex : 0, match.captured(1)});
         }
     }
     return parsed;
@@ -595,7 +604,18 @@ int GameEventHandler::resolveRuledLandPlayHandIndexForClickedCard(const CardItem
     if (!card) {
         return -1;
     }
+    // A land's client CardItem carries its front-face Oracle name (an MDFC's back face never becomes
+    // a separate hand card), which the engine also uses to label each playable face of that slot —
+    // so a single lookup resolves the shared hand slot for both faces of a pathway.
     return resolveEngineHandIndexFromLegalSlots(card, getRuledLandPlayHandIndicesForCardName(card->getName()));
+}
+
+QVector<RuledLandFaceOption> GameEventHandler::getRuledLandPlayFaceOptionsForHandIndex(int handIndex) const
+{
+    QVector<RuledLandFaceOption> options = legalRuledLandPlayFaceOptionsByHandIndex.value(handIndex);
+    std::sort(options.begin(), options.end(),
+              [](const RuledLandFaceOption &a, const RuledLandFaceOption &b) { return a.faceIndex < b.faceIndex; });
+    return options;
 }
 
 bool GameEventHandler::isRuledCleanupDiscardLegalForHandIndex(int handIndex) const
@@ -1302,6 +1322,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                     ruled::v1::RuledEventBatch batch;
                     legalRuledLandPlayHandIndices.clear();
                     legalRuledLandPlayIndicesByCardName.clear();
+                    legalRuledLandPlayFaceOptionsByHandIndex.clear();
                     legalRuledSpellCastHandIndices.clear();
                     legalRuledSpellCastIndicesByCardName.clear();
                     legalRuledSpellCastNeedsTargetHandIndices.clear();
@@ -1841,6 +1862,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                             const ParsedRuledLandActions parsed = parseRuledLandActions(lit->second);
                             legalRuledLandPlayHandIndices = parsed.handIndices;
                             legalRuledLandPlayIndicesByCardName = parsed.handIndicesByCardName;
+                            legalRuledLandPlayFaceOptionsByHandIndex = parsed.faceOptionsByHandIndex;
                             const ParsedRuledCastActions parsedCast = parseRuledCastActions(lit->second);
                             legalRuledSpellCastHandIndices = parsedCast.handIndices;
                             legalRuledSpellCastIndicesByCardName = parsedCast.handIndicesByCardName;
@@ -1926,6 +1948,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                         } else {
                             legalRuledLandPlayHandIndices.clear();
                             legalRuledLandPlayIndicesByCardName.clear();
+                            legalRuledLandPlayFaceOptionsByHandIndex.clear();
                             legalRuledSpellCastHandIndices.clear();
                             legalRuledSpellCastIndicesByCardName.clear();
                             legalRuledSpellCastNeedsTargetHandIndices.clear();
@@ -2622,6 +2645,7 @@ void GameEventHandler::clearRuledSessionState()
     // Legal action sets
     legalRuledLandPlayHandIndices.clear();
     legalRuledLandPlayIndicesByCardName.clear();
+    legalRuledLandPlayFaceOptionsByHandIndex.clear();
     legalRuledSpellCastHandIndices.clear();
     legalRuledSpellCastIndicesByCardName.clear();
     legalRuledSpellCastNeedsTargetHandIndices.clear();
