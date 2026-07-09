@@ -127,6 +127,109 @@ fn fire_ice_ice_half_taps_and_draws() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// MDFC Pathway lands (CR 712): choose one face on play; that face's abilities apply.
+// ---------------------------------------------------------------------------
+
+/// CR 712.2c / 712.4: a Modal DFC land played as face 0 (Cragcrown Pathway) enters the
+/// battlefield with face_up_index = 0 and exposes only that face's activated ability
+/// ({T}: Add {R}). Tapping it produces red, not green.
+#[test]
+fn mdfc_pathway_enter_as_face_0_taps_for_red() {
+    let decks = Some(vec![
+        deck_with("mountain", &["cragcrown_pathway_timbercrown_pathway"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(40, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let card_oid = relocate_to_hand(&mut e, 0, "cragcrown_pathway_timbercrown_pathway");
+    let idx = e.state.players[0]
+        .hand
+        .iter()
+        .position(|&o| o == card_oid)
+        .expect("pathway in hand");
+
+    e.apply_command(0, &play_land_face(idx, 0))
+        .expect("play as Cragcrown (face 0)");
+    let land_oid = *e.state.players[0]
+        .battlefield
+        .last()
+        .expect("land on battlefield");
+
+    assert_eq!(
+        e.state.objects[&land_oid].face_up_index, 0,
+        "enters as face 0"
+    );
+
+    e.apply_command(0, &activate_ability(land_oid, 0, vec![]))
+        .expect("tap for R");
+    assert_eq!(e.state.players[0].mana_pool.red, 1, "produced {{R}}");
+    assert_eq!(
+        e.state.players[0].mana_pool.green, 0,
+        "no {{G}} from face 0"
+    );
+    assert!(e.state.objects[&land_oid].tapped, "land tapped as cost");
+}
+
+/// CR 712.2c / 712.4: the same MDFC card played as face 1 (Timbercrown Pathway) enters with
+/// face_up_index = 1 and exposes only that face's ability ({T}: Add {G}).
+#[test]
+fn mdfc_pathway_enter_as_face_1_taps_for_green() {
+    let decks = Some(vec![
+        deck_with("forest", &["cragcrown_pathway_timbercrown_pathway"]),
+        vec!["mountain".into(); 20],
+    ]);
+    let mut e = GameEngine::new(41, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let card_oid = relocate_to_hand(&mut e, 0, "cragcrown_pathway_timbercrown_pathway");
+    let idx = e.state.players[0]
+        .hand
+        .iter()
+        .position(|&o| o == card_oid)
+        .expect("pathway in hand");
+
+    e.apply_command(0, &play_land_face(idx, 1))
+        .expect("play as Timbercrown (face 1)");
+    let land_oid = *e.state.players[0]
+        .battlefield
+        .last()
+        .expect("land on battlefield");
+
+    assert_eq!(
+        e.state.objects[&land_oid].face_up_index, 1,
+        "enters as face 1"
+    );
+
+    e.apply_command(0, &activate_ability(land_oid, 0, vec![]))
+        .expect("tap for G");
+    assert_eq!(e.state.players[0].mana_pool.green, 1, "produced {{G}}");
+    assert_eq!(e.state.players[0].mana_pool.red, 0, "no {{R}} from face 1");
+    assert!(e.state.objects[&land_oid].tapped, "land tapped as cost");
+}
+
+/// CR 712.2c: Modal DFCs are not double-faced cards that transform; TransformPermanent on a
+/// ModalDfc permanent is illegal (only Transform/Flip layouts may transform).
+#[test]
+fn transform_permanent_rejected_for_mdfc_land() {
+    let decks = Some(vec![
+        deck_with("mountain", &["cragcrown_pathway_timbercrown_pathway"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(42, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let land_oid =
+        inject_permanent_on_battlefield(&mut e, 0, "cragcrown_pathway_timbercrown_pathway");
+
+    let result = e.apply_command(0, &transform_permanent_cmd(land_oid));
+    assert!(
+        result.is_err(),
+        "TransformPermanent on a ModalDfc card must be rejected"
+    );
+}
+
 /// CR 709/115.4: each half of a split card offers only its own legal targets. Fire targets "any
 /// target" (creatures/players, never lands); Ice targets "any permanent" (including lands). The
 /// engine emits per-face target sets keyed by (hand_slot << 8 | face_index) so the UI cannot offer

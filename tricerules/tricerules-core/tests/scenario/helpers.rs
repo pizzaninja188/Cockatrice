@@ -9,7 +9,7 @@ pub(crate) use tricerules_proto::ruled::v1::{
     DeclareAttackers, DeclareBlockers, DiscardToHandSize, FlexPipPayment, PassPriority, PlayLand,
     PreviewDeclareAttackers, PreviewDeclareBlockers, PrimitiveYieldStructured,
     ResolutionChoiceRequired, RuledCommand, RuledEventBatch, SubmitResolutionChoice, TargetRef,
-    UndoManaAbility,
+    TransformPermanent, UndoManaAbility,
 };
 
 pub(crate) fn pass() -> RuledCommand {
@@ -65,9 +65,14 @@ pub(crate) fn resolve_cleanup_discards_if_any(e: &mut GameEngine) {
 }
 
 pub(crate) fn play_land(hand_card_index: usize) -> RuledCommand {
+    play_land_face(hand_card_index, 0)
+}
+
+pub(crate) fn play_land_face(hand_card_index: usize, face_index: usize) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::PlayLand(PlayLand {
             hand_card_index: hand_card_index as u32,
+            face_index: face_index as u32,
         })),
     }
 }
@@ -165,6 +170,12 @@ pub(crate) fn activate_ability(
 pub(crate) fn undo_mana_ability() -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::UndoManaAbility(UndoManaAbility {})),
+    }
+}
+
+pub(crate) fn transform_permanent_cmd(permanent_id: u32) -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::TransformPermanent(TransformPermanent { permanent_id })),
     }
 }
 
@@ -395,6 +406,7 @@ pub(crate) fn inject_creature_on_battlefield(
             regeneration_shields: 0,
             must_attack_if_able: false,
             must_block_if_able: false,
+            face_up_index: 0,
         },
     );
     e.state.players[player].battlefield.push(id);
@@ -429,6 +441,7 @@ pub(crate) fn inject_permanent_on_battlefield(
             regeneration_shields: 0,
             must_attack_if_able: false,
             must_block_if_able: false,
+            face_up_index: 0,
         },
     );
     e.state.players[player].battlefield.push(id);
@@ -459,6 +472,7 @@ pub(crate) fn inject_library_card(e: &mut GameEngine, player: usize, card_id: &s
             regeneration_shields: 0,
             must_attack_if_able: false,
             must_block_if_able: false,
+            face_up_index: 0,
         },
     );
     e.state.players[player].library.push_back(id);
@@ -663,6 +677,7 @@ pub(crate) fn inject_creature_with_stats(
             regeneration_shields: 0,
             must_attack_if_able: false,
             must_block_if_able: false,
+            face_up_index: 0,
         },
     );
     e.state.players[player].battlefield.push(id);

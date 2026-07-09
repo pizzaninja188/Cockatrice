@@ -52,6 +52,15 @@ class Player;
 
 inline Q_LOGGING_CATEGORY(GameEventHandlerLog, "game_event_handler");
 
+// CR 712: one playable face of a hand card the engine offers as a land play. An MDFC land (pathway)
+// yields more than one option for a single hand slot (front + back), each with its own face index
+// and Oracle face name for the side-picker menu.
+struct RuledLandFaceOption
+{
+    int faceIndex;
+    QString faceName;
+};
+
 class GameEventHandler : public QObject
 {
     Q_OBJECT
@@ -171,6 +180,9 @@ private:
     AbstractGame *game;
     QSet<int> legalRuledLandPlayHandIndices;
     QMultiHash<QString, int> legalRuledLandPlayIndicesByCardName;
+    // CR 712: engine hand slot -> the faces offered as a land play there. An MDFC land (pathway)
+    // has >1 entry per slot; drives the PlayLand.face_index side-picker.
+    QHash<int, QVector<RuledLandFaceOption>> legalRuledLandPlayFaceOptionsByHandIndex;
     QSet<int> legalRuledSpellCastHandIndices;
     QMultiHash<QString, int> legalRuledSpellCastIndicesByCardName;
     QSet<int> legalRuledSpellCastNeedsTargetHandIndices;
@@ -340,6 +352,9 @@ public:
     [[nodiscard]] int resolveEngineHandIndexFromLegalSlots(const CardItem *card,
                                                            const QList<int> &sortedLegalHandIndices) const;
     [[nodiscard]] int resolveRuledLandPlayHandIndexForClickedCard(const CardItem *card) const;
+    // CR 712: every playable face the engine offers for a given hand slot, sorted by face index.
+    // Size > 1 means an MDFC land whose side the player must choose; size 1 is a single-face land.
+    [[nodiscard]] QVector<RuledLandFaceOption> getRuledLandPlayFaceOptionsForHandIndex(int handIndex) const;
     [[nodiscard]] bool isRuledCleanupDiscardLegalForHandIndex(int handIndex) const;
     [[nodiscard]] int getRuledCleanupDiscardHandIndexForCard(const QString &cardName, int preferredHandIndex) const;
     [[nodiscard]] QList<int> getRuledCleanupDiscardHandIndicesForCardName(const QString &cardName) const;

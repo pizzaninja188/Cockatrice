@@ -72,13 +72,21 @@ pub struct GameObject {
     /// CR 509.1c: this creature must be declared as a blocker whenever it could legally block
     /// ("blocks each combat if able"). Set from card data; may be overridden by continuous effects.
     pub must_block_if_able: bool,
+    /// CR 712.4: which face is currently showing on the battlefield. 0 = front (default).
+    /// Always 0 for Normal single-face cards; set from `StackItem.face_index` when a multi-face
+    /// permanent enters the battlefield (MDFC, Transform, Flip). Engine reads characteristics
+    /// through this so the active face's types/keywords/P/T are used everywhere, not the front.
+    pub face_up_index: usize,
 }
 
 impl GameObject {
+    /// CR 712.4: true if the active face is a creature type. For Normal cards this reads the flat
+    /// `is_creature` flag; for multi-face cards it reads the active face via `face_up_index`.
     pub fn is_creature(&self, registry: &tricerules_cards::CardRegistry) -> bool {
         registry
             .get(&self.card_id)
-            .map(|c| c.is_creature)
+            .and_then(|c| c.face(self.face_up_index))
+            .map(|f| f.is_creature)
             .unwrap_or(false)
     }
 
@@ -123,7 +131,8 @@ impl GameObject {
             .join("\n")
     }
 
-    /// Returns true if this permanent's card definition includes the given keyword ability.
+    /// CR 712.4: true if the active face has the given keyword. For Normal cards reads the flat
+    /// keyword list; for multi-face cards reads the active face via `face_up_index`.
     pub fn has_keyword(
         &self,
         registry: &tricerules_cards::CardRegistry,
@@ -131,7 +140,8 @@ impl GameObject {
     ) -> bool {
         registry
             .get(&self.card_id)
-            .map(|c| c.keywords.contains(&kw))
+            .and_then(|c| c.face(self.face_up_index))
+            .map(|f| f.keywords.contains(&kw))
             .unwrap_or(false)
     }
 }

@@ -399,12 +399,12 @@ impl GameEngine {
             .player_idx(player)
             .ok_or(EngineError::UnknownPlayer(player))?;
 
-        let card_id = self
+        let (card_id, face_up_index) = self
             .state
             .objects
             .get(&permanent_id)
             .filter(|o| o.zone == Zone::Battlefield)
-            .map(|o| o.card_id.clone())
+            .map(|o| (o.card_id.clone(), o.face_up_index))
             .ok_or(EngineError::Illegal("permanent not on battlefield"))?;
         if !self.state.players[idx].battlefield.contains(&permanent_id) {
             return Err(EngineError::Illegal("not your permanent"));
@@ -415,7 +415,11 @@ impl GameEngine {
             .get(&card_id)
             .ok_or_else(|| EngineError::MissingCard(card_id.clone()))?;
 
+        // CR 712.4: read activated abilities from the active face so multi-face permanents
+        // (e.g. MDFC lands) expose the correct ability when activated.
         let ability = def
+            .face(face_up_index)
+            .ok_or(EngineError::Illegal("bad face index on permanent"))?
             .activated_abilities
             .get(ability_index)
             .ok_or(EngineError::Illegal("no such activated ability"))?
@@ -731,6 +735,7 @@ impl GameEngine {
         &mut self,
         player: PlayerId,
         hand_idx: usize,
+        face_index: usize,
     ) -> Result<RuledEventBatch, EngineError> {
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("not your priority"));
@@ -750,19 +755,33 @@ impl GameEngine {
             .get(hand_idx)
             .ok_or(EngineError::Illegal("bad hand index"))?;
         let card_id = self.state.objects.get(&oid).unwrap().card_id.clone();
-        let def = self.registry.get(&card_id).unwrap();
-        if !def.is_land {
+        let def = self
+            .registry
+            .get(&card_id)
+            .ok_or_else(|| EngineError::MissingCard(card_id.clone()))?;
+        // CR 712: for MDFC lands, check the specific face; for normal lands, check the flat flag.
+        let face = def
+            .face(face_index)
+            .ok_or(EngineError::Illegal("bad face index"))?;
+        if !face.is_land {
             return Err(EngineError::Illegal("not a land"));
         }
+        let land_name = if def.is_multiface() {
+            face.name.to_string()
+        } else {
+            def.name.clone()
+        };
         self.state.land_dropped_this_turn = true;
         self.state.players[idx].hand.retain(|&x| x != oid);
         self.state.players[idx].battlefield.push(oid);
         if let Some(o) = self.state.objects.get_mut(&oid) {
             o.zone = Zone::Battlefield;
+            // CR 712.4: set the active face from the chosen face so characteristics (mana
+            // abilities, types) are read from the correct face on the battlefield.
+            o.face_up_index = face_index;
         }
         self.state.passes_since_stack_change = 0;
         let mut batch = RuledEventBatch::default();
-        let land_name = def.name.clone();
         batch
             .events
             .push(ev_log(format!("P{} played {}", player, land_name)));

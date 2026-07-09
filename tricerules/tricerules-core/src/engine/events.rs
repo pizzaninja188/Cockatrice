@@ -257,6 +257,8 @@ impl GameEngine {
                     })
                     .unwrap_or(false),
                 // Pipe-delimited activated ability texts per battlefield permanent (empty if none).
+                // CR 712.4: read activated abilities from the active face for multi-face cards
+                // so the relay builds the correct context menu (e.g. pathway land mana ability).
                 battlefield_activated_ability_texts: p
                     .battlefield
                     .iter()
@@ -264,13 +266,17 @@ impl GameEngine {
                         self.state
                             .objects
                             .get(&oid)
-                            .and_then(|o| self.registry.get(&o.card_id))
-                            .map(|def| {
-                                def.activated_abilities
-                                    .iter()
-                                    .map(|a| a.text.as_str())
-                                    .collect::<Vec<_>>()
-                                    .join("|")
+                            .and_then(|o| {
+                                self.registry
+                                    .get(&o.card_id)
+                                    .and_then(|d| d.face(o.face_up_index))
+                                    .map(|f| {
+                                        f.activated_abilities
+                                            .iter()
+                                            .map(|a| a.text.as_str())
+                                            .collect::<Vec<_>>()
+                                            .join("|")
+                                    })
                             })
                             .unwrap_or_default()
                     })
@@ -286,18 +292,21 @@ impl GameEngine {
                         self.state
                             .objects
                             .get(&oid)
-                            .and_then(|o| self.registry.get(&o.card_id))
-                            .map(|def| {
-                                def.activated_abilities
-                                    .iter()
-                                    .map(|a| match &a.cost {
-                                        AbilityCost::Mana(c) | AbilityCost::TapAndMana(c) => {
-                                            c.to_string()
-                                        }
-                                        _ => String::new(),
+                            .and_then(|o| {
+                                self.registry
+                                    .get(&o.card_id)
+                                    .and_then(|d| d.face(o.face_up_index))
+                                    .map(|f| {
+                                        f.activated_abilities
+                                            .iter()
+                                            .map(|a| match &a.cost {
+                                                AbilityCost::Mana(c)
+                                                | AbilityCost::TapAndMana(c) => c.to_string(),
+                                                _ => String::new(),
+                                            })
+                                            .collect::<Vec<_>>()
+                                            .join("|")
                                     })
-                                    .collect::<Vec<_>>()
-                                    .join("|")
                             })
                             .unwrap_or_default()
                     })
@@ -310,20 +319,24 @@ impl GameEngine {
                         self.state
                             .objects
                             .get(&oid)
-                            .and_then(|o| self.registry.get(&o.card_id))
-                            .map(|def| {
-                                def.activated_abilities
-                                    .iter()
-                                    .map(|a| match &a.effect {
-                                        SpellEffectKind::ProduceMana { options } => options
+                            .and_then(|o| {
+                                self.registry
+                                    .get(&o.card_id)
+                                    .and_then(|d| d.face(o.face_up_index))
+                                    .map(|f| {
+                                        f.activated_abilities
                                             .iter()
-                                            .map(mana_amount_symbols)
+                                            .map(|a| match &a.effect {
+                                                SpellEffectKind::ProduceMana { options } => options
+                                                    .iter()
+                                                    .map(mana_amount_symbols)
+                                                    .collect::<Vec<_>>()
+                                                    .join("/"),
+                                                _ => String::new(),
+                                            })
                                             .collect::<Vec<_>>()
-                                            .join("/"),
-                                        _ => String::new(),
+                                            .join("|")
                                     })
-                                    .collect::<Vec<_>>()
-                                    .join("|")
                             })
                             .unwrap_or_default()
                     })
@@ -386,6 +399,20 @@ impl GameEngine {
                 // Engine ObjectIds for each card in this player's graveyard (in graveyard order).
                 // Relay uses these to build the graveyard OID→server-card-id map for targeting.
                 graveyard_object_id: p.graveyard.clone(),
+                // Parallel to `battlefield`: active face index (0 = front) per permanent.
+                // Non-zero only for MDFC/Transform/Flip permanents that entered or transformed
+                // as a non-front face. Always 0 for Normal single-face cards.
+                battlefield_face_up_index: p
+                    .battlefield
+                    .iter()
+                    .map(|&oid| {
+                        self.state
+                            .objects
+                            .get(&oid)
+                            .map(|o| o.face_up_index as u32)
+                            .unwrap_or(0)
+                    })
+                    .collect(),
             })
             .collect();
         RuledEvent {

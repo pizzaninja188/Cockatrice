@@ -1012,6 +1012,11 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
                 AbstractCardItem::mouseReleaseEvent(event);
                 return;
             }
+            // CR 712: MDFC land side-picker ("Play Cragcrown Pathway" / "Play Timbercrown Pathway").
+            if (owner->getPlayerInfo()->getLocal() && actions && actions->tryRuledLandPlayFaceMenu(this)) {
+                AbstractCardItem::mouseReleaseEvent(event);
+                return;
+            }
         }
         if (owner != nullptr) {
             owner->getGame()->setActiveCard(this);

@@ -925,30 +925,13 @@ void PlayerActions::autoApplyFloatedManaToPendingCost(const QString &counterName
     }
 }
 
-bool PlayerActions::tryPlayRuledLand(CardItem *card)
+bool PlayerActions::sendRuledPlayLand(int handIndex, int faceIndex)
 {
-    if (!card || !player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
-        return false;
-    }
-    if (card->getZone()->getName() != ZoneNames::HAND) {
-        return false;
-    }
-    if (!card->getCardInfo().getCardType().contains("Land", Qt::CaseInsensitive)) {
-        return false;
-    }
-
-    if (card->getZone()->getCards().indexOf(card) < 0) {
-        return false;
-    }
-
-    const int ruledHandIndex = player->getGame()->getGameEventHandler()->resolveRuledLandPlayHandIndexForClickedCard(
-        card);
-    if (ruledHandIndex < 0) {
-        return false;
-    }
-
     ruled::v1::RuledCommand ruledCommand;
-    ruledCommand.mutable_play_land()->set_hand_card_index(ruledHandIndex);
+    auto *pl = ruledCommand.mutable_play_land();
+    pl->set_hand_card_index(handIndex);
+    // CR 712: which face of an MDFC land enters the battlefield (0 = front; default for single-face).
+    pl->set_face_index(static_cast<quint32>(faceIndex));
     std::string payload;
     if (!ruledCommand.SerializeToString(&payload)) {
         return false;
@@ -959,6 +942,82 @@ bool PlayerActions::tryPlayRuledLand(CardItem *card)
     sendGameCommand(cmd);
     clearLandTapUndoStack();
     return true;
+}
+
+bool PlayerActions::tryPlayRuledLand(CardItem *card)
+{
+    if (!card || !player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+        return false;
+    }
+    if (card->getZone()->getName() != ZoneNames::HAND) {
+        return false;
+    }
+    if (card->getZone()->getCards().indexOf(card) < 0) {
+        return false;
+    }
+
+    GameEventHandler *const geh = player->getGame()->getGameEventHandler();
+    const int ruledHandIndex = geh->resolveRuledLandPlayHandIndexForClickedCard(card);
+    if (ruledHandIndex < 0) {
+        return false; // engine does not offer this card as a land play right now
+    }
+
+    // CR 712: an MDFC land (a pathway) shows up in the engine's legal actions as more than one
+    // playable face for the same hand slot — front and back. Present a side-picker so the player
+    // chooses which land to play; a single-face land plays its one face directly. The whole notion
+    // of "which faces are lands and playable" comes from the engine (rules), not the Oracle DB.
+    const QVector<RuledLandFaceOption> faces = geh->getRuledLandPlayFaceOptionsForHandIndex(ruledHandIndex);
+    if (faces.size() > 1) {
+        return tryRuledLandPlayFaceMenu(card);
+    }
+    return sendRuledPlayLand(ruledHandIndex, faces.isEmpty() ? 0 : faces.first().faceIndex);
+}
+
+bool PlayerActions::tryRuledLandPlayFaceMenu(CardItem *card)
+{
+    if (!card || !card->getZone()) {
+        return false;
+    }
+    if (!player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+        return false;
+    }
+    if (card->getZone()->getName() != ZoneNames::HAND) {
+        return false;
+    }
+    if (card->getZone()->getCards().indexOf(card) < 0) {
+        return false;
+    }
+    GameEventHandler *const geh = player->getGame()->getGameEventHandler();
+    if (!geh) {
+        return false;
+    }
+    const int ruledHandIndex = geh->resolveRuledLandPlayHandIndexForClickedCard(card);
+    if (ruledHandIndex < 0) {
+        return false;
+    }
+    // CR 712: only offer the picker when the engine exposes more than one playable face for this
+    // slot (an MDFC land). A single-face land keeps its direct click-to-play and falls through so a
+    // right-click still opens the normal card menu.
+    const QVector<RuledLandFaceOption> faces = geh->getRuledLandPlayFaceOptionsForHandIndex(ruledHandIndex);
+    if (faces.size() < 2) {
+        return false;
+    }
+
+    QMenu menu;
+    QVector<QAction *> actionsByOption;
+    actionsByOption.reserve(faces.size());
+    for (const RuledLandFaceOption &opt : faces) {
+        actionsByOption.append(menu.addAction(tr("Play %1").arg(opt.faceName)));
+    }
+    QAction *chosen = menu.exec(QCursor::pos());
+    if (!chosen) {
+        return true; // menu was shown, player cancelled
+    }
+    const int sel = actionsByOption.indexOf(chosen);
+    if (sel < 0) {
+        return true;
+    }
+    return sendRuledPlayLand(ruledHandIndex, faces.at(sel).faceIndex);
 }
 
 bool PlayerActions::tryRuledOpeningBottomCard(CardItem *card)

@@ -79,6 +79,12 @@ impl GameEngine {
                 },
             )?;
             if resolves_to_battlefield {
+                // CR 712.4: a permanent enters the battlefield showing the face that was cast.
+                // Set face_up_index from the stack item so characteristic queries (types, keywords,
+                // P/T, mana abilities) read from the correct face while on the battlefield.
+                if let Some(o) = self.state.objects.get_mut(&top.id) {
+                    o.face_up_index = top.face_index;
+                }
                 // Set attached_to before ETB triggers so emit_static_abilities_on_enter can read it.
                 if is_aura {
                     if let (Some(aura_obj), Some(&enchanted_oid)) =
@@ -1230,6 +1236,7 @@ impl GameEngine {
                         regeneration_shields: 0,
                         must_attack_if_able: false,
                         must_block_if_able: false,
+                        face_up_index: 0,
                     },
                 );
                 self.state.players[pidx].battlefield.push(oid);

@@ -106,6 +106,10 @@ public:
     /// chosen face's cast. Returns true if the menu was shown (click consumed); false for single-face
     /// cards or when no face is currently castable.
     bool tryRuledSpellCastFaceMenu(CardItem *card);
+    /// Show a side-picker menu ("Play Cragcrown Pathway" / "Play Timbercrown Pathway") for a
+    /// multi-face (MDFC) land in hand and play the chosen face (CR 712). Returns true if the menu was
+    /// shown (click consumed); false for single-face cards or when no land face is currently playable.
+    bool tryRuledLandPlayFaceMenu(CardItem *card);
     /// Handle a target click for a pending activated ability activation or trigger target selection.
     bool tryHandleRuledAbilityTargetClick(CardItem *card);
     bool tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer);
@@ -336,6 +340,8 @@ private:
 
     Player *player;
     bool tryPlayRuledLand(CardItem *card);
+    /// Serialize and send a PlayLand command for the given hand slot and MDFC face (CR 712).
+    bool sendRuledPlayLand(int handIndex, int faceIndex);
     bool tryStartRuledSpellCast(CardItem *card);
     // Set up and begin a pending ruled cast for an already-resolved hand slot + face. faceIndex selects
     // the split/MDFC half (0 for single-face); castName/castCost are that face's name and mana cost.

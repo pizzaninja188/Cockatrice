@@ -148,6 +148,7 @@ impl GameEngine {
                         regeneration_shields: 0,
                         must_attack_if_able: def.must_attack_if_able,
                         must_block_if_able: def.must_block_if_able,
+                        face_up_index: 0,
                     },
                 );
                 p.library.push_back(oid);
@@ -228,6 +229,63 @@ impl GameEngine {
         starting_life: i32,
     ) -> Result<Self, EngineError> {
         Self::new(seed, player_ids, starting_life, None, true)
+    }
+
+    /// CR 712.8 / 710: flip the active face of a Transform or Flip layout permanent.
+    /// Transforming does not trigger ETB. Only the controller may transform their own permanent.
+    pub(super) fn transform_permanent(
+        &mut self,
+        player: PlayerId,
+        permanent_id: ObjectId,
+    ) -> Result<RuledEventBatch, EngineError> {
+        use tricerules_cards::Layout;
+        let obj = self
+            .state
+            .objects
+            .get(&permanent_id)
+            .ok_or(EngineError::Illegal("no such object"))?;
+        if obj.zone != Zone::Battlefield {
+            return Err(EngineError::Illegal("not on battlefield"));
+        }
+        if obj.owner != player {
+            return Err(EngineError::Illegal("not your permanent"));
+        }
+        let card_id = obj.card_id.clone();
+        let def = self
+            .registry
+            .get(&card_id)
+            .ok_or_else(|| EngineError::MissingCard(card_id.clone()))?;
+        if !matches!(def.layout, Layout::Transform | Layout::Flip) {
+            return Err(EngineError::Illegal("not a Transform or Flip card"));
+        }
+        let face_count = def.face_count();
+        let current_face = obj.face_up_index;
+        let new_face = (current_face + 1) % face_count;
+
+        // Drain static abilities from the old face, then flip, then emit for the new face.
+        self.state.continuous_effects.retain(|e| {
+            let static_from_this = e.source_id == Some(permanent_id)
+                && e.duration
+                    == tricerules_cards::primitives::EffectDuration::WhileSourceOnBattlefield;
+            !static_from_this
+        });
+        if let Some(o) = self.state.objects.get_mut(&permanent_id) {
+            o.face_up_index = new_face;
+        }
+        // Emit static abilities for the newly-revealed face (CR 712.8: no ETB, but statics apply).
+        self.emit_static_abilities_on_enter(permanent_id);
+
+        let owner = player;
+        let mut batch = RuledEventBatch::default();
+        batch.events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::FaceChanged(rv1::FaceChanged {
+                object_id: permanent_id,
+                owner_player_id: owner,
+                face_up_index: new_face as u32,
+            })),
+        });
+        legal_actions::fill_legal(&mut batch, self);
+        Ok(batch)
     }
 
     pub fn apply_command(
@@ -372,7 +430,10 @@ impl GameEngine {
             Some(Cmd::SubmitResolutionChoice(s)) => {
                 self.submit_resolution_choice(player, &s.chosen_object_ids)
             }
-            Some(Cmd::PlayLand(pl)) => self.play_land(player, pl.hand_card_index as usize),
+            Some(Cmd::PlayLand(pl)) => {
+                self.play_land(player, pl.hand_card_index as usize, pl.face_index as usize)
+            }
+            Some(Cmd::TransformPermanent(tp)) => self.transform_permanent(player, tp.permanent_id),
             Some(Cmd::DiscardToHandSize(d)) => self.discard_to_hand_size(player, d),
             Some(Cmd::AssignCombatDamage(acd)) => {
                 if self.state.active_player_id() != player {

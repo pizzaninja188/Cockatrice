@@ -102,6 +102,7 @@ fn default_cards_xml() -> Option<String> {
 }
 
 /// Implementation status of a card name, as known to the rules engine.
+#[derive(Clone)]
 enum Status {
     Full,
     Partial(String),
@@ -133,12 +134,31 @@ fn main() -> ExitCode {
         }
     };
     let mut implemented: HashMap<String, Status> = HashMap::new();
+    // For each face name added as an alias, track its parent composite card name.
+    // Used so that face-name aliases whose parent was matched by Oracle are not flagged as
+    // missing: e.g. "Fire" is an alias for "Fire // Ice"; if "Fire // Ice" is matched (Oracle
+    // stores split cards combined) then "Fire" must not be reported as unmatched.
+    let mut face_alias_parent: HashMap<String, String> = HashMap::new();
     for def in registry.definitions() {
         let status = match &def.partial {
             Some(note) => Status::Partial(note.clone()),
             None => Status::Full,
         };
-        implemented.insert(def.name.trim().to_string(), status);
+        let composite = def.name.trim().to_string();
+        implemented.insert(composite.clone(), status.clone());
+        // Multi-face cards (e.g. "A // B") may be stored in Oracle with each face as a separate
+        // entry (MDFCs), so also register each face name so the checklist marks both implemented.
+        for face in def.faces_iter() {
+            let face_name = face.name.trim().to_string();
+            if face_name != composite {
+                implemented
+                    .entry(face_name.clone())
+                    .or_insert_with(|| status.clone());
+                face_alias_parent
+                    .entry(face_name)
+                    .or_insert_with(|| composite.clone());
+            }
+        }
     }
     // Track which implemented names we actually find in Oracle, to flag mismatches.
     let mut matched: HashSet<String> = HashSet::new();
@@ -298,9 +318,30 @@ fn main() -> ExitCode {
     }
 
     // Sanity check: implemented cards that never matched an Oracle entry.
+    // Two suppression rules handle the split/MDFC Oracle naming mismatch:
+    // 1. "A // B" composite: considered matched if any face part ("A" or "B") was in Oracle
+    //    (Cockatrice stores some DFCs as separate face-named entries, e.g. pathway lands).
+    // 2. A face-name alias (e.g. "Fire", "Ice") whose parent composite ("Fire // Ice") WAS
+    //    matched directly by Oracle: suppress the alias from the unmatched report.
     let unmatched: Vec<&String> = implemented
         .keys()
-        .filter(|n| !matched.contains(*n))
+        .filter(|n| {
+            if matched.contains(*n) {
+                return false;
+            }
+            // Rule 1: composite matched via any face name.
+            if n.contains(" // ") {
+                let faces_matched = n.split(" // ").any(|face| matched.contains(face.trim()));
+                return !faces_matched;
+            }
+            // Rule 2: face-name alias whose composite parent was matched.
+            if let Some(parent) = face_alias_parent.get(*n) {
+                if matched.contains(parent) {
+                    return false;
+                }
+            }
+            true
+        })
         .collect();
     if unmatched.is_empty() {
         eprintln!(

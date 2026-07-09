@@ -731,6 +731,7 @@ fn mind_sculpt_rejects_self_target() {
                 regeneration_shields: 0,
                 must_attack_if_able: false,
                 must_block_if_able: false,
+                face_up_index: 0,
             },
         );
         e.state.players[0].hand.push(id);

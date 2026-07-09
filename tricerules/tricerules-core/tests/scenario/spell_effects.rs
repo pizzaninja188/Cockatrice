@@ -605,6 +605,7 @@ fn tome_scour_mills_five_cards_from_target_player() {
                 regeneration_shields: 0,
                 must_attack_if_able: false,
                 must_block_if_able: false,
+                face_up_index: 0,
             },
         );
         e.state.players[0].hand.push(id);
@@ -684,6 +685,7 @@ fn tome_scour_caps_at_library_size() {
                 regeneration_shields: 0,
                 must_attack_if_able: false,
                 must_block_if_able: false,
+                face_up_index: 0,
             },
         );
         e.state.players[0].hand.push(id);
@@ -737,6 +739,7 @@ fn tome_scour_can_target_controller() {
                 regeneration_shields: 0,
                 must_attack_if_able: false,
                 must_block_if_able: false,
+                face_up_index: 0,
             },
         );
         e.state.players[0].hand.push(id);
@@ -875,6 +878,7 @@ fn disentomb_returns_creature_from_graveyard_to_hand() {
                 regeneration_shields: 0,
                 must_attack_if_able: false,
                 must_block_if_able: false,
+                face_up_index: 0,
             },
         );
         e.state.players[0].graveyard.push(id);
@@ -901,6 +905,7 @@ fn disentomb_returns_creature_from_graveyard_to_hand() {
                 regeneration_shields: 0,
                 must_attack_if_able: false,
                 must_block_if_able: false,
+                face_up_index: 0,
             },
         );
         e.state.players[0].hand.push(id);
@@ -992,6 +997,7 @@ fn return_from_graveyard_fizzles_when_target_removed_before_resolution() {
                 regeneration_shields: 0,
                 must_attack_if_able: false,
                 must_block_if_able: false,
+                face_up_index: 0,
             },
         );
         e.state.players[0].hand.push(id);
@@ -1020,6 +1026,7 @@ fn return_from_graveyard_fizzles_when_target_removed_before_resolution() {
                 regeneration_shields: 0,
                 must_attack_if_able: false,
                 must_block_if_able: false,
+                face_up_index: 0,
             },
         );
         e.state.players[0].graveyard.push(id);
@@ -1103,6 +1110,7 @@ fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
                 regeneration_shields: 0,
                 must_attack_if_able: false,
                 must_block_if_able: false,
+                face_up_index: 0,
             },
         );
         e.state.players[0].graveyard.push(id);
@@ -1129,6 +1137,7 @@ fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
                 regeneration_shields: 0,
                 must_attack_if_able: false,
                 must_block_if_able: false,
+                face_up_index: 0,
             },
         );
         e.state.players[0].hand.push(id);
