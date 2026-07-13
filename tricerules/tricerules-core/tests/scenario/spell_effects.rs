@@ -1269,3 +1269,214 @@ fn draw_spell_decking_out_loses_without_erroring() {
     );
     assert_eq!(e.state.winner, Some(1), "P1 wins once P0 decks out");
 }
+
+// ── DiscardCards tests ─────────────────────────────────────────────────────────
+
+fn inject_card_into_hand(e: &mut GameEngine, player: usize, player_id: i32, card_id: &str) -> u32 {
+    let id = e.state.next_object_id;
+    e.state.next_object_id += 1;
+    e.state.objects.insert(
+        id,
+        tricerules_core::state::GameObject {
+            id,
+            owner: player_id,
+            card_id: card_id.to_string(),
+            zone: tricerules_core::Zone::Hand,
+            tapped: false,
+            summoning_sick: false,
+            power: None,
+            toughness: None,
+            damage: 0,
+            deathtouch_damage: false,
+            counters: std::collections::BTreeMap::new(),
+            attached_to: None,
+            regeneration_shields: 0,
+            must_attack_if_able: false,
+            must_block_if_able: false,
+            face_up_index: 0,
+        },
+    );
+    e.state.players[player].hand.push(id);
+    id
+}
+
+#[test]
+fn hymn_to_tourach_discards_two_random_cards() {
+    let decks = Some(vec![
+        deck_with("swamp", &["hymn_to_tourach"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(3000, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Inject 3 specific cards into P1's hand so we have a controlled count.
+    inject_card_into_hand(&mut e, 1, 1, "grizzly_bears");
+    inject_card_into_hand(&mut e, 1, 1, "storm_crow");
+    inject_card_into_hand(&mut e, 1, 1, "grizzly_bears");
+    let hand_before = e.state.players[1].hand.len();
+    let grave_before = e.state.players[1].graveyard.len();
+
+    relocate_to_hand(&mut e, 0, "hymn_to_tourach");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 2,
+            ..Default::default()
+        },
+    );
+    let hymn_idx = hand_index_for_card(&e, 0, "hymn_to_tourach");
+    e.apply_command(0, &cast_spell(hymn_idx, target_player(1)))
+        .expect("cast hymn");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass())
+        .expect("p1 pass — hymn resolves");
+
+    assert_eq!(
+        e.state.players[1].hand.len(),
+        hand_before - 2,
+        "P1 discarded 2 cards"
+    );
+    assert_eq!(
+        e.state.players[1].graveyard.len(),
+        grave_before + 2,
+        "2 cards in graveyard"
+    );
+}
+
+#[test]
+fn hymn_to_tourach_discards_all_when_hand_smaller_than_count() {
+    let decks = Some(vec![
+        deck_with("swamp", &["hymn_to_tourach"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(3001, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Clear P1's hand and inject exactly 1 card so count(2) > hand_size(1).
+    let cleared: Vec<_> = e.state.players[1].hand.drain(..).collect();
+    e.state.players[1].library.extend(cleared);
+    inject_card_into_hand(&mut e, 1, 1, "grizzly_bears");
+    assert_eq!(e.state.players[1].hand.len(), 1);
+
+    relocate_to_hand(&mut e, 0, "hymn_to_tourach");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 2,
+            ..Default::default()
+        },
+    );
+    let hymn_idx = hand_index_for_card(&e, 0, "hymn_to_tourach");
+    e.apply_command(0, &cast_spell(hymn_idx, target_player(1)))
+        .expect("cast hymn");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass())
+        .expect("p1 pass — hymn resolves");
+
+    // CR 701.7a: if the player has fewer cards than count, they discard all.
+    assert_eq!(
+        e.state.players[1].hand.len(),
+        0,
+        "P1 discarded their only card"
+    );
+}
+
+#[test]
+fn hymn_to_tourach_empty_hand_is_no_op() {
+    let decks = Some(vec![
+        deck_with("swamp", &["hymn_to_tourach"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(3002, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Empty P1's hand entirely.
+    let cleared: Vec<_> = e.state.players[1].hand.drain(..).collect();
+    e.state.players[1].library.extend(cleared);
+    assert_eq!(e.state.players[1].hand.len(), 0);
+
+    relocate_to_hand(&mut e, 0, "hymn_to_tourach");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 2,
+            ..Default::default()
+        },
+    );
+    let hymn_idx = hand_index_for_card(&e, 0, "hymn_to_tourach");
+    e.apply_command(0, &cast_spell(hymn_idx, target_player(1)))
+        .expect("cast hymn");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass())
+        .expect("p1 pass — hymn resolves (no-op)");
+
+    assert_eq!(
+        e.state.players[1].hand.len(),
+        0,
+        "P1 still has empty hand after no-op"
+    );
+}
+
+#[test]
+fn coercion_caster_chooses_which_card_to_discard() {
+    let decks = Some(vec![
+        deck_with("swamp", &["coercion"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(3003, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Clear P1's hand and inject exactly 2 cards so the test is unambiguous.
+    let cleared: Vec<_> = e.state.players[1].hand.drain(..).collect();
+    e.state.players[1].library.extend(cleared);
+    let bear_oid = inject_card_into_hand(&mut e, 1, 1, "grizzly_bears");
+    inject_card_into_hand(&mut e, 1, 1, "storm_crow");
+    assert_eq!(e.state.players[1].hand.len(), 2);
+
+    relocate_to_hand(&mut e, 0, "coercion");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    let coercion_idx = hand_index_for_card(&e, 0, "coercion");
+    e.apply_command(0, &cast_spell(coercion_idx, target_player(1)))
+        .expect("cast coercion");
+
+    e.apply_command(0, &pass()).expect("p0 pass");
+    let resolve_batch = e
+        .apply_command(1, &pass())
+        .expect("p1 pass — coercion parks for choice");
+
+    // Engine should be waiting for P0 (caster) to choose.
+    let choice_req =
+        find_resolution_choice(&resolve_batch).expect("ResolutionChoiceRequired must be emitted");
+    assert_eq!(choice_req.deciding_player_id, 0, "P0 (caster) decides");
+    assert_eq!(choice_req.min, 1);
+    assert_eq!(choice_req.max, 1);
+    assert!(
+        choice_req.candidate_object_ids.contains(&bear_oid),
+        "bear is a candidate"
+    );
+
+    // P0 picks the grizzly_bears.
+    e.apply_command(0, &submit_resolution_choice(vec![bear_oid]))
+        .expect("P0 submits choice");
+
+    assert_eq!(
+        e.state.players[1].hand.len(),
+        1,
+        "P1 has 1 card left (storm_crow)"
+    );
+    assert!(
+        e.state.players[1].graveyard.contains(&bear_oid),
+        "grizzly_bears is in P1 graveyard"
+    );
+}

@@ -3,6 +3,8 @@ use super::targeting::{
     battlefield_objects_matching, compute_spell_targets, spell_has_no_legal_targets_at_resolution,
 };
 use super::*;
+use rand::seq::SliceRandom;
+use rand::SeedableRng;
 
 impl GameEngine {
     pub(super) fn resolve_top_of_stack(
@@ -780,6 +782,129 @@ impl GameEngine {
                         }
                     }
                 }
+                SpellEffectKind::DiscardCards {
+                    count,
+                    target: _,
+                    random,
+                } => {
+                    if let Some(&tid) = targets.first() {
+                        if let Some(pi) = self.state.player_idx(tid as i32) {
+                            let pid = self.state.players[pi].id;
+                            if random {
+                                // CR 701.7a "at random": engine chooses using a seeded RNG so
+                                // replays reconstruct the same discard (Hymn to Tourach).
+                                let hand = self.state.players[pi].hand.clone();
+                                let discard_count = (count as usize).min(hand.len());
+                                if discard_count == 0 {
+                                    events.push(ev_log(format!(
+                                        "P{pid} has no cards to discard ({spell_label})."
+                                    )));
+                                } else {
+                                    let mix = self
+                                        .state
+                                        .command_index
+                                        .wrapping_mul(0x9E37_79B9_7F4A_7C15);
+                                    let mut rng = rand::rngs::StdRng::seed_from_u64(mix);
+                                    let mut shuffled = hand;
+                                    shuffled.shuffle(&mut rng);
+                                    let to_discard: Vec<ObjectId> =
+                                        shuffled.into_iter().take(discard_count).collect();
+                                    for oid in &to_discard {
+                                        let card_name =
+                                            object_display_name(&self.state, self.registry, *oid);
+                                        move_object_to_zone(
+                                            &mut self.state,
+                                            *oid,
+                                            Zone::Graveyard,
+                                        )?;
+                                        events.push(permanent_moved_event(
+                                            &self.state,
+                                            *oid,
+                                            pid,
+                                            rv1::permanent_moved::Destination::Graveyard,
+                                        ));
+                                        events.push(ev_log(format!(
+                                            "P{pid} discards {card_name} ({spell_label})."
+                                        )));
+                                    }
+                                }
+                            } else {
+                                // Caster-chooses: emit ResolutionChoiceRequired so the caster
+                                // sees the target's revealed hand and picks which cards to discard
+                                // (Coercion, Thoughtseize). choice_kind 1 = RevealedCards (public).
+                                let hand: Vec<ObjectId> = self.state.players[pi].hand.clone();
+                                if hand.is_empty() {
+                                    events.push(ev_log(format!(
+                                        "P{pid} has no cards to discard ({spell_label})."
+                                    )));
+                                } else {
+                                    let n = (hand.len() as u32).min(count);
+                                    let candidate_card_ids: Vec<String> = hand
+                                        .iter()
+                                        .map(|&oid| {
+                                            self.state
+                                                .objects
+                                                .get(&oid)
+                                                .map(|o| o.card_id.clone())
+                                                .unwrap_or_default()
+                                        })
+                                        .collect();
+                                    let candidate_names: Vec<String> = candidate_card_ids
+                                        .iter()
+                                        .map(|cid| {
+                                            self.registry
+                                                .get(cid)
+                                                .map(|d| d.name.clone())
+                                                .unwrap_or_else(|| cid.clone())
+                                        })
+                                        .collect();
+                                    let prompt = format!(
+                                        "P{controller}: choose {n} card(s) to discard from P{pid}'s hand."
+                                    );
+                                    events.push(rv1::RuledEvent {
+                                        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                                            rv1::ResolutionChoiceRequired {
+                                                deciding_player_id: controller,
+                                                source_object_id: top.id,
+                                                prompt_text: prompt.clone(),
+                                                choice_kind: custom::ChoiceKind::RevealedCards
+                                                    .as_proto(),
+                                                candidate_object_ids: hand.clone(),
+                                                candidate_card_ids,
+                                                candidate_names,
+                                                min: n,
+                                                max: n,
+                                                ordered: false,
+                                                unique_names: false,
+                                                candidate_server_card_ids: Vec::new(),
+                                            },
+                                        )),
+                                    });
+                                    events.push(ev_log(prompt.clone()));
+                                    self.state.pending_resolution = Some(PendingResolution {
+                                        item: top.clone(),
+                                        custom_key: "__discard_chosen".to_string(),
+                                        step: 0,
+                                        scratch: vec![],
+                                        deciding_player: controller,
+                                        candidates: hand,
+                                        min: n,
+                                        max: n,
+                                        ordered: false,
+                                        unique_names: false,
+                                        prompt,
+                                        choice_kind: custom::ChoiceKind::RevealedCards.as_proto(),
+                                        copy_source_object_id: 0,
+                                        search_destination: SearchDestination::Hand,
+                                        search_shuffle: false,
+                                        search_reveal: false,
+                                    });
+                                    return Ok(());
+                                }
+                            }
+                        }
+                    }
+                }
                 SpellEffectKind::MillTargetPlayer { count, .. } => {
                     if let Some(&tid) = targets.first() {
                         if let Some(pi) = self.state.player_idx(tid as i32) {
@@ -1328,7 +1453,7 @@ pub(super) fn resolve_anthem_scope(
     }
 }
 
-pub(super) fn move_object_to_zone(
+pub(crate) fn move_object_to_zone(
     state: &mut GameState,
     oid: ObjectId,
     z: Zone,

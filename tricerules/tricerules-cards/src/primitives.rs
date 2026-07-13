@@ -455,6 +455,18 @@ pub enum SpellEffectKind {
         count: u32,
         target: TargetFilter,
     },
+    /// CR 701.7a: force `count` cards from the target player's hand to their graveyard.
+    /// `random: true` chooses cards at random (Hymn to Tourach); `random: false` lets
+    /// the spell's controller choose from the revealed hand (Coercion, Thoughtseize).
+    /// When `count` exceeds the hand size, the player discards all remaining cards.
+    /// Two cards covered: Hymn to Tourach (`random: true`); Coercion (`random: false`).
+    DiscardCards {
+        count: u32,
+        target: TargetFilter,
+        /// True = at random (Hymn to Tourach). False = caster chooses from revealed hand (Coercion).
+        #[serde(default)]
+        random: bool,
+    },
     /// Destroy every battlefield permanent matching `kind` (CR 701.7). Untargeted, so it
     /// ignores hexproof/shroud and never fizzles. `kind` selects the affected set — `Creature`
     /// for Wrath of God / Day of Judgment, `AnyPermanent` for "destroy all permanents". Only
@@ -610,6 +622,7 @@ impl SpellEffectKind {
             | SpellEffectKind::TargetPlayerGainsLife { target, .. }
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
             | SpellEffectKind::MillTargetPlayer { target, .. }
+            | SpellEffectKind::DiscardCards { target, .. }
             | SpellEffectKind::PutCounters { target, .. }
             | SpellEffectKind::AuraAttach { target }
             | SpellEffectKind::Equip { target }
@@ -639,7 +652,8 @@ impl SpellEffectKind {
         match self {
             SpellEffectKind::TargetPlayerGainsLife { target, .. }
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
-            | SpellEffectKind::MillTargetPlayer { target, .. } => {
+            | SpellEffectKind::MillTargetPlayer { target, .. }
+            | SpellEffectKind::DiscardCards { target, .. } => {
                 if target.is_player() {
                     Ok(())
                 } else {

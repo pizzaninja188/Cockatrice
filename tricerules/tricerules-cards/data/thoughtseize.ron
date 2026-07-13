@@ -1,0 +1,8 @@
+(
+  id: "thoughtseize",
+  name: "Thoughtseize",
+  mana_cost: "{B}",
+  types: ["Sorcery"],
+  spell_effect: [DiscardCards(count: 1, target: (kind: AnyPlayer))],
+  partial: "nonland restriction not enforced; you-lose-2-life not implemented",
+)
