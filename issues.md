@@ -36,10 +36,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Eyeblight's Ending currently targets and destroys any creature, missing the "non-Elf" restriction. Add `not_subtype: Option<String>` to `TargetFilter` (parallel to the existing `not_color: Option<Color>` field) and update the Eyeblight's Ending RON to use `not_subtype: Some("Elf")`. Update `legal_actions.rs` target filtering and the relay's target-legality pass. Add scenario tests verifying: Elf creature is not a valid target, non-Elf creature is a valid target, casting on an Elf returns `EngineError::Illegal`. This same field also fixes any future cards with "non-[Subtype]" targeting restrictions.
   - Priority: Low
 
-- [ ] #22 [feature] Discard effect primitive (hand disruption)
-  - Details: No `DiscardCards` or forced-discard variant exists in `SpellEffectKind` (`tricerules-cards/src/primitives.rs`). Add `DiscardCards { count: u32, target: TargetFilter }` (target must be a player kind) to cover "target player discards N cards" (Coercion, Hymn to Tourach, Thoughtseize). When `count` exceeds the player's hand size the player discards all remaining cards (CR 701.7a). Add scenario tests for: normal discard, discard more than hand size, empty hand no-op.
-  - Priority: Medium
-
 - [ ] #23 [feature] Forced-sacrifice effect (Diabolic Edict / Plaguecrafter)
   - Details: `sacrifice_permanent` already exists in `tricerules-core/src/engine/resolution.rs:923` but there is no `SpellEffectKind` variant that forces a target player to sacrifice. Add `TargetPlayerSacrifices { filter: TargetFilter }` (filter restricts what may be sacrificed — default creature). The targeted player chooses which qualifying permanent they sacrifice; this requires a `ResolutionChoiceRequired` interrupt (reusing the existing proto pair) so the player picks from their matching permanents. Implement Diabolic Edict (opponent sacrifices a creature) and add scenario tests for: valid sacrifice, no valid permanent fizzle, player choice validation.
   - Priority: Medium
