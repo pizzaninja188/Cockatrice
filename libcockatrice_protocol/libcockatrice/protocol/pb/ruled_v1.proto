@@ -350,6 +350,9 @@ message ResolutionChoiceRequired {
   //   2 = cards being searched out of the deciding player's library (private — redacted)
   //   3 = target objects (battlefield permanents, stack spells, or players — public).
   //       The client uses click-to-target mode instead of a list dialog for this kind.
+  //   4 = cards in *another* player's hand, revealed privately to the deciding player
+  //       (Thoughtseize/Coercion "look at target player's hand" — private, redacted from
+  //       everyone but the decider). Rendered by the client exactly like kind 1.
   int32 choice_kind = 4;
   // Candidate object ids to choose among (engine ObjectIds).
   repeated uint32 candidate_object_ids = 5;

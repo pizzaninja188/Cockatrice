@@ -1715,11 +1715,13 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                             resolutionHandPick->min, 0);
                                         emit ruledLibrarySearchPickStarted(libNames, libScids);
                                         emit ruledCombatStateChanged();
-                                    } else if (rcr.choice_kind() == 1 &&
+                                    } else if ((rcr.choice_kind() == 1 || rcr.choice_kind() == 4) &&
                                                rcr.candidate_server_card_ids_size() == rcr.candidate_names_size() &&
                                                rcr.candidate_names_size() > 0) {
-                                        // RevealedCards (choice_kind 1) with server card ids: zone popup pick.
-                                        // The deciding player (opponent) chooses from the revealed cards.
+                                        // RevealedCards (choice_kind 1) or PrivateRevealedHand (choice_kind 4)
+                                        // with server card ids: zone popup pick. The deciding player chooses
+                                        // from the revealed cards (kind 4 = a target player's hand shown only
+                                        // to the caster; the relay redacted it from everyone else).
                                         ResolutionHandPick pick;
                                         pick.min = static_cast<int>(rcr.min());
                                         pick.max = static_cast<int>(rcr.max());
