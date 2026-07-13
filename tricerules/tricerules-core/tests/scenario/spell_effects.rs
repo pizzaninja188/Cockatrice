@@ -1486,3 +1486,244 @@ fn coercion_caster_chooses_which_card_to_discard() {
         "grizzly_bears is in P1 graveyard"
     );
 }
+// ---------------------------------------------------------------------------
+// TargetPlayerSacrifices (Diabolic Edict)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn diabolic_edict_forces_target_player_to_sacrifice_a_creature() {
+    let decks = Some(vec![
+        {
+            let mut d = vec!["diabolic_edict".to_string(), "swamp".to_string()];
+            d.extend(std::iter::repeat_n("swamp".to_string(), 28));
+            d
+        },
+        {
+            let mut d = vec!["grizzly_bears".to_string()];
+            d.extend(std::iter::repeat_n("forest".to_string(), 29));
+            d
+        },
+    ]);
+    let mut e = GameEngine::new(9001, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Give P0 mana to cast Diabolic Edict ({1}{B}) and put a bear on P1's board.
+    let bear_id = deploy_to_battlefield(&mut e, 1, "grizzly_bears", false);
+    ensure_in_hand(&mut e, 0, "diabolic_edict");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+
+    let edict_idx = hand_index_for_card(&e, 0, "diabolic_edict");
+    e.apply_command(0, &cast_spell(edict_idx, target_player(1)))
+        .expect("P0 casts Diabolic Edict targeting P1");
+
+    // Both players pass priority to let it resolve.
+    e.apply_command(0, &pass()).expect("P0 pass");
+    let batch = e.apply_command(1, &pass()).expect("P1 pass resolves edict");
+
+    // Engine should emit a ResolutionChoiceRequired for P1 to pick a creature.
+    let req = find_resolution_choice(&batch).expect("resolution choice required");
+    assert_eq!(
+        req.deciding_player_id, 1,
+        "P1 must choose what to sacrifice"
+    );
+    assert_eq!(req.min, 1);
+    assert_eq!(req.max, 1);
+    assert!(
+        req.candidate_object_ids.contains(&bear_id),
+        "Grizzly Bears is a legal sacrifice"
+    );
+    assert!(e.state.pending_resolution.is_some());
+
+    // P1 sacrifices the bear.
+    let result = e
+        .apply_command(1, &submit_resolution_choice(vec![bear_id]))
+        .expect("P1 submits sacrifice choice");
+
+    assert!(
+        e.state.pending_resolution.is_none(),
+        "resolution complete after choice"
+    );
+    assert!(
+        e.state.players[1].battlefield.is_empty(),
+        "bear was sacrificed off the battlefield"
+    );
+    assert_eq!(
+        e.state.players[1].graveyard.len(),
+        1,
+        "bear moved to P1 graveyard"
+    );
+    // PermanentMoved event should have been emitted.
+    let moved = result.events.iter().any(|ev| {
+        matches!(&ev.ev, Some(tricerules_proto::ruled::v1::ruled_event::Ev::PermanentMoved(m))
+            if m.object_id == bear_id
+            && m.destination == tricerules_proto::ruled::v1::permanent_moved::Destination::Graveyard as i32)
+    });
+    assert!(
+        moved,
+        "PermanentMoved(Graveyard) event emitted for the bear"
+    );
+}
+
+#[test]
+fn diabolic_edict_fizzles_when_target_has_no_creatures() {
+    let decks = Some(vec![
+        {
+            let mut d = vec!["diabolic_edict".to_string()];
+            d.extend(std::iter::repeat_n("swamp".to_string(), 29));
+            d
+        },
+        std::iter::repeat_n("forest".to_string(), 30).collect(),
+    ]);
+    let mut e = GameEngine::new(9002, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // P1 has no creatures on the battlefield.
+    assert!(e.state.players[1].battlefield.is_empty());
+
+    ensure_in_hand(&mut e, 0, "diabolic_edict");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+
+    let edict_idx = hand_index_for_card(&e, 0, "diabolic_edict");
+    e.apply_command(0, &cast_spell(edict_idx, target_player(1)))
+        .expect("P0 casts Diabolic Edict");
+
+    e.apply_command(0, &pass()).expect("P0 pass");
+    let batch = e
+        .apply_command(1, &pass())
+        .expect("P1 pass resolves edict (fizzle)");
+
+    // No ResolutionChoiceRequired — effect fizzled with no valid sacrifice.
+    assert!(
+        find_resolution_choice(&batch).is_none(),
+        "no choice required: P1 has nothing to sacrifice"
+    );
+    assert!(
+        e.state.pending_resolution.is_none(),
+        "resolution finished immediately (fizzle)"
+    );
+    // P1's battlefield and graveyard are both empty.
+    assert!(e.state.players[1].battlefield.is_empty());
+    assert!(e.state.players[1].graveyard.is_empty());
+}
+
+#[test]
+fn diabolic_edict_rejects_invalid_sacrifice_choice() {
+    let decks = Some(vec![
+        {
+            let mut d = vec!["diabolic_edict".to_string()];
+            d.extend(std::iter::repeat_n("swamp".to_string(), 29));
+            d
+        },
+        {
+            let mut d = vec!["grizzly_bears".to_string()];
+            d.extend(std::iter::repeat_n("forest".to_string(), 29));
+            d
+        },
+    ]);
+    let mut e = GameEngine::new(9003, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let bear_id = deploy_to_battlefield(&mut e, 1, "grizzly_bears", false);
+    ensure_in_hand(&mut e, 0, "diabolic_edict");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+
+    let edict_idx = hand_index_for_card(&e, 0, "diabolic_edict");
+    e.apply_command(0, &cast_spell(edict_idx, target_player(1)))
+        .expect("P0 casts Diabolic Edict");
+
+    e.apply_command(0, &pass()).expect("P0 pass");
+    let batch = e.apply_command(1, &pass()).expect("P1 pass resolves edict");
+    assert!(find_resolution_choice(&batch).is_some());
+
+    // P1 tries to submit an object_id that is not in the candidates (e.g. a forest land).
+    let forest_id = inject_permanent_on_battlefield(&mut e, 1, "forest");
+    let bad_result = e.apply_command(1, &submit_resolution_choice(vec![forest_id]));
+    assert!(
+        bad_result.is_err(),
+        "submitting a non-candidate object is rejected"
+    );
+
+    // Resolution is still pending; bear is still alive.
+    assert!(
+        e.state.pending_resolution.is_some(),
+        "still pending after invalid choice"
+    );
+    assert!(e.state.players[1].battlefield.contains(&bear_id));
+
+    // Now submit the correct choice — bear gets sacrificed.
+    e.apply_command(1, &submit_resolution_choice(vec![bear_id]))
+        .expect("valid sacrifice choice accepted");
+
+    assert!(e.state.pending_resolution.is_none());
+    assert!(!e.state.players[1].battlefield.contains(&bear_id));
+}
+
+#[test]
+fn diabolic_edict_targeting_self_is_legal() {
+    // Diabolic Edict says "target player" (not opponent), so casting it on yourself is legal.
+    let decks = Some(vec![
+        {
+            let mut d = vec!["diabolic_edict".to_string(), "grizzly_bears".to_string()];
+            d.extend(std::iter::repeat_n("swamp".to_string(), 28));
+            d
+        },
+        std::iter::repeat_n("forest".to_string(), 30).collect(),
+    ]);
+    let mut e = GameEngine::new(9004, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let bear_id = deploy_to_battlefield(&mut e, 0, "grizzly_bears", false);
+    ensure_in_hand(&mut e, 0, "diabolic_edict");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+
+    let edict_idx = hand_index_for_card(&e, 0, "diabolic_edict");
+    // Target P0 (self) — should be legal for AnyPlayer kind.
+    e.apply_command(0, &cast_spell(edict_idx, target_player(0)))
+        .expect("P0 targets self with Diabolic Edict");
+
+    e.apply_command(0, &pass()).expect("P0 pass");
+    let batch = e.apply_command(1, &pass()).expect("P1 pass resolves edict");
+
+    let req = find_resolution_choice(&batch).expect("choice required");
+    assert_eq!(
+        req.deciding_player_id, 0,
+        "P0 is the deciding player (self-target)"
+    );
+
+    e.apply_command(0, &submit_resolution_choice(vec![bear_id]))
+        .expect("P0 sacrifices own bear");
+
+    assert!(!e.state.players[0].battlefield.contains(&bear_id));
+}

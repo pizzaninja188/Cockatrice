@@ -3,6 +3,7 @@ use super::events::{
     format_spell_targets_log, object_display_name,
 };
 use super::legal_actions::fill_legal;
+use super::resolution::{permanent_moved_event, sacrifice_permanent};
 use super::targeting::validate_effect_targets;
 use super::*;
 
@@ -207,6 +208,11 @@ impl GameEngine {
             return self.finish_discard_chosen(pending, chosen);
         }
 
+        // CR 701.17: sacrifice choice — target player picks which qualifying permanent to lose.
+        if pending.custom_key == "__sacrifice_chosen" {
+            return self.finish_sacrifice_chosen(pending, chosen);
+        }
+
         let effect = match custom::lookup(&pending.custom_key) {
             Some(e) => e,
             None => {
@@ -296,6 +302,62 @@ impl GameEngine {
                 "{copied_name} copy targeting{tgt_log} (P{controller})"
             )),
         ];
+
+        if let Some(i) = self.state.player_idx(self.state.active_player_id()) {
+            self.state.priority_idx = i;
+        }
+        ev.push(ev_priority_changed(self));
+
+        Ok(finish_with_events(self, ev))
+    }
+
+    /// CR 701.17: the target player has chosen which permanent to sacrifice.
+    fn finish_sacrifice_chosen(
+        &mut self,
+        pending: PendingResolution,
+        chosen: &[u32],
+    ) -> Result<RuledEventBatch, EngineError> {
+        let oid = chosen[0];
+        let card_name = super::events::object_display_name(&self.state, self.registry, oid);
+        // Capture card_id and controller before the zone move clears transient state.
+        let owner = self
+            .state
+            .objects
+            .get(&oid)
+            .map(|o| o.owner)
+            .ok_or(EngineError::Illegal("sacrificed object missing"))?;
+        let card_id = self
+            .state
+            .objects
+            .get(&oid)
+            .map(|o| o.card_id.clone())
+            .unwrap_or_default();
+        let controller = owner;
+
+        sacrifice_permanent(&mut self.state, oid)?;
+
+        let mut ev = vec![
+            permanent_moved_event(
+                &self.state,
+                oid,
+                owner,
+                rv1::permanent_moved::Destination::Graveyard,
+            ),
+            ev_log(format!(
+                "P{} sacrifices {card_name}.",
+                pending.deciding_player
+            )),
+        ];
+
+        self.fire_triggers(
+            GameEvent::Dies {
+                object_id: oid,
+                card_id,
+                controller,
+            },
+            &mut ev,
+        );
+        let _ = self.apply_sbas(&mut ev);
 
         if let Some(i) = self.state.player_idx(self.state.active_player_id()) {
             self.state.priority_idx = i;

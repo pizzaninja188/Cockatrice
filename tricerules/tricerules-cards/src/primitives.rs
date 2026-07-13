@@ -559,6 +559,18 @@ pub enum SpellEffectKind {
         #[serde(default = "TargetFilter::default_equip")]
         target: TargetFilter,
     },
+    /// CR 701.17: force the targeted player to sacrifice a permanent matching `filter` (default:
+    /// any creature). The target is specified by `target` (kind must be AnyPlayer or
+    /// OpponentPlayer — validated at registry load). The targeted player chooses which qualifying
+    /// permanent to sacrifice; if they have none the effect fizzles. Covers Diabolic Edict
+    /// (opponent sacrifices a creature) and Plaguecrafter (target player sacrifices a creature).
+    TargetPlayerSacrifices {
+        /// Who must sacrifice — kind must be AnyPlayer or OpponentPlayer.
+        target: TargetFilter,
+        /// What kind of permanent may be sacrificed (default: Creature).
+        #[serde(default = "TargetFilter::default_creature")]
+        filter: TargetFilter,
+    },
     None,
 }
 
@@ -626,7 +638,8 @@ impl SpellEffectKind {
             | SpellEffectKind::PutCounters { target, .. }
             | SpellEffectKind::AuraAttach { target }
             | SpellEffectKind::Equip { target }
-            | SpellEffectKind::Regenerate { target } => vec![target],
+            | SpellEffectKind::Regenerate { target }
+            | SpellEffectKind::TargetPlayerSacrifices { target, .. } => vec![target],
             _ => vec![],
         }
     }
@@ -683,6 +696,23 @@ impl SpellEffectKind {
                 } else {
                     Ok(())
                 }
+            }
+            // TargetPlayerSacrifices targets a player (kind must be AnyPlayer/OpponentPlayer),
+            // and the sacrifice filter must select objects not players.
+            SpellEffectKind::TargetPlayerSacrifices { target, filter } => {
+                if !target.is_player() {
+                    return Err(format!(
+                        "TargetPlayerSacrifices.target must be AnyPlayer or OpponentPlayer, got {:?}",
+                        target.kind
+                    ));
+                }
+                if filter.is_player() {
+                    return Err(format!(
+                        "TargetPlayerSacrifices.filter must select permanents, not players, got {:?}",
+                        filter.kind
+                    ));
+                }
+                Ok(())
             }
             // Mass effects select objects, not players, and never use Self_/AnyTarget (which
             // include players). Only Creature / AnyPermanent are honored by the engine.
