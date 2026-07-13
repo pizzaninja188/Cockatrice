@@ -867,8 +867,11 @@ impl GameEngine {
                                                 deciding_player_id: controller,
                                                 source_object_id: top.id,
                                                 prompt_text: prompt.clone(),
-                                                choice_kind: custom::ChoiceKind::RevealedCards
-                                                    .as_proto(),
+                                                // Private: "look at target player's hand" reveals
+                                                // it only to the caster, not the table (CR 701.7).
+                                                choice_kind:
+                                                    custom::ChoiceKind::PrivateRevealedHand
+                                                        .as_proto(),
                                                 candidate_object_ids: hand.clone(),
                                                 candidate_card_ids,
                                                 candidate_names,
@@ -893,7 +896,8 @@ impl GameEngine {
                                         ordered: false,
                                         unique_names: false,
                                         prompt,
-                                        choice_kind: custom::ChoiceKind::RevealedCards.as_proto(),
+                                        choice_kind: custom::ChoiceKind::PrivateRevealedHand
+                                            .as_proto(),
                                         copy_source_object_id: 0,
                                         search_destination: SearchDestination::Hand,
                                         search_shuffle: false,

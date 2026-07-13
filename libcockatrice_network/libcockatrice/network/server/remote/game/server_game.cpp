@@ -2051,7 +2051,8 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
                 continue;
             }
             auto *rcr = filtered.mutable_events(ei)->mutable_resolution_choice_required();
-            const bool privateCards = rcr->choice_kind() == 0 || rcr->choice_kind() == 2;
+            const bool privateCards = rcr->choice_kind() == 0 || rcr->choice_kind() == 2 ||
+                                      rcr->choice_kind() == 4;
             if (privateCards && rcr->deciding_player_id() != participant->getPlayerId()) {
                 rcr->clear_candidate_object_ids();
                 rcr->clear_candidate_card_ids();
@@ -2081,6 +2082,14 @@ void Server_Game::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
             } else if (rcr->choice_kind() == 1 &&
                        rcr->candidate_server_card_ids_size() == 0) {
                 // RevealedCards: same sequential-index scheme for the same reason.
+                for (int ci = 0; ci < rcr->candidate_names_size(); ++ci) {
+                    rcr->add_candidate_server_card_ids(ci);
+                }
+            } else if (rcr->choice_kind() == 4 &&
+                       rcr->candidate_server_card_ids_size() == 0) {
+                // PrivateRevealedHand: reaches here only for the deciding player (non-deciders were
+                // redacted above). The candidates live in another player's hidden hand, so — like
+                // RevealedCards/LibrarySearch — use sequential indices the client maps back to OIDs.
                 for (int ci = 0; ci < rcr->candidate_names_size(); ++ci) {
                     rcr->add_candidate_server_card_ids(ci);
                 }

@@ -67,8 +67,8 @@ pub struct ResolutionInterrupt {
 }
 
 /// What the candidate object ids in a [`ResolutionInterrupt`] are, for client presentation and,
-/// crucially, for hidden-information redaction by the relay. `HandCards` and `LibrarySearch` are
-/// *private* to the deciding player (their own concealed zone), so Servatrice strips the candidate
+/// crucially, for hidden-information redaction by the relay. `HandCards`, `LibrarySearch`, and
+/// `PrivateRevealedHand` are *private* to the deciding player, so Servatrice strips the candidate
 /// ids/names from every other player; `RevealedCards` are public (they were shown to the table).
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ChoiceKind {
@@ -79,16 +79,23 @@ pub enum ChoiceKind {
     /// Cards the deciding player is searching out of their own library (Gifts Ungiven's search step,
     /// Demonic Tutor, …). Private — the library stays hidden; only the chosen cards become public.
     LibrarySearch,
+    /// Cards in *another* player's hand, shown privately to the deciding player who chooses among
+    /// them (Thoughtseize/Coercion "look at target player's hand"; reusable for Duress, Distress,
+    /// Cabal Therapy's reveal). Private — CR 701.7 "look" does not reveal the hand to the table, so
+    /// the relay strips the candidates from everyone but the decider. Rendered like `RevealedCards`.
+    PrivateRevealedHand,
 }
 
 impl ChoiceKind {
     /// Stable proto-wire discriminant (kept in sync with `RuledEvent.ResolutionChoiceRequired.choice_kind`
-    /// and the relay's redaction in `Server_Game::sendRuledBatch`). 0 and 2 are private kinds.
+    /// and the relay's redaction in `Server_Game::sendRuledBatch`). 0, 2, and 4 are private kinds.
     pub fn as_proto(self) -> i32 {
         match self {
             ChoiceKind::HandCards => 0,
             ChoiceKind::RevealedCards => 1,
             ChoiceKind::LibrarySearch => 2,
+            // 3 is TargetObjects (emitted by the copy-retarget path, not via this enum).
+            ChoiceKind::PrivateRevealedHand => 4,
         }
     }
 }
