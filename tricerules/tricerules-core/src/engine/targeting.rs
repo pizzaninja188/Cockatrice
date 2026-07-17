@@ -385,6 +385,7 @@ pub(super) fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
         | SpellEffectKind::ReturnFromGraveyard { .. }
         | SpellEffectKind::TargetPlayerGainsLife { .. }
         | SpellEffectKind::TargetPlayerLosesLife { .. }
+        | SpellEffectKind::DrainTarget { .. }
         | SpellEffectKind::MillTargetPlayer { .. }
         | SpellEffectKind::DiscardCards { .. }
         | SpellEffectKind::TapTarget { .. }
@@ -506,6 +507,7 @@ pub(super) fn validate_effect_targets(
         }
         SpellEffectKind::TargetPlayerGainsLife { target: filter, .. }
         | SpellEffectKind::TargetPlayerLosesLife { target: filter, .. }
+        | SpellEffectKind::DrainTarget { target: filter, .. }
         | SpellEffectKind::MillTargetPlayer { target: filter, .. }
         | SpellEffectKind::DiscardCards { target: filter, .. }
         | SpellEffectKind::TargetPlayerSacrifices { target: filter, .. } => {
@@ -681,6 +683,7 @@ pub(super) fn spell_target_legality_error(
         }
         SpellEffectKind::TargetPlayerGainsLife { target: filter, .. }
         | SpellEffectKind::TargetPlayerLosesLife { target: filter, .. }
+        | SpellEffectKind::DrainTarget { target: filter, .. }
         | SpellEffectKind::MillTargetPlayer { target: filter, .. }
         | SpellEffectKind::DiscardCards { target: filter, .. }
         | SpellEffectKind::TargetPlayerSacrifices { target: filter, .. } => {

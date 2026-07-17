@@ -723,6 +723,37 @@ impl GameEngine {
                         }
                     }
                 }
+                SpellEffectKind::DrainTarget { amount, .. } => {
+                    if let Some(&tid) = targets.first() {
+                        if let Some(pi) = self.state.player_idx(tid as i32) {
+                            let pid = self.state.players[pi].id;
+                            self.state.players[pi].life -= amount as i32;
+                            events.push(rv1::RuledEvent {
+                                ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                                    player_id: pid,
+                                    new_total: self.state.players[pi].life,
+                                    delta: -(amount as i32),
+                                })),
+                            });
+                            events.push(ev_log(format!(
+                                "P{pid} loses {amount} life ({spell_label})."
+                            )));
+                        }
+                        if let Some(ci) = self.state.player_idx(controller) {
+                            self.state.players[ci].life += amount as i32;
+                            events.push(rv1::RuledEvent {
+                                ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                                    player_id: controller,
+                                    new_total: self.state.players[ci].life,
+                                    delta: amount as i32,
+                                })),
+                            });
+                            events.push(ev_log(format!(
+                                "P{controller} gains {amount} life ({spell_label})."
+                            )));
+                        }
+                    }
+                }
                 SpellEffectKind::ExileTarget => {
                     if let Some(&tid) = targets.first() {
                         let tgt = object_display_name(&self.state, self.registry, tid);

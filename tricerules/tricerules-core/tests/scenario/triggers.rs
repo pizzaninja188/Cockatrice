@@ -417,3 +417,247 @@ fn soul_warden_gains_life_when_another_creature_enters() {
         "another creature entering gains Soul Warden's controller 1 life"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Blood Artist — WheneverCreatureDies observer trigger + DrainTarget effect
+// ---------------------------------------------------------------------------
+
+/// Blood Artist's trigger fires when a creature controlled by ANY player dies.
+/// Scenario: P0 has Blood Artist; P1's Grizzly Bears die via lethal damage (SBA).
+/// P0 chooses P1 as the drain target → P1 loses 1 life, P0 gains 1 life.
+#[test]
+fn blood_artist_triggers_on_opponent_creature_dying() {
+    let decks = Some(vec![
+        deck_with("swamp", &["blood_artist"]),
+        deck_with("forest", &["grizzly_bears"]),
+    ]);
+    let mut e = GameEngine::new(8100, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let artist_oid = relocate_to_battlefield(&mut e, 0, "blood_artist", false);
+    let bears_oid = relocate_to_battlefield(&mut e, 1, "grizzly_bears", false);
+
+    // Record life totals before the kill.
+    let p0_life_before = e.state.players[0].life;
+    let p1_life_before = e.state.players[1].life;
+
+    // Mark lethal damage on bears (toughness 2); SBAs will destroy them on next priority check.
+    e.state.objects.get_mut(&bears_oid).expect("bears").damage = 2;
+
+    // Pass priority — SBA runs, Bears die, Blood Artist trigger fires (needs target).
+    let batch = e.apply_command(0, &pass()).expect("pass triggers SBA");
+    let _ = batch; // SBA fires and pending_trigger is queued
+
+    assert_eq!(
+        e.state.objects.get(&bears_oid).expect("bears").zone,
+        tricerules_core::Zone::Graveyard,
+        "Grizzly Bears must be in graveyard after lethal-damage SBA"
+    );
+    assert_eq!(
+        e.state.pending_triggers.len(),
+        1,
+        "Blood Artist WheneverCreatureDies trigger must be pending target selection"
+    );
+
+    // P0 (Blood Artist controller) chooses P1 as the drain target.
+    let p1_id = e.state.players[1].id;
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                target_object_id: p1_id as u32,
+            })),
+        },
+    )
+    .expect("choose trigger target: P1");
+
+    assert!(
+        e.state.pending_triggers.is_empty(),
+        "pending_triggers must be empty after target chosen"
+    );
+    assert_eq!(e.state.stack.len(), 1, "Blood Artist trigger on the stack");
+
+    // Resolve the trigger: P1 had priority after P0's pass; both pass to resolve the drain.
+    pass_both_players(&mut e);
+
+    assert_eq!(
+        e.state.players[0].life,
+        p0_life_before + 1,
+        "Blood Artist controller must gain 1 life"
+    );
+    assert_eq!(
+        e.state.players[1].life,
+        p1_life_before - 1,
+        "drained player must lose 1 life"
+    );
+    let _ = artist_oid; // suppress unused warning
+}
+
+/// Blood Artist triggers on its own death (exclude_self: false) and still drains.
+/// Blood Artist (0/1) takes 1 damage → lethal → Blood Artist dies → trigger fires.
+#[test]
+fn blood_artist_triggers_on_own_death() {
+    let decks = Some(vec![
+        deck_with("swamp", &["blood_artist"]),
+        deck_with("mountain", &[]),
+    ]);
+    let mut e = GameEngine::new(8101, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let artist_oid = relocate_to_battlefield(&mut e, 0, "blood_artist", false);
+    let p0_life_before = e.state.players[0].life;
+    let p1_life_before = e.state.players[1].life;
+
+    // Blood Artist has toughness 1; 1 damage kills it.
+    e.state.objects.get_mut(&artist_oid).expect("artist").damage = 1;
+
+    // Pass priority triggers SBA → Blood Artist dies.
+    e.apply_command(0, &pass()).expect("pass triggers SBA");
+
+    assert_eq!(
+        e.state.objects.get(&artist_oid).expect("artist").zone,
+        tricerules_core::Zone::Graveyard,
+        "Blood Artist must be dead"
+    );
+    // The trigger fires from the graveyard context (card data still in registry), needs target.
+    assert_eq!(
+        e.state.pending_triggers.len(),
+        1,
+        "Blood Artist must queue its own-death trigger"
+    );
+
+    // P0 chooses P1 as drain target.
+    let p1_id = e.state.players[1].id;
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                target_object_id: p1_id as u32,
+            })),
+        },
+    )
+    .expect("choose trigger target: P1");
+
+    // After P0's pass triggered the SBA, priority is now P1's; pass both to resolve.
+    pass_both_players(&mut e);
+
+    assert_eq!(
+        e.state.players[0].life,
+        p0_life_before + 1,
+        "Blood Artist gains 1 life on its own death"
+    );
+    assert_eq!(
+        e.state.players[1].life,
+        p1_life_before - 1,
+        "P1 loses 1 life from Blood Artist drain on self-death"
+    );
+}
+
+/// Blood Artist triggers on its controller's own creature dying (not just opponents').
+/// P0 has Blood Artist + Grizzly Bears; Bears take lethal damage → drain fires.
+#[test]
+fn blood_artist_triggers_on_own_creature_dying() {
+    let decks = Some(vec![
+        deck_with("swamp", &["blood_artist", "grizzly_bears"]),
+        deck_with("mountain", &[]),
+    ]);
+    let mut e = GameEngine::new(8102, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let _artist = relocate_to_battlefield(&mut e, 0, "blood_artist", false);
+    let bears_oid = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
+    let p0_life_before = e.state.players[0].life;
+    let p1_life_before = e.state.players[1].life;
+
+    // Grizzly Bears (2/2) takes 2 lethal damage.
+    e.state.objects.get_mut(&bears_oid).expect("bears").damage = 2;
+
+    e.apply_command(0, &pass()).expect("SBA pass");
+
+    assert_eq!(
+        e.state.pending_triggers.len(),
+        1,
+        "Blood Artist must trigger on controller's own creature dying"
+    );
+
+    let p1_id = e.state.players[1].id;
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                target_object_id: p1_id as u32,
+            })),
+        },
+    )
+    .expect("choose P1 as drain target");
+
+    pass_both_players(&mut e);
+
+    assert_eq!(e.state.players[0].life, p0_life_before + 1);
+    assert_eq!(e.state.players[1].life, p1_life_before - 1);
+}
+
+/// Two Blood Artists both trigger on the same creature dying — simultaneous triggers,
+/// both drain independently (net: target loses 2 life, P0 gains 2 life).
+#[test]
+fn two_blood_artists_both_trigger_on_one_death() {
+    let decks = Some(vec![
+        deck_with("swamp", &["blood_artist", "blood_artist"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(8103, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    relocate_to_battlefield(&mut e, 0, "blood_artist", false);
+    relocate_to_battlefield(&mut e, 0, "blood_artist", false);
+    let bears_oid = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    let p0_life_before = e.state.players[0].life;
+    let p1_life_before = e.state.players[1].life;
+
+    e.state.objects.get_mut(&bears_oid).expect("bears").damage = 2;
+
+    e.apply_command(0, &pass()).expect("SBA pass");
+
+    assert_eq!(
+        e.state.pending_triggers.len(),
+        2,
+        "both Blood Artists must queue a drain trigger on one creature death"
+    );
+
+    let p1_id = e.state.players[1].id;
+    // Choose target for the first pending trigger.
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                target_object_id: p1_id as u32,
+            })),
+        },
+    )
+    .expect("target 1st trigger");
+    // Choose target for the second pending trigger.
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                target_object_id: p1_id as u32,
+            })),
+        },
+    )
+    .expect("target 2nd trigger");
+
+    assert_eq!(e.state.stack.len(), 2, "both drain triggers on stack");
+
+    resolve_entire_stack_two_player(&mut e);
+
+    assert_eq!(
+        e.state.players[0].life,
+        p0_life_before + 2,
+        "P0 gains 2 life from two Blood Artist drains"
+    );
+    assert_eq!(
+        e.state.players[1].life,
+        p1_life_before - 2,
+        "P1 loses 2 life from two Blood Artist drains"
+    );
+}
