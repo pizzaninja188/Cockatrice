@@ -1,0 +1,7 @@
+(
+  id: "fog",
+  name: "Fog",
+  mana_cost: "{G}",
+  types: ["Instant"],
+  spell_effect: [PreventAllCombatDamageTurn],
+)

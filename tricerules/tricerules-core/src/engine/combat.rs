@@ -1,5 +1,6 @@
 use super::events::{ev_log, ev_phase_labeled, ev_priority_changed, object_display_name};
 use super::legal_actions::fill_legal;
+use super::resolution::apply_prevention_shield;
 use super::*;
 
 impl GameEngine {
@@ -747,6 +748,13 @@ impl GameEngine {
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
         use tricerules_cards::Keyword;
+        // CR 614.1a: Fog-style global prevention — skip all combat damage this step.
+        if self.state.prevent_all_combat_damage_this_turn {
+            events.push(ev_log(
+                "All combat damage prevented (Fog effect).".to_string(),
+            ));
+            return Ok(());
+        }
         let dfd = self.state.defending_player_id_1v1().unwrap();
         let ap = self.state.active_player_id();
         let mut total_life_lost: i32 = 0;
@@ -785,17 +793,22 @@ impl GameEngine {
                 // Unblocked: deal full power to defending player — only if the attacker assigns
                 // damage this pass (CR 510.4).
                 if attacker_participates {
-                    let p = att_power as i32;
+                    let p = apply_prevention_shield(
+                        &mut self.state.damage_prevention_shields,
+                        dfd as ObjectId,
+                        att_power,
+                        events,
+                    );
                     if let Some(di) = self.state.player_idx(dfd) {
-                        self.state.players[di].life -= p;
-                        total_life_lost += p;
+                        self.state.players[di].life -= p as i32;
+                        total_life_lost += p as i32;
                     }
-                    if att_power > 0 {
+                    if p > 0 {
                         combat_dmg_to_player.push((att, dfd));
                     }
                     // CR 702.15b: attacker with lifelink causes its controller to gain that much life.
-                    if att_has_lifelink && att_power > 0 {
-                        lifelink_gains.push((att_owner, att_power));
+                    if att_has_lifelink && p > 0 {
+                        lifelink_gains.push((att_owner, p));
                     }
                 }
             } else if blockers.len() == 1 && !att_has_trample {
@@ -810,30 +823,42 @@ impl GameEngine {
                 let blk_has_deathtouch = self.effective_has_keyword(blk, Keyword::Deathtouch);
                 let blk_owner = self.state.objects.get(&blk).map(|o| o.owner).unwrap_or(dfd);
                 if blocker_participates {
+                    let dmg_to_att = apply_prevention_shield(
+                        &mut self.state.damage_prevention_shields,
+                        att,
+                        bpw,
+                        events,
+                    );
                     if let Some(af) = self.state.objects.get_mut(&att) {
-                        af.damage += bpw;
+                        af.damage += dmg_to_att;
                         // CR 702.2b / CR 704.5h: any damage from a deathtouch source is lethal.
-                        if blk_has_deathtouch && bpw > 0 {
+                        if blk_has_deathtouch && dmg_to_att > 0 {
                             af.deathtouch_damage = true;
                         }
                     }
+                    // CR 702.15b: blocker with lifelink gains life = damage dealt to attacker.
+                    if blk_has_lifelink && dmg_to_att > 0 {
+                        lifelink_gains.push((blk_owner, dmg_to_att));
+                    }
                 }
                 if attacker_participates {
+                    let dmg_to_blk = apply_prevention_shield(
+                        &mut self.state.damage_prevention_shields,
+                        blk,
+                        att_power,
+                        events,
+                    );
                     if let Some(bf) = self.state.objects.get_mut(&blk) {
-                        bf.damage += att_power;
+                        bf.damage += dmg_to_blk;
                         // CR 702.2b: any damage from attacker with deathtouch is lethal.
-                        if att_has_deathtouch && att_power > 0 {
+                        if att_has_deathtouch && dmg_to_blk > 0 {
                             bf.deathtouch_damage = true;
                         }
                     }
                     // CR 702.15b: attacker with lifelink gains life = damage dealt to blocker.
-                    if att_has_lifelink && att_power > 0 {
-                        lifelink_gains.push((att_owner, att_power));
+                    if att_has_lifelink && dmg_to_blk > 0 {
+                        lifelink_gains.push((att_owner, dmg_to_blk));
                     }
-                }
-                // CR 702.15b: blocker with lifelink gains life = damage dealt to attacker.
-                if blocker_participates && blk_has_lifelink && bpw > 0 {
-                    lifelink_gains.push((blk_owner, bpw));
                 }
             } else {
                 // Multiple blockers OR single-blocker with trample: all blockers deal their power
@@ -864,9 +889,16 @@ impl GameEngine {
                 let any_blocker_deathtouch_hit = blocker_info
                     .iter()
                     .any(|(_, pw, _, has_dt, _, p)| *p && *has_dt && *pw > 0);
+                // CR 614.1a: apply prevention shield before recording multi-blocker total.
+                let dmg_to_att = apply_prevention_shield(
+                    &mut self.state.damage_prevention_shields,
+                    att,
+                    total_blocker_power,
+                    events,
+                );
                 if let Some(af) = self.state.objects.get_mut(&att) {
-                    af.damage += total_blocker_power;
-                    if any_blocker_deathtouch_hit {
+                    af.damage += dmg_to_att;
+                    if any_blocker_deathtouch_hit && dmg_to_att > 0 {
                         af.deathtouch_damage = true;
                     }
                 }
@@ -876,35 +908,52 @@ impl GameEngine {
                     let pairs = c.damage_assignments.get(&att).ok_or(EngineError::Illegal(
                         "combat damage assignments missing for multiply-blocked attacker",
                     ))?;
+                    let mut total_att_lifelink: u32 = 0;
                     for &(blk, dmg) in pairs {
+                        let dmg_to_blk = apply_prevention_shield(
+                            &mut self.state.damage_prevention_shields,
+                            blk,
+                            dmg,
+                            events,
+                        );
                         if let Some(bf) = self.state.objects.get_mut(&blk) {
-                            bf.damage += dmg;
+                            bf.damage += dmg_to_blk;
                             // CR 702.2b: any damage from attacker with deathtouch is lethal.
-                            if att_has_deathtouch && dmg > 0 {
+                            if att_has_deathtouch && dmg_to_blk > 0 {
                                 bf.deathtouch_damage = true;
                             }
                         }
+                        total_att_lifelink += dmg_to_blk;
                     }
                     // CR 702.19: deal trample excess damage to the defending player.
                     let player_trample_dmg =
                         c.trample_player_damage.get(&att).copied().unwrap_or(0);
                     if player_trample_dmg > 0 {
+                        let trample_after = apply_prevention_shield(
+                            &mut self.state.damage_prevention_shields,
+                            dfd as ObjectId,
+                            player_trample_dmg,
+                            events,
+                        );
                         if let Some(di) = self.state.player_idx(dfd) {
-                            self.state.players[di].life -= player_trample_dmg as i32;
-                            total_life_lost += player_trample_dmg as i32;
+                            self.state.players[di].life -= trample_after as i32;
+                            total_life_lost += trample_after as i32;
                         }
-                        // CR 510: trample excess is combat damage the attacker deals to the
-                        // defending player, so it fires "deals combat damage to a player" triggers
-                        // exactly like an unblocked hit.
-                        combat_dmg_to_player.push((att, dfd));
+                        if trample_after > 0 {
+                            // CR 510: trample excess is combat damage the attacker deals to the
+                            // defending player, so it fires "deals combat damage to a player" triggers
+                            // exactly like an unblocked hit.
+                            combat_dmg_to_player.push((att, dfd));
+                        }
+                        total_att_lifelink += trample_after;
                     }
                     // CR 702.15b: attacker with lifelink gains life = damage dealt to all blockers.
-                    if att_has_lifelink && att_power > 0 {
-                        lifelink_gains.push((att_owner, att_power));
+                    if att_has_lifelink && total_att_lifelink > 0 {
+                        lifelink_gains.push((att_owner, total_att_lifelink));
                     }
                 }
                 // CR 702.15b: each participating blocker with lifelink gains life = damage it dealt
-                // to the attacker.
+                // to the attacker (which may have been shielded — use dmg_to_att proportionally).
                 for (_, blk_pw, blk_has_ll, _, blk_owner, blk_participates) in blocker_info {
                     if blk_participates && blk_has_ll && blk_pw > 0 {
                         lifelink_gains.push((blk_owner, blk_pw));

@@ -143,23 +143,26 @@ fn go_for_the_throat_destroys_target_creature() {
     );
 }
 
+/// A Healing Salve (3-shield) on a player fully absorbs a Lightning Bolt (3 damage);
+/// the player's life is unchanged and the shield is exhausted.
 #[test]
-fn healing_salve_gains_three_life_for_target_player() {
+fn healing_salve_shield_fully_consumed_by_bolt() {
     let decks = Some(vec![
         vec![
             "plains".into(),
             "healing_salve".into(),
-            "plains".into(),
-            "plains".into(),
-            "plains".into(),
-            "plains".into(),
-            "plains".into(),
+            "mountain".into(),
+            "lightning_bolt".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
         ],
         forest_only_deck(),
     ]);
     let mut e = GameEngine::new(2601, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
 
+    // Cast Healing Salve on P1 → 3-damage shield.
     give_mana(
         &mut e,
         0,
@@ -168,60 +171,190 @@ fn healing_salve_gains_three_life_for_target_player() {
             ..Default::default()
         },
     );
-
     let salve_idx = hand_index_for_card(&e, 0, "healing_salve");
-    let p1_life_before = e.state.players[1].life;
     e.apply_command(0, &cast_spell(salve_idx, target_player(1)))
-        .expect("cast salve targeting opponent");
-    let batch = {
-        e.apply_command(0, &pass()).expect("p0 pass");
-        e.apply_command(1, &pass()).expect("p1 pass")
-    };
-
+        .expect("cast salve on P1");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass()).expect("p1 pass resolves salve");
     assert_eq!(
-        e.state.players[1].life,
-        p1_life_before + 3,
-        "target player (P1) gains 3"
+        e.state
+            .damage_prevention_shields
+            .get(&1u32)
+            .copied()
+            .unwrap_or(0),
+        3,
+        "3-point shield placed on P1"
     );
-    let life = life_changes_in(&batch);
-    assert!(
-        life.iter()
-            .any(|lc| lc.player_id == 1 && lc.delta == 3 && lc.new_total == p1_life_before + 3),
-        "LifeChanged event expected, got {life:?}"
+    let p1_life = e.state.players[1].life;
+
+    // Lightning Bolt deals 3 to P1 → shield absorbs all 3, P1 life unchanged.
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+    let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+        .expect("cast bolt on P1");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass()).expect("p1 pass resolves bolt");
+    assert_eq!(
+        e.state.players[1].life, p1_life,
+        "shield absorbs all 3 — P1 life unchanged"
+    );
+    assert_eq!(
+        e.state
+            .damage_prevention_shields
+            .get(&1u32)
+            .copied()
+            .unwrap_or(0),
+        0,
+        "shield exhausted after absorbing 3 damage"
     );
 }
 
+/// Two Healing Salves (6-shield total) absorb a Lightning Bolt (3 damage); 3 shield points
+/// remain — demonstrating partial shield consumption.
 #[test]
-fn healing_salve_can_target_controller() {
+fn healing_salve_double_shield_partially_consumed_by_bolt() {
     let decks = Some(vec![
         vec![
             "plains".into(),
             "healing_salve".into(),
-            "plains".into(),
-            "plains".into(),
-            "plains".into(),
-            "plains".into(),
-            "plains".into(),
+            "healing_salve".into(),
+            "mountain".into(),
+            "lightning_bolt".into(),
+            "mountain".into(),
+            "mountain".into(),
         ],
         forest_only_deck(),
     ]);
     let mut e = GameEngine::new(2602, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
+
+    // Cast two Healing Salves on P1 → 6-point shield.
+    for _ in 0..2 {
+        give_mana(
+            &mut e,
+            0,
+            ManaGift {
+                w: 1,
+                ..Default::default()
+            },
+        );
+        let salve_idx = hand_index_for_card(&e, 0, "healing_salve");
+        e.apply_command(0, &cast_spell(salve_idx, target_player(1)))
+            .expect("cast salve");
+        e.apply_command(0, &pass()).expect("p0 pass");
+        e.apply_command(1, &pass()).expect("p1 pass resolves salve");
+    }
+    assert_eq!(
+        e.state
+            .damage_prevention_shields
+            .get(&1u32)
+            .copied()
+            .unwrap_or(0),
+        6,
+        "6-point shield placed on P1 (two salves)"
+    );
+    let p1_life = e.state.players[1].life;
+
+    // Lightning Bolt (3 damage) is absorbed; 3 shield remain.
     give_mana(
         &mut e,
         0,
         ManaGift {
-            w: 1,
+            r: 1,
             ..Default::default()
         },
     );
-    let salve_idx = hand_index_for_card(&e, 0, "healing_salve");
-    let p0_life_before = e.state.players[0].life;
-    e.apply_command(0, &cast_spell(salve_idx, target_player(0)))
-        .expect("salve may target controller");
+    let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+        .expect("cast bolt on P1");
     e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass");
-    assert_eq!(e.state.players[0].life, p0_life_before + 3);
+    e.apply_command(1, &pass()).expect("p1 pass resolves bolt");
+    assert_eq!(
+        e.state.players[1].life, p1_life,
+        "P1 life unchanged — shield absorbed bolt"
+    );
+    assert_eq!(
+        e.state
+            .damage_prevention_shields
+            .get(&1u32)
+            .copied()
+            .unwrap_or(0),
+        3,
+        "3 shield points remaining after absorbing 3 of 6"
+    );
+}
+
+/// Fog prevents all combat damage that would be dealt this turn.
+#[test]
+fn fog_prevents_all_combat_damage() {
+    let decks = Some(vec![
+        std::iter::repeat_n("grizzly_bears".to_string(), 10).collect::<Vec<_>>(),
+        vec![
+            "forest".into(),
+            "fog".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(2603, &[0, 1], 20, decks, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+
+    // P0 attacks with the grizzly bears injected by advance_to_declare_attackers.
+    let attacker = *e.state.players[0]
+        .battlefield
+        .last()
+        .expect("bears on battlefield");
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("declare attacker");
+    // P0 passes — P1 has priority in DeclareAttackers.
+    e.apply_command(0, &pass())
+        .expect("p0 pass DeclareAttackers");
+    // P1 casts Fog at instant speed before passing.
+    give_mana(
+        &mut e,
+        1,
+        ManaGift {
+            g: 1,
+            ..Default::default()
+        },
+    );
+    let fog_idx = hand_index_for_card(&e, 1, "fog");
+    e.apply_command(1, &cast_spell(fog_idx, vec![]))
+        .expect("P1 casts Fog");
+    e.apply_command(1, &pass()).expect("p1 pass on stack");
+    e.apply_command(0, &pass()).expect("p0 pass → Fog resolves");
+    // Active player (P0) has priority in DeclareAttackers with empty stack.
+    e.apply_command(0, &pass())
+        .expect("p0 pass DeclareAttackers after Fog");
+    // Both passed → no eligible P1 blockers → auto-declare empty blockers → DeclareBlockers, P0 has priority.
+    e.apply_command(1, &pass())
+        .expect("p1 pass → DeclareBlockers auto-advance");
+    // Both pass in DeclareBlockers to resolve combat damage.
+    e.apply_command(0, &pass())
+        .expect("p0 pass DeclareBlockers");
+    let b = e
+        .apply_command(1, &pass())
+        .expect("p1 pass → combat damage resolves");
+    // Fog prevents all combat damage; P1 life must be 20.
+    let life = life_changes_in(&b);
+    assert!(
+        life.is_empty() || life.iter().all(|lc| lc.delta >= 0),
+        "Fog prevented all combat damage; no negative LifeChanged expected, got {life:?}"
+    );
+    assert_eq!(
+        e.state.players[1].life, 20,
+        "P1 took no damage thanks to Fog"
+    );
 }
 
 #[test]

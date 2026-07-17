@@ -249,6 +249,10 @@ impl GameEngine {
                 o.regeneration_shields = 0;
             }
         }
+        // CR 614.1a: damage prevention shields (Healing Salve, Circle of Protection, etc.)
+        // and the global Fog flag expire at the cleanup step alongside marked damage.
+        self.state.damage_prevention_shields.clear();
+        self.state.prevent_all_combat_damage_this_turn = false;
     }
 
     /// CR 704.4: state-based actions are checked and performed repeatedly until a check finds

@@ -216,6 +216,8 @@ impl GameEngine {
             pending_triggers: VecDeque::new(),
             pending_resolution: None,
             continuous_effects: Vec::new(),
+            damage_prevention_shields: HashMap::new(),
+            prevent_all_combat_damage_this_turn: false,
             undoable_mana_abilities: Vec::new(),
         };
         let mut eng = GameEngine { state, registry };

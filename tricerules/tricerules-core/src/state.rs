@@ -426,6 +426,14 @@ pub struct GameState {
     /// recomputed from base + this list on demand — `GameObject.power/toughness` always hold the
     /// printed base value and are never mutated by effects.
     pub continuous_effects: Vec<ContinuousEffect>,
+    /// CR 614.1a: damage prevention shields keyed by target id. Key is either a creature
+    /// `ObjectId` or a player's `PlayerId` cast to `ObjectId` (same convention as `targets`
+    /// throughout the engine). The value is remaining damage absorb capacity; consumed when
+    /// damage is dealt and cleared at cleanup.
+    pub damage_prevention_shields: HashMap<ObjectId, u32>,
+    /// CR 614.1a: if true, all combat damage this turn is prevented (Fog / Holy Day).
+    /// Set when a `PreventAllCombatDamageTurn` effect resolves; cleared at cleanup.
+    pub prevent_all_combat_damage_this_turn: bool,
     /// Mana abilities the priority player has activated this priority window that are still
     /// inconsequential and may be rewound by `UndoManaAbility` (CR 605 float courtesy). Newest
     /// last. Cleared by any consequential action (see [`UndoableManaAbility`]); empty whenever no

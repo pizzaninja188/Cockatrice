@@ -393,7 +393,8 @@ pub(super) fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
         | SpellEffectKind::AuraAttach { .. }
         // CR 702.6a: equip targets "target creature you control" — always targeted.
         | SpellEffectKind::Equip { .. }
-        | SpellEffectKind::TargetPlayerSacrifices { .. } => true,
+        | SpellEffectKind::TargetPlayerSacrifices { .. }
+        | SpellEffectKind::PreventNextDamage { .. } => true,
         _ => false,
     }
 }
@@ -540,6 +541,14 @@ pub(super) fn validate_effect_targets(
                 ));
             }
         }
+        SpellEffectKind::PreventNextDamage { target: filter, .. } => {
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal("requires exactly one target"));
+            }
+            if !target_filter_legal(state, registry, filter, targets[0].object_id, caster) {
+                return Err(EngineError::Illegal("illegal target for damage prevention"));
+            }
+        }
         SpellEffectKind::ReturnFromGraveyard { filter, .. } => {
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one graveyard card target"));
@@ -564,6 +573,7 @@ pub(super) fn validate_effect_targets(
         | SpellEffectKind::PumpAll { .. }
         | SpellEffectKind::GrantKeywordsAll { .. }
         | SpellEffectKind::CreateTokens { .. }
+        | SpellEffectKind::PreventAllCombatDamageTurn
         // CR 605.1a: a mana ability is untargeted by definition.
         | SpellEffectKind::ProduceMana { .. }
         // CR 701.18: library search is untargeted; the library card is chosen via a pending
@@ -634,6 +644,7 @@ pub(super) fn spell_target_legality_error(
         | SpellEffectKind::TapTarget { target: filter }
         | SpellEffectKind::PumpTarget { target: filter, .. }
         | SpellEffectKind::PutCounters { target: filter, .. }
+        | SpellEffectKind::PreventNextDamage { target: filter, .. }
             if !target_filter_legal(state, registry, filter, tid, caster) =>
         {
             return Err(EngineError::Illegal(
