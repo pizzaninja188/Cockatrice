@@ -321,6 +321,10 @@ pub enum AffectedScope {
     /// only while the equipment is on the battlefield (`WhileSourceOnBattlefield`) and is drained
     /// normally when the equipment leaves (CR 611.3).
     EquippedBy(ObjectId),
+    /// Effect that targets a specific player rather than permanents (e.g. extra land plays,
+    /// future hand-size modifiers). Not considered by `effect_affects` (permanent queries).
+    Player(PlayerId),
+    // Future: CreaturesWithPower(u32), …
 }
 
 /// A single active continuous effect (CR 611/613).
@@ -401,8 +405,8 @@ pub struct GameState {
     pub command_index: u64,
     /// Consecutive priority passes; reset when a spell/ability is added to stack
     pub passes_since_stack_change: u32,
-    /// At most one land from hand per full turn
-    pub land_dropped_this_turn: bool,
+    /// Number of lands played from hand this turn; compared against max (1 + extra land plays).
+    pub lands_played_this_turn: u32,
     /// Active combat, if in declare/damage
     pub combat: Option<CombatState>,
     /// If set, game is over; winning player

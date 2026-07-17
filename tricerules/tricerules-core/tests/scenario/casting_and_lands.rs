@@ -441,3 +441,223 @@ fn can_cast_new_vanilla_creature_with_swamp() {
 
     assert!(e.state.players[0].battlefield.contains(&corpse_oid));
 }
+
+// ---------------------------------------------------------------------------
+// Exploration — extra land per turn (CR 305.2b / layer 5)
+// ---------------------------------------------------------------------------
+
+/// With Exploration in play, the active player may play a second land this turn.
+#[test]
+fn exploration_allows_second_land_per_turn() {
+    let decks = Some(vec![
+        vec![
+            "exploration".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+        vec!["island".into(); 7],
+    ]);
+    let mut e = GameEngine::new(42, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Cast and resolve Exploration ({G}).
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            g: 1,
+            ..Default::default()
+        },
+    );
+    let exp_idx = hand_index_for_card(&e, 0, "exploration");
+    e.apply_command(0, &cast_spell(exp_idx, vec![]))
+        .expect("cast exploration");
+    resolve_entire_stack_two_player(&mut e);
+    assert!(
+        e.state.players[0].battlefield.iter().any(|oid| e
+            .state
+            .objects
+            .get(oid)
+            .map(|o| o.card_id.as_str())
+            == Some("exploration")),
+        "Exploration should be on the battlefield"
+    );
+
+    // First land: allowed normally.
+    let f1 = hand_index_for_card(&e, 0, "forest");
+    e.apply_command(0, &play_land(f1))
+        .expect("play first forest");
+    assert_eq!(e.state.lands_played_this_turn, 1);
+
+    // Second land: allowed because Exploration grants +1 land play.
+    let f2 = hand_index_for_card(&e, 0, "forest");
+    e.apply_command(0, &play_land(f2))
+        .expect("play second forest with Exploration");
+    assert_eq!(e.state.lands_played_this_turn, 2);
+
+    // Third land: rejected — max is 2 (1 base + 1 from Exploration).
+    let f3 = hand_index_for_card(&e, 0, "forest");
+    e.apply_command(0, &play_land(f3))
+        .expect_err("third land must be rejected even with Exploration");
+}
+
+/// Without Exploration, the second land play is rejected as normal.
+#[test]
+fn without_exploration_second_land_is_rejected() {
+    let decks = Some(vec![vec!["forest".into(); 7], vec!["island".into(); 7]]);
+    let mut e = GameEngine::new(43, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let f1 = hand_index_for_card(&e, 0, "forest");
+    e.apply_command(0, &play_land(f1))
+        .expect("play first forest");
+
+    let f2 = hand_index_for_card(&e, 0, "forest");
+    e.apply_command(0, &play_land(f2))
+        .expect_err("second land without Exploration must be rejected");
+}
+
+/// When Exploration leaves the battlefield, the extra land play is revoked immediately (CR 611.3).
+/// After Exploration is bounced back to hand, the second land play is no longer available.
+#[test]
+fn exploration_leaving_revokes_extra_land_play() {
+    // P0: Exploration + Boomerang (to bounce Exploration) + forests + plains (needed for W blue?
+    // Boomerang is {1}{U}, so give mana directly in tests).
+    let decks = Some(vec![
+        vec![
+            "exploration".into(),
+            "boomerang".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "island".into(),
+            "island".into(),
+        ],
+        vec!["island".into(); 7],
+    ]);
+    let mut e = GameEngine::new(44, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Cast Exploration.
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            g: 1,
+            ..Default::default()
+        },
+    );
+    let exp_idx = hand_index_for_card(&e, 0, "exploration");
+    e.apply_command(0, &cast_spell(exp_idx, vec![]))
+        .expect("cast exploration");
+    resolve_entire_stack_two_player(&mut e);
+
+    // Play first land.
+    let f1 = hand_index_for_card(&e, 0, "forest");
+    e.apply_command(0, &play_land(f1))
+        .expect("play first forest");
+    assert_eq!(e.state.lands_played_this_turn, 1);
+
+    // Bounce Exploration back to hand with Boomerang (targets the Exploration permanent).
+    let exploration_oid = battlefield_object_for_card(&e, 0, "exploration");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            u: 2,
+            ..Default::default()
+        },
+    );
+    let boom_idx = hand_index_for_card(&e, 0, "boomerang");
+    e.apply_command(
+        0,
+        &cast_spell(
+            boom_idx,
+            vec![TargetRef {
+                object_id: exploration_oid,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast boomerang targeting Exploration");
+    resolve_entire_stack_two_player(&mut e);
+
+    // Exploration is now in P0's hand; its continuous effect is drained.
+    assert!(
+        e.state.players[0].battlefield.iter().all(|oid| e
+            .state
+            .objects
+            .get(oid)
+            .map(|o| o.card_id.as_str())
+            != Some("exploration")),
+        "Exploration should be back in hand"
+    );
+    assert!(
+        e.state.continuous_effects.is_empty(),
+        "ExtraLandPlays effect must be drained after Exploration leaves"
+    );
+
+    // Second land play is now rejected (max is 1 again).
+    let f2 = hand_index_for_card(&e, 0, "forest");
+    e.apply_command(0, &play_land(f2))
+        .expect_err("second land must be rejected after Exploration leaves");
+}
+
+/// Two Explorations in play: the player may play 3 lands this turn (1 base + 2 extra).
+#[test]
+fn two_explorations_allow_three_lands_per_turn() {
+    let decks = Some(vec![
+        vec![
+            "exploration".into(),
+            "exploration".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+        vec!["island".into(); 7],
+    ]);
+    let mut e = GameEngine::new(45, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Cast both Explorations.
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            g: 2,
+            ..Default::default()
+        },
+    );
+    let exp1_idx = hand_index_for_card(&e, 0, "exploration");
+    e.apply_command(0, &cast_spell(exp1_idx, vec![]))
+        .expect("cast first exploration");
+    resolve_entire_stack_two_player(&mut e);
+
+    let exp2_idx = hand_index_for_card(&e, 0, "exploration");
+    e.apply_command(0, &cast_spell(exp2_idx, vec![]))
+        .expect("cast second exploration");
+    resolve_entire_stack_two_player(&mut e);
+
+    // Play three lands — all allowed.
+    let f1 = hand_index_for_card(&e, 0, "forest");
+    e.apply_command(0, &play_land(f1))
+        .expect("play land 1 of 3");
+    let f2 = hand_index_for_card(&e, 0, "forest");
+    e.apply_command(0, &play_land(f2))
+        .expect("play land 2 of 3");
+    let f3 = hand_index_for_card(&e, 0, "forest");
+    e.apply_command(0, &play_land(f3))
+        .expect("play land 3 of 3");
+    assert_eq!(e.state.lands_played_this_turn, 3);
+
+    // Fourth land is rejected (max is 3).
+    let f4 = hand_index_for_card(&e, 0, "forest");
+    e.apply_command(0, &play_land(f4))
+        .expect_err("fourth land must be rejected with two Explorations");
+}

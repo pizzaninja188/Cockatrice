@@ -994,6 +994,9 @@ pub enum ContinuousEffectKind {
     /// (Goblin Chieftain → Haste), pump sorceries (Overrun → Trample), and any
     /// "creatures you control gain [keyword] until end of turn" effect.
     Layer6AddKeyword(Keyword),
+    /// CR 305.2b / layer 5 (rule-change): controller may play `count` additional lands per turn.
+    /// Covers Exploration, Oracle of Mul Daya, and similar enchantments/permanents.
+    ExtraLandPlays(u32),
     // Future: Layer7bSetPt { power: i32, toughness: i32 }, …
 }
 
@@ -1074,6 +1077,9 @@ pub enum StaticAbilityDef {
         filter: AnthemFilter,
         keyword: Keyword,
     },
+    /// CR 305.2b / layer 5: controller may play `count` additional lands per turn while this
+    /// permanent is on the battlefield. Exploration, Oracle of Mul Daya.
+    ExtraLandPlays { count: u32 },
 }
 
 #[cfg(test)]

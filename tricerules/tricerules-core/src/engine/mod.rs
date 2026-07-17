@@ -207,7 +207,7 @@ impl GameEngine {
             next_object_id,
             command_index: 0,
             passes_since_stack_change: 0,
-            land_dropped_this_turn: false,
+            lands_played_this_turn: 0,
             combat: None,
             winner: None,
             cleanup_discard_player: None,

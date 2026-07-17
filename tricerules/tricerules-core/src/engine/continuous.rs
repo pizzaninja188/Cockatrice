@@ -58,7 +58,27 @@ impl GameEngine {
                 }
                 true
             }
+            // Player-scoped effects (e.g. ExtraLandPlays) don't affect permanents.
+            AffectedScope::Player(_) => false,
         }
+    }
+
+    /// Sum of extra land plays granted to `pid` by active `ExtraLandPlays` continuous effects.
+    pub(super) fn extra_land_plays_for(&self, pid: PlayerId) -> u32 {
+        self.state
+            .continuous_effects
+            .iter()
+            .filter_map(|e| {
+                if let AffectedScope::Player(p) = e.affected {
+                    if p == pid {
+                        if let ContinuousEffectKind::ExtraLandPlays(n) = e.kind {
+                            return Some(n);
+                        }
+                    }
+                }
+                None
+            })
+            .sum()
     }
 
     /// CR 604.3 / 611.3: when a permanent with static anthem abilities enters the battlefield,
@@ -151,6 +171,18 @@ impl GameEngine {
                         timestamp,
                     });
                 }
+                // CR 305.2b / layer 5: player-scoped extra land plays while the source is on the
+                // battlefield (Exploration, Oracle of Mul Daya). Drains at LTB via the same
+                // WhileSourceOnBattlefield path.
+                StaticAbilityDef::ExtraLandPlays { count } => {
+                    self.state.continuous_effects.push(ContinuousEffect {
+                        source_id: Some(object_id),
+                        affected: AffectedScope::Player(controller),
+                        kind: ContinuousEffectKind::ExtraLandPlays(count),
+                        duration: EffectDuration::WhileSourceOnBattlefield,
+                        timestamp,
+                    });
+                }
             }
         }
     }
@@ -179,6 +211,7 @@ impl GameEngine {
             .map(|e| match &e.kind {
                 ContinuousEffectKind::PtModify { delta_power, .. } => *delta_power,
                 ContinuousEffectKind::Layer6AddKeyword(_) => 0,
+                ContinuousEffectKind::ExtraLandPlays(_) => 0,
             })
             .sum();
         // Layer 7d: counters apply after all layer-7c modifying effects (CR 613.4d).
@@ -210,6 +243,7 @@ impl GameEngine {
                     delta_toughness, ..
                 } => *delta_toughness,
                 ContinuousEffectKind::Layer6AddKeyword(_) => 0,
+                ContinuousEffectKind::ExtraLandPlays(_) => 0,
             })
             .sum();
         Some((base + delta + obj.counter_pt_delta()).max(0) as u32)
