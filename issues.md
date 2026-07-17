@@ -36,10 +36,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Eyeblight's Ending currently targets and destroys any creature, missing the "non-Elf" restriction. Add `not_subtype: Option<String>` to `TargetFilter` (parallel to the existing `not_color: Option<Color>` field) and update the Eyeblight's Ending RON to use `not_subtype: Some("Elf")`. Update `legal_actions.rs` target filtering and the relay's target-legality pass. Add scenario tests verifying: Elf creature is not a valid target, non-Elf creature is a valid target, casting on an Elf returns `EngineError::Illegal`. This same field also fixes any future cards with "non-[Subtype]" targeting restrictions.
   - Priority: Low
 
-- [ ] #24 [feature] Damage prevention shields (Healing Salve mode 2 / Fog-family)
-  - Details: Healing Salve is partial (`tricerules-cards/data/healing_salve.ron`) — the "prevent the next 3 damage" mode is missing. Add `PreventNextDamage { amount: u32, target: TargetFilter }` to `SpellEffectKind` and a `damage_prevention: HashMap<ObjectId, u32>` (player or creature id → remaining shield) to `GameState`. During damage application, consume the shield before recording damage on the object/player. Also add `PreventAllDamageThisTurn {}` variant for Fog-style effects (stores a flag per player). Add scenario tests for: shield partially consumed, shield fully consumed, Fog blocks all combat damage.
-  - Priority: Medium
-
 - [ ] #25 [feature] Scry effect primitive
   - Details: No `Scry` variant exists in `SpellEffectKind`. Add `Scry { count: u32 }` — the player looks at the top `count` cards of their library and puts any number on the bottom in any order, keeping the rest on top in any order (CR 701.18). Because the library is a hidden zone, the server relays only the player's own library slice; the engine emits a `ResolutionChoiceRequired` interrupt (reusing the existing proto pair with a new choice-kind discriminant) so the player submits their reordering. Implement Preordain (Scry 2 then Draw 1) and Opt (Scry 1 then Draw 1). Add scenario tests for: put all on bottom, put all on top, empty library no-op.
   - Priority: Low
