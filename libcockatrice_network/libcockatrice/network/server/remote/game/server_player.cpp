@@ -245,18 +245,15 @@ Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const
     for (Server_Card *c : handZone->getCards()) {
         pool.append(c);
     }
-    const QString libCsv = QString::fromStdString(v.lib_ids_csv());
     QStringList libWants;
-    if (!libCsv.isEmpty()) {
-        for (const QString &part : libCsv.split(QLatin1Char(','))) {
-            if (!part.isEmpty()) {
-                libWants.append(part);
-            }
+    for (const std::string &id : v.lib_ids()) {
+        if (!id.empty()) {
+            libWants.append(QString::fromStdString(id));
         }
     }
     if (v.hand_size() + libWants.size() != pool.size()) {
         qWarning() << "applyRuledEngineZoneView: count mismatch hand" << v.hand_size() << "lib" << libWants.size()
-                   << "pool" << pool.size() << "lib_csv_len" << libCsv.size();
+                   << "pool" << pool.size() << "lib_ids" << v.lib_ids_size();
         return result;
     }
     QList<Server_Card *> handList;

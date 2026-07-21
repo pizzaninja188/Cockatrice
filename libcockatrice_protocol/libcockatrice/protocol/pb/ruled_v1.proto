@@ -428,14 +428,19 @@ message SbasApplied {
 
 // Authoritative hand + library from the rules engine, for server to sync physical zones
 // (engine card ids, lowercase_underscore; resolve to Oracle names via CardCatalog).
-// Library: comma-separated, top of library (next draw) first. TricRules ids never contain commas.
-// Field 3 is reserved: older tricerules emitted repeated string there; same tag as singular string
-// on the C++ side merged 53 submessages into one wrong value. Use 4+ only for the CSV.
+// Library ids (`lib_ids`): top of library (next draw) first.
+// Fields 3 and 4 are reserved: field 3 was a repeated string whose tag collided with a singular
+// string on the C++ side (merged 53 submessages into one wrong value); field 4 (`lib_ids_csv`) was a
+// comma-joined string that silently corrupted any card id containing a comma — and card ids DO contain
+// commas (the slug keeps them verbatim, e.g. "kokusho,_the_evening_star"), which split one id into two
+// entries and tore down the ruled session at game start. Use the repeated `lib_ids` instead.
 message RuledPerPlayerView {
   int32 player_id = 1;
   repeated string hand = 2;
-  reserved 3;
-  string lib_ids_csv = 4;
+  reserved 3, 4;
+  reserved "lib_ids_csv";
+  // Library card ids, top of library (next draw) first (tricerules ids, lowercase_underscore).
+  repeated string lib_ids = 23;
   // Battlefield card ids in controller order (tricerules ids, lowercase_underscore).
   repeated string battlefield = 5;
   // Parallel array to `battlefield`, true if that permanent is tapped.

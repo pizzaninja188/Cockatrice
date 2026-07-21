@@ -116,20 +116,6 @@ static Server_Card *ruledPhysicalSpellOnCanonicalStack(Server_CardZone *stackZon
     return nullptr;
 }
 
-int countCsvEntries(const std::string &csv)
-{
-    if (csv.empty()) {
-        return 0;
-    }
-    int count = 1;
-    for (char c : csv) {
-        if (c == ',') {
-            ++count;
-        }
-    }
-    return count;
-}
-
 /// Removes or redacts server-only engine output before a batch is broadcast to clients.
 void stripRuledServerOnlyEventsForBroadcast(ruled::v1::IpcResponse *resp)
 {
@@ -156,7 +142,7 @@ void stripRuledServerOnlyEventsForBroadcast(ruled::v1::IpcResponse *resp)
         for (int j = 0; j < zv->per_player_size(); ++j) {
             auto *pp = zv->mutable_per_player(j);
             pp->clear_hand();
-            pp->clear_lib_ids_csv();
+            pp->clear_lib_ids();
             pp->clear_hand_object_id();
         }
     }
@@ -2167,11 +2153,11 @@ void Server_Game::applyRuledStartupBatch(const ruled::v1::IpcResponse &resp,
                 const auto &p = z.per_player(pi);
                 const int mainN = expectedMainboardSizeForStartupSync(this, p.player_id(), deckByPlayer);
                 const int needLib = mainN - p.hand_size();
-                const int csvCount = countCsvEntries(p.lib_ids_csv());
-                if (csvCount != needLib) {
+                const int libCount = p.lib_ids_size();
+                if (libCount != needLib) {
                     qWarning() << "Ruled zone sync: player" << p.player_id() << "expected" << needLib
-                               << "library card ids, lib_ids_csv has" << csvCount
-                               << "parts, len" << p.lib_ids_csv().size() << "— is tricerules-server up to date? "
+                               << "library card ids, lib_ids has" << libCount
+                               << "entries — is tricerules-server up to date? "
                                   "(RulesRelay read was fixed; rebuild + restart the Rust side from this repo.)";
                     for (Server_AbstractPlayer *pl : getPlayers().values()) {
                         static_cast<Server_Player *>(pl)->shuffleMainDeckForRuledFallback();

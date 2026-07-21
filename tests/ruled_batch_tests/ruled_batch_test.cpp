@@ -155,7 +155,7 @@ protected:
     {
         ruled::v1::RuledPerPlayerView v;
         v.set_player_id(p->getPlayerId());
-        v.set_lib_ids_csv("");
+        // Empty library: leave the repeated lib_ids field empty.
         Server_CardZone *table = p->getZones().value(ZoneNames::TABLE);
         const auto &cards = table->getCards();
         for (int i = 0; i < cards.size(); ++i) {

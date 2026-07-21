@@ -79,7 +79,7 @@ bool RulesRelay::readFrame(QByteArray &out)
 {
     // QIODevice::read may return fewer than requested; always loop until the length prefix
     // and the payload are complete. A partial length read produced truncated frames and
-    // short garbage lib_ids_csv.
+    // short/garbled zone-view data.
     char lenLeRaw[4];
     {
         int got = 0;

@@ -114,7 +114,7 @@ impl GameEngine {
                     })
                     .collect(),
                 hand_object_id: p.hand.clone(),
-                lib_ids_csv: p
+                lib_ids: p
                     .library
                     .iter()
                     .map(|&oid| {
@@ -124,8 +124,7 @@ impl GameEngine {
                             .map(|o| o.card_id.clone())
                             .unwrap_or_default()
                     })
-                    .collect::<Vec<_>>()
-                    .join(","),
+                    .collect::<Vec<_>>(),
                 battlefield: p
                     .battlefield
                     .iter()
