@@ -213,6 +213,12 @@ impl GameEngine {
             return self.finish_sacrifice_chosen(pending, chosen);
         }
 
+        // CR 704.5j: legend SBA choice — the chosen object id is the legend to KEEP;
+        // all others are sacrificed through the normal die path so LTB/death triggers fire.
+        if pending.custom_key == "__legend_sba" {
+            return self.finish_legend_sba_choice(pending, chosen);
+        }
+
         let effect = match custom::lookup(&pending.custom_key) {
             Some(e) => e,
             None => {
@@ -364,6 +370,56 @@ impl GameEngine {
         }
         ev.push(ev_priority_changed(self));
 
+        Ok(finish_with_events(self, ev))
+    }
+
+    /// CR 704.5j: the controller has chosen which legend to keep. Sacrifice all other candidates
+    /// via `sacrifice_permanent` so LTB / death triggers fire normally, then re-run SBAs.
+    fn finish_legend_sba_choice(
+        &mut self,
+        pending: PendingResolution,
+        chosen: &[u32],
+    ) -> Result<RuledEventBatch, EngineError> {
+        let keep_id = chosen[0];
+        let mut ev = vec![];
+        for &oid in &pending.candidates {
+            if oid == keep_id {
+                continue;
+            }
+            let owner = self.state.objects.get(&oid).map(|o| o.owner);
+            let card_id = self.state.objects.get(&oid).map(|o| o.card_id.clone());
+            if sacrifice_permanent(&mut self.state, oid).is_ok() {
+                if let Some(owner_id) = owner {
+                    ev.push(permanent_moved_event(
+                        &self.state,
+                        oid,
+                        owner_id,
+                        rv1::permanent_moved::Destination::Graveyard,
+                    ));
+                }
+                if let (Some(cid), Some(ctrl)) = (card_id, owner) {
+                    self.fire_triggers(
+                        GameEvent::Dies {
+                            object_id: oid,
+                            card_id: cid,
+                            controller: ctrl,
+                        },
+                        &mut ev,
+                    );
+                }
+            }
+        }
+        // Re-run SBAs: triggered abilities may have caused further state changes, and
+        // multiple legend conflicts are resolved one at a time.
+        if self.state.pending_resolution.is_none() {
+            if let Some(i) = self.state.player_idx(self.state.active_player_id()) {
+                self.state.priority_idx = i;
+            }
+            self.apply_sbas(&mut ev)?;
+            if self.state.pending_resolution.is_none() {
+                ev.push(ev_priority_changed(self));
+            }
+        }
         Ok(finish_with_events(self, ev))
     }
 

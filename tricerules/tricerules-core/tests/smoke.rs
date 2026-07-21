@@ -42,15 +42,49 @@ fn initial_batch_includes_card_catalog_then_zone_view_for_cockatrice() {
             assert_eq!(z.per_player.len(), 2);
             for p in &z.per_player {
                 assert_eq!(p.hand.len(), 7, "opening hand");
-                assert_eq!(
-                    p.lib_ids_csv.split(',').count(),
-                    60 - 7,
-                    "rest in library (csv)"
-                );
+                assert_eq!(p.lib_ids.len(), 60 - 7, "rest in library");
                 assert_eq!(p.battlefield_power.len(), p.battlefield.len());
                 assert_eq!(p.battlefield_is_creature.len(), p.battlefield.len());
             }
         }
         _ => panic!("expected ZoneView, got {:?}", e1.ev),
+    }
+}
+
+#[test]
+fn library_ids_preserve_comma_bearing_card_ids() {
+    // Regression: card ids keep commas verbatim (the slug convention preserves them, e.g.
+    // "kokusho,_the_evening_star"). The zone-view library was once a comma-joined string, which
+    // split such an id into two entries — that inflated Servatrice's startup library count, so the
+    // zone sync mismatched and the ruled session was torn down, leaving the game stuck at start.
+    let deck = vec![
+        "kokusho,_the_evening_star".to_string(),
+        "mountain".to_string(),
+        "mountain".to_string(),
+    ];
+    let decks = Some(vec![deck.clone(), deck]);
+    // skip_opening_sequence = false: opening draws happen only after the choose-first command, so
+    // the whole deck is still in the library when the initial zone view is emitted.
+    let eng = GameEngine::new(1, &[0, 1], 20, decks, false).expect("engine");
+    let b = eng.initial_response_batch();
+    let zv = b
+        .events
+        .iter()
+        .find_map(|e| match e.ev.as_ref() {
+            Some(Ev::ZoneView(z)) => Some(z),
+            _ => None,
+        })
+        .expect("zone view present in initial batch");
+    for p in &zv.per_player {
+        assert_eq!(
+            p.lib_ids.len(),
+            3,
+            "3 library cards; a comma must not be miscounted"
+        );
+        assert!(
+            p.lib_ids.iter().any(|id| id == "kokusho,_the_evening_star"),
+            "comma-bearing id must survive as a single lib_ids entry, got {:?}",
+            p.lib_ids
+        );
     }
 }

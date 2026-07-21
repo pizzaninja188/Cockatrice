@@ -21,6 +21,8 @@ mod custom_resolution;
 mod equipment;
 #[path = "scenario/helpers.rs"]
 mod helpers;
+#[path = "scenario/legend_rule.rs"]
+mod legend_rule;
 #[path = "scenario/mana.rs"]
 mod mana;
 #[path = "scenario/multi_face.rs"]

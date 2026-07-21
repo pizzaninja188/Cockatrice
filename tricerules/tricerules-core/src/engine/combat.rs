@@ -718,8 +718,6 @@ impl GameEngine {
             // CR 510.2 + 704: SBAs run between damage steps so creatures with lethal damage are
             // moved to graveyards before the regular step decides who deals damage.
             self.apply_sbas(events)?;
-            let legend_events = self.apply_legend_sbas()?;
-            events.extend(legend_events);
             events.push(ev_priority_changed(self));
         } else {
             // Emit PhaseChanged before resolving damage so the C++ client clears its
@@ -734,8 +732,7 @@ impl GameEngine {
             events.push(ev_log("Combat damage dealt.".to_string()));
             events.push(ev_phase_labeled(self, "combat_damage"));
             self.resolve_combat_damage(&c_init, DamagePass::Normal, events)?;
-            let legend_events = self.apply_legend_sbas()?;
-            events.extend(legend_events);
+            self.apply_sbas(events)?;
             events.push(ev_priority_changed(self));
         }
         Ok(())

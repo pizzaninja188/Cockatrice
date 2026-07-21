@@ -1,3 +1,4 @@
+use super::events::ev_log;
 use super::resolution::{
     consume_regen_shield, destroy_permanent, permanent_moved_event, resolve_anthem_scope,
 };
@@ -290,9 +291,9 @@ impl GameEngine {
     }
 
     /// CR 704.4: state-based actions are checked and performed repeatedly until a check finds
-    /// nothing left to do.
+    /// nothing left to do. Stops early if a legend-rule SBA pauses for player choice.
     pub(super) fn apply_sbas(&mut self, out: &mut Vec<rv1::RuledEvent>) -> Result<(), EngineError> {
-        while self.apply_sbas_once(out)? {}
+        while self.state.pending_resolution.is_none() && self.apply_sbas_once(out)? {}
         Ok(())
     }
 
@@ -502,17 +503,21 @@ impl GameEngine {
             }
         }
 
-        let legend_events = self.apply_legend_sbas()?;
-        if !legend_events.is_empty() {
+        if self.apply_legend_sbas(out)? {
             changed = true;
         }
-        out.extend(legend_events);
         Ok(changed)
     }
 
-    pub(super) fn apply_legend_sbas(&mut self) -> Result<Vec<rv1::RuledEvent>, EngineError> {
+    /// CR 704.5j: if a player controls two or more legendary permanents with the same name,
+    /// that player chooses one to keep; the rest go to their owners' graveyards. Processes
+    /// one legend conflict at a time via `ResolutionChoiceRequired` (choice_kind 4); the SBA
+    /// loop stops while waiting for the choice and resumes after `SubmitResolutionChoice`.
+    pub(super) fn apply_legend_sbas(
+        &mut self,
+        out: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<bool, EngineError> {
         let mut by_owner_name: BTreeMap<(PlayerId, String), Vec<ObjectId>> = BTreeMap::new();
-        let mut out = Vec::new();
         for (&id, o) in &self.state.objects {
             if o.zone != Zone::Battlefield {
                 continue;
@@ -528,26 +533,83 @@ impl GameEngine {
             let n = self.registry.get(&o.card_id).unwrap().name.clone();
             by_owner_name.entry((o.owner, n)).or_default().push(id);
         }
-        for ids in by_owner_name.values_mut() {
+        // Process one legend conflict per SBA pass; after the player's choice the SBA loop
+        // re-runs and finds any remaining conflicts.
+        for ((owner, name), mut ids) in by_owner_name {
             if ids.len() < 2 {
                 continue;
             }
             ids.sort_unstable();
-            for &g in ids.iter().skip(1) {
-                let owner = self.state.objects.get(&g).map(|o| o.owner);
-                if destroy_permanent(&mut self.state, g).is_ok() {
-                    if let Some(owner_id) = owner {
-                        out.push(permanent_moved_event(
-                            &self.state,
-                            g,
-                            owner_id,
-                            rv1::permanent_moved::Destination::Graveyard,
-                        ));
-                    }
-                }
-            }
+            let first_id = ids[0];
+            let candidate_card_ids: Vec<String> = ids
+                .iter()
+                .map(|&oid| {
+                    self.state
+                        .objects
+                        .get(&oid)
+                        .map(|o| o.card_id.clone())
+                        .unwrap_or_default()
+                })
+                .collect();
+            let candidate_names: Vec<String> = ids.iter().map(|_| name.clone()).collect();
+            let prompt = format!("Legend rule: choose which {name} to keep (CR 704.5j)");
+            out.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                    rv1::ResolutionChoiceRequired {
+                        deciding_player_id: owner,
+                        source_object_id: first_id,
+                        prompt_text: prompt.clone(),
+                        // choice_kind 4 = legend rule: pick one battlefield permanent to keep.
+                        choice_kind: 4,
+                        candidate_object_ids: ids.clone(),
+                        candidate_card_ids,
+                        candidate_names,
+                        min: 1,
+                        max: 1,
+                        ordered: false,
+                        unique_names: false,
+                        candidate_server_card_ids: vec![],
+                    },
+                )),
+            });
+            out.push(ev_log(prompt.clone()));
+            // Dummy stack item — legend SBA has no spell; `id` is the first candidate so
+            // `source_object_id` points to one of the duplicate legends.
+            let dummy_item = StackItem {
+                id: first_id,
+                controller: owner,
+                card_id: String::new(),
+                targets: vec![],
+                ability_text: None,
+                source_permanent_id: None,
+                ability_index: None,
+                is_triggered: false,
+                is_copy: false,
+                face_index: 0,
+                chosen_x: 0,
+                target_damage: vec![],
+            };
+            self.state.pending_resolution = Some(PendingResolution {
+                item: dummy_item,
+                custom_key: "__legend_sba".to_string(),
+                step: 0,
+                scratch: vec![],
+                deciding_player: owner,
+                candidates: ids,
+                min: 1,
+                max: 1,
+                ordered: false,
+                prompt,
+                choice_kind: 4,
+                unique_names: false,
+                copy_source_object_id: 0,
+                search_destination: SearchDestination::default(),
+                search_shuffle: false,
+                search_reveal: false,
+            });
+            return Ok(true);
         }
-        Ok(out)
+        Ok(false)
     }
 }
 

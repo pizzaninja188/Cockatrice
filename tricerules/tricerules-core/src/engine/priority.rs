@@ -580,8 +580,6 @@ impl GameEngine {
             self.state.priority_idx = i;
         }
         self.state.passes_since_stack_change = 0;
-        let legend_events = self.apply_legend_sbas()?;
-        ev.extend(legend_events);
         self.apply_sbas(&mut ev)?;
         ev.push(ev_log(format!("Turn {}: P{}", self.state.turn, ap)));
         ev.push(ev_priority_changed(self));
