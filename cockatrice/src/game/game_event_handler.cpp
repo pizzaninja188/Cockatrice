@@ -1658,6 +1658,20 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                             pendingCopyTargetChoice.candidateOids.append(
                                                 rcr.candidate_object_ids(i));
                                         }
+                                    } else if (rcr.choice_kind() == 5) {
+                                        // choice_kind 5 = legend rule keep (CR 704.5j): the controller
+                                        // clicks the legendary permanent to KEEP directly on the
+                                        // battlefield; the rest are sacrificed. Click-to-select mode,
+                                        // like copy retarget, instead of a modal list dialog.
+                                        pendingLegendKeepChoice.valid = true;
+                                        pendingLegendKeepChoice.promptText =
+                                            QString::fromStdString(rcr.prompt_text());
+                                        pendingLegendKeepChoice.candidateOids.clear();
+                                        for (int i = 0; i < rcr.candidate_object_ids_size(); ++i) {
+                                            pendingLegendKeepChoice.candidateOids.append(
+                                                rcr.candidate_object_ids(i));
+                                        }
+                                        emit ruledCombatStateChanged();
                                     } else if (rcr.choice_kind() == 0 &&
                                                rcr.candidate_server_card_ids_size() == rcr.candidate_object_ids_size()) {
                                         // HandCards (choice_kind 0) with server card ids: use the hand-click UI.
@@ -2873,6 +2887,7 @@ void GameEventHandler::clearRuledSessionState()
     pendingTriggerAbilityText.clear();
     pendingTriggerControllerPlayerId = -1;
     pendingCopyTargetChoice = {};
+    pendingLegendKeepChoice = {};
 
     // Stack tracking — remove synthetic ability cards from their zones before clearing the maps.
     const QList<quint32> syntheticOids = syntheticAbilityStackCards.keys();
@@ -2917,6 +2932,20 @@ void GameEventHandler::clearRuledSessionState()
 void GameEventHandler::submitCopyTargetChoice(quint32 oid)
 {
     pendingCopyTargetChoice = {};
+    ruled::v1::RuledCommand cmd;
+    cmd.mutable_submit_resolution_choice()->add_chosen_object_ids(oid);
+    std::string payload;
+    if (cmd.SerializeToString(&payload)) {
+        Command_RuledPayload ruledPayload;
+        ruledPayload.set_payload(payload);
+        sendGameCommand(ruledPayload);
+    }
+}
+
+void GameEventHandler::submitLegendKeepChoice(quint32 oid)
+{
+    // CR 704.5j: the chosen permanent is the legend to KEEP; the engine sacrifices the rest.
+    pendingLegendKeepChoice = {};
     ruled::v1::RuledCommand cmd;
     cmd.mutable_submit_resolution_choice()->add_chosen_object_ids(oid);
     std::string payload;

@@ -25,14 +25,14 @@ fn legend_rule_controller_chooses_which_to_keep() {
         .apply_command(0, &pass())
         .expect("pass priority triggers legend SBA");
 
-    // The engine must emit a ResolutionChoiceRequired with choice_kind 4 (legend keep).
+    // The engine must emit a ResolutionChoiceRequired with choice_kind 5 (legend keep).
     let choice_req = find_resolution_choice(&batch);
     assert!(
         choice_req.is_some(),
         "legend rule must emit ResolutionChoiceRequired"
     );
     let req = choice_req.unwrap();
-    assert_eq!(req.choice_kind, 4, "choice_kind must be 4 for legend keep");
+    assert_eq!(req.choice_kind, 5, "choice_kind must be 5 for legend keep");
     assert_eq!(req.deciding_player_id, 0, "P0 owns the legends");
     // Candidates contain both duplicate legends.
     assert!(
@@ -87,7 +87,7 @@ fn legend_rule_ltb_trigger_fires_on_removed_legend() {
     // Pass priority; legend SBA pauses for choice.
     let batch = e.apply_command(0, &pass()).expect("pass");
     let req = find_resolution_choice(&batch).expect("ResolutionChoiceRequired expected");
-    assert_eq!(req.choice_kind, 4);
+    assert_eq!(req.choice_kind, 5);
 
     // P0 keeps oid_a; oid_b is sacrificed and its WhenSelfDies trigger must fire.
     let stack_before = e.state.stack.len();

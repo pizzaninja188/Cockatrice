@@ -3944,6 +3944,25 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
         return true;
     }
 
+    // Check pending legend-rule keep choice (CR 704.5j: click the legend to keep on the battlefield).
+    if (handler && handler->hasPendingLegendKeepChoice()) {
+        if (!card || !card->getZone()) {
+            return false;
+        }
+        if (card->getZone()->getName() != ZoneNames::TABLE) {
+            handler->emitLocalRuledLog(tr("Click the legendary permanent to keep on the battlefield."));
+            return true;
+        }
+        const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
+        const quint32 keepOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
+        if (keepOid == 0 || !handler->isValidLegendKeepTarget(keepOid)) {
+            handler->emitLocalRuledLog(tr("That is not one of the legends you must choose between."));
+            return true;
+        }
+        handler->submitLegendKeepChoice(keepOid);
+        return true;
+    }
+
     // Check pending trigger first (higher priority).
     if (handler && handler->hasPendingTriggerTarget()) {
         if (!card || !card->getZone()) {

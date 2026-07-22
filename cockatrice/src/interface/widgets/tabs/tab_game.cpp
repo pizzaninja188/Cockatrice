@@ -344,6 +344,15 @@ void TabGame::connectToGameEventHandler()
                                                         tr("\nClick a target, or click the original target to keep it."));
                         return;
                     }
+                    // If the legend rule needs the local player to choose which duplicate legend to
+                    // keep (CR 704.5j), prompt them to click the permanent to keep on the battlefield.
+                    const bool legendKeepPending = handler && handler->hasPendingLegendKeepChoice();
+                    gamePromptWidget->setLegendKeepPending(legendKeepPending);
+                    if (legendKeepPending) {
+                        gamePromptWidget->setPromptText(handler->pendingLegendKeepPromptText() +
+                                                        tr("\nClick the permanent to keep on the battlefield."));
+                        return;
+                    }
                     // If a triggered ability is waiting for the local player to choose a target,
                     // show that prompt and suppress the pass-priority button.
                     const bool triggerPending = handler && handler->hasPendingTriggerTarget();

@@ -353,6 +353,9 @@ message ResolutionChoiceRequired {
   //   4 = cards in *another* player's hand, revealed privately to the deciding player
   //       (Thoughtseize/Coercion "look at target player's hand" — private, redacted from
   //       everyone but the decider). Rendered by the client exactly like kind 1.
+  //   5 = legend-rule keep (CR 704.5j): battlefield permanents the deciding player controls,
+  //       one of which is kept and the rest sacrificed — public. Like kind 3, the client uses
+  //       click-to-select on the battlefield instead of a list dialog.
   int32 choice_kind = 4;
   // Candidate object ids to choose among (engine ObjectIds).
   repeated uint32 candidate_object_ids = 5;

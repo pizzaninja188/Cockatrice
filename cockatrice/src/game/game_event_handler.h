@@ -314,6 +314,17 @@ private:
         QString promptText;
     };
     PendingCopyTargetChoice pendingCopyTargetChoice;
+    // Pending legend-rule keep choice (choice_kind 5, CR 704.5j): set when ResolutionChoiceRequired
+    // arrives asking which of two-or-more same-name legends the controller keeps. Like the copy
+    // target choice, the player selects by clicking the permanent to keep directly on the
+    // battlefield rather than through a modal list dialog.
+    struct PendingLegendKeepChoice
+    {
+        bool valid = false;
+        QVector<quint32> candidateOids;
+        QString promptText;
+    };
+    PendingLegendKeepChoice pendingLegendKeepChoice;
     // Maps trigger stack OID → source permanent OID, for drawing the ability arrow from the source.
     QHash<quint32, quint32> ruledStackSourceOidByStackOid;
     QList<QPair<Player *, int>> ruledSpellTargetSyntheticArrows;
@@ -610,6 +621,13 @@ public:
     }
     [[nodiscard]] QString pendingCopyTargetPromptText() const { return pendingCopyTargetChoice.promptText; }
     void submitCopyTargetChoice(quint32 oid);
+    [[nodiscard]] bool hasPendingLegendKeepChoice() const { return pendingLegendKeepChoice.valid; }
+    [[nodiscard]] bool isValidLegendKeepTarget(quint32 oid) const
+    {
+        return pendingLegendKeepChoice.candidateOids.contains(oid);
+    }
+    [[nodiscard]] QString pendingLegendKeepPromptText() const { return pendingLegendKeepChoice.promptText; }
+    void submitLegendKeepChoice(quint32 oid);
     [[nodiscard]] bool isRuledFirstStrikeStepPending() const
     {
         return ruledFirstStrikeStepPending;
