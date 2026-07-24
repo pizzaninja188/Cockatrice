@@ -868,7 +868,7 @@ pub(crate) fn cast_instant_and_resolve(
 
 // ===========================================================================
 // Card-coverage expansion — P1 (static anthems / lords, one-shot mass pump)
-// and P2 (target-filter widening). See plan-card-coverage-expansion.md.
+// and P2 (target-filter widening). See docs/plan-card-coverage-expansion.md.
 // ===========================================================================
 
 /// Build a two-player engine at Main 1 with P0 holding `p0_card` (deck padded with mountains)

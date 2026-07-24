@@ -5,7 +5,7 @@
 //! Regeneration does NOT save a creature from toughness-0 (CR 704.5f — not a "destroy").
 //! Wrath of God's "can't be regenerated" bypasses shields (CR 701.15b).
 
-use super::helpers::*;
+use crate::helpers::*;
 use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration};
 use tricerules_core::state::{AffectedScope, ContinuousEffect};
 

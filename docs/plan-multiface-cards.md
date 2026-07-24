@@ -1,5 +1,7 @@
 # Design Plan — Multi-face cards (remaining phases)
 
+> **Status (2026-07-23):** §1–§2 (battlefield face state, MDFC) shipped; §3–§5 tracked as issues #33–#35 in [issues.md](issues.md). Moved from repo root to `docs/`.
+
 ## Status
 
 The **faces substrate** and **split** layout are implemented (commit `c97582b4`,

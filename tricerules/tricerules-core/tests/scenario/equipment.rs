@@ -4,7 +4,7 @@
 //! Happy paths: equip, re-equip. Illegal paths: opponent's creature.
 //! SBA: equipment falls off when attached creature leaves the battlefield (CR 704.5p).
 
-use super::helpers::*;
+use crate::helpers::*;
 use tricerules_proto::ruled::v1::TargetRef;
 
 fn equipment_deck(equipment: &str) -> Vec<String> {

@@ -1,5 +1,7 @@
 # Design Plan — Card-coverage primitive expansion
 
+> **Status (2026-07-23):** P1–P2 shipped; P3–P5 remain TODO. Moved from repo root to `docs/`.
+
 ## Status
 
 **P1 (static anthems/lords + one-shot mass pump) and P2 (target-filter widening) are

@@ -3,16 +3,17 @@
 # auto-fix-issues.sh — unattended driver for the Cockatrice auto-fixer.
 #
 # Workflow (origin-authoritative):
-#   You (elsewhere): edit issues.md, push to origin/master. Later: pull fix
+#   You (elsewhere): edit docs/issues.md, push to origin/master. Later: pull fix
 #   branches, UI-test, merge them to master.
 #   This box (cron): pull origin/master -> fix one unclaimed open issue at a time
 #   on a fresh `claude -p` -> push fix/issue-N branch -> record status in
-#   AUTOMATION_STATUS.md -> push that. When issues run out, generate no-new-logic
-#   cards on branches. Runs until issues/cards run out or the usage window ends.
+#   docs/AUTOMATION_STATUS.md -> push that. When issues run out, generate
+#   no-new-logic cards on branches. Runs until issues/cards run out or the usage
+#   window ends.
 #
 # Conflict-free by construction: on master the box ONLY ever commits
-# AUTOMATION_STATUS.md; you only ever touch issues.md + code merges. Disjoint, so
-# pull --rebase and your merges never collide.
+# docs/AUTOMATION_STATUS.md; you only ever touch docs/issues.md + code merges.
+# Disjoint, so pull --rebase and your merges never collide.
 
 set -uo pipefail
 
@@ -26,7 +27,7 @@ REPO="${REPO:-/home/ubuntu/Cockatrice}"
 BASE_BRANCH="${BASE_BRANCH:-master}"
 PROMPT_FILE="${PROMPT_FILE:-$REPO/.claude/automation/fix-one-issue.md}"
 CARDS_PROMPT_FILE="${CARDS_PROMPT_FILE:-$REPO/.claude/automation/implement-cards.md}"
-STATUS_FILE="${STATUS_FILE:-$REPO/AUTOMATION_STATUS.md}"
+STATUS_FILE="${STATUS_FILE:-$REPO/docs/AUTOMATION_STATUS.md}"
 LOG_DIR="${LOG_DIR:-/home/ubuntu/cockatrice-auto-logs}"
 CLAUDE_BIN="${CLAUDE_BIN:-/home/ubuntu/.local/bin/claude}"
 MAX_ISSUES="${MAX_ISSUES:-100}"           # runaway-safety backstop on total tasks/run
@@ -71,8 +72,8 @@ PROMPT_CARDS=""
 # --- helpers -----------------------------------------------------------------
 
 # Push master, rebasing onto origin first if it advanced (your merges). The box
-# only commits AUTOMATION_STATUS.md to master, so the rebase never conflicts with
-# your issues.md / code changes.
+# only commits docs/AUTOMATION_STATUS.md to master, so the rebase never conflicts
+# with your docs/issues.md / code changes.
 push_master() {
   [[ "$SYNC_REMOTE" == "1" ]] || return 0
   timeout 120 git push origin "$BASE_BRANCH" >/dev/null 2>&1 && return 0
@@ -177,7 +178,7 @@ for (( i=1; i<=MAX_ISSUES; i++ )); do
     if [[ -n "$resume_sid" ]]; then
       echo "resuming session $resume_sid for interrupted issue #$resume_id"
       timeout "$PER_ISSUE_TIMEOUT" "$CLAUDE_BIN" -p \
-"Your previous session was interrupted (usage window ended). You were working issue #$resume_id on branch fix/issue-$resume_id. Re-check git state and continue to completion, following the workflow and output discipline you were given. Keep \`session=$resume_sid\` on that issue's line in AUTOMATION_STATUS.md. Your VERY LAST line of output must be exactly (bare text, no markdown): AUTOFIX_RESULT: RESOLVED #$resume_id  — or AUTOFIX_RESULT: BLOCKED #$resume_id - <reason> if stuck." \
+"Your previous session was interrupted (usage window ended). You were working issue #$resume_id on branch fix/issue-$resume_id. Re-check git state and continue to completion, following the workflow and output discipline you were given. Keep \`session=$resume_sid\` on that issue's line in docs/AUTOMATION_STATUS.md. Your VERY LAST line of output must be exactly (bare text, no markdown): AUTOFIX_RESULT: RESOLVED #$resume_id  — or AUTOFIX_RESULT: BLOCKED #$resume_id - <reason> if stuck." \
           --resume "$resume_sid" "${model_args[@]}" \
           --dangerously-skip-permissions --output-format json >"$TASK_LOG" 2>&1
       rc=$?
@@ -194,7 +195,7 @@ for (( i=1; i<=MAX_ISSUES; i++ )); do
 
 ## Your session id
 This run's session id is: $new_sid
-When you create or update this issue's line in AUTOMATION_STATUS.md (claim OR
+When you create or update this issue's line in docs/AUTOMATION_STATUS.md (claim OR
 resume), set \`session=$new_sid\` so a future interrupted run can resume it." \
           --session-id "$new_sid" "${model_args[@]}" \
           --dangerously-skip-permissions --output-format json >"$TASK_LOG" 2>&1
@@ -256,19 +257,19 @@ resume), set \`session=$new_sid\` so a future interrupted run can resume it." \
     fi
   fi
 
-  # Flush any AUTOMATION_STATUS.md commits the agent made on master.
+  # Flush any docs/AUTOMATION_STATUS.md commits the agent made on master.
   git checkout "$BASE_BRANCH" >/dev/null 2>&1
 
-  # Drift check: if the agent accidentally committed AUTOMATION_STATUS.md onto the
+  # Drift check: if the agent accidentally committed docs/AUTOMATION_STATUS.md onto the
   # task branch instead of master, apply it here before pushing. This happens when
   # the agent bundles the status update with the code commit rather than switching
   # to master first.
   if [[ "$agent_branch" == fix/* || "$agent_branch" == cards/* ]]; then
     if git rev-parse --verify "$agent_branch" >/dev/null 2>&1; then
-      branch_status="$(git show "$agent_branch:AUTOMATION_STATUS.md" 2>/dev/null || true)"
+      branch_status="$(git show "$agent_branch:docs/AUTOMATION_STATUS.md" 2>/dev/null || true)"
       master_status="$(cat "$STATUS_FILE" 2>/dev/null || true)"
       if [[ -n "$branch_status" && "$branch_status" != "$master_status" ]]; then
-        echo "  WARNING: AUTOMATION_STATUS.md drifted onto $agent_branch; recovering to $BASE_BRANCH."
+        echo "  WARNING: docs/AUTOMATION_STATUS.md drifted onto $agent_branch; recovering to $BASE_BRANCH."
         printf '%s' "$branch_status" > "$STATUS_FILE"
         git add "$STATUS_FILE" && git commit -q -m "automation: recover status from $agent_branch (drift fix)"
       fi
@@ -288,13 +289,13 @@ resume), set \`session=$new_sid\` so a future interrupted run can resume it." \
   result_line="$(echo "$TASK_TEXT" | grep -aoE 'AUTOFIX_RESULT[: ].*' | tail -n 1 | tr -d '`')"
 
   # Fallback: if the agent exited cleanly but omitted the sentinel, infer from
-  # AUTOMATION_STATUS.md — any issue that newly appeared as in-review counts as resolved.
+  # docs/AUTOMATION_STATUS.md — any issue that newly appeared as in-review counts as resolved.
   if [[ -z "$result_line" && $rc -eq 0 && "$mode" == "issues" ]]; then
     status_after="$(grep 'status=in-review' "$STATUS_FILE" 2>/dev/null | sort || true)"
     inferred_id="$(comm -13 <(echo "$status_before") <(echo "$status_after") \
                    | grep -oE '#[0-9]+' | head -1 || true)"
     if [[ -n "$inferred_id" ]]; then
-      result_line="AUTOFIX_RESULT: RESOLVED $inferred_id (inferred from AUTOMATION_STATUS.md)"
+      result_line="AUTOFIX_RESULT: RESOLVED $inferred_id (inferred from docs/AUTOMATION_STATUS.md)"
       echo "  (no AUTOFIX_RESULT sentinel; inferred resolution from status file)"
     fi
   fi
@@ -304,7 +305,7 @@ resume), set \`session=$new_sid\` so a future interrupted run can resume it." \
   if [[ "$mode" == "issues" ]]; then
     case "$result_line" in
       # `status=in-review` is the fallback when a resumed agent prints the
-      # AUTOMATION_STATUS.md line format instead of the proper sentinel.
+      # docs/AUTOMATION_STATUS.md line format instead of the proper sentinel.
       *"RESOLVED"*|*"status=in-review"*) resolved=$(( resolved + 1 )); echo "issue resolved; continuing." ;;
       *"NO_ELIGIBLE_ISSUES"*)
         if [[ "$CARDS_ENABLED" == "1" && -n "$PROMPT_CARDS" ]]; then

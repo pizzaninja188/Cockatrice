@@ -1,5 +1,7 @@
 # Codebase Audit Findings
 
+> **Status (2026-07-23):** stale working notes from the June 2026 audit, moved from repo root; pending findings not re-verified against current code.
+
 ## Applied Fixes
 
 ### 2026-06-25

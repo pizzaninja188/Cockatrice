@@ -1,5 +1,7 @@
 # Design Plan — Copy effects (CR 707), trimmed to remaining phases
 
+> **Status (2026-07-23):** Phase 1 (spell copy / Twincast) shipped; Phases 2–3 (permanent + token copy) remain TODO. Moved from repo root to `docs/`.
+
 ## Status
 
 - **Phase 1 — copying a spell on the stack (Twincast class): DONE.** `SpellEffectKind::CopyTargetSpell { count }`, `StackItem.is_copy`, copies pushed on resolution (controlled by the copy's controller, retaining the original's chosen X/face/targets), copies cease to exist on resolution (CR 707.10d) and never fire cast triggers/storm. Proto `StackPushed.is_copy`; relay guards copies (no physical card → never bound, resolve is a no-op move). First card: **Twincast** (partial: instant/sorcery target restriction unenforced; CR 707.10c new-target choice not offered). Scenario + conformance coverage landed.

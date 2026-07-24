@@ -1,5 +1,7 @@
 # Issue Tracker
 
+> **Status (2026-07-23):** active tracker, moved from repo root to `docs/`; `scripts/auto-fix-issues.sh` paths updated to match.
+
 This file is **your input** to the automated fixer. You own it — edit it (ideally
 on your Windows machine) and push. The automation reads it but never writes it;
 it records progress in `AUTOMATION_STATUS.md` instead.
