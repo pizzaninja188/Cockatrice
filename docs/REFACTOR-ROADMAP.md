@@ -133,6 +133,21 @@ batch tests (client translation) → `tests/game_prompt/` (presentation) → thi
 
 ### Step 4 — Server extraction: `RuledGameDriver` (~1,500 lines moved, 3 PRs)
 
+> **Done 2026-07-24** (3 commits, one per planned PR). `ruled_game_driver.{h,cpp}` and
+> `ruled_player_binding.{h,cpp}` landed as pure motion; `server_game.cpp` shrank 2440 → 943
+> lines and `server_player.h` carries zero ruled code (no `ruled_v1.pb.h` include). Residual
+> upstream hooks: the `ruledGame` flag + owning `unique_ptr` + `friend class RuledGameDriver`
+> + `ruled()` accessor + `processRuledPayload`/`getRuledPriorityPlayer` delegators on
+> `Server_Game`; one `friend struct RuledPlayerBinding` on `Server_AbstractPlayer` (protected
+> `sendCreateTokenEvents`); `getRuledGame()` guards in `server_player.cpp`. `RuledBatchTest`
+> retargeted at the driver. The follow-up split landed with pass names matching the *actual*
+> pass structure — `applyTokenCreations` / `applyPermanentMoves` / `applyPhaseStackAndZoneViews`
+> / `applyAttachmentRestores` / `applyLifeManaAndCombatEvents`, and broadcast staged as strip →
+> `appendServerObjectMaps` → `redactBatchForParticipant` — rather than the provisional names
+> below (catalog indexing lives in `applyRuledStartupBatch`, not the batch path). Verified per
+> commit: full build + full ctest (incl. `ruled_batch_test`, `ruled_e2e_smoke_test`); manual
+> game still recommended before the next release-ish milestone.
+
 `server_game.cpp` (upstream, 2440 lines) carries ~1,372 contiguous lines of ruled code plus a
 helper block, bolted onto the upstream `Server_Game` class; `Server_Player` carries 8 more
 ruled identity maps. Extract into new fork files in
