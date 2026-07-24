@@ -7,6 +7,7 @@
 3. **Ruled work is end-to-end.** Unless explicitly scoped backend-only, ship **engine + proto + Servatrice relay + Cockatrice UI** together (commands, prompts, targets, phases, visible state). Minimal viable UI (button/menu/click) is enough. Any `.proto` change must keep **both C++ and Rust** buildable.
 4. **Don't break freeform.** Gate all new UI/paths on ruled mode.
 5. **Small diffs.** Preserve legacy paths unless migrating is the task.
+6. **Structural refactors follow [docs/REFACTOR-ROADMAP.md](docs/REFACTOR-ROADMAP.md)** — it fixes the execution order and the standing rules (upstream files get extraction-only treatment with thin hooks, never in-place restructuring; new fork-owned C++ files use the `ruled_` prefix; stay player-set-generic). Read it before any refactor or cross-component structural change.
 
 ---
 
