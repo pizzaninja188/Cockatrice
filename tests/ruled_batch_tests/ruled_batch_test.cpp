@@ -1,4 +1,4 @@
-// Unit tests for Server_Player::applyRuledEngineZoneView and RuledGameDriver::applyRuledBatch.
+// Unit tests for RuledPlayerBinding::applyRuledEngineZoneView and RuledGameDriver::applyRuledBatch.
 //
 // These tests feed synthetic ruled::v1::IpcResponse batches to the server and assert that
 // the engine -> Cockatrice translation produces the expected state changes:
@@ -108,6 +108,20 @@ protected:
         }
     }
 
+    // Per-player binding access (the maps moved off Server_Player onto the driver).
+    RuledPlayerBinding::RuledZoneSyncResult applyZoneView(Server_Player *p,
+                                                          const ruled::v1::RuledPerPlayerView &v,
+                                                          GameEventStorage *tapGes,
+                                                          bool allowUntapReset = true)
+    {
+        return game->ruled()->playerBinding(p->getPlayerId()).applyRuledEngineZoneView(p, v, tapGes, allowUntapReset);
+    }
+
+    Server_Card *findCardByEngineOid(Server_Player *p, quint32 engineOid)
+    {
+        return game->ruled()->playerBinding(p->getPlayerId()).findCardByEngineOid(p, engineOid);
+    }
+
     BatchOutcome callBatchApply(const ruled::v1::IpcResponse &resp)
     {
         const auto r = game->ruled()->applyRuledBatch(resp);
@@ -181,7 +195,7 @@ TEST_F(RuledBatchTest, ZoneViewBuildsOidMapAndPropagatesTapState)
 
     GameEventStorage tapGes;
     // Default allowUntapReset=true (startup-style sync): engine may set taps freely.
-    Server_Player::RuledZoneSyncResult result = p1->applyRuledEngineZoneView(v, &tapGes);
+    RuledPlayerBinding::RuledZoneSyncResult result = applyZoneView(p1, v, &tapGes);
 
     EXPECT_TRUE(result.tapStateChanged);
     EXPECT_TRUE(bear->getTapped());
@@ -191,9 +205,9 @@ TEST_F(RuledBatchTest, ZoneViewBuildsOidMapAndPropagatesTapState)
     EXPECT_EQ(oidMap.value(101u, -1), bear->getId());
     EXPECT_EQ(oidMap.value(102u, -1), wolf->getId());
 
-    EXPECT_EQ(p1->findCardByEngineOid(101u), bear);
-    EXPECT_EQ(p1->findCardByEngineOid(102u), wolf);
-    EXPECT_EQ(p1->findCardByEngineOid(999u), nullptr);
+    EXPECT_EQ(findCardByEngineOid(p1, 101u), bear);
+    EXPECT_EQ(findCardByEngineOid(p1, 102u), wolf);
+    EXPECT_EQ(findCardByEngineOid(p1, 999u), nullptr);
 }
 
 TEST_F(RuledBatchTest, ZoneViewDoesNotForceUntapOutsideUntapStep)
@@ -203,7 +217,7 @@ TEST_F(RuledBatchTest, ZoneViewDoesNotForceUntapOutsideUntapStep)
     ruled::v1::RuledPerPlayerView v = buildPerPlayerView(p1, {101u}, {false});
 
     GameEventStorage tapGes;
-    Server_Player::RuledZoneSyncResult result = p1->applyRuledEngineZoneView(v, &tapGes, false);
+    RuledPlayerBinding::RuledZoneSyncResult result = applyZoneView(p1, v, &tapGes, false);
     EXPECT_FALSE(result.tapStateChanged);
     EXPECT_TRUE(bear->getTapped());
 }
@@ -215,7 +229,7 @@ TEST_F(RuledBatchTest, ZoneViewForcesUntapDuringUntapStepBatch)
     ruled::v1::RuledPerPlayerView v = buildPerPlayerView(p1, {101u}, {false});
 
     GameEventStorage tapGes;
-    Server_Player::RuledZoneSyncResult result = p1->applyRuledEngineZoneView(v, &tapGes, true);
+    RuledPlayerBinding::RuledZoneSyncResult result = applyZoneView(p1, v, &tapGes, true);
     EXPECT_TRUE(result.tapStateChanged);
     EXPECT_FALSE(bear->getTapped());
 }
@@ -241,8 +255,8 @@ TEST_F(RuledBatchTest, ApplyRuledBatchMovesPermanentToGraveyard)
         EXPECT_TRUE(r.zoneViewApplied);
     }
 
-    EXPECT_EQ(p1->findCardByEngineOid(201u), bear);
-    EXPECT_EQ(p1->findCardByEngineOid(202u), wolf);
+    EXPECT_EQ(findCardByEngineOid(p1, 201u), bear);
+    EXPECT_EQ(findCardByEngineOid(p1, 202u), wolf);
     Server_CardZone *p1Table = p1->getZones().value(ZoneNames::TABLE);
     Server_CardZone *p1Grave = p1->getZones().value(ZoneNames::GRAVE);
     ASSERT_NE(p1Table, nullptr);
@@ -309,7 +323,7 @@ TEST_F(RuledBatchTest, ApplyRuledBatchCreatesTokenOnControllerTable)
     EXPECT_EQ(token->getColor(), QStringLiteral("w"));
     EXPECT_TRUE(token->getDestroyOnZoneChange());
     // The engine ObjectId is bound to the minted card for subsequent zone-view / combat sync.
-    EXPECT_EQ(p1->findCardByEngineOid(501u), token);
+    EXPECT_EQ(findCardByEngineOid(p1, 501u), token);
     // The opponent received no token (controller-only effect).
     EXPECT_EQ(p2->getZones().value(ZoneNames::TABLE)->getCards().size(), 0);
 }

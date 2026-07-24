@@ -2,8 +2,6 @@
 #define PLAYER_H
 
 #include "server_abstract_player.h"
-#include <QHash>
-#include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 
 class Server_Player : public Server_AbstractPlayer
 {
@@ -11,58 +9,8 @@ class Server_Player : public Server_AbstractPlayer
 private:
     QMap<int, Server_Counter *> counters;
     QList<int> lastDrawList;
-    // Latest mapping between engine ObjectIds (parallel to RuledPerPlayerView::battlefield
-    // and `hand_object_id`) and the corresponding Server_Card. Updated each
-    // applyRuledEngineZoneView; consumed by Server_Game::applyRuledBatch when translating
-    // engine-side events into client-visible Cockatrice events.
-    QHash<quint32, int> engineOidToServerCardId;
-    QHash<int, quint32> serverCardIdToEngineOid;
-    QHash<quint32, bool> engineOidToSummoningSick;
-    QHash<quint32, bool> engineOidToHaste;
-    QHash<quint32, bool> engineOidToTrample;
-    QHash<quint32, bool> engineOidToCreature;
-    // Parallel to engineOidToServerCardId but scoped to the graveyard zone.
-    // Updated from RuledPerPlayerView::graveyard_object_id each zone-view sync.
-    QHash<quint32, int> graveyardEngineOidToServerCardId;
 
 public:
-    struct RuledZoneSyncResult
-    {
-        bool handOrLibraryChanged = false;
-        bool tapStateChanged = false;
-        /// TABLE card order was rewritten to match engine battlefield order.
-        bool battlefieldOrderChanged = false;
-        // engine_oid -> Server_Card.id, captured this sync. Empty when sync failed.
-        QHash<quint32, int> engineOidToServerCardId;
-    };
-
-    QHash<quint32, int> getEngineOidToServerCardId() const
-    {
-        return engineOidToServerCardId;
-    }
-    QHash<quint32, int> getGraveyardEngineOidToServerCardId() const
-    {
-        return graveyardEngineOidToServerCardId;
-    }
-    bool isEngineOidSummoningSick(quint32 engineOid) const
-    {
-        return engineOidToSummoningSick.value(engineOid, false);
-    }
-    bool isEngineOidHaste(quint32 engineOid) const
-    {
-        return engineOidToHaste.value(engineOid, false);
-    }
-    bool isEngineOidTrample(quint32 engineOid) const
-    {
-        return engineOidToTrample.value(engineOid, false);
-    }
-    bool isEngineOidCreature(quint32 engineOid) const
-    {
-        return engineOidToCreature.value(engineOid, false);
-    }
-    Server_Card *findCardByEngineOid(quint32 engineOid) const;
-    Server_Card *findGraveyardCardByEngineOid(quint32 engineOid) const;
-
     Server_Player(Server_Game *_game,
                   int _playerId,
                   const ServerInfo_User &_userInfo,
@@ -78,16 +26,6 @@ public:
 
     void setupZones() override;
     void clearZones() override;
-    RuledZoneSyncResult applyRuledEngineZoneView(const ruled::v1::RuledPerPlayerView &v,
-                                                 GameEventStorage *tapGes = nullptr,
-                                                 bool allowUntapReset = true);
-    // CR 111: mint a physical token Server_Card on this player's table from an engine
-    // TokenCreated identity (tokens have no deck card / Oracle entry) and bind it to `engineOid`
-    // so the following zone-view sync matches the engine battlefield slot to it. The token is
-    // marked destroy-on-zone-change so it disappears client-side when the engine moves it off the
-    // battlefield (CR 111.7). Broadcasts an Event_CreateToken via `ges`.
-    void createRuledToken(quint32 engineOid, const ruled::v1::TokenIdentity &identity, GameEventStorage &ges);
-    void shuffleMainDeckForRuledFallback();
 
     Response::ResponseCode drawCards(GameEventStorage &ges, int number);
     void onCardBeingMoved(GameEventStorage &ges,

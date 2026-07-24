@@ -8,6 +8,7 @@
 // `ruledGame` flag, the owning unique_ptr, and 1-line delegation hooks.
 
 #include "../server_response_containers.h"
+#include "ruled_player_binding.h"
 #include "rules_relay.h"
 
 #include <QByteArray>
@@ -124,7 +125,14 @@ private:
     /// network/userInterface plumbing) via the driver's Server_Game friendship.
     void insertParticipantForTest(int id, Server_AbstractParticipant *participant);
 
+    /// Per-player ruled state (engine-oid identity maps); default-constructed on first access.
+    RuledPlayerBinding &playerBinding(int playerId)
+    {
+        return playerBindings[playerId];
+    }
+
     Server_Game *const game;
+    QHash<int, RuledPlayerBinding> playerBindings;
     quint64 ruledSeed;
     int ruledPriorityPlayer;
     std::unique_ptr<RulesRelay> rulesRelay;

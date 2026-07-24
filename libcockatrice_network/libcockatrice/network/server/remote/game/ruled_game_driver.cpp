@@ -109,6 +109,15 @@ void stripRuledServerOnlyEventsForBroadcast(ruled::v1::IpcResponse *resp)
     }
 }
 
+/// Legacy casual fallback: the engine refused the session for a non-card reason, so the
+/// physical decks (left unshuffled for engine-ordered play) get a normal shuffle instead.
+void shuffleMainDeckForRuledFallback(Server_AbstractPlayer *player)
+{
+    if (Server_CardZone *deckZone = player->getZones().value(ZoneNames::DECK)) {
+        deckZone->shuffle();
+    }
+}
+
 int expectedMainboardSizeForStartupSync(Server_Game *game,
                                         int playerId,
                                         const QList<QPair<int, QStringList>> &deckByPlayer)
@@ -498,7 +507,7 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
         if (!ab) {
             continue;
         }
-        preBatchOidMaps.insert(ab->getPlayerId(), static_cast<Server_Player *>(ab)->getEngineOidToServerCardId());
+        preBatchOidMaps.insert(ab->getPlayerId(), playerBinding(ab->getPlayerId()).engineOidToServerCardId);
     }
 
     // Tokens (CR 111) appear on the engine battlefield with no physical card behind them. Mint
@@ -517,8 +526,9 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
             continue;
         }
         if (Server_AbstractPlayer *controller = game->getPlayer(tc.controller_player_id())) {
-            static_cast<Server_Player *>(controller)
-                ->createRuledToken(static_cast<quint32>(tc.object_id()), tc.identity(), tokenCreateGes);
+            playerBinding(tc.controller_player_id())
+                .createRuledToken(static_cast<Server_Player *>(controller), static_cast<quint32>(tc.object_id()),
+                                  tc.identity(), tokenCreateGes);
             tokenCreateGesHasEvents = true;
         }
     }
@@ -561,10 +571,10 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
             }
         }
         // ReturnFromGraveyard: the card may be in the graveyard zone, not in the battlefield/hand
-        // OID map. Try the graveyard map maintained by Server_Player.
+        // OID map. Try the graveyard map maintained by the player's binding.
         if (!card) {
             if (auto *sp = qobject_cast<Server_Player *>(owner)) {
-                if (Server_Card *c = sp->findGraveyardCardByEngineOid(oid)) {
+                if (Server_Card *c = playerBinding(ownerId).findGraveyardCardByEngineOid(sp, oid)) {
                     card = c;
                 }
             }
@@ -573,7 +583,7 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
             // A spell leaving the stack (e.g. countered) physically lives on the single shared
             // canonical stack zone (owned by the lowest player-id), not in this owner's own zones,
             // and stack cards are never in the per-player engine-oid map (only battlefield + hand
-            // are — see Server_Player::applyRuledEngineZoneView). Resolve it through the global
+            // are — see RuledPlayerBinding::applyRuledEngineZoneView). Resolve it through the global
             // stack-object map and search every player's stack zone; the move below routes it to
             // the owner's destination. This makes countered spells generic — no name special-case.
             //
@@ -782,8 +792,10 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
             const bool perPlayerAllowUntap = (batchHasUntapPhase && p.player_id() == game->getActivePlayer()) ||
                                              p.player_id() == forceUntapForPlayerId;
             if (Server_AbstractPlayer *ab = game->getPlayer(p.player_id())) {
-                const Server_Player::RuledZoneSyncResult sync =
-                    static_cast<Server_Player *>(ab)->applyRuledEngineZoneView(p, &tapSyncGes, perPlayerAllowUntap);
+                const RuledPlayerBinding::RuledZoneSyncResult sync =
+                    playerBinding(p.player_id())
+                        .applyRuledEngineZoneView(static_cast<Server_Player *>(ab), p, &tapSyncGes,
+                                                  perPlayerAllowUntap);
                 result.handOrLibraryChanged = result.handOrLibraryChanged || sync.handOrLibraryChanged;
                 result.battlefieldOrderChanged = result.battlefieldOrderChanged || sync.battlefieldOrderChanged;
                 result.tapStateEventsQueued = result.tapStateEventsQueued || sync.tapStateChanged;
@@ -823,7 +835,7 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
                         continue;
                     }
                     const quint32 attachedOid = static_cast<quint32>(p.battlefield_object_id(i));
-                    Server_Card *attachedCard = ownerPlayer->findCardByEngineOid(attachedOid);
+                    Server_Card *attachedCard = playerBinding(p.player_id()).findCardByEngineOid(ownerPlayer, attachedOid);
                     if (!attachedCard || !attachedCard->getZone()) {
                         continue;
                     }
@@ -832,7 +844,8 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
                         if (!ab) {
                             continue;
                         }
-                        targetCard = static_cast<Server_Player *>(ab)->findCardByEngineOid(targetOid);
+                        targetCard = playerBinding(ab->getPlayerId())
+                                         .findCardByEngineOid(static_cast<Server_Player *>(ab), targetOid);
                         if (targetCard) {
                             break;
                         }
@@ -957,7 +970,7 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
             }
             for (int i = 0; i < ad.attacker_object_ids_size(); ++i) {
                 const quint32 oid = static_cast<quint32>(ad.attacker_object_ids(i));
-                Server_Card *card = attackerPlayer->findCardByEngineOid(oid);
+                Server_Card *card = playerBinding(ad.attacking_player_id()).findCardByEngineOid(attackerPlayer, oid);
                 if (!card) {
                     continue;
                 }
@@ -995,11 +1008,12 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
                     continue;
                 }
                 auto *pl = static_cast<Server_Player *>(ab);
+                RuledPlayerBinding &binding = playerBinding(pl->getPlayerId());
                 if (!auraCard) {
-                    auraCard = pl->findCardByEngineOid(auraOid);
+                    auraCard = binding.findCardByEngineOid(pl, auraOid);
                 }
                 if (!enchantedCard) {
-                    enchantedCard = pl->findCardByEngineOid(enchantedOid);
+                    enchantedCard = binding.findCardByEngineOid(pl, enchantedOid);
                 }
             }
             if (auraCard && enchantedCard && auraCard->getZone()) {
@@ -1047,7 +1061,8 @@ void RuledGameDriver::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
                 continue;
             }
             auto *pl = static_cast<Server_Player *>(ab);
-            const QHash<quint32, int> oidMap = pl->getEngineOidToServerCardId();
+            const RuledPlayerBinding &binding = playerBinding(pl->getPlayerId());
+            const QHash<quint32, int> oidMap = binding.engineOidToServerCardId;
             Server_CardZone *tableZone = pl->getZones().value(ZoneNames::TABLE);
             int ordinal = 0;
             // Iterate the table zone in current order so `ordinal` matches the
@@ -1077,10 +1092,10 @@ void RuledGameDriver::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
                     entry->set_card_id(tr.toStdString());
                     entry->set_ordinal(static_cast<uint32_t>(ordinal));
                     entry->set_server_card_id(card->getId());
-                    entry->set_summoning_sick(pl->isEngineOidSummoningSick(engineOid));
-                    entry->set_haste(pl->isEngineOidHaste(engineOid));
-                    entry->set_trample(pl->isEngineOidTrample(engineOid));
-                    entry->set_is_creature(pl->isEngineOidCreature(engineOid));
+                    entry->set_summoning_sick(binding.isEngineOidSummoningSick(engineOid));
+                    entry->set_haste(binding.isEngineOidHaste(engineOid));
+                    entry->set_trample(binding.isEngineOidTrample(engineOid));
+                    entry->set_is_creature(binding.isEngineOidCreature(engineOid));
                     ++ordinal;
                 }
             }
@@ -1160,7 +1175,7 @@ void RuledGameDriver::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
                 continue;
             }
             auto *pl = static_cast<Server_Player *>(ab);
-            const QHash<quint32, int> gravOidMap = pl->getGraveyardEngineOidToServerCardId();
+            const QHash<quint32, int> gravOidMap = playerBinding(pl->getPlayerId()).graveyardEngineOidToServerCardId;
             for (auto it = gravOidMap.constBegin(); it != gravOidMap.constEnd(); ++it) {
                 auto *entry = gm->add_entries();
                 entry->set_player_id(pl->getPlayerId());
@@ -1225,7 +1240,7 @@ void RuledGameDriver::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
                 if (deciderPlayer) {
                     for (int ci = 0; ci < rcr->candidate_object_ids_size(); ++ci) {
                         const quint32 oid = static_cast<quint32>(rcr->candidate_object_ids(ci));
-                        Server_Card *sc = deciderPlayer->findCardByEngineOid(oid);
+                        Server_Card *sc = playerBinding(deciderId).findCardByEngineOid(deciderPlayer, oid);
                         rcr->add_candidate_server_card_ids(sc ? sc->getId() : -1);
                     }
                 }
@@ -1434,7 +1449,7 @@ bool RuledGameDriver::startRuledSidecarSession()
             return false;
         }
         for (Server_AbstractPlayer *p : game->getPlayers().values()) {
-            static_cast<Server_Player *>(p)->shuffleMainDeckForRuledFallback();
+            shuffleMainDeckForRuledFallback(p);
         }
         rulesRelay.reset();
         return true;
@@ -1547,7 +1562,7 @@ void RuledGameDriver::applyRuledStartupBatch(const ruled::v1::IpcResponse &resp,
                                << "entries — is tricerules-server up to date? "
                                   "(RulesRelay read was fixed; rebuild + restart the Rust side from this repo.)";
                     for (Server_AbstractPlayer *pl : game->getPlayers().values()) {
-                        static_cast<Server_Player *>(pl)->shuffleMainDeckForRuledFallback();
+                        shuffleMainDeckForRuledFallback(pl);
                     }
                     rulesRelay.reset();
                     return;
@@ -1555,7 +1570,7 @@ void RuledGameDriver::applyRuledStartupBatch(const ruled::v1::IpcResponse &resp,
             }
             for (const auto &p : e.zone_view().per_player()) {
                 if (Server_AbstractPlayer *ab = game->getPlayer(p.player_id())) {
-                    static_cast<Server_Player *>(ab)->applyRuledEngineZoneView(p);
+                    playerBinding(p.player_id()).applyRuledEngineZoneView(static_cast<Server_Player *>(ab), p);
                 }
             }
             startupZoneViewApplied = true;

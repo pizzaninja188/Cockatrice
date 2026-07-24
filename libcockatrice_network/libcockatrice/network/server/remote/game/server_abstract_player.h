@@ -25,8 +25,9 @@ private:
     void getPlayerProperties(ServerInfo_PlayerProperties &result) override;
 
 protected:
-    // Protected so the ruled relay (Server_Player::createRuledToken) can broadcast a token
+    // Fork hook: the ruled relay (RuledPlayerBinding::createRuledToken) broadcasts a token
     // it mints from an engine TokenCreated event without duplicating the create/reveal logic.
+    friend struct RuledPlayerBinding;
     void sendCreateTokenEvents(Server_CardZone *zone, Server_Card *card, int xCoord, int yCoord, GameEventStorage &ges);
     bool conceded;
     DeckList *deck;
