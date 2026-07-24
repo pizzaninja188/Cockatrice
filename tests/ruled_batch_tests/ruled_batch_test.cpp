@@ -1,4 +1,4 @@
-// Unit tests for Server_Player::applyRuledEngineZoneView and Server_Game::applyRuledBatch.
+// Unit tests for Server_Player::applyRuledEngineZoneView and RuledGameDriver::applyRuledBatch.
 //
 // These tests feed synthetic ruled::v1::IpcResponse batches to the server and assert that
 // the engine -> Cockatrice translation produces the expected state changes:
@@ -8,12 +8,13 @@
 //   * LifeChanged    -> per-player life counter updated
 //   * AttackersDeclared -> Server_Card::attacking flag flipped
 //
-// Server_Game::applyRuledBatch and ::participants are private; we reach them via
-// `friend class RuledBatchTest` declared in server_game.h. Friend privileges are not
+// RuledGameDriver::applyRuledBatch and its catalog maps are private; we reach them via
+// `friend class RuledBatchTest` declared in ruled_game_driver.h. Friend privileges are not
 // inherited by TEST_F's auto-generated subclasses, so the fixture exposes its
 // privileged operations as protected helpers (callBatchApply / insertParticipant /
 // peekBatchResult) which the test bodies invoke.
 
+#include "game/ruled_game_driver.h"
 #include "game/server_abstract_player.h"
 #include "game/server_card.h"
 #include "game/server_cardzone.h"
@@ -45,7 +46,7 @@ protected:
     ServerInfo_User userA;
     ServerInfo_User userB;
 
-    // Captured-but-opaque batch result (the result struct is private to Server_Game).
+    // Captured-but-opaque batch result (the result struct is private to RuledGameDriver).
     struct BatchOutcome
     {
         bool zoneViewApplied = false;
@@ -66,7 +67,7 @@ protected:
         p2 = new Server_Player(game, 2, userB, false, nullptr);
 
         // Bypass addPlayer (which wants a Server_AbstractUserInterface for the
-        // network round-trip). We have friend access to participants here.
+        // network round-trip); the driver's test hook reaches the participant map.
         insertParticipant(1, p1);
         insertParticipant(2, p2);
 
@@ -88,7 +89,7 @@ protected:
     // Privileged helpers (only callable here via the friend declaration).
     void insertParticipant(int id, Server_AbstractParticipant *p)
     {
-        game->participants.insert(id, p);
+        game->ruled()->insertParticipantForTest(id, p);
     }
 
     // Fills the per-game catalog maps the way applyRuledStartupBatch would from a
@@ -102,14 +103,14 @@ protected:
             ruled::v1::CardCatalog_Entry entry;
             entry.set_card_id(id.toStdString());
             entry.set_name(name.toStdString());
-            game->ruledCardCatalogById.insert(id, entry);
-            game->ruledCardIdByLowerName.insert(name.trimmed().toLower(), id);
+            game->ruled()->ruledCardCatalogById.insert(id, entry);
+            game->ruled()->ruledCardIdByLowerName.insert(name.trimmed().toLower(), id);
         }
     }
 
     BatchOutcome callBatchApply(const ruled::v1::IpcResponse &resp)
     {
-        const auto r = game->applyRuledBatch(resp);
+        const auto r = game->ruled()->applyRuledBatch(resp);
         BatchOutcome out;
         out.zoneViewApplied = r.zoneViewApplied;
         out.handOrLibraryChanged = r.handOrLibraryChanged;

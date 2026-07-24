@@ -32,11 +32,7 @@
 #include <QVector>
 #include <libcockatrice/protocol/pb/event_leave.pb.h>
 #include <libcockatrice/protocol/pb/response.pb.h>
-#include <libcockatrice/protocol/pb/command_ruled_payload.pb.h>
-#include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_game.pb.h>
-
-#include "rules_relay.h"
 
 #include <memory>
 
@@ -50,14 +46,12 @@ class ServerInfo_User;
 class ServerInfo_Game;
 class Server_AbstractUserInterface;
 class Event_GameStateChanged;
+class Command_RuledPayload;
+class RuledGameDriver;
 
 class Server_Game : public QObject
 {
     Q_OBJECT
-    // Test-only friend: lets the ruled-batch unit test reach the otherwise-private
-    // participant map and applyRuledBatch entry point without going through the
-    // network/userInterface plumbing required by addPlayer().
-    friend class RuledBatchTest;
 private:
     Server_Room *room;
     int nextPlayerId;
@@ -89,81 +83,16 @@ private:
     QList<GameReplay *> replayList;
     GameReplay *currentReplay;
     bool ruledGame;
-    quint64 ruledSeed;
-    int ruledPriorityPlayer;
-    std::unique_ptr<RulesRelay> rulesRelay;
-    /// Set once the rules engine connection drops during an active ruled game. The engine state
-    /// is unrecoverable (a restarted sidecar is a fresh process with no session), so we notify
-    /// the players exactly once and stop relaying further commands to a dead socket.
-    bool ruledEngineConnectionLost = false;
-    /// Engine-provided card identity catalog for this session (CardCatalog event, server-only):
-    /// the single name<->id mapping — Servatrice never derives engine card ids itself.
-    QHash<QString, ruled::v1::CardCatalog_Entry> ruledCardCatalogById;
-    /// Trimmed, lowercased Oracle name -> engine card id (mirrors the engine's own normalization).
-    QHash<QString, QString> ruledCardIdByLowerName;
-    /// StackPushed.object_id -> engine card name; push and resolve may arrive in different ruled IPC batches.
-    QHash<quint32, QString> ruledEngineStackPushDescriptionsByObjectId;
-    // Stack object id -> Server_Card.id currently in the Cockatrice STACK zone.
-    QHash<quint32, int> ruledStackObjectIdToServerCardId;
-    /// Stack object id -> player who cast the spell (may differ from canonical stack zone owner).
-    QHash<quint32, int> ruledStackObjectIdToCasterPlayerId;
-    // Stack object id -> target engine object ids captured from CastSpell intent.
-    QHash<quint32, QVector<quint32>> ruledStackTargetsByObjectId;
-    /// Stack object ids that are spell *copies* (CR 707.10, StackPushed.is_copy). A copy has no
-    /// physical Cockatrice card on the shared stack, so it is never bound to a Server_Card and its
-    /// StackResolved is a no-op move — without this guard the copy (which shares the original's
-    /// card_id/name) would mis-resolve the original's physical card.
-    QSet<quint32> ruledStackCopyObjectIds;
-    struct PendingRuledCastVisual
-    {
-        QString cardName;
-        int serverCardId = -1;
-        int casterPlayerId = -1;
-        QVector<quint32> targetOids;
-    };
-    // Pending local cast intents waiting to be bound to the next StackPushed.object_id.
-    QList<PendingRuledCastVisual> ruledPendingCastVisualQueue;
-    struct RuledBatchApplyResult
-    {
-        bool zoneViewApplied = false;
-        bool handOrLibraryChanged = false;
-        bool battlefieldOrderChanged = false;
-        bool tapStateEventsQueued = false;
-        bool phaseChanged = false;
-    };
+    /// Fork hook: all ruled-mode state and logic lives in the fork-owned driver
+    /// (ruled_game_driver.{h,cpp}); non-null iff ruledGame.
+    std::unique_ptr<RuledGameDriver> ruledDriver;
+    friend class RuledGameDriver; // covers participants / currentReplay
 
     void createGameStateChangedEvent(Event_GameStateChanged *event,
                                      Server_AbstractParticipant *recipient,
                                      bool omniscient,
                                      bool withUserInfo);
     void storeGameInformation();
-    /// Mainboard Oracle card names per player id, one entry per copy (the format both
-    /// deck validation and the sidecar SessionStart consume).
-    QList<QPair<int, QStringList>> ruledMainboardNamesByPlayer() const;
-    /// Tells everyone a ruled game cannot start because of unimplemented cards: a game-log
-    /// message plus a popup (Event_NotifyUser CUSTOM) to every player, naming the cards
-    /// per player with copy counts.
-    void notifyRuledUnimplementedCards(const QList<QPair<int, QStringList>> &deckByPlayer,
-                                       const QStringList &missingNames);
-    /// Sends a rules-engine notice to every player: a game-log message plus a popup
-    /// (Event_NotifyUser CUSTOM) with the given title. Shared by the pregame-unreachable and
-    /// mid-game-disconnect paths.
-    void sendRuledEngineNotice(const QString &title, const QString &message);
-    /// Tells everyone a ruled game cannot start because the rules engine (tricerules sidecar)
-    /// is unreachable. The client commits to ruled-vs-freeform at join time, so a started game
-    /// cannot be downgraded to casual mid-life — we block the start instead of half-starting.
-    void notifyRuledEngineUnreachable();
-    /// Handles the rules engine connection dropping during an active ruled game: notifies the
-    /// players once (the game is unrecoverable) and tears down the dead relay so subsequent
-    /// commands fail fast instead of re-timing-out and re-notifying. Idempotent.
-    void handleRuledEngineConnectionLost();
-    void applyRuledStartupBatch(const ruled::v1::IpcResponse &resp,
-                                const QList<QPair<int, QStringList>> &deckByPlayer);
-    // `forceUntapForPlayerId` (default -1 = none) lets engine untaps outside the untap step reach
-    // clients for that player's permanents — used for UndoManaAbility (CR 605 float courtesy), which
-    // legitimately untaps a mana source mid-turn. Without it the normal guard keeps the visual tapped.
-    RuledBatchApplyResult applyRuledBatch(const ruled::v1::IpcResponse &resp, int forceUntapForPlayerId = -1);
-    void applyRuledStackResolvedEvent(const ruled::v1::StackResolved &stackResolved);
 signals:
     void sigStartGameIfReady(bool override);
     void gameInfoChanged(ServerInfo_Game gameInfo);
@@ -259,9 +188,11 @@ public:
     {
         return ruledGame;
     }
-    /// Ruled mode: forward a serialized `ruled.v1.RuledCommand` to tricerules and broadcast the batch
-    /// (used for mana-pool sync on land taps — not every payload goes through `Command_RuledPayload`).
-    void relayRuledPayloadAndBroadcast(int playerId, const QByteArray &ruledCmdBytes);
+    /// Fork hook: the ruled-mode driver (nullptr in freeform games).
+    RuledGameDriver *ruled() const
+    {
+        return ruledDriver.get();
+    }
     Response::ResponseCode
     checkJoin(ServerInfo_User *user, const QString &_password, bool spectator, bool overrideRestrictions, bool asJudge);
     bool containsUser(const QString &userName) const;
@@ -284,10 +215,7 @@ public:
     {
         return activePhase;
     }
-    int getRuledPriorityPlayer() const
-    {
-        return ruledPriorityPlayer;
-    }
+    int getRuledPriorityPlayer() const;
     void setActivePlayer(int newPlayer);
     void setActivePhase(int newPhase);
     void removeArrows(int newPhase, bool force = false);
@@ -307,20 +235,8 @@ public:
     prepareGameEvent(const ::google::protobuf::Message &gameEvent, int playerId, GameEventContext *context = 0);
     GameEventContext prepareGameEventContext(const ::google::protobuf::Message &gameEventContext);
 
+    /// Delegates to the ruled driver; RespInvalidCommand in freeform games.
     Response::ResponseCode processRuledPayload(int playerId, const Command_RuledPayload &cmd, GameEventStorage &ges);
-    void broadcastRuledResponse(const ruled::v1::IpcResponse &resp);
-    /// Returns false when the session was refused because a deck contains unimplemented
-    /// cards (the game must not start; players were already notified). Infrastructure
-    /// failures keep the legacy casual fallback and return true.
-    bool startRuledSidecarSession();
-    /// Engine card id for an Oracle card name via the session catalog; empty when unknown
-    /// (no catalog yet / card not in this game's decks).
-    QString ruledCardIdForName(const QString &cardName) const;
-    /// Oracle card name for an engine card id via the session catalog; empty when unknown.
-    QString ruledCardNameForId(const QString &cardId) const;
-    /// CR 712: Oracle name of a multi-face card's active face (0 = front/combined name). Used to
-    /// display the correct face image for an MDFC/Transform/Flip permanent. Empty when unknown.
-    QString ruledActiveFaceName(const QString &cardId, int faceIndex) const;
 
     void sendGameStateToPlayers();
     void sendGameEventContainer(GameEventContainer *cont,

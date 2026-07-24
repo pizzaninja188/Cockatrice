@@ -11,6 +11,7 @@ set(HEADERS
     game/server_cardzone.h
     game/server_counter.h
     game/rules_relay.h
+    game/ruled_game_driver.h
     game/ruled_utils.h
     game/server_game.h
     game/server_player.h
@@ -42,6 +43,7 @@ add_library(
   game/server_cardzone.cpp
   game/server_counter.cpp
   game/rules_relay.cpp
+  game/ruled_game_driver.cpp
   game/ruled_utils.cpp
   game/server_game.cpp
   game/server_player.cpp

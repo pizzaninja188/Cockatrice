@@ -4,12 +4,13 @@
 #include "../server_abstractuserinterface.h"
 #include "../server_database_interface.h"
 #include "../server_room.h"
+#include "ruled_game_driver.h"
+#include "ruled_utils.h"
 #include "server_card.h"
 #include "server_cardzone.h"
 #include "server_counter.h"
 #include "server_game.h"
 #include "server_move_card_struct.h"
-#include "ruled_utils.h"
 
 #include <QDebug>
 #include <QRegularExpression>
@@ -235,9 +236,10 @@ Server_Player::RuledZoneSyncResult Server_Player::applyRuledEngineZoneView(const
         return result;
     }
     // Engine card ids come from the session catalog (engine-owned identity); the server
-    // never derives ids from names itself.
+    // never derives ids from names itself. The ruled driver is always non-null here:
+    // zone views only arrive in ruled games.
     Server_Game *game = getGame();
-    const auto trId = [game](Server_Card *c) { return game->ruledCardIdForName(c->getName()); };
+    const auto trId = [game](Server_Card *c) { return game->ruled()->ruledCardIdForName(c->getName()); };
     QList<Server_Card *> pool;
     for (Server_Card *c : deckZone->getCards()) {
         pool.append(c);
