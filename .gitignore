@@ -1,6 +1,7 @@
 tags
 build*
 !**/build.rs
+!scripts/build*.ps1
 *.qm
 .directory
 mysql.cnf
@@ -16,7 +17,6 @@ compile_commands.json
 .cache
 .gdb_history
 cockatrice/resources/config/qtlogging.ini
-docs/
 
 # Local vcpkg clone (see CMakeLists.txt toolchain); not part of source tree
 vcpkg/

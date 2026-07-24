@@ -63,6 +63,29 @@
       }
     },
     {
+      "name": "windows-ninja",
+      "hidden": true,
+      "inherits": ["windows-vcpkg"],
+      "description": "Ninja generator + MSVC toolchain. Configure AND build from a VS x64 dev environment (vcvars64); scripts/build-ninja.ps1 does this for you.",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "QTDIR": "${sourceDir}/6.6.3/msvc2019_64",
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "windows-ninja-all",
+      "displayName": "Windows: Ninja full build (client + server + tests + rules engine)",
+      "description": "Ninja single-config Release equivalent of windows-msvc-all; fast incremental builds for the dev loop. Requires a vcvars environment (use scripts/build-ninja.ps1).",
+      "inherits": ["windows-ninja"],
+      "binaryDir": "${sourceDir}/build/windows-ninja-all",
+      "cacheVariables": {
+        "WITH_SERVER": "ON",
+        "TEST": "ON",
+        "WITH_RULES_ENGINE": "ON"
+      }
+    },
+    {
       "name": "unix-ninja",
       "hidden": true,
       "description": "Ninja (Linux / macOS desktop CI) with explicit Release/Debug cache.",
@@ -106,41 +129,53 @@
     {
       "name": "windows-msvc-release",
       "displayName": "Build Release",
-      "description": "MSBuild/VS multi-config: Release.",
+      "description": "MSBuild/VS multi-config: Release. jobs feeds MSBuild /m (cross-project parallelism; /MP handles within-project).",
       "configurePreset": "windows-msvc-release",
-      "configuration": "Release"
+      "configuration": "Release",
+      "jobs": 16
     },
     {
       "name": "windows-msvc-debug",
       "displayName": "Build Debug",
       "configurePreset": "windows-msvc-release",
-      "configuration": "Debug"
+      "configuration": "Debug",
+      "jobs": 16
     },
     {
       "name": "windows-msvc-ci-release",
       "displayName": "CI: Build Release",
       "configurePreset": "windows-msvc-ci",
-      "configuration": "Release"
+      "configuration": "Release",
+      "jobs": 16
     },
     {
       "name": "windows-msvc-ruled-release",
       "displayName": "Ruled: Build Release",
       "configurePreset": "windows-msvc-ruled",
-      "configuration": "Release"
+      "configuration": "Release",
+      "jobs": 16
     },
     {
       "name": "windows-msvc-all-release",
       "displayName": "All: Build Release",
       "description": "Builds full Windows solution (client, servatrice, tests, and tricerules sidecar) in Release.",
       "configurePreset": "windows-msvc-all",
-      "configuration": "Release"
+      "configuration": "Release",
+      "jobs": 16
     },
     {
       "name": "windows-msvc-all-debug",
       "displayName": "All: Build Debug",
       "description": "Builds full Windows solution (client, servatrice, tests, and tricerules sidecar) in Debug.",
       "configurePreset": "windows-msvc-all",
-      "configuration": "Debug"
+      "configuration": "Debug",
+      "jobs": 16
+    },
+    {
+      "name": "windows-ninja-all",
+      "displayName": "All: Ninja build (Release-configured)",
+      "description": "Ninja incremental build of the full tree. Run inside a vcvars environment (scripts/build-ninja.ps1). Ninja self-parallelizes; no jobs needed.",
+      "configurePreset": "windows-ninja-all"
     },
     {
       "name": "unix-ninja-release",
@@ -159,6 +194,14 @@
     }
   ],
   "testPresets": [
+    {
+      "name": "windows-ninja-all",
+      "displayName": "CTest (Ninja tree)",
+      "description": "Single-config Ninja tree; remember Qt bin on PATH (see CLAUDE.md).",
+      "configurePreset": "windows-ninja-all",
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" }
+    },
     {
       "name": "windows-msvc-ci",
       "displayName": "CTest (CI configure preset, Release)",

@@ -166,15 +166,37 @@ Release preset: `unix-ninja-release` (drop `-DTEST=ON`).
 ### Windows (PowerShell)
 
 ```powershell
-# Configure + build:
-cmake --preset windows-msvc-all -DTEST=ON
-cmake --build --preset windows-msvc-all-release
+# Configure + build (Ninja tree; the script enters the VS dev shell and configures on first run):
+./scripts/build-ninja.ps1                       # full tree
+./scripts/build-ninja.ps1 --target servatrice   # targeted (any cmake --build args pass through)
 
-# C++ tests — Qt DLLs must be on PATH; use offscreen for headless:
-$env:PATH = "<Qt6>\msvc2019_64\bin;$env:PATH"
-ctest --test-dir build/windows-msvc-all -C Release --output-on-failure
+# C++ tests — Qt DLLs must be on PATH; use offscreen for headless (single-config: no -C):
+$env:PATH = "C:\Users\pizza\CodingProjects\Cockatrice\6.6.3\msvc2019_64\bin;$env:PATH"
+ctest --test-dir build/windows-ninja-all --output-on-failure
 
 # Rust / CI checks:
 cd tricerules; cargo test; cargo clippy -- -D warnings; cargo fmt --check
 ```
-Needs `QTDIR` (Qt 6 MSVC), `cargo`, MSVC. Fix failures and any warnings you introduce or that are trivial; note pre-existing unrelated warnings briefly.
+Needs `cargo` + MSVC (Qt kit is vendored at `6.6.3/msvc2019_64` via the preset). The MSBuild
+presets (`windows-msvc-all` / `windows-msvc-all-release`, now with `jobs: 16`) remain for CI
+parity and VS IDE use — but the Ninja tree is the dev loop: measured 2026-07, no-op build
+0.4 s vs 7.9 s and one-file rebuild 7.3 s vs 12.8 s against MSBuild. Debug flags were also
+measured only ~11% faster per compile than Release on a heavy TU, so Release stays the only
+iteration config (tests run against it anyway).
+
+### Targeted verification (the iteration loop)
+
+The full build + full suite is the **pre-commit** gate, not the per-iteration loop. While
+iterating, build and test only the components your change touches:
+
+| Change touches | Build | Tests that satisfy "relevant tests" |
+|---|---|---|
+| `tricerules/**/*.rs` or `data/*.ron` only | no C++ build | `cd tricerules; cargo test -p tricerules-core --test scenario <filter>` (or `-p tricerules-cards` for registry/data); clippy + fmt |
+| `ruled_v1.proto` | everything (C++ **and** Rust; near-full C++ recompile is expected) | full C++ ctest + `cargo test` |
+| Server (`libcockatrice_network`, servatrice) | `--target servatrice` + test targets | `ctest -R "ruled_batch_test|ruled_utils_test"` |
+| Client only (`cockatrice/`) | `--target cockatrice` + test targets | `ctest -R game_prompt_widget_test` (plus any touched client test) |
+
+- `ctest -R <regex>` selects by test name (see `ctest -N` for the list); `cargo test -p
+  tricerules-core --test scenario <filter>` runs matching scenario tests only.
+- Before **commit**: full build of the affected side(s) + full ctest and/or `cargo test`,
+  clippy, fmt — per the blocks above.
