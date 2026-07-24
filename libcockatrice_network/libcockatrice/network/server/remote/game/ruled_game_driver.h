@@ -119,7 +119,22 @@ private:
     // clients for that player's permanents — used for UndoManaAbility (CR 605 float courtesy), which
     // legitimately untaps a mana source mid-turn. Without it the normal guard keeps the visual tapped.
     RuledBatchApplyResult applyRuledBatch(const ruled::v1::IpcResponse &resp, int forceUntapForPlayerId = -1);
+    // applyRuledBatch passes, in call order (order dependencies are load-bearing — see the
+    // comment in applyRuledBatch; never merge or reorder these):
+    void applyTokenCreations(const ruled::v1::RuledEventBatch &batch);
+    void applyPermanentMoves(const ruled::v1::RuledEventBatch &batch,
+                             const QHash<int, QHash<quint32, int>> &preBatchOidMaps);
+    void applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBatch &batch,
+                                     int forceUntapForPlayerId,
+                                     RuledBatchApplyResult &result);
+    void applyAttachmentRestores(const ruled::v1::RuledEventBatch &batch);
+    void applyLifeManaAndCombatEvents(const ruled::v1::RuledEventBatch &batch);
     void applyRuledStackResolvedEvent(const ruled::v1::StackResolved &stackResolved);
+    // broadcastRuledResponse stages: server-built identity-map injection, then per-participant
+    // hidden-info redaction.
+    void appendServerObjectMaps(ruled::v1::IpcResponse &toSend);
+    ruled::v1::RuledEventBatch redactBatchForParticipant(const ruled::v1::RuledEventBatch &batch,
+                                                         Server_AbstractParticipant *participant);
 
     /// Test-only: registers a participant directly on the game (bypassing addPlayer's
     /// network/userInterface plumbing) via the driver's Server_Game friendship.

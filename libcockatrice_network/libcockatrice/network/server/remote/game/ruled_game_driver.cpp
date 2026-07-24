@@ -488,20 +488,18 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
     if (!resp.has_batch()) {
         return result;
     }
+    const ruled::v1::RuledEventBatch &batch = resp.batch();
 
-    GameEventStorage tapSyncGes;
-    bool batchHasUntapPhase = false;
-    for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
-        const auto &e = resp.batch().events(ei);
-        if (e.has_phase_changed() && e.phase_changed().phase() == "untap") {
-            batchHasUntapPhase = true;
-            break;
-        }
-    }
+    // One named method per pass. The pass order is load-bearing — never merge or reorder:
+    // the pre-batch oid capture feeds PermanentMoved translation, tokens must exist before
+    // the zone-view sync binds battlefield slots, PermanentMoved must run before zone views
+    // reconcile hand/library counts, and attachment restore plus life/mana/combat
+    // translation need the fresh post-zone-view oid maps.
+
     // Capture the pre-batch engine_oid -> Server_Card map per player. The engine has
     // already removed dead permanents from its battlefield, so the upcoming zone-view
     // sync will rebuild the map without them. We need the *prior* mapping to translate
-    // PermanentMoved events into moveCard(...) calls below.
+    // PermanentMoved events into moveCard(...) calls.
     QHash<int, QHash<quint32, int>> preBatchOidMaps;
     for (Server_AbstractPlayer *ab : game->getPlayers().values()) {
         if (!ab) {
@@ -510,14 +508,24 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
         preBatchOidMaps.insert(ab->getPlayerId(), playerBinding(ab->getPlayerId()).engineOidToServerCardId);
     }
 
-    // Tokens (CR 111) appear on the engine battlefield with no physical card behind them. Mint
-    // one on the controller's table for each TokenCreated event before the zone-view sync below,
-    // so that sync can bind the engine battlefield slot to a real Server_Card by ObjectId. Runs
-    // before PermanentMoved: a token created this batch cannot also have died this batch.
+    applyTokenCreations(batch);
+    applyPermanentMoves(batch, preBatchOidMaps);
+    applyPhaseStackAndZoneViews(batch, forceUntapForPlayerId, result);
+    applyAttachmentRestores(batch);
+    applyLifeManaAndCombatEvents(batch);
+    return result;
+}
+
+// Tokens (CR 111) appear on the engine battlefield with no physical card behind them. Mint
+// one on the controller's table for each TokenCreated event before the zone-view sync,
+// so that sync can bind the engine battlefield slot to a real Server_Card by ObjectId. Runs
+// before PermanentMoved: a token created this batch cannot also have died this batch.
+void RuledGameDriver::applyTokenCreations(const ruled::v1::RuledEventBatch &batch)
+{
     GameEventStorage tokenCreateGes;
     bool tokenCreateGesHasEvents = false;
-    for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
-        const auto &e = resp.batch().events(ei);
+    for (int ei = 0; ei < batch.events_size(); ++ei) {
+        const auto &e = batch.events(ei);
         if (!e.has_token_created()) {
             continue;
         }
@@ -535,14 +543,18 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
     if (tokenCreateGesHasEvents) {
         tokenCreateGes.sendToGame(game);
     }
+}
 
-    // Apply every PermanentMoved before zone_view. Hand discards are already absent from the
-    // engine hand list in the sync that follows, so the server must move the physical card
-    // first or applyRuledEngineZoneView's deck+hand pool counts disagree with the engine.
+// Apply every PermanentMoved before zone_view. Hand discards are already absent from the
+// engine hand list in the sync that follows, so the server must move the physical card
+// first or applyRuledEngineZoneView's deck+hand pool counts disagree with the engine.
+void RuledGameDriver::applyPermanentMoves(const ruled::v1::RuledEventBatch &batch,
+                                          const QHash<int, QHash<quint32, int>> &preBatchOidMaps)
+{
     GameEventStorage permanentMoveGes;
     bool permanentMoveGesHasEvents = false;
-    for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
-        const auto &e = resp.batch().events(ei);
+    for (int ei = 0; ei < batch.events_size(); ++ei) {
+        const auto &e = batch.events(ei);
         if (!e.has_permanent_moved()) {
             continue;
         }
@@ -677,12 +689,26 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
     if (permanentMoveGesHasEvents) {
         permanentMoveGes.sendToGame(game);
     }
+}
 
-    // First pass: phase / priority / zone view + tap sync, plus stack resolution.
-    // Tap state propagates from the engine on every batch — declare attackers, mana
-    // payment, and untap all use this path (no longer gated on an explicit untap event).
-    for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
-        const auto &e = resp.batch().events(ei);
+// Phase / priority / stack push+resolve / zone view + tap sync.
+// Tap state propagates from the engine on every batch — declare attackers, mana
+// payment, and untap all use this path (no longer gated on an explicit untap event).
+void RuledGameDriver::applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBatch &batch,
+                                                  int forceUntapForPlayerId,
+                                                  RuledBatchApplyResult &result)
+{
+    GameEventStorage tapSyncGes;
+    bool batchHasUntapPhase = false;
+    for (int ei = 0; ei < batch.events_size(); ++ei) {
+        const auto &e = batch.events(ei);
+        if (e.has_phase_changed() && e.phase_changed().phase() == "untap") {
+            batchHasUntapPhase = true;
+            break;
+        }
+    }
+    for (int ei = 0; ei < batch.events_size(); ++ei) {
+        const auto &e = batch.events(ei);
         if (e.has_phase_changed()) {
             const int newActive = e.phase_changed().active_player_id();
             if (newActive >= 0 && game->getActivePlayer() != newActive) {
@@ -806,17 +832,20 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
     if (result.tapStateEventsQueued) {
         tapSyncGes.sendToGame(game);
     }
+}
 
-    // Post-zone-view pass: restore attach state from battlefield_attached_to_oid for both
-    // Auras and Equipment. The engine OID maps are fresh after the zone-view loop above, so
-    // cross-player lookups work. A non-zero attached_to_oid means the card at that slot is
-    // currently attached to that target — issue Event_AttachCard to bring client visual state
-    // into sync. This handles reconnect (initial_response_batch) and any batch with a zone_view.
+// Post-zone-view pass: restore attach state from battlefield_attached_to_oid for both
+// Auras and Equipment. The engine OID maps are fresh after the zone-view pass, so
+// cross-player lookups work. A non-zero attached_to_oid means the card at that slot is
+// currently attached to that target — issue Event_AttachCard to bring client visual state
+// into sync. This handles reconnect (initial_response_batch) and any batch with a zone_view.
+void RuledGameDriver::applyAttachmentRestores(const ruled::v1::RuledEventBatch &batch)
+{
     {
         GameEventStorage attachRestoreGes;
         bool attachRestoreGesHasEvents = false;
-        for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
-            const auto &e = resp.batch().events(ei);
+        for (int ei = 0; ei < batch.events_size(); ++ei) {
+            const auto &e = batch.events(ei);
             if (!e.has_zone_view()) {
                 continue;
             }
@@ -873,14 +902,17 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
             attachRestoreGes.sendToGame(game);
         }
     }
+}
 
-    // Second pass: combat-related events that depend on the engine OID map (LifeChanged,
-    // AttackersDeclared) and stack resolution side effects that synthesize standard
-    // Cockatrice events for clients. PermanentMoved is handled earlier (before zone_view).
+// Combat-related events that depend on the engine OID map (LifeChanged,
+// AttackersDeclared) and stack resolution side effects that synthesize standard
+// Cockatrice events for clients. PermanentMoved is handled earlier (before zone_view).
+void RuledGameDriver::applyLifeManaAndCombatEvents(const ruled::v1::RuledEventBatch &batch)
+{
     GameEventStorage combatGes;
     bool combatGesHasEvents = false;
-    for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
-        const auto &e = resp.batch().events(ei);
+    for (int ei = 0; ei < batch.events_size(); ++ei) {
+        const auto &e = batch.events(ei);
         if (e.has_life_changed()) {
             const auto &lc = e.life_changed();
             Server_AbstractPlayer *target = game->getPlayer(lc.player_id());
@@ -1034,7 +1066,6 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
     if (combatGesHasEvents) {
         combatGes.sendToGame(game);
     }
-    return result;
 }
 
 void RuledGameDriver::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
@@ -1050,9 +1081,27 @@ void RuledGameDriver::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
     if (!toSend.has_batch()) {
         return;
     }
-    // Append a server-built BattlefieldObjectMap so clients can map their visible
-    // CardItem (Server_Card.id) back to the engine ObjectId that DeclareAttackers /
-    // DeclareBlockers expects. This is rebuilt every batch from the latest sync.
+    appendServerObjectMaps(toSend);
+    const ruled::v1::RuledEventBatch &batch = toSend.batch();
+    for (auto *participant : game->getParticipants()) {
+        GameEventStorage ges;
+        const ruled::v1::RuledEventBatch filtered = redactBatchForParticipant(batch, participant);
+        Event_RuledPayload ev;
+        std::string bytes;
+        filtered.SerializeToString(&bytes);
+        ev.set_payload(bytes);
+        ges.enqueueGameEvent(ev, -1, GameEventStorageItem::SendToPrivate, participant->getPlayerId());
+        ges.sendToGame(game);
+    }
+}
+
+// Appends the server-built identity-map events to the outgoing batch: a
+// BattlefieldObjectMap so clients can map their visible CardItem (Server_Card.id)
+// back to the engine ObjectId that DeclareAttackers / DeclareBlockers expects, a
+// HandSlotMap (zone_view hand/lib fields are cleared before broadcast), and a
+// GraveyardObjectMap for graveyard spell targets. Rebuilt every batch from the latest sync.
+void RuledGameDriver::appendServerObjectMaps(ruled::v1::IpcResponse &toSend)
+{
     {
         ruled::v1::RuledEvent mapEvent;
         auto *map = mapEvent.mutable_battlefield_object_map();
@@ -1187,30 +1236,36 @@ void RuledGameDriver::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
             *toSend.mutable_batch()->add_events() = graveyardEv;
         }
     }
-    const ruled::v1::RuledEventBatch &batch = toSend.batch();
-    for (auto *participant : game->getParticipants()) {
-        GameEventStorage ges;
-        ruled::v1::RuledEventBatch filtered;
-        filtered.CopyFrom(batch);
-        filtered.clear_legal_by_player();
-        const auto it = batch.legal_by_player().find(participant->getPlayerId());
-        if (it != batch.legal_by_player().end()) {
-            (*filtered.mutable_legal_by_player())[participant->getPlayerId()] = it->second;
+}
+
+// Per-participant hidden-info redaction: keeps only the participant's own legal actions,
+// drops LogMessage events not meant for them, and redacts/augments tier-3 resolution
+// choice candidates by choice kind.
+ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const ruled::v1::RuledEventBatch &batch,
+                                                                     Server_AbstractParticipant *participant)
+{
+    ruled::v1::RuledEventBatch filtered;
+    filtered.CopyFrom(batch);
+    filtered.clear_legal_by_player();
+    const auto it = batch.legal_by_player().find(participant->getPlayerId());
+    if (it != batch.legal_by_player().end()) {
+        (*filtered.mutable_legal_by_player())[participant->getPlayerId()] = it->second;
+    }
+    // Drop LogMessage events directed at a different player or explicitly hidden from this one.
+    for (int ei = filtered.events_size() - 1; ei >= 0; --ei) {
+        const auto &ev = filtered.events(ei);
+        if (!ev.has_log()) {
+            continue;
         }
-        // Drop LogMessage events directed at a different player or explicitly hidden from this one.
-        for (int ei = filtered.events_size() - 1; ei >= 0; --ei) {
-            const auto &ev = filtered.events(ei);
-            if (!ev.has_log()) {
-                continue;
-            }
-            const auto &log = ev.log();
-            if (log.has_visible_to_player_id() && log.visible_to_player_id() != participant->getPlayerId()) {
-                filtered.mutable_events()->DeleteSubrange(ei, 1);
-            } else if (log.has_hidden_from_player_id() &&
-                       log.hidden_from_player_id() == participant->getPlayerId()) {
-                filtered.mutable_events()->DeleteSubrange(ei, 1);
-            }
+        const auto &log = ev.log();
+        if (log.has_visible_to_player_id() && log.visible_to_player_id() != participant->getPlayerId()) {
+            filtered.mutable_events()->DeleteSubrange(ei, 1);
+        } else if (log.has_hidden_from_player_id() &&
+                   log.hidden_from_player_id() == participant->getPlayerId()) {
+            filtered.mutable_events()->DeleteSubrange(ei, 1);
         }
+    }
+    {
         // Redact private candidates of a tier-3 resolution choice (CR 608) from everyone but the
         // deciding player. Private kinds expose a concealed zone: HandCards (choice_kind 0) reveal a
         // player's hand and LibrarySearch (choice_kind 2) reveal their library, so only the decider
@@ -1267,13 +1322,8 @@ void RuledGameDriver::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
                 }
             }
         }
-        Event_RuledPayload ev;
-        std::string bytes;
-        filtered.SerializeToString(&bytes);
-        ev.set_payload(bytes);
-        ges.enqueueGameEvent(ev, -1, GameEventStorageItem::SendToPrivate, participant->getPlayerId());
-        ges.sendToGame(game);
     }
+    return filtered;
 }
 
 QList<QPair<int, QStringList>> RuledGameDriver::ruledMainboardNamesByPlayer() const
