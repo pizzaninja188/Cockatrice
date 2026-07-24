@@ -1,1 +1,1 @@
-.\build\windows-msvc-all\servatrice\Release\servatrice.exe --config ".\servatrice-local.ini" --log-to-console
+.\build\windows-ninja-all\servatrice\servatrice.exe --config ".\servatrice-local.ini" --log-to-console
