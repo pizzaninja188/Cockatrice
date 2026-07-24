@@ -193,10 +193,14 @@ iterating, build and test only the components your change touches:
 |---|---|---|
 | `tricerules/**/*.rs` or `data/*.ron` only | no C++ build | `cd tricerules; cargo test -p tricerules-core --test scenario <filter>` (or `-p tricerules-cards` for registry/data); clippy + fmt |
 | `ruled_v1.proto` | everything (C++ **and** Rust; near-full C++ recompile is expected) | full C++ ctest + `cargo test` |
-| Server (`libcockatrice_network`, servatrice) | `--target servatrice` + test targets | `ctest -R "ruled_batch_test|ruled_utils_test"` |
+| Server (`libcockatrice_network`, servatrice) | `--target servatrice` + test targets | `ctest -R "ruled_batch_test|ruled_utils_test|ruled_e2e_smoke_test"` |
 | Client only (`cockatrice/`) | `--target cockatrice` + test targets | `ctest -R game_prompt_widget_test` (plus any touched client test) |
 
 - `ctest -R <regex>` selects by test name (see `ctest -N` for the list); `cargo test -p
   tricerules-core --test scenario <filter>` runs matching scenario tests only.
+- `ruled_e2e_smoke_test` (~1 s, in the default ctest run) drives a full scripted ruled game
+  through real servatrice + sidecar processes — run it after any change to the relay,
+  `ruled_v1.proto`, or ruled `server_game` paths, and before/after every extraction PR
+  (roadmap Step 3). It SKIPs if the servatrice or tricerules-server binary is missing.
 - Before **commit**: full build of the affected side(s) + full ctest and/or `cargo test`,
   clippy, fmt — per the blocks above.

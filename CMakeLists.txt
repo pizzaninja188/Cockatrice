@@ -362,16 +362,8 @@ if(WITH_ORACLE)
   set(CPACK_INSTALL_CMAKE_PROJECTS "Oracle;Oracle;ALL;/" ${CPACK_INSTALL_CMAKE_PROJECTS})
 endif()
 
-if(TEST)
-  include(CTest)
-  add_subdirectory(tests)
-endif()
-
-if(Qt6_FOUND AND Qt6_VERSION_MINOR GREATER_EQUAL 3)
-  # Qt6.3+ requires project finalization to support translations
-  qt6_finalize_project()
-endif()
-
+# Defined before add_subdirectory(tests): the ruled E2E smoke test spawns TRICERULES_BIN and
+# depends on the tricerules target when it exists.
 if(WITH_RULES_ENGINE)
   find_program(CARGO_EXECUTABLE cargo)
   if(CARGO_EXECUTABLE)
@@ -389,4 +381,14 @@ if(WITH_RULES_ENGINE)
   else()
     message(WARNING "WITH_RULES_ENGINE is ON but cargo was not found; skipping tricerules build")
   endif()
+endif()
+
+if(TEST)
+  include(CTest)
+  add_subdirectory(tests)
+endif()
+
+if(Qt6_FOUND AND Qt6_VERSION_MINOR GREATER_EQUAL 3)
+  # Qt6.3+ requires project finalization to support translations
+  qt6_finalize_project()
 endif()

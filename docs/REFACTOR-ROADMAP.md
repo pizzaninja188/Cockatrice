@@ -98,6 +98,21 @@ and half by the build/test loop, which is independently fixable:
 
 ### Step 3 — Automated ruled E2E smoke test (1–2 days; safety net for Steps 4–5)
 
+> **Done 2026-07-24.** `tests/ruled_e2e_smoke/ruled_e2e_smoke_test.cpp` (ctest name
+> `ruled_e2e_smoke_test`, runs in ~1 s): spawns the real `tricerules-server` + servatrice
+> (temp config, ports 17391/47997), drives two scripted protobuf-level QTcpSocket clients
+> through one fixed seeded game — deck-validation block on Black Lotus + NotifyUser popup,
+> ChooseStartingPlayer, one London mulligan + bottoming, land plays, mana taps, Lightning
+> Bolt targeted cast (LifeChanged −3), Hill Giant combat (DeclareAttackers/DeclareBlockers/
+> combat damage), Brainstorm tier-3 ResolutionChoiceRequired/SubmitResolutionChoice, and
+> cleanup DiscardToHandSize. The clients are reactive (driven by LegalActions labels, zone
+> views, and object maps), so the script stays legal for any shuffle; determinism comes from
+> the new `COCKATRICE_RULED_SEED` env override in `startRuledSidecarSession` (test-only;
+> the seed is verified via the sidecar's session-start log line and deliberately never
+> broadcast to clients). SKIPs when either server binary is missing (`RULED_E2E_REQUIRE=1`
+> forces failure); part of the default ctest run, so it executes before/after every
+> extraction PR per the standard gate.
+
 The ruled path has no automated end-to-end coverage: engine tests are excellent, but nothing
 exercises servatrice relay + sidecar + client wiring together — exactly the ~3,700 lines the
 extraction steps move.

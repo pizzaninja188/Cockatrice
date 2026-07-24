@@ -2220,6 +2220,16 @@ bool Server_Game::startRuledSidecarSession()
     }
     rulesRelay = std::make_unique<RulesRelay>(this);
     ruledSeed = QRandomGenerator::global()->generate64();
+    // Test-only determinism hook: COCKATRICE_RULED_SEED pins the session seed so the whole
+    // (seed, command log) event stream is reproducible for the E2E smoke test. Unset in production.
+    {
+        bool forcedOk = false;
+        const quint64 forcedSeed = qEnvironmentVariable("COCKATRICE_RULED_SEED").toULongLong(&forcedOk);
+        if (forcedOk) {
+            ruledSeed = forcedSeed;
+            qWarning() << "startRuledSidecarSession: using forced seed from COCKATRICE_RULED_SEED:" << ruledSeed;
+        }
+    }
     QList<int> ids;
     for (auto *p : getPlayers().values()) {
         ids.append(p->getPlayerId());

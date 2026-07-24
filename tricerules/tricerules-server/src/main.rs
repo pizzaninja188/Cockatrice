@@ -77,12 +77,19 @@ async fn handle_connection(
         let env = read_proto::<IpcEnvelope>(&mut sock).await?;
         let resp = match env.msg {
             Some(Msg::SessionStart(s)) => {
-                if !s.servatrice_build.is_empty() {
-                    eprintln!(
-                        "tricerules: session from servatrice build {}",
-                        s.servatrice_build
-                    );
-                }
+                // Server-side only (never broadcast to clients): the seed here plus the logged
+                // command stream is what reproduces a session, and the E2E smoke test asserts
+                // its forced seed reached the engine through this line.
+                eprintln!(
+                    "tricerules: session start game {} seed {} (servatrice build {})",
+                    s.game_id,
+                    s.seed,
+                    if s.servatrice_build.is_empty() {
+                        "unknown"
+                    } else {
+                        s.servatrice_build.as_str()
+                    }
+                );
                 let pids: Vec<PlayerId> = s.player_ids;
                 match resolve_deck_names(&pids, &s.player_decks) {
                     Err(missing) => missing_cards_response(missing),
