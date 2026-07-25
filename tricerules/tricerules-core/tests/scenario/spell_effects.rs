@@ -894,6 +894,82 @@ fn tome_scour_can_target_controller() {
 }
 
 #[test]
+fn tome_scour_self_mill_puts_the_spell_under_the_milled_cards() {
+    // CR 608.2m: a sorcery is put into its owner's graveyard as the *final* part of its
+    // resolution — after its own effects. So a self-targeted Tome Scour comes to rest beneath
+    // the five cards it milled, not on top of them. Graveyard order is load-bearing for any
+    // card that cares about it, so pin it here rather than only asserting membership.
+    let decks = Some(vec![island_only_deck(), forest_only_deck()]);
+    let mut e = GameEngine::new(2616, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    let scour_id = {
+        let id = e.state.next_object_id;
+        e.state.next_object_id += 1;
+        e.state.objects.insert(
+            id,
+            tricerules_core::state::GameObject {
+                id,
+                owner: 0,
+                card_id: "tome_scour".into(),
+                zone: tricerules_core::Zone::Hand,
+                tapped: false,
+                summoning_sick: false,
+                power: None,
+                toughness: None,
+                damage: 0,
+                deathtouch_damage: false,
+                counters: std::collections::BTreeMap::new(),
+                attached_to: None,
+                regeneration_shields: 0,
+                must_attack_if_able: false,
+                must_block_if_able: false,
+                face_up_index: 0,
+            },
+        );
+        e.state.players[0].hand.push(id);
+        id
+    };
+    let scour_idx = e.state.players[0]
+        .hand
+        .iter()
+        .position(|&oid| oid == scour_id)
+        .expect("scour in hand");
+    // Mill takes from the front of the library, so these are the five that will move, in order.
+    let top_five: Vec<_> = e.state.players[0].library.iter().take(5).copied().collect();
+    let grave_before = e.state.players[0].graveyard.len();
+
+    e.apply_command(0, &cast_spell(scour_idx, target_player(0)))
+        .expect("cast tome scour at self");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass()).expect("p1 pass");
+
+    let graveyard = &e.state.players[0].graveyard;
+    assert_eq!(
+        graveyard.len(),
+        grave_before + 6,
+        "five milled cards plus the spell itself"
+    );
+    assert_eq!(
+        &graveyard[grave_before..grave_before + 5],
+        top_five.as_slice(),
+        "milled cards enter the graveyard in library order, ahead of the spell"
+    );
+    assert_eq!(
+        graveyard.last(),
+        Some(&scour_id),
+        "CR 608.2m: the spell is placed as the final part of its own resolution"
+    );
+}
+
+#[test]
 fn wrath_of_god_destroys_all_creatures_except_indestructible() {
     let decks = Some(vec![
         deck_with(

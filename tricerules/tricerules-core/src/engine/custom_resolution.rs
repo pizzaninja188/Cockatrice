@@ -3,7 +3,9 @@ use super::events::{
     format_spell_targets_log, object_display_name,
 };
 use super::legal_actions::fill_legal;
-use super::resolution::{permanent_moved_event, sacrifice_permanent};
+use super::resolution::{
+    permanent_moved_event, sacrifice_permanent, seat_resolved_spell_last_in_graveyard,
+};
 use super::targeting::validate_effect_targets;
 use super::*;
 
@@ -433,7 +435,14 @@ impl GameEngine {
         events: &mut Vec<rv1::RuledEvent>,
     ) {
         let interrupt = match step {
-            ResolutionStep::Done => return,
+            // CR 608.2m: this is the single point where a tier-3 resolution completes, whether it
+            // ran straight through in `begin` or came back here from a later `resume`, so it is
+            // where the spell takes its place beneath whatever its resolution put in the
+            // graveyard — e.g. Gifts Ungiven under the two cards it puts there.
+            ResolutionStep::Done => {
+                seat_resolved_spell_last_in_graveyard(&mut self.state, item.id);
+                return;
+            }
             ResolutionStep::NeedsChoice(it) => it,
         };
         let candidate_card_ids: Vec<String> = interrupt

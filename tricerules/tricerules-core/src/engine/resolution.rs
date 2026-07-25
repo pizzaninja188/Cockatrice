@@ -1437,6 +1437,9 @@ impl GameEngine {
             }
         }
         events.push(ev_log(format!("{spell_label} resolves.")));
+        // CR 608.2m: the spell lands in its owner's graveyard *after* its effects, so it sits
+        // beneath anything those effects put there (e.g. a self-targeted Tome Scour's five cards).
+        seat_resolved_spell_last_in_graveyard(&mut self.state, top.id);
         Ok(())
     }
 
@@ -1688,6 +1691,39 @@ pub(super) fn destroy_permanent(state: &mut GameState, oid: ObjectId) -> Result<
 /// redirected.
 pub(super) fn sacrifice_permanent(state: &mut GameState, oid: ObjectId) -> Result<(), EngineError> {
     move_object_to_zone(state, oid, Zone::Graveyard)
+}
+
+/// CR 608.2m: "As the final part of an instant or sorcery spell's resolution, the spell is put
+/// into its owner's graveyard" — that is, *after* its own effects have been applied. A
+/// self-targeted Tome Scour must therefore end up beneath the five cards it milled, not on top
+/// of them.
+///
+/// The spell object is moved out of the stack up front, before its effects run, and that is
+/// deliberately left alone: resolution can suspend on a player choice at several points (tier-3
+/// custom effects, copy-target, legend-keep, library search), and deferring the move would strand
+/// an already-popped stack item in a zone-less limbo on every one of those paths. Instead this
+/// re-seats the already-moved card at the back of its owner's graveyard once resolution finishes,
+/// which is what graveyard-order-sensitive cards actually read.
+///
+/// Intentional simplification: the placement *timing* is still early, so an effect that scans its
+/// own controller's graveyard mid-resolution can see the resolving spell. No card in the registry
+/// does that today; revisit if one lands.
+///
+/// A no-op unless `oid` is currently in a graveyard and not already last, so it is safe to call
+/// on any resolution path, including ones that end with the spell on the battlefield.
+pub(super) fn seat_resolved_spell_last_in_graveyard(state: &mut GameState, oid: ObjectId) {
+    let Some(owner) = state.objects.get(&oid).map(|o| o.owner) else {
+        return;
+    };
+    let Some(idx) = state.player_idx(owner) else {
+        return;
+    };
+    let graveyard = &mut state.players[idx].graveyard;
+    if graveyard.last() == Some(&oid) || !graveyard.contains(&oid) {
+        return;
+    }
+    graveyard.retain(|&x| x != oid);
+    graveyard.push(oid);
 }
 
 fn counter_label(kind: CounterKind) -> &'static str {
