@@ -293,6 +293,47 @@ TEST_F(RuledBatchTest, ApplyRuledBatchMovesPermanentToGraveyard)
     }
 }
 
+TEST_F(RuledBatchTest, ApplyRuledBatchPutsMostRecentGraveyardCardAtTheFrontOfThePile)
+{
+    // A pile zone renders only its front card (PileZone::paint draws index 0), and the freeform
+    // client sends x=0 for graveyard moves for exactly that reason. Appending instead would leave
+    // whichever card entered the graveyard first showing forever, no matter how much is milled.
+    Server_Card *bear = addCardToTable(p1, "Grizzly Bears");
+    Server_Card *wolf = addCardToTable(p1, "Timber Wolves");
+
+    {
+        ruled::v1::IpcResponse seedResp;
+        seedResp.set_ok(true);
+        auto *batch = seedResp.mutable_batch();
+        auto *evZv = batch->add_events()->mutable_zone_view();
+        *evZv->add_per_player() = buildPerPlayerView(p1, {701u, 702u}, {false, false});
+        *evZv->add_per_player() = buildPerPlayerView(p2, {}, {});
+        callBatchApply(seedResp);
+    }
+
+    Server_CardZone *p1Grave = p1->getZones().value(ZoneNames::GRAVE);
+    ASSERT_NE(p1Grave, nullptr);
+
+    auto sendToGraveyard = [this](quint32 engineOid) {
+        ruled::v1::IpcResponse resp;
+        resp.set_ok(true);
+        auto *moved = resp.mutable_batch()->add_events()->mutable_permanent_moved();
+        moved->set_object_id(engineOid);
+        moved->set_owner_player_id(1);
+        moved->set_destination(ruled::v1::PermanentMoved::DESTINATION_GRAVEYARD);
+        callBatchApply(resp);
+    };
+
+    sendToGraveyard(701u); // bear dies first
+    ASSERT_EQ(p1Grave->getCards().size(), 1);
+    EXPECT_EQ(p1Grave->getCards().at(0), bear);
+
+    sendToGraveyard(702u); // wolf dies second and must become the visible card
+    ASSERT_EQ(p1Grave->getCards().size(), 2);
+    EXPECT_EQ(p1Grave->getCards().at(0), wolf) << "most recent card belongs at the front of the pile";
+    EXPECT_EQ(p1Grave->getCards().at(1), bear);
+}
+
 TEST_F(RuledBatchTest, ApplyRuledBatchCreatesTokenOnControllerTable)
 {
     // A TokenCreated event has no physical card behind it (CR 111): the relay must mint one on

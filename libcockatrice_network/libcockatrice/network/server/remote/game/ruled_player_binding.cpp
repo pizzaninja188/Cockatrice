@@ -283,7 +283,13 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                         continue;
                     }
                     const int y = expectedY[i];
-                    const int x = tableZone->getFreeGridColumn(-1, y, c->getName(), y != 2);
+                    // An attached card (aura, equipment) carries x = -1 by upstream convention —
+                    // see Server_AbstractPlayer::cmdAttachCard, which sets exactly that on attach.
+                    // It is drawn against its parent rather than occupying a grid column, so handing
+                    // it a real column here both steals a slot from unattached permanents and gives
+                    // the client a stale grid position to render the card at.
+                    const int x =
+                        c->getParentCard() ? -1 : tableZone->getFreeGridColumn(-1, y, c->getName(), y != 2);
                     tableZone->insertCard(c, x, y);
                 }
                 result.battlefieldOrderChanged = true;
@@ -401,15 +407,20 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
         }
     }
 
-    // Graveyard OIDs: build position-based map from graveyard_object_id parallel array.
-    // The engine's graveyard and the relay graveyard zone both maintain insertion order, so
-    // position matching is correct as long as the sizes agree.
+    // Graveyard OIDs: build a position-based map from the graveyard_object_id parallel array.
+    // The two sides run in *opposite* directions and must be walked as such: the engine's
+    // graveyard vector is oldest-first (each card is pushed on entry), while the physical
+    // Cockatrice pile is newest-first (each arrival is inserted at position 0 so the pile renders
+    // the most recent card — see PileZone::paint, which draws index 0). Pairing them by equal
+    // index silently mismaps every card, which makes graveyard cards resolve to the wrong target
+    // when clicked. Sizes still have to agree for positions to mean anything.
     Server_CardZone *graveZone = zones.value(ZoneNames::GRAVE);
     if (graveZone && v.graveyard_object_id_size() == graveZone->getCards().size()) {
         graveyardEngineOidToServerCardId.clear();
-        for (int i = 0; i < v.graveyard_object_id_size(); ++i) {
+        const int graveyardSize = v.graveyard_object_id_size();
+        for (int i = 0; i < graveyardSize; ++i) {
             const quint32 oid = static_cast<quint32>(v.graveyard_object_id(i));
-            Server_Card *card = graveZone->getCards().at(i);
+            Server_Card *card = graveZone->getCards().at(graveyardSize - 1 - i);
             graveyardEngineOidToServerCardId.insert(oid, card->getId());
         }
     }

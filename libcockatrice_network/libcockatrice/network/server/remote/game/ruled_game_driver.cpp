@@ -430,7 +430,11 @@ void RuledGameDriver::applyRuledStackResolvedEvent(const ruled::v1::StackResolve
                 }
             }
         }
-        if (ab->moveCard(moveGes, stackZone, QList<const CardToMove *>() << &cardToMove, targetZone, -1, targetY,
+        // Battlefield: -1 means "find a free grid column". Graveyard is a pile that renders its
+        // front card, so a resolved spell goes to position 0 (matching the freeform client, which
+        // sends x=0 for stack->graveyard) rather than being appended behind everything already there.
+        const int targetX = goesToBattlefield ? -1 : 0;
+        if (ab->moveCard(moveGes, stackZone, QList<const CardToMove *>() << &cardToMove, targetZone, targetX, targetY,
                          true) == Response::RespOk) {
             moveGes.sendToGame(game);
             return true;
@@ -649,23 +653,36 @@ void RuledGameDriver::applyPermanentMoves(const ruled::v1::RuledEventBatch &batc
         if (!startZone) {
             continue;
         }
+        // `destX` is the insert position, not a grid column, for the zones without coords.
+        // A pile zone renders only its *front* card (PileZone::paint draws index 0), so the most
+        // recently added card must go to position 0 — that is what the freeform client sends for
+        // GRAVE/EXILE. Passing -1 appends to the far end (server_abstract_player.cpp turns it into
+        // `getCards().size()`), which leaves the oldest card showing forever no matter how much
+        // is milled. TABLE uses -1 to mean "find a free grid column"; hand/library order is not
+        // rendered as a pile, so they keep the append behaviour.
         const char *destZone = ZoneNames::GRAVE;
+        int destX = 0;
         switch (pm.destination()) {
             case ruled::v1::PermanentMoved::DESTINATION_HAND:
                 destZone = ZoneNames::HAND;
+                destX = -1;
                 break;
             case ruled::v1::PermanentMoved::DESTINATION_LIBRARY:
                 destZone = ZoneNames::DECK;
+                destX = -1;
                 break;
             case ruled::v1::PermanentMoved::DESTINATION_EXILE:
                 destZone = ZoneNames::EXILE;
+                destX = 0;
                 break;
             case ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD:
                 destZone = ZoneNames::TABLE;
+                destX = -1;
                 break;
             case ruled::v1::PermanentMoved::DESTINATION_GRAVEYARD:
             default:
                 destZone = ZoneNames::GRAVE;
+                destX = 0;
                 break;
         }
         Server_CardZone *targetZone = owner->getZones().value(destZone);
@@ -685,8 +702,8 @@ void RuledGameDriver::applyPermanentMoves(const ruled::v1::RuledEventBatch &batc
         }
         CardToMove cardToMove;
         cardToMove.set_card_id(moveCardId);
-        if (owner->moveCard(permanentMoveGes, startZone, QList<const CardToMove *>() << &cardToMove, targetZone, -1, 0,
-                            true) == Response::RespOk) {
+        if (owner->moveCard(permanentMoveGes, startZone, QList<const CardToMove *>() << &cardToMove, targetZone, destX,
+                            0, true) == Response::RespOk) {
             permanentMoveGesHasEvents = true;
         }
     }
@@ -891,6 +908,12 @@ void RuledGameDriver::applyAttachmentRestores(const ruled::v1::RuledEventBatch &
                         continue;
                     }
                     attachedCard->setParentCard(targetCard);
+                    // Match cmdAttachCard: an attached card leaves the grid (x = -1) and is drawn
+                    // against its parent.
+                    const int attachedOldX = attachedCard->getX();
+                    attachedCard->setCoords(-1, attachedCard->getY());
+                    attachedCard->getZone()->updateCardCoordinates(attachedCard, attachedOldX,
+                                                                   attachedCard->getY());
                     Event_AttachCard attachEv;
                     attachEv.set_start_zone(attachedCard->getZone()->getName().toStdString());
                     attachEv.set_card_id(attachedCard->getId());
@@ -1052,8 +1075,17 @@ void RuledGameDriver::applyLifeManaAndCombatEvents(const ruled::v1::RuledEventBa
                     enchantedCard = binding.findCardByEngineOid(pl, enchantedOid);
                 }
             }
-            if (auraCard && enchantedCard && auraCard->getZone()) {
+            // Skip when the server already has this attachment: a repeated AuraAttached (e.g. in a
+            // reconnect's initial batch) would otherwise re-broadcast Event_AttachCard and make the
+            // client replay the attach.
+            if (auraCard && enchantedCard && auraCard->getZone() &&
+                auraCard->getParentCard() != enchantedCard) {
                 auraCard->setParentCard(enchantedCard);
+                // Match cmdAttachCard: an attached card leaves the grid (x = -1) and is drawn
+                // against its parent. Without this it keeps a grid column of its own.
+                const int auraOldX = auraCard->getX();
+                auraCard->setCoords(-1, auraCard->getY());
+                auraCard->getZone()->updateCardCoordinates(auraCard, auraOldX, auraCard->getY());
                 Event_AttachCard attachEv;
                 attachEv.set_start_zone(auraCard->getZone()->getName().toStdString());
                 attachEv.set_card_id(auraCard->getId());
