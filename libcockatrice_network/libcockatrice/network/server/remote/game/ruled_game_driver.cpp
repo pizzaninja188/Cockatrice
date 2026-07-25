@@ -188,6 +188,10 @@ bool RuledGameDriver::validateDecksForStart()
 
 void RuledGameDriver::resetForNewGame()
 {
+    // Per-player engine identity maps are rebuilt from the new session's zone views. Carrying
+    // them across games republishes dead Server_Card ids (notably in GraveyardObjectMap, which
+    // is only re-sent when non-empty) and lets stale oids resolve to cards that no longer exist.
+    playerBindings.clear();
     ruledEngineStackPushDescriptionsByObjectId.clear();
     ruledStackObjectIdToServerCardId.clear();
     ruledStackObjectIdToCasterPlayerId.clear();

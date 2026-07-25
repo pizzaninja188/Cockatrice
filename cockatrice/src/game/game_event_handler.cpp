@@ -2900,6 +2900,27 @@ void GameEventHandler::clearRuledSessionState()
     ruledStackSourceOidByStackOid.clear();
     syntheticAbilityControllerPid.clear();
 
+    // GRAVE and STACK are the two zones Player::processPlayerInfo deliberately skips in ruled
+    // mode (repopulating them from a mid-game snapshot duplicates cards into open zone views),
+    // so no game-state snapshot ever resets them. This function runs only on the game-start /
+    // game-stop transitions — exactly when they must be reset. Without this, conceding and
+    // starting a new game leaves the previous game's graveyard on screen for the player who did
+    // not concede (the conceding player's zones are cleared via Player::setConceded -> clear()).
+    for (Player *p : game->getPlayerManager()->getPlayers()) {
+        if (!p) {
+            continue;
+        }
+        for (const char *zoneName : {ZoneNames::GRAVE, ZoneNames::STACK}) {
+            if (CardZoneLogic *zone = p->getZones().value(QString::fromLatin1(zoneName), nullptr)) {
+                zone->clearContents();
+            }
+        }
+    }
+    // Engine oid -> Server_Card.id for graveyard cards: rebuilt per batch from the server's
+    // GraveyardObjectMap, but that event is only sent when non-empty, so a stale map would
+    // otherwise survive into the next game and offer phantom targets.
+    ruledGraveyardEngineOidToServerCardId.clear();
+
     // Legal action sets
     legalRuledLandPlayHandIndices.clear();
     legalRuledLandPlayIndicesByCardName.clear();
