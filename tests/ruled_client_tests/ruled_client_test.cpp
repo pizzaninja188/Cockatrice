@@ -170,11 +170,11 @@ protected:
     }
 
     /// Batch carrying just a phase change, to drive the combat state machine.
-    static ruled::v1::RuledEventBatch phaseBatch(const std::string &phase, int activePlayerId)
+    static ruled::v1::RuledEventBatch phaseBatch(ruled::v1::PhaseId phase, int activePlayerId)
     {
         ruled::v1::RuledEventBatch batch;
         auto *pc = batch.add_events()->mutable_phase_changed();
-        pc->set_phase(phase);
+        pc->set_phase_id(phase);
         pc->set_active_player_id(activePlayerId);
         return batch;
     }
@@ -255,7 +255,7 @@ TEST_F(RuledClientTest, HandSlotMapIsRebuiltFromScratchEachBatch)
     ASSERT_EQ(state->engineHandSlotForServerCard(kLocalPlayer, 5), 0);
 
     // A later batch with no hand_slot_map must not leave the stale slot behind.
-    apply(phaseBatch("main1", kLocalPlayer));
+    apply(phaseBatch(ruled::v1::PHASE_ID_MAIN1, kLocalPlayer));
     EXPECT_EQ(state->engineHandSlotForServerCard(kLocalPlayer, 5), -1);
 }
 
@@ -441,7 +441,7 @@ TEST_F(RuledClientTest, LegalActionsBatchEmitsUndoableManaCount)
     EXPECT_EQ(spy.at(0).at(0).toInt(), 2);
 
     // No entry for us this batch → the affordance is retracted.
-    apply(phaseBatch("main1", kLocalPlayer));
+    apply(phaseBatch(ruled::v1::PHASE_ID_MAIN1, kLocalPlayer));
     ASSERT_EQ(spy.count(), 2);
     EXPECT_EQ(spy.at(1).at(0).toInt(), 0);
 }
@@ -569,7 +569,7 @@ TEST_F(RuledClientTest, PhaseChangeEmptiesTheStack)
     apply(push);
     ASSERT_TRUE(state->hasStackItems());
 
-    apply(phaseBatch("main2", kLocalPlayer));
+    apply(phaseBatch(ruled::v1::PHASE_ID_MAIN2, kLocalPlayer));
     EXPECT_FALSE(state->hasStackItems());
     EXPECT_TRUE(state->stackTargetsByStackOid.isEmpty());
 }
@@ -580,7 +580,7 @@ TEST_F(RuledClientTest, PhaseChangeEmptiesTheStack)
 
 TEST_F(RuledClientTest, PhaseChangeMapsToToolbarSlotAndCombatPhase)
 {
-    apply(phaseBatch("declare_attackers", kLocalPlayer));
+    apply(phaseBatch(ruled::v1::PHASE_ID_DECLARE_ATTACKERS, kLocalPlayer));
     EXPECT_EQ(host.toolbarPhase, 5);
     EXPECT_EQ(host.activePlayer, kLocalPlayer);
     EXPECT_EQ(state->getCombatPhase(), RuledClientState::RuledCombatPhase::DeclareAttackers);
@@ -588,7 +588,7 @@ TEST_F(RuledClientTest, PhaseChangeMapsToToolbarSlotAndCombatPhase)
     EXPECT_FALSE(state->localPlayerIsDefender());
 
     // CR 510.4: assign-combat-damage shares the declare-blockers toolbar slot.
-    apply(phaseBatch("assign_combat_damage", kLocalPlayer));
+    apply(phaseBatch(ruled::v1::PHASE_ID_ASSIGN_COMBAT_DAMAGE, kLocalPlayer));
     EXPECT_EQ(host.toolbarPhase, 6);
     EXPECT_EQ(state->getCombatPhase(), RuledClientState::RuledCombatPhase::AssignCombatDamage);
 }
@@ -596,12 +596,12 @@ TEST_F(RuledClientTest, PhaseChangeMapsToToolbarSlotAndCombatPhase)
 TEST_F(RuledClientTest, FirstStrikeStepTransitionsAreAnnounced)
 {
     QSignalSpy spy(state, &RuledClientState::firstStrikeDamageStepActiveChanged);
-    apply(phaseBatch("first_strike_damage", kLocalPlayer));
+    apply(phaseBatch(ruled::v1::PHASE_ID_FIRST_STRIKE_DAMAGE, kLocalPlayer));
     EXPECT_TRUE(state->inFirstStrikeDamageStep());
     ASSERT_EQ(spy.count(), 1);
     EXPECT_TRUE(spy.at(0).at(0).toBool());
 
-    apply(phaseBatch("combat_damage", kLocalPlayer));
+    apply(phaseBatch(ruled::v1::PHASE_ID_COMBAT_DAMAGE, kLocalPlayer));
     EXPECT_FALSE(state->inFirstStrikeDamageStep());
     ASSERT_EQ(spy.count(), 2);
     EXPECT_FALSE(spy.at(1).at(0).toBool());
@@ -609,15 +609,15 @@ TEST_F(RuledClientTest, FirstStrikeStepTransitionsAreAnnounced)
 
 TEST_F(RuledClientTest, OpeningPhaseSlugIsRecognised)
 {
-    apply(phaseBatch("opening_mulligan", kLocalPlayer));
+    apply(phaseBatch(ruled::v1::PHASE_ID_OPENING_MULLIGAN, kLocalPlayer));
     EXPECT_TRUE(state->engineOpeningPhaseActive());
-    apply(phaseBatch("untap", kLocalPlayer));
+    apply(phaseBatch(ruled::v1::PHASE_ID_UNTAP, kLocalPlayer));
     EXPECT_FALSE(state->engineOpeningPhaseActive());
 }
 
 TEST_F(RuledClientTest, AttackerStagingSyncsAPreviewAndClearsOnDeclaration)
 {
-    apply(phaseBatch("declare_attackers", kLocalPlayer));
+    apply(phaseBatch(ruled::v1::PHASE_ID_DECLARE_ATTACKERS, kLocalPlayer));
     ASSERT_TRUE(state->localPlayerIsActive());
     host.sentCommands.clear();
 
@@ -646,7 +646,7 @@ TEST_F(RuledClientTest, AttackerStagingSyncsAPreviewAndClearsOnDeclaration)
 
 TEST_F(RuledClientTest, ConfirmAttackersIsGatedOnMustAttackRequirements)
 {
-    ruled::v1::RuledEventBatch batch = phaseBatch("declare_attackers", kLocalPlayer);
+    ruled::v1::RuledEventBatch batch = phaseBatch(ruled::v1::PHASE_ID_DECLARE_ATTACKERS, kLocalPlayer);
     auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
     actions.add_required_attacker_ids(100); // CR 508.1d "attacks if able"
     apply(batch);
@@ -663,7 +663,7 @@ TEST_F(RuledClientTest, BlockerStagingPairsToAnAttackerAndSyncsAPreview)
     ad->add_attacker_object_ids(100);
     apply(declared);
     // The opponent is the active player during our declare-blockers step.
-    apply(phaseBatch("declare_blockers", kOpponent));
+    apply(phaseBatch(ruled::v1::PHASE_ID_DECLARE_BLOCKERS, kOpponent));
     ASSERT_TRUE(state->localPlayerIsDefender());
     host.sentCommands.clear();
 
@@ -690,7 +690,7 @@ TEST_F(RuledClientTest, RejectedBlockDeclarationRollsBackTheLocalGuard)
     ruled::v1::RuledEventBatch declared;
     declared.add_events()->mutable_attackers_declared()->add_attacker_object_ids(100);
     apply(declared);
-    apply(phaseBatch("declare_blockers", kOpponent));
+    apply(phaseBatch(ruled::v1::PHASE_ID_DECLARE_BLOCKERS, kOpponent));
     state->toggleStagedBlocker(200);
     state->pairStagedBlockerToAttacker(100);
     host.sentCommands.clear();
@@ -762,7 +762,7 @@ TEST_F(RuledClientTest, StalePairsArePrunedWhenPermanentsLeaveTheBattlefield)
 
 TEST_F(RuledClientTest, MultipleBlockersQueueAnAssignmentSeededLethalFirst)
 {
-    apply(phaseBatch("declare_blockers", kLocalPlayer));
+    apply(phaseBatch(ruled::v1::PHASE_ID_DECLARE_BLOCKERS, kLocalPlayer));
     ruled::v1::RuledEventBatch batch;
     // A 5/5 attacker blocked by a 2/2 and a 3/3.
     auto *ev = batch.add_events();
@@ -807,7 +807,7 @@ TEST_F(RuledClientTest, MultipleBlockersQueueAnAssignmentSeededLethalFirst)
 
 TEST_F(RuledClientTest, TrampleAssignsLethalToBlockerAndTheRemainderToThePlayer)
 {
-    apply(phaseBatch("declare_blockers", kLocalPlayer));
+    apply(phaseBatch(ruled::v1::PHASE_ID_DECLARE_BLOCKERS, kLocalPlayer));
     ruled::v1::RuledEventBatch batch;
     auto *ev = batch.add_events();
     addPermanent(ev, kLocalPlayer, 100, 1)->set_trample(true); // CR 702.19
@@ -1202,9 +1202,9 @@ TEST_F(RuledClientTest, ClearSessionStateResetsEverythingCarriedBetweenGames)
 
 TEST_F(RuledClientTest, EveryBatchSchedulesAnArrowResync)
 {
-    apply(phaseBatch("main1", kLocalPlayer));
+    apply(phaseBatch(ruled::v1::PHASE_ID_MAIN1, kLocalPlayer));
     EXPECT_EQ(host.arrowSyncRequests, 1);
-    apply(phaseBatch("main2", kLocalPlayer));
+    apply(phaseBatch(ruled::v1::PHASE_ID_MAIN2, kLocalPlayer));
     EXPECT_EQ(host.arrowSyncRequests, 2);
 }
 

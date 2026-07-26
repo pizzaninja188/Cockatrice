@@ -272,6 +272,33 @@ smoke; manual games covering combat, targeting, tier-3 picks, opening as the fin
 
 ### Step 6 — Small proto enums (4a/4b; ~1½ days, interleave anywhere after Step 1)
 
+> **Done 2026-07-26** (2 commits, one per sub-step).
+>
+> **6a `ChoiceKind`.** Same tag, same varint — a pure type change. The hand-maintained Rust
+> mirror is gone: `custom::ChoiceKind` is now a `pub use` of the generated proto enum (its
+> `as_proto()` and the "kept in sync" comment deleted), `PendingResolution.choice_kind` is typed
+> instead of `i32`, and the literals in `resolution.rs`/`continuous.rs` are named values. Server
+> redaction reads `isPrivateChoiceKind()` in `ruled_utils` — one place naming the three
+> concealed-zone kinds, unknown values treated as private — covered by `ruled_utils_test`. The
+> client's local `kChoiceKind*` constant block is deleted. Two variants got the roadmap's shorter
+> names (`RevealedCards` → `Revealed`, `PrivateRevealedHand` → `OpponentHand`).
+>
+> **6b `PhaseId`.** `PhaseChanged.phase` (string) is `reserved 1` and replaced by
+> `PhaseId phase_id = 3`; `ev_phase_labeled(&str)` became `ev_phase(rv1::PhaseId)` across 24 call
+> sites. The three hand-maintained label parsers are now `switch`es on the enum:
+> `ruledPhaseLabelToCockatricePhase` → `ruledPhaseToCockatricePhase`, and the client's
+> `mapRuledPhaseSlug*` pair → `mapRuledPhase*`; `RuledClientState::lastEnginePhaseSlug` (QString)
+> → `lastEnginePhaseId` (`ruled::v1::PhaseId`), which is why `ruled_client_state.h` now includes
+> `ruled_v1.pb.h` — the no-`AbstractGame`/`Player`/`CardItem` rule is unaffected. Two deliberate
+> extras in the enum: `PHASE_ID_ASSIGN_COMBAT_DAMAGE` (a fork pause inside the combat damage step,
+> not a CR step) and `PHASE_ID_CLEANUP` (never emitted today — clients keep highlighting the end
+> step through cleanup — but both C++ parsers already had a branch for it). Mapping tables are
+> unchanged, including the asymmetry where the server maps assign-combat-damage to no toolbar slot
+> while the client maps it to the declare-blockers slot.
+>
+> Verified per commit: full ninja build + full ctest (16/16, incl. `ruled_batch_test`,
+> `ruled_client_test`, `ruled_e2e_smoke_test`) and `cargo test` + `clippy -D warnings` + `fmt`.
+
 Proto is fork-owned with no deployed users: breaking changes are fine; keep the `reserved`
 discipline for removed tags. Each step is one end-to-end commit (C++ + Rust).
 

@@ -178,7 +178,7 @@ public:
     // Latest ruled view (rebuilt from each Event_RuledPayload batch)
     quint64 stateVersion = 0;
     quint64 lastActedVersion = 0;
-    QString phase;
+    ruled::v1::PhaseId phase = ruled::v1::PHASE_ID_UNSPECIFIED;
     int activePlayer = -1;
     int priorityPlayer = -1;
     int stackDepth = 0;
@@ -424,18 +424,20 @@ public:
         ++stateVersion;
         for (const ruled::v1::RuledEvent &ev : batch.events()) {
             if (ev.has_phase_changed()) {
-                const QString newPhase = QString::fromStdString(ev.phase_changed().phase());
+                const ruled::v1::PhaseId newPhase = ev.phase_changed().phase_id();
                 if (newPhase != phase) {
-                    log(QStringLiteral("phase: %1 (active %2)").arg(newPhase).arg(ev.phase_changed().active_player_id()));
+                    log(QStringLiteral("phase: %1 (active %2)")
+                            .arg(QString::fromStdString(ruled::v1::PhaseId_Name(newPhase)))
+                            .arg(ev.phase_changed().active_player_id()));
                 }
                 phase = newPhase;
                 activePlayer = ev.phase_changed().active_player_id();
-                if (phase == QLatin1String("untap") || phase == QLatin1String("declare_attackers")) {
+                if (phase == ruled::v1::PHASE_ID_UNTAP || phase == ruled::v1::PHASE_ID_DECLARE_ATTACKERS) {
                     attackersSentThisCombat = false;
                     blockersSentThisCombat = false;
                 }
-                inCombatDamageWindow =
-                    phase == QLatin1String("combat_damage") || phase == QLatin1String("first_strike_damage");
+                inCombatDamageWindow = phase == ruled::v1::PHASE_ID_COMBAT_DAMAGE ||
+                                       phase == ruled::v1::PHASE_ID_FIRST_STRIKE_DAMAGE;
             } else if (ev.has_priority_changed()) {
                 priorityPlayer = ev.priority_changed().player_id();
             } else if (ev.has_stack_pushed()) {
@@ -757,7 +759,7 @@ public:
         }
 
         // --- Combat declarations (priority is locked; phase + role drive these) ---
-        if (phase == QLatin1String("declare_attackers") && activePlayer == myId && !attackersSentThisCombat) {
+        if (phase == ruled::v1::PHASE_ID_DECLARE_ATTACKERS && activePlayer == myId && !attackersSentThisCombat) {
             ruled::v1::RuledCommand cmd;
             auto *att = cmd.mutable_declare_attackers();
             const auto it = battlefieldByPlayer.find(myId);
@@ -774,7 +776,7 @@ public:
             sendRuled(cmd, QStringLiteral("declare attackers (%1)").arg(att->creature_ids_size()));
             return;
         }
-        if (phase == QLatin1String("declare_blockers") && activePlayer != myId && !blockersSentThisCombat) {
+        if (phase == ruled::v1::PHASE_ID_DECLARE_BLOCKERS && activePlayer != myId && !blockersSentThisCombat) {
             ruled::v1::RuledCommand cmd;
             cmd.mutable_declare_blockers();
             blockersSentThisCombat = true;
@@ -812,7 +814,7 @@ public:
             return;
         }
         const bool inMain =
-            (phase == QLatin1String("main1") || phase == QLatin1String("main2")) && activePlayer == myId;
+            (phase == ruled::v1::PHASE_ID_MAIN1 || phase == ruled::v1::PHASE_ID_MAIN2) && activePlayer == myId;
 
         if (role == Role::Aggressor && inMain && stackDepth == 0) {
             QRegularExpressionMatch m;

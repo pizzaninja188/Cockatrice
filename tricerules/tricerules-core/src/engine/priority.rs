@@ -1,4 +1,4 @@
-use super::events::{ev_log, ev_phase_labeled, ev_priority_changed, finish_with_events};
+use super::events::{ev_log, ev_phase, ev_priority_changed, finish_with_events};
 use super::legal_actions::fill_legal;
 use super::resolution::{draw_card, move_object_to_zone, permanent_moved_event};
 use super::*;
@@ -168,7 +168,7 @@ impl GameEngine {
                     self.state.priority_idx = i;
                 }
                 self.state.passes_since_stack_change = 0;
-                ev.push(ev_phase_labeled(self, "upkeep"));
+                ev.push(ev_phase(self, rv1::PhaseId::Upkeep));
                 self.fire_triggers(GameEvent::UpkeepBegin, ev);
                 ev.push(ev_priority_changed(self));
             }
@@ -178,7 +178,7 @@ impl GameEngine {
                 if let Some(i) = self.state.player_idx(ap) {
                     self.state.priority_idx = i;
                 }
-                ev.push(ev_phase_labeled(self, "draw"));
+                ev.push(ev_phase(self, rv1::PhaseId::Draw));
                 // First draw step of the duel: only the starting player skips (CR 103.8). `turn`
                 // may stay 1 for the second seat's first turn because we bump `turn` when wrapping
                 // to seat 0, not on every active change.
@@ -212,7 +212,7 @@ impl GameEngine {
                     self.state.priority_idx = i;
                 }
                 self.state.passes_since_stack_change = 0;
-                ev.push(ev_phase_labeled(self, "main1"));
+                ev.push(ev_phase(self, rv1::PhaseId::Main1));
                 ev.push(ev_priority_changed(self));
             }
             Main1 => {
@@ -221,7 +221,7 @@ impl GameEngine {
                 if let Some(i) = self.state.player_idx(ap) {
                     self.state.priority_idx = i;
                 }
-                ev.push(ev_phase_labeled(self, "begin_combat"));
+                ev.push(ev_phase(self, rv1::PhaseId::BeginCombat));
                 ev.push(ev_priority_changed(self));
             }
             BeginCombat => {
@@ -234,7 +234,7 @@ impl GameEngine {
                         self.state.priority_idx = i;
                     }
                     self.state.passes_since_stack_change = 0;
-                    ev.push(ev_phase_labeled(self, "end_combat"));
+                    ev.push(ev_phase(self, rv1::PhaseId::EndCombat));
                     ev.push(ev_priority_changed(self));
                 } else {
                     self.state.turn_step = DeclareAttackers;
@@ -254,7 +254,7 @@ impl GameEngine {
                         first_strike_blockers: HashMap::new(),
                         first_strike_damage_done: false,
                     });
-                    ev.push(ev_phase_labeled(self, "declare_attackers"));
+                    ev.push(ev_phase(self, rv1::PhaseId::DeclareAttackers));
                     ev.push(ev_priority_changed(self));
                 }
             }
@@ -283,7 +283,7 @@ impl GameEngine {
                     ev.push(ev_log(
                         "No eligible blockers — auto-declaring empty blockers.".into(),
                     ));
-                    ev.push(ev_phase_labeled(self, "declare_blockers"));
+                    ev.push(ev_phase(self, rv1::PhaseId::DeclareBlockers));
                     // Emit BlockersDeclared (empty) AFTER phase_changed so the client's
                     // blockersSubmittedThisStep ends up true (phase_changed resets it to false,
                     // then BlockersDeclared sets it true; order matters).
@@ -302,7 +302,7 @@ impl GameEngine {
                             self.state.priority_idx = di;
                         }
                     }
-                    ev.push(ev_phase_labeled(self, "declare_blockers"));
+                    ev.push(ev_phase(self, rv1::PhaseId::DeclareBlockers));
                     ev.push(ev_priority_changed(self));
                 }
             }
@@ -336,7 +336,7 @@ impl GameEngine {
                             "Proceeding to combat damage assignment (after declare blockers)."
                                 .into(),
                         ));
-                        ev.push(ev_phase_labeled(self, "assign_combat_damage"));
+                        ev.push(ev_phase(self, rv1::PhaseId::AssignCombatDamage));
                         ev.push(ev_priority_changed(self));
                     } else {
                         return Err(EngineError::Illegal(
@@ -364,7 +364,7 @@ impl GameEngine {
                     self.state.priority_idx = i;
                 }
                 self.state.passes_since_stack_change = 0;
-                ev.push(ev_phase_labeled(self, "end_combat"));
+                ev.push(ev_phase(self, rv1::PhaseId::EndCombat));
                 ev.push(ev_priority_changed(self));
             }
             EndCombat => {
@@ -373,7 +373,7 @@ impl GameEngine {
                 if let Some(i) = self.state.player_idx(ap) {
                     self.state.priority_idx = i;
                 }
-                ev.push(ev_phase_labeled(self, "main2"));
+                ev.push(ev_phase(self, rv1::PhaseId::Main2));
                 ev.push(ev_priority_changed(self));
             }
             Main2 => {
@@ -383,7 +383,7 @@ impl GameEngine {
                 }
                 self.state.turn_step = EndStep;
                 self.state.passes_since_stack_change = 0;
-                ev.push(ev_phase_labeled(self, "end_step"));
+                ev.push(ev_phase(self, rv1::PhaseId::EndStep));
                 ev.push(ev_priority_changed(self));
             }
             EndStep => {
@@ -402,7 +402,7 @@ impl GameEngine {
                     self.state.priority_idx = i;
                 }
                 self.state.passes_since_stack_change = 0;
-                ev.push(ev_phase_labeled(self, "main1"));
+                ev.push(ev_phase(self, rv1::PhaseId::Main1));
                 ev.push(ev_priority_changed(self));
             }
         }
@@ -551,7 +551,7 @@ impl GameEngine {
         }
         let ap = self.state.active_player_id();
         self.state.turn_step = TurnStep::Untap;
-        ev.push(ev_phase_labeled(self, "untap"));
+        ev.push(ev_phase(self, rv1::PhaseId::Untap));
 
         // CR 502.1 / 502.3: in their untap step the active player untaps the permanents they
         // control and any creature they've controlled since their last turn began loses summoning
@@ -574,7 +574,7 @@ impl GameEngine {
         // batchHasUntapPhase is still true (see Server_Game::applyRuledBatch).
         ev.push(self.ev_zone_view_sync());
         self.state.turn_step = TurnStep::Upkeep;
-        ev.push(ev_phase_labeled(self, "upkeep"));
+        ev.push(ev_phase(self, rv1::PhaseId::Upkeep));
         self.state.combat = None;
         if let Some(i) = self.state.player_idx(ap) {
             self.state.priority_idx = i;

@@ -31,6 +31,8 @@
 #include <QStringList>
 #include <QVector>
 #include <QtGlobal>
+// For ruled::v1::PhaseId only — the engine's turn-structure position is mirrored verbatim.
+#include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <optional>
 
 class RuledClientHost;
@@ -160,7 +162,7 @@ public:
     QVector<int> openingPickSeatIds;
     RuledOpeningUiKind openingUiKind = RuledOpeningUiKind::None;
     int openingMulliganCount = 0;
-    QString lastEnginePhaseSlug;
+    ruled::v1::PhaseId lastEnginePhaseId = ruled::v1::PHASE_ID_UNSPECIFIED;
 
     // -----------------------------------------------------------------------------------
     // Identity maps (see docs/ARCHITECTURE.md's identity glossary, once it exists).
@@ -477,7 +479,8 @@ public:
     }
     [[nodiscard]] bool engineOpeningPhaseActive() const
     {
-        return lastEnginePhaseSlug.startsWith(QLatin1String("opening_"));
+        return lastEnginePhaseId == ruled::v1::PHASE_ID_OPENING_CHOOSE_FIRST ||
+               lastEnginePhaseId == ruled::v1::PHASE_ID_OPENING_MULLIGAN;
     }
     /// CR 510.4: true while the engine has us in the first-strike combat damage substep.
     /// Used to suppress the phase-toolbar auto-advance that would otherwise auto-pass
@@ -485,7 +488,7 @@ public:
     /// the pass-priority button correctly while inside the step.
     [[nodiscard]] bool inFirstStrikeDamageStep() const
     {
-        return lastEnginePhaseSlug == QLatin1String("first_strike_damage");
+        return lastEnginePhaseId == ruled::v1::PHASE_ID_FIRST_STRIKE_DAMAGE;
     }
 
     // -----------------------------------------------------------------------------------

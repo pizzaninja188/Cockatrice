@@ -31,65 +31,57 @@ struct ParsedRuledCastActions
     QSet<int> needsTargetHandIndices;
 };
 
-RuledCombatPhase mapRuledPhaseSlugToCombatPhase(const QString &slug)
+RuledCombatPhase mapRuledPhaseToCombatPhase(ruled::v1::PhaseId phase)
 {
-    if (slug == QLatin1String("declare_attackers")) {
-        return RuledCombatPhase::DeclareAttackers;
+    switch (phase) {
+        case ruled::v1::PHASE_ID_DECLARE_ATTACKERS:
+            return RuledCombatPhase::DeclareAttackers;
+        case ruled::v1::PHASE_ID_DECLARE_BLOCKERS:
+            return RuledCombatPhase::DeclareBlockers;
+        case ruled::v1::PHASE_ID_ASSIGN_COMBAT_DAMAGE:
+            return RuledCombatPhase::AssignCombatDamage;
+        case ruled::v1::PHASE_ID_FIRST_STRIKE_DAMAGE:
+            return RuledCombatPhase::FirstStrikeDamage;
+        case ruled::v1::PHASE_ID_COMBAT_DAMAGE:
+            return RuledCombatPhase::CombatDamage;
+        default:
+            // Includes end of combat: combat is over, so no combat UI.
+            return RuledCombatPhase::None;
     }
-    if (slug == QLatin1String("declare_blockers")) {
-        return RuledCombatPhase::DeclareBlockers;
-    }
-    if (slug == QLatin1String("assign_combat_damage")) {
-        return RuledCombatPhase::AssignCombatDamage;
-    }
-    if (slug == QLatin1String("first_strike_damage")) {
-        return RuledCombatPhase::FirstStrikeDamage;
-    }
-    if (slug == QLatin1String("combat_damage")) {
-        return RuledCombatPhase::CombatDamage;
-    }
-    if (slug == QLatin1String("end_combat")) {
-        return RuledCombatPhase::None;
-    }
-    return RuledCombatPhase::None;
 }
 
-int mapRuledPhaseSlugToToolbarPhase(const QString &slug)
+int mapRuledPhaseToToolbarPhase(ruled::v1::PhaseId phase)
 {
-    if (slug == QLatin1String("untap")) {
-        return 0;
+    switch (phase) {
+        case ruled::v1::PHASE_ID_UNTAP:
+            return 0;
+        case ruled::v1::PHASE_ID_UPKEEP:
+            return 1;
+        case ruled::v1::PHASE_ID_DRAW:
+            return 2;
+        case ruled::v1::PHASE_ID_MAIN1:
+            return 3;
+        case ruled::v1::PHASE_ID_BEGIN_COMBAT:
+            return 4;
+        case ruled::v1::PHASE_ID_DECLARE_ATTACKERS:
+            return 5;
+        case ruled::v1::PHASE_ID_DECLARE_BLOCKERS:
+        case ruled::v1::PHASE_ID_ASSIGN_COMBAT_DAMAGE:
+            return 6;
+        case ruled::v1::PHASE_ID_COMBAT_DAMAGE:
+            return 7;
+        case ruled::v1::PHASE_ID_END_COMBAT:
+            return 8;
+        case ruled::v1::PHASE_ID_MAIN2:
+            return 9;
+        case ruled::v1::PHASE_ID_END_STEP:
+        case ruled::v1::PHASE_ID_CLEANUP:
+            return 10;
+        default:
+            // CR 510.4: the first-strike substep deliberately leaves the toolbar highlight where
+            // it is (see inFirstStrikeDamageStep). Opening pseudo-phases have no slot either.
+            return -1;
     }
-    if (slug == QLatin1String("upkeep")) {
-        return 1;
-    }
-    if (slug == QLatin1String("draw")) {
-        return 2;
-    }
-    if (slug == QLatin1String("main1")) {
-        return 3;
-    }
-    if (slug == QLatin1String("begin_combat")) {
-        return 4;
-    }
-    if (slug == QLatin1String("declare_attackers")) {
-        return 5;
-    }
-    if (slug == QLatin1String("declare_blockers") || slug == QLatin1String("assign_combat_damage")) {
-        return 6;
-    }
-    if (slug == QLatin1String("combat_damage")) {
-        return 7;
-    }
-    if (slug == QLatin1String("end_combat")) {
-        return 8;
-    }
-    if (slug == QLatin1String("main2")) {
-        return 9;
-    }
-    if (slug == QLatin1String("end_step") || slug == QLatin1String("cleanup")) {
-        return 10;
-    }
-    return -1;
 }
 
 bool isCombatPhase(RuledCombatPhase phase)
@@ -308,13 +300,13 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
 
 void RuledEventDispatcher::applyPhaseChanged(const ruled::v1::PhaseChanged &pc, BatchContext &ctx)
 {
-    const QString prevSlug = state->lastEnginePhaseSlug;
-    state->lastEnginePhaseSlug = QString::fromStdString(pc.phase());
+    const ruled::v1::PhaseId prevPhase = state->lastEnginePhaseId;
+    state->lastEnginePhaseId = pc.phase_id();
     // CR 510.4: when entering or leaving the first-strike damage substep, notify the prompt
     // widget so it can label the pass button "Combat Damage" while inside the FS step (the
     // next step is regular combat damage).
-    const bool wasFsStep = prevSlug == QLatin1String("first_strike_damage");
-    const bool isFsStep = state->lastEnginePhaseSlug == QLatin1String("first_strike_damage");
+    const bool wasFsStep = prevPhase == ruled::v1::PHASE_ID_FIRST_STRIKE_DAMAGE;
+    const bool isFsStep = state->lastEnginePhaseId == ruled::v1::PHASE_ID_FIRST_STRIKE_DAMAGE;
     if (wasFsStep != isFsStep) {
         emit state->firstStrikeDamageStepActiveChanged(isFsStep);
     }
@@ -327,11 +319,11 @@ void RuledEventDispatcher::applyPhaseChanged(const ruled::v1::PhaseChanged &pc, 
     if (host->currentActivePlayerId() != static_cast<int>(pc.active_player_id())) {
         host->setActivePlayerId(static_cast<int>(pc.active_player_id()));
     }
-    const int mappedPhase = mapRuledPhaseSlugToToolbarPhase(state->lastEnginePhaseSlug);
+    const int mappedPhase = mapRuledPhaseToToolbarPhase(state->lastEnginePhaseId);
     if (mappedPhase >= 0) {
         host->setToolbarPhase(mappedPhase);
     }
-    const RuledCombatPhase combatPhase = mapRuledPhaseSlugToCombatPhase(state->lastEnginePhaseSlug);
+    const RuledCombatPhase combatPhase = mapRuledPhaseToCombatPhase(state->lastEnginePhaseId);
     if (combatPhase == state->currentCombatPhase &&
         state->currentActivePlayerId == static_cast<int>(pc.active_player_id())) {
         return;

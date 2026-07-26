@@ -330,7 +330,8 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                         // Do not force untap from engine during non-untap batches: Cockatrice may have
                         // tapped permanents for mana (or other UI) that the engine has not yet
                         // reflected in battlefield_tapped. Real untap-step sync is delivered in the
-                        // same ruled batch as phase_changed("untap") (see tricerules finish_cleanup_roll_new_turn).
+                        // same ruled batch as PhaseChanged(PHASE_ID_UNTAP) (see tricerules
+                        // finish_cleanup_roll_new_turn).
                         if (!allowUntapReset && card->getTapped() && !desiredTapped) {
                             continue;
                         }

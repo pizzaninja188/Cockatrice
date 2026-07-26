@@ -1,4 +1,4 @@
-use super::events::{ev_log, ev_phase_labeled, ev_priority_changed, object_display_name};
+use super::events::{ev_log, ev_phase, ev_priority_changed, object_display_name};
 use super::legal_actions::fill_legal;
 use super::resolution::apply_prevention_shield;
 use super::*;
@@ -235,7 +235,7 @@ impl GameEngine {
             let mut b2 = RuledEventBatch::default();
             b2.events
                 .push(ev_log("No attackers — skipped to end combat".to_string()));
-            b2.events.push(ev_phase_labeled(self, "end_combat"));
+            b2.events.push(ev_phase(self, rv1::PhaseId::EndCombat));
             b2.events.push(ev_priority_changed(self));
             fill_legal(&mut b2, self);
             return Ok(b2);
@@ -713,7 +713,7 @@ impl GameEngine {
             }
             self.state.passes_since_stack_change = 0;
             events.push(ev_log("First strike combat damage dealt.".to_string()));
-            events.push(ev_phase_labeled(self, "first_strike_damage"));
+            events.push(ev_phase(self, rv1::PhaseId::FirstStrikeDamage));
             self.resolve_combat_damage(&c2, DamagePass::FirstStrike, events)?;
             // CR 510.2 + 704: SBAs run between damage steps so creatures with lethal damage are
             // moved to graveyards before the regular step decides who deals damage.
@@ -730,7 +730,7 @@ impl GameEngine {
             }
             self.state.passes_since_stack_change = 0;
             events.push(ev_log("Combat damage dealt.".to_string()));
-            events.push(ev_phase_labeled(self, "combat_damage"));
+            events.push(ev_phase(self, rv1::PhaseId::CombatDamage));
             self.resolve_combat_damage(&c_init, DamagePass::Normal, events)?;
             self.apply_sbas(events)?;
             events.push(ev_priority_changed(self));

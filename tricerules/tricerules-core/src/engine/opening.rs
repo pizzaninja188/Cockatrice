@@ -1,4 +1,4 @@
-use super::events::{ev_log, ev_phase_labeled, ev_priority_changed};
+use super::events::{ev_log, ev_phase, ev_priority_changed};
 use super::legal_actions::fill_legal;
 use super::resolution::{draw_card, move_object_to_zone, permanent_moved_event};
 use super::*;
@@ -84,7 +84,7 @@ impl GameEngine {
                 } else {
                     format!("P{chooser} chooses P{sp} to play first.")
                 }));
-                events.push(ev_phase_labeled(self, "opening_mulligan"));
+                events.push(ev_phase(self, rv1::PhaseId::OpeningMulligan));
                 events.push(ev_priority_changed(self));
             }
             Some(Cmd::Mulligan(md)) => {
@@ -254,7 +254,7 @@ impl GameEngine {
             op.mulligan_actor = Some(pid);
         }
         eng.state.priority_idx = next_idx;
-        events.push(ev_phase_labeled(eng, "opening_mulligan"));
+        events.push(ev_phase(eng, rv1::PhaseId::OpeningMulligan));
         events.push(ev_priority_changed(eng));
         Ok(())
     }
@@ -278,7 +278,7 @@ impl GameEngine {
             eng.state.starting_player_idx = sp_idx;
             eng.state.turn_step = TurnStep::Upkeep;
             eng.state.turn = 1;
-            events.push(ev_phase_labeled(eng, "upkeep"));
+            events.push(ev_phase(eng, rv1::PhaseId::Upkeep));
             events.push(ev_priority_changed(eng));
             return Ok(());
         }
@@ -296,7 +296,7 @@ impl GameEngine {
                     let pid = eng.state.players[oi].id;
                     op.mulligan_actor = Some(pid);
                     eng.state.priority_idx = oi;
-                    events.push(ev_phase_labeled(eng, "opening_mulligan"));
+                    events.push(ev_phase(eng, rv1::PhaseId::OpeningMulligan));
                     events.push(ev_priority_changed(eng));
                     break;
                 }

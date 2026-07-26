@@ -723,7 +723,7 @@ void RuledGameDriver::applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBat
     bool batchHasUntapPhase = false;
     for (int ei = 0; ei < batch.events_size(); ++ei) {
         const auto &e = batch.events(ei);
-        if (e.has_phase_changed() && e.phase_changed().phase() == "untap") {
+        if (e.has_phase_changed() && e.phase_changed().phase_id() == ruled::v1::PHASE_ID_UNTAP) {
             batchHasUntapPhase = true;
             break;
         }
@@ -735,7 +735,7 @@ void RuledGameDriver::applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBat
             if (newActive >= 0 && game->getActivePlayer() != newActive) {
                 game->setActivePlayer(newActive);
             }
-            const int mappedPhase = ruledPhaseLabelToCockatricePhase(e.phase_changed().phase());
+            const int mappedPhase = ruledPhaseToCockatricePhase(e.phase_changed().phase_id());
             if (mappedPhase >= 0 && game->getActivePhase() != mappedPhase) {
                 game->setActivePhase(mappedPhase);
             }
@@ -1632,7 +1632,7 @@ void RuledGameDriver::applyRuledStartupBatch(const ruled::v1::IpcResponse &resp,
         const auto &e = resp.batch().events(ei);
         if (e.has_phase_changed()) {
             startupActivePlayer = e.phase_changed().active_player_id();
-            startupMappedPhase = ruledPhaseLabelToCockatricePhase(e.phase_changed().phase());
+            startupMappedPhase = ruledPhaseToCockatricePhase(e.phase_changed().phase_id());
         }
         if (e.has_priority_changed()) {
             startupPriorityPlayer = e.priority_changed().player_id();

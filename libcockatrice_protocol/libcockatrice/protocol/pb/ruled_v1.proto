@@ -442,9 +442,44 @@ message CombatDamageAssigned {
   repeated DamagePair assignments = 2;
 }
 
+// Where the engine is in the turn structure (CR 500-514), plus the fork's two opening-procedure
+// pseudo-phases. Emitted by the engine and mapped by both C++ consumers; it replaces the free
+// phase-label string that used to be hand-parsed in three places. Values are ordered by when they
+// occur in a turn (the numbering carries no other meaning — never do arithmetic on it).
+enum PhaseId {
+  PHASE_ID_UNSPECIFIED = 0;
+  // Opening procedure (CR 103), before the first turn: the randomly chosen player picks who goes
+  // first, then each player takes London mulligans.
+  PHASE_ID_OPENING_CHOOSE_FIRST = 1;
+  PHASE_ID_OPENING_MULLIGAN = 2;
+  PHASE_ID_UNTAP = 3;
+  PHASE_ID_UPKEEP = 4;
+  PHASE_ID_DRAW = 5;
+  PHASE_ID_MAIN1 = 6;
+  PHASE_ID_BEGIN_COMBAT = 7;
+  PHASE_ID_DECLARE_ATTACKERS = 8;
+  PHASE_ID_DECLARE_BLOCKERS = 9;
+  // CR 510.1a: the active player is assigning one multiply-blocked attacker's combat damage.
+  // Not a CR step of its own — a fork-side pause inside the combat damage step.
+  PHASE_ID_ASSIGN_COMBAT_DAMAGE = 10;
+  // CR 510.4: the extra combat damage step created by first/double strike. Shares the Cockatrice
+  // "Combat Damage Step" toolbar slot with PHASE_ID_COMBAT_DAMAGE.
+  PHASE_ID_FIRST_STRIKE_DAMAGE = 11;
+  PHASE_ID_COMBAT_DAMAGE = 12;
+  PHASE_ID_END_COMBAT = 13;
+  PHASE_ID_MAIN2 = 14;
+  PHASE_ID_END_STEP = 15;
+  // CR 514. The engine does not announce cleanup today (clients keep highlighting the end step
+  // through it); the value exists so a cleanup-visible change needs no proto edit.
+  PHASE_ID_CLEANUP = 16;
+}
+
 message PhaseChanged {
-  string phase = 1;
+  // Was `string phase`, a free label re-parsed by the relay and the client independently.
+  reserved 1;
+  reserved "phase";
   int32 active_player_id = 2;
+  PhaseId phase_id = 3;
 }
 
 message PriorityChanged {

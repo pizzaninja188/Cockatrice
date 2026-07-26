@@ -2,28 +2,34 @@
 
 #include "game/ruled_utils.h"
 
-TEST(RuledUtilsTest, MapsKnownPhaseLabels)
+TEST(RuledUtilsTest, MapsKnownPhases)
 {
-    EXPECT_EQ(0, ruledPhaseLabelToCockatricePhase("untap"));
-    EXPECT_EQ(1, ruledPhaseLabelToCockatricePhase("upkeep"));
-    EXPECT_EQ(2, ruledPhaseLabelToCockatricePhase("draw"));
-    EXPECT_EQ(3, ruledPhaseLabelToCockatricePhase("main1"));
-    EXPECT_EQ(4, ruledPhaseLabelToCockatricePhase("begin_combat"));
-    EXPECT_EQ(5, ruledPhaseLabelToCockatricePhase("declare_attackers"));
-    EXPECT_EQ(6, ruledPhaseLabelToCockatricePhase("declare_blockers"));
-    EXPECT_EQ(7, ruledPhaseLabelToCockatricePhase("combat_damage"));
+    EXPECT_EQ(0, ruledPhaseToCockatricePhase(ruled::v1::PHASE_ID_UNTAP));
+    EXPECT_EQ(1, ruledPhaseToCockatricePhase(ruled::v1::PHASE_ID_UPKEEP));
+    EXPECT_EQ(2, ruledPhaseToCockatricePhase(ruled::v1::PHASE_ID_DRAW));
+    EXPECT_EQ(3, ruledPhaseToCockatricePhase(ruled::v1::PHASE_ID_MAIN1));
+    EXPECT_EQ(4, ruledPhaseToCockatricePhase(ruled::v1::PHASE_ID_BEGIN_COMBAT));
+    EXPECT_EQ(5, ruledPhaseToCockatricePhase(ruled::v1::PHASE_ID_DECLARE_ATTACKERS));
+    EXPECT_EQ(6, ruledPhaseToCockatricePhase(ruled::v1::PHASE_ID_DECLARE_BLOCKERS));
+    EXPECT_EQ(7, ruledPhaseToCockatricePhase(ruled::v1::PHASE_ID_COMBAT_DAMAGE));
     // CR 510.4: first-strike substep shares the combat damage toolbar slot; the prompt
     // widget differentiates via `first_strike_step_pending` on the per-player view.
-    EXPECT_EQ(7, ruledPhaseLabelToCockatricePhase("first_strike_damage"));
-    EXPECT_EQ(8, ruledPhaseLabelToCockatricePhase("end_combat"));
-    EXPECT_EQ(9, ruledPhaseLabelToCockatricePhase("main2"));
-    EXPECT_EQ(10, ruledPhaseLabelToCockatricePhase("end_step"));
-    EXPECT_EQ(10, ruledPhaseLabelToCockatricePhase("cleanup"));
+    EXPECT_EQ(7, ruledPhaseToCockatricePhase(ruled::v1::PHASE_ID_FIRST_STRIKE_DAMAGE));
+    EXPECT_EQ(8, ruledPhaseToCockatricePhase(ruled::v1::PHASE_ID_END_COMBAT));
+    EXPECT_EQ(9, ruledPhaseToCockatricePhase(ruled::v1::PHASE_ID_MAIN2));
+    EXPECT_EQ(10, ruledPhaseToCockatricePhase(ruled::v1::PHASE_ID_END_STEP));
+    EXPECT_EQ(10, ruledPhaseToCockatricePhase(ruled::v1::PHASE_ID_CLEANUP));
 }
 
-TEST(RuledUtilsTest, UnknownPhaseMapsToMinusOne)
+TEST(RuledUtilsTest, PhasesWithoutAToolbarSlotMapToMinusOne)
 {
-    EXPECT_EQ(-1, ruledPhaseLabelToCockatricePhase("unknown_phase"));
+    // The opening procedure and the assign-combat-damage pause have no toolbar slot, and
+    // neither does an unset or unknown value.
+    EXPECT_EQ(-1, ruledPhaseToCockatricePhase(ruled::v1::PHASE_ID_OPENING_CHOOSE_FIRST));
+    EXPECT_EQ(-1, ruledPhaseToCockatricePhase(ruled::v1::PHASE_ID_OPENING_MULLIGAN));
+    EXPECT_EQ(-1, ruledPhaseToCockatricePhase(ruled::v1::PHASE_ID_ASSIGN_COMBAT_DAMAGE));
+    EXPECT_EQ(-1, ruledPhaseToCockatricePhase(ruled::v1::PHASE_ID_UNSPECIFIED));
+    EXPECT_EQ(-1, ruledPhaseToCockatricePhase(static_cast<ruled::v1::PhaseId>(99)));
 }
 
 TEST(RuledUtilsTest, PrivateChoiceKindsAreTheConcealedZoneOnes)

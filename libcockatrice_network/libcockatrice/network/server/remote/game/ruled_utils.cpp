@@ -26,43 +26,39 @@ bool isPrivateChoiceKind(ruled::v1::ChoiceKind kind)
     }
 }
 
-int ruledPhaseLabelToCockatricePhase(const std::string &phase)
+int ruledPhaseToCockatricePhase(ruled::v1::PhaseId phase)
 {
-    if (phase == "untap") {
-        return 0;
+    switch (phase) {
+        case ruled::v1::PHASE_ID_UNTAP:
+            return 0;
+        case ruled::v1::PHASE_ID_UPKEEP:
+            return 1;
+        case ruled::v1::PHASE_ID_DRAW:
+            return 2;
+        case ruled::v1::PHASE_ID_MAIN1:
+            return 3;
+        case ruled::v1::PHASE_ID_BEGIN_COMBAT:
+            return 4;
+        case ruled::v1::PHASE_ID_DECLARE_ATTACKERS:
+            return 5;
+        case ruled::v1::PHASE_ID_DECLARE_BLOCKERS:
+            return 6;
+        case ruled::v1::PHASE_ID_COMBAT_DAMAGE:
+        case ruled::v1::PHASE_ID_FIRST_STRIKE_DAMAGE:
+            // CR 510.4: the first-strike substep shares the "Combat Damage Step" slot in the
+            // Cockatrice phases toolbar; the prompt widget distinguishes them via the
+            // `first_strike_step_pending` flag on the per-player view.
+            return 7;
+        case ruled::v1::PHASE_ID_END_COMBAT:
+            return 8;
+        case ruled::v1::PHASE_ID_MAIN2:
+            return 9;
+        case ruled::v1::PHASE_ID_END_STEP:
+        case ruled::v1::PHASE_ID_CLEANUP:
+            return 10;
+        default:
+            // Opening pseudo-phases, assign-combat-damage and anything unknown have no toolbar
+            // slot; -1 tells callers to leave the highlight where it is.
+            return -1;
     }
-    if (phase == "upkeep") {
-        return 1;
-    }
-    if (phase == "draw") {
-        return 2;
-    }
-    if (phase == "main1") {
-        return 3;
-    }
-    if (phase == "begin_combat") {
-        return 4;
-    }
-    if (phase == "declare_attackers") {
-        return 5;
-    }
-    if (phase == "declare_blockers") {
-        return 6;
-    }
-    if (phase == "combat_damage" || phase == "first_strike_damage") {
-        // CR 510.4: the first-strike substep shares the "Combat Damage Step" slot in the
-        // Cockatrice phases toolbar; the prompt widget distinguishes them via the
-        // `first_strike_step_pending` flag on the per-player view.
-        return 7;
-    }
-    if (phase == "end_combat") {
-        return 8;
-    }
-    if (phase == "main2") {
-        return 9;
-    }
-    if (phase == "end_step" || phase == "cleanup") {
-        return 10;
-    }
-    return -1;
 }

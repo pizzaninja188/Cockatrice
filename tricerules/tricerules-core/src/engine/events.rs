@@ -10,7 +10,7 @@ impl GameEngine {
         if let Some(op) = &self.state.opening {
             batch
                 .events
-                .push(ev_phase_labeled(self, "opening_choose_first"));
+                .push(ev_phase(self, rv1::PhaseId::OpeningChooseFirst));
             batch.events.push(ev_priority_changed(self));
             batch
                 .events
@@ -18,7 +18,7 @@ impl GameEngine {
             fill_legal(&mut batch, self);
             return batch;
         }
-        batch.events.push(ev_phase_labeled(self, "upkeep"));
+        batch.events.push(ev_phase(self, rv1::PhaseId::Upkeep));
         batch.events.push(ev_priority_changed(self));
         batch.events.push(ev_log(format!(
             "Game started — active P{}, priority P{} (upkeep).",
@@ -550,10 +550,10 @@ pub(super) fn ev_log_hidden_from(text: String, player_id: i32) -> RuledEvent {
     }
 }
 
-pub(super) fn ev_phase_labeled(eng: &GameEngine, name: &str) -> RuledEvent {
+pub(super) fn ev_phase(eng: &GameEngine, phase: rv1::PhaseId) -> RuledEvent {
     RuledEvent {
         ev: Some(rv1::ruled_event::Ev::PhaseChanged(rv1::PhaseChanged {
-            phase: name.to_string(),
+            phase_id: phase as i32,
             active_player_id: eng.state.active_player_id(),
         })),
     }
