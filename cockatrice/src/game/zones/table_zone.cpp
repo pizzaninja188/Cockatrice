@@ -1,5 +1,6 @@
 #include "table_zone.h"
 
+#include "../ruled/ruled_actions.h"
 #include "../../client/settings/cache_settings.h"
 #include "../../interface/theme_manager.h"
 #include "../abstract_game.h"
@@ -8,6 +9,7 @@
 #include "../board/card_item.h"
 #include "../player/player.h"
 #include "../player/player_actions.h"
+#include "../ruled/ruled_client_state.h"
 #include "../board/abstract_counter.h"
 #include "../z_values.h"
 #include "logic/table_zone_logic.h"
@@ -292,19 +294,19 @@ void TableZone::toggleTapped()
     }
 
     QList<const ::google::protobuf::Message *> cmdList;
-    const bool ruledGame = getLogic()->getPlayer()->getGame()->getGameMetaInfo()->proto().ruled_game();
+    const bool ruledGame = RuledActions::isRuledGame(getLogic()->getPlayer()->getGame());
     const int localPlayerId = getLogic()->getPlayer()->getGame()->getPlayerManager()->getLocalPlayerId();
     const int priorityPlayer = getLogic()->getPlayer()->getGame()->getGameState()->getPriorityPlayer();
     if (ruledGame && localPlayerId != priorityPlayer) {
         return;
     }
     if (ruledGame) {
-        const GameEventHandler *handler = getLogic()->getPlayer()->getGame()->getGameEventHandler();
-        const auto combatPhase = handler->getRuledCombatPhase();
+        const RuledClientState *handler = getLogic()->getPlayer()->getGame()->getGameEventHandler()->ruled();
+        const auto combatPhase = handler->getCombatPhase();
         const bool mustDeclareAttackers =
-            combatPhase == GameEventHandler::RuledCombatPhase::DeclareAttackers && handler->localPlayerIsRuledActive();
+            combatPhase == RuledClientState::RuledCombatPhase::DeclareAttackers && handler->localPlayerIsActive();
         const bool mustDeclareBlockers =
-            combatPhase == GameEventHandler::RuledCombatPhase::DeclareBlockers && handler->localPlayerIsRuledDefender();
+            combatPhase == RuledClientState::RuledCombatPhase::DeclareBlockers && handler->localPlayerIsDefender();
         if (mustDeclareAttackers || mustDeclareBlockers) {
             return;
         }

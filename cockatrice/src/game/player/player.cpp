@@ -1,5 +1,6 @@
 #include "player.h"
 
+#include "../ruled/ruled_actions.h"
 #include "../../interface/theme_manager.h"
 #include "../../interface/widgets/tabs/tab_game.h"
 #include "../board/arrow_item.h"
@@ -134,7 +135,7 @@ void Player::processPlayerInfo(const ServerInfo_Player &info)
     // game-state snapshot (sent on hand/battlefield-order changes) causes visual duplicates:
     // open zone views are not cleared by clearContents(), so each repopulation adds another
     // copy of every card on top of the ones the view already holds.
-    const bool ruledMode = game && game->getGameMetaInfo()->proto().ruled_game();
+    const bool ruledMode = RuledActions::isRuledGame(game);
     auto skipInRuledMode = [&](const QString &zoneName) {
         return ruledMode &&
                (zoneName == QLatin1String(ZoneNames::STACK) ||

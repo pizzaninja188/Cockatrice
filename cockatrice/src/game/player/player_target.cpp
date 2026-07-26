@@ -2,8 +2,11 @@
 
 #include "../../interface/pixel_map_generator.h"
 #include "../abstract_game.h"
+#include "../game_event_handler.h"
 #include "../player/player_actions.h"
 #include "../player/player_manager.h"
+#include "../ruled/ruled_actions.h"
+#include "../ruled/ruled_client_state.h"
 #include "player.h"
 
 #include <QDebug>
@@ -58,8 +61,9 @@ PlayerTarget::PlayerTarget(Player *_owner, QGraphicsItem *parentItem)
 
     if (auto *game = _owner ? _owner->getGame() : nullptr) {
         if (auto *handler = game->getGameEventHandler()) {
-            connect(handler, &GameEventHandler::ruledSpellTargetSelectionChanged, this, [this]() { update(); });
-            connect(handler, &GameEventHandler::ruledSpellDamageAllocationUiChanged, this, [this]() { update(); });
+            RuledClientState *ruled = handler->ruled();
+            connect(ruled, &RuledClientState::spellTargetSelectionChanged, this, [this]() { update(); });
+            connect(ruled, &RuledClientState::spellDamageAllocationUiChanged, this, [this]() { update(); });
         }
     }
 
@@ -168,9 +172,9 @@ void PlayerTarget::paint(QPainter *painter, const QStyleOptionGraphicsItem * /*o
     }
 
     if (owner && owner->getGame()) {
-        auto *gameHandler = owner->getGame()->getGameEventHandler();
+        AbstractGame *ruledGame = owner->getGame();
         const int ownerId = owner->getPlayerInfo()->getId();
-        if (gameHandler && gameHandler->isPlayerSelectedAsSpellTarget(ownerId)) {
+        if (RuledActions::isPlayerSelectedAsSpellTarget(ruledGame, ownerId)) {
             const qreal selWidth = 3.0;
             const qreal selInset = border + 3.0;
             QRectF selRect = avatarBoundingRect.adjusted(selInset, selInset, -selInset, -selInset);
@@ -181,8 +185,8 @@ void PlayerTarget::paint(QPainter *painter, const QStyleOptionGraphicsItem * /*o
             painter->setBrush(Qt::NoBrush);
             painter->drawRoundedRect(selRect, 4.0, 4.0);
         }
-        if (gameHandler && gameHandler->isSpellDamageAllocationDisplayActive()) {
-            const int alloc = gameHandler->spellDamageAllocationForPlayerId(ownerId);
+        if (RuledActions::isSpellDamageAllocationDisplayActive(ruledGame)) {
+            const int alloc = RuledActions::spellDamageAllocationForPlayerId(ruledGame, ownerId);
             if (alloc > 0) {
                 paintNumberEllipse(alloc, 14, QColor(255, 120, 0), 0, 1, painter);
             }

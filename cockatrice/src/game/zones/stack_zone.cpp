@@ -1,5 +1,6 @@
 #include "stack_zone.h"
 
+#include "../ruled/ruled_actions.h"
 #include "../../client/settings/cache_settings.h"
 #include "../../interface/theme_manager.h"
 #include "../abstract_game.h"
@@ -7,6 +8,7 @@
 #include "../board/card_drag_item.h"
 #include "../board/card_item.h"
 #include "../game_event_handler.h"
+#include "../ruled/ruled_client_state.h"
 #include "../player/player.h"
 #include "../player/player_actions.h"
 #include "logic/stack_zone_logic.h"
@@ -102,9 +104,9 @@ void StackZone::reorganizeCards()
         // is not reordered so that takeCard(position, id) continues to work correctly.
         QList<CardItem *> display(rawCards.begin(), rawCards.end());
         if (auto *ag = getLogic()->getPlayer()->getGame()) {
-            if (ag->getGameMetaInfo()->proto().ruled_game()) {
-                if (auto *geh = ag->getGameEventHandler()) {
-                    const QList<quint32> &oidOrder = geh->getRuledStackOidOrder();
+            if (RuledActions::isRuledGame(ag)) {
+                if (auto *geh = ag->getGameEventHandler()->ruled()) {
+                    const QList<quint32> &oidOrder = geh->getStackOidOrder();
                     const int pid = getLogic()->getPlayer()->getPlayerInfo()->getId();
                     std::sort(display.begin(), display.end(), [&](CardItem *a, CardItem *b) {
                         int ia = static_cast<int>(oidOrder.indexOf(

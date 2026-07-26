@@ -1,9 +1,11 @@
 #include "view_zone.h"
 
+#include "../ruled/ruled_actions.h"
 #include "../board/card_drag_item.h"
 #include "../board/card_item.h"
 #include "../abstract_game.h"
 #include "../game_event_handler.h"
+#include "../ruled/ruled_client_state.h"
 
 #include <algorithm>
 #include <climits>
@@ -191,9 +193,9 @@ void ZoneViewZone::reorganizeCards()
         // synthetic ability cards (prepended on createSyntheticAbilityStackCard).
         if (auto *player = getLogic()->getPlayer()) {
             if (auto *ag = player->getGame()) {
-                if (ag->getGameMetaInfo()->proto().ruled_game()) {
-                    if (auto *geh = ag->getGameEventHandler()) {
-                        const QList<quint32> &oidOrder = geh->getRuledStackOidOrder();
+                if (RuledActions::isRuledGame(ag)) {
+                    if (auto *geh = ag->getGameEventHandler()->ruled()) {
+                        const QList<quint32> &oidOrder = geh->getStackOidOrder();
                         const int pid = player->getPlayerInfo()->getId();
                         std::sort(cardsToDisplay.begin(), cardsToDisplay.end(),
                                   [&](CardItem *a, CardItem *b) {

@@ -26,6 +26,7 @@
 | Shared protobufs | `libcockatrice_protocol/libcockatrice/protocol/pb/` (`ruled_v1.proto`) |
 | Server ruled integration | `libcockatrice_network/.../server/remote/game/` (`server_game`, `rules_relay`) |
 | Desktop client | `cockatrice/` |
+| Ruled client view model | `cockatrice/src/game/ruled/` (`ruled_client_state`, `ruled_event_dispatcher`, `ruled_actions`, `ruled_client_host`) |
 | Ruled prompt UI | `cockatrice/src/game/prompt/game_prompt_widget.{h,cpp}` |
 
 ---
@@ -131,6 +132,24 @@ Filter: `layout == "normal"`, type line contains `Creature`, integer power/tough
 
 ---
 
+## Ruled client (`cockatrice/src/game/ruled/`)
+
+All ruled client logic is fork-owned and lives here; upstream files keep 1–3-line hooks.
+
+- **`RuledClientState`** — the client's mirror of the engine's view (identity maps, legal actions,
+  combat staging, stack tracking, pending choices) plus every `ruled` signal the UI listens to.
+  Reach it with `game->getGameEventHandler()->ruled()`.
+- **`RuledEventDispatcher`** — applies one `RuledEventBatch`; one private method per event kind.
+  **A new engine event means a new method plus one `has_*()` line — never an inline block.**
+- **`RuledActions`** — click interpretation and CardItem lookup. Upstream call sites are guards:
+  `if (RuledActions::tryHandleCombatClick(this)) return;`. `RuledActions::isRuledGame(game)` is
+  the only place that reads the `ruled_game` flag — never re-inline the proto chain.
+- **`RuledClientHost`** — the pure-virtual seam the first two use to reach the Qt UI, implemented
+  by `GameEventHandler`. **Keep `ruled_client_state.cpp` and `ruled_event_dispatcher.cpp` free of
+  `AbstractGame` / `Player` / `CardItem`**: anything new they need goes on the host interface.
+  That is the only reason `tests/ruled_client_tests/` can run headless — adding a UI include
+  there silently breaks the test target's link.
+
 ## Ruled prompt UI (`game_prompt_widget`, `tab_game`)
 
 - Logic lives in `cockatrice/src/game/prompt/game_prompt_widget.{h,cpp}`; **TabGame** does placement + signals only.
@@ -194,7 +213,7 @@ iterating, build and test only the components your change touches:
 | `tricerules/**/*.rs` or `data/*.ron` only | no C++ build | `cd tricerules; cargo test -p tricerules-core --test scenario <filter>` (or `-p tricerules-cards` for registry/data); clippy + fmt |
 | `ruled_v1.proto` | everything (C++ **and** Rust; near-full C++ recompile is expected) | full C++ ctest + `cargo test` |
 | Server (`libcockatrice_network`, servatrice) | `--target servatrice` + test targets | `ctest -R "ruled_batch_test|ruled_utils_test|ruled_e2e_smoke_test"` |
-| Client only (`cockatrice/`) | `--target cockatrice` + test targets | `ctest -R game_prompt_widget_test` (plus any touched client test) |
+| Client only (`cockatrice/`) | `--target cockatrice` + test targets | `ctest -R "ruled_client_test\|game_prompt_widget_test"` (plus any touched client test) |
 
 - `ctest -R <regex>` selects by test name (see `ctest -N` for the list); `cargo test -p
   tricerules-core --test scenario <filter>` runs matching scenario tests only.

@@ -1,5 +1,6 @@
 #include "pile_zone.h"
 
+#include "../ruled/ruled_actions.h"
 #include "../abstract_game.h"
 #include "../board/card_drag_item.h"
 #include "../board/card_item.h"
@@ -108,7 +109,7 @@ void PileZone::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
         return;
 
     if (auto *game = getLogic()->getPlayer()->getGame();
-        game && game->getGameMetaInfo() && game->getGameMetaInfo()->proto().ruled_game()) {
+        RuledActions::isRuledGame(game)) {
         setCursor(Qt::OpenHandCursor);
         return;
     }

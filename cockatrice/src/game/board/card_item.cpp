@@ -4,6 +4,8 @@
 #include "../../interface/widgets/tabs/tab_game.h"
 #include "../abstract_game.h"
 #include "../game_event_handler.h"
+#include "../ruled/ruled_actions.h"
+#include "../ruled/ruled_client_state.h"
 #include "../game_scene.h"
 #include "../phase.h"
 #include "../player/player.h"
@@ -42,11 +44,12 @@ CardItem::CardItem(Player *_owner, QGraphicsItem *parent, const CardRef &cardRef
 
     if (auto *game = owner ? owner->getGame() : nullptr) {
         if (auto *handler = game->getGameEventHandler()) {
-            connect(handler, &GameEventHandler::ruledCombatStateChanged, this, [this]() { update(); });
-            connect(handler, &GameEventHandler::ruledBattlefieldMapUpdated, this, [this]() { update(); });
-            connect(handler, &GameEventHandler::ruledCombatDamageUiChanged, this, [this]() { update(); });
-            connect(handler, &GameEventHandler::ruledSpellTargetSelectionChanged, this, [this]() { update(); });
-            connect(handler, &GameEventHandler::ruledSpellDamageAllocationUiChanged, this, [this]() { update(); });
+            RuledClientState *ruled = handler->ruled();
+            connect(ruled, &RuledClientState::combatStateChanged, this, [this]() { update(); });
+            connect(ruled, &RuledClientState::battlefieldMapUpdated, this, [this]() { update(); });
+            connect(ruled, &RuledClientState::combatDamageUiChanged, this, [this]() { update(); });
+            connect(ruled, &RuledClientState::spellTargetSelectionChanged, this, [this]() { update(); });
+            connect(ruled, &RuledClientState::spellDamageAllocationUiChanged, this, [this]() { update(); });
         }
     }
 }
@@ -108,16 +111,12 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
 
     QSizeF translatedSize = getTranslatedSize(painter);
     qreal scaleFactor = translatedSize.width() / boundingRect().width();
-    GameEventHandler *ruledHandler = nullptr;
+    AbstractGame *ruledGame = owner ? owner->getGame() : nullptr;
+    RuledClientState *ruledHandler = RuledActions::stateFor(ruledGame);
     quint32 ruledOid = 0;
-    if (auto *game = owner ? owner->getGame() : nullptr) {
-        if (game->getGameMetaInfo()->proto().ruled_game()) {
-            ruledHandler = game->getGameEventHandler();
-            if (ruledHandler) {
-                const int ownerPlayerId = owner ? owner->getPlayerInfo()->getId() : -1;
-                ruledOid = ruledHandler->engineOidForCardId(ownerPlayerId, id);
-            }
-        }
+    if (ruledHandler) {
+        const int ownerPlayerId = owner ? owner->getPlayerInfo()->getId() : -1;
+        ruledOid = ruledHandler->engineOidForCardId(ownerPlayerId, id);
     }
 
     if (!pt.isEmpty()) {
@@ -186,7 +185,7 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
 
     // Ability annotation: draw italic text at the bottom of the card for abilities on the stack.
     if (ruledHandler && ruledOid != 0) {
-        const QString abilityAnnotation = ruledHandler->ruledStackAnnotation(ruledOid);
+        const QString abilityAnnotation = ruledHandler->stackAnnotation(ruledOid);
         if (!abilityAnnotation.isEmpty()) {
             painter->save();
             transformPainter(painter, translatedSize, tapAngle);
@@ -227,8 +226,8 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
     if (ruledHandler) {
         if (ruledOid != 0) {
             QColor outlineColor;
-            const auto ruledPhase = ruledHandler->getRuledCombatPhase();
-            using RuledPhase = GameEventHandler::RuledCombatPhase;
+            const auto ruledPhase = ruledHandler->getCombatPhase();
+            using RuledPhase = RuledClientState::RuledCombatPhase;
             if (ruledPhase == RuledPhase::AssignCombatDamage) {
                 const quint32 curAtt = ruledHandler->currentCombatDamageAttackerOid();
                 const int dmg = static_cast<int>(ruledHandler->assignedCombatDamageForBlocker(ruledOid));
@@ -248,7 +247,7 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
                 // may not have arrived yet — draw a faint marker.
                 outlineColor = QColor(255, 80, 80, 200); // red-ish
             }
-            if (ruledHandler->isSelectedSpellTarget(ruledOid)) {
+            if (RuledActions::isSelectedSpellTarget(ruledGame, ruledOid)) {
                 outlineColor = QColor(220, 40, 40);
             }
             if (outlineColor.isValid()) {
@@ -261,8 +260,8 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
                 painter->drawPath(shape());
                 painter->restore();
             }
-            if (ruledHandler->isSpellDamageAllocationDisplayActive()) {
-                const int alloc = ruledHandler->spellDamageAllocationForOid(ruledOid);
+            if (RuledActions::isSpellDamageAllocationDisplayActive(ruledGame)) {
+                const int alloc = RuledActions::spellDamageAllocationForOid(ruledGame, ruledOid);
                 if (alloc > 0) {
                     paintNumberEllipse(alloc, 14, QColor(255, 120, 0), 0, 1, painter);
                 }
@@ -278,9 +277,9 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
         if (zone && zone->getName() == ZoneNames::HAND && owner && owner->getPlayerInfo()->getLocal() &&
             ruledHandler->localPlayerMustCleanupDiscard()) {
             if (zone->getCards().indexOf(const_cast<CardItem *>(this)) >= 0) {
-                const int ri = ruledHandler->resolveRuledCleanupDiscardHandIndexForClickedCard(this);
-                if (ri >= 0 && ruledHandler->isRuledCleanupDiscardLegalForHandIndex(ri) &&
-                    ruledHandler->isRuledCleanupDiscardHandIndexSelected(ri)) {
+                const int ri = RuledActions::resolveCleanupDiscardHandIndex(ruledHandler, this);
+                if (ri >= 0 && ruledHandler->isCleanupDiscardLegalForHandIndex(ri) &&
+                    ruledHandler->isCleanupDiscardHandIndexSelected(ri)) {
                     painter->save();
                     painter->setRenderHint(QPainter::Antialiasing, true);
                     QPen pen;
@@ -293,11 +292,11 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
             }
         }
         if (zone && zone->getName() == ZoneNames::HAND && owner && owner->getPlayerInfo()->getLocal() &&
-            ruledHandler->getRuledOpeningUiKind() == GameEventHandler::RuledOpeningUiKind::BottomLibrary) {
+            ruledHandler->getOpeningUiKind() == RuledClientState::RuledOpeningUiKind::BottomLibrary) {
             if (zone->getCards().indexOf(const_cast<CardItem *>(this)) >= 0) {
-                const int ri = ruledHandler->resolveRuledOpeningBottomHandIndexForClickedCard(this);
+                const int ri = RuledActions::resolveOpeningBottomHandIndex(ruledHandler, this);
                 if (ri >= 0) {
-                    const int clickOrder = ruledHandler->ruledOpeningBottomClickOrderFor(ri);
+                    const int clickOrder = ruledHandler->openingBottomClickOrderFor(ri);
                     if (clickOrder > 0) {
                         painter->save();
                         painter->setRenderHint(QPainter::Antialiasing, true);
@@ -457,18 +456,12 @@ QString normalizeKeyword(const QString &kw)
     return kw.toLower().remove(QLatin1Char(' '));
 }
 
-bool cardItemIsRuledGame(const CardItem *card)
-{
-    return card && card->getOwner() && card->getOwner()->getGame() &&
-           card->getOwner()->getGame()->getGameMetaInfo()->proto().ruled_game();
-}
-
 // Apply CardItem::resolveRuledTokenDisplayCard to `ref` in place when `card` is a ruled-game token
 // whose bare engine name ("Knight") has no Oracle entry. Shared by token creation and resync.
 void retargetRuledTokenCardRef(const CardItem *card, CardRef &ref, const QString &pt, const QString &color,
                                const QStringList &keywords)
 {
-    if (ref.name.isEmpty() || !cardItemIsRuledGame(card) || CardDatabaseManager::query()->getCard(ref)) {
+    if (ref.name.isEmpty() || !RuledActions::isRuledGameForCard(card) || CardDatabaseManager::query()->getCard(ref)) {
         return;
     }
     CardRef resolved = CardItem::resolveRuledTokenDisplayCard(ref.name, pt, color, keywords);
@@ -686,7 +679,7 @@ void CardItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
             return;
 
         if (auto *game = owner->getGame();
-            game && game->getGameMetaInfo() && game->getGameMetaInfo()->proto().ruled_game()) {
+            RuledActions::isRuledGame(game)) {
             setCursor(Qt::OpenHandCursor);
             return;
         }
@@ -729,7 +722,7 @@ void CardItem::playCard(bool faceDown)
     TableZoneLogic *tz = qobject_cast<TableZoneLogic *>(zone);
     if (tz) {
         if (auto *game = owner->getGame();
-            game && game->getGameMetaInfo() && game->getGameMetaInfo()->proto().ruled_game()) {
+            RuledActions::isRuledGame(game)) {
             // Non-lands: no freeform click-to-tap. Face-up lands: still use table tap for local mana shortcut.
             if (!isTableLandSingleClickLegal(this) || faceDown) {
                 return;
@@ -765,56 +758,6 @@ static bool isStationaryLeftRelease(const QGraphicsSceneMouseEvent *event)
            QApplication::startDragDistance();
 }
 
-static bool isRuledLandSingleClickLegal(const CardItem *card)
-{
-    if (!card || !card->getOwner() || !card->getZone()) {
-        return false;
-    }
-    if (card->getZone()->getName() != ZoneNames::HAND) {
-        return false;
-    }
-    if (!card->getCardInfo().getCardType().contains("Land", Qt::CaseInsensitive)) {
-        return false;
-    }
-
-    auto *game = card->getOwner()->getGame();
-    if (!game || !game->getGameMetaInfo()->proto().ruled_game()) {
-        return false;
-    }
-
-    const int handIndex = card->getZone()->getCards().indexOf(const_cast<CardItem *>(card));
-    if (handIndex < 0) {
-        return false;
-    }
-    const int resolved = game->getGameEventHandler()->resolveRuledLandPlayHandIndexForClickedCard(card);
-    return resolved >= 0;
-}
-
-static bool isRuledSpellSingleClickLegal(const CardItem *card)
-{
-    if (!card || !card->getOwner() || !card->getZone()) {
-        return false;
-    }
-    if (card->getZone()->getName() != ZoneNames::HAND) {
-        return false;
-    }
-    if (card->getCardInfo().getCardType().contains("Land", Qt::CaseInsensitive)) {
-        return false;
-    }
-
-    auto *game = card->getOwner()->getGame();
-    if (!game || !game->getGameMetaInfo()->proto().ruled_game()) {
-        return false;
-    }
-
-    const int handIndex = card->getZone()->getCards().indexOf(const_cast<CardItem *>(card));
-    if (handIndex < 0) {
-        return false;
-    }
-    const int resolved = game->getGameEventHandler()->resolveRuledSpellCastHandIndexForClickedCard(card);
-    return resolved >= 0;
-}
-
 static bool isTableLandSingleClickLegal(const CardItem *card)
 {
     if (!card || !card->getZone() || card->getFaceDown()) {
@@ -825,142 +768,6 @@ static bool isTableLandSingleClickLegal(const CardItem *card)
     }
     return card->getCardInfo().getCardType().contains("Land", Qt::CaseInsensitive);
 }
-
-namespace {
-GameEventHandler *ruledHandlerForCard(const CardItem *card)
-{
-    if (!card || !card->getOwner() || !card->getOwner()->getGame()) {
-        return nullptr;
-    }
-    auto *game = card->getOwner()->getGame();
-    if (!game->getGameMetaInfo()->proto().ruled_game()) {
-        return nullptr;
-    }
-    return game->getGameEventHandler();
-}
-
-bool isCombatEligibleCreature(const CardItem *card)
-{
-    if (!card || !card->getZone()) {
-        return false;
-    }
-    if (card->getZone()->getName() != ZoneNames::TABLE) {
-        return false;
-    }
-    if (card->getFaceDown()) {
-        return false;
-    }
-    // Creature-ness is a ruled/mechanical decision: ask the engine (via the battlefield object
-    // map) rather than the Oracle display DB. The Oracle path has no entry for engine-minted
-    // tokens, so deciding from getCardType() would wrongly make tokens combat-ineligible.
-    if (GameEventHandler *handler = ruledHandlerForCard(card)) {
-        Player *owner = card->getOwner();
-        const int ownerPlayerId = owner ? owner->getPlayerInfo()->getId() : -1;
-        const quint32 oid = handler->engineOidForCardId(ownerPlayerId, card->getId());
-        if (oid != 0) {
-            return handler->isEngineOidCreature(oid);
-        }
-    }
-    return card->getCardInfo().getCardType().contains("Creature", Qt::CaseInsensitive);
-}
-
-// Try to handle a left-click as a ruled-mode combat input.
-// Returns true if the click was consumed by combat handling.
-bool handleRuledCombatRightClick(CardItem *card)
-{
-    GameEventHandler *handler = ruledHandlerForCard(card);
-    if (!handler) {
-        return false;
-    }
-    if (!isCombatEligibleCreature(card)) {
-        return false;
-    }
-    Player *owner = card->getOwner();
-    const int ownerPlayerId = owner ? owner->getPlayerInfo()->getId() : -1;
-    const quint32 oid = handler->engineOidForCardId(ownerPlayerId, card->getId());
-    if (oid == 0) {
-        return false;
-    }
-    const auto phase = handler->getRuledCombatPhase();
-    using Phase = GameEventHandler::RuledCombatPhase;
-    if (phase == Phase::AssignCombatDamage && handler->localPlayerIsRuledActive()) {
-        const quint32 curAtt = handler->currentCombatDamageAttackerOid();
-        if (curAtt == 0) {
-            return false;
-        }
-        if (handler->getCommittedBlocks().value(oid, 0) != curAtt) {
-            return false;
-        }
-        handler->bumpBlockerCombatDamage(oid, -1);
-        return true;
-    }
-    return false;
-}
-
-bool handleRuledCombatClick(CardItem *card)
-{
-    GameEventHandler *handler = ruledHandlerForCard(card);
-    if (!handler) {
-        return false;
-    }
-    if (!isCombatEligibleCreature(card)) {
-        return false;
-    }
-    Player *owner = card->getOwner();
-    const int ownerPlayerId = owner ? owner->getPlayerInfo()->getId() : -1;
-    const quint32 oid = handler->engineOidForCardId(ownerPlayerId, card->getId());
-    if (oid == 0) {
-        return false;
-    }
-    const auto phase = handler->getRuledCombatPhase();
-    using Phase = GameEventHandler::RuledCombatPhase;
-    const bool ownCreature = owner && owner->getPlayerInfo()->getLocal();
-
-    if (phase == Phase::DeclareAttackers && handler->localPlayerIsRuledActive() && ownCreature) {
-        if (card->getTapped()) {
-            return false;
-        }
-        // CR 702.10b: Haste bypasses summoning sickness — a creature with Haste
-        // may be selected as an attacker even on the turn it entered the battlefield.
-        if (handler->isEngineOidSummoningSick(oid) && !handler->isEngineOidHaste(oid)) {
-            return false;
-        }
-        handler->togglePendingAttacker(oid);
-        return true;
-    }
-
-    if (phase == Phase::DeclareBlockers && handler->localPlayerIsRuledDefender()) {
-        if (ownCreature) {
-            if (card->getTapped()) {
-                return false;
-            }
-            // Toggle this creature in/out of the staged blocker set.
-            handler->toggleStagedBlocker(oid);
-            return true;
-        }
-        // Clicked an enemy attacker — pair all staged blockers to it.
-        if (handler->hasStagedBlocker() && handler->isCurrentAttacker(oid)) {
-            handler->pairStagedBlockerToAttacker(oid);
-            return true;
-        }
-    }
-
-    if (phase == Phase::AssignCombatDamage && handler->localPlayerIsRuledActive()) {
-        const quint32 curAtt = handler->currentCombatDamageAttackerOid();
-        if (curAtt == 0) {
-            return false;
-        }
-        // Only accept blockers assigned to the current attacker.
-        if (handler->getCommittedBlocks().value(oid, 0) != curAtt) {
-            return false;
-        }
-        handler->bumpBlockerCombatDamage(oid, +1);
-        return true;
-    }
-
-    return false;
-}
-} // namespace
 
 /**
  * This method is called when a "click to play" is done on the card.
@@ -984,7 +791,7 @@ void CardItem::handleClickedToPlay(bool shiftHeld)
 void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
     if (event->button() == Qt::RightButton) {
-        if (handleRuledCombatRightClick(this)) {
+        if (RuledActions::tryHandleCombatRightClick(this)) {
             update();
             AbstractCardItem::mouseReleaseEvent(event);
             return;
@@ -1083,7 +890,7 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
             }
         }
         // Ruled-mode combat clicks take priority over normal play handling on the table.
-        if (stationaryLeft && handleRuledCombatClick(this)) {
+        if (stationaryLeft && RuledActions::tryHandleCombatClick(this)) {
             update();
             if (owner != nullptr) {
                 setCursor(Qt::OpenHandCursor);
@@ -1092,8 +899,8 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
             return;
         }
         if (stationaryLeft &&
-            (!SettingsCache::instance().getDoubleClickToPlay() || isRuledLandSingleClickLegal(this) ||
-             isRuledSpellSingleClickLegal(this) || isTableLandSingleClickLegal(this))) {
+            (!SettingsCache::instance().getDoubleClickToPlay() || RuledActions::isSingleClickPlayLegal(this) ||
+             isTableLandSingleClickLegal(this))) {
             handleClickedToPlay(event->modifiers().testFlag(Qt::ShiftModifier));
         }
     }

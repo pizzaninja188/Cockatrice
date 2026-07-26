@@ -1,7 +1,9 @@
 #include "player_event_handler.h"
 
+#include "../ruled/ruled_actions.h"
 #include "../../interface/widgets/tabs/tab_game.h"
 #include "../game_event_handler.h"
+#include "../ruled/ruled_client_state.h"
 #include "../board/arrow_item.h"
 #include "../board/card_item.h"
 #include "../board/card_list.h"
@@ -157,7 +159,7 @@ void PlayerEventHandler::eventCreateToken(const Event_CreateToken &event)
     // variant so it shows the right art and details (CardItem::resolveRuledTokenDisplayCard). The same
     // resolution runs in CardItem::processCardInfo so a battlefield resync doesn't revert it. Display-
     // only; only triggers on an exact-name miss, so freeform tokens (exact DB names) are unaffected.
-    if (player->getGame() && player->getGame()->getGameMetaInfo()->proto().ruled_game() &&
+    if (RuledActions::isRuledGame(player->getGame()) &&
         !event.face_down() && !cardRef.name.isEmpty() &&
         !CardDatabaseManager::query()->getCard(cardRef)) {
         QStringList engineKeywords;
@@ -250,7 +252,7 @@ void PlayerEventHandler::eventSetCounter(const Event_SetCounter &event)
     }
     int oldValue = ctr->getValue();
     ctr->setValue(event.value());
-    if (player->getGame() && player->getGame()->getGameMetaInfo()->proto().ruled_game() &&
+    if (RuledActions::isRuledGame(player->getGame()) &&
         isRuledManaPoolCounterName(ctr->getName())) {
         // CR 605: when the local player produces mana (this pool counter just went up) while a spell or
         // ability is mid-payment, route the new mana straight into that pending cost rather than leaving
@@ -331,13 +333,13 @@ void PlayerEventHandler::eventMoveCard(const Event_MoveCard &event, const GameEv
     // Ruled: opponent hands use contentsKnown=false (card ids are not mirrored). Server Event_MoveCard position
     // is the server's hand index and can disagree with this client's ordering. Prefer engine HandSlotMap when it
     // maps (start_player_id, card_id) to a valid local index so takeCard removes the correct CardItem.
-    if (player->getGame() && player->getGame()->getGameMetaInfo()->proto().ruled_game() &&
+    if (RuledActions::isRuledGame(player->getGame()) &&
         startZoneString == QLatin1String(ZoneNames::HAND) && !startZone->getCards().getContentsKnown()) {
-        if (GameEventHandler *geh = player->getGame()->getGameEventHandler()) {
+        if (RuledClientState *geh = player->getGame()->getGameEventHandler()->ruled()) {
             if (event.has_card_id()) {
                 const int sid = static_cast<int>(event.card_id());
                 if (sid >= 0) {
-                    const int slot = geh->ruledEngineHandSlotForServerCard(static_cast<int>(event.start_player_id()), sid);
+                    const int slot = geh->engineHandSlotForServerCard(static_cast<int>(event.start_player_id()), sid);
                     if (slot >= 0 && slot < startZone->getCards().size()) {
                         position = slot;
                     }
@@ -434,7 +436,7 @@ void PlayerEventHandler::eventMoveCard(const Event_MoveCard &event, const GameEv
     // the targeting arrow un-drawn. Re-sync arrows now so the arrow appears regardless of order.
     if (startZone != targetZone &&
         targetZone->getName() == QLatin1String(ZoneNames::STACK) &&
-        player->getGame() && player->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+        RuledActions::isRuledGame(player->getGame())) {
         if (GameEventHandler *geh = player->getGame()->getGameEventHandler()) {
             geh->refreshRuledSpellTargetArrows();
         }

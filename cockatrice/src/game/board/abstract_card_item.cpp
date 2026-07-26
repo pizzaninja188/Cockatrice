@@ -1,5 +1,6 @@
 #include "abstract_card_item.h"
 
+#include "../ruled/ruled_actions.h"
 #include "../../client/settings/cache_settings.h"
 #include "../../interface/card_picture_loader/card_picture_loader.h"
 #include "../abstract_game.h"
@@ -182,7 +183,7 @@ void AbstractCardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *
     painter->setRenderHint(QPainter::Antialiasing, false);
 
     const bool ruledGame = owner && owner->getGame() && owner->getGame()->getGameMetaInfo() &&
-                           owner->getGame()->getGameMetaInfo()->proto().ruled_game();
+                           RuledActions::isRuledGame(owner->getGame());
     // Ruled games: no red "selected" outline (freeform sandbox affordance); keep yellow hover.
     if (isHovered || (isSelected() && !ruledGame)) {
         QPen pen;

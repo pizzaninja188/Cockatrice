@@ -1,5 +1,6 @@
 #include "abstract_counter.h"
 
+#include "../ruled/ruled_actions.h"
 #include "../../client/settings/cache_settings.h"
 #include "../../interface/widgets/tabs/tab_game.h"
 #include "../abstract_game.h"
@@ -37,7 +38,7 @@ bool manualManaEditsDisallowedInRuledGame(Player *p, const QString &counterName)
     if (p->getPlayerInfo()->getJudge()) {
         return false;
     }
-    if (!p->getGame()->getGameMetaInfo()->proto().ruled_game()) {
+    if (!RuledActions::isRuledGame(p->getGame())) {
         return false;
     }
     return isManaPoolSymbolName(counterName);

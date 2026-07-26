@@ -192,6 +192,44 @@ unchanged. Verify: `RuledBatchTest` + the Step 3 smoke + one manual game.
 
 ### Step 5 — Client extraction: `cockatrice/src/game/ruled/` (~2,200 lines moved, 4–5 PRs)
 
+> **Done 2026-07-25.** `cockatrice/src/game/ruled/` now holds `ruled_client_state.{h,cpp}`,
+> `ruled_event_dispatcher.{h,cpp}`, `ruled_actions.{h,cpp}`, and a fourth file the plan below did
+> not anticipate: **`ruled_client_host.h`**, a pure-virtual seam the state and dispatcher use to
+> reach the Qt UI (local seat id, turn/phase writes, synthetic stack cards, P/T fallback, command
+> transport, the modal-choice fallback, arrow resync). `GameEventHandler` implements it. That seam
+> is what makes the new suite possible at all — the state and dispatcher compile with **zero**
+> dependency on `AbstractGame` / `Player` / `CardItem`, so `tests/ruled_client_tests/` links just
+> those two `.cpp` files plus `libcockatrice_protocol` and drives them with a `FakeHost`.
+>
+> `game_event_handler.h` went 851 → 204 lines and `game_event_handler.cpp` 3,146 → 956; the
+> `RULED_PAYLOAD` case is now one line. The temporary-forwarder sub-step was skipped deliberately:
+> writing a ~400-line forwarding header only to delete it in the next PR is pure churn when the
+> whole move can be compiled and tested in one pass, so consumers were repointed to
+> `geh->ruled()->…` directly and the redundant `Ruled*` name prefixes were dropped inside
+> `RuledClientState` (`getRuledCombatPhase` → `getCombatPhase`, `ruledCombatStateChanged` →
+> `combatStateChanged`, …). `RuledActions::isRuledGame()` took over **every** verbatim
+> `getGameMetaInfo()->proto().ruled_game()` chain in `cockatrice/src` — `grep -rn 'ruled_game()'`
+> now hits only the helper itself and the create-game dialog's checkbox (a raw proto field read,
+> not a mode test).
+>
+> **`tests/ruled_client_tests/ruled_client_test.cpp`** (ctest `ruled_client_test`, 43 tests,
+> ~0.04 s): identity maps both ways, per-kind legal-action label parsing (land + MDFC faces,
+> cast + target flag, cleanup discard, the three opening modes), targeting tables by hand
+> slot/face and by ability, requirement sets surviving preview echoes, stack LIFO + countered-spell
+> cleanup + synthetic ability/copy cards, phase→toolbar mapping and first-strike transitions,
+> attacker/blocker staging with preview commands and the rejected-declaration rollback, combat
+> damage seeding (lethal-first and trample), zone-view pipe-delimited ability parsing, all five
+> resolution choice kinds plus the modal fallback, opening-bottom index adjustment, and session
+> reset. Verified: full build + full ctest (16/16, incl. `ruled_batch_test` and
+> `ruled_e2e_smoke_test`); a manual game is still worth doing before the next release-ish
+> milestone, since the E2E smoke drives protobuf-level clients, not the Qt UI.
+>
+> Not moved, and deliberately so: the ruled **pending-cast state machine** in
+> `player_actions.cpp` (~1,300 lines — `PendingRuledSpellCast`, flex-pip mana payment, ability
+> activation, damage allocation). It is local-player UI state reached *through* the click
+> interpreters, not part of the engine mirror, and moving it would have doubled this step. See
+> the new backlog entry.
+
 `game_event_handler.h` (851 lines) is ~80% ruled members/methods/signals on an upstream class;
 the `RULED_PAYLOAD` case (`game_event_handler.cpp:1416`, ~700 lines) handles all 18 event
 kinds inline; `player_actions.cpp`, `tab_game.cpp`, `card_item.cpp` interleave more. Extract
@@ -488,6 +526,17 @@ Unscheduled by design. Each entry fires on its trigger, not before.
   architecture supports it nearly for free; noting it here so nobody designs against it.
 - **Test-harness split** — *trigger: `tests/scenario/helpers.rs` passes ~1,500 lines.* Split
   by concern (setup builders vs assertion helpers), not by card theme.
+- **`PendingRuledSpellCast` extraction** — *trigger: when a new cast-time mechanic (kicker,
+  additional costs, alternative costs) would add another parallel pending-* family to
+  `player_actions.cpp`.* Step 5 left the ruled pending-cast state machine in place
+  (`PendingRuledSpellCast` + `PendingActivatedAbility`, flex-pip mana payment, X prompting,
+  multi-target collection, damage allocation — ~1,300 lines in the upstream
+  `player_actions.{h,cpp}`). It is genuinely local-player UI state, not part of the engine
+  mirror, and the click interpreters in `RuledActions` already gate every entry into it, so it
+  is not on the bleeding path the way `game_event_handler` was. When the trigger fires, move it
+  to `cockatrice/src/game/ruled/ruled_pending_cast.{h,cpp}` with `PlayerActions` keeping a
+  member pointer — and fold the three pending-* families into Step 7's one pending-choice holder
+  in the same pass rather than porting them as-is.
 
 ---
 

@@ -1,5 +1,6 @@
 #include "message_log_widget.h"
 
+#include "../ruled/ruled_actions.h"
 #include "../../client/sound_engine.h"
 #include "../../interface/widgets/tabs/tab_game.h"
 #include "../board/card_item.h"
@@ -25,7 +26,7 @@ static QString cardLink(const QString &cardName)
 
 bool MessageLogWidget::isRuledGame() const
 {
-    return game && game->getGameMetaInfo() && game->getGameMetaInfo()->proto().ruled_game();
+    return RuledActions::isRuledGame(game);
 }
 
 QPair<QString, QString>

@@ -104,6 +104,9 @@ set(cockatrice_SOURCES
     src/game/player/player_manager.cpp
     src/game/player/player_target.cpp
     src/game/replay.cpp
+    src/game/ruled/ruled_actions.cpp
+    src/game/ruled/ruled_client_state.cpp
+    src/game/ruled/ruled_event_dispatcher.cpp
     src/game/zones/card_zone.cpp
     src/game/zones/hand_zone.cpp
     src/game/zones/logic/card_zone_logic.cpp

@@ -15,6 +15,8 @@
 #include "../game/player/player_list_widget.h"
 #include "../game/prompt/game_prompt_widget.h"
 #include "../game/replay.h"
+#include "../game/ruled/ruled_actions.h"
+#include "../game/ruled/ruled_client_state.h"
 #include "../game/zones/view_zone.h"
 #include "../game/zones/view_zone_widget.h"
 #include "../interface/card_picture_loader/card_picture_loader.h"
@@ -102,7 +104,7 @@ CardItem *findOwnedTableCard(AbstractGame *game, int ownerPlayerId, int cardId)
 }
 
 // Resolve an engine ObjectId to the table CardItem owned by that object's controller.
-CardItem *findTableCardForEngineOid(AbstractGame *game, GameEventHandler *handler, quint32 oid)
+CardItem *findTableCardForEngineOid(AbstractGame *game, const RuledClientState *handler, quint32 oid)
 {
     if (!handler) {
         return nullptr;
@@ -240,7 +242,7 @@ void TabGame::connectToGameEventHandler()
     connect(game->getGameEventHandler(), &GameEventHandler::emitUserEvent, this, &TabGame::emitUserEvent);
     connect(game->getGameEventHandler(), &GameEventHandler::gameStopped, this, &TabGame::stopGame);
     connect(game->getGameEventHandler(), &GameEventHandler::gameStopped, messageLog, &MessageLogWidget::prepareForNewGame);
-    connect(game->getGameEventHandler(), &GameEventHandler::ruledSessionReset, this, [this] {
+    connect(game->getGameEventHandler()->ruled(), &RuledClientState::sessionReset, this, [this] {
         if (gamePromptWidget) {
             gamePromptWidget->setTriggerTargetPending(false);
             gamePromptWidget->setCopyTargetPending(false);
@@ -260,17 +262,17 @@ void TabGame::connectToGameEventHandler()
             &TabGame::processRemotePlayerDeckSelect);
     connect(game->getGameEventHandler(), &GameEventHandler::remotePlayersDecksSelected, this,
             &TabGame::processMultipleRemotePlayerDeckSelect);
-    connect(game->getGameEventHandler(), &GameEventHandler::ruledCombatStateChanged, this,
+    connect(game->getGameEventHandler()->ruled(), &RuledClientState::combatStateChanged, this,
             &TabGame::refreshRuledCombatArrows);
-    connect(game->getGameEventHandler(), &GameEventHandler::ruledBattlefieldMapUpdated, this,
+    connect(game->getGameEventHandler()->ruled(), &RuledClientState::battlefieldMapUpdated, this,
             &TabGame::refreshRuledCombatArrows);
-    connect(game->getGameEventHandler(), &GameEventHandler::ruledStackHasItemsChanged, this,
+    connect(game->getGameEventHandler()->ruled(), &RuledClientState::stackHasItemsChanged, this,
             [this](bool /*hasItems*/) {
-                if (game && game->getGameMetaInfo()->proto().ruled_game()) {
+                if (RuledActions::isRuledGame(game)) {
                     syncStackWindowVisibility();
                 }
             });
-    connect(game->getGameEventHandler(), &GameEventHandler::ruledStackOrderChanged, this,
+    connect(game->getGameEventHandler()->ruled(), &RuledClientState::stackOrderChanged, this,
             [this](const QList<quint32> &) {
                 // Re-sort the open stack window. Event_MoveCard (which adds the physical card and
                 // fires reorganizeCards) arrives before Event_RuledPayload (which updates
@@ -282,7 +284,7 @@ void TabGame::connectToGameEventHandler()
                     }
                 }
             });
-    connect(game->getGameEventHandler(), &GameEventHandler::ruledTriggerGraveyardNeedsTarget, this,
+    connect(game->getGameEventHandler()->ruled(), &RuledClientState::triggerGraveyardNeedsTarget, this,
             [this](bool needed) {
                 if (!game || !scene) {
                     return;
@@ -304,18 +306,18 @@ void TabGame::connectToGameEventHandler()
                 }
             });
     if (gamePromptWidget) {
-        connect(game->getGameEventHandler(), &GameEventHandler::ruledBlockerRejected, gamePromptWidget,
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::blockerRejected, gamePromptWidget,
                 [this]() {
                     if (gamePromptWidget) {
                         gamePromptWidget->setStickyBlockerError(tr("Illegal blocks."));
                     }
                 });
-        connect(game->getGameEventHandler(), &GameEventHandler::ruledEnginePromptFeed, gamePromptWidget,
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::enginePromptFeed, gamePromptWidget,
                 [this](const QString & /*lines*/) {
-                    auto *handler = game->getGameEventHandler();
+                    auto *handler = game->getGameEventHandler()->ruled();
                     if (handler && handler->localPlayerMustCleanupDiscard()) {
                         gamePromptWidget->setCleanupDiscardMode(
-                            true, handler->ruledCleanupDiscardRequiredCount(), handler->ruledCleanupDiscardSelectedCount());
+                            true, handler->cleanupDiscardRequiredCount(), handler->cleanupDiscardSelectedCount());
                         return;
                     }
                     gamePromptWidget->setCleanupDiscardMode(false, 0, 0);
@@ -370,7 +372,7 @@ void TabGame::connectToGameEventHandler()
                     // Refresh after the full batch has settled (state is complete here).
                     gamePromptWidget->refreshPromptLabel();
                 });
-        connect(game->getGameEventHandler(), &GameEventHandler::ruledCleanupDiscardUiChanged, this,
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::cleanupDiscardUiChanged, this,
                 [this](int required, int selected) {
                     if (!gamePromptWidget) {
                         return;
@@ -386,13 +388,13 @@ void TabGame::connectToGameEventHandler()
                         gamePromptWidget->setCleanupDiscardMode(false, 0, 0);
                     }
                 });
-        connect(game->getGameEventHandler(), &GameEventHandler::ruledOpeningUiChanged, this, [this]() {
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::openingUiChanged, this, [this]() {
             if (!gamePromptWidget || !game) {
                 return;
             }
-            auto *h = game->getGameEventHandler();
-            const auto kind = h->getRuledOpeningUiKind();
-            if (kind == GameEventHandler::RuledOpeningUiKind::ChooseFirst) {
+            auto *h = game->getGameEventHandler()->ruled();
+            const auto kind = h->getOpeningUiKind();
+            if (kind == RuledClientState::RuledOpeningUiKind::ChooseFirst) {
                 const int localId = game->getPlayerManager()->getLocalPlayerId();
                 int opponentId = -1;
                 for (int pid : game->getPlayerManager()->getPlayers().keys()) {
@@ -406,12 +408,12 @@ void TabGame::connectToGameEventHandler()
                 } else {
                     gamePromptWidget->setRuledOpeningUi(0, {});
                 }
-            } else if (kind == GameEventHandler::RuledOpeningUiKind::None) {
+            } else if (kind == RuledClientState::RuledOpeningUiKind::None) {
                 gamePromptWidget->setRuledOpeningUi(0, {});
                 // During the opening phase the local player has no active action — show who we're
                 // waiting for. This must run unconditionally: activePlayerName may already be set
                 // from a prior logActivePlayer signal, so checking isEmpty() misses later rounds.
-                if (h->ruledEngineOpeningPhaseActive()) {
+                if (h->engineOpeningPhaseActive()) {
                     const int localId = game->getPlayerManager()->getLocalPlayerId();
                     for (auto *player : game->getPlayerManager()->getPlayers()) {
                         if (player->getPlayerInfo()->getId() != localId) {
@@ -422,27 +424,27 @@ void TabGame::connectToGameEventHandler()
                     }
                 }
             } else {
-                gamePromptWidget->setRuledOpeningUi(static_cast<int>(kind), h->getRuledOpeningPickSeatIds(),
-                                                    h->getRuledOpeningMulliganCount());
+                gamePromptWidget->setRuledOpeningUi(static_cast<int>(kind), h->getOpeningPickSeatIds(),
+                                                    h->getOpeningMulliganCount());
             }
         });
-        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningPickSeatRequested, game->getGameEventHandler(),
-                &GameEventHandler::handleRuledOpeningPickFirstSeat);
-        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningMulliganKeepRequested, game->getGameEventHandler(),
-                &GameEventHandler::handleRuledOpeningMulliganKeep);
-        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningMulliganRedrawRequested, game->getGameEventHandler(),
-                &GameEventHandler::handleRuledOpeningMulliganRedraw);
-        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningBottomCancelRequested, game->getGameEventHandler(),
-                &GameEventHandler::handleRuledOpeningBottomCancel);
-        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningBottomDoneRequested, game->getGameEventHandler(),
-                &GameEventHandler::handleRuledOpeningBottomDone);
-        connect(game->getGameEventHandler(), &GameEventHandler::ruledOpeningBottomUiChanged, this,
+        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningPickSeatRequested, game->getGameEventHandler()->ruled(),
+                &RuledClientState::openingPickFirstSeat);
+        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningMulliganKeepRequested, game->getGameEventHandler()->ruled(),
+                &RuledClientState::openingMulliganKeep);
+        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningMulliganRedrawRequested, game->getGameEventHandler()->ruled(),
+                &RuledClientState::openingMulliganRedraw);
+        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningBottomCancelRequested, game->getGameEventHandler()->ruled(),
+                &RuledClientState::openingBottomCancel);
+        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningBottomDoneRequested, game->getGameEventHandler()->ruled(),
+                &RuledClientState::openingBottomDone);
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::openingBottomUiChanged, this,
                 [this](int required, int selected) {
                     if (gamePromptWidget) {
                         gamePromptWidget->setRuledOpeningBottomProgress(required, selected);
                     }
                 });
-        connect(game->getGameEventHandler(), &GameEventHandler::ruledResolutionHandPickUiChanged, this,
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::resolutionHandPickUiChanged, this,
                 [this](int required, int selected) {
                     if (gamePromptWidget) {
                         gamePromptWidget->setResolutionHandPickMode(required, selected);
@@ -454,10 +456,10 @@ void TabGame::connectToGameEventHandler()
                     }
                 });
         connect(gamePromptWidget, &GamePromptWidget::ruledResolutionHandPickConfirmRequested,
-                game->getGameEventHandler(), &GameEventHandler::submitResolutionHandPick);
-        connect(game->getGameEventHandler(), &GameEventHandler::ruledLibrarySearchPickStarted,
+                game->getGameEventHandler()->ruled(), &RuledClientState::submitResolutionHandPick);
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::librarySearchPickStarted,
                 this, &TabGame::onRuledLibrarySearchPickStarted);
-        connect(game->getGameEventHandler(), &GameEventHandler::ruledRevealedPickChanged,
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::revealedPickChanged,
                 this, &TabGame::onRuledRevealedPickChanged);
         connect(game->getGameState(), &GameState::activePhaseChanged, gamePromptWidget, &GamePromptWidget::setActivePhase);
         connect(game->getGameEventHandler(), &GameEventHandler::logActivePlayer, gamePromptWidget, [this](Player *player) {
@@ -465,35 +467,35 @@ void TabGame::connectToGameEventHandler()
                 gamePromptWidget->setActivePlayerName(player->getPlayerInfo()->getName());
             }
         });
-        connect(game->getGameEventHandler(), &GameEventHandler::ruledCombatStateChanged, gamePromptWidget,
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::combatStateChanged, gamePromptWidget,
                 [this]() {
-                    auto *handler = game->getGameEventHandler();
+                    auto *handler = game->getGameEventHandler()->ruled();
                     if (!handler || !gamePromptWidget) {
                         return;
                     }
-                    const auto phase = handler->getRuledCombatPhase();
-                    using Phase = GameEventHandler::RuledCombatPhase;
+                    const auto phase = handler->getCombatPhase();
+                    using Phase = RuledClientState::RuledCombatPhase;
                     GamePromptWidget::CombatMode mode = GamePromptWidget::CombatMode::None;
                     bool localHasButtons = false;
                     if (phase == Phase::DeclareAttackers) {
                         mode = GamePromptWidget::CombatMode::DeclareAttackers;
-                        localHasButtons = handler->localPlayerIsRuledActive();
+                        localHasButtons = handler->localPlayerIsActive();
                     } else if (phase == Phase::DeclareBlockers) {
                         mode = GamePromptWidget::CombatMode::DeclareBlockers;
-                        localHasButtons = handler->localPlayerIsRuledDefender();
+                        localHasButtons = handler->localPlayerIsDefender();
                     } else if (phase == Phase::AssignCombatDamage) {
                         mode = GamePromptWidget::CombatMode::AssignCombatDamage;
-                        localHasButtons = handler->localPlayerIsRuledActive();
+                        localHasButtons = handler->localPlayerIsActive();
                     }
                     // CR 508.1d / 509.1c: disable the confirm (OK) button while a required
                     // attacker/blocker is still unstaged, so an illegal declaration can't be sent.
-                    const bool declarationSatisfied = handler->ruledCombatDeclarationSatisfied();
+                    const bool declarationSatisfied = handler->combatDeclarationSatisfied();
                     gamePromptWidget->setCombatMode(mode, localHasButtons, declarationSatisfied);
-                    if (!game->getGameMetaInfo()->proto().ruled_game()) {
+                    if (!RuledActions::isRuledGame(game)) {
                         return;
                     }
                     if (phase == Phase::AssignCombatDamage) {
-                        if (handler->localPlayerIsRuledActive()) {
+                        if (handler->localPlayerIsActive()) {
                             gamePromptWidget->setCombatDamageStatus(
                                 handler->currentCombatDamageAttackerDisplayName(),
                                 handler->localCombatDamageAssignedTotal(),
@@ -506,13 +508,13 @@ void TabGame::connectToGameEventHandler()
                         }
                     }
                 });
-        connect(game->getGameEventHandler(), &GameEventHandler::ruledCombatDamageUiChanged, this, [this]() {
-            auto *handler = game->getGameEventHandler();
-            if (!handler || !gamePromptWidget || !game->getGameMetaInfo()->proto().ruled_game()) {
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::combatDamageUiChanged, this, [this]() {
+            auto *handler = game->getGameEventHandler()->ruled();
+            if (!handler || !gamePromptWidget || !RuledActions::isRuledGame(game)) {
                 return;
             }
-            if (handler->getRuledCombatPhase() != GameEventHandler::RuledCombatPhase::AssignCombatDamage ||
-                !handler->localPlayerIsRuledActive()) {
+            if (handler->getCombatPhase() != RuledClientState::RuledCombatPhase::AssignCombatDamage ||
+                !handler->localPlayerIsActive()) {
                 return;
             }
             gamePromptWidget->setCombatDamageStatus(handler->currentCombatDamageAttackerDisplayName(),
@@ -521,8 +523,8 @@ void TabGame::connectToGameEventHandler()
                                                     handler->localCombatDamagePlayerDamage(),
                                                     handler->localCombatDamageAssignmentLegal());
         });
-        connect(game->getGameEventHandler(), &GameEventHandler::ruledSpellDamageAllocationUiChanged, this, [this]() {
-            if (!gamePromptWidget || !game->getGameMetaInfo()->proto().ruled_game()) return;
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::spellDamageAllocationUiChanged, this, [this]() {
+            if (!gamePromptWidget || !RuledActions::isRuledGame(game)) return;
             const int localId = game->getPlayerManager()->getLocalPlayerId();
             Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr);
             auto *actions = local ? local->getPlayerActions() : nullptr;
@@ -533,14 +535,14 @@ void TabGame::connectToGameEventHandler()
                 active ? actions->spellDamageAllocationAssignedTotal() : 0,
                 active ? actions->spellDamageAllocationMaxTotal() : 0);
         });
-        connect(gamePromptWidget, &GamePromptWidget::confirmAttackersRequested, game->getGameEventHandler(),
-                &GameEventHandler::handleConfirmRuledAttackers);
-        connect(gamePromptWidget, &GamePromptWidget::confirmBlockersRequested, game->getGameEventHandler(),
-                &GameEventHandler::handleConfirmRuledBlockers);
-        connect(gamePromptWidget, &GamePromptWidget::resetBlockersRequested, game->getGameEventHandler(),
-                &GameEventHandler::clearPendingBlocks);
-        connect(gamePromptWidget, &GamePromptWidget::confirmCombatDamageRequested, game->getGameEventHandler(),
-                &GameEventHandler::confirmCombatDamageForCurrentAttacker);
+        connect(gamePromptWidget, &GamePromptWidget::confirmAttackersRequested, game->getGameEventHandler()->ruled(),
+                &RuledClientState::confirmAttackers);
+        connect(gamePromptWidget, &GamePromptWidget::confirmBlockersRequested, game->getGameEventHandler()->ruled(),
+                &RuledClientState::confirmBlockers);
+        connect(gamePromptWidget, &GamePromptWidget::resetBlockersRequested, game->getGameEventHandler()->ruled(),
+                &RuledClientState::clearPendingBlocks);
+        connect(gamePromptWidget, &GamePromptWidget::confirmCombatDamageRequested, game->getGameEventHandler()->ruled(),
+                &RuledClientState::confirmCombatDamageForCurrentAttacker);
         connect(gamePromptWidget, &GamePromptWidget::cancelTargetingRequested, this, [this]() {
             if (!game) {
                 return;
@@ -553,17 +555,17 @@ void TabGame::connectToGameEventHandler()
             localPlayer->getPlayerActions()->cancelPendingRuledSpellCast();
             localPlayer->getPlayerActions()->cancelPendingActivatedAbility();
         });
-        connect(game->getGameEventHandler(), &GameEventHandler::ruledStackHasItemsChanged, gamePromptWidget,
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::stackHasItemsChanged, gamePromptWidget,
                 &GamePromptWidget::setRuledStackHasItems);
-        gamePromptWidget->setRuledStackHasItems(game->getGameEventHandler()->hasRuledStackItems());
-        connect(game->getGameEventHandler(), &GameEventHandler::ruledFirstStrikeStepPendingChanged,
+        gamePromptWidget->setRuledStackHasItems(game->getGameEventHandler()->ruled()->hasStackItems());
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::firstStrikeStepPendingChanged,
                 gamePromptWidget, &GamePromptWidget::setFirstStrikeStepPending);
         gamePromptWidget->setFirstStrikeStepPending(
-            game->getGameEventHandler()->isRuledFirstStrikeStepPending());
-        connect(game->getGameEventHandler(), &GameEventHandler::ruledFirstStrikeDamageStepActiveChanged,
+            game->getGameEventHandler()->ruled()->isFirstStrikeStepPending());
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::firstStrikeDamageStepActiveChanged,
                 gamePromptWidget, &GamePromptWidget::setFirstStrikeDamageStepActive);
         gamePromptWidget->setFirstStrikeDamageStepActive(
-            game->getGameEventHandler()->inRuledFirstStrikeDamageStep());
+            game->getGameEventHandler()->ruled()->inFirstStrikeDamageStep());
     }
 }
 
@@ -608,7 +610,7 @@ void TabGame::connectMessageLogToGameEventHandler()
     connect(game->getGameEventHandler(), &GameEventHandler::logConcede, messageLog, &MessageLogWidget::logConcede);
     connect(game->getGameEventHandler(), &GameEventHandler::logUnconcede, messageLog, &MessageLogWidget::logUnconcede);
 
-    connect(game->getGameEventHandler(), &GameEventHandler::ruledEngineTimeline, messageLog,
+    connect(game->getGameEventHandler()->ruled(), &RuledClientState::engineTimeline, messageLog,
             &MessageLogWidget::logRuledGameplay);
     connect(game->getGameEventHandler(), &GameEventHandler::logGameClosed, messageLog,
             &MessageLogWidget::logGameClosed);
@@ -683,17 +685,17 @@ void TabGame::refreshRuledCombatArrows()
 {
     clearRuledCombatArrows();
 
-    if (!game || !game->getGameMetaInfo()->proto().ruled_game()) {
+    if (!game || !RuledActions::isRuledGame(game)) {
         return;
     }
 
-    GameEventHandler *handler = game->getGameEventHandler();
+    const RuledClientState *handler = game->getGameEventHandler()->ruled();
     if (!handler) {
         return;
     }
 
-    const auto phase = handler->getRuledCombatPhase();
-    if (phase == GameEventHandler::RuledCombatPhase::None) {
+    const auto phase = handler->getCombatPhase();
+    if (phase == RuledClientState::RuledCombatPhase::None) {
         return;
     }
 
@@ -735,7 +737,7 @@ void TabGame::refreshRuledCombatArrows()
         attackersToDraw.insert(oid);
     }
 
-    ArrowTarget *defendingPlayerTarget = findDefendingPlayerTarget(game, handler->getRuledActivePlayerId());
+    ArrowTarget *defendingPlayerTarget = findDefendingPlayerTarget(game, handler->getActivePlayerId());
     if (!defendingPlayerTarget) {
         return;
     }
@@ -1170,9 +1172,9 @@ CardZoneLogic *TabGame::findVisibleStackZone() const
     // Ruled mode: activated/triggered abilities use virtual engine stack items with no physical card.
     // Show the local player's stack zone even when empty so the window stays visible while the
     // ability is on the stack and the player can pass priority.
-    if (!best && game && game->getGameMetaInfo()->proto().ruled_game()) {
-        const auto *handler = game->getGameEventHandler();
-        if (handler && handler->hasRuledStackItems()) {
+    if (!best && RuledActions::isRuledGame(game)) {
+        const auto *handler = game->getGameEventHandler()->ruled();
+        if (handler && handler->hasStackItems()) {
             if (localPlayer && localPlayer->getStackZone()) {
                 return localPlayer->getStackZone();
             }
@@ -1241,7 +1243,7 @@ void TabGame::ensureStackWindow()
     if (!scene || !game || !aToggleStackWindow) {
         return;
     }
-    if (!game->getGameMetaInfo()->proto().ruled_game()) {
+    if (!RuledActions::isRuledGame(game)) {
         return;
     }
     if (!game->getGameMetaInfo()->started()) {
@@ -1423,7 +1425,7 @@ void TabGame::addLocalPlayer(Player *newPlayer, int playerId)
                 &PlayerActions::undoLastLandTap);
         // CR 605 float courtesy: in ruled mode the Undo button reflects the engine's authoritative
         // undoable-mana count (per local player), which re-emits landTapUndoAvailableChanged.
-        connect(game->getGameEventHandler(), &GameEventHandler::ruledUndoableManaAbilitiesChanged,
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::undoableManaAbilitiesChanged,
                 newPlayer->getPlayerActions(), &PlayerActions::setRuledUndoableManaCount);
     }
 
@@ -1627,14 +1629,14 @@ Player *TabGame::setPriorityPlayer(int id)
 {
     Player *priorityPlayer = game->getPlayerManager()->getPlayer(id);
     const int localPlayerId = game->getPlayerManager()->getLocalPlayerId();
-    if (gamePromptWidget && game->getGameMetaInfo()->proto().ruled_game()) {
+    if (gamePromptWidget && RuledActions::isRuledGame(game)) {
         const bool localHasPriority = (id == localPlayerId);
         gamePromptWidget->setLocalPlayerHasPriority(localHasPriority);
         if (priorityPlayer) {
             gamePromptWidget->setPriorityPlayerName(priorityPlayer->getPlayerInfo()->getName());
         }
         if (localHasPriority) {
-            // Defer the auto-advance decision: ruledCombatStateChanged (which updates
+            // Defer the auto-advance decision: combatStateChanged (which updates
             // localPlayerHasCombatButtons) is emitted after the full event batch, but
             // setPriorityPlayer is called during batch processing. Deferring ensures the
             // mustDeclare check sees up-to-date combat state.
@@ -1648,9 +1650,9 @@ Player *TabGame::setPriorityPlayer(int id)
                 const int currentPhase = game->getGameState()->getCurrentPhase();
                 const bool myTurn = (game->getGameState()->getActivePlayer() == localPlayerId);
                 const bool hasManualStop = phasesToolbar->shouldStopAtPhase(currentPhase, myTurn);
-                const bool stackIsEmpty = !game->getGameEventHandler()->hasRuledStackItems();
-                const bool cleanupDiscard = game->getGameEventHandler()->localPlayerMustCleanupDiscard();
-                const bool openingPhase = game->getGameEventHandler()->ruledEngineOpeningPhaseActive();
+                const bool stackIsEmpty = !game->getGameEventHandler()->ruled()->hasStackItems();
+                const bool cleanupDiscard = game->getGameEventHandler()->ruled()->localPlayerMustCleanupDiscard();
+                const bool openingPhase = game->getGameEventHandler()->ruled()->engineOpeningPhaseActive();
                 const bool mustDeclare = gamePromptWidget && gamePromptWidget->localPlayerMustDeclareCombat();
                 // CR 510.4: the first-strike damage step shares the "Combat Damage" toolbar
                 // slot (phase 7) with regular damage, matching MTGO — both substeps obey the
@@ -1858,7 +1860,7 @@ void TabGame::createViewMenuItems()
     }
 
     viewMenu->addSeparator();
-    if (aToggleStackWindow && game->getGameMetaInfo()->proto().ruled_game()) {
+    if (aToggleStackWindow && RuledActions::isRuledGame(game)) {
         viewMenu->addAction(aToggleStackWindow);
     }
     viewMenu->addSeparator();
@@ -2045,7 +2047,7 @@ void TabGame::createMessageDock(bool bReplay)
         messageLogLayout->addWidget(timeElapsedLabel);
     }
 
-    if (!bReplay && game->getGameMetaInfo()->proto().ruled_game()) {
+    if (!bReplay && RuledActions::isRuledGame(game)) {
         gamePromptWidget = new GamePromptWidget(this);
         gamePromptWidget->setPassPriorityEnabled(true);
         gamePromptWidget->setActivePhase(game->getGameState()->getCurrentPhase());

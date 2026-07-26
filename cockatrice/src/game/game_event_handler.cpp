@@ -1,16 +1,30 @@
 #include "game_event_handler.h"
 
+#include "../interface/widgets/tabs/tab_game.h"
+#include "abstract_game.h"
 #include "board/arrow_item.h"
 #include "board/arrow_target.h"
 #include "board/card_item.h"
-#include "../interface/widgets/tabs/tab_game.h"
-#include "zones/logic/card_zone_logic.h"
-#include "abstract_game.h"
 #include "log/message_log_widget.h"
 #include "player/player.h"
 #include "player/player_actions.h"
 #include "player/player_manager.h"
+#include "ruled/ruled_actions.h"
+#include "ruled/ruled_client_state.h"
+#include "ruled/ruled_event_dispatcher.h"
+#include "zones/logic/card_zone_logic.h"
+#include "zones/logic/stack_zone_logic.h"
 
+#include <QColor>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QLabel>
+#include <QListWidget>
+#include <QPointer>
+#include <QPushButton>
+#include <QTimer>
+#include <QVBoxLayout>
+#include <algorithm>
 #include <libcockatrice/network/client/abstract/abstract_client.h>
 #include <libcockatrice/protocol/get_pb_extension.h>
 #include <libcockatrice/protocol/pb/command_concede.pb.h>
@@ -18,8 +32,8 @@
 #include <libcockatrice/protocol/pb/command_game_say.pb.h>
 #include <libcockatrice/protocol/pb/command_leave_game.pb.h>
 #include <libcockatrice/protocol/pb/command_next_turn.pb.h>
-#include <libcockatrice/protocol/pb/command_ruled_payload.pb.h>
 #include <libcockatrice/protocol/pb/command_reverse_turn.pb.h>
+#include <libcockatrice/protocol/pb/command_ruled_payload.pb.h>
 #include <libcockatrice/protocol/pb/command_set_active_phase.pb.h>
 #include <libcockatrice/protocol/pb/context_connection_state_changed.pb.h>
 #include <libcockatrice/protocol/pb/context_deck_select.pb.h>
@@ -29,60 +43,33 @@
 #include <libcockatrice/protocol/pb/event_game_state_changed.pb.h>
 #include <libcockatrice/protocol/pb/event_join.pb.h>
 #include <libcockatrice/protocol/pb/event_kicked.pb.h>
-#include <libcockatrice/protocol/pb/game_event.pb.h>
 #include <libcockatrice/protocol/pb/event_leave.pb.h>
 #include <libcockatrice/protocol/pb/event_player_properties_changed.pb.h>
 #include <libcockatrice/protocol/pb/event_reverse_turn.pb.h>
 #include <libcockatrice/protocol/pb/event_ruled_payload.pb.h>
-#include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <libcockatrice/protocol/pb/event_set_active_phase.pb.h>
 #include <libcockatrice/protocol/pb/event_set_active_player.pb.h>
+#include <libcockatrice/protocol/pb/game_event.pb.h>
 #include <libcockatrice/protocol/pb/game_event_container.pb.h>
+#include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <libcockatrice/protocol/pending_command.h>
 #include <libcockatrice/utility/zone_names.h>
-#include "zones/logic/stack_zone_logic.h"
-#include <QColor>
-#include <QDateTime>
-#include <QDialog>
-#include <QDialogButtonBox>
-#include <QDir>
-#include <QFile>
-#include <QLabel>
-#include <QListWidget>
-#include <QPointer>
-#include <QPushButton>
-#include <QRegularExpression>
-#include <QTextStream>
-#include <QTimer>
-#include <QVBoxLayout>
-#include <algorithm>
 
-// ---------------------------------------------------------------------------
-// Diagnostic logger — writes to ~/cockatrice_stack_debug.log
-// Remove after the spell-on-stack visibility bug is resolved.
-// ---------------------------------------------------------------------------
-static void sdbgLog(const QString &msg)
+namespace
 {
-    static const QString kPath = QDir::homePath() + QStringLiteral("/cockatrice_stack_debug.log");
-    QFile f(kPath);
-    if (f.open(QIODevice::Append | QIODevice::Text)) {
-        QTextStream ts(&f);
-        ts << QDateTime::currentDateTime().toString(Qt::ISODateWithMs) << " [GEH] " << msg << "\n";
-    }
-}
 
 // Minimal modal picker for a tier-3 custom resolution choice (CR 608): Brainstorm "put two on
 // top in order", Gifts Ungiven "opponent chooses two". Click a card to add it to the ordered
 // selection (click again to remove); OK enables only inside [minN, maxN]. There is no Cancel —
 // the resolution is mandatory, so the only exit is a legal selection. Returns the chosen engine
 // ObjectIds (in click order when `ordered`), parallel to `oids`.
-static QVector<quint32> askRuledResolutionChoice(const QString &prompt,
-                                                  const QVector<quint32> &oids,
-                                                  const QStringList &names,
-                                                  int minN,
-                                                  int maxN,
-                                                  bool ordered,
-                                                  bool uniqueNames)
+QVector<quint32> askRuledResolutionChoice(const QString &prompt,
+                                          const QVector<quint32> &oids,
+                                          const QStringList &names,
+                                          int minN,
+                                          int maxN,
+                                          bool ordered,
+                                          bool uniqueNames)
 {
     QDialog dlg;
     dlg.setWindowTitle(QObject::tr("Resolve"));
@@ -114,9 +101,8 @@ static QVector<quint32> askRuledResolutionChoice(const QString &prompt,
                 // Not yet chosen — grey out if it would violate unique-names.
                 const bool blocked = uniqueNames && chosenNameSet.contains(names.value(r));
                 list->item(r)->setText(names.value(r));
-                list->item(r)->setFlags(blocked
-                    ? list->item(r)->flags() & ~Qt::ItemIsEnabled
-                    : list->item(r)->flags() | Qt::ItemIsEnabled);
+                list->item(r)->setFlags(blocked ? list->item(r)->flags() & ~Qt::ItemIsEnabled
+                                                : list->item(r)->flags() | Qt::ItemIsEnabled);
             } else if (ordered) {
                 list->item(r)->setText(QStringLiteral("%1. %2").arg(pos + 1).arg(names.value(r)));
                 list->item(r)->setFlags(list->item(r)->flags() | Qt::ItemIsEnabled);
@@ -125,8 +111,7 @@ static QVector<quint32> askRuledResolutionChoice(const QString &prompt,
                 list->item(r)->setFlags(list->item(r)->flags() | Qt::ItemIsEnabled);
             }
         }
-        buttons->button(QDialogButtonBox::Ok)
-            ->setEnabled(chosen->size() >= minN && chosen->size() <= maxN);
+        buttons->button(QDialogButtonBox::Ok)->setEnabled(chosen->size() >= minN && chosen->size() <= maxN);
     };
     QObject::connect(list, &QListWidget::itemClicked, [=](QListWidgetItem *item) {
         const int r = list->row(item);
@@ -162,1122 +147,216 @@ static QVector<quint32> askRuledResolutionChoice(const QString &prompt,
     return out;
 }
 
-namespace {
-struct ParsedRuledLandActions
-{
-    QSet<int> handIndices;
-    QMultiHash<QString, int> handIndicesByCardName;
-    // CR 712: engine hand slot -> the faces the engine offers as a land play there. A multi-face
-    // (MDFC) land yields more than one entry for the same slot (front + back), each with its own
-    // face index for PlayLand.face_index and Oracle face name for the side-picker menu.
-    QHash<int, QVector<RuledLandFaceOption>> faceOptionsByHandIndex;
-};
-
-struct ParsedRuledCastActions
-{
-    QSet<int> handIndices;
-    QMultiHash<QString, int> handIndicesByCardName;
-    QSet<int> needsTargetHandIndices;
-};
-
-bool parseCreaturePt(const QString &pt, int *outPower, int *outToughness)
-{
-    if (!outPower || !outToughness) {
-        return false;
-    }
-    *outPower = *outToughness = 0;
-    const QString s = pt.trimmed();
-    if (s.isEmpty()) {
-        return false;
-    }
-    const int slash = s.indexOf(QLatin1Char('/'));
-    if (slash < 0) {
-        return false;
-    }
-    const QString left = s.left(slash).trimmed();
-    const QString right = s.mid(slash + 1).trimmed();
-    if (left.contains(QLatin1Char('*')) || right.contains(QLatin1Char('*'))) {
-        return false;
-    }
-    bool okP = false;
-    bool okT = false;
-    *outPower = left.toInt(&okP);
-    *outToughness = right.toInt(&okT);
-    return okP && okT;
-}
-
-GameEventHandler::RuledCombatPhase mapRuledPhaseSlugToCombatPhase(const QString &slug)
-{
-    if (slug == QLatin1String("declare_attackers")) {
-        return GameEventHandler::RuledCombatPhase::DeclareAttackers;
-    }
-    if (slug == QLatin1String("declare_blockers")) {
-        return GameEventHandler::RuledCombatPhase::DeclareBlockers;
-    }
-    if (slug == QLatin1String("assign_combat_damage")) {
-        return GameEventHandler::RuledCombatPhase::AssignCombatDamage;
-    }
-    if (slug == QLatin1String("first_strike_damage")) {
-        return GameEventHandler::RuledCombatPhase::FirstStrikeDamage;
-    }
-    if (slug == QLatin1String("combat_damage")) {
-        return GameEventHandler::RuledCombatPhase::CombatDamage;
-    }
-    if (slug == QLatin1String("end_combat")) {
-        return GameEventHandler::RuledCombatPhase::None;
-    }
-    return GameEventHandler::RuledCombatPhase::None;
-}
-
-int mapRuledPhaseSlugToToolbarPhase(const QString &slug)
-{
-    if (slug == QLatin1String("untap")) {
-        return 0;
-    }
-    if (slug == QLatin1String("upkeep")) {
-        return 1;
-    }
-    if (slug == QLatin1String("draw")) {
-        return 2;
-    }
-    if (slug == QLatin1String("main1")) {
-        return 3;
-    }
-    if (slug == QLatin1String("begin_combat")) {
-        return 4;
-    }
-    if (slug == QLatin1String("declare_attackers")) {
-        return 5;
-    }
-    if (slug == QLatin1String("declare_blockers") || slug == QLatin1String("assign_combat_damage")) {
-        return 6;
-    }
-    if (slug == QLatin1String("combat_damage")) {
-        return 7;
-    }
-    if (slug == QLatin1String("end_combat")) {
-        return 8;
-    }
-    if (slug == QLatin1String("main2")) {
-        return 9;
-    }
-    if (slug == QLatin1String("end_step") || slug == QLatin1String("cleanup")) {
-        return 10;
-    }
-    return -1;
-}
-
-ParsedRuledLandActions parseRuledLandActions(const ruled::v1::LegalActions &actions)
-{
-    // CR 712: multi-face (MDFC) land labels append ", face N"; single-face lands omit it (face 0).
-    static const QRegularExpression labelRegex(
-        QStringLiteral(R"(^Play land (.*) \(hand idx (\d+)(?:, face (\d+))?\)$)"));
-    ParsedRuledLandActions parsed;
-
-    for (const auto &label : actions.labels()) {
-        const QRegularExpressionMatch match = labelRegex.match(QString::fromStdString(label));
-        if (!match.hasMatch()) {
-            continue;
-        }
-
-        bool ok = false;
-        const int handIndex = match.captured(2).toInt(&ok);
-        if (ok) {
-            parsed.handIndices.insert(handIndex);
-            parsed.handIndicesByCardName.insert(match.captured(1), handIndex);
-            bool faceOk = false;
-            const int faceIndex = match.captured(3).toInt(&faceOk);
-            parsed.faceOptionsByHandIndex[handIndex].append({faceOk ? faceIndex : 0, match.captured(1)});
-        }
-    }
-    return parsed;
-}
-
-ParsedRuledCastActions parseRuledCastActions(const ruled::v1::LegalActions &actions)
-{
-    // Optional ", target" suffix is emitted by the engine when the spell needs a cast-time target.
-    static const QRegularExpression labelRegex(
-        QStringLiteral(R"(^Cast (.*) \(hand idx (\d+)(, target)?\)$)"));
-    ParsedRuledCastActions parsed;
-
-    for (const auto &label : actions.labels()) {
-        const QRegularExpressionMatch match = labelRegex.match(QString::fromStdString(label));
-        if (!match.hasMatch()) {
-            continue;
-        }
-
-        bool ok = false;
-        const int handIndex = match.captured(2).toInt(&ok);
-        if (ok) {
-            parsed.handIndices.insert(handIndex);
-            parsed.handIndicesByCardName.insert(match.captured(1), handIndex);
-            if (!match.captured(3).isEmpty()) {
-                parsed.needsTargetHandIndices.insert(handIndex);
-            }
-        }
-    }
-    return parsed;
-}
-
-ParsedRuledLandActions parseRuledCleanupDiscardActions(const ruled::v1::LegalActions &actions)
-{
-    static const QRegularExpression labelRegex(
-        QStringLiteral(R"(^Discard (.*) \(cleanup, hand idx (\d+)\)$)"));
-    ParsedRuledLandActions parsed;
-
-    for (const auto &label : actions.labels()) {
-        const QRegularExpressionMatch match = labelRegex.match(QString::fromStdString(label));
-        if (!match.hasMatch()) {
-            continue;
-        }
-
-        bool ok = false;
-        const int handIndex = match.captured(2).toInt(&ok);
-        if (ok) {
-            parsed.handIndices.insert(handIndex);
-            parsed.handIndicesByCardName.insert(match.captured(1), handIndex);
-        }
-    }
-    return parsed;
-}
-
-CardItem *findStackCardByServerId(AbstractGame *ag, int serverCardId)
-{
-    if (!ag || serverCardId < 0) {
-        return nullptr;
-    }
-    for (Player *p : ag->getPlayerManager()->getPlayers()) {
-        if (!p) {
-            continue;
-        }
-        if (CardItem *c = ag->getCard(p->getPlayerInfo()->getId(), QString::fromLatin1(ZoneNames::STACK), serverCardId)) {
-            return c;
-        }
-    }
-    return nullptr;
-}
-
-CardItem *findBattlefieldCardByEngineOid(AbstractGame *ag, const GameEventHandler *handler, quint32 engineOid)
-{
-    if (!ag || !handler || engineOid == 0) {
-        return nullptr;
-    }
-    const int sid = handler->cardIdForEngineOid(engineOid);
-    const int owner = handler->playerIdForEngineOid(engineOid);
-    if (sid >= 0 && owner >= 0) {
-        if (CardItem *c = ag->getCard(owner, QString::fromLatin1(ZoneNames::TABLE), sid)) {
-            return c;
-        }
-    }
-    PlayerManager *pm = ag->getPlayerManager();
-    for (Player *p : pm->getPlayers()) {
-        if (!p) {
-            continue;
-        }
-        CardZoneLogic *zt = p->getZones().value(QString::fromLatin1(ZoneNames::TABLE), nullptr);
-        if (!zt) {
-            continue;
-        }
-        for (CardItem *c : zt->getCards()) {
-            if (!c) {
-                continue;
-            }
-            const int cid = c->getId();
-            // BattlefieldObjectMap keys (player_id, server_card_id) use the server zone controller; CardItem
-            // ownership can disagree, so try every seat id that appears in the ruled oid map.
-            for (Player *op : pm->getPlayers()) {
-                if (!op || !op->getPlayerInfo()) {
-                    continue;
-                }
-                const int opId = op->getPlayerInfo()->getId();
-                if (handler->engineOidForCardId(opId, cid) == engineOid) {
-                    return c;
-                }
-            }
-        }
-    }
-    return nullptr;
-}
-
-CardItem *resolveStackCardItemByEngineOid(AbstractGame *ag,
-                                          TabGame *tab,
-                                          const GameEventHandler *handler,
-                                          PlayerManager *pm,
-                                          quint32 stackSpellOid)
-{
-    const int sid = handler->cardIdForEngineOid(stackSpellOid);
-    if (sid >= 0) {
-        if (tab) {
-            if (CardItem *c = tab->findVisibleStackSpellCardItem(sid)) {
-                return c;
-            }
-        }
-        if (CardItem *c = findStackCardByServerId(ag, sid)) {
-            return c;
-        }
-    }
-    for (Player *p : pm->getPlayers()) {
-        if (!p) {
-            continue;
-        }
-        CardZoneLogic *sz = p->getZones().value(QString::fromLatin1(ZoneNames::STACK), nullptr);
-        if (!sz) {
-            continue;
-        }
-        for (CardItem *c : sz->getCards()) {
-            if (!c) {
-                continue;
-            }
-            const int cid = c->getId();
-            for (Player *op : pm->getPlayers()) {
-                if (!op || !op->getPlayerInfo()) {
-                    continue;
-                }
-                if (handler->engineOidForCardId(op->getPlayerInfo()->getId(), cid) == stackSpellOid) {
-                    return c;
-                }
-            }
-        }
-    }
-    return nullptr;
-}
-
-ArrowTarget *resolveRuledSpellTarget(AbstractGame *ag,
-                                     TabGame *tab,
-                                     const GameEventHandler *handler,
-                                     const QList<quint32> &stackOids,
-                                     quint32 targetOid)
-{
-    if (!ag || !handler) {
-        return nullptr;
-    }
-    PlayerManager *pm = ag->getPlayerManager();
-    // Only Cockatrice seat ids count as player targets (engine object ids never collide with seats).
-    const int seatId = static_cast<int>(targetOid);
-    if (pm->getPlayers().contains(seatId)) {
-        if (Player *asPlayer = pm->getPlayer(seatId)) {
-            return asPlayer->getGraphicsItem()->getPlayerTarget();
-        }
-    }
-    if (stackOids.contains(targetOid)) {
-        return resolveStackCardItemByEngineOid(ag, tab, handler, pm, targetOid);
-    }
-    // Counterspell target: the countered spell's oid may already be removed from `ruledStackOidOrder` in the same
-    // batch as StackResolved, while StackPushed.targets still reference it — resolve via map + physical stack zone.
-    const int sidProbe = handler->cardIdForEngineOid(targetOid);
-    if (sidProbe >= 0) {
-        if (CardItem *stk = findStackCardByServerId(ag, sidProbe)) {
-            if (stk->getZone() &&
-                stk->getZone()->getName().compare(QStringLiteral("stack"), Qt::CaseInsensitive) == 0) {
-                if (tab) {
-                    if (CardItem *vis = tab->findVisibleStackSpellCardItem(sidProbe)) {
-                        return vis;
-                    }
-                }
-                return stk;
-            }
-        }
-    }
-    return findBattlefieldCardByEngineOid(ag, handler, targetOid);
-}
-
 } // namespace
 
-GameEventHandler::GameEventHandler(AbstractGame *_game) : QObject(_game), game(_game)
+GameEventHandler::GameEventHandler(AbstractGame *_game)
+    : QObject(_game), game(_game), ruledState(new RuledClientState(this, this)),
+      ruledDispatcher(new RuledEventDispatcher(ruledState, this, this))
 {
 }
 
-bool GameEventHandler::isRuledLandPlayLegalForHandIndex(int handIndex) const
+// ---------------------------------------------------------------------------------------
+// RuledClientHost
+// ---------------------------------------------------------------------------------------
+
+int GameEventHandler::localPlayerId() const
 {
-    return legalRuledLandPlayHandIndices.contains(handIndex);
+    return game->getPlayerManager()->getLocalPlayerId();
 }
 
-int GameEventHandler::getRuledLandPlayHandIndexForCard(const QString &cardName, int preferredHandIndex) const
+int GameEventHandler::currentActivePlayerId() const
 {
-    const QList<int> matching = getRuledLandPlayHandIndicesForCardName(cardName);
-    if (matching.contains(preferredHandIndex)) {
-        return preferredHandIndex;
+    return game->getGameState()->getActivePlayer();
+}
+
+void GameEventHandler::setActivePlayerId(int playerId)
+{
+    game->getGameState()->setActivePlayer(playerId);
+}
+
+void GameEventHandler::setPriorityPlayerId(int playerId)
+{
+    game->getGameState()->setPriorityPlayer(playerId);
+}
+
+void GameEventHandler::setToolbarPhase(int toolbarPhase)
+{
+    game->getGameState()->setCurrentPhase(toolbarPhase);
+}
+
+void GameEventHandler::createSyntheticStackCard(quint32 virtualOid,
+                                                const QString &displayName,
+                                                int controllerPlayerId,
+                                                const QString &setName)
+{
+    Q_UNUSED(controllerPlayerId);
+    // Idempotent: StackPushed may be rebroadcast; a second card for the same OID would corrupt the zone.
+    if (syntheticAbilityStackCards.contains(virtualOid)) {
+        return;
     }
-    if (matching.isEmpty()) {
-        return -1;
+    if (!game) {
+        return;
     }
-    return matching.first();
-}
-
-QList<int> GameEventHandler::getRuledLandPlayHandIndicesForCardName(const QString &cardName) const
-{
-    QList<int> matching = legalRuledLandPlayIndicesByCardName.values(cardName);
-    std::sort(matching.begin(), matching.end());
-    return matching;
-}
-
-bool GameEventHandler::isRuledSpellCastLegalForHandIndex(int handIndex) const
-{
-    return legalRuledSpellCastHandIndices.contains(handIndex);
-}
-
-bool GameEventHandler::isRuledSpellCastNeedsTargetForHandIndex(int handIndex) const
-{
-    return legalRuledSpellCastNeedsTargetHandIndices.contains(handIndex);
-}
-
-int GameEventHandler::getRuledSpellCastHandIndexForCard(const QString &cardName, int preferredHandIndex) const
-{
-    const QList<int> matching = getRuledSpellCastHandIndicesForCardName(cardName);
-    if (matching.contains(preferredHandIndex)) {
-        return preferredHandIndex;
+    // Always place the synthetic card in the canonical (lowest player-id) zone so that
+    // physical spells — which the server also routes to the canonical zone — appear in the
+    // same zone as synthetic ability cards. This keeps the stack window unified for both players.
+    const int localPid = game->getPlayerManager()->getLocalPlayerId();
+    const QMap<int, Player *> &allPlayers = game->getPlayerManager()->getPlayers();
+    const int zonePid = allPlayers.isEmpty() ? localPid : allPlayers.firstKey();
+    Player *zonePlayer = game->getPlayerManager()->getPlayers().value(zonePid, nullptr);
+    if (!zonePlayer) {
+        return;
     }
-    if (matching.isEmpty()) {
-        return -1;
+    CardZoneLogic *stackZone = zonePlayer->getStackZone();
+    if (!stackZone) {
+        return;
     }
-    return matching.first();
+    // Assign a fake card ID well outside the range Servatrice assigns (small positive ints).
+    const int fakeId = static_cast<int>(0x70000000u | (virtualOid & 0x0FFFFFFFu));
+    CardRef ref{displayName, setName};
+    auto *card = new CardItem(zonePlayer, nullptr, ref, fakeId);
+    // Register the OID mapping so card_item.cpp paint() can show the italic ability annotation.
+    // BattlefieldObjectMap clears ownerCardIdToEngineOid on every priority change, so the state
+    // keeps the fakeId and re-registers after each clear.
+    ruledState->registerSyntheticStackCard(virtualOid, fakeId, zonePid);
+    // Insert at front (index 0) so the newest item appears at the top of the visual stack,
+    // matching MTG rules where the most recently added item resolves first.
+    stackZone->addCard(card, true, 0);
+    // QPointer: auto-nullifies if the card is deleted outside our cleanup path.
+    syntheticAbilityStackCards.insert(virtualOid, QPointer<CardItem>(card));
 }
 
-QList<int> GameEventHandler::getRuledSpellCastHandIndicesForCardName(const QString &cardName) const
+void GameEventHandler::removeSyntheticStackCard(quint32 virtualOid)
 {
-    QList<int> matching = legalRuledSpellCastIndicesByCardName.values(cardName);
-    std::sort(matching.begin(), matching.end());
-    return matching;
-}
-
-int GameEventHandler::resolveEngineHandIndexFromLegalSlots(const CardItem *card,
-                                                           const QList<int> &sortedLegalHandIndices) const
-{
-    if (!card || !card->getZone()) {
-        return -1;
+    QPointer<CardItem> cardPtr = syntheticAbilityStackCards.take(virtualOid);
+    CardItem *card = cardPtr.data();
+    if (!card) {
+        ruledState->unregisterSyntheticStackCard(virtualOid, -1);
+        return;
     }
-    const CardZoneLogic *zone = card->getZone();
-    Player *handPlayer = zone->getPlayer();
-    const int clickedId = card->getId();
-    if (handPlayer && handPlayer->getPlayerInfo()) {
-        const int pid = handPlayer->getPlayerInfo()->getId();
-        const auto mit = ruledOwnedCardToEngineHandSlot.constFind(makeOwnedCardKey(pid, clickedId));
-        if (mit != ruledOwnedCardToEngineHandSlot.constEnd()) {
-            const int mapped = mit.value();
-            if (mapped >= 0 && sortedLegalHandIndices.contains(mapped)) {
-                return mapped;
+    if (auto *zone = card->getZone()) {
+        // Find by pointer so we never remove the wrong card by fake ID.
+        const CardList &zoneCards = zone->getCards();
+        int pos = -1;
+        for (int i = 0; i < zoneCards.size(); ++i) {
+            if (zoneCards[i] == card) {
+                pos = i;
+                break;
             }
         }
-    }
-    for (int h : sortedLegalHandIndices) {
-        if (h < 0 || h >= zone->getCards().size()) {
-            continue;
-        }
-        const CardItem *slot = zone->getCards().at(h);
-        if (slot && slot->getId() == clickedId) {
-            return h;
+        if (pos >= 0) {
+            zone->takeCard(pos, card->getId(), false);
         }
     }
-    const int handIndex = zone->getCards().indexOf(const_cast<CardItem *>(card));
-    if (handIndex >= 0 && sortedLegalHandIndices.contains(handIndex)) {
-        return handIndex;
-    }
-    return -1;
+    ruledState->unregisterSyntheticStackCard(virtualOid, card->getId());
+    card->deleteLater();
 }
 
-int GameEventHandler::resolveRuledSpellCastHandIndexForClickedCard(const CardItem *card) const
+QString GameEventHandler::stackCardProviderId(quint32 oid) const
 {
-    if (!card) {
-        return -1;
+    if (CardItem *srcCard = RuledActions::findStackCardItemByEngineOid(game, oid)) {
+        return srcCard->getCardRef().providerId;
     }
-    int resolved =
-        resolveEngineHandIndexFromLegalSlots(card, getRuledSpellCastHandIndicesForCardName(card->getName()));
-    if (resolved >= 0) {
-        return resolved;
-    }
-    // CR 709/712/715: the engine labels each castable face of a multi-face card (split half / MDFC
-    // face) by that face's own name, not the combined "A // B" Oracle name a CardItem carries. Try
-    // each face so a click on a multi-face card resolves to its shared hand slot.
-    const QStringList faceNames = card->getName().split(QStringLiteral(" // "), Qt::SkipEmptyParts);
-    if (faceNames.size() > 1) {
-        for (const QString &faceName : faceNames) {
-            resolved = resolveEngineHandIndexFromLegalSlots(card, getRuledSpellCastHandIndicesForCardName(faceName));
-            if (resolved >= 0) {
-                return resolved;
-            }
-        }
-    }
-    return resolved;
+    return {};
 }
 
-int GameEventHandler::resolveRuledLandPlayHandIndexForClickedCard(const CardItem *card) const
+bool GameEventHandler::fallbackCreaturePt(quint32 engineOid, int *power, int *toughness) const
 {
-    if (!card) {
-        return -1;
-    }
-    // A land's client CardItem carries its front-face Oracle name (an MDFC's back face never becomes
-    // a separate hand card), which the engine also uses to label each playable face of that slot —
-    // so a single lookup resolves the shared hand slot for both faces of a pathway.
-    return resolveEngineHandIndexFromLegalSlots(card, getRuledLandPlayHandIndicesForCardName(card->getName()));
-}
-
-QVector<RuledLandFaceOption> GameEventHandler::getRuledLandPlayFaceOptionsForHandIndex(int handIndex) const
-{
-    QVector<RuledLandFaceOption> options = legalRuledLandPlayFaceOptionsByHandIndex.value(handIndex);
-    std::sort(options.begin(), options.end(),
-              [](const RuledLandFaceOption &a, const RuledLandFaceOption &b) { return a.faceIndex < b.faceIndex; });
-    return options;
-}
-
-bool GameEventHandler::isRuledCleanupDiscardLegalForHandIndex(int handIndex) const
-{
-    return legalRuledCleanupDiscardHandIndices.contains(handIndex);
-}
-
-int GameEventHandler::getRuledCleanupDiscardHandIndexForCard(const QString &cardName, int preferredHandIndex) const
-{
-    const QList<int> matching = getRuledCleanupDiscardHandIndicesForCardName(cardName);
-    if (matching.contains(preferredHandIndex)) {
-        return preferredHandIndex;
-    }
-    if (matching.isEmpty()) {
-        return -1;
-    }
-    return matching.first();
-}
-
-QList<int> GameEventHandler::getRuledCleanupDiscardHandIndicesForCardName(const QString &cardName) const
-{
-    QList<int> matching = legalRuledCleanupDiscardIndicesByCardName.values(cardName);
-    std::sort(matching.begin(), matching.end());
-    return matching;
-}
-
-int GameEventHandler::resolveRuledCleanupDiscardHandIndexForClickedCard(const CardItem *card) const
-{
-    if (!card) {
-        return -1;
-    }
-    return resolveEngineHandIndexFromLegalSlots(card, getRuledCleanupDiscardHandIndicesForCardName(card->getName()));
-}
-
-bool GameEventHandler::isRuledOpeningBottomLegalForHandIndex(int handIndex) const
-{
-    return legalRuledOpeningBottomHandIndices.contains(handIndex);
-}
-
-int GameEventHandler::resolveRuledOpeningBottomHandIndexForClickedCard(const CardItem *card) const
-{
-    if (!card) {
-        return -1;
-    }
-    QList<int> legal = legalRuledOpeningBottomHandIndices.values();
-    std::sort(legal.begin(), legal.end());
-    return resolveEngineHandIndexFromLegalSlots(card, legal);
-}
-
-bool GameEventHandler::localPlayerMustCleanupDiscard() const
-{
-    return !legalRuledCleanupDiscardHandIndices.isEmpty();
-}
-
-int GameEventHandler::ruledCleanupDiscardRequiredCount() const
-{
-    const int n = legalRuledCleanupDiscardHandIndices.size();
-    if (n <= 7) {
-        return 0;
-    }
-    return n - 7;
-}
-
-int GameEventHandler::ruledCleanupDiscardSelectedCount() const
-{
-    return cleanupDiscardSelectedIndices.size();
-}
-
-bool GameEventHandler::isRuledCleanupDiscardHandIndexSelected(int handIndex) const
-{
-    return cleanupDiscardSelectedIndices.contains(handIndex);
-}
-
-void GameEventHandler::toggleRuledCleanupDiscardHandIndex(int ruledHandIndex)
-{
-    if (!isRuledCleanupDiscardLegalForHandIndex(ruledHandIndex)) {
-        return;
-    }
-    const int need = ruledCleanupDiscardRequiredCount();
-    if (need <= 0) {
-        return;
-    }
-    if (cleanupDiscardSelectedIndices.contains(ruledHandIndex)) {
-        cleanupDiscardSelectedIndices.remove(ruledHandIndex);
-    } else if (cleanupDiscardSelectedIndices.size() < need) {
-        cleanupDiscardSelectedIndices.insert(ruledHandIndex);
-    }
-    emit ruledCleanupDiscardUiChanged(need, cleanupDiscardSelectedIndices.size());
-    emit ruledCombatStateChanged();
-}
-
-void GameEventHandler::clearRuledCleanupDiscardSelection(bool emitUiChange)
-{
-    if (cleanupDiscardSelectedIndices.isEmpty()) {
-        return;
-    }
-    cleanupDiscardSelectedIndices.clear();
-    if (emitUiChange) {
-        emit ruledCleanupDiscardUiChanged(ruledCleanupDiscardRequiredCount(), 0);
-        emit ruledCombatStateChanged();
-    }
-}
-
-QList<int> GameEventHandler::ruledCleanupDiscardSelectedIndicesSorted() const
-{
-    QList<int> out;
-    out.reserve(cleanupDiscardSelectedIndices.size());
-    for (int x : cleanupDiscardSelectedIndices) {
-        out.append(x);
-    }
-    std::sort(out.begin(), out.end());
-    return out;
-}
-
-void GameEventHandler::notifyRuledHandUiChanged()
-{
-    emit ruledCombatStateChanged();
-}
-
-int GameEventHandler::ruledOpeningBottomRequiredCount() const
-{
-    return ruledOpeningMulliganCount;
-}
-
-int GameEventHandler::ruledOpeningBottomSelectedCount() const
-{
-    return ruledOpeningBottomSelectedIndices.size();
-}
-
-bool GameEventHandler::isRuledOpeningBottomHandIndexSelected(int handIndex) const
-{
-    return ruledOpeningBottomSelectedIndices.contains(handIndex);
-}
-
-void GameEventHandler::toggleRuledOpeningBottomHandIndex(int ruledHandIndex)
-{
-    if (!isRuledOpeningBottomLegalForHandIndex(ruledHandIndex)) {
-        return;
-    }
-    const int need = ruledOpeningBottomRequiredCount();
-    if (need <= 0) {
-        return;
-    }
-    if (ruledOpeningBottomSelectedIndices.contains(ruledHandIndex)) {
-        ruledOpeningBottomSelectedIndices.removeOne(ruledHandIndex);
-    } else if (ruledOpeningBottomSelectedIndices.size() < need) {
-        ruledOpeningBottomSelectedIndices.append(ruledHandIndex);
-    }
-    emit ruledOpeningBottomUiChanged(need, ruledOpeningBottomSelectedIndices.size());
-    emit ruledCombatStateChanged();
-}
-
-void GameEventHandler::clearRuledOpeningBottomSelection(bool emitUiChange)
-{
-    if (ruledOpeningBottomSelectedIndices.isEmpty()) {
-        return;
-    }
-    ruledOpeningBottomSelectedIndices.clear();
-    if (emitUiChange) {
-        emit ruledOpeningBottomUiChanged(ruledOpeningBottomRequiredCount(), 0);
-        emit ruledCombatStateChanged();
-    }
-}
-
-int GameEventHandler::ruledOpeningBottomClickOrderFor(int handIndex) const
-{
-    const int pos = ruledOpeningBottomSelectedIndices.indexOf(handIndex);
-    return pos + 1; // 1-based; returns 0 if not selected
-}
-
-void GameEventHandler::toggleResolutionHandPickCard(int serverCardId)
-{
-    if (!resolutionHandPick.has_value()) {
-        return;
-    }
-    if (!resolutionHandPick->serverCardIdToOid.contains(serverCardId)) {
-        return;
-    }
-    const int pos = resolutionHandPick->selectedServerCardIds.indexOf(serverCardId);
-    if (pos >= 0) {
-        resolutionHandPick->selectedServerCardIds.removeAt(pos);
-    } else if (resolutionHandPick->selectedServerCardIds.size() < resolutionHandPick->max) {
-        if (resolutionHandPick->uniqueNames) {
-            const QString clickedName = resolutionHandPick->serverCardIdToName.value(serverCardId);
-            bool nameTaken = false;
-            for (int selId : resolutionHandPick->selectedServerCardIds) {
-                if (resolutionHandPick->serverCardIdToName.value(selId) == clickedName) {
-                    nameTaken = true;
-                    break;
-                }
-            }
-            if (nameTaken) {
-                return;
-            }
-        }
-        resolutionHandPick->selectedServerCardIds.append(serverCardId);
-    }
-    emit ruledResolutionHandPickUiChanged(resolutionHandPick->min,
-                                          resolutionHandPick->selectedServerCardIds.size());
-    emit ruledCombatStateChanged();
-}
-
-void GameEventHandler::submitResolutionHandPick()
-{
-    if (!resolutionHandPick.has_value()) {
-        return;
-    }
-    const int n = resolutionHandPick->selectedServerCardIds.size();
-    if (n < resolutionHandPick->min || n > resolutionHandPick->max) {
-        return;
-    }
-    QVector<quint32> chosen;
-    chosen.reserve(n);
-    for (int scid : resolutionHandPick->selectedServerCardIds) {
-        const quint32 oid = resolutionHandPick->serverCardIdToOid.value(scid, 0);
-        if (oid != 0) {
-            chosen.append(oid);
-        }
-    }
-    const bool wasRevealed = resolutionHandPick.has_value() &&
-                             resolutionHandPick->pickZone == PickZone::Revealed;
-    resolutionHandPick.reset();
-    emit ruledResolutionHandPickUiChanged(-1, -1);
-    if (wasRevealed) {
-        emit ruledRevealedPickChanged(false, {}, {}, 0, 0);
-    }
-    emit ruledCombatStateChanged();
-
-    ruled::v1::RuledCommand cmd;
-    auto *sub = cmd.mutable_submit_resolution_choice();
-    for (quint32 o : chosen) {
-        sub->add_chosen_object_ids(o);
-    }
-    std::string payload;
-    if (cmd.SerializeToString(&payload)) {
-        Command_RuledPayload ruledPayload;
-        ruledPayload.set_payload(payload);
-        sendGameCommand(ruledPayload);
-    }
-}
-
-void GameEventHandler::pruneCleanupDiscardSelectionAndEmitUi()
-{
-    if (legalRuledCleanupDiscardHandIndices.isEmpty()) {
-        cleanupDiscardSelectedIndices.clear();
-        emit ruledCleanupDiscardUiChanged(0, 0);
-        emit ruledCombatStateChanged();
-        return;
-    }
-    for (auto it = cleanupDiscardSelectedIndices.begin(); it != cleanupDiscardSelectedIndices.end();) {
-        if (!legalRuledCleanupDiscardHandIndices.contains(*it)) {
-            it = cleanupDiscardSelectedIndices.erase(it);
-        } else {
-            ++it;
-        }
-    }
-    emit ruledCleanupDiscardUiChanged(ruledCleanupDiscardRequiredCount(), cleanupDiscardSelectedIndices.size());
-    emit ruledCombatStateChanged();
-}
-
-void GameEventHandler::emitLocalRuledLog(const QString &message)
-{
-    emit ruledEnginePromptFeed(message);
-}
-
-bool GameEventHandler::localPlayerIsRuledActive() const
-{
-    const int localId = game->getPlayerManager()->getLocalPlayerId();
-    if (localId < 0 || currentRuledActivePlayerId < 0) {
+    if (!game || engineOid == 0 || !power || !toughness) {
         return false;
     }
-    if (currentRuledCombatPhase == RuledCombatPhase::DeclareAttackers) {
-        return localId == currentRuledActivePlayerId && !attackersSubmittedThisStep;
-    }
-    return localId == currentRuledActivePlayerId;
+    CardItem *c = RuledActions::findBattlefieldCardItemByEngineOid(game, engineOid);
+    return c && RuledActions::parseCreaturePt(c->getPT(), power, toughness);
 }
 
-bool GameEventHandler::localPlayerIsRuledDefender() const
+QString GameEventHandler::battlefieldCardName(quint32 engineOid) const
 {
-    const int localId = game->getPlayerManager()->getLocalPlayerId();
-    if (localId < 0 || currentRuledActivePlayerId < 0) {
-        return false;
-    }
-    if (currentRuledCombatPhase == RuledCombatPhase::DeclareBlockers) {
-        return localId != currentRuledActivePlayerId && !blockersSubmittedThisStep;
-    }
-    return localId != currentRuledActivePlayerId;
-}
-
-bool GameEventHandler::isSelectedSpellTarget(quint32 oid) const
-{
-    const int localId = game->getPlayerManager()->getLocalPlayerId();
-    if (localId < 0) {
-        return false;
-    }
-    Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr);
-    return local && local->getPlayerActions() &&
-           local->getPlayerActions()->isTargetSelectedForPendingSpell(oid);
-}
-
-bool GameEventHandler::isPlayerSelectedAsSpellTarget(int playerId) const
-{
-    const int localId = game->getPlayerManager()->getLocalPlayerId();
-    if (localId < 0) {
-        return false;
-    }
-    Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr);
-    return local && local->getPlayerActions() &&
-           local->getPlayerActions()->isPlayerSelectedAsPendingSpellTarget(playerId);
-}
-
-bool GameEventHandler::isSpellDamageAllocationMode() const
-{
-    const int localId = game->getPlayerManager()->getLocalPlayerId();
-    if (localId < 0) return false;
-    Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr);
-    return local && local->getPlayerActions() && local->getPlayerActions()->isInSpellDamageAllocationMode();
-}
-
-bool GameEventHandler::isSpellDamageAllocationDisplayActive() const
-{
-    const int localId = game->getPlayerManager()->getLocalPlayerId();
-    if (localId < 0) return false;
-    Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr);
-    return local && local->getPlayerActions() && local->getPlayerActions()->isSpellDamageAllocationDisplayActive();
-}
-
-int GameEventHandler::spellDamageAllocationForOid(quint32 oid) const
-{
-    const int localId = game->getPlayerManager()->getLocalPlayerId();
-    if (localId < 0) return 0;
-    Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr);
-    if (!local || !local->getPlayerActions()) return 0;
-    return local->getPlayerActions()->spellDamageAllocationForOid(oid);
-}
-
-int GameEventHandler::spellDamageAllocationForPlayerId(int playerId) const
-{
-    const int localId = game->getPlayerManager()->getLocalPlayerId();
-    if (localId < 0) return 0;
-    Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr);
-    if (!local || !local->getPlayerActions()) return 0;
-    return local->getPlayerActions()->spellDamageAllocationForPlayerId(playerId);
-}
-
-bool GameEventHandler::ruledCombatDeclarationSatisfied() const
-{
-    // CR 508.1d: every must-attack creature must be among the staged attackers.
-    if (currentRuledCombatPhase == RuledCombatPhase::DeclareAttackers) {
-        for (const quint32 oid : ruledRequiredAttackerOids) {
-            if (!pendingAttackerOids.contains(oid)) {
-                return false;
-            }
-        }
-        return true;
-    }
-    // CR 509.1c: every must-block creature must be staged as a blocker of some attacker. The engine
-    // still validates the specific pairing (evasion); here we only require it be blocking something.
-    if (currentRuledCombatPhase == RuledCombatPhase::DeclareBlockers) {
-        for (const quint32 oid : ruledRequiredBlockerOids) {
-            if (!pendingBlocks.contains(oid) && !committedBlocks.contains(oid)) {
-                return false;
-            }
-        }
-        return true;
-    }
-    return true;
-}
-
-void GameEventHandler::togglePendingAttacker(quint32 engineOid)
-{
-    if (engineOid == 0) {
-        return;
-    }
-    if (pendingAttackerOids.contains(engineOid)) {
-        pendingAttackerOids.remove(engineOid);
-    } else {
-        pendingAttackerOids.insert(engineOid);
-    }
-    syncRuledAttackersPreviewToServer();
-    emit ruledCombatStateChanged();
-}
-
-void GameEventHandler::clearPendingAttackers()
-{
-    if (pendingAttackerOids.isEmpty()) {
-        return;
-    }
-    pendingAttackerOids.clear();
-    syncRuledAttackersPreviewToServer();
-    emit ruledCombatStateChanged();
-}
-
-void GameEventHandler::toggleStagedBlocker(quint32 blockerOid)
-{
-    if (stagedBlockerOids.contains(blockerOid)) {
-        stagedBlockerOids.remove(blockerOid);
-    } else {
-        stagedBlockerOids.insert(blockerOid);
-    }
-    emit ruledCombatStateChanged();
-}
-
-void GameEventHandler::clearStagedBlockers()
-{
-    if (stagedBlockerOids.isEmpty()) {
-        return;
-    }
-    stagedBlockerOids.clear();
-    emit ruledCombatStateChanged();
-}
-
-void GameEventHandler::pairStagedBlockerToAttacker(quint32 attackerOid)
-{
-    if (stagedBlockerOids.isEmpty() || attackerOid == 0) {
-        return;
-    }
-    if (!currentAttackerOids.contains(attackerOid)) {
-        return;
-    }
-    for (quint32 blockerOid : std::as_const(stagedBlockerOids)) {
-        pendingBlocks.insert(blockerOid, attackerOid);
-    }
-    stagedBlockerOids.clear();
-    syncRuledBlockersPreviewToServer();
-    emit ruledCombatStateChanged();
-}
-
-void GameEventHandler::clearPendingBlocks()
-{
-    if (pendingBlocks.isEmpty() && stagedBlockerOids.isEmpty() && committedBlocks.isEmpty()) {
-        return;
-    }
-    pendingBlocks.clear();
-    committedBlocks.clear();
-    stagedBlockerOids.clear();
-    syncRuledBlockersPreviewToServer();
-    emit ruledCombatStateChanged();
-}
-
-quint32 GameEventHandler::currentCombatDamageAttackerOid() const
-{
-    if (currentCombatDamageAttackerIdx < 0 ||
-        currentCombatDamageAttackerIdx >= combatDamagePendingAttackers.size()) {
-        return 0;
-    }
-    return combatDamagePendingAttackers.at(currentCombatDamageAttackerIdx);
-}
-
-quint32 GameEventHandler::assignedCombatDamageForBlocker(quint32 blockerOid) const
-{
-    return pendingCombatDamageByBlocker.value(blockerOid, 0);
-}
-
-int GameEventHandler::ruledCombatPowerForCreatureOid(quint32 engineOid) const
-{
-    const int fromEngine = engineOidBattlefieldPower.value(engineOid, 0);
-    if (fromEngine > 0) {
-        return fromEngine;
-    }
-    if (!game || engineOid == 0) {
-        return 0;
-    }
-    if (CardItem *c = findBattlefieldCardByEngineOid(game, this, engineOid)) {
-        int pow = 0;
-        int tough = 0;
-        if (parseCreaturePt(c->getPT(), &pow, &tough)) {
-            return pow;
-        }
-    }
-    return 0;
-}
-
-int GameEventHandler::ruledCombatToughnessForCreatureOid(quint32 engineOid) const
-{
-    const int fromEngine = engineOidBattlefieldToughness.value(engineOid, 0);
-    if (fromEngine > 0) {
-        return fromEngine;
-    }
-    if (!game || engineOid == 0) {
-        return 1;
-    }
-    if (CardItem *c = findBattlefieldCardByEngineOid(game, this, engineOid)) {
-        int pow = 0;
-        int tough = 0;
-        if (parseCreaturePt(c->getPT(), &pow, &tough) && tough > 0) {
-            return tough;
-        }
-    }
-    return 1;
-}
-
-void GameEventHandler::seedDefaultCombatDamageForCurrentAttacker()
-{
-    if (!game || !game->getGameMetaInfo()->proto().ruled_game() || !localPlayerIsRuledActive()) {
-        return;
-    }
-    const quint32 curAtt = currentCombatDamageAttackerOid();
-    if (curAtt == 0) {
-        return;
-    }
-    const QList<quint32> blockers = committedBlockerGroups.value(curAtt);
-    const bool hasTramp = engineOidTrample.value(curAtt, false);
-    // Single-blocker without trample: no explicit assignment needed; skip.
-    if (blockers.size() < 2 && !hasTramp) {
-        return;
-    }
-    const int power = ruledCombatPowerForCreatureOid(curAtt);
-    if (power <= 0) {
-        return;
-    }
-    for (quint32 blk : blockers) {
-        pendingCombatDamageByBlocker.remove(blk);
-    }
-    int remaining = power;
-    for (int i = 0; i < blockers.size(); ++i) {
-        const quint32 blk = blockers.at(i);
-        const int lethal =
-            qMax(1, ruledCombatToughnessForCreatureOid(blk) - engineOidMarkedDamage.value(blk, 0));
-        if (hasTramp) {
-            // CR 702.19: trample — assign exactly lethal to each blocker; remainder goes to
-            // the defending player (not to the last blocker).
-            const int assign = qMin(remaining, lethal);
-            remaining -= assign;
-            if (assign > 0) {
-                pendingCombatDamageByBlocker.insert(blk, static_cast<quint32>(assign));
-            }
-        } else if (i == blockers.size() - 1) {
-            // Non-trample last blocker: receives all remaining damage.
-            if (remaining > 0) {
-                pendingCombatDamageByBlocker.insert(blk, static_cast<quint32>(remaining));
-            }
-            break;
-        } else {
-            // Non-trample middle blocker: assign up to lethal.
-            const int assign = qMin(remaining, lethal);
-            remaining -= assign;
-            if (assign > 0) {
-                pendingCombatDamageByBlocker.insert(blk, static_cast<quint32>(assign));
-            }
-        }
-    }
-    emit ruledCombatDamageUiChanged();
-    emit ruledCombatStateChanged();
-}
-
-void GameEventHandler::bumpBlockerCombatDamage(quint32 blockerOid, int delta)
-{
-    const quint32 curAtt = currentCombatDamageAttackerOid();
-    if (curAtt == 0 || delta == 0) {
-        return;
-    }
-    const QList<quint32> &blockers = committedBlockerGroups.value(curAtt);
-    if (!blockers.contains(blockerOid)) {
-        return;
-    }
-    const int power = ruledCombatPowerForCreatureOid(curAtt);
-    if (power <= 0) {
-        return;
-    }
-    const quint32 cur = pendingCombatDamageByBlocker.value(blockerOid, 0);
-    qint64 next = static_cast<qint64>(cur) + delta;
-    if (next < 0) {
-        next = 0;
-    }
-    if (next > power) {
-        next = power;
-    }
-    if (next == 0) {
-        pendingCombatDamageByBlocker.remove(blockerOid);
-    } else {
-        pendingCombatDamageByBlocker.insert(blockerOid, static_cast<quint32>(next));
-    }
-    emit ruledCombatDamageUiChanged();
-    emit ruledCombatStateChanged();
-}
-
-void GameEventHandler::clearCombatDamageAssignmentState()
-{
-    combatDamagePendingAttackers.clear();
-    currentCombatDamageAttackerIdx = -1;
-    pendingCombatDamageByBlocker.clear();
-}
-
-QString GameEventHandler::currentCombatDamageAttackerDisplayName() const
-{
-    const quint32 att = currentCombatDamageAttackerOid();
-    if (att == 0 || !game) {
+    if (!game) {
         return {};
     }
-    if (CardItem *c = findBattlefieldCardByEngineOid(game, this, att)) {
+    if (CardItem *c = RuledActions::findBattlefieldCardItemByEngineOid(game, engineOid)) {
         return c->getName();
     }
-    return tr("creature");
+    return {};
 }
 
-int GameEventHandler::currentCombatDamageAttackerPower() const
+void GameEventHandler::sendRuledCommand(const ruled::v1::RuledCommand &command)
 {
-    const quint32 att = currentCombatDamageAttackerOid();
-    if (att == 0) {
-        return 0;
+    AbstractClient *client = game->getClientForPlayer(-1);
+    if (!client) {
+        return;
     }
-    return ruledCombatPowerForCreatureOid(att);
+    std::string payload;
+    if (!command.SerializeToString(&payload)) {
+        return;
+    }
+    Command_RuledPayload cmd;
+    cmd.set_payload(payload);
+    PendingCommand *pend = prepareGameCommand(cmd);
+    connect(pend, &PendingCommand::finished, this, &GameEventHandler::commandFinished);
+    client->sendCommand(pend);
 }
 
-int GameEventHandler::localCombatDamageAssignedTotal() const
+void GameEventHandler::sendRuledCommandExpectingAck(const ruled::v1::RuledCommand &command,
+                                                    std::function<void(bool accepted)> onFinished)
 {
-    int sum = 0;
-    for (auto it = pendingCombatDamageByBlocker.constBegin(); it != pendingCombatDamageByBlocker.constEnd(); ++it) {
-        sum += static_cast<int>(it.value());
+    AbstractClient *client = game->getClientForPlayer(-1);
+    if (!client) {
+        return;
     }
-    return sum;
+    std::string payload;
+    if (!command.SerializeToString(&payload)) {
+        return;
+    }
+    Command_RuledPayload cmd;
+    cmd.set_payload(payload);
+    PendingCommand *pend = prepareGameCommand(cmd);
+    QObject::connect(
+        pend, &PendingCommand::finished, this,
+        [handler = std::move(onFinished)](const Response &response, const CommandContainer &, const QVariant &) {
+            handler(response.response_code() == Response::RespOk);
+        });
+    client->sendCommand(pend);
 }
 
-int GameEventHandler::localCombatDamagePlayerDamage() const
+void GameEventHandler::requestResolutionChoiceDialog(const QString &prompt,
+                                                     const QVector<quint32> &candidateOids,
+                                                     const QStringList &candidateNames,
+                                                     int minCount,
+                                                     int maxCount,
+                                                     bool ordered,
+                                                     bool uniqueNames)
 {
-    const quint32 curAtt = currentCombatDamageAttackerOid();
-    if (curAtt == 0 || !engineOidTrample.value(curAtt, false)) {
-        return 0;
-    }
-    const int power = currentCombatDamageAttackerPower();
-    const QList<quint32> blockers = committedBlockerGroups.value(curAtt);
-    int sum = 0;
-    for (quint32 blk : blockers) {
-        sum += static_cast<int>(pendingCombatDamageByBlocker.value(blk, 0));
-    }
-    return qMax(0, power - sum);
+    // Defer the modal dialog until after this batch finishes processing (avoid re-entering event
+    // handling while a modal loop is open).
+    QPointer<GameEventHandler> self(this);
+    QTimer::singleShot(0, this,
+                       [self, prompt, candidateOids, candidateNames, minCount, maxCount, ordered, uniqueNames]() {
+                           if (!self) {
+                               return;
+                           }
+                           const QVector<quint32> chosen = askRuledResolutionChoice(
+                               prompt, candidateOids, candidateNames, minCount, maxCount, ordered, uniqueNames);
+                           if (chosen.size() < minCount) {
+                               return; // dialog closed without a legal selection
+                           }
+                           ruled::v1::RuledCommand cmd;
+                           auto *sub = cmd.mutable_submit_resolution_choice();
+                           for (quint32 o : chosen) {
+                               sub->add_chosen_object_ids(o);
+                           }
+                           self->sendRuledCommand(cmd);
+                       });
 }
 
-bool GameEventHandler::localCombatDamageAssignmentLegal() const
+void GameEventHandler::scheduleSpellTargetArrowSync()
 {
-    const quint32 curAtt = currentCombatDamageAttackerOid();
-    if (curAtt == 0) {
-        return false;
-    }
-    const int power = currentCombatDamageAttackerPower();
-    if (power <= 0) {
-        return false;
-    }
-    const QList<quint32> blockers = committedBlockerGroups.value(curAtt);
-    int sum = 0;
-    for (quint32 blk : blockers) {
-        sum += static_cast<int>(pendingCombatDamageByBlocker.value(blk, 0));
-    }
-    if (engineOidTrample.value(curAtt, false)) {
-        // CR 702.19: each blocker must receive >= lethal; total assigned to blockers must be <= power
-        // (remainder goes to the defending player).
-        if (sum > power) {
-            return false;
-        }
-        for (quint32 blk : blockers) {
-            const int lethal =
-                qMax(1, ruledCombatToughnessForCreatureOid(blk) - engineOidMarkedDamage.value(blk, 0));
-            if (static_cast<int>(pendingCombatDamageByBlocker.value(blk, 0)) < lethal) {
-                return false;
-            }
-        }
-        return true;
-    }
-    return sum == power;
+    QTimer::singleShot(0, this, [this] { syncRuledSpellTargetingArrows(); });
 }
+
+// ---------------------------------------------------------------------------------------
+// Command plumbing
+// ---------------------------------------------------------------------------------------
 
 void GameEventHandler::sendGameCommand(PendingCommand *pend, int playerId)
 {
@@ -1295,20 +374,12 @@ void GameEventHandler::sendGameCommand(const google::protobuf::Message &command,
     if (!client)
         return;
 
-    if (game->getGameMetaInfo()->proto().ruled_game() && dynamic_cast<const Command_NextTurn *>(&command)) {
+    if (RuledActions::isRuledGame(game) && dynamic_cast<const Command_NextTurn *>(&command)) {
         ruled::v1::RuledCommand ruledCommand;
         // "Pass Turn" is currently the ruled-mode pass-priority button.
         // Always issue pass_priority so AP/NAP cadence is respected on empty stack too.
         ruledCommand.mutable_pass_priority();
-        std::string payload;
-        if (!ruledCommand.SerializeToString(&payload)) {
-            return;
-        }
-        Command_RuledPayload cmd;
-        cmd.set_payload(payload);
-        PendingCommand *pend = prepareGameCommand(cmd);
-        connect(pend, &PendingCommand::finished, this, &GameEventHandler::commandFinished);
-        client->sendCommand(pend);
+        sendRuledCommand(ruledCommand);
         return;
     }
 
@@ -1343,6 +414,10 @@ PendingCommand *GameEventHandler::prepareGameCommand(const QList<const ::google:
     }
     return new PendingCommand(cont);
 }
+
+// ---------------------------------------------------------------------------------------
+// Event fan-out
+// ---------------------------------------------------------------------------------------
 
 void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                                  AbstractClient *client,
@@ -1413,829 +488,9 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                 case GameEvent::REVERSE_TURN:
                     eventReverseTurn(event.GetExtension(Event_ReverseTurn::ext), playerId, context);
                     break;
-                case GameEvent::RULED_PAYLOAD: {
-                    const Event_RuledPayload &ruled = event.GetExtension(Event_RuledPayload::ext);
-                    ruled::v1::RuledEventBatch batch;
-                    legalRuledLandPlayHandIndices.clear();
-                    legalRuledLandPlayIndicesByCardName.clear();
-                    legalRuledLandPlayFaceOptionsByHandIndex.clear();
-                    legalRuledSpellCastHandIndices.clear();
-                    legalRuledSpellCastIndicesByCardName.clear();
-                    legalRuledSpellCastNeedsTargetHandIndices.clear();
-                    legalRuledCleanupDiscardHandIndices.clear();
-                    legalRuledCleanupDiscardIndicesByCardName.clear();
-                    legalRuledOpeningBottomHandIndices.clear();
-                    ruledOpeningBottomSelectedIndices.clear();
-                    ruledOpeningPickSeatIds.clear();
-                    ruledOpeningUiKind = RuledOpeningUiKind::None;
-                    ruledOwnedCardToEngineHandSlot.clear();
-                    if (batch.ParseFromString(ruled.payload())) {
-                        QString timeline;
-                        QString promptFeed;
-                        bool combatStateDirty = false;
-                        bool battlefieldMapDirty = false;
-                        bool ruledStackTrackingDirty = false;
-                        for (const auto &e : batch.events()) {
-                            if (e.has_log()) {
-                                const QString logLine =
-                                    QString::fromStdString(e.log().text()).trimmed();
-                                if (!logLine.isEmpty()) {
-                                    timeline += logLine + QLatin1Char('\n');
-                                }
-                            }
-                            if (e.has_phase_changed()) {
-                                const auto &pc = e.phase_changed();
-                                const QString prevSlug = lastRuledEnginePhaseSlug;
-                                lastRuledEnginePhaseSlug = QString::fromStdString(pc.phase());
-                                // CR 510.4: when entering or leaving the first-strike damage
-                                // substep, notify the prompt widget so it can label the pass
-                                // button "Combat Damage" while inside the FS step (next step
-                                // is regular combat damage).
-                                const bool wasFsStep = prevSlug == QLatin1String("first_strike_damage");
-                                const bool isFsStep = lastRuledEnginePhaseSlug == QLatin1String("first_strike_damage");
-                                if (wasFsStep != isFsStep) {
-                                    emit ruledFirstStrikeDamageStepActiveChanged(isFsStep);
-                                }
-                                // Phase is already reflected by Event_SetActivePhase from the server
-                                // (toolbar highlight + logSetActivePhase); do not duplicate here.
-                                // Reaching a new phase guarantees the previous stack emptied.
-                                ruledStackOidOrder.clear();
-                                ruledStackTargetsByStackOid.clear();
-                                ruledStackTrackingDirty = true;
-                                if (game->getGameState()->getActivePlayer() != pc.active_player_id()) {
-                                    game->getGameState()->setActivePlayer(pc.active_player_id());
-                                }
-                                const int mappedPhase = mapRuledPhaseSlugToToolbarPhase(QString::fromStdString(pc.phase()));
-                                if (mappedPhase >= 0) {
-                                    game->getGameState()->setCurrentPhase(mappedPhase);
-                                }
-                                const RuledCombatPhase combatPhase =
-                                    mapRuledPhaseSlugToCombatPhase(QString::fromStdString(pc.phase()));
-                                if (combatPhase != currentRuledCombatPhase ||
-                                    currentRuledActivePlayerId != pc.active_player_id()) {
-                                    const RuledCombatPhase previousCombatPhase = currentRuledCombatPhase;
-                                    currentRuledCombatPhase = combatPhase;
-                                    currentRuledActivePlayerId = pc.active_player_id();
-                                    // Phase transitions reset any local pending selections.
-                                    pendingAttackerOids.clear();
-                                    pendingBlocks.clear();
-                                    remoteBlockPreviewPairs.clear();
-                                    remoteAttackerPreviewOids.clear();
-                                    stagedBlockerOids.clear();
-                                    // Keep committed block assignments visible/interactive while
-                                    // progressing from declare blockers -> assign combat damage ->
-                                    // combat damage. Clear only when leaving combat.
-                                    const auto isCombatPhase = [](RuledCombatPhase phase) {
-                                        return phase == RuledCombatPhase::DeclareAttackers ||
-                                               phase == RuledCombatPhase::DeclareBlockers ||
-                                               phase == RuledCombatPhase::AssignCombatDamage ||
-                                               phase == RuledCombatPhase::FirstStrikeDamage ||
-                                               phase == RuledCombatPhase::CombatDamage;
-                                    };
-                                    if (!isCombatPhase(previousCombatPhase) || !isCombatPhase(combatPhase)) {
-                                        committedBlocks.clear();
-                                    }
-                                    if (combatPhase == RuledCombatPhase::DeclareAttackers) {
-                                        attackersSubmittedThisStep = false;
-                                    } else if (combatPhase == RuledCombatPhase::DeclareBlockers) {
-                                        blockersSubmittedThisStep = false;
-                                    } else if (combatPhase == RuledCombatPhase::None) {
-                                        attackersSubmittedThisStep = false;
-                                        blockersSubmittedThisStep = false;
-                                    }
-                                    if (combatPhase == RuledCombatPhase::None) {
-                                        currentAttackerOids.clear();
-                                        remoteAttackerPreviewOids.clear();
-                                        clearCombatDamageAssignmentState();
-                                        committedBlockerGroups.clear();
-                                    }
-                                    if (combatPhase == RuledCombatPhase::AssignCombatDamage && localPlayerIsRuledActive()) {
-                                        seedDefaultCombatDamageForCurrentAttacker();
-                                    }
-                                    combatStateDirty = true;
-                                }
-                            }
-                            if (e.has_priority_changed()) {
-                                game->getGameState()->setPriorityPlayer(e.priority_changed().player_id());
-                                promptFeed += QStringLiteral("Priority: P%1\n")
-                                                   .arg(e.priority_changed().player_id());
-                            }
-                            if (e.has_stack_pushed()) {
-                                const auto &sp = e.stack_pushed();
-                                ruledStackOidOrder.prepend(sp.object_id());
-                                QVector<quint32> tlist;
-                                tlist.reserve(sp.targets_size());
-                                for (int ti = 0; ti < sp.targets_size(); ++ti) {
-                                    tlist.append(static_cast<quint32>(sp.targets(ti).object_id()));
-                                }
-                                ruledStackTargetsByStackOid.insert(sp.object_id(), tlist);
-                                // --- DIAG H3/H5: log every StackPushed so we know if the non-caster
-                                //     receives this event and what targets are recorded. ---
-                                {
-                                    const int localPid = game->getPlayerManager()->getLocalPlayerId();
-                                    QString targetStr;
-                                    for (quint32 t : tlist) {
-                                        if (!targetStr.isEmpty()) targetStr += QLatin1Char(',');
-                                        targetStr += QString::number(t);
-                                    }
-                                    sdbgLog(QStringLiteral("StackPushed localPid=%1 oid=%2 isAbility=%3 desc='%4' targets=[%5]")
-                                                .arg(localPid)
-                                                .arg(sp.object_id())
-                                                .arg(sp.card_id().empty())
-                                                .arg(QString::fromStdString(sp.description()))
-                                                .arg(targetStr));
-                                }
-                                // Overlay the annotation on the stack card: an ability's text, an X
-                                // value for an X spell ("X = N", CR 107.3), or the cast face of a
-                                // multi-face spell (e.g. "Fire" / "Ice").
-                                if (!sp.ability_annotation().empty()) {
-                                    ruledStackAnnotationByOid.insert(
-                                        sp.object_id(),
-                                        QString::fromStdString(sp.ability_annotation()));
-                                    // Abilities (no card_id) and spell copies (is_copy) both lack a
-                                    // physical CardItem on the stack and need a synthetic one. A normal
-                                    // spell (non-empty card_id, not a copy) already has a real card.
-                                    if (sp.card_id().empty()) {
-                                        // A triggered ability was just placed on the stack — the pending
-                                        // trigger target has been chosen and is no longer pending.
-                                        hasPendingTrigger = false;
-                                        // Record the source permanent so the targeting arrow starts from it.
-                                        if (pendingTriggerSourceOid != 0) {
-                                            ruledStackSourceOidByStackOid.insert(sp.object_id(), pendingTriggerSourceOid);
-                                        }
-                                        createSyntheticAbilityStackCard(
-                                            sp.object_id(),
-                                            QString::fromStdString(sp.description()),
-                                            pendingTriggerControllerPlayerId);
-                                    } else if (sp.is_copy()) {
-                                        // The copy is being placed on the stack — any pending copy-target
-                                        // choice has been accepted by the engine.
-                                        pendingCopyTargetChoice = {};
-                                        // CR 707.10: a spell copy (Twincast/Fork) has no physical card;
-                                        // create a synthetic stack card so the copy is visible.
-                                        // Inherit the original spell's printing so the copy shows the
-                                        // same card art rather than defaulting to the newest printing.
-                                        QString copySetName;
-                                        const quint32 srcOid = sp.copy_source_object_id();
-                                        if (srcOid != 0) {
-                                            TabGame *tab = game->getTab();
-                                            if (CardItem *srcCard = resolveStackCardItemByEngineOid(
-                                                    game, tab, this, game->getPlayerManager(), srcOid)) {
-                                                copySetName = srcCard->getCardRef().providerId;
-                                            }
-                                        }
-                                        createSyntheticAbilityStackCard(
-                                            sp.object_id(),
-                                            QString::fromStdString(sp.description()),
-                                            -1,
-                                            copySetName);
-                                        // The StackResolved for the copy-maker (Twincast/Fork)
-                                        // uses counterspell cleanup logic that removes targets from
-                                        // ruledStackOidOrder — but the source spell was NOT removed
-                                        // from the engine stack, so restore it here.
-                                        const quint32 copySrcOid =
-                                            static_cast<quint32>(sp.copy_source_object_id());
-                                        if (copySrcOid != 0
-                                                && !ruledStackOidOrder.contains(copySrcOid)
-                                                && ruledStackTargetsByStackOid.contains(copySrcOid)) {
-                                            ruledStackOidOrder.insert(1, copySrcOid);
-                                        }
-                                    }
-                                }
-                                ruledStackTrackingDirty = true;
-                            }
-                            if (e.has_stack_resolved()) {
-                                const quint32 rid = e.stack_resolved().object_id();
-                                // Countered spells leave the engine stack without their own StackResolved;
-                                // remove this spell's stack targets (e.g. the countered object id) so
-                                // ruledStackOidOrder matches the real stack (pass button + stack window).
-                                const QVector<quint32> spellTargets = ruledStackTargetsByStackOid.value(rid);
-                                ruledStackOidOrder.removeOne(rid);
-                                ruledStackTargetsByStackOid.remove(rid);
-                                ruledStackAnnotationByOid.remove(rid);
-                                ruledStackSourceOidByStackOid.remove(rid);
-                                removeSyntheticAbilityStackCard(rid);
-                                for (quint32 t : spellTargets) {
-                                    ruledStackOidOrder.removeOne(t);
-                                }
-                                ruledStackTrackingDirty = true;
-                            }
-                            if (e.has_trigger_needs_target()) {
-                                const auto &tnt = e.trigger_needs_target();
-                                pendingTriggerSourceOid = tnt.source_permanent_id();
-                                pendingTriggerAbilityIndex = tnt.ability_index();
-                                pendingTriggerAbilityText = QString::fromStdString(tnt.ability_text());
-                                pendingTriggerControllerPlayerId = tnt.controller_player_id();
-                                // Only the controller sees hasPendingTrigger = true so that only
-                                // they can send ChooseTriggerTarget commands.
-                                const int localId = game->getPlayerManager()->getLocalPlayerId();
-                                hasPendingTrigger = (pendingTriggerControllerPlayerId == localId);
-                                if (hasPendingTrigger) {
-                                    promptFeed += QStringLiteral("Choose a target for: %1\n").arg(pendingTriggerAbilityText);
-                                }
-                                emit ruledTriggerNeedsTarget(pendingTriggerAbilityText);
-                            }
-                            if (e.has_resolution_choice_required()) {
-                                // Tier-3 custom resolution paused for a player choice (CR 608).
-                                const auto &rcr = e.resolution_choice_required();
-                                const int localId = game->getPlayerManager()->getLocalPlayerId();
-                                promptFeed += QString::fromStdString(rcr.prompt_text()) + QStringLiteral("\n");
-                                // Clear any stale hand-pick state from a previous resolution step.
-                                if (resolutionHandPick.has_value() &&
-                                    resolutionHandPick->pickZone == PickZone::Revealed) {
-                                    emit ruledRevealedPickChanged(false, {}, {}, 0, 0);
-                                }
-                                resolutionHandPick.reset();
-                                if (rcr.deciding_player_id() == localId && rcr.candidate_object_ids_size() > 0) {
-                                    if (rcr.choice_kind() == 3) {
-                                        // choice_kind 3 = target objects (CR 707.10c copy retarget):
-                                        // use click-to-target mode rather than a modal list dialog.
-                                        pendingCopyTargetChoice.valid = true;
-                                        pendingCopyTargetChoice.promptText =
-                                            QString::fromStdString(rcr.prompt_text());
-                                        pendingCopyTargetChoice.candidateOids.clear();
-                                        for (int i = 0; i < rcr.candidate_object_ids_size(); ++i) {
-                                            pendingCopyTargetChoice.candidateOids.append(
-                                                rcr.candidate_object_ids(i));
-                                        }
-                                    } else if (rcr.choice_kind() == 5) {
-                                        // choice_kind 5 = legend rule keep (CR 704.5j): the controller
-                                        // clicks the legendary permanent to KEEP directly on the
-                                        // battlefield; the rest are sacrificed. Click-to-select mode,
-                                        // like copy retarget, instead of a modal list dialog.
-                                        pendingLegendKeepChoice.valid = true;
-                                        pendingLegendKeepChoice.promptText =
-                                            QString::fromStdString(rcr.prompt_text());
-                                        pendingLegendKeepChoice.candidateOids.clear();
-                                        for (int i = 0; i < rcr.candidate_object_ids_size(); ++i) {
-                                            pendingLegendKeepChoice.candidateOids.append(
-                                                rcr.candidate_object_ids(i));
-                                        }
-                                        emit ruledCombatStateChanged();
-                                    } else if (rcr.choice_kind() == 0 &&
-                                               rcr.candidate_server_card_ids_size() == rcr.candidate_object_ids_size()) {
-                                        // HandCards (choice_kind 0) with server card ids: use the hand-click UI.
-                                        ResolutionHandPick pick;
-                                        pick.min = static_cast<int>(rcr.min());
-                                        pick.max = static_cast<int>(rcr.max());
-                                        pick.promptText = QString::fromStdString(rcr.prompt_text());
-                                        pick.pickZone = PickZone::Hand;
-                                        for (int i = 0; i < rcr.candidate_object_ids_size(); ++i) {
-                                            const quint32 oid = rcr.candidate_object_ids(i);
-                                            const int scid = rcr.candidate_server_card_ids(i);
-                                            if (scid >= 0) {
-                                                pick.serverCardIdToOid.insert(scid, oid);
-                                                if (i < rcr.candidate_names_size()) {
-                                                    pick.candidateNames.append(
-                                                        QString::fromStdString(rcr.candidate_names(i)));
-                                                }
-                                            }
-                                        }
-                                        resolutionHandPick = std::move(pick);
-                                        emit ruledResolutionHandPickUiChanged(
-                                            resolutionHandPick->min, 0);
-                                        emit ruledCombatStateChanged();
-                                    } else if (rcr.choice_kind() == 2 &&
-                                               rcr.candidate_server_card_ids_size() == rcr.candidate_names_size() &&
-                                               rcr.candidate_names_size() > 0) {
-                                        // LibrarySearch (choice_kind 2) with server card ids: deck zone-view pick.
-                                        // unique_names is always true for Gifts Ungiven step 1.
-                                        ResolutionHandPick pick;
-                                        pick.min = static_cast<int>(rcr.min());
-                                        pick.max = static_cast<int>(rcr.max());
-                                        pick.uniqueNames = rcr.unique_names();
-                                        pick.promptText = QString::fromStdString(rcr.prompt_text());
-                                        pick.pickZone = PickZone::Deck;
-                                        for (int i = 0; i < rcr.candidate_names_size(); ++i) {
-                                            const quint32 oid = (i < rcr.candidate_object_ids_size())
-                                                                    ? rcr.candidate_object_ids(i)
-                                                                    : 0;
-                                            const int scid = rcr.candidate_server_card_ids(i);
-                                            const QString name =
-                                                QString::fromStdString(rcr.candidate_names(i));
-                                            if (scid >= 0) {
-                                                pick.serverCardIdToOid.insert(scid, oid);
-                                                pick.serverCardIdToName.insert(scid, name);
-                                            }
-                                            pick.candidateNames.append(name);
-                                        }
-                                        resolutionHandPick = std::move(pick);
-                                        const QStringList libNames = resolutionHandPick->candidateNames;
-                                        QVector<int> libScids;
-                                        for (int i = 0; i < rcr.candidate_server_card_ids_size(); ++i) {
-                                            libScids.append(static_cast<int>(rcr.candidate_server_card_ids(i)));
-                                        }
-                                        emit ruledResolutionHandPickUiChanged(
-                                            resolutionHandPick->min, 0);
-                                        emit ruledLibrarySearchPickStarted(libNames, libScids);
-                                        emit ruledCombatStateChanged();
-                                    } else if ((rcr.choice_kind() == 1 || rcr.choice_kind() == 4) &&
-                                               rcr.candidate_server_card_ids_size() == rcr.candidate_names_size() &&
-                                               rcr.candidate_names_size() > 0) {
-                                        // RevealedCards (choice_kind 1) or PrivateRevealedHand (choice_kind 4)
-                                        // with server card ids: zone popup pick. The deciding player chooses
-                                        // from the revealed cards (kind 4 = a target player's hand shown only
-                                        // to the caster; the relay redacted it from everyone else).
-                                        ResolutionHandPick pick;
-                                        pick.min = static_cast<int>(rcr.min());
-                                        pick.max = static_cast<int>(rcr.max());
-                                        pick.promptText = QString::fromStdString(rcr.prompt_text());
-                                        pick.pickZone = PickZone::Revealed;
-                                        QStringList names;
-                                        QVector<int> scids;
-                                        for (int i = 0; i < rcr.candidate_names_size(); ++i) {
-                                            const quint32 oid = (i < rcr.candidate_object_ids_size())
-                                                                    ? rcr.candidate_object_ids(i)
-                                                                    : 0;
-                                            const int scid = rcr.candidate_server_card_ids(i);
-                                            if (scid >= 0) {
-                                                pick.serverCardIdToOid.insert(scid, oid);
-                                            }
-                                            const QString name =
-                                                QString::fromStdString(rcr.candidate_names(i));
-                                            pick.candidateNames.append(name);
-                                            names.append(name);
-                                            scids.append(scid);
-                                        }
-                                        resolutionHandPick = std::move(pick);
-                                        emit ruledResolutionHandPickUiChanged(
-                                            resolutionHandPick->min, 0);
-                                        emit ruledRevealedPickChanged(true, names, scids,
-                                                                      resolutionHandPick->min,
-                                                                      resolutionHandPick->max);
-                                        emit ruledCombatStateChanged();
-                                    } else {
-                                        // Fallback: modal dialog for unrecognised kinds or missing server card ids.
-                                        QVector<quint32> oids;
-                                        for (int i = 0; i < rcr.candidate_object_ids_size(); ++i) {
-                                            oids.append(rcr.candidate_object_ids(i));
-                                        }
-                                        QStringList names;
-                                        for (int i = 0; i < rcr.candidate_names_size(); ++i) {
-                                            names.append(QString::fromStdString(rcr.candidate_names(i)));
-                                        }
-                                        const QString prompt = QString::fromStdString(rcr.prompt_text());
-                                        const int minN = static_cast<int>(rcr.min());
-                                        const int maxN = static_cast<int>(rcr.max());
-                                        const bool ordered = rcr.ordered();
-                                        const bool uniqueNames = rcr.unique_names();
-                                        // Defer the modal dialog until after this batch finishes processing
-                                        // (avoid re-entering event handling while a modal loop is open).
-                                        QPointer<GameEventHandler> self(this);
-                                        QTimer::singleShot(0, this,
-                                                           [self, prompt, oids, names, minN, maxN, ordered, uniqueNames]() {
-                                                               if (!self) {
-                                                                   return;
-                                                               }
-                                                               const QVector<quint32> chosen = askRuledResolutionChoice(
-                                                                   prompt, oids, names, minN, maxN, ordered, uniqueNames);
-                                                               if (chosen.size() < minN) {
-                                                                   return; // dialog closed without a legal selection
-                                                               }
-                                                               ruled::v1::RuledCommand cmd;
-                                                               auto *sub = cmd.mutable_submit_resolution_choice();
-                                                               for (quint32 o : chosen) {
-                                                                   sub->add_chosen_object_ids(o);
-                                                               }
-                                                               std::string payload;
-                                                               if (cmd.SerializeToString(&payload)) {
-                                                                   Command_RuledPayload ruledPayload;
-                                                                   ruledPayload.set_payload(payload);
-                                                                   self->sendGameCommand(ruledPayload);
-                                                               }
-                                                           });
-                                    }
-                                }
-                            }
-                            if (e.has_battlefield_object_map()) {
-                                ownerCardIdToEngineOid.clear();
-                                engineOidToCardId.clear();
-                                engineOidOwner.clear();
-                                engineOidSummoningSick.clear();
-                                engineOidHaste.clear();
-                                engineOidTrample.clear();
-                                engineOidCreature.clear();
-                                engineOidMarkedDamage.clear();
-                                engineOidBattlefieldPower.clear();
-                                engineOidBattlefieldToughness.clear();
-                                QSet<quint32> validOids;
-                                for (const auto &entry : e.battlefield_object_map().entries()) {
-                                    validOids.insert(entry.engine_object_id());
-                                    engineOidOwner.insert(entry.engine_object_id(), entry.player_id());
-                                    engineOidSummoningSick.insert(entry.engine_object_id(), entry.summoning_sick());
-                                    engineOidHaste.insert(entry.engine_object_id(), entry.haste());
-                                    engineOidTrample.insert(entry.engine_object_id(), entry.trample());
-                                    engineOidCreature.insert(entry.engine_object_id(), entry.is_creature());
-                                    if (entry.server_card_id() >= 0) {
-                                        ownerCardIdToEngineOid.insert(makeOwnedCardKey(entry.player_id(), entry.server_card_id()),
-                                                                      entry.engine_object_id());
-                                        engineOidToCardId.insert(entry.engine_object_id(), entry.server_card_id());
-                                    }
-                                }
-                                auto pruneByKnownOid = [&validOids](QHash<quint32, quint32> &pairs) {
-                                    for (auto it = pairs.begin(); it != pairs.end();) {
-                                        if (!validOids.contains(it.key()) || !validOids.contains(it.value())) {
-                                            it = pairs.erase(it);
-                                        } else {
-                                            ++it;
-                                        }
-                                    }
-                                };
-                                pruneByKnownOid(pendingBlocks);
-                                pruneByKnownOid(committedBlocks);
-                                pruneByKnownOid(remoteBlockPreviewPairs);
-                                for (auto it = remoteAttackerPreviewOids.begin();
-                                     it != remoteAttackerPreviewOids.end();) {
-                                    if (!validOids.contains(*it)) {
-                                        it = remoteAttackerPreviewOids.erase(it);
-                                    } else {
-                                        ++it;
-                                    }
-                                }
-                                for (auto it = stagedBlockerOids.begin(); it != stagedBlockerOids.end();) {
-                                    if (!validOids.contains(*it)) {
-                                        it = stagedBlockerOids.erase(it);
-                                    } else {
-                                        ++it;
-                                    }
-                                }
-                                // Re-register synthetic ability stack card OID mappings cleared above.
-                                // Use the per-OID controller pid (not always localPid) so the mapping
-                                // is keyed consistently with createSyntheticAbilityStackCard.
-                                if (!syntheticAbilityFakeIds.isEmpty() && game) {
-                                    const int localPid = game->getPlayerManager()->getLocalPlayerId();
-                                    for (auto sit = syntheticAbilityFakeIds.constBegin();
-                                         sit != syntheticAbilityFakeIds.constEnd(); ++sit) {
-                                        const int ctrlPid = syntheticAbilityControllerPid.value(sit.key(), localPid);
-                                        ownerCardIdToEngineOid.insert(
-                                            makeOwnedCardKey(ctrlPid, sit.value()), sit.key());
-                                    }
-                                }
-                                battlefieldMapDirty = true;
-                                combatStateDirty = true;
-                            }
-                            if (e.has_hand_slot_map()) {
-                                for (int hi = 0; hi < e.hand_slot_map().entries_size(); ++hi) {
-                                    const auto &ent = e.hand_slot_map().entries(hi);
-                                    ruledOwnedCardToEngineHandSlot.insert(
-                                        makeOwnedCardKey(ent.player_id(), ent.server_card_id()),
-                                        static_cast<int>(ent.hand_index()));
-                                }
-                            }
-                            if (e.has_graveyard_object_map()) {
-                                ruledGraveyardEngineOidToServerCardId.clear();
-                                for (int gi = 0; gi < e.graveyard_object_map().entries_size(); ++gi) {
-                                    const auto &ent = e.graveyard_object_map().entries(gi);
-                                    ruledGraveyardEngineOidToServerCardId.insert(
-                                        static_cast<quint32>(ent.engine_object_id()), ent.server_card_id());
-                                }
-                            }
-                            if (e.has_zone_view()) {
-                                engineOidMarkedDamage.clear();
-                                engineOidBattlefieldPower.clear();
-                                engineOidBattlefieldToughness.clear();
-                                engineOidToActivatedAbilityTexts.clear();
-                                engineOidToActivatedAbilityManaCosts.clear();
-                                engineOidToActivatedAbilityManaProduced.clear();
-                                bool anyFirstStrikePending = false;
-                                for (const auto &p : e.zone_view().per_player()) {
-                                    if (p.first_strike_step_pending()) {
-                                        anyFirstStrikePending = true;
-                                    }
-                                    const int count = std::min(p.battlefield_object_id_size(), p.battlefield_damage_size());
-                                    for (int zdi = 0; zdi < count; ++zdi) {
-                                        const quint32 oid = p.battlefield_object_id(zdi);
-                                        const int damage = static_cast<int>(p.battlefield_damage(zdi));
-                                        if (oid != 0 && damage > 0) {
-                                            engineOidMarkedDamage.insert(oid, damage);
-                                        }
-                                    }
-                                    // Parse activated ability texts and mana costs (pipe-delimited per permanent).
-                                    const int nAbil = std::min(p.battlefield_object_id_size(),
-                                                               p.battlefield_activated_ability_texts_size());
-                                    for (int ai = 0; ai < nAbil; ++ai) {
-                                        const quint32 oid = p.battlefield_object_id(ai);
-                                        const QString textsStr =
-                                            QString::fromStdString(p.battlefield_activated_ability_texts(ai));
-                                        if (oid != 0 && !textsStr.isEmpty()) {
-                                            engineOidToActivatedAbilityTexts.insert(
-                                                oid, textsStr.split(QChar('|'), Qt::SkipEmptyParts));
-                                        }
-                                        if (oid != 0 && ai < p.battlefield_activated_ability_mana_costs_size()) {
-                                            const QString costsStr =
-                                                QString::fromStdString(p.battlefield_activated_ability_mana_costs(ai));
-                                            // Split on '|'; an empty entry means no mana cost for that ability.
-                                            engineOidToActivatedAbilityManaCosts.insert(
-                                                oid, costsStr.split(QChar('|')));
-                                        }
-                                        if (oid != 0 && ai < p.battlefield_activated_ability_mana_produced_size()) {
-                                            const QString producedStr = QString::fromStdString(
-                                                p.battlefield_activated_ability_mana_produced(ai));
-                                            // Split on '|'; empty entry = non-mana ability (CR 605).
-                                            engineOidToActivatedAbilityManaProduced.insert(
-                                                oid, producedStr.split(QChar('|')));
-                                        }
-                                        if (oid != 0 && ai < p.battlefield_activated_ability_cost_labels_size()) {
-                                            const QString labelsStr = QString::fromStdString(
-                                                p.battlefield_activated_ability_cost_labels(ai));
-                                            // Split on '|'; each entry is a display cost string.
-                                            engineOidToActivatedAbilityCostLabels.insert(
-                                                oid, labelsStr.split(QChar('|')));
-                                        }
-                                    }
-                                    const int nPow = std::min(p.battlefield_object_id_size(), p.battlefield_power_size());
-                                    for (int pi = 0; pi < nPow; ++pi) {
-                                        const quint32 oid = p.battlefield_object_id(pi);
-                                        if (oid != 0) {
-                                            engineOidBattlefieldPower.insert(oid,
-                                                                              static_cast<int>(p.battlefield_power(pi)));
-                                        }
-                                    }
-                                    const int nTough =
-                                        std::min(p.battlefield_object_id_size(), p.battlefield_toughness_size());
-                                    for (int ti = 0; ti < nTough; ++ti) {
-                                        const quint32 oid = p.battlefield_object_id(ti);
-                                        if (oid != 0) {
-                                            engineOidBattlefieldToughness.insert(
-                                                oid, static_cast<int>(p.battlefield_toughness(ti)));
-                                        }
-                                    }
-                                }
-                                if (anyFirstStrikePending != ruledFirstStrikeStepPending) {
-                                    ruledFirstStrikeStepPending = anyFirstStrikePending;
-                                    emit ruledFirstStrikeStepPendingChanged(ruledFirstStrikeStepPending);
-                                }
-                                battlefieldMapDirty = true;
-                            }
-                            if (e.has_attackers_declared()) {
-                                currentAttackerOids.clear();
-                                for (const auto oid : e.attackers_declared().attacker_object_ids()) {
-                                    currentAttackerOids.insert(oid);
-                                }
-                                // Active player's pending picks are now committed; clear them.
-                                pendingAttackerOids.clear();
-                                remoteAttackerPreviewOids.clear();
-                                attackersSubmittedThisStep = true;
-                                combatStateDirty = true;
-                            }
-                            if (e.has_attackers_preview()) {
-                                const int declId = e.attackers_preview().declaring_player_id();
-                                if (declId != game->getPlayerManager()->getLocalPlayerId()) {
-                                    remoteAttackerPreviewOids.clear();
-                                    for (int ai = 0; ai < e.attackers_preview().attacker_object_ids_size(); ++ai) {
-                                        remoteAttackerPreviewOids.insert(
-                                            static_cast<quint32>(e.attackers_preview().attacker_object_ids(ai)));
-                                    }
-                                }
-                                combatStateDirty = true;
-                            }
-                            if (e.has_blockers_declared()) {
-                                committedBlocks.clear();
-                                pendingBlocks.clear();
-                                remoteBlockPreviewPairs.clear();
-                                stagedBlockerOids.clear();
-                                committedBlockerGroups.clear();
-                                for (int bpi = 0; bpi < e.blockers_declared().block_pairs_size(); ++bpi) {
-                                    const auto &bp = e.blockers_declared().block_pairs(bpi);
-                                    const auto attOid = static_cast<quint32>(bp.attacker_id());
-                                    const auto blkOid = static_cast<quint32>(bp.blocker_id());
-                                    committedBlocks.insert(blkOid, attOid);
-                                    committedBlockerGroups[attOid].append(blkOid);
-                                }
-                                // Queue attackers that need explicit combat damage assignment:
-                                // any attacker with 2+ blockers, or a trample attacker with 1+ blockers
-                                // (CR 702.19: trample excess goes to defending player).
-                                clearCombatDamageAssignmentState();
-                                for (auto it = committedBlockerGroups.constBegin();
-                                     it != committedBlockerGroups.constEnd(); ++it) {
-                                    const bool singleWithTrample =
-                                        it.value().size() == 1 && engineOidTrample.value(it.key(), false);
-                                    if (it.value().size() > 1 || singleWithTrample) {
-                                        combatDamagePendingAttackers.append(it.key());
-                                    }
-                                }
-                                if (!combatDamagePendingAttackers.isEmpty()) {
-                                    currentCombatDamageAttackerIdx = 0;
-                                    if (localPlayerIsRuledActive()) {
-                                        seedDefaultCombatDamageForCurrentAttacker();
-                                    }
-                                }
-                                blockersSubmittedThisStep = true;
-                                combatStateDirty = true;
-                            }
-                            if (e.has_combat_damage_assigned()) {
-                                const quint32 doneAtt = e.combat_damage_assigned().attacker_id();
-                                if (currentCombatDamageAttackerIdx >= 0 &&
-                                    currentCombatDamageAttackerIdx < combatDamagePendingAttackers.size() &&
-                                    combatDamagePendingAttackers.at(currentCombatDamageAttackerIdx) == doneAtt) {
-                                    pendingCombatDamageByBlocker.clear();
-                                    currentCombatDamageAttackerIdx++;
-                                    if (localPlayerIsRuledActive() &&
-                                        currentCombatDamageAttackerIdx < combatDamagePendingAttackers.size()) {
-                                        seedDefaultCombatDamageForCurrentAttacker();
-                                    }
-                                }
-                                combatStateDirty = true;
-                            }
-                            if (e.has_blockers_preview()) {
-                                const int declId = e.blockers_preview().declaring_player_id();
-                                if (declId != game->getPlayerManager()->getLocalPlayerId()) {
-                                    remoteBlockPreviewPairs.clear();
-                                    for (int bpi = 0; bpi < e.blockers_preview().block_pairs_size(); ++bpi) {
-                                        const auto &bp = e.blockers_preview().block_pairs(bpi);
-                                        remoteBlockPreviewPairs.insert(static_cast<quint32>(bp.blocker_id()),
-                                                                       static_cast<quint32>(bp.attacker_id()));
-                                    }
-                                }
-                                combatStateDirty = true;
-                            }
-                            if (e.has_removed_from_combat()) {
-                                for (const auto rawOid : e.removed_from_combat().object_ids()) {
-                                    const quint32 oid = static_cast<quint32>(rawOid);
-                                    currentAttackerOids.remove(oid);
-                                    // Clean up attacker-side of blocker groups.
-                                    committedBlockerGroups.remove(oid);
-                                    // Clean up blocker-side: remove this blocker from any group.
-                                    committedBlocks.remove(oid);
-                                    for (auto git = committedBlockerGroups.begin();
-                                         git != committedBlockerGroups.end();) {
-                                        git.value().removeAll(oid);
-                                        if (git.value().isEmpty()) {
-                                            git = committedBlockerGroups.erase(git);
-                                        } else {
-                                            ++git;
-                                        }
-                                    }
-                                }
-                                combatStateDirty = true;
-                            }
-                            if (e.has_life_changed()) {
-                                const auto &lc = e.life_changed();
-                                const QString lifeLine = QStringLiteral("Life: P%1 is now %2 (%3)\n")
-                                                             .arg(lc.player_id())
-                                                             .arg(lc.new_total())
-                                                             .arg(lc.delta());
-                                timeline += lifeLine;
-                            }
-                        }
-                        const auto lit =
-                            batch.legal_by_player().find(game->getPlayerManager()->getLocalPlayerId());
-                        if (lit != batch.legal_by_player().end()) {
-                            const ParsedRuledLandActions parsed = parseRuledLandActions(lit->second);
-                            legalRuledLandPlayHandIndices = parsed.handIndices;
-                            legalRuledLandPlayIndicesByCardName = parsed.handIndicesByCardName;
-                            legalRuledLandPlayFaceOptionsByHandIndex = parsed.faceOptionsByHandIndex;
-                            const ParsedRuledCastActions parsedCast = parseRuledCastActions(lit->second);
-                            legalRuledSpellCastHandIndices = parsedCast.handIndices;
-                            legalRuledSpellCastIndicesByCardName = parsedCast.handIndicesByCardName;
-                            legalRuledSpellCastNeedsTargetHandIndices = parsedCast.needsTargetHandIndices;
-                            ruledValidTargetsByHandSlot.clear();
-                            for (const auto &entry : lit->second.valid_targets_by_hand_slot()) {
-                                // Key is the engine's composite (hand slot << 8 | face index); stored
-                                // verbatim and matched by GameEventHandler::spellTargetKey().
-                                const int key = static_cast<int>(entry.first);
-                                const auto &src = entry.second;
-                                SpellTargetData data;
-                                for (const quint32 oid : src.valid_permanent_ids()) {
-                                    data.validPermanentIds.insert(oid);
-                                }
-                                for (const quint32 oid : src.valid_stack_ids()) {
-                                    data.validStackIds.insert(oid);
-                                }
-                                for (const quint32 oid : src.valid_graveyard_ids()) {
-                                    data.validGraveyardIds.insert(oid);
-                                }
-                                data.canTargetSelf = src.can_target_self();
-                                data.canTargetOpponent = src.can_target_opponent();
-                                data.maxTargets = static_cast<int>(src.max_targets());
-                                data.fixedDamage = static_cast<int>(src.fixed_damage());
-                                data.isDamageTargets = src.is_damage_targets();
-                                data.extraManaPerTarget = static_cast<int>(src.extra_mana_per_target());
-                                ruledValidTargetsByHandSlot.insert(key, std::move(data));
-                            }
-                            ruledValidTargetsByAbility.clear();
-                            for (const auto &entry : lit->second.valid_targets_by_ability()) {
-                                const quint64 key = static_cast<quint64>(entry.first);
-                                const auto &src = entry.second;
-                                SpellTargetData data;
-                                for (const quint32 oid : src.valid_permanent_ids()) {
-                                    data.validPermanentIds.insert(oid);
-                                }
-                                for (const quint32 oid : src.valid_graveyard_ids()) {
-                                    data.validGraveyardIds.insert(oid);
-                                }
-                                data.canTargetSelf = src.can_target_self();
-                                data.canTargetOpponent = src.can_target_opponent();
-                                ruledValidTargetsByAbility.insert(key, std::move(data));
-                            }
-                            const ParsedRuledLandActions parsedCleanup = parseRuledCleanupDiscardActions(lit->second);
-                            legalRuledCleanupDiscardHandIndices = parsedCleanup.handIndices;
-                            legalRuledCleanupDiscardIndicesByCardName = parsedCleanup.handIndicesByCardName;
-                            ruledOpeningUiKind = RuledOpeningUiKind::None;
-                            ruledOpeningPickSeatIds.clear();
-                            legalRuledOpeningBottomHandIndices.clear();
-                            ruledOpeningBottomSelectedIndices.clear();
-                            static const QRegularExpression openingBottomRe(
-                                QStringLiteral(R"(^Put .+ on bottom \(opening, hand idx (\d+)\)$)"));
-                            for (const auto &l : lit->second.labels()) {
-                                const QString qs = QString::fromStdString(l);
-                                if (const QRegularExpressionMatch bm = openingBottomRe.match(qs); bm.hasMatch()) {
-                                    bool ok = false;
-                                    const int hi = bm.captured(1).toInt(&ok);
-                                    if (ok) {
-                                        legalRuledOpeningBottomHandIndices.insert(hi);
-                                    }
-                                }
-                            }
-                            if (!legalRuledOpeningBottomHandIndices.isEmpty()) {
-                                ruledOpeningUiKind = RuledOpeningUiKind::BottomLibrary;
-                            } else {
-                                for (const auto &l : lit->second.labels()) {
-                                    const QString qs = QString::fromStdString(l);
-                                    if (qs == QLatin1String("Keep opening hand (opening)")) {
-                                        ruledOpeningUiKind = RuledOpeningUiKind::MulliganChoice;
-                                        break;
-                                    }
-                                }
-                            }
-                            if (ruledOpeningUiKind == RuledOpeningUiKind::None) {
-                                for (const auto &l : lit->second.labels()) {
-                                    const QString qs = QString::fromStdString(l);
-                                    if (qs == QLatin1String("You start (opening pick)") ||
-                                        qs == QLatin1String("Opponent starts (opening pick)")) {
-                                        ruledOpeningUiKind = RuledOpeningUiKind::ChooseFirst;
-                                        ruledOpeningMulliganCount = 0;
-                                        break;
-                                    }
-                                }
-                            }
-                            promptFeed += tr("Legal actions:\n");
-                            for (const auto &l : lit->second.labels()) {
-                                promptFeed += QStringLiteral(" — %1\n").arg(QString::fromStdString(l));
-                            }
-                            // CR 605 float courtesy: surface the engine's undoable-mana count so the
-                            // client can offer/retract the Undo affordance authoritatively.
-                            emit ruledUndoableManaAbilitiesChanged(
-                                static_cast<int>(lit->second.undoable_mana_abilities()));
-                            // CR 508.1d / 509.1c: engine-reported must-attack / must-block sets that
-                            // gate the combat confirm controls (see ruledCombatDeclarationSatisfied).
-                            ruledRequiredAttackerOids.clear();
-                            for (const quint32 oid : lit->second.required_attacker_ids()) {
-                                ruledRequiredAttackerOids.insert(oid);
-                            }
-                            ruledRequiredBlockerOids.clear();
-                            for (const quint32 oid : lit->second.required_blocker_ids()) {
-                                ruledRequiredBlockerOids.insert(oid);
-                            }
-                        } else {
-                            legalRuledLandPlayHandIndices.clear();
-                            legalRuledLandPlayIndicesByCardName.clear();
-                            legalRuledLandPlayFaceOptionsByHandIndex.clear();
-                            legalRuledSpellCastHandIndices.clear();
-                            legalRuledSpellCastIndicesByCardName.clear();
-                            legalRuledSpellCastNeedsTargetHandIndices.clear();
-                            legalRuledCleanupDiscardHandIndices.clear();
-                            legalRuledCleanupDiscardIndicesByCardName.clear();
-                            legalRuledOpeningBottomHandIndices.clear();
-                            ruledOpeningBottomSelectedIndices.clear();
-                            ruledOpeningPickSeatIds.clear();
-                            ruledOpeningUiKind = RuledOpeningUiKind::None;
-                            // NB: do NOT clear ruledRequiredAttackerOids / ruledRequiredBlockerOids here.
-                            // Servatrice-synthesized combat preview batches (AttackersPreview /
-                            // BlockersPreview, emitted while the local player stages attackers/blocks)
-                            // carry no legal_by_player entry and land in this branch. The must-attack /
-                            // must-block sets are engine-authoritative and only change when a real engine
-                            // batch (with legal_by_player) arrives, so they must survive preview echoes —
-                            // otherwise deselecting a staged required creature couldn't re-disable OK.
-                            emit ruledUndoableManaAbilitiesChanged(0);
-                        }
-                        pruneCleanupDiscardSelectionAndEmitUi();
-                        if (ruledStackTrackingDirty) {
-                            emit ruledStackHasItemsChanged(!ruledStackOidOrder.isEmpty());
-                            emit ruledStackOrderChanged(ruledStackOidOrder);
-                        }
-                        emit ruledEngineTimeline(timeline);
-                        emit ruledEnginePromptFeed(promptFeed);
-                        emit ruledOpeningUiChanged();
-                        if (battlefieldMapDirty) {
-                            emit ruledBattlefieldMapUpdated();
-                        }
-                        if (combatStateDirty) {
-                            emit ruledCombatStateChanged();
-                        }
-                        // Emit graveyard-open signal for triggers whose valid targets are in the graveyard
-                        // (e.g. Gravedigger ETB). ruledValidTargetsByAbility is populated in this same batch.
-                        {
-                            const quint64 abilityKey = abilityTargetKey(pendingTriggerSourceOid, pendingTriggerAbilityIndex);
-                            const bool graveyardNeeded = hasPendingTrigger &&
-                                !ruledValidTargetsByAbility.value(abilityKey).validGraveyardIds.isEmpty();
-                            emit ruledTriggerGraveyardNeedsTarget(graveyardNeeded);
-                        }
-                        // Defer so stack window / zone views finish layout before we resolve CardItem positions.
-                        QTimer::singleShot(0, this, [this] { syncRuledSpellTargetingArrows(); });
-                    }
+                case GameEvent::RULED_PAYLOAD:
+                    ruledDispatcher->processPayload(event.GetExtension(Event_RuledPayload::ext).payload());
                     break;
-                }
 
                 default: {
                     Player *player = game->getPlayerManager()->getPlayers().value(playerId, 0);
@@ -2255,275 +510,6 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
 void GameEventHandler::handleNextTurn()
 {
     sendGameCommand(Command_NextTurn());
-}
-
-namespace {
-void sendRuledCommandFromHandler(GameEventHandler *handler,
-                                 AbstractGame *game,
-                                 const ruled::v1::RuledCommand &ruledCommand)
-{
-    AbstractClient *client = game->getClientForPlayer(-1);
-    if (!client) {
-        return;
-    }
-    std::string payload;
-    if (!ruledCommand.SerializeToString(&payload)) {
-        return;
-    }
-    Command_RuledPayload cmd;
-    cmd.set_payload(payload);
-    PendingCommand *pend = handler->prepareGameCommand(cmd);
-    QObject::connect(pend, &PendingCommand::finished, handler, &GameEventHandler::commandFinished);
-    client->sendCommand(pend);
-}
-} // namespace
-
-void GameEventHandler::confirmCombatDamageForCurrentAttacker()
-{
-    if (!game->getGameMetaInfo()->proto().ruled_game()) {
-        return;
-    }
-    const quint32 curAtt = currentCombatDamageAttackerOid();
-    if (curAtt == 0) {
-        return;
-    }
-    if (!localCombatDamageAssignmentLegal()) {
-        return;
-    }
-    ruled::v1::RuledCommand ruledCommand;
-    auto *acd = ruledCommand.mutable_assign_combat_damage();
-    acd->set_attacker_id(curAtt);
-    const QList<quint32> blockers = committedBlockerGroups.value(curAtt);
-    const int power = currentCombatDamageAttackerPower();
-    int blockerSum = 0;
-    for (quint32 blk : blockers) {
-        const auto dmg = pendingCombatDamageByBlocker.value(blk, 0);
-        auto *pair = acd->add_assignments();
-        pair->set_blocker_id(blk);
-        pair->set_damage(dmg);
-        blockerSum += static_cast<int>(dmg);
-    }
-    // CR 702.19: for trample, set the defending player's share of the damage.
-    const int playerDmg = qMax(0, power - blockerSum);
-    if (engineOidTrample.value(curAtt, false) && playerDmg > 0) {
-        acd->set_defending_player_damage(static_cast<uint32_t>(playerDmg));
-    }
-    sendRuledCommandFromHandler(this, game, ruledCommand);
-    emit ruledCombatStateChanged();
-}
-
-void GameEventHandler::syncRuledBlockersPreviewToServer()
-{
-    if (!game->getGameMetaInfo()->proto().ruled_game()) {
-        return;
-    }
-    if (currentRuledCombatPhase != RuledCombatPhase::DeclareBlockers) {
-        return;
-    }
-    if (blockersSubmittedThisStep) {
-        return;
-    }
-    const int localId = game->getPlayerManager()->getLocalPlayerId();
-    if (localId < 0 || currentRuledActivePlayerId < 0) {
-        return;
-    }
-    if (localId == currentRuledActivePlayerId) {
-        return;
-    }
-
-    ruled::v1::RuledCommand ruledCommand;
-    auto *preview = ruledCommand.mutable_preview_declare_blockers();
-    for (auto it = pendingBlocks.constBegin(); it != pendingBlocks.constEnd(); ++it) {
-        auto *pair = preview->add_block_pairs();
-        pair->set_blocker_id(it.key());
-        pair->set_attacker_id(it.value());
-    }
-    sendRuledCommandFromHandler(this, game, ruledCommand);
-}
-
-void GameEventHandler::syncRuledAttackersPreviewToServer()
-{
-    if (!game->getGameMetaInfo()->proto().ruled_game()) {
-        return;
-    }
-    if (currentRuledCombatPhase != RuledCombatPhase::DeclareAttackers) {
-        return;
-    }
-    if (attackersSubmittedThisStep) {
-        return;
-    }
-    const int localId = game->getPlayerManager()->getLocalPlayerId();
-    if (localId < 0 || currentRuledActivePlayerId < 0) {
-        return;
-    }
-    if (localId != currentRuledActivePlayerId) {
-        return;
-    }
-
-    ruled::v1::RuledCommand ruledCommand;
-    auto *preview = ruledCommand.mutable_preview_declare_attackers();
-    for (const quint32 oid : pendingAttackerOids) {
-        preview->add_creature_ids(oid);
-    }
-    sendRuledCommandFromHandler(this, game, ruledCommand);
-}
-
-void GameEventHandler::handleConfirmRuledAttackers()
-{
-    if (!game->getGameMetaInfo()->proto().ruled_game()) {
-        return;
-    }
-    ruled::v1::RuledCommand ruledCommand;
-    auto *declare = ruledCommand.mutable_declare_attackers();
-    for (const quint32 oid : pendingAttackerOids) {
-        declare->add_creature_ids(oid);
-    }
-    sendRuledCommandFromHandler(this, game, ruledCommand);
-    attackersSubmittedThisStep = true;
-    pendingAttackerOids.clear();
-    emit ruledCombatStateChanged();
-}
-
-void GameEventHandler::handleSkipRuledAttackers()
-{
-    if (!game->getGameMetaInfo()->proto().ruled_game()) {
-        return;
-    }
-    ruled::v1::RuledCommand ruledCommand;
-    ruledCommand.mutable_declare_attackers();
-    sendRuledCommandFromHandler(this, game, ruledCommand);
-    attackersSubmittedThisStep = true;
-    pendingAttackerOids.clear();
-    emit ruledCombatStateChanged();
-}
-
-void GameEventHandler::handleConfirmRuledBlockers()
-{
-    if (!game->getGameMetaInfo()->proto().ruled_game()) {
-        return;
-    }
-    AbstractClient *client = game->getClientForPlayer(-1);
-    if (!client) {
-        return;
-    }
-    ruled::v1::RuledCommand ruledCommand;
-    auto *declare = ruledCommand.mutable_declare_blockers();
-    for (auto it = pendingBlocks.constBegin(); it != pendingBlocks.constEnd(); ++it) {
-        auto *pair = declare->add_block_pairs();
-        pair->set_blocker_id(it.key());
-        pair->set_attacker_id(it.value());
-    }
-    std::string payload;
-    if (!ruledCommand.SerializeToString(&payload)) {
-        return;
-    }
-    Command_RuledPayload cmd;
-    cmd.set_payload(payload);
-    PendingCommand *pend = prepareGameCommand(cmd);
-    // On rejection (e.g. menace requires 2+ blockers), roll back the eagerly-set guard flags so
-    // the defender can fix and re-submit. On success the engine's BlockersDeclared event will
-    // update committedBlocks and set blockersSubmittedThisStep via the normal event path.
-    QObject::connect(
-        pend, &PendingCommand::finished, this,
-        [this](const Response &response, const CommandContainer &, const QVariant &) {
-            if (response.response_code() != Response::RespOk) {
-                pendingBlocks = committedBlocks;
-                committedBlocks.clear();
-                blockersSubmittedThisStep = false;
-                // Fire ruledBlockerRejected first so the prompt widget sets its sticky label
-                // before ruledCombatStateChanged triggers refreshPromptLabel().
-                emit ruledBlockerRejected();
-                emit ruledCombatStateChanged();
-            }
-        });
-    client->sendCommand(pend);
-    // Eagerly flip the guard to prevent a double-submit while the round-trip is in flight;
-    // the callback above resets it if the engine rejects.
-    blockersSubmittedThisStep = true;
-    committedBlocks = pendingBlocks;
-    pendingBlocks.clear();
-    stagedBlockerOids.clear();
-    emit ruledCombatStateChanged();
-}
-
-void GameEventHandler::handleSkipRuledBlockers()
-{
-    if (!game->getGameMetaInfo()->proto().ruled_game()) {
-        return;
-    }
-    ruled::v1::RuledCommand ruledCommand;
-    ruledCommand.mutable_declare_blockers();
-    sendRuledCommandFromHandler(this, game, ruledCommand);
-    blockersSubmittedThisStep = true;
-    pendingBlocks.clear();
-    committedBlocks.clear();
-    stagedBlockerOids.clear();
-    emit ruledCombatStateChanged();
-}
-
-void GameEventHandler::handleRuledOpeningPickFirstSeat(int seatId)
-{
-    if (!game->getGameMetaInfo()->proto().ruled_game()) {
-        return;
-    }
-    ruled::v1::RuledCommand ruledCommand;
-    ruledCommand.mutable_choose_starting_player()->set_starting_player_id(seatId);
-    sendRuledCommandFromHandler(this, game, ruledCommand);
-}
-
-void GameEventHandler::handleRuledOpeningMulliganKeep()
-{
-    if (!game->getGameMetaInfo()->proto().ruled_game()) {
-        return;
-    }
-    ruled::v1::RuledCommand ruledCommand;
-    ruledCommand.mutable_mulligan()->set_keep(true);
-    sendRuledCommandFromHandler(this, game, ruledCommand);
-}
-
-void GameEventHandler::handleRuledOpeningMulliganRedraw()
-{
-    if (!game->getGameMetaInfo()->proto().ruled_game()) {
-        return;
-    }
-    ++ruledOpeningMulliganCount;
-    ruled::v1::RuledCommand ruledCommand;
-    ruledCommand.mutable_mulligan()->set_keep(false);
-    sendRuledCommandFromHandler(this, game, ruledCommand);
-}
-
-void GameEventHandler::handleRuledOpeningBottomCancel()
-{
-    clearRuledOpeningBottomSelection(true);
-}
-
-void GameEventHandler::handleRuledOpeningBottomDone()
-{
-    if (!game->getGameMetaInfo()->proto().ruled_game()) {
-        return;
-    }
-    const int need = ruledOpeningBottomRequiredCount();
-    if (need <= 0 || ruledOpeningBottomSelectedIndices.size() != need) {
-        return;
-    }
-    const QList<int> clickOrder = ruledOpeningBottomSelectedIndices;
-    clearRuledOpeningBottomSelection(false);
-    notifyRuledHandUiChanged();
-    // Send in click order. Each sent command removes a card from the engine hand Vec,
-    // shifting all higher indices down by one. Adjust each index for prior removals.
-    for (int k = 0; k < clickOrder.size(); ++k) {
-        const int orig = clickOrder[k];
-        int adjusted = orig;
-        for (int j = 0; j < k; ++j) {
-            if (clickOrder[j] < orig) {
-                --adjusted;
-            }
-        }
-        ruled::v1::RuledCommand ruledCommand;
-        ruledCommand.mutable_put_opening_hand_on_bottom()->set_hand_card_index(
-            static_cast<quint32>(adjusted));
-        sendRuledCommandFromHandler(this, game, ruledCommand);
-    }
 }
 
 void GameEventHandler::handleReverseTurn()
@@ -2863,6 +849,10 @@ void GameEventHandler::eventSetActivePhase(const Event_SetActivePhase &event,
     emitUserEvent();
 }
 
+// ---------------------------------------------------------------------------------------
+// Ruled spell → target arrows (UI-side; the state only tracks the target lists)
+// ---------------------------------------------------------------------------------------
+
 void GameEventHandler::refreshRuledSpellTargetArrows()
 {
     syncRuledSpellTargetingArrows();
@@ -2878,27 +868,72 @@ void GameEventHandler::clearRuledSpellTargetArrows()
     ruledSpellTargetSyntheticArrows.clear();
 }
 
+void GameEventHandler::syncRuledSpellTargetingArrows()
+{
+    if (!game || !RuledActions::isRuledGame(game)) {
+        clearRuledSpellTargetArrows();
+        return;
+    }
+
+    clearRuledSpellTargetArrows();
+
+    static const QColor spellTargetRed(220, 40, 40);
+
+    const QList<quint32> &stackOidOrder = ruledState->getStackOidOrder();
+    for (auto it = ruledState->stackTargetsByStackOid.constBegin(); it != ruledState->stackTargetsByStackOid.constEnd();
+         ++it) {
+        const quint32 stackOid = it.key();
+        if (!stackOidOrder.contains(stackOid)) {
+            continue;
+        }
+        TabGame *tab = game->getTab();
+        // QPointer::data() returns null if the card was deleted outside our cleanup path.
+        CardItem *startCard = syntheticAbilityStackCards.value(stackOid).data();
+        if (startCard && tab) {
+            // When the stack window is open, the user sees a copy of the card in the zone
+            // view widget, not the original in the player's hidden stack zone. Prefer the
+            // visible copy so the arrow originates from the card the user can actually see.
+            if (CardItem *vis = tab->findVisibleStackSpellCardItem(startCard->getId())) {
+                startCard = vis;
+            }
+        }
+        if (!startCard) {
+            startCard = RuledActions::findStackCardItemByEngineOid(game, stackOid);
+        }
+        if (!startCard || !startCard->getZone()) {
+            continue;
+        }
+        Player *arrowOwner = startCard->getZone()->getPlayer();
+        if (!arrowOwner) {
+            continue;
+        }
+
+        const QVector<quint32> targets = it.value();
+        for (int ti = 0; ti < targets.size(); ++ti) {
+            ArrowTarget *tgt = RuledActions::resolveSpellTargetItem(game, ruledState, targets.at(ti));
+            if (!tgt || tgt == startCard) {
+                continue;
+            }
+            const int aid = nextRuledSpellTargetArrowId--;
+            ArrowItem *arr = arrowOwner->addArrow(aid, startCard, tgt, spellTargetRed);
+            if (!arr) {
+                continue;
+            }
+            arr->setAcceptedMouseButtons(Qt::NoButton);
+            ruledSpellTargetSyntheticArrows.append(qMakePair(arrowOwner, aid));
+        }
+    }
+}
+
 void GameEventHandler::clearRuledSessionState()
 {
-    // Pending trigger
-    hasPendingTrigger = false;
-    pendingTriggerSourceOid = 0;
-    pendingTriggerAbilityIndex = 0;
-    pendingTriggerAbilityText.clear();
-    pendingTriggerControllerPlayerId = -1;
-    pendingCopyTargetChoice = {};
-    pendingLegendKeepChoice = {};
-
-    // Stack tracking — remove synthetic ability cards from their zones before clearing the maps.
+    // Remove synthetic ability cards from their zones before the state clears the maps.
     const QList<quint32> syntheticOids = syntheticAbilityStackCards.keys();
     for (const quint32 oid : syntheticOids) {
-        removeSyntheticAbilityStackCard(oid);
+        removeSyntheticStackCard(oid);
     }
-    ruledStackOidOrder.clear();
-    ruledStackTargetsByStackOid.clear();
-    ruledStackAnnotationByOid.clear();
-    ruledStackSourceOidByStackOid.clear();
-    syntheticAbilityControllerPid.clear();
+
+    ruledState->clearSessionState();
 
     // GRAVE and STACK are the two zones Player::processPlayerInfo deliberately skips in ruled
     // mode (repopulating them from a mid-game snapshot duplicates cards into open zone views),
@@ -2916,231 +951,6 @@ void GameEventHandler::clearRuledSessionState()
             }
         }
     }
-    // Engine oid -> Server_Card.id for graveyard cards: rebuilt per batch from the server's
-    // GraveyardObjectMap, but that event is only sent when non-empty, so a stale map would
-    // otherwise survive into the next game and offer phantom targets.
-    ruledGraveyardEngineOidToServerCardId.clear();
-
-    // Legal action sets
-    legalRuledLandPlayHandIndices.clear();
-    legalRuledLandPlayIndicesByCardName.clear();
-    legalRuledLandPlayFaceOptionsByHandIndex.clear();
-    legalRuledSpellCastHandIndices.clear();
-    legalRuledSpellCastIndicesByCardName.clear();
-    legalRuledSpellCastNeedsTargetHandIndices.clear();
-    legalRuledCleanupDiscardHandIndices.clear();
-    legalRuledCleanupDiscardIndicesByCardName.clear();
-    legalRuledOpeningBottomHandIndices.clear();
-
-    // Opening sequence
-    ruledOpeningUiKind = RuledOpeningUiKind::None;
-    ruledOpeningMulliganCount = 0;
-    ruledOpeningPickSeatIds.clear();
-    ruledOpeningBottomSelectedIndices.clear();
-
-    // Resolution hand-pick
-    if (resolutionHandPick.has_value() && resolutionHandPick->pickZone == PickZone::Revealed) {
-        emit ruledRevealedPickChanged(false, {}, {}, 0, 0);
-    }
-    resolutionHandPick.reset();
-    emit ruledResolutionHandPickUiChanged(-1, -1);
 
     clearRuledSpellTargetArrows();
-
-    emit ruledSessionReset();
-}
-
-void GameEventHandler::submitCopyTargetChoice(quint32 oid)
-{
-    pendingCopyTargetChoice = {};
-    ruled::v1::RuledCommand cmd;
-    cmd.mutable_submit_resolution_choice()->add_chosen_object_ids(oid);
-    std::string payload;
-    if (cmd.SerializeToString(&payload)) {
-        Command_RuledPayload ruledPayload;
-        ruledPayload.set_payload(payload);
-        sendGameCommand(ruledPayload);
-    }
-}
-
-void GameEventHandler::submitLegendKeepChoice(quint32 oid)
-{
-    // CR 704.5j: the chosen permanent is the legend to KEEP; the engine sacrifices the rest.
-    pendingLegendKeepChoice = {};
-    ruled::v1::RuledCommand cmd;
-    cmd.mutable_submit_resolution_choice()->add_chosen_object_ids(oid);
-    std::string payload;
-    if (cmd.SerializeToString(&payload)) {
-        Command_RuledPayload ruledPayload;
-        ruledPayload.set_payload(payload);
-        sendGameCommand(ruledPayload);
-    }
-}
-
-void GameEventHandler::createSyntheticAbilityStackCard(quint32 virtualOid,
-                                                        const QString &cardName,
-                                                        int controllerPlayerId,
-                                                        const QString &setName)
-{
-    (void)controllerPlayerId;
-    // Idempotent: StackPushed may be rebroadcast; a second card for the same OID would corrupt the zone.
-    if (syntheticAbilityStackCards.contains(virtualOid)) {
-        return;
-    }
-    if (!game) {
-        return;
-    }
-    // Always place the synthetic card in the canonical (lowest player-id) zone so that
-    // physical spells — which the server also routes to the canonical zone — appear in the
-    // same zone as synthetic ability cards. This keeps the stack window unified for both players.
-    const int localPlayerId = game->getPlayerManager()->getLocalPlayerId();
-    const QMap<int, Player *> &allPlayers = game->getPlayerManager()->getPlayers();
-    const int zonePid = allPlayers.isEmpty() ? localPlayerId : allPlayers.firstKey();
-    Player *zonePlayer = game->getPlayerManager()->getPlayers().value(zonePid, nullptr);
-    if (!zonePlayer) {
-        return;
-    }
-    CardZoneLogic *stackZone = zonePlayer->getStackZone();
-    if (!stackZone) {
-        return;
-    }
-    // Assign a fake card ID well outside the range Servatrice assigns (small positive ints).
-    const int fakeId = static_cast<int>(0x70000000u | (virtualOid & 0x0FFFFFFFu));
-    CardRef ref{cardName, setName};
-    auto *card = new CardItem(zonePlayer, nullptr, ref, fakeId);
-    // Register the OID mapping so card_item.cpp paint() can show the italic ability annotation.
-    // BattlefieldObjectMap clears ownerCardIdToEngineOid on every priority change, so we keep
-    // the fakeId in syntheticAbilityFakeIds and re-register after each clear.
-    syntheticAbilityFakeIds.insert(virtualOid, fakeId);
-    syntheticAbilityControllerPid.insert(virtualOid, zonePid);
-    ownerCardIdToEngineOid.insert(makeOwnedCardKey(zonePid, fakeId), virtualOid);
-    // Insert at front (index 0) so the newest item appears at the top of the visual stack,
-    // matching MTG rules where the most recently added item resolves first.
-    stackZone->addCard(card, true, 0);
-    // QPointer: auto-nullifies if the card is deleted outside our cleanup path.
-    syntheticAbilityStackCards.insert(virtualOid, QPointer<CardItem>(card));
-}
-
-void GameEventHandler::removeSyntheticAbilityStackCard(quint32 virtualOid)
-{
-    QPointer<CardItem> cardPtr = syntheticAbilityStackCards.take(virtualOid);
-    syntheticAbilityFakeIds.remove(virtualOid);
-    const int zonePid = syntheticAbilityControllerPid.take(virtualOid);
-    CardItem *card = cardPtr.data();
-    if (!card) {
-        return;
-    }
-    if (auto *zone = card->getZone()) {
-        // Find by pointer so we never remove the wrong card by fake ID.
-        const CardList &zoneCards = zone->getCards();
-        int pos = -1;
-        for (int i = 0; i < zoneCards.size(); ++i) {
-            if (zoneCards[i] == card) {
-                pos = i;
-                break;
-            }
-        }
-        if (pos >= 0) {
-            zone->takeCard(pos, card->getId(), false);
-        }
-    }
-    ownerCardIdToEngineOid.remove(makeOwnedCardKey(zonePid, card->getId()));
-    card->deleteLater();
-}
-
-void GameEventHandler::syncRuledSpellTargetingArrows()
-{
-    if (!game || !game->getGameMetaInfo()->proto().ruled_game()) {
-        clearRuledSpellTargetArrows();
-        return;
-    }
-
-    clearRuledSpellTargetArrows();
-
-    static const QColor spellTargetRed(220, 40, 40);
-
-    // --- DIAG H2/H5: log every sync so we know what the local client has tracked. ---
-    {
-        const int localPid = game->getPlayerManager()->getLocalPlayerId();
-        QString oidStr;
-        for (quint32 o : ruledStackOidOrder) {
-            if (!oidStr.isEmpty()) oidStr += QLatin1Char(',');
-            oidStr += QString::number(o);
-        }
-        sdbgLog(QStringLiteral("SyncArrows localPid=%1 stackOidOrder=[%2] targetEntries=%3")
-                    .arg(localPid)
-                    .arg(oidStr)
-                    .arg(ruledStackTargetsByStackOid.size()));
-    }
-
-    for (auto it = ruledStackTargetsByStackOid.constBegin(); it != ruledStackTargetsByStackOid.constEnd(); ++it) {
-        const quint32 stackOid = it.key();
-        if (!ruledStackOidOrder.contains(stackOid)) {
-            sdbgLog(QStringLiteral("SyncArrows  oid=%1 SKIPPED (not in ruledStackOidOrder)").arg(stackOid));
-            continue;
-        }
-        TabGame *tab = game->getTab();
-        // QPointer::data() returns null if the card was deleted outside our cleanup path.
-        CardItem *startCard = syntheticAbilityStackCards.value(stackOid).data();
-        if (startCard && tab) {
-            // When the stack window is open, the user sees a copy of the card in the zone
-            // view widget, not the original in the player's hidden stack zone. Prefer the
-            // visible copy so the arrow originates from the card the user can actually see.
-            if (CardItem *vis = tab->findVisibleStackSpellCardItem(startCard->getId())) {
-                startCard = vis;
-            }
-        }
-        const int spellServerId = cardIdForEngineOid(stackOid);
-        if (!startCard) {
-            startCard = tab ? tab->findVisibleStackSpellCardItem(spellServerId) : nullptr;
-            if (!startCard) {
-                startCard = findStackCardByServerId(game, spellServerId);
-            }
-        }
-        // --- DIAG H1/H2: was the card found and where is it? ---
-        {
-            const bool isSynth = syntheticAbilityStackCards.value(stackOid).data() != nullptr;
-            QString cardInfo = QStringLiteral("null");
-            if (startCard) {
-                const QString zoneName = startCard->getZone() ? startCard->getZone()->getName() : QStringLiteral("nozone");
-                cardInfo = QStringLiteral("name='%1' zone='%2' scenePos=(%3,%4)")
-                               .arg(startCard->getName())
-                               .arg(zoneName)
-                               .arg(startCard->scenePos().x())
-                               .arg(startCard->scenePos().y());
-            }
-            sdbgLog(QStringLiteral("SyncArrows  oid=%1 isSynth=%2 cardIdFromOid=%3 startCard=%4")
-                        .arg(stackOid)
-                        .arg(isSynth)
-                        .arg(spellServerId)
-                        .arg(cardInfo));
-        }
-        if (!startCard || !startCard->getZone()) {
-            continue;
-        }
-        Player *arrowOwner = startCard->getZone()->getPlayer();
-        if (!arrowOwner) {
-            continue;
-        }
-
-        const QVector<quint32> targets = it.value();
-        for (int ti = 0; ti < targets.size(); ++ti) {
-            ArrowTarget *tgt =
-                resolveRuledSpellTarget(game, tab, this, ruledStackOidOrder, targets.at(ti));
-            if (!tgt || tgt == startCard) {
-                sdbgLog(QStringLiteral("SyncArrows    target[%1]=%2 tgtNull=%3 tgtSelf=%4 SKIPPED")
-                            .arg(ti).arg(targets.at(ti)).arg(tgt == nullptr).arg(tgt == startCard));
-                continue;
-            }
-            const int aid = nextRuledSpellTargetArrowId--;
-            ArrowItem *arr = arrowOwner->addArrow(aid, startCard, tgt, spellTargetRed);
-            if (!arr) {
-                continue;
-            }
-            arr->setAcceptedMouseButtons(Qt::NoButton);
-            ruledSpellTargetSyntheticArrows.append(qMakePair(arrowOwner, aid));
-            sdbgLog(QStringLiteral("SyncArrows    ARROW ADDED oid=%1 target[%2]=%3")
-                        .arg(stackOid).arg(ti).arg(targets.at(ti)));
-        }
-    }
 }
