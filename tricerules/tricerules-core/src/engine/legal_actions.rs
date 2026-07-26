@@ -58,6 +58,35 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
             }
         }
 
+        // CR 603.3d: a triggered ability chooses its targets as it is put on the stack. While one
+        // is parked waiting on its controller, publish its legal targets under the same
+        // (source_oid << 32 | ability_index) key an activated ability would use, so the client can
+        // highlight them and open the zone they live in (e.g. Gravedigger's graveyard). Only the
+        // controller gets them — nobody else may answer the trigger.
+        //
+        // A same-index activated ability on the same permanent would be overwritten here, which is
+        // the right precedence: priority is blocked while a trigger is pending (see priority.rs),
+        // so the parked trigger is the only thing its controller can be choosing targets for.
+        if let Some(pt) = eng.state.pending_triggers.front() {
+            if pt.controller == p.id {
+                if let Some(effect) = eng
+                    .registry
+                    .get(&pt.card_id)
+                    .and_then(|def| def.triggered_abilities.get(pt.ability_index))
+                    .map(|ta| &ta.effect)
+                {
+                    let targets = compute_spell_targets(
+                        &eng.state,
+                        eng.registry,
+                        p.id,
+                        std::slice::from_ref(effect),
+                    );
+                    let key = (pt.source_permanent_id as u64) << 32 | pt.ability_index as u64;
+                    valid_targets_by_ability.insert(key, targets);
+                }
+            }
+        }
+
         let undoable_mana_abilities = eng
             .state
             .undoable_mana_abilities

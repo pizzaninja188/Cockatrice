@@ -1373,7 +1373,8 @@ fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
 
     // Both players pass; Gravedigger resolves and ETB trigger fires.
     e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass())
+    let batch = e
+        .apply_command(1, &pass())
         .expect("p1 pass resolves gravedigger");
 
     // Gravedigger ETB trigger requires a target from the graveyard.
@@ -1382,6 +1383,34 @@ fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
         1,
         "Gravedigger ETB trigger must be queued"
     );
+
+    // CR 603.3d: while the trigger is parked, its legal targets must be published under the same
+    // (source_oid << 32 | ability_index) key an activated ability uses — that is what lets the
+    // client highlight them and auto-open the graveyard they live in.
+    {
+        let pt = e
+            .state
+            .pending_triggers
+            .front()
+            .expect("pending trigger queued");
+        let key = (pt.source_permanent_id as u64) << 32 | pt.ability_index as u64;
+        let p0 = batch.legal_by_player.get(&0).expect("p0 legal actions");
+        let targets = p0
+            .valid_targets_by_ability
+            .get(&key)
+            .expect("a parked trigger must publish its valid targets");
+        assert_eq!(
+            targets.valid_graveyard_ids,
+            vec![bears_oid],
+            "the graveyard creature is the trigger's only legal target"
+        );
+        // Only the controller may answer the trigger, so nobody else is told what it can hit.
+        let p1 = batch.legal_by_player.get(&1).expect("p1 legal actions");
+        assert!(
+            !p1.valid_targets_by_ability.contains_key(&key),
+            "the opponent must not receive the trigger's target set"
+        );
+    }
 
     // P0 chooses Grizzly Bears as the graveyard target.
     e.apply_command(
