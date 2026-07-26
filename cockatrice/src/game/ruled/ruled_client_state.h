@@ -37,13 +37,41 @@
 
 class RuledClientHost;
 
-// CR 712: one playable face of a hand card the engine offers as a land play. An MDFC land (pathway)
-// yields more than one option for a single hand slot (front + back), each with its own face index
-// and Oracle face name for the side-picker menu.
-struct RuledLandFaceOption
+// CR 712: one playable face of a hand card the engine offers for a hand action. An MDFC land
+// (pathway) yields more than one option for a single hand slot (front + back), each with its own
+// face index and Oracle face name for the side-picker menu.
+struct RuledFaceOption
 {
     int faceIndex;
     QString faceName;
+};
+
+/// Every kind of action the engine can offer on a card in hand. Adding a hand mechanic (cycling,
+/// foretell, …) is an enum value here plus a label spec in the dispatcher's parse table — the
+/// storage, the legality queries and the clicked-card resolver below are already generic.
+/// The fixed underlying type lets `ruled_actions.h` forward-declare this without dragging the
+/// generated proto header into every one of its consumers — keep the two declarations in step.
+enum class RuledHandActionKind : int
+{
+    PlayLand,
+    CastSpell,
+    CleanupDiscard,
+    OpeningBottom,
+};
+
+/// The engine's offer for one hand-action kind, rebuilt from LegalActions every batch.
+struct RuledHandActionSet
+{
+    /// Engine hand slots the action is legal on.
+    QSet<int> handIndices;
+    /// Oracle name (as the engine labelled it) -> hand slot. Multi-valued: two copies of a card
+    /// in hand are two slots under one name.
+    QMultiHash<QString, int> indicesByCardName;
+    /// CR 712: hand slot -> the faces offered there. More than one entry means a multi-face card
+    /// whose side the player must choose (MDFC lands today).
+    QHash<int, QVector<RuledFaceOption>> faceOptionsByIndex;
+    /// Slots whose action needs a cast-time target (CastSpell only).
+    QSet<int> needsTargetIndices;
 };
 
 class RuledClientState : public QObject
@@ -150,18 +178,10 @@ public:
     // -----------------------------------------------------------------------------------
     // Legal actions offered to the local player this batch.
     // -----------------------------------------------------------------------------------
-    QSet<int> legalLandPlayHandIndices;
-    QMultiHash<QString, int> legalLandPlayIndicesByCardName;
-    // CR 712: engine hand slot -> the faces offered as a land play there. An MDFC land (pathway)
-    // has >1 entry per slot; drives the PlayLand.face_index side-picker.
-    QHash<int, QVector<RuledLandFaceOption>> legalLandPlayFaceOptionsByHandIndex;
-    QSet<int> legalSpellCastHandIndices;
-    QMultiHash<QString, int> legalSpellCastIndicesByCardName;
-    QSet<int> legalSpellCastNeedsTargetHandIndices;
-    QSet<int> legalCleanupDiscardHandIndices;
-    QMultiHash<QString, int> legalCleanupDiscardIndicesByCardName;
+    // One entry per hand-action kind the engine offered this batch; absent kind = nothing legal.
+    // Written wholesale by RuledEventDispatcher::applyLegalActions.
+    QHash<RuledHandActionKind, RuledHandActionSet> handActions;
     QSet<int> cleanupDiscardSelectedIndices;
-    QSet<int> legalOpeningBottomHandIndices;
     QList<int> openingBottomSelectedIndices;
     QVector<int> openingPickSeatIds;
     RuledOpeningUiKind openingUiKind = RuledOpeningUiKind::None;
@@ -357,21 +377,25 @@ public:
     }
 
     // -----------------------------------------------------------------------------------
-    // Legal hand-action queries.
+    // Legal hand-action queries. One family for every kind — see RuledHandActionKind.
     // -----------------------------------------------------------------------------------
-    [[nodiscard]] bool isLandPlayLegalForHandIndex(int handIndex) const;
-    [[nodiscard]] int landPlayHandIndexForCard(const QString &cardName, int preferredHandIndex) const;
-    [[nodiscard]] QList<int> landPlayHandIndicesForCardName(const QString &cardName) const;
-    [[nodiscard]] bool isSpellCastLegalForHandIndex(int handIndex) const;
-    [[nodiscard]] bool isSpellCastNeedsTargetForHandIndex(int handIndex) const;
-    [[nodiscard]] int spellCastHandIndexForCard(const QString &cardName, int preferredHandIndex) const;
-    [[nodiscard]] QList<int> spellCastHandIndicesForCardName(const QString &cardName) const;
-    // CR 712: every playable face the engine offers for a given hand slot, sorted by face index.
-    // Size > 1 means an MDFC land whose side the player must choose; size 1 is a single-face land.
-    [[nodiscard]] QVector<RuledLandFaceOption> landPlayFaceOptionsForHandIndex(int handIndex) const;
-    [[nodiscard]] bool isCleanupDiscardLegalForHandIndex(int handIndex) const;
-    [[nodiscard]] int cleanupDiscardHandIndexForCard(const QString &cardName, int preferredHandIndex) const;
-    [[nodiscard]] QList<int> cleanupDiscardHandIndicesForCardName(const QString &cardName) const;
+    /// The engine's offer for `kind`; an empty set when the engine offered nothing.
+    [[nodiscard]] const RuledHandActionSet &handActionSet(RuledHandActionKind kind) const;
+    [[nodiscard]] bool isHandActionLegal(RuledHandActionKind kind, int handIndex) const;
+    /// Every legal slot for `kind`, ascending.
+    [[nodiscard]] QList<int> handActionLegalIndicesSorted(RuledHandActionKind kind) const;
+    /// Legal slots holding `cardName`, ascending.
+    [[nodiscard]] QList<int> handActionIndicesForCardName(RuledHandActionKind kind, const QString &cardName) const;
+    /// `preferredHandIndex` when it is one of the slots holding `cardName`, else the lowest such
+    /// slot, else -1.
+    [[nodiscard]] int
+    handActionIndexForCard(RuledHandActionKind kind, const QString &cardName, int preferredHandIndex) const;
+    /// CR 712: every playable face the engine offers for a given hand slot, sorted by face index.
+    /// Size > 1 means a multi-face card whose side the player must choose.
+    [[nodiscard]] QVector<RuledFaceOption> handActionFaceOptions(RuledHandActionKind kind, int handIndex) const;
+    /// True when the action on this slot needs a cast-time target (CastSpell).
+    [[nodiscard]] bool handActionNeedsTarget(RuledHandActionKind kind, int handIndex) const;
+    void clearHandActions();
     [[nodiscard]] bool localPlayerMustCleanupDiscard() const;
     [[nodiscard]] int cleanupDiscardRequiredCount() const;
     [[nodiscard]] int cleanupDiscardSelectedCount() const;
@@ -721,8 +745,6 @@ public:
     {
         return openingMulliganCount;
     }
-    [[nodiscard]] bool isOpeningBottomLegalForHandIndex(int handIndex) const;
-    [[nodiscard]] QList<int> openingBottomLegalHandIndicesSorted() const;
     [[nodiscard]] int openingBottomRequiredCount() const;
     [[nodiscard]] int openingBottomSelectedCount() const;
     [[nodiscard]] bool isOpeningBottomHandIndexSelected(int handIndex) const;

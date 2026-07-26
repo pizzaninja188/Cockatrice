@@ -959,7 +959,7 @@ bool PlayerActions::tryPlayRuledLand(CardItem *card)
     }
 
     RuledClientState *const geh = player->getGame()->getGameEventHandler()->ruled();
-    const int ruledHandIndex = RuledActions::resolveLandPlayHandIndex(geh, card);
+    const int ruledHandIndex = RuledActions::resolveHandActionIndex(geh, RuledHandActionKind::PlayLand, card);
     if (ruledHandIndex < 0) {
         return false; // engine does not offer this card as a land play right now
     }
@@ -968,7 +968,8 @@ bool PlayerActions::tryPlayRuledLand(CardItem *card)
     // playable face for the same hand slot — front and back. Present a side-picker so the player
     // chooses which land to play; a single-face land plays its one face directly. The whole notion
     // of "which faces are lands and playable" comes from the engine (rules), not the Oracle DB.
-    const QVector<RuledLandFaceOption> faces = geh->landPlayFaceOptionsForHandIndex(ruledHandIndex);
+    const QVector<RuledFaceOption> faces =
+        geh->handActionFaceOptions(RuledHandActionKind::PlayLand, ruledHandIndex);
     if (faces.size() > 1) {
         return tryRuledLandPlayFaceMenu(card);
     }
@@ -993,14 +994,15 @@ bool PlayerActions::tryRuledLandPlayFaceMenu(CardItem *card)
     if (!geh) {
         return false;
     }
-    const int ruledHandIndex = RuledActions::resolveLandPlayHandIndex(geh, card);
+    const int ruledHandIndex = RuledActions::resolveHandActionIndex(geh, RuledHandActionKind::PlayLand, card);
     if (ruledHandIndex < 0) {
         return false;
     }
     // CR 712: only offer the picker when the engine exposes more than one playable face for this
     // slot (an MDFC land). A single-face land keeps its direct click-to-play and falls through so a
     // right-click still opens the normal card menu.
-    const QVector<RuledLandFaceOption> faces = geh->landPlayFaceOptionsForHandIndex(ruledHandIndex);
+    const QVector<RuledFaceOption> faces =
+        geh->handActionFaceOptions(RuledHandActionKind::PlayLand, ruledHandIndex);
     if (faces.size() < 2) {
         return false;
     }
@@ -1008,7 +1010,7 @@ bool PlayerActions::tryRuledLandPlayFaceMenu(CardItem *card)
     QMenu menu;
     QVector<QAction *> actionsByOption;
     actionsByOption.reserve(faces.size());
-    for (const RuledLandFaceOption &opt : faces) {
+    for (const RuledFaceOption &opt : faces) {
         actionsByOption.append(menu.addAction(tr("Play %1").arg(opt.faceName)));
     }
     QAction *chosen = menu.exec(QCursor::pos());
@@ -1037,8 +1039,9 @@ bool PlayerActions::tryRuledOpeningBottomCard(CardItem *card)
     if (!handler || handler->getOpeningUiKind() != RuledClientState::RuledOpeningUiKind::BottomLibrary) {
         return false;
     }
-    const int ruledHandIndex = RuledActions::resolveOpeningBottomHandIndex(handler, card);
-    if (ruledHandIndex < 0 || !handler->isOpeningBottomLegalForHandIndex(ruledHandIndex)) {
+    const int ruledHandIndex =
+        RuledActions::resolveHandActionIndex(handler, RuledHandActionKind::OpeningBottom, card);
+    if (ruledHandIndex < 0 || !handler->isHandActionLegal(RuledHandActionKind::OpeningBottom, ruledHandIndex)) {
         return false;
     }
     handler->toggleOpeningBottomHandIndex(ruledHandIndex);
@@ -1088,8 +1091,9 @@ bool PlayerActions::tryToggleRuledCleanupDiscard(CardItem *card)
     if (card->getZone()->getCards().indexOf(card) < 0) {
         return false;
     }
-    const int ruledHandIndex = RuledActions::resolveCleanupDiscardHandIndex(handler, card);
-    if (ruledHandIndex < 0 || !handler->isCleanupDiscardLegalForHandIndex(ruledHandIndex)) {
+    const int ruledHandIndex =
+        RuledActions::resolveHandActionIndex(handler, RuledHandActionKind::CleanupDiscard, card);
+    if (ruledHandIndex < 0 || !handler->isHandActionLegal(RuledHandActionKind::CleanupDiscard, ruledHandIndex)) {
         return false;
     }
     handler->toggleCleanupDiscardHandIndex(ruledHandIndex);
@@ -1157,7 +1161,7 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
     }
 
     RuledClientState *const geh = player->getGame()->getGameEventHandler()->ruled();
-    const int ruledHandIndex = RuledActions::resolveSpellCastHandIndex(geh, card);
+    const int ruledHandIndex = RuledActions::resolveHandActionIndex(geh, RuledHandActionKind::CastSpell, card);
     if (ruledHandIndex < 0) {
         return false;
     }
@@ -1171,7 +1175,7 @@ bool PlayerActions::beginRuledSpellCast(CardItem *card,
                                         const QString &castCost)
 {
     RuledClientState *const geh = player->getGame()->getGameEventHandler()->ruled();
-    if (!geh->isSpellCastLegalForHandIndex(ruledHandIndex)) {
+    if (!geh->isHandActionLegal(RuledHandActionKind::CastSpell, ruledHandIndex)) {
         return false;
     }
     if (pendingRuledSpellCast.valid && pendingRuledSpellCast.waitingForTarget &&
@@ -1186,7 +1190,7 @@ bool PlayerActions::beginRuledSpellCast(CardItem *card,
     }
 
     // Timing legality (sorcery vs. instant speed, flash, combat-declaration locks, priority) is
-    // decided by the engine and surfaced via isSpellCastLegalForHandIndex above — the single
+    // decided by the engine and surfaced via the CastSpell legality check above — the single
     // source of truth. We deliberately do NOT re-gate by card type here: doing so would block
     // flash creatures (CR 702.8b) and any future card that grants instant speed to a non-instant
     // spell. If the engine offered this hand index as castable, the click is allowed.
@@ -1216,7 +1220,7 @@ bool PlayerActions::beginRuledSpellCast(CardItem *card,
     // alternative — and a Phyrexian pip can be paid with 2 life by clicking the player's portrait.
     pendingRuledSpellCast.flexPips = parseFlexPips(rawCost);
 
-    pendingRuledSpellCast.waitingForTarget = geh->isSpellCastNeedsTargetForHandIndex(ruledHandIndex);
+    pendingRuledSpellCast.waitingForTarget = geh->handActionNeedsTarget(RuledHandActionKind::CastSpell, ruledHandIndex);
     pendingRuledSpellCast.isDamageTargets = geh->spellIsDamageTargets(ruledHandIndex, faceIndex);
     pendingRuledSpellCast.maxTargets = geh->spellMaxTargets(ruledHandIndex, faceIndex);
     pendingRuledSpellCast.fixedDamage = geh->spellFixedDamage(ruledHandIndex, faceIndex);
@@ -1294,7 +1298,8 @@ bool PlayerActions::tryRuledSpellCastFaceMenu(CardItem *card)
     QVector<FaceOption> options;
     const QStringList faceCosts = card->getCardInfo().getManaCost().split(QStringLiteral(" // "));
     for (int f = 0; f < faceNames.size(); ++f) {
-        const QList<int> legalSlots = geh->spellCastHandIndicesForCardName(faceNames.at(f));
+        const QList<int> legalSlots =
+            geh->handActionIndicesForCardName(RuledHandActionKind::CastSpell, faceNames.at(f));
         const int handIndex = RuledActions::engineHandIndexFromLegalSlots(geh, card, legalSlots);
         if (handIndex < 0) {
             continue;

@@ -28,14 +28,37 @@ quint32 RuledClientState::graveyardEngineOidForServerCardId(int serverCardId) co
 // Legal hand actions
 // ---------------------------------------------------------------------------------------
 
-bool RuledClientState::isLandPlayLegalForHandIndex(int handIndex) const
+const RuledHandActionSet &RuledClientState::handActionSet(RuledHandActionKind kind) const
 {
-    return legalLandPlayHandIndices.contains(handIndex);
+    static const RuledHandActionSet empty;
+    const auto it = handActions.constFind(kind);
+    return it == handActions.constEnd() ? empty : *it;
 }
 
-int RuledClientState::landPlayHandIndexForCard(const QString &cardName, int preferredHandIndex) const
+bool RuledClientState::isHandActionLegal(RuledHandActionKind kind, int handIndex) const
 {
-    const QList<int> matching = landPlayHandIndicesForCardName(cardName);
+    return handActionSet(kind).handIndices.contains(handIndex);
+}
+
+QList<int> RuledClientState::handActionLegalIndicesSorted(RuledHandActionKind kind) const
+{
+    QList<int> legal = handActionSet(kind).handIndices.values();
+    std::sort(legal.begin(), legal.end());
+    return legal;
+}
+
+QList<int> RuledClientState::handActionIndicesForCardName(RuledHandActionKind kind, const QString &cardName) const
+{
+    QList<int> matching = handActionSet(kind).indicesByCardName.values(cardName);
+    std::sort(matching.begin(), matching.end());
+    return matching;
+}
+
+int RuledClientState::handActionIndexForCard(RuledHandActionKind kind,
+                                             const QString &cardName,
+                                             int preferredHandIndex) const
+{
+    const QList<int> matching = handActionIndicesForCardName(kind, cardName);
     if (matching.contains(preferredHandIndex)) {
         return preferredHandIndex;
     }
@@ -45,82 +68,32 @@ int RuledClientState::landPlayHandIndexForCard(const QString &cardName, int pref
     return matching.first();
 }
 
-QList<int> RuledClientState::landPlayHandIndicesForCardName(const QString &cardName) const
+QVector<RuledFaceOption> RuledClientState::handActionFaceOptions(RuledHandActionKind kind, int handIndex) const
 {
-    QList<int> matching = legalLandPlayIndicesByCardName.values(cardName);
-    std::sort(matching.begin(), matching.end());
-    return matching;
-}
-
-bool RuledClientState::isSpellCastLegalForHandIndex(int handIndex) const
-{
-    return legalSpellCastHandIndices.contains(handIndex);
-}
-
-bool RuledClientState::isSpellCastNeedsTargetForHandIndex(int handIndex) const
-{
-    return legalSpellCastNeedsTargetHandIndices.contains(handIndex);
-}
-
-int RuledClientState::spellCastHandIndexForCard(const QString &cardName, int preferredHandIndex) const
-{
-    const QList<int> matching = spellCastHandIndicesForCardName(cardName);
-    if (matching.contains(preferredHandIndex)) {
-        return preferredHandIndex;
-    }
-    if (matching.isEmpty()) {
-        return -1;
-    }
-    return matching.first();
-}
-
-QList<int> RuledClientState::spellCastHandIndicesForCardName(const QString &cardName) const
-{
-    QList<int> matching = legalSpellCastIndicesByCardName.values(cardName);
-    std::sort(matching.begin(), matching.end());
-    return matching;
-}
-
-QVector<RuledLandFaceOption> RuledClientState::landPlayFaceOptionsForHandIndex(int handIndex) const
-{
-    QVector<RuledLandFaceOption> options = legalLandPlayFaceOptionsByHandIndex.value(handIndex);
+    QVector<RuledFaceOption> options = handActionSet(kind).faceOptionsByIndex.value(handIndex);
     std::sort(options.begin(), options.end(),
-              [](const RuledLandFaceOption &a, const RuledLandFaceOption &b) { return a.faceIndex < b.faceIndex; });
+              [](const RuledFaceOption &a, const RuledFaceOption &b) { return a.faceIndex < b.faceIndex; });
     return options;
 }
 
-bool RuledClientState::isCleanupDiscardLegalForHandIndex(int handIndex) const
+bool RuledClientState::handActionNeedsTarget(RuledHandActionKind kind, int handIndex) const
 {
-    return legalCleanupDiscardHandIndices.contains(handIndex);
+    return handActionSet(kind).needsTargetIndices.contains(handIndex);
 }
 
-int RuledClientState::cleanupDiscardHandIndexForCard(const QString &cardName, int preferredHandIndex) const
+void RuledClientState::clearHandActions()
 {
-    const QList<int> matching = cleanupDiscardHandIndicesForCardName(cardName);
-    if (matching.contains(preferredHandIndex)) {
-        return preferredHandIndex;
-    }
-    if (matching.isEmpty()) {
-        return -1;
-    }
-    return matching.first();
-}
-
-QList<int> RuledClientState::cleanupDiscardHandIndicesForCardName(const QString &cardName) const
-{
-    QList<int> matching = legalCleanupDiscardIndicesByCardName.values(cardName);
-    std::sort(matching.begin(), matching.end());
-    return matching;
+    handActions.clear();
 }
 
 bool RuledClientState::localPlayerMustCleanupDiscard() const
 {
-    return !legalCleanupDiscardHandIndices.isEmpty();
+    return !handActionSet(RuledHandActionKind::CleanupDiscard).handIndices.isEmpty();
 }
 
 int RuledClientState::cleanupDiscardRequiredCount() const
 {
-    const int n = legalCleanupDiscardHandIndices.size();
+    const int n = handActionSet(RuledHandActionKind::CleanupDiscard).handIndices.size();
     if (n <= 7) {
         return 0;
     }
@@ -150,7 +123,7 @@ QList<int> RuledClientState::cleanupDiscardSelectedIndicesSorted() const
 
 void RuledClientState::toggleCleanupDiscardHandIndex(int ruledHandIndex)
 {
-    if (!isCleanupDiscardLegalForHandIndex(ruledHandIndex)) {
+    if (!isHandActionLegal(RuledHandActionKind::CleanupDiscard, ruledHandIndex)) {
         return;
     }
     const int need = cleanupDiscardRequiredCount();
@@ -180,14 +153,15 @@ void RuledClientState::clearCleanupDiscardSelection(bool emitUiChange)
 
 void RuledClientState::pruneCleanupDiscardSelectionAndEmitUi()
 {
-    if (legalCleanupDiscardHandIndices.isEmpty()) {
+    const QSet<int> &legal = handActionSet(RuledHandActionKind::CleanupDiscard).handIndices;
+    if (legal.isEmpty()) {
         cleanupDiscardSelectedIndices.clear();
         emit cleanupDiscardUiChanged(0, 0);
         emit combatStateChanged();
         return;
     }
     for (auto it = cleanupDiscardSelectedIndices.begin(); it != cleanupDiscardSelectedIndices.end();) {
-        if (!legalCleanupDiscardHandIndices.contains(*it)) {
+        if (!legal.contains(*it)) {
             it = cleanupDiscardSelectedIndices.erase(it);
         } else {
             ++it;
@@ -200,18 +174,6 @@ void RuledClientState::pruneCleanupDiscardSelectionAndEmitUi()
 // ---------------------------------------------------------------------------------------
 // Opening sequence
 // ---------------------------------------------------------------------------------------
-
-bool RuledClientState::isOpeningBottomLegalForHandIndex(int handIndex) const
-{
-    return legalOpeningBottomHandIndices.contains(handIndex);
-}
-
-QList<int> RuledClientState::openingBottomLegalHandIndicesSorted() const
-{
-    QList<int> legal = legalOpeningBottomHandIndices.values();
-    std::sort(legal.begin(), legal.end());
-    return legal;
-}
 
 int RuledClientState::openingBottomRequiredCount() const
 {
@@ -236,7 +198,7 @@ int RuledClientState::openingBottomClickOrderFor(int handIndex) const
 
 void RuledClientState::toggleOpeningBottomHandIndex(int ruledHandIndex)
 {
-    if (!isOpeningBottomLegalForHandIndex(ruledHandIndex)) {
+    if (!isHandActionLegal(RuledHandActionKind::OpeningBottom, ruledHandIndex)) {
         return;
     }
     const int need = openingBottomRequiredCount();
@@ -987,15 +949,7 @@ void RuledClientState::clearSessionState()
     graveyardEngineOidToServerCardId.clear();
 
     // Legal action sets
-    legalLandPlayHandIndices.clear();
-    legalLandPlayIndicesByCardName.clear();
-    legalLandPlayFaceOptionsByHandIndex.clear();
-    legalSpellCastHandIndices.clear();
-    legalSpellCastIndicesByCardName.clear();
-    legalSpellCastNeedsTargetHandIndices.clear();
-    legalCleanupDiscardHandIndices.clear();
-    legalCleanupDiscardIndicesByCardName.clear();
-    legalOpeningBottomHandIndices.clear();
+    clearHandActions();
 
     // Opening sequence
     openingUiKind = RuledOpeningUiKind::None;

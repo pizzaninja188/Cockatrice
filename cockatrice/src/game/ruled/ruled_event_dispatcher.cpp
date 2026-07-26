@@ -14,23 +14,6 @@ using RuledCombatPhase = RuledClientState::RuledCombatPhase;
 using RuledOpeningUiKind = RuledClientState::RuledOpeningUiKind;
 using PickZone = RuledClientState::PickZone;
 
-struct ParsedRuledLandActions
-{
-    QSet<int> handIndices;
-    QMultiHash<QString, int> handIndicesByCardName;
-    // CR 712: engine hand slot -> the faces the engine offers as a land play there. A multi-face
-    // (MDFC) land yields more than one entry for the same slot (front + back), each with its own
-    // face index for PlayLand.face_index and Oracle face name for the side-picker menu.
-    QHash<int, QVector<RuledLandFaceOption>> faceOptionsByHandIndex;
-};
-
-struct ParsedRuledCastActions
-{
-    QSet<int> handIndices;
-    QMultiHash<QString, int> handIndicesByCardName;
-    QSet<int> needsTargetHandIndices;
-};
-
 RuledCombatPhase mapRuledPhaseToCombatPhase(ruled::v1::PhaseId phase)
 {
     switch (phase) {
@@ -91,73 +74,71 @@ bool isCombatPhase(RuledCombatPhase phase)
            phase == RuledCombatPhase::CombatDamage;
 }
 
-ParsedRuledLandActions parseRuledLandActions(const ruled::v1::LegalActions &actions)
+/// How a label spec's optional third capture group is interpreted.
+enum class ThirdCapture
 {
-    // CR 712: multi-face (MDFC) land labels append ", face N"; single-face lands omit it (face 0).
-    static const QRegularExpression labelRegex(
-        QStringLiteral(R"(^Play land (.*) \(hand idx (\d+)(?:, face (\d+))?\)$)"));
-    ParsedRuledLandActions parsed;
+    Unused,     ///< the pattern has no third group
+    FaceIndex,  ///< CR 712: ", face N" — one entry per playable face of the slot
+    NeedsTarget ///< ", target" — the action needs a cast-time target
+};
 
-    for (const auto &label : actions.labels()) {
-        const QRegularExpressionMatch match = labelRegex.match(QString::fromStdString(label));
-        if (!match.hasMatch()) {
-            continue;
-        }
+/// One engine legal-action label form. Capture 1 is the card name, capture 2 the engine hand slot,
+/// capture 3 whatever `third` says. A new hand mechanic is one more row here plus a
+/// RuledHandActionKind value — nothing else in the client parses labels.
+struct HandActionLabelSpec
+{
+    RuledHandActionKind kind;
+    QRegularExpression pattern;
+    ThirdCapture third;
+};
 
-        bool ok = false;
-        const int handIndex = match.captured(2).toInt(&ok);
-        if (ok) {
-            parsed.handIndices.insert(handIndex);
-            parsed.handIndicesByCardName.insert(match.captured(1), handIndex);
-            bool faceOk = false;
-            const int faceIndex = match.captured(3).toInt(&faceOk);
-            parsed.faceOptionsByHandIndex[handIndex].append({faceOk ? faceIndex : 0, match.captured(1)});
-        }
-    }
-    return parsed;
+const QVector<HandActionLabelSpec> &handActionLabelSpecs()
+{
+    static const QVector<HandActionLabelSpec> specs{
+        // CR 712: multi-face (MDFC) land labels append ", face N"; single-face lands omit it (face 0).
+        {RuledHandActionKind::PlayLand,
+         QRegularExpression(QStringLiteral(R"(^Play land (.*) \(hand idx (\d+)(?:, face (\d+))?\)$)")),
+         ThirdCapture::FaceIndex},
+        // Optional ", target" suffix is emitted by the engine when the spell needs a cast-time target.
+        {RuledHandActionKind::CastSpell,
+         QRegularExpression(QStringLiteral(R"(^Cast (.*) \(hand idx (\d+)(, target)?\)$)")),
+         ThirdCapture::NeedsTarget},
+        {RuledHandActionKind::CleanupDiscard,
+         QRegularExpression(QStringLiteral(R"(^Discard (.*) \(cleanup, hand idx (\d+)\)$)")), ThirdCapture::Unused},
+        {RuledHandActionKind::OpeningBottom,
+         QRegularExpression(QStringLiteral(R"(^Put (.+) on bottom \(opening, hand idx (\d+)\)$)")),
+         ThirdCapture::Unused},
+    };
+    return specs;
 }
 
-ParsedRuledCastActions parseRuledCastActions(const ruled::v1::LegalActions &actions)
+/// The one legal-action label parser: every hand-action kind at once, in a single pass over labels.
+QHash<RuledHandActionKind, RuledHandActionSet> parseHandActions(const ruled::v1::LegalActions &actions)
 {
-    // Optional ", target" suffix is emitted by the engine when the spell needs a cast-time target.
-    static const QRegularExpression labelRegex(QStringLiteral(R"(^Cast (.*) \(hand idx (\d+)(, target)?\)$)"));
-    ParsedRuledCastActions parsed;
-
+    QHash<RuledHandActionKind, RuledHandActionSet> parsed;
     for (const auto &label : actions.labels()) {
-        const QRegularExpressionMatch match = labelRegex.match(QString::fromStdString(label));
-        if (!match.hasMatch()) {
-            continue;
-        }
-
-        bool ok = false;
-        const int handIndex = match.captured(2).toInt(&ok);
-        if (ok) {
-            parsed.handIndices.insert(handIndex);
-            parsed.handIndicesByCardName.insert(match.captured(1), handIndex);
-            if (!match.captured(3).isEmpty()) {
-                parsed.needsTargetHandIndices.insert(handIndex);
+        const QString text = QString::fromStdString(label);
+        for (const HandActionLabelSpec &spec : handActionLabelSpecs()) {
+            const QRegularExpressionMatch match = spec.pattern.match(text);
+            if (!match.hasMatch()) {
+                continue;
             }
-        }
-    }
-    return parsed;
-}
-
-ParsedRuledLandActions parseRuledCleanupDiscardActions(const ruled::v1::LegalActions &actions)
-{
-    static const QRegularExpression labelRegex(QStringLiteral(R"(^Discard (.*) \(cleanup, hand idx (\d+)\)$)"));
-    ParsedRuledLandActions parsed;
-
-    for (const auto &label : actions.labels()) {
-        const QRegularExpressionMatch match = labelRegex.match(QString::fromStdString(label));
-        if (!match.hasMatch()) {
-            continue;
-        }
-
-        bool ok = false;
-        const int handIndex = match.captured(2).toInt(&ok);
-        if (ok) {
-            parsed.handIndices.insert(handIndex);
-            parsed.handIndicesByCardName.insert(match.captured(1), handIndex);
+            bool ok = false;
+            const int handIndex = match.captured(2).toInt(&ok);
+            if (!ok) {
+                break; // label matched this kind; a malformed slot is not another kind's label
+            }
+            RuledHandActionSet &set = parsed[spec.kind];
+            set.handIndices.insert(handIndex);
+            set.indicesByCardName.insert(match.captured(1), handIndex);
+            if (spec.third == ThirdCapture::FaceIndex) {
+                bool faceOk = false;
+                const int faceIndex = match.captured(3).toInt(&faceOk);
+                set.faceOptionsByIndex[handIndex].append({faceOk ? faceIndex : 0, match.captured(1)});
+            } else if (spec.third == ThirdCapture::NeedsTarget && !match.captured(3).isEmpty()) {
+                set.needsTargetIndices.insert(handIndex);
+            }
+            break;
         }
     }
     return parsed;
@@ -204,15 +185,7 @@ bool RuledEventDispatcher::processPayload(const std::string &payload)
 
 void RuledEventDispatcher::resetPerBatchLegalActions()
 {
-    state->legalLandPlayHandIndices.clear();
-    state->legalLandPlayIndicesByCardName.clear();
-    state->legalLandPlayFaceOptionsByHandIndex.clear();
-    state->legalSpellCastHandIndices.clear();
-    state->legalSpellCastIndicesByCardName.clear();
-    state->legalSpellCastNeedsTargetHandIndices.clear();
-    state->legalCleanupDiscardHandIndices.clear();
-    state->legalCleanupDiscardIndicesByCardName.clear();
-    state->legalOpeningBottomHandIndices.clear();
+    state->clearHandActions();
     state->openingBottomSelectedIndices.clear();
     state->openingPickSeatIds.clear();
     state->openingUiKind = RuledOpeningUiKind::None;
@@ -863,15 +836,7 @@ void RuledEventDispatcher::applyLifeChanged(const ruled::v1::LifeChanged &lc, Ba
 
 void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &actions, BatchContext &ctx)
 {
-    const ParsedRuledLandActions parsed = parseRuledLandActions(actions);
-    state->legalLandPlayHandIndices = parsed.handIndices;
-    state->legalLandPlayIndicesByCardName = parsed.handIndicesByCardName;
-    state->legalLandPlayFaceOptionsByHandIndex = parsed.faceOptionsByHandIndex;
-
-    const ParsedRuledCastActions parsedCast = parseRuledCastActions(actions);
-    state->legalSpellCastHandIndices = parsedCast.handIndices;
-    state->legalSpellCastIndicesByCardName = parsedCast.handIndicesByCardName;
-    state->legalSpellCastNeedsTargetHandIndices = parsedCast.needsTargetHandIndices;
+    state->handActions = parseHandActions(actions);
 
     state->validTargetsByHandSlot.clear();
     for (const auto &entry : actions.valid_targets_by_hand_slot()) {
@@ -884,27 +849,10 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
         state->validTargetsByAbility.insert(static_cast<quint64>(entry.first), parseSpellTargets(entry.second));
     }
 
-    const ParsedRuledLandActions parsedCleanup = parseRuledCleanupDiscardActions(actions);
-    state->legalCleanupDiscardHandIndices = parsedCleanup.handIndices;
-    state->legalCleanupDiscardIndicesByCardName = parsedCleanup.handIndicesByCardName;
-
     state->openingUiKind = RuledOpeningUiKind::None;
     state->openingPickSeatIds.clear();
-    state->legalOpeningBottomHandIndices.clear();
     state->openingBottomSelectedIndices.clear();
-    static const QRegularExpression openingBottomRe(
-        QStringLiteral(R"(^Put .+ on bottom \(opening, hand idx (\d+)\)$)"));
-    for (const auto &l : actions.labels()) {
-        const QString qs = QString::fromStdString(l);
-        if (const QRegularExpressionMatch bm = openingBottomRe.match(qs); bm.hasMatch()) {
-            bool ok = false;
-            const int hi = bm.captured(1).toInt(&ok);
-            if (ok) {
-                state->legalOpeningBottomHandIndices.insert(hi);
-            }
-        }
-    }
-    if (!state->legalOpeningBottomHandIndices.isEmpty()) {
+    if (!state->handActionSet(RuledHandActionKind::OpeningBottom).handIndices.isEmpty()) {
         state->openingUiKind = RuledOpeningUiKind::BottomLibrary;
     } else {
         for (const auto &l : actions.labels()) {
@@ -947,15 +895,7 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
 
 void RuledEventDispatcher::applyNoLegalActions()
 {
-    state->legalLandPlayHandIndices.clear();
-    state->legalLandPlayIndicesByCardName.clear();
-    state->legalLandPlayFaceOptionsByHandIndex.clear();
-    state->legalSpellCastHandIndices.clear();
-    state->legalSpellCastIndicesByCardName.clear();
-    state->legalSpellCastNeedsTargetHandIndices.clear();
-    state->legalCleanupDiscardHandIndices.clear();
-    state->legalCleanupDiscardIndicesByCardName.clear();
-    state->legalOpeningBottomHandIndices.clear();
+    state->clearHandActions();
     state->openingBottomSelectedIndices.clear();
     state->openingPickSeatIds.clear();
     state->openingUiKind = RuledOpeningUiKind::None;

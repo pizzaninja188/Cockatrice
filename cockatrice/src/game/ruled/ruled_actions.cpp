@@ -304,13 +304,22 @@ int engineHandIndexFromLegalSlots(const RuledClientState *state,
     return -1;
 }
 
-int resolveSpellCastHandIndex(const RuledClientState *state, const CardItem *card)
+int resolveHandActionIndex(const RuledClientState *state, RuledHandActionKind kind, const CardItem *card)
 {
     if (!state || !card) {
         return -1;
     }
-    int resolved = engineHandIndexFromLegalSlots(state, card, state->spellCastHandIndicesForCardName(card->getName()));
-    if (resolved >= 0) {
+    if (kind == RuledHandActionKind::OpeningBottom) {
+        // Every card in the opening hand is offered, so narrow by slot rather than by name: the
+        // label name and the CardItem's Oracle name need not agree, and there is nothing to gain.
+        return engineHandIndexFromLegalSlots(state, card, state->handActionLegalIndicesSorted(kind));
+    }
+    // A land's client CardItem carries its front-face Oracle name (an MDFC's back face never becomes
+    // a separate hand card), which the engine also uses to label each playable face of that slot —
+    // so a single lookup resolves the shared hand slot for both faces of a pathway.
+    int resolved =
+        engineHandIndexFromLegalSlots(state, card, state->handActionIndicesForCardName(kind, card->getName()));
+    if (resolved >= 0 || kind != RuledHandActionKind::CastSpell) {
         return resolved;
     }
     // CR 709/712/715: the engine labels each castable face of a multi-face card (split half / MDFC
@@ -319,40 +328,13 @@ int resolveSpellCastHandIndex(const RuledClientState *state, const CardItem *car
     const QStringList faceNames = card->getName().split(QStringLiteral(" // "), Qt::SkipEmptyParts);
     if (faceNames.size() > 1) {
         for (const QString &faceName : faceNames) {
-            resolved = engineHandIndexFromLegalSlots(state, card, state->spellCastHandIndicesForCardName(faceName));
+            resolved = engineHandIndexFromLegalSlots(state, card, state->handActionIndicesForCardName(kind, faceName));
             if (resolved >= 0) {
                 return resolved;
             }
         }
     }
     return resolved;
-}
-
-int resolveLandPlayHandIndex(const RuledClientState *state, const CardItem *card)
-{
-    if (!state || !card) {
-        return -1;
-    }
-    // A land's client CardItem carries its front-face Oracle name (an MDFC's back face never becomes
-    // a separate hand card), which the engine also uses to label each playable face of that slot —
-    // so a single lookup resolves the shared hand slot for both faces of a pathway.
-    return engineHandIndexFromLegalSlots(state, card, state->landPlayHandIndicesForCardName(card->getName()));
-}
-
-int resolveCleanupDiscardHandIndex(const RuledClientState *state, const CardItem *card)
-{
-    if (!state || !card) {
-        return -1;
-    }
-    return engineHandIndexFromLegalSlots(state, card, state->cleanupDiscardHandIndicesForCardName(card->getName()));
-}
-
-int resolveOpeningBottomHandIndex(const RuledClientState *state, const CardItem *card)
-{
-    if (!state || !card) {
-        return -1;
-    }
-    return engineHandIndexFromLegalSlots(state, card, state->openingBottomLegalHandIndicesSorted());
 }
 
 bool isResolutionPickZoneCard(const RuledClientState *state, const CardItem *card)
@@ -526,7 +508,8 @@ bool isSingleClickPlayLegal(const CardItem *card)
         return false;
     }
     const bool isLand = card->getCardInfo().getCardType().contains("Land", Qt::CaseInsensitive);
-    return isLand ? resolveLandPlayHandIndex(state, card) >= 0 : resolveSpellCastHandIndex(state, card) >= 0;
+    const RuledHandActionKind kind = isLand ? RuledHandActionKind::PlayLand : RuledHandActionKind::CastSpell;
+    return resolveHandActionIndex(state, kind, card) >= 0;
 }
 
 // ---------------------------------------------------------------------------------------

@@ -25,6 +25,8 @@ class ArrowTarget;
 class CardItem;
 class Player;
 class RuledClientState;
+/// Defined in ruled_client_state.h; declared opaquely here so this header stays proto-free.
+enum class RuledHandActionKind : int;
 
 namespace RuledActions
 {
@@ -63,10 +65,10 @@ namespace RuledActions
 [[nodiscard]] int engineHandIndexFromLegalSlots(const RuledClientState *state,
                                                 const CardItem *card,
                                                 const QList<int> &sortedLegalHandIndices);
-[[nodiscard]] int resolveSpellCastHandIndex(const RuledClientState *state, const CardItem *card);
-[[nodiscard]] int resolveLandPlayHandIndex(const RuledClientState *state, const CardItem *card);
-[[nodiscard]] int resolveCleanupDiscardHandIndex(const RuledClientState *state, const CardItem *card);
-[[nodiscard]] int resolveOpeningBottomHandIndex(const RuledClientState *state, const CardItem *card);
+/// Engine hand slot a clicked hand card would use for `kind`, or -1 when the engine does not offer
+/// that action on it. The only click→slot entry point; a new hand mechanic needs no new function.
+[[nodiscard]] int
+resolveHandActionIndex(const RuledClientState *state, RuledHandActionKind kind, const CardItem *card);
 
 /// True when `card` lives in the zone the active tier-3 resolution pick is drawing candidates
 /// from. **Every id-keyed pick query must be gated on this**: a candidate's `Server_Card.id` is

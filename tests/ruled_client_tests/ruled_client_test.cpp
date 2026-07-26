@@ -273,21 +273,25 @@ TEST_F(RuledClientTest, ParsesLandPlayLabelsIncludingMdfcFaces)
     actions.add_labels("Cast Lightning Bolt (hand idx 1, target)");
     apply(batch);
 
-    EXPECT_TRUE(state->isLandPlayLegalForHandIndex(2));
-    EXPECT_TRUE(state->isLandPlayLegalForHandIndex(4));
-    EXPECT_FALSE(state->isLandPlayLegalForHandIndex(3));
-    EXPECT_EQ(state->landPlayHandIndicesForCardName("Forest"), QList<int>({2}));
+    constexpr auto kLand = RuledHandActionKind::PlayLand;
+    EXPECT_TRUE(state->isHandActionLegal(kLand, 2));
+    EXPECT_TRUE(state->isHandActionLegal(kLand, 4));
+    EXPECT_FALSE(state->isHandActionLegal(kLand, 3));
+    EXPECT_EQ(state->handActionIndicesForCardName(kLand, "Forest"), QList<int>({2}));
+    // A cast label never lands in the PlayLand set (one parser, one kind per label).
+    EXPECT_FALSE(state->isHandActionLegal(kLand, 1));
+    EXPECT_TRUE(state->isHandActionLegal(RuledHandActionKind::CastSpell, 1));
 
     // CR 712: one hand slot, two playable faces, sorted by face index.
-    const QVector<RuledLandFaceOption> faces = state->landPlayFaceOptionsForHandIndex(4);
+    const QVector<RuledFaceOption> faces = state->handActionFaceOptions(kLand, 4);
     ASSERT_EQ(faces.size(), 2);
     EXPECT_EQ(faces[0].faceIndex, 0);
     EXPECT_EQ(faces[0].faceName, QStringLiteral("Cragcrown Pathway"));
     EXPECT_EQ(faces[1].faceIndex, 1);
     EXPECT_EQ(faces[1].faceName, QStringLiteral("Timbercrown Pathway"));
     // A single-face land still reports exactly one option, at face 0.
-    ASSERT_EQ(state->landPlayFaceOptionsForHandIndex(2).size(), 1);
-    EXPECT_EQ(state->landPlayFaceOptionsForHandIndex(2)[0].faceIndex, 0);
+    ASSERT_EQ(state->handActionFaceOptions(kLand, 2).size(), 1);
+    EXPECT_EQ(state->handActionFaceOptions(kLand, 2)[0].faceIndex, 0);
 }
 
 TEST_F(RuledClientTest, ParsesSpellCastLabelsAndTargetRequirement)
@@ -298,12 +302,13 @@ TEST_F(RuledClientTest, ParsesSpellCastLabelsAndTargetRequirement)
     actions.add_labels("Cast Llanowar Elves (hand idx 3)");
     apply(batch);
 
-    EXPECT_TRUE(state->isSpellCastLegalForHandIndex(1));
-    EXPECT_TRUE(state->isSpellCastNeedsTargetForHandIndex(1));
-    EXPECT_TRUE(state->isSpellCastLegalForHandIndex(3));
-    EXPECT_FALSE(state->isSpellCastNeedsTargetForHandIndex(3));
-    EXPECT_EQ(state->spellCastHandIndexForCard("Llanowar Elves", 99), 3);
-    EXPECT_EQ(state->spellCastHandIndexForCard("Nonexistent", 0), -1);
+    constexpr auto kCast = RuledHandActionKind::CastSpell;
+    EXPECT_TRUE(state->isHandActionLegal(kCast, 1));
+    EXPECT_TRUE(state->handActionNeedsTarget(kCast, 1));
+    EXPECT_TRUE(state->isHandActionLegal(kCast, 3));
+    EXPECT_FALSE(state->handActionNeedsTarget(kCast, 3));
+    EXPECT_EQ(state->handActionIndexForCard(kCast, "Llanowar Elves", 99), 3);
+    EXPECT_EQ(state->handActionIndexForCard(kCast, "Nonexistent", 0), -1);
 }
 
 TEST_F(RuledClientTest, ParsesCleanupDiscardLabelsAndRequiredCount)
@@ -362,9 +367,12 @@ TEST_F(RuledClientTest, ParsesOpeningLabelsIntoTheThreeOpeningModes)
         apply(batch);
         // The bottoming step wins over the mulligan prompt when both labels are present.
         EXPECT_EQ(state->getOpeningUiKind(), RuledClientState::RuledOpeningUiKind::BottomLibrary);
-        EXPECT_TRUE(state->isOpeningBottomLegalForHandIndex(0));
-        EXPECT_TRUE(state->isOpeningBottomLegalForHandIndex(5));
-        EXPECT_EQ(state->openingBottomLegalHandIndicesSorted(), QList<int>({0, 5}));
+        constexpr auto kBottom = RuledHandActionKind::OpeningBottom;
+        EXPECT_TRUE(state->isHandActionLegal(kBottom, 0));
+        EXPECT_TRUE(state->isHandActionLegal(kBottom, 5));
+        EXPECT_EQ(state->handActionLegalIndicesSorted(kBottom), QList<int>({0, 5}));
+        // The label's card name is captured too, so a name-keyed lookup works for every kind.
+        EXPECT_EQ(state->handActionIndicesForCardName(kBottom, "Mountain"), QList<int>({5}));
     }
 }
 
@@ -425,7 +433,7 @@ TEST_F(RuledClientTest, RequirementSetsSurviveABatchWithoutLegalActions)
     ap->add_attacker_object_ids(100);
     apply(preview);
 
-    EXPECT_FALSE(state->isSpellCastLegalForHandIndex(0));
+    EXPECT_FALSE(state->isHandActionLegal(RuledHandActionKind::CastSpell, 0));
     EXPECT_TRUE(state->requiredAttackerOids.contains(100));
     EXPECT_TRUE(state->requiredBlockerOids.contains(200));
     EXPECT_TRUE(state->remoteAttackerPreviewOids.contains(100));
@@ -452,7 +460,7 @@ TEST_F(RuledClientTest, LegalActionsForAnotherPlayerAreIgnored)
     auto &actions = (*batch.mutable_legal_by_player())[kOpponent];
     actions.add_labels("Cast Lightning Bolt (hand idx 1, target)");
     apply(batch);
-    EXPECT_FALSE(state->isSpellCastLegalForHandIndex(1));
+    EXPECT_FALSE(state->isHandActionLegal(RuledHandActionKind::CastSpell, 1));
 }
 
 // ---------------------------------------------------------------------------------------
@@ -1227,7 +1235,7 @@ TEST_F(RuledClientTest, ClearSessionStateResetsEverythingCarriedBetweenGames)
     EXPECT_TRUE(state->stackAnnotation(900).isEmpty());
     EXPECT_FALSE(state->hasPendingCopyTargetChoice());
     EXPECT_FALSE(state->hasPendingTriggerTarget());
-    EXPECT_FALSE(state->isSpellCastLegalForHandIndex(0));
+    EXPECT_FALSE(state->isHandActionLegal(RuledHandActionKind::CastSpell, 0));
     EXPECT_EQ(state->getOpeningUiKind(), RuledClientState::RuledOpeningUiKind::None);
     EXPECT_EQ(state->getOpeningMulliganCount(), 0);
     // Phantom graveyard targets are the reason this map must not survive a game boundary.
