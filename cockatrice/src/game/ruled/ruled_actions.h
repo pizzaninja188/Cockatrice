@@ -68,6 +68,14 @@ namespace RuledActions
 [[nodiscard]] int resolveCleanupDiscardHandIndex(const RuledClientState *state, const CardItem *card);
 [[nodiscard]] int resolveOpeningBottomHandIndex(const RuledClientState *state, const CardItem *card);
 
+/// True when `card` lives in the zone the active tier-3 resolution pick is drawing candidates
+/// from. **Every id-keyed pick query must be gated on this**: a candidate's `Server_Card.id` is
+/// only meaningful within its own zone. The library-search and revealed popups carry synthetic
+/// sequential ids (0, 1, 2, … — see the relay's redaction pass, which has no real card ids to
+/// hand out for cards in a hidden zone), and those collide with the genuine ids of cards on the
+/// battlefield and in hand. Returns false when no pick is active.
+[[nodiscard]] bool isResolutionPickZoneCard(const RuledClientState *state, const CardItem *card);
+
 // ---------------------------------------------------------------------------------------
 // Click interpretation. Each returns true when the click was consumed.
 // ---------------------------------------------------------------------------------------

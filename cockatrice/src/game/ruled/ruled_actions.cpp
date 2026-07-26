@@ -14,6 +14,7 @@
 #include "../player/player_manager.h"
 #include "../player/player_target.h"
 #include "../zones/logic/card_zone_logic.h"
+#include "../zones/logic/view_zone_logic.h"
 #include "ruled_client_state.h"
 
 #include <algorithm>
@@ -352,6 +353,32 @@ int resolveOpeningBottomHandIndex(const RuledClientState *state, const CardItem 
         return -1;
     }
     return engineHandIndexFromLegalSlots(state, card, state->openingBottomLegalHandIndicesSorted());
+}
+
+bool isResolutionPickZoneCard(const RuledClientState *state, const CardItem *card)
+{
+    if (!state || !card || !state->isResolutionHandPickActive()) {
+        return false;
+    }
+    CardZoneLogic *zone = card->getZone();
+    if (!zone) {
+        return false;
+    }
+    const auto *viewZone = qobject_cast<const ZoneViewZoneLogic *>(zone);
+    const Player *zonePlayer = zone->getPlayer();
+    const bool zoneIsLocal = zonePlayer && zonePlayer->getPlayerInfo()->getLocal();
+    switch (state->resolutionHandPickZone()) {
+        case RuledClientState::PickZone::Hand:
+            // Brainstorm: real cards in the local hand, carrying genuine Server_Card ids.
+            return zone->getName() == ZoneNames::HAND && zoneIsLocal;
+        case RuledClientState::PickZone::Deck:
+            // Tutor / Gifts Ungiven search: the deck zone-*view* popup, never the face-down pile.
+            return viewZone != nullptr && zone->getName() == ZoneNames::DECK && zoneIsLocal;
+        case RuledClientState::PickZone::Revealed:
+            // Revealed set / a looked-at hand: a popup built on the deck zone as a scaffold.
+            return viewZone != nullptr && zone->getName() == ZoneNames::DECK;
+    }
+    return false;
 }
 
 // ---------------------------------------------------------------------------------------

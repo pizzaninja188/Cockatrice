@@ -2185,6 +2185,8 @@ void TabGame::onRuledLibrarySearchPickStarted(QStringList candidateNames, QVecto
     // Open revealed, not closeable (resolution is mandatory per CR 608).
     librarySearchView =
         new ZoneViewWidget(localPlayer, deckZone, -1, true, false, cardList, false, true, false, false);
+    // The deck zone is only a scaffold for the widget; title the window for what it actually shows.
+    librarySearchView->setWindowTitle(game->getGameEventHandler()->ruled()->resolutionHandPickViewTitle());
     scene->addItem(librarySearchView);
     librarySearchView->setPos(340, 80);
     connect(librarySearchView, &ZoneViewWidget::closePressed, this, [this](ZoneViewWidget *) {
@@ -2234,6 +2236,9 @@ void TabGame::onRuledRevealedPickChanged(bool started, QStringList cardNames,
     // Not closeable: resolution is mandatory per CR 608.
     revealedPickView = new ZoneViewWidget(localPlayer, deckZone, -1, true, false, cardList,
                                           false, false, true, false);
+    // The deck zone is only a scaffold for the widget: without this the window would announce
+    // itself as somebody's library while showing a hand (Thoughtseize) or a revealed set (Gifts).
+    revealedPickView->setWindowTitle(game->getGameEventHandler()->ruled()->resolutionHandPickViewTitle());
     scene->addItem(revealedPickView);
     revealedPickView->setPos(340, 80);
     connect(revealedPickView, &ZoneViewWidget::closePressed, this, [this](ZoneViewWidget *) {

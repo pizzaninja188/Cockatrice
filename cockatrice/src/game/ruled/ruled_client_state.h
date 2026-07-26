@@ -98,6 +98,10 @@ public:
         bool uniqueNames = false;
         QString promptText;
         PickZone pickZone = PickZone::Hand;
+        // Title for the Deck / Revealed popup. The popup is built on the local player's deck zone
+        // purely as a scaffold, so without this it would inherit that zone's name and claim to be
+        // a library even when it is showing a hand or a revealed set.
+        QString viewTitle;
         // For Deck / Revealed picks: oracle card names parallel to serverCardIdToOid keys,
         // used to populate the deck zone view prompt and the revealed-cards popup.
         QStringList candidateNames;
@@ -692,6 +696,11 @@ public:
     [[nodiscard]] QStringList resolutionHandPickCandidateNames() const
     {
         return resolutionHandPick.has_value() ? resolutionHandPick->candidateNames : QStringList{};
+    }
+    /// Window title for the Deck / Revealed pick popup (empty for a hand pick, which has none).
+    [[nodiscard]] QString resolutionHandPickViewTitle() const
+    {
+        return resolutionHandPick.has_value() ? resolutionHandPick->viewTitle : QString{};
     }
     [[nodiscard]] QVector<int> resolutionHandPickCandidateServerCardIds() const;
     void toggleResolutionHandPickCard(int serverCardId);

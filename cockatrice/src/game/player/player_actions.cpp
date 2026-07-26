@@ -1057,29 +1057,9 @@ bool PlayerActions::tryRuledResolutionHandPickCard(CardItem *card)
     if (!handler || !handler->isResolutionHandPickActive()) {
         return false;
     }
-    const RuledClientState::PickZone pz = handler->resolutionHandPickZone();
-    CardZoneLogic *zone = card->getZone();
-    if (pz == RuledClientState::PickZone::Hand) {
-        // Standard hand-click pick (Brainstorm).
-        if (zone->getName() != ZoneNames::HAND || zone->getPlayer() != player) {
-            return false;
-        }
-    } else if (pz == RuledClientState::PickZone::Deck) {
-        // Deck zone-view pick (Gifts Ungiven search step): accept cards in a ZoneViewZone
-        // whose original zone is the deck. The view zone has name "deck" (inherited).
-        auto *zvl = qobject_cast<ZoneViewZoneLogic *>(zone);
-        if (!zvl || zvl->getName() != ZoneNames::DECK || zone->getPlayer() != player) {
-            return false;
-        }
-    } else if (pz == RuledClientState::PickZone::Revealed) {
-        // Revealed-cards popup pick (Gifts Ungiven opponent step): accept cards from any
-        // ZoneViewZone whose original zone name is the revealed-pick marker "deck".
-        // The popup is attached to the deciding player; gate on local player match.
-        auto *zvl = qobject_cast<ZoneViewZoneLogic *>(zone);
-        if (!zvl || zvl->getName() != ZoneNames::DECK) {
-            return false;
-        }
-    } else {
+    // Same zone gate the highlight uses — keeping the two in one place is what stops a card that
+    // merely shares an id with a candidate from being treated as one.
+    if (!RuledActions::isResolutionPickZoneCard(handler, card)) {
         return false;
     }
     const int serverCardId = card->getId();

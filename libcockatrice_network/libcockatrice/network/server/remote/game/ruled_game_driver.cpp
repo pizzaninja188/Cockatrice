@@ -1341,6 +1341,10 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
                 // so there is no server-side lookup available. Sequential indices give every
                 // physical card (including duplicate-named ones) a unique client-side ID.
                 // The client maps index i → engine OID via candidate_object_ids[i].
+                // NB: unique *within this candidate list only* — 0, 1, 2 … collide head-on with
+                // the real Server_Card ids of cards in hand and on the battlefield. Any client
+                // lookup keyed on these must first confirm the card is in the pick's own zone
+                // (RuledActions::isResolutionPickZoneCard).
                 for (int ci = 0; ci < rcr->candidate_names_size(); ++ci) {
                     rcr->add_candidate_server_card_ids(ci);
                 }

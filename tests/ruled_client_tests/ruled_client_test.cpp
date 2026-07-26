@@ -982,6 +982,7 @@ TEST_F(RuledClientTest, LibrarySearchChoiceEnforcesUniqueNamesAndOpensTheDeckVie
 
     ASSERT_TRUE(state->isResolutionHandPickActive());
     EXPECT_EQ(state->resolutionHandPickZone(), RuledClientState::PickZone::Deck);
+    EXPECT_EQ(state->resolutionHandPickViewTitle(), QStringLiteral("Search your library"));
     ASSERT_EQ(started.count(), 1);
     EXPECT_EQ(started.at(0).at(0).toStringList(),
               QStringList({QStringLiteral("Forest"), QStringLiteral("Forest"), QStringLiteral("Island")}));
@@ -1018,12 +1019,45 @@ TEST_F(RuledClientTest, RevealedChoiceAnnouncesAndClosesThePopup)
     ASSERT_EQ(revealed.count(), 1);
     EXPECT_TRUE(revealed.at(0).at(0).toBool());
     EXPECT_EQ(state->resolutionHandPickZone(), RuledClientState::PickZone::Revealed);
+    EXPECT_EQ(state->resolutionHandPickViewTitle(), QStringLiteral("Revealed cards"));
 
     state->toggleResolutionHandPickCard(1);
     state->toggleResolutionHandPickCard(2);
     state->submitResolutionHandPick();
     ASSERT_EQ(revealed.count(), 2);
     EXPECT_FALSE(revealed.at(1).at(0).toBool());
+}
+
+/// Thoughtseize/Coercion (CR 701.7): the popup renders like a revealed set but is a hand, and
+/// must say so — it is built on the deck zone as a scaffold, which used to name the window.
+TEST_F(RuledClientTest, OpponentHandChoiceRendersAsARevealedPickTitledAsAHand)
+{
+    QSignalSpy revealed(state, &RuledClientState::revealedPickChanged);
+    ruled::v1::RuledEventBatch batch;
+    auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+    rcr->set_deciding_player_id(kLocalPlayer);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_OPPONENT_HAND);
+    rcr->set_min(1);
+    rcr->set_max(1);
+    for (const quint32 oid : {21u, 22u}) {
+        rcr->add_candidate_object_ids(oid);
+    }
+    for (const int scid : {0, 1}) {
+        rcr->add_candidate_server_card_ids(scid);
+    }
+    rcr->add_candidate_names("Black Lotus");
+    rcr->add_candidate_names("Swamp");
+    apply(batch);
+
+    ASSERT_EQ(revealed.count(), 1);
+    EXPECT_TRUE(revealed.at(0).at(0).toBool());
+    EXPECT_EQ(state->resolutionHandPickZone(), RuledClientState::PickZone::Revealed);
+    EXPECT_EQ(state->resolutionHandPickViewTitle(), QStringLiteral("Target player's hand"));
+    EXPECT_EQ(revealed.at(0).at(1).toStringList(),
+              QStringList({QStringLiteral("Black Lotus"), QStringLiteral("Swamp")}));
+
+    state->toggleResolutionHandPickCard(0);
+    EXPECT_EQ(state->resolutionHandPickSelected(), 1);
 }
 
 TEST_F(RuledClientTest, TargetObjectAndLegendKeepChoicesUseClickToSelect)

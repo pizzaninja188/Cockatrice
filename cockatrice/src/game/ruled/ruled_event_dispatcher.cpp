@@ -516,6 +516,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         pick.uniqueNames = rcr.unique_names();
         pick.promptText = QString::fromStdString(rcr.prompt_text());
         pick.pickZone = PickZone::Deck;
+        pick.viewTitle = tr("Search your library");
         QVector<int> libScids;
         for (int i = 0; i < rcr.candidate_names_size(); ++i) {
             const quint32 oid = (i < rcr.candidate_object_ids_size()) ? rcr.candidate_object_ids(i) : 0;
@@ -546,6 +547,13 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         pick.max = static_cast<int>(rcr.max());
         pick.promptText = QString::fromStdString(rcr.prompt_text());
         pick.pickZone = PickZone::Revealed;
+        // Both kinds render identically, but they are not the same thing: REVEALED was shown to
+        // the whole table, OPPONENT_HAND is a hand only the decider may look at (CR 701.7). The
+        // proto does not carry whose hand it is, so the title stays seat-agnostic — if a future
+        // card picks a player without targeting one, that owner id has to come across the wire.
+        pick.viewTitle = rcr.choice_kind() == ruled::v1::CHOICE_KIND_OPPONENT_HAND
+                             ? tr("Target player's hand")
+                             : tr("Revealed cards");
         QStringList names;
         QVector<int> scids;
         for (int i = 0; i < rcr.candidate_names_size(); ++i) {

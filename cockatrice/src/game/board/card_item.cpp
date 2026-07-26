@@ -313,10 +313,10 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
         }
         // Resolution pick (Brainstorm hand, Gifts Ungiven deck search, Gifts Ungiven opponent popup):
         // number selected cards in click order using cyan.
-        const bool inPickZone = zone &&
-                                (zone->getName() == ZoneNames::HAND || zone->getName() == ZoneNames::DECK);
-        if (inPickZone && owner && owner->getPlayerInfo()->getLocal() &&
-            ruledHandler->isResolutionHandPickActive()) {
+        // Gate on the pick's own zone before touching the id: candidate ids are only unique
+        // within that zone, so an ungated lookup lights up unrelated cards that happen to share
+        // an id with a candidate.
+        if (RuledActions::isResolutionPickZoneCard(ruledHandler, this)) {
             const int scid = getId();
             if (ruledHandler->isResolutionHandPickCardSelectable(scid)) {
                 const int clickOrder = ruledHandler->resolutionHandPickClickOrderFor(scid);
