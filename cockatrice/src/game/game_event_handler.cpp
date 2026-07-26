@@ -620,7 +620,9 @@ void GameEventHandler::eventGameStateChanged(const Event_GameStateChanged &event
     game->getGameState()->setGameTime(event.seconds_elapsed());
 
     if (event.game_started() && !game->getGameMetaInfo()->started()) {
-        clearRuledSessionState();
+        // The new session's opening batch already arrived (the server broadcasts it before this
+        // event), so keep what it delivered — see RuledClientState::SessionResetScope.
+        clearRuledSessionState(RuledSessionResetScope::KeepCurrentBatch);
         game->getGameState()->setResuming(!game->getGameState()->isGameStateKnown());
         game->getGameMetaInfo()->setStarted(event.game_started());
         if (game->getGameState()->isGameStateKnown())
@@ -628,7 +630,7 @@ void GameEventHandler::eventGameStateChanged(const Event_GameStateChanged &event
         game->getGameState()->setActivePlayer(event.active_player_id());
         game->getGameState()->setCurrentPhase(event.active_phase());
     } else if (!event.game_started() && game->getGameMetaInfo()->started()) {
-        clearRuledSessionState();
+        clearRuledSessionState(RuledSessionResetScope::All);
         game->getGameState()->setCurrentPhase(-1);
         game->getGameState()->setActivePlayer(-1);
         game->getGameMetaInfo()->setStarted(false);
@@ -925,7 +927,7 @@ void GameEventHandler::syncRuledSpellTargetingArrows()
     }
 }
 
-void GameEventHandler::clearRuledSessionState()
+void GameEventHandler::clearRuledSessionState(RuledSessionResetScope scope)
 {
     // Remove synthetic ability cards from their zones before the state clears the maps.
     const QList<quint32> syntheticOids = syntheticAbilityStackCards.keys();
@@ -933,7 +935,7 @@ void GameEventHandler::clearRuledSessionState()
         removeSyntheticStackCard(oid);
     }
 
-    ruledState->clearSessionState();
+    ruledState->clearSessionState(scope);
 
     // GRAVE and STACK are the two zones Player::processPlayerInfo deliberately skips in ruled
     // mode (repopulating them from a mid-game snapshot duplicates cards into open zone views),

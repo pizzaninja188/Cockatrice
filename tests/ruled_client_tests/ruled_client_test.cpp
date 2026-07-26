@@ -1272,6 +1272,32 @@ TEST_F(RuledClientTest, ClearSessionStateResetsEverythingCarriedBetweenGames)
     EXPECT_EQ(state->graveyardEngineOidForServerCardId(11), 0u);
 }
 
+// The server broadcasts a new session's first RuledEventBatch *before* the Event_GameStateChanged
+// that flips game_started, so the game-start teardown runs with the incoming opening prompt already
+// applied. Clearing it there strands the opening: the engine is blocked on ChooseStartingPlayer and
+// never re-sends the prompt.
+TEST_F(RuledClientTest, GameStartResetKeepsTheIncomingSessionsOpeningPrompt)
+{
+    ruled::v1::RuledEventBatch batch;
+    // Residue from the finished game that must still be cleared…
+    batch.add_events()->mutable_stack_pushed()->set_object_id(900);
+    // …alongside the incoming session's opening prompt, which must survive.
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    actions.add_labels("You start (opening pick)");
+    actions.add_labels("Opponent starts (opening pick)");
+    apply(batch);
+    ASSERT_EQ(state->getOpeningUiKind(), RuledClientState::RuledOpeningUiKind::ChooseFirst);
+
+    state->clearSessionState(RuledSessionResetScope::KeepCurrentBatch);
+
+    EXPECT_EQ(state->getOpeningUiKind(), RuledClientState::RuledOpeningUiKind::ChooseFirst);
+    EXPECT_FALSE(state->hasStackItems()); // the finished game's residue still goes
+
+    // The game-stop transition is the symmetric case: nothing survives it.
+    state->clearSessionState(RuledSessionResetScope::All);
+    EXPECT_EQ(state->getOpeningUiKind(), RuledClientState::RuledOpeningUiKind::None);
+}
+
 TEST_F(RuledClientTest, EveryBatchSchedulesAnArrowResync)
 {
     apply(phaseBatch(ruled::v1::PHASE_ID_MAIN1, kLocalPlayer));

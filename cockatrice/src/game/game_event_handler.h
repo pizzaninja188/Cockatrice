@@ -49,6 +49,8 @@ class PendingCommand;
 class Player;
 class RuledClientState;
 class RuledEventDispatcher;
+/// Defined in ruled/ruled_client_state.h; declared opaquely so this header need not include it.
+enum class RuledSessionResetScope : int;
 
 inline Q_LOGGING_CATEGORY(GameEventHandlerLog, "game_event_handler");
 
@@ -186,9 +188,10 @@ private:
 
     void clearRuledSpellTargetArrows();
     void syncRuledSpellTargetingArrows();
-    /// Clears all ruled engine-session tracking state and the two zones no game-state snapshot
-    /// resets in ruled mode. Call on game stop and before a new game starts on the same handler.
-    void clearRuledSessionState();
+    /// Clears ruled engine-session tracking state and the two zones no game-state snapshot
+    /// resets in ruled mode. Call on game stop and before a new game starts on the same handler;
+    /// see RuledClientState::SessionResetScope for why the two transitions differ.
+    void clearRuledSessionState(RuledSessionResetScope scope);
 
     AbstractGame *game;
     RuledClientState *ruledState;

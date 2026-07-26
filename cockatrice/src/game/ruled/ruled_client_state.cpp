@@ -946,7 +946,7 @@ void RuledClientState::unregisterSyntheticStackCard(quint32 virtualOid, int fake
 // Session lifecycle
 // ---------------------------------------------------------------------------------------
 
-void RuledClientState::clearSessionState()
+void RuledClientState::clearSessionState(RuledSessionResetScope scope)
 {
     // Pending choice + the trigger stack bookkeeping that outlives it.
     clearPendingChoice();
@@ -968,14 +968,18 @@ void RuledClientState::clearSessionState()
     // otherwise survive into the next game and offer phantom targets.
     graveyardEngineOidToServerCardId.clear();
 
-    // Legal action sets
-    clearHandActions();
-
-    // Opening sequence
-    openingUiKind = RuledOpeningUiKind::None;
-    openingMulliganCount = 0;
-    openingPickSeatIds.clear();
-    openingBottomSelectedIndices.clear();
+    // Legal actions + opening sequence. Skipped on the game-start transition: the incoming
+    // session's first batch has already populated these (see SessionResetScope), and clearing
+    // them here would drop the choose-first prompt on the floor with the engine blocked waiting
+    // for the answer. Not a leak risk either way — resetPerBatchLegalActions() rebuilds all of
+    // it at the head of every payload.
+    if (scope == RuledSessionResetScope::All) {
+        clearHandActions();
+        openingUiKind = RuledOpeningUiKind::None;
+        openingMulliganCount = 0;
+        openingPickSeatIds.clear();
+        openingBottomSelectedIndices.clear();
+    }
 
     // A pick may have been live when the session ended; the holder is already cleared above, but
     // the prompt panel still needs telling.

@@ -37,6 +37,25 @@
 
 class RuledClientHost;
 
+/// How much of the session state a teardown may destroy. The two transitions that tear a session
+/// down are *not* symmetric, because of the order the server sends things in `doStartGameIfReady`:
+/// the new session's first `RuledEventBatch` is broadcast **before** the `Event_GameStateChanged`
+/// that flips `game_started`. So by the time a client processes the game-start transition, the new
+/// game's legal actions and opening prompt have already been applied, and clearing them strands the
+/// opening — the engine is blocked waiting for ChooseStartingPlayer and never re-sends the prompt.
+///
+/// Fixed underlying type so `game_event_handler.h` can forward-declare it, per the same convention
+/// `RuledHandActionKind` uses below — keep the two declarations in step.
+enum class RuledSessionResetScope : int
+{
+    /// Game-stop transition: nothing from the finished session may survive.
+    All,
+    /// Game-start transition: keep the legal-action / opening state the incoming session already
+    /// delivered. Safe because that state is strictly per-batch — every payload rebuilds it via
+    /// `RuledEventDispatcher::resetPerBatchLegalActions()` — so it can never leak across games.
+    KeepCurrentBatch,
+};
+
 // CR 712: one playable face of a hand card the engine offers for a hand action. An MDFC land
 // (pathway) yields more than one option for a single hand slot (front + back), each with its own
 // face index and Oracle face name for the side-picker menu.
@@ -772,10 +791,10 @@ public:
     // -----------------------------------------------------------------------------------
     // Session lifecycle.
     // -----------------------------------------------------------------------------------
-    /// Clears all ruled engine-session tracking state (stack, triggers, legal actions).
-    /// Call on game stop and before a new game starts on the same handler instance.
-    /// Zone teardown (GRAVE/STACK contents) stays with the host, which calls this.
-    void clearSessionState();
+    /// Clears ruled engine-session tracking state (stack, triggers, pending choice, and — per
+    /// `scope` — legal actions). Call on game stop and before a new game starts on the same
+    /// handler instance. Zone teardown (GRAVE/STACK contents) stays with the host, which calls this.
+    void clearSessionState(RuledSessionResetScope scope = RuledSessionResetScope::All);
 
     /// Re-emit helpers used by call sites that changed state the view-model does not own
     /// (PlayerActions' pending-cast selection).

@@ -246,7 +246,10 @@ void TabGame::connectToGameEventHandler()
         if (gamePromptWidget) {
             gamePromptWidget->setRuledStackHasItems(false);
             gamePromptWidget->setSpellCastPending(false);
-            gamePromptWidget->setRuledPromptState({});
+            // Re-derive rather than blank: on the game-start transition the view model has
+            // deliberately kept the incoming session's opening prompt, and blanking here would
+            // strand it (the engine is blocked on ChooseStartingPlayer and never re-sends it).
+            refreshRuledPromptState();
         }
     });
     connect(game->getGameEventHandler(), &GameEventHandler::gameClosed, this, &TabGame::closeGame);
