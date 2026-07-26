@@ -538,6 +538,44 @@ TEST_F(RuledClientTest, AbilityOnStackGetsASyntheticCardAndClearsThePendingTrigg
     EXPECT_EQ(state->stackAnnotation(900), QStringLiteral("Return target creature card..."));
 }
 
+// Gravedigger ETB: a pending trigger whose only legal targets sit in a graveyard makes the tab
+// auto-open the local graveyard view, so the player can click the target without hunting for it.
+//
+// NB the engine currently only fills LegalActions.valid_targets_by_ability from a permanent's
+// *activated* abilities (engine/legal_actions.rs), so a triggered ability never gets an entry and
+// this never fires in a real game. This pins the client half of the contract; the engine half is
+// the open half.
+TEST_F(RuledClientTest, PendingTriggerWithGraveyardTargetsAsksForTheGraveyardView)
+{
+    QSignalSpy spy(state, &RuledClientState::triggerGraveyardNeedsTarget);
+
+    ruled::v1::RuledEventBatch batch;
+    auto *tnt = batch.add_events()->mutable_trigger_needs_target();
+    tnt->set_source_permanent_id(100);
+    tnt->set_ability_index(0);
+    tnt->set_ability_text("Return target creature card from your graveyard to your hand.");
+    tnt->set_controller_player_id(kLocalPlayer);
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    auto &abilityTargets = (*actions.mutable_valid_targets_by_ability())[(quint64(100) << 32) | 0u];
+    abilityTargets.add_valid_graveyard_ids(500);
+    apply(batch);
+
+    ASSERT_TRUE(state->hasPendingTriggerTarget());
+    ASSERT_EQ(spy.count(), 1);
+    EXPECT_TRUE(spy.at(0).at(0).toBool());
+
+    // Once the ability itself is on the stack the target has been chosen, so the view may close.
+    // An ability push is card_id-less and annotated — that is what retires the pending trigger.
+    ruled::v1::RuledEventBatch push;
+    auto *sp = push.add_events()->mutable_stack_pushed();
+    sp->set_object_id(900);
+    sp->set_ability_annotation("Return target creature card...");
+    apply(push);
+    EXPECT_FALSE(state->hasPendingTriggerTarget());
+    ASSERT_EQ(spy.count(), 2);
+    EXPECT_FALSE(spy.at(1).at(0).toBool());
+}
+
 TEST_F(RuledClientTest, TriggerNeedsTargetOnlyPendsForItsController)
 {
     ruled::v1::RuledEventBatch batch;
