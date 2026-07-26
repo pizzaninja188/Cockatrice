@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, HashMap, VecDeque};
 use tricerules_cards::primitives::{
     Color, ContinuousEffectKind, CounterKind, EffectDuration, ManaAmount, SearchDestination,
 };
+use tricerules_proto::ruled::v1::ChoiceKind;
 
 pub type PlayerId = i32;
 pub type ObjectId = u32;
@@ -228,8 +229,8 @@ pub struct PendingResolution {
     pub ordered: bool,
     /// Display-only prompt text (re-emitted on reconnect; no Oracle lookup).
     pub prompt: String,
-    /// `ChoiceKind` proto discriminant for the client (0 = hand cards, 1 = revealed cards).
-    pub choice_kind: i32,
+    /// What the candidates are, for client presentation and relay redaction (see `ChoiceKind`).
+    pub choice_kind: ChoiceKind,
     /// Mirror of [`ResolutionInterrupt::unique_names`]: the engine rejects submissions where two
     /// chosen object ids map to the same card name (Gifts Ungiven: "different names").
     pub unique_names: bool,

@@ -539,7 +539,7 @@ pub enum SpellEffectKind {
     /// matching `filter` (None = any card; Some = only cards of that spell type), move it to
     /// `destination`, then shuffle if `shuffle` is true. Uses the tier-3 interrupt mechanism
     /// (`ResolutionChoiceRequired` / `SubmitResolutionChoice`) with `ChoiceKind::LibrarySearch`
-    /// (choice_kind 2, private to the searching player). Named two: Demonic Tutor (any → hand),
+    /// (private to the searching player). Named two: Demonic Tutor (any → hand),
     /// Mystical Tutor (instant or sorcery → top of library).
     SearchLibrary {
         /// `None` = any card is valid; `Some(f)` = only cards of this type qualify.

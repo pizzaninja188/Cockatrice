@@ -31,7 +31,7 @@ fn brainstorm_draws_three_then_returns_two_in_chosen_order() {
     assert_eq!(req.deciding_player_id, 0);
     assert_eq!((req.min, req.max), (2, 2));
     assert!(req.ordered);
-    assert_eq!(req.choice_kind, 0, "hand cards");
+    assert_eq!(req.choice_kind(), ChoiceKind::HandCards);
     assert!(e.state.pending_resolution.is_some());
     // Cast removed brainstorm from hand; begin drew three.
     assert_eq!(e.state.players[0].hand.len(), hand_before - 1 + 3);
@@ -189,12 +189,13 @@ fn gifts_ungiven_opponent_chooses_the_split() {
     );
 
     // First interrupt: the controller searches their library (up to four). This is a *private*
-    // library search (choice_kind 2 = LibrarySearch), so the relay redacts the candidate library
+    // library search (ChoiceKind::LibrarySearch), so the relay redacts the candidate library
     // cards from the opponent — the library must not leak. Only the chosen cards become public.
     let search = find_resolution_choice(&batch).expect("search choice");
     assert_eq!(search.deciding_player_id, 0);
     assert_eq!(
-        search.choice_kind, 2,
+        search.choice_kind(),
+        ChoiceKind::LibrarySearch,
         "private library search (not public-revealed)"
     );
     for &oid in &found {

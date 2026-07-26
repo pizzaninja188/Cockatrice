@@ -67,38 +67,10 @@ pub struct ResolutionInterrupt {
 }
 
 /// What the candidate object ids in a [`ResolutionInterrupt`] are, for client presentation and,
-/// crucially, for hidden-information redaction by the relay. `HandCards`, `LibrarySearch`, and
-/// `PrivateRevealedHand` are *private* to the deciding player, so Servatrice strips the candidate
-/// ids/names from every other player; `RevealedCards` are public (they were shown to the table).
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum ChoiceKind {
-    /// Cards in the deciding player's hand (Brainstorm: pick 2 to put back). Private.
-    HandCards,
-    /// Cards revealed during resolution (Gifts Ungiven: opponent picks 2 of the revealed set). Public.
-    RevealedCards,
-    /// Cards the deciding player is searching out of their own library (Gifts Ungiven's search step,
-    /// Demonic Tutor, …). Private — the library stays hidden; only the chosen cards become public.
-    LibrarySearch,
-    /// Cards in *another* player's hand, shown privately to the deciding player who chooses among
-    /// them (Thoughtseize/Coercion "look at target player's hand"; reusable for Duress, Distress,
-    /// Cabal Therapy's reveal). Private — CR 701.7 "look" does not reveal the hand to the table, so
-    /// the relay strips the candidates from everyone but the decider. Rendered like `RevealedCards`.
-    PrivateRevealedHand,
-}
-
-impl ChoiceKind {
-    /// Stable proto-wire discriminant (kept in sync with `RuledEvent.ResolutionChoiceRequired.choice_kind`
-    /// and the relay's redaction in `Server_Game::sendRuledBatch`). 0, 2, and 4 are private kinds.
-    pub fn as_proto(self) -> i32 {
-        match self {
-            ChoiceKind::HandCards => 0,
-            ChoiceKind::RevealedCards => 1,
-            ChoiceKind::LibrarySearch => 2,
-            // 3 is TargetObjects (emitted by the copy-retarget path, not via this enum).
-            ChoiceKind::PrivateRevealedHand => 4,
-        }
-    }
-}
+/// crucially, for hidden-information redaction by the relay. This *is* the proto enum
+/// (`ruled.v1.ChoiceKind`) rather than a parallel Rust copy kept in sync by hand — the variant
+/// docs and the private/public classification live in `ruled_v1.proto`.
+pub use rv1::ChoiceKind;
 
 /// A player's answer to a [`ResolutionInterrupt`]: the chosen object ids, in order when the
 /// interrupt was `ordered`. Validated against the interrupt's candidates/min/max by the engine.

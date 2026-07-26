@@ -1303,28 +1303,28 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
     }
     {
         // Redact private candidates of a tier-3 resolution choice (CR 608) from everyone but the
-        // deciding player. Private kinds expose a concealed zone: HandCards (choice_kind 0) reveal a
-        // player's hand and LibrarySearch (choice_kind 2) reveal their library, so only the decider
-        // sees the candidate object ids / names; RevealedCards (1) are public and pass through.
-        // For HandCards (choice_kind 0), inject candidate_server_card_ids for the deciding player
+        // deciding player. Private kinds expose a concealed zone (see isPrivateChoiceKind):
+        // HAND_CARDS reveals a player's hand, LIBRARY_SEARCH their library, OPPONENT_HAND another
+        // player's hand, so only the decider sees the candidate object ids / names; the public
+        // kinds (REVEALED, TARGET_OBJECTS, LEGEND_KEEP) pass through.
+        // For HAND_CARDS, inject candidate_server_card_ids for the deciding player
         // so the client can map engine OIDs to physical hand CardItems for the hand-click UI.
-        // For LibrarySearch (choice_kind 2), inject by name-matching from the decider's deck zone
+        // For LIBRARY_SEARCH, inject by name-matching from the decider's deck zone
         // so the client can open the deck zone view and use deck-card click-to-pick (like Gifts Ungiven
-        // search step). For RevealedCards (choice_kind 1), inject from the non-deciding player's deck
+        // search step). For REVEALED, inject from the non-deciding player's deck
         // so the client can render the revealed cards in a zone popup for the opponent's pick step.
         for (int ei = 0; ei < filtered.events_size(); ++ei) {
             if (!filtered.events(ei).has_resolution_choice_required()) {
                 continue;
             }
             auto *rcr = filtered.mutable_events(ei)->mutable_resolution_choice_required();
-            const bool privateCards = rcr->choice_kind() == 0 || rcr->choice_kind() == 2 || rcr->choice_kind() == 4;
-            if (privateCards && rcr->deciding_player_id() != participant->getPlayerId()) {
+            if (isPrivateChoiceKind(rcr->choice_kind()) && rcr->deciding_player_id() != participant->getPlayerId()) {
                 rcr->clear_candidate_object_ids();
                 rcr->clear_candidate_card_ids();
                 rcr->clear_candidate_names();
                 rcr->clear_candidate_server_card_ids();
                 rcr->set_prompt_text("Opponent is making a resolution choice.");
-            } else if (rcr->choice_kind() == 0) {
+            } else if (rcr->choice_kind() == ruled::v1::CHOICE_KIND_HAND_CARDS) {
                 // HandCards: populate server card ids so client hand-click UI can match engine OIDs.
                 const int deciderId = rcr->deciding_player_id();
                 auto *deciderPlayer = static_cast<Server_Player *>(game->getPlayers().value(deciderId));
@@ -1335,7 +1335,7 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
                         rcr->add_candidate_server_card_ids(sc ? sc->getId() : -1);
                     }
                 }
-            } else if (rcr->choice_kind() == 2) {
+            } else if (rcr->choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH) {
                 // LibrarySearch: assign each candidate a sequential index as its server card ID.
                 // Deck cards are not in engineOidToServerCardId (only battlefield/hand/stack are),
                 // so there is no server-side lookup available. Sequential indices give every
@@ -1344,13 +1344,15 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
                 for (int ci = 0; ci < rcr->candidate_names_size(); ++ci) {
                     rcr->add_candidate_server_card_ids(ci);
                 }
-            } else if (rcr->choice_kind() == 1 && rcr->candidate_server_card_ids_size() == 0) {
+            } else if (rcr->choice_kind() == ruled::v1::CHOICE_KIND_REVEALED &&
+                       rcr->candidate_server_card_ids_size() == 0) {
                 // RevealedCards: same sequential-index scheme for the same reason.
                 for (int ci = 0; ci < rcr->candidate_names_size(); ++ci) {
                     rcr->add_candidate_server_card_ids(ci);
                 }
-            } else if (rcr->choice_kind() == 4 && rcr->candidate_server_card_ids_size() == 0) {
-                // PrivateRevealedHand: reaches here only for the deciding player (non-deciders were
+            } else if (rcr->choice_kind() == ruled::v1::CHOICE_KIND_OPPONENT_HAND &&
+                       rcr->candidate_server_card_ids_size() == 0) {
+                // OpponentHand: reaches here only for the deciding player (non-deciders were
                 // redacted above). The candidates live in another player's hidden hand, so — like
                 // RevealedCards/LibrarySearch — use sequential indices the client maps back to OIDs.
                 for (int ci = 0; ci < rcr->candidate_names_size(); ++ci) {

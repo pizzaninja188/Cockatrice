@@ -5,9 +5,9 @@ pub(crate) use tricerules_core::GameEngine;
 pub(crate) use tricerules_proto::ruled::v1::ruled_command::Cmd;
 pub(crate) use tricerules_proto::ruled::v1::ruled_event::Ev;
 pub(crate) use tricerules_proto::ruled::v1::{
-    ActivateAbility, AssignCombatDamage, BlockPair, CastSpell, ChooseTriggerTarget, DamagePair,
-    DeclareAttackers, DeclareBlockers, DiscardToHandSize, FlexPipPayment, PassPriority, PlayLand,
-    PreviewDeclareAttackers, PreviewDeclareBlockers, PrimitiveYieldStructured,
+    ActivateAbility, AssignCombatDamage, BlockPair, CastSpell, ChoiceKind, ChooseTriggerTarget,
+    DamagePair, DeclareAttackers, DeclareBlockers, DiscardToHandSize, FlexPipPayment, PassPriority,
+    PlayLand, PreviewDeclareAttackers, PreviewDeclareBlockers, PrimitiveYieldStructured,
     ResolutionChoiceRequired, RuledCommand, RuledEventBatch, SubmitResolutionChoice, TargetRef,
     TransformPermanent, UndoManaAbility,
 };

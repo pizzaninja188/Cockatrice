@@ -26,6 +26,21 @@ TEST(RuledUtilsTest, UnknownPhaseMapsToMinusOne)
     EXPECT_EQ(-1, ruledPhaseLabelToCockatricePhase("unknown_phase"));
 }
 
+TEST(RuledUtilsTest, PrivateChoiceKindsAreTheConcealedZoneOnes)
+{
+    // Private: the candidates live in a zone the other players cannot see, so the relay must
+    // strip them from everyone but the deciding player.
+    EXPECT_TRUE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_HAND_CARDS));
+    EXPECT_TRUE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_LIBRARY_SEARCH));
+    EXPECT_TRUE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_OPPONENT_HAND));
+    // Public: already revealed to the table, or on the battlefield.
+    EXPECT_FALSE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_REVEALED));
+    EXPECT_FALSE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_TARGET_OBJECTS));
+    EXPECT_FALSE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_LEGEND_KEEP));
+    // A kind this build does not know about is treated as concealing something.
+    EXPECT_TRUE(isPrivateChoiceKind(static_cast<ruled::v1::ChoiceKind>(99)));
+}
+
 TEST(RuledUtilsTest, ManaPoolCounterNameValidation)
 {
     EXPECT_TRUE(isRuledModeManaPoolCounterName("w"));

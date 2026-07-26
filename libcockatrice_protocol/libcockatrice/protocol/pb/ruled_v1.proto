@@ -333,6 +333,32 @@ message ManaPoolUpdated {
   uint32 c = 7;
 }
 
+// What the candidate object ids of a ResolutionChoiceRequired refer to, so the client can present
+// them correctly and — crucially — so Servatrice knows which ones expose a concealed zone. The
+// three *private* kinds (HAND_CARDS, LIBRARY_SEARCH, OPPONENT_HAND) are redacted from every player
+// but the decider; see isPrivateChoiceKind() next to the relay's redaction pass.
+enum ChoiceKind {
+  // Cards in the deciding player's own hand (Brainstorm: pick 2 to put back). Private.
+  CHOICE_KIND_HAND_CARDS = 0;
+  // Cards revealed to the table during resolution (Gifts Ungiven: opponent picks 2 of the
+  // revealed set). Public — everyone already saw them.
+  CHOICE_KIND_REVEALED = 1;
+  // Cards the deciding player is searching out of their own library (Demonic Tutor, Gifts
+  // Ungiven's search step). Private — the library stays hidden; only the chosen cards go public.
+  CHOICE_KIND_LIBRARY_SEARCH = 2;
+  // Target objects: battlefield permanents, stack spells, or players (CR 707.10c copy retarget).
+  // Public; the client uses click-to-target mode instead of a list dialog for this kind.
+  CHOICE_KIND_TARGET_OBJECTS = 3;
+  // Cards in *another* player's hand, revealed privately to the deciding player
+  // (Thoughtseize/Coercion "look at target player's hand" — CR 701.7 "look" does not reveal the
+  // hand to the table). Private; rendered by the client exactly like CHOICE_KIND_REVEALED.
+  CHOICE_KIND_OPPONENT_HAND = 4;
+  // Legend-rule keep (CR 704.5j): battlefield permanents the deciding player controls, one of
+  // which is kept and the rest sacrificed. Public; like TARGET_OBJECTS the client uses
+  // click-to-select on the battlefield instead of a list dialog.
+  CHOICE_KIND_LEGEND_KEEP = 5;
+}
+
 // A parked custom resolution (CR 608) requesting input from one player. Reused by every tier-3
 // card (and later X-spells / modal spells) — the engine is the sole source of the candidate set,
 // so clients never replicate selection logic from Oracle text. The deciding player may be the
@@ -344,19 +370,9 @@ message ResolutionChoiceRequired {
   uint32 source_object_id = 2;
   // Display-only prompt (server-only; the relay does not look up Oracle text for this).
   string prompt_text = 3;
-  // What the candidate ids refer to:
-  //   0 = cards in the deciding player's hand (private — redacted from opponents by Servatrice)
-  //   1 = revealed cards (public)
-  //   2 = cards being searched out of the deciding player's library (private — redacted)
-  //   3 = target objects (battlefield permanents, stack spells, or players — public).
-  //       The client uses click-to-target mode instead of a list dialog for this kind.
-  //   4 = cards in *another* player's hand, revealed privately to the deciding player
-  //       (Thoughtseize/Coercion "look at target player's hand" — private, redacted from
-  //       everyone but the decider). Rendered by the client exactly like kind 1.
-  //   5 = legend-rule keep (CR 704.5j): battlefield permanents the deciding player controls,
-  //       one of which is kept and the rest sacrificed — public. Like kind 3, the client uses
-  //       click-to-select on the battlefield instead of a list dialog.
-  int32 choice_kind = 4;
+  // What the candidate ids refer to (see ChoiceKind for the per-value semantics and which
+  // kinds Servatrice redacts). Wire-identical to the untyped int32 this used to be.
+  ChoiceKind choice_kind = 4;
   // Candidate object ids to choose among (engine ObjectIds).
   repeated uint32 candidate_object_ids = 5;
   // Parallel to candidate_object_ids: tricerules card id for each candidate, so the relay/client
@@ -368,13 +384,13 @@ message ResolutionChoiceRequired {
   // True when the chosen order is significant (Brainstorm: order cards put back on top).
   bool ordered = 9;
   // Parallel to candidate_object_ids: each candidate's display (Oracle) name, so the deciding
-  // player's client renders the choice without a card-id lookup. For HandCards (choice_kind 0)
+  // player's client renders the choice without a card-id lookup. For CHOICE_KIND_HAND_CARDS
   // these are private; Servatrice redacts candidate_* for everyone but the deciding player.
   repeated string candidate_names = 10;
   // Parallel to candidate_object_ids: Servatrice's physical card id (Server_Card::getId()) for
   // each candidate, injected by the relay so the client can map engine OIDs to physical hand
-  // CardItems without a separate OID→serverCardId table. Only populated for private HandCards
-  // (choice_kind 0) on the deciding player's copy; empty for other players and other kinds.
+  // CardItems without a separate OID→serverCardId table. Only populated for private
+  // CHOICE_KIND_HAND_CARDS on the deciding player's copy; empty for other players and other kinds.
   repeated int32 candidate_server_card_ids = 11;
   // When true, all chosen candidates must have distinct card names (Gifts Ungiven: "four cards
   // with different names"). The client enforces this before submission; the engine re-validates.

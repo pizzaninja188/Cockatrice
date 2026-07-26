@@ -9,6 +9,23 @@ bool isRuledModeManaPoolCounterName(const QString &name)
     return QStringLiteral("wubrgxc").contains(n.at(0), Qt::CaseInsensitive);
 }
 
+bool isPrivateChoiceKind(ruled::v1::ChoiceKind kind)
+{
+    switch (kind) {
+        case ruled::v1::CHOICE_KIND_HAND_CARDS:     // the decider's own hand
+        case ruled::v1::CHOICE_KIND_LIBRARY_SEARCH: // the decider's library
+        case ruled::v1::CHOICE_KIND_OPPONENT_HAND:  // another player's hand, CR 701.7 "look"
+            return true;
+        case ruled::v1::CHOICE_KIND_REVEALED:
+        case ruled::v1::CHOICE_KIND_TARGET_OBJECTS:
+        case ruled::v1::CHOICE_KIND_LEGEND_KEEP:
+            return false;
+        default:
+            // Unknown kind from a newer engine: assume it conceals something.
+            return true;
+    }
+}
+
 int ruledPhaseLabelToCockatricePhase(const std::string &phase)
 {
     if (phase == "untap") {

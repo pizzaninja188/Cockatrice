@@ -902,7 +902,7 @@ TEST_F(RuledClientTest, HandCardsChoiceStartsAClickToPickAndSubmitsInClickOrder)
     ruled::v1::RuledEventBatch batch;
     auto *rcr = batch.add_events()->mutable_resolution_choice_required();
     rcr->set_deciding_player_id(kLocalPlayer);
-    rcr->set_choice_kind(0); // HandCards — Brainstorm
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS); // Brainstorm
     rcr->set_prompt_text("Put two cards from your hand on top of your library.");
     rcr->set_min(2);
     rcr->set_max(2);
@@ -945,7 +945,7 @@ TEST_F(RuledClientTest, SubmitIsRefusedBelowTheMinimum)
     ruled::v1::RuledEventBatch batch;
     auto *rcr = batch.add_events()->mutable_resolution_choice_required();
     rcr->set_deciding_player_id(kLocalPlayer);
-    rcr->set_choice_kind(0);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
     rcr->set_min(2);
     rcr->set_max(2);
     rcr->add_candidate_object_ids(11);
@@ -965,7 +965,7 @@ TEST_F(RuledClientTest, LibrarySearchChoiceEnforcesUniqueNamesAndOpensTheDeckVie
     ruled::v1::RuledEventBatch batch;
     auto *rcr = batch.add_events()->mutable_resolution_choice_required();
     rcr->set_deciding_player_id(kLocalPlayer);
-    rcr->set_choice_kind(2); // LibrarySearch — Gifts Ungiven step 1
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_LIBRARY_SEARCH); // Gifts Ungiven step 1
     rcr->set_min(4);
     rcr->set_max(4);
     rcr->set_unique_names(true);
@@ -1002,7 +1002,7 @@ TEST_F(RuledClientTest, RevealedChoiceAnnouncesAndClosesThePopup)
     ruled::v1::RuledEventBatch batch;
     auto *rcr = batch.add_events()->mutable_resolution_choice_required();
     rcr->set_deciding_player_id(kLocalPlayer);
-    rcr->set_choice_kind(1); // RevealedCards — Gifts Ungiven step 2
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_REVEALED); // Gifts Ungiven step 2
     rcr->set_min(2);
     rcr->set_max(2);
     for (const quint32 oid : {11u, 12u}) {
@@ -1032,7 +1032,7 @@ TEST_F(RuledClientTest, TargetObjectAndLegendKeepChoicesUseClickToSelect)
         ruled::v1::RuledEventBatch batch;
         auto *rcr = batch.add_events()->mutable_resolution_choice_required();
         rcr->set_deciding_player_id(kLocalPlayer);
-        rcr->set_choice_kind(3); // CR 707.10c copy retarget
+        rcr->set_choice_kind(ruled::v1::CHOICE_KIND_TARGET_OBJECTS); // CR 707.10c copy retarget
         rcr->set_prompt_text("Choose new targets for the copy.");
         rcr->add_candidate_object_ids(100);
         apply(batch);
@@ -1052,7 +1052,7 @@ TEST_F(RuledClientTest, TargetObjectAndLegendKeepChoicesUseClickToSelect)
         ruled::v1::RuledEventBatch batch;
         auto *rcr = batch.add_events()->mutable_resolution_choice_required();
         rcr->set_deciding_player_id(kLocalPlayer);
-        rcr->set_choice_kind(5); // CR 704.5j legend rule
+        rcr->set_choice_kind(ruled::v1::CHOICE_KIND_LEGEND_KEEP); // CR 704.5j legend rule
         rcr->add_candidate_object_ids(100);
         rcr->add_candidate_object_ids(101);
         apply(batch);
@@ -1072,7 +1072,7 @@ TEST_F(RuledClientTest, UnrecognisedChoiceKindFallsBackToTheModalDialog)
     ruled::v1::RuledEventBatch batch;
     auto *rcr = batch.add_events()->mutable_resolution_choice_required();
     rcr->set_deciding_player_id(kLocalPlayer);
-    rcr->set_choice_kind(0); // HandCards, but with no parallel server card ids
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS); // no parallel server card ids
     rcr->set_prompt_text("Choose one.");
     rcr->add_candidate_object_ids(11);
     rcr->add_candidate_names("Forest");
@@ -1088,7 +1088,7 @@ TEST_F(RuledClientTest, ChoicesForAnotherPlayerNeverPromptUs)
     ruled::v1::RuledEventBatch batch;
     auto *rcr = batch.add_events()->mutable_resolution_choice_required();
     rcr->set_deciding_player_id(kOpponent);
-    rcr->set_choice_kind(0);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
     rcr->add_candidate_object_ids(11);
     rcr->add_candidate_server_card_ids(1);
     apply(batch);
@@ -1177,7 +1177,7 @@ TEST_F(RuledClientTest, ClearSessionStateResetsEverythingCarriedBetweenGames)
     gy->set_server_card_id(11);
     auto *rcr = batch.add_events()->mutable_resolution_choice_required();
     rcr->set_deciding_player_id(kLocalPlayer);
-    rcr->set_choice_kind(3);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_TARGET_OBJECTS);
     rcr->add_candidate_object_ids(100);
     auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
     actions.add_labels("Cast Grizzly Bears (hand idx 0)");

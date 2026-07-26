@@ -36,11 +36,12 @@ fn demonic_tutor_puts_chosen_card_in_hand() {
         },
     );
 
-    // Should be parked on a library search choice (choice_kind 2 = LibrarySearch).
+    // Should be parked on a library search choice (ChoiceKind::LibrarySearch).
     let req = find_resolution_choice(&batch).expect("resolution choice required");
     assert_eq!(req.deciding_player_id, 0);
     assert_eq!(
-        req.choice_kind, 2,
+        req.choice_kind(),
+        ChoiceKind::LibrarySearch,
         "LibrarySearch (private to searching player)"
     );
     assert_eq!((req.min, req.max), (1, 1));
@@ -124,7 +125,7 @@ fn mystical_tutor_filters_to_instant_or_sorcery() {
     );
 
     let req = find_resolution_choice(&batch).expect("resolution choice required");
-    assert_eq!(req.choice_kind, 2, "LibrarySearch kind");
+    assert_eq!(req.choice_kind(), ChoiceKind::LibrarySearch);
     // The creature must NOT appear in candidates.
     assert!(
         !req.candidate_object_ids.contains(&bear_oid),
@@ -255,7 +256,7 @@ fn demonic_tutor_empty_library_allows_empty_choice() {
     assert!(e.state.pending_resolution.is_none(), "resolution completed");
 }
 
-/// Library search choice_kind is 2 (LibrarySearch, private) — verifies relay redaction signal.
+/// Library search choice_kind is LibrarySearch (private) — verifies relay redaction signal.
 #[test]
 fn search_library_choice_kind_is_library_search() {
     let decks = Some(vec![
@@ -284,9 +285,10 @@ fn search_library_choice_kind_is_library_search() {
     );
 
     let req = find_resolution_choice(&batch).expect("resolution choice required");
-    // choice_kind == 2 signals the relay to strip candidate ids/names from all other players.
+    // LibrarySearch signals the relay to strip candidate ids/names from all other players.
     assert_eq!(
-        req.choice_kind, 2,
+        req.choice_kind(),
+        ChoiceKind::LibrarySearch,
         "LibrarySearch choice_kind signals relay to redact candidates from opponents"
     );
 }

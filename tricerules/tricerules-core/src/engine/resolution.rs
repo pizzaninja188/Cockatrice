@@ -568,9 +568,10 @@ impl GameEngine {
                                                 deciding_player_id: controller,
                                                 source_object_id: copy_id,
                                                 prompt_text: prompt.clone(),
-                                                // choice_kind 3 = target objects: client uses
-                                                // click-to-target instead of a list dialog.
-                                                choice_kind: 3,
+                                                // TargetObjects: client uses click-to-target
+                                                // instead of a list dialog.
+                                                choice_kind: custom::ChoiceKind::TargetObjects
+                                                    as i32,
                                                 candidate_object_ids: candidates.clone(),
                                                 candidate_card_ids,
                                                 candidate_names,
@@ -594,7 +595,7 @@ impl GameEngine {
                                         max: 1,
                                         ordered: false,
                                         prompt,
-                                        choice_kind: 3,
+                                        choice_kind: custom::ChoiceKind::TargetObjects,
                                         unique_names: false,
                                         copy_source_object_id: src.id,
                                         search_destination: SearchDestination::Hand,
@@ -912,9 +913,8 @@ impl GameEngine {
                                                 prompt_text: prompt.clone(),
                                                 // Private: "look at target player's hand" reveals
                                                 // it only to the caster, not the table (CR 701.7).
-                                                choice_kind:
-                                                    custom::ChoiceKind::PrivateRevealedHand
-                                                        .as_proto(),
+                                                choice_kind: custom::ChoiceKind::OpponentHand
+                                                    as i32,
                                                 candidate_object_ids: hand.clone(),
                                                 candidate_card_ids,
                                                 candidate_names,
@@ -939,8 +939,7 @@ impl GameEngine {
                                         ordered: false,
                                         unique_names: false,
                                         prompt,
-                                        choice_kind: custom::ChoiceKind::PrivateRevealedHand
-                                            .as_proto(),
+                                        choice_kind: custom::ChoiceKind::OpponentHand,
                                         copy_source_object_id: 0,
                                         search_destination: SearchDestination::Hand,
                                         search_shuffle: false,
@@ -1030,9 +1029,9 @@ impl GameEngine {
                                             deciding_player_id: pid,
                                             source_object_id: top.id,
                                             prompt_text: prompt.clone(),
-                                            // choice_kind 1 = RevealedCards: the battlefield is
-                                            // public so no hidden-zone redaction is needed.
-                                            choice_kind: 1,
+                                            // Revealed: the battlefield is public so no
+                                            // hidden-zone redaction is needed.
+                                            choice_kind: custom::ChoiceKind::Revealed as i32,
                                             candidate_object_ids: qualifying.clone(),
                                             candidate_card_ids,
                                             candidate_names,
@@ -1057,7 +1056,7 @@ impl GameEngine {
                                     ordered: false,
                                     unique_names: false,
                                     prompt,
-                                    choice_kind: 1,
+                                    choice_kind: custom::ChoiceKind::Revealed,
                                     copy_source_object_id: 0,
                                     search_destination: SearchDestination::default(),
                                     search_shuffle: false,
@@ -1293,7 +1292,7 @@ impl GameEngine {
                 }
                 SpellEffectKind::ProduceMana { .. } => {}
                 // CR 701.18: pause resolution and ask the controller to choose from their library.
-                // Uses choice_kind 2 (LibrarySearch) so the relay redacts candidates from opponents.
+                // Uses ChoiceKind::LibrarySearch so the relay redacts candidates from opponents.
                 SpellEffectKind::SearchLibrary {
                     filter,
                     destination,
@@ -1352,7 +1351,7 @@ impl GameEngine {
                                 deciding_player_id: controller,
                                 source_object_id: top.id,
                                 prompt_text: prompt.clone(),
-                                choice_kind: custom::ChoiceKind::LibrarySearch.as_proto(),
+                                choice_kind: custom::ChoiceKind::LibrarySearch as i32,
                                 candidate_object_ids: candidates.clone(),
                                 candidate_card_ids,
                                 candidate_names,
@@ -1377,7 +1376,7 @@ impl GameEngine {
                         ordered: false,
                         unique_names: false,
                         prompt,
-                        choice_kind: custom::ChoiceKind::LibrarySearch.as_proto(),
+                        choice_kind: custom::ChoiceKind::LibrarySearch,
                         copy_source_object_id: 0,
                         search_destination: destination,
                         search_shuffle: shuffle,

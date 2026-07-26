@@ -1668,10 +1668,11 @@ fn coercion_caster_chooses_which_card_to_discard() {
     let choice_req =
         find_resolution_choice(&resolve_batch).expect("ResolutionChoiceRequired must be emitted");
     assert_eq!(choice_req.deciding_player_id, 0, "P0 (caster) decides");
-    // choice_kind 4 = PrivateRevealedHand: the target's hand is shown only to the caster (CR 701.7
+    // ChoiceKind::OpponentHand: the target's hand is shown only to the caster (CR 701.7
     // "look at target player's hand"), so the relay redacts the candidates from everyone else.
     assert_eq!(
-        choice_req.choice_kind, 4,
+        choice_req.choice_kind(),
+        ChoiceKind::OpponentHand,
         "discard-a-chosen-card reveals the hand privately to the caster, not publicly"
     );
     assert_eq!(choice_req.min, 1);

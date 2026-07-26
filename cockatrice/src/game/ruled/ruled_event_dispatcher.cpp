@@ -14,15 +14,6 @@ using RuledCombatPhase = RuledClientState::RuledCombatPhase;
 using RuledOpeningUiKind = RuledClientState::RuledOpeningUiKind;
 using PickZone = RuledClientState::PickZone;
 
-/// Choice kinds carried by `ResolutionChoiceRequired.choice_kind`. Still an untyped int32 on the
-/// wire — Step 6 of docs/REFACTOR-ROADMAP.md promotes it to a proto enum.
-constexpr int kChoiceKindHandCards = 0;
-constexpr int kChoiceKindRevealed = 1;
-constexpr int kChoiceKindLibrarySearch = 2;
-constexpr int kChoiceKindTargetObjects = 3;
-constexpr int kChoiceKindOpponentHand = 4;
-constexpr int kChoiceKindLegendKeep = 5;
-
 struct ParsedRuledLandActions
 {
     QSet<int> handIndices;
@@ -474,7 +465,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         return;
     }
 
-    if (rcr.choice_kind() == kChoiceKindTargetObjects) {
+    if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_TARGET_OBJECTS) {
         // Target objects (CR 707.10c copy retarget): click-to-target rather than a modal list.
         state->pendingCopyTargetChoice.valid = true;
         state->pendingCopyTargetChoice.promptText = QString::fromStdString(rcr.prompt_text());
@@ -485,7 +476,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         return;
     }
 
-    if (rcr.choice_kind() == kChoiceKindLegendKeep) {
+    if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_LEGEND_KEEP) {
         // Legend rule keep (CR 704.5j): the controller clicks the legendary permanent to KEEP
         // directly on the battlefield; the rest are sacrificed. Click-to-select mode, like copy
         // retarget, instead of a modal list dialog.
@@ -499,7 +490,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         return;
     }
 
-    if (rcr.choice_kind() == kChoiceKindHandCards &&
+    if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_HAND_CARDS &&
         rcr.candidate_server_card_ids_size() == rcr.candidate_object_ids_size()) {
         // HandCards with server card ids: use the hand-click UI.
         RuledClientState::ResolutionHandPick pick;
@@ -523,7 +514,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         return;
     }
 
-    if (rcr.choice_kind() == kChoiceKindLibrarySearch &&
+    if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH &&
         rcr.candidate_server_card_ids_size() == rcr.candidate_names_size() && rcr.candidate_names_size() > 0) {
         // LibrarySearch with server card ids: deck zone-view pick.
         // unique_names is always true for Gifts Ungiven step 1.
@@ -552,7 +543,8 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         return;
     }
 
-    if ((rcr.choice_kind() == kChoiceKindRevealed || rcr.choice_kind() == kChoiceKindOpponentHand) &&
+    if ((rcr.choice_kind() == ruled::v1::CHOICE_KIND_REVEALED ||
+         rcr.choice_kind() == ruled::v1::CHOICE_KIND_OPPONENT_HAND) &&
         rcr.candidate_server_card_ids_size() == rcr.candidate_names_size() && rcr.candidate_names_size() > 0) {
         // RevealedCards or PrivateRevealedHand with server card ids: zone popup pick. The deciding
         // player chooses from the revealed cards (OpponentHand = a target player's hand shown only

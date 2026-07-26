@@ -82,7 +82,7 @@ impl CardEffect for GiftsUngiven {
                          P{}'s graveyard (the rest go to their hand).",
                         ctx.controller
                     ),
-                    choice_kind: ChoiceKind::RevealedCards,
+                    choice_kind: ChoiceKind::Revealed,
                     candidates: revealed,
                     min: pick,
                     max: pick,

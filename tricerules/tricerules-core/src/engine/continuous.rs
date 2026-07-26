@@ -511,7 +511,7 @@ impl GameEngine {
 
     /// CR 704.5j: if a player controls two or more legendary permanents with the same name,
     /// that player chooses one to keep; the rest go to their owners' graveyards. Processes
-    /// one legend conflict at a time via `ResolutionChoiceRequired` (choice_kind 5); the SBA
+    /// one legend conflict at a time via `ResolutionChoiceRequired` (`ChoiceKind::LegendKeep`); the SBA
     /// loop stops while waiting for the choice and resumes after `SubmitResolutionChoice`.
     pub(super) fn apply_legend_sbas(
         &mut self,
@@ -559,9 +559,9 @@ impl GameEngine {
                         deciding_player_id: owner,
                         source_object_id: first_id,
                         prompt_text: prompt.clone(),
-                        // choice_kind 5 = legend rule: pick one battlefield permanent to keep.
-                        // Public (battlefield); the client selects it by clicking the permanent.
-                        choice_kind: 5,
+                        // LegendKeep: pick one battlefield permanent to keep. Public
+                        // (battlefield); the client selects it by clicking the permanent.
+                        choice_kind: custom::ChoiceKind::LegendKeep as i32,
                         candidate_object_ids: ids.clone(),
                         candidate_card_ids,
                         candidate_names,
@@ -601,7 +601,7 @@ impl GameEngine {
                 max: 1,
                 ordered: false,
                 prompt,
-                choice_kind: 5,
+                choice_kind: custom::ChoiceKind::LegendKeep,
                 unique_names: false,
                 copy_source_object_id: 0,
                 search_destination: SearchDestination::default(),

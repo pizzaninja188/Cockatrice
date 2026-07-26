@@ -482,7 +482,7 @@ public:
                 if (rcr.deciding_player_id() == myId && rcr.candidate_object_ids_size() > 0) {
                     pendingChoice = rcr;
                     log(QStringLiteral("resolution choice: kind %1 min %2 max %3 ordered %4 candidates %5")
-                            .arg(rcr.choice_kind())
+                            .arg(QString::fromStdString(ruled::v1::ChoiceKind_Name(rcr.choice_kind())))
                             .arg(rcr.min())
                             .arg(rcr.max())
                             .arg(rcr.ordered())
@@ -741,7 +741,7 @@ public:
         // --- Tier-3 resolution choice (may target either player at any point) ---
         if (pendingChoice) {
             const auto &rcr = *pendingChoice;
-            if (rcr.choice_kind() == 0 && rcr.ordered()) {
+            if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_HAND_CARDS && rcr.ordered()) {
                 sawBrainstormChoice = true;
             }
             ruled::v1::RuledCommand cmd;
