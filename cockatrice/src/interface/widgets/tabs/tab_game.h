@@ -87,7 +87,9 @@ private:
     QDockWidget *cardInfoDock, *messageLayoutDock, *playerListDock, *replayDock;
     GamePromptWidget *gamePromptWidget;
     QList<QPointer<ArrowItem>> ruledCombatArrows;
-    bool ruledGraveyardAutoOpened = false;
+    /// The graveyard view a pending trigger opened for us, so it can be closed again without
+    /// touching one the player opened themselves. Null when we have none open.
+    QPointer<ZoneViewWidget> ruledAutoOpenedGraveyardView;
     QPointer<ZoneViewWidget> stackView;
     CardZoneLogic *stackViewZone = nullptr;
     // Deck zone view auto-opened for LibrarySearch (Gifts Ungiven search step).

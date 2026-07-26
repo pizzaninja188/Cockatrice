@@ -297,13 +297,20 @@ void TabGame::connectToGameEventHandler()
                 }
                 const QString graveName = QStringLiteral("grave");
                 if (needed) {
+                    // Leave a graveyard the player opened themselves alone — we only ever tidy up
+                    // after ourselves.
                     if (!scene->isZoneViewOpen(localPlayer, graveName)) {
                         scene->toggleZoneView(localPlayer, graveName, -1);
-                        ruledGraveyardAutoOpened = true;
+                        ruledAutoOpenedGraveyardView = scene->zoneViewWidgetFor(localPlayer, graveName);
                     }
-                } else if (ruledGraveyardAutoOpened) {
-                    scene->closeZoneView(localPlayer, graveName);
-                    ruledGraveyardAutoOpened = false;
+                } else if (ruledAutoOpenedGraveyardView) {
+                    // Close only the exact view we opened. A bare "did we open one?" flag is not
+                    // enough: the player may have closed ours and opened their own while the
+                    // trigger was still pending, and that one is theirs to keep.
+                    if (scene->zoneViewWidgetFor(localPlayer, graveName) == ruledAutoOpenedGraveyardView) {
+                        ruledAutoOpenedGraveyardView->close();
+                    }
+                    ruledAutoOpenedGraveyardView = nullptr;
                 }
             });
     if (gamePromptWidget) {

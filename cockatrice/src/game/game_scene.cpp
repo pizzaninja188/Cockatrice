@@ -406,6 +406,18 @@ bool GameScene::isZoneViewOpen(Player *player, const QString &zoneName, int numb
     return false;
 }
 
+ZoneViewWidget *GameScene::zoneViewWidgetFor(Player *player, const QString &zoneName, int numberCards) const
+{
+    for (ZoneViewWidget *view : zoneViews) {
+        const ZoneViewZone *z = view->getZone();
+        if (z->getLogic()->getName() == zoneName && z->getLogic()->getPlayer() == player &&
+            qobject_cast<const ZoneViewZoneLogic *>(z->getLogic())->getNumberCards() == numberCards) {
+            return view;
+        }
+    }
+    return nullptr;
+}
+
 void GameScene::closeZoneView(Player *player, const QString &zoneName, int numberCards)
 {
     // Iterate a copy so that view->close() modifying zoneViews is safe.

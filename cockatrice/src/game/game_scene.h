@@ -168,6 +168,9 @@ public:
 
     /** Returns true if a zone view matching player/zoneName/numberCards is currently open. */
     bool isZoneViewOpen(Player *player, const QString &zoneName, int numberCards = -1) const;
+    /** The open zone view matching player/zoneName/numberCards, or nullptr. Lets a caller that
+        opened a view identify it later and avoid closing one the user opened instead. */
+    ZoneViewWidget *zoneViewWidgetFor(Player *player, const QString &zoneName, int numberCards = -1) const;
     /** Closes the matching zone view if it is open. Does nothing if not found. */
     void closeZoneView(Player *player, const QString &zoneName, int numberCards = -1);
 
