@@ -328,7 +328,9 @@ discipline for removed tags. Each step is one end-to-end commit (C++ + Rust).
 > `RuledFaceOption` (no longer land-specific). `ruled_actions.h` forward-declares the kind enum with
 > a fixed underlying type so it stays free of the generated proto header. Two behaviours are
 > deliberately kind-specific and stayed: OpeningBottom resolves a clicked card against *all* legal
-> slots rather than by card name, and CastSpell keeps the multi-face `A // B` name fallback.
+> slots rather than by card name, and CastSpell keeps the multi-face `A // B` name fallback. This
+> consolidated the label parsing but kept the stringly-typed wire format it parses — replacing that
+> with a structured message is **8c**, deferred so the proto churn rides Step 8's single pass.
 >
 > **7.2 pending choices.** `PendingCopyTargetChoice`, `PendingLegendKeepChoice`, the five
 > `pendingTrigger*` members and `ResolutionHandPick` collapsed into one
@@ -401,7 +403,7 @@ family + parser + setters + bool + label branch) to ~2 (enum value + switch case
 
 ### Step 8 — Proto restructure + hidden-info classification (2–4 days; after Steps 4–5, before the keyword count grows)
 
-Two changes, one field-by-field pass over `ruled_v1.proto`:
+Three changes, one field-by-field pass over `ruled_v1.proto`:
 
 **8a. `RuledPerPlayerView` parallel arrays → structured messages.** The view has grown to ~40
 fields, mostly index-aligned parallel arrays over the battlefield (`battlefield_tapped`,
@@ -441,6 +443,44 @@ broadcast-reachable messages, **fails when any field is unclassified**, and asse
 redaction pass actually clears each non-public field. New fields then break the build until
 classified. Land with 8a since it touches every zone-view field anyway; add a redaction unit
 test to the ruled batch tests in the same pass.
+
+**8c. `LegalActions.labels` → structured hand actions.** Same move as 8a, on the other
+stringly-typed encoding. `labels` is a `repeated string` the engine `format!`s
+(`engine/legal_actions.rs`: `"Play land {name} (hand idx {i}, face {face_index})"`,
+`"Cast {name} (hand idx {i}, target)"`, `"Discard {name} (cleanup, hand idx {i})"`,
+`"Put {name} on bottom (opening, hand idx {i})"`) and the client regexes back apart
+(`handActionLabelSpecs()` in `ruled_event_dispatcher.cpp`, Step 7.1).
+
+The defect is that one field serves two masters: `labels` is *both* the prompt-feed display text
+and the only data channel saying which hand slot can do what. So a label can never be reworded or
+localized without breaking gameplay, and the data can never be restructured without breaking the
+log. It is also the odd one out on its own message — `valid_targets_by_hand_slot`,
+`required_attacker_ids` and `undoable_mana_abilities` all arrive structured.
+
+Add alongside `labels`, which stays and becomes display-only:
+
+```proto
+enum HandActionKind { HAND_ACTION_PLAY_LAND = 0; CAST_SPELL = 1; CLEANUP_DISCARD = 2;
+                      OPENING_BOTTOM = 3; }
+message LegalHandAction {
+  HandActionKind kind = 1; uint32 hand_index = 2; string card_name = 3;
+  uint32 face_index = 4;   // CR 712: one entry per (slot, face), mirroring today's labels
+  bool needs_target = 5;   // CastSpell only
+}
+repeated LegalHandAction hand_actions = N;
+```
+
+One entry per *(slot, face)* rather than per slot: that is what the labels already emit for an MDFC
+land, and the client's `faceOptionsByIndex` already groups them. `HandActionKind` replaces the
+client-side `RuledHandActionKind` the same way 6a's `ChoiceKind` replaced its hand-maintained Rust
+mirror. The parse table and `parseHandActions()` are deleted outright; `applyLegalActions` copies
+fields.
+
+This also closes a coverage hole worth naming: `ruled_client_test` hardcodes the label strings it
+feeds in, so it only tests the parser against itself — the *contract* is checked nowhere but
+`ruled_e2e_smoke_test`, and only for the four forms that script happens to drive. A new hand
+mechanic gets no cross-language check at all, and the failure mode is silent (no regex match → empty
+set → the card is simply unclickable, no error anywhere).
 
 ### Step 9 — Rust: resolution split + primitives split (~3 days; before mass primitive growth)
 
