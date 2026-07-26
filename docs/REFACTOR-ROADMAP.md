@@ -317,6 +317,53 @@ discipline for removed tags. Each step is one end-to-end commit (C++ + Rust).
 
 ### Step 7 — Client generic-action model (3 PRs; after Step 5, inside fork files)
 
+> **Done 2026-07-26** (3 commits, one per sub-step).
+>
+> **7.1 hand actions.** `RuledHandActionKind` + `RuledHandActionSet` +
+> `QHash<RuledHandActionKind, RuledHandActionSet> handActions` replaced the three per-action member
+> families. The three label parsers became one table-driven pass over `LegalActions.labels()` —
+> `HandActionLabelSpec { kind, regex, ThirdCapture }` rows, where the third capture is a face index
+> (CR 712 MDFC lands) or the `, target` flag — and the four `RuledActions::resolve*HandIndex`
+> functions became `resolveHandActionIndex(state, kind, card)`. `RuledLandFaceOption` →
+> `RuledFaceOption` (no longer land-specific). `ruled_actions.h` forward-declares the kind enum with
+> a fixed underlying type so it stays free of the generated proto header. Two behaviours are
+> deliberately kind-specific and stayed: OpeningBottom resolves a clicked card against *all* legal
+> slots rather than by card name, and CastSpell keeps the multi-face `A // B` name fallback.
+>
+> **7.2 pending choices.** `PendingCopyTargetChoice`, `PendingLegendKeepChoice`, the five
+> `pendingTrigger*` members and `ResolutionHandPick` collapsed into one
+> `std::optional<RuledPendingChoice>` with a `Kind` (TriggerTarget / CopyTarget / LegendKeep /
+> ResolutionPick). The holder is exclusive — the engine parks one choice and blocks — so
+> `setPendingChoice()` tears down what it replaces (closing the revealed-cards popup) and
+> `clearPendingChoiceOfKind()` is how a follow-up engine event retires the one choice it answers;
+> one `sendResolutionChoice()` is the only `SubmitResolutionChoice` sender. **Not** folded in: the
+> trigger *stack bookkeeping* (`lastTriggerSourceOid` / `lastTriggerAbilityIndex` /
+> `lastTriggerControllerPlayerId`). `TriggerNeedsTarget` is recorded on every client because the
+> synthetic stack card and its source arrow are built from it on seats that never choose the target;
+> only the controller parks a choice. Behaviour change: a new choice now displaces a stale one of a
+> different kind instead of the two coexisting.
+>
+> **7.3 prompt state.** Thirteen per-mechanic members in `GamePromptWidget` became two:
+> `RuledPromptState { PromptMode mode; int required, selected; QString text; QVector<int>
+> openingPickSeatIds; }` plus a `TargetingSources` flag set. `PromptMode` is
+> Normal / Targeting / ClickChoice / CleanupDiscard / ResolutionPick / OpeningChooseFirst /
+> OpeningMulligan / OpeningBottom, and `effectiveMode()` holds **the** priority chain that both
+> `updateCombatButtonsVisibility()` and `refreshPromptLabel()` now switch on. Targeting is derived,
+> never pushed: three PlayerActions signals (spell targeting / cast pending / ability target) raise
+> and drop its sources independently, so they stayed as thin flag setters rather than becoming modes.
+> The mode decision moved out of the widget's internal bool chain *and* out of `tab_game`'s
+> `enginePromptFeed` lambda into one `TabGame::refreshRuledPromptState()`, called from every ruled
+> signal that can change it. Two small deviations from the plan above: `openingPickSeatIds` rides in
+> the state struct (mode payload, not an orthogonal input), and a resolution pick with `required == 0`
+> now suppresses the composed phase label like every other pick (the old `> 0` test let it through).
+>
+> Verified per commit: full ninja build + full ctest (16/16, incl. `ruled_batch_test`,
+> `ruled_client_test`, `ruled_e2e_smoke_test`). New coverage: one `ruled_client_test` case for the
+> choice holder's teardown-on-displace, extra assertions in the hand-action parsing cases (a cast
+> label never lands in the land set; the name-keyed lookup works for opening-bottom too), and 7 new
+> `game_prompt_widget_test` cases (mode priority, the targeting OR-set, pick/opening button gating).
+> A manual game is still worth doing before the next release-ish milestone.
+
 Changes the *slope* of client growth: per-mechanic cost drops from ~6 touch points (member
 family + parser + setters + bool + label branch) to ~2 (enum value + switch case).
 

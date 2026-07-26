@@ -119,9 +119,13 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     auto *openingRowLayout = new QHBoxLayout;
     openingRowLayout->setSpacing(4);
     openingPickSeatButton1 = new QPushButton(this);
+    openingPickSeatButton1->setObjectName("openingPickSeatButton1");
     openingPickSeatButton2 = new QPushButton(this);
+    openingPickSeatButton2->setObjectName("openingPickSeatButton2");
     openingKeepButton = new QPushButton(this);
+    openingKeepButton->setObjectName("openingKeepButton");
     openingMulliganButton = new QPushButton(this);
+    openingMulliganButton->setObjectName("openingMulliganButton");
     openingPickSeatButton1->hide();
     openingPickSeatButton2->hide();
     openingKeepButton->hide();
@@ -131,7 +135,9 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     openingRowLayout->addWidget(openingKeepButton);
     openingRowLayout->addWidget(openingMulliganButton);
     openingBottomCancelButton = new QPushButton(this);
+    openingBottomCancelButton->setObjectName("openingBottomCancelButton");
     openingBottomDoneButton = new QPushButton(this);
+    openingBottomDoneButton->setObjectName("openingBottomDoneButton");
     openingBottomCancelButton->hide();
     openingBottomDoneButton->hide();
     openingRowLayout->addWidget(openingBottomCancelButton);
@@ -232,18 +238,100 @@ void GamePromptWidget::retranslateUi()
     openingMulliganButton->setText(tr("Mulligan"));
     openingBottomCancelButton->setText(tr("Cancel"));
     openingBottomDoneButton->setText(tr("Done"));
-    if (ruledOpeningUiKind == 1 && ruledOpeningPickSeatIds.size() >= 2) {
+    if (promptState.mode == PromptMode::OpeningChooseFirst && promptState.openingPickSeatIds.size() >= 2) {
         openingPickSeatButton1->setText(tr("You"));
         openingPickSeatButton2->setText(tr("Opponent"));
     }
     resolutionHandPickConfirmButton->setText(tr("Confirm"));
 }
 
-void GamePromptWidget::setResolutionHandPickMode(int required, int selected)
+// ---------------------------------------------------------------------------------------
+// Prompt mode
+// ---------------------------------------------------------------------------------------
+
+GamePromptWidget::PromptMode GamePromptWidget::effectiveMode() const
 {
-    resolutionHandPickRequired = required;
-    resolutionHandPickSelected = selected;
+    // One priority chain, resolved here and nowhere else: a take-over mode outranks the
+    // mid-cast targeting state, which outranks a parked click-a-permanent choice.
+    switch (promptState.mode) {
+        case PromptMode::ResolutionPick:
+        case PromptMode::OpeningChooseFirst:
+        case PromptMode::OpeningMulligan:
+        case PromptMode::OpeningBottom:
+        case PromptMode::CleanupDiscard:
+            return promptState.mode;
+        default:
+            break;
+    }
+    if (targetingSources) {
+        return PromptMode::Targeting;
+    }
+    if (promptState.mode == PromptMode::ClickChoice) {
+        return PromptMode::ClickChoice;
+    }
+    return PromptMode::Normal;
+}
+
+void GamePromptWidget::setRuledPromptState(RuledPromptState newState)
+{
+    promptState = std::move(newState);
+    // The seat buttons carry the seat ids in their click handlers, so rewire them on entry.
+    openingPickSeatButton1->disconnect();
+    openingPickSeatButton2->disconnect();
+    if (promptState.mode == PromptMode::OpeningChooseFirst && promptState.openingPickSeatIds.size() >= 2) {
+        openingPickSeatButton1->setText(tr("You"));
+        openingPickSeatButton2->setText(tr("Opponent"));
+        const int selfSeatId = promptState.openingPickSeatIds[0];
+        const int opponentSeatId = promptState.openingPickSeatIds[1];
+        QObject::connect(openingPickSeatButton1, &QPushButton::clicked, this,
+                         [this, selfSeatId] { emit ruledOpeningPickSeatRequested(selfSeatId); });
+        QObject::connect(openingPickSeatButton2, &QPushButton::clicked, this,
+                         [this, opponentSeatId] { emit ruledOpeningPickSeatRequested(opponentSeatId); });
+    }
+    applyPromptStateText();
     updateCombatButtonsVisibility();
+    refreshPromptLabel();
+}
+
+void GamePromptWidget::applyPromptStateText()
+{
+    switch (promptState.mode) {
+        case PromptMode::CleanupDiscard:
+            if (promptState.required > 0) {
+                setPromptText(tr("Cleanup — discard %2 card(s) to reach hand size 7. Selected: %1 of %2. Click hand "
+                                 "cards to toggle; click again to deselect.")
+                                  .arg(promptState.selected)
+                                  .arg(promptState.required));
+            }
+            return;
+        case PromptMode::OpeningChooseFirst:
+            setPromptText(tr("Choose who goes first."));
+            return;
+        case PromptMode::OpeningMulligan: {
+            const int keepCount = 7 - promptState.required;
+            setPromptText(tr("Mulligan to %1 or keep these %2?").arg(keepCount - 1).arg(keepCount));
+            return;
+        }
+        case PromptMode::OpeningBottom:
+            setPromptText(tr("Put %1 card(s) to the bottom of your library.").arg(promptState.required));
+            return;
+        case PromptMode::ClickChoice:
+        case PromptMode::ResolutionPick:
+            // Engine-authored: the caller passed the prompt the engine wrote.
+            setPromptText(promptState.text);
+            return;
+        case PromptMode::Normal:
+            if (!promptState.text.isEmpty()) {
+                setPromptText(promptState.text);
+            } else if (effectiveMode() == PromptMode::Normal) {
+                // Nothing owns the label any more; refreshPromptLabel() recomposes it below.
+                setPromptText({});
+            }
+            return;
+        case PromptMode::Targeting:
+            // Never pushed — see PromptMode::Targeting.
+            return;
+    }
 }
 
 void GamePromptWidget::setMultiTargetSelectionCount(int selected, int maxTargets)
@@ -337,12 +425,25 @@ void GamePromptWidget::setStickyBlockerError(const QString &msg)
     refreshPromptLabel();
 }
 
+void GamePromptWidget::setTargetingSource(TargetingSource source, bool active)
+{
+    const TargetingSources next = active ? (targetingSources | source) : (targetingSources & ~TargetingSources(source));
+    if (next == targetingSources) {
+        return;
+    }
+    targetingSources = next;
+    updateCombatButtonsVisibility();
+    refreshPromptLabel();
+}
+
 void GamePromptWidget::setTargetingMode(bool enabled, const QString &cardName)
 {
-    targetingModeEnabled = enabled;
+    // Unlike the other two sources this one always re-announces itself: re-entering targeting for
+    // a different spell must replace the card name on the label.
     if (enabled) {
         setPromptText(tr("Cast %1 selected. Select a target card, or press Cancel.").arg(cardName));
     }
+    setTargetingSource(TargetingSource::SpellTargetSelection, enabled);
     updateCombatButtonsVisibility();
 }
 
@@ -375,60 +476,6 @@ void GamePromptWidget::setFirstStrikeDamageStepActive(bool active)
     refreshPromptLabel();
 }
 
-void GamePromptWidget::setRuledOpeningUi(int kind, QVector<int> pickSeatIds, int mulliganCount)
-{
-    ruledOpeningUiKind = kind;
-    ruledOpeningMulliganCount = mulliganCount;
-    ruledOpeningPickSeatIds = std::move(pickSeatIds);
-    openingPickSeatButton1->disconnect();
-    openingPickSeatButton2->disconnect();
-    if (kind == 1 && ruledOpeningPickSeatIds.size() >= 2) {
-        setPromptText(tr("Choose who goes first."));
-        openingPickSeatButton1->setText(tr("You"));
-        openingPickSeatButton2->setText(tr("Opponent"));
-        const int selfSeatId = ruledOpeningPickSeatIds[0];
-        const int opponentSeatId = ruledOpeningPickSeatIds[1];
-        QObject::connect(openingPickSeatButton1, &QPushButton::clicked, this, [this, selfSeatId] {
-            emit ruledOpeningPickSeatRequested(selfSeatId);
-        });
-        QObject::connect(openingPickSeatButton2, &QPushButton::clicked, this, [this, opponentSeatId] {
-            emit ruledOpeningPickSeatRequested(opponentSeatId);
-        });
-    }
-    if (kind == 2) {
-        const int keepCount = 7 - mulliganCount;
-        const int mulliganTo = keepCount - 1;
-        setPromptText(tr("Mulligan to %1 or keep these %2?").arg(mulliganTo).arg(keepCount));
-    }
-    if (kind == 3) {
-        ruledOpeningBottomSelected = 0;
-        setPromptText(tr("Put %1 card(s) to the bottom of your library.").arg(mulliganCount));
-    }
-    updateCombatButtonsVisibility();
-}
-
-void GamePromptWidget::setRuledOpeningBottomProgress(int /*required*/, int selected)
-{
-    ruledOpeningBottomSelected = selected;
-    updateCombatButtonsVisibility();
-}
-
-void GamePromptWidget::setCleanupDiscardMode(bool active, int cardsRequired, int cardsSelected)
-{
-    cleanupDiscardMode = active;
-    if (active && cardsRequired > 0) {
-        setPromptText(tr("Cleanup — discard %2 card(s) to reach hand size 7. Selected: %1 of %2. Click hand cards to "
-                         "toggle; click again to deselect.")
-                          .arg(cardsSelected)
-                          .arg(cardsRequired));
-    } else if (!active) {
-        if (!targetingModeEnabled && !spellCastPending && !activatedAbilityTargetPending && !triggerTargetPending) {
-            setPromptText({});
-        }
-    }
-    updateCombatButtonsVisibility();
-}
-
 void GamePromptWidget::setLandTapUndoAvailable(bool available)
 {
     if (landTapUndoAvailable == available) {
@@ -440,55 +487,18 @@ void GamePromptWidget::setLandTapUndoAvailable(bool available)
 
 void GamePromptWidget::setSpellCastPending(bool pending)
 {
-    if (spellCastPending == pending) {
-        return;
-    }
-    spellCastPending = pending;
-    updateCombatButtonsVisibility();
-}
-
-void GamePromptWidget::setTriggerTargetPending(bool pending)
-{
-    if (triggerTargetPending == pending) {
-        return;
-    }
-    triggerTargetPending = pending;
-    updateCombatButtonsVisibility();
-    refreshPromptLabel();
-}
-
-void GamePromptWidget::setCopyTargetPending(bool pending)
-{
-    if (copyTargetPending == pending) {
-        return;
-    }
-    copyTargetPending = pending;
-    updateCombatButtonsVisibility();
-    refreshPromptLabel();
-}
-
-void GamePromptWidget::setLegendKeepPending(bool pending)
-{
-    if (legendKeepPending == pending) {
-        return;
-    }
-    legendKeepPending = pending;
-    updateCombatButtonsVisibility();
-    refreshPromptLabel();
+    setTargetingSource(TargetingSource::SpellCastPending, pending);
 }
 
 void GamePromptWidget::setActivatedAbilityTargetPending(bool pending, const QString &abilityText)
 {
-    if (activatedAbilityTargetPending == pending) {
+    if (targetingSources.testFlag(TargetingSource::AbilityTargetPending) == pending) {
         return;
     }
-    activatedAbilityTargetPending = pending;
     if (pending) {
         setPromptText(tr("Activate %1: choose a target, or press Cancel.").arg(abilityText));
-    } else {
-        refreshPromptLabel();
     }
-    updateCombatButtonsVisibility();
+    setTargetingSource(TargetingSource::AbilityTargetPending, pending);
 }
 
 void GamePromptWidget::setCombatDamageStatus(const QString &attackerName, int assigned, int power,
@@ -513,98 +523,55 @@ void GamePromptWidget::setCombatDamageStatus(const QString &attackerName, int as
     confirmCombatDamageButton->setEnabled(legal && power > 0);
 }
 
+void GamePromptWidget::hideActionAndCombatButtons()
+{
+    passPriorityButton->setVisible(false);
+    confirmAttackersButton->setVisible(false);
+    confirmBlockersButton->setVisible(false);
+    resetBlockersButton->setVisible(false);
+    confirmCombatDamageButton->setVisible(false);
+    cancelTargetingButton->setVisible(false);
+    confirmTargetsButton->setVisible(false);
+    undoLandTapButton->setVisible(false);
+}
+
 void GamePromptWidget::updateCombatButtonsVisibility()
 {
+    const PromptMode mode = effectiveMode();
     confirmSpellDamageButton->setVisible(false);
 
-    // Resolution hand-pick: show only the Confirm button when a pick is active (required >= 0).
-    if (resolutionHandPickRequired >= 0) {
-        passPriorityButton->setVisible(false);
-        confirmAttackersButton->setVisible(false);
-        confirmBlockersButton->setVisible(false);
-        resetBlockersButton->setVisible(false);
-        confirmCombatDamageButton->setVisible(false);
-        cancelTargetingButton->setVisible(false);
-        confirmTargetsButton->setVisible(false);
-        undoLandTapButton->setVisible(false);
-        openingPickSeatButton1->hide();
-        openingPickSeatButton2->hide();
-        openingKeepButton->hide();
-        openingMulliganButton->hide();
-        openingBottomCancelButton->hide();
-        openingBottomDoneButton->hide();
-        resolutionHandPickConfirmButton->setVisible(true);
-        resolutionHandPickConfirmButton->setEnabled(resolutionHandPickSelected >= resolutionHandPickRequired);
-        return;
+    // Mode-owned buttons: shown by exactly one mode each, hidden everywhere else.
+    const bool showSeatPicks = mode == PromptMode::OpeningChooseFirst && !promptState.openingPickSeatIds.isEmpty();
+    openingPickSeatButton1->setVisible(showSeatPicks);
+    openingPickSeatButton2->setVisible(showSeatPicks && promptState.openingPickSeatIds.size() >= 2);
+    openingKeepButton->setVisible(mode == PromptMode::OpeningMulligan);
+    // No mulligan below a zero-card hand.
+    openingMulliganButton->setVisible(mode == PromptMode::OpeningMulligan && (7 - promptState.required) - 1 >= 0);
+    openingBottomCancelButton->setVisible(mode == PromptMode::OpeningBottom && promptState.selected >= 1);
+    openingBottomDoneButton->setVisible(mode == PromptMode::OpeningBottom && promptState.required > 0 &&
+                                        promptState.selected == promptState.required);
+    resolutionHandPickConfirmButton->setVisible(mode == PromptMode::ResolutionPick);
+    if (mode == PromptMode::ResolutionPick) {
+        resolutionHandPickConfirmButton->setEnabled(promptState.selected >= promptState.required);
     }
-    resolutionHandPickConfirmButton->setVisible(false);
 
-    if (ruledOpeningUiKind != 0) {
-        passPriorityButton->setVisible(false);
-        confirmAttackersButton->setVisible(false);
-        confirmBlockersButton->setVisible(false);
-        resetBlockersButton->setVisible(false);
-        confirmCombatDamageButton->setVisible(false);
-        cancelTargetingButton->setVisible(false);
-        confirmTargetsButton->setVisible(false);
-        undoLandTapButton->setVisible(false);
-        const bool showPick = ruledOpeningUiKind == 1 && !ruledOpeningPickSeatIds.isEmpty();
-        openingPickSeatButton1->setVisible(showPick && ruledOpeningPickSeatIds.size() >= 1);
-        openingPickSeatButton2->setVisible(showPick && ruledOpeningPickSeatIds.size() >= 2);
-        openingKeepButton->setVisible(ruledOpeningUiKind == 2);
-        openingMulliganButton->setVisible(ruledOpeningUiKind == 2 && (7 - ruledOpeningMulliganCount) - 1 >= 0);
-        const bool isBottom = (ruledOpeningUiKind == 3);
-        openingBottomCancelButton->setVisible(isBottom && ruledOpeningBottomSelected >= 1);
-        openingBottomDoneButton->setVisible(isBottom && ruledOpeningMulliganCount > 0 &&
-                                             ruledOpeningBottomSelected == ruledOpeningMulliganCount);
+    // Every take-over mode suppresses the priority / combat / targeting controls.
+    if (mode != PromptMode::Normal && mode != PromptMode::Targeting) {
+        hideActionAndCombatButtons();
         return;
     }
-    openingPickSeatButton1->hide();
-    openingPickSeatButton2->hide();
-    openingKeepButton->hide();
-    openingMulliganButton->hide();
-    openingBottomCancelButton->hide();
-    openingBottomDoneButton->hide();
-    if (cleanupDiscardMode) {
-        passPriorityButton->setVisible(false);
-        confirmAttackersButton->setVisible(false);
-        confirmBlockersButton->setVisible(false);
-        resetBlockersButton->setVisible(false);
-        confirmCombatDamageButton->setVisible(false);
-        cancelTargetingButton->setVisible(false);
-        confirmTargetsButton->setVisible(false);
-        undoLandTapButton->setVisible(false);
-        return;
-    }
-    if (targetingModeEnabled || spellCastPending || activatedAbilityTargetPending) {
-        passPriorityButton->setVisible(false);
-        confirmAttackersButton->setVisible(false);
-        confirmBlockersButton->setVisible(false);
-        resetBlockersButton->setVisible(false);
-        confirmCombatDamageButton->setVisible(false);
-        undoLandTapButton->setVisible(false);
+
+    if (mode == PromptMode::Targeting) {
+        hideActionAndCombatButtons();
+        cancelTargetingButton->setVisible(true);
         if (spellDamageAllocationMode) {
-            cancelTargetingButton->setVisible(true);
-            confirmTargetsButton->setVisible(false);
-            confirmSpellDamageButton->setVisible(true);
             // enabled state is managed by setSpellDamageAllocationStatus
+            confirmSpellDamageButton->setVisible(true);
             return;
         }
-        cancelTargetingButton->setVisible(true);
-        const bool showConfirm = targetingModeEnabled && multiTargetMaxCount >= 0 && multiTargetSelectedCount >= 1;
-        confirmTargetsButton->setVisible(showConfirm);
-        confirmSpellDamageButton->setVisible(false);
-        return;
-    }
-    if (triggerTargetPending || copyTargetPending || legendKeepPending) {
-        passPriorityButton->setVisible(false);
-        confirmAttackersButton->setVisible(false);
-        confirmBlockersButton->setVisible(false);
-        resetBlockersButton->setVisible(false);
-        confirmCombatDamageButton->setVisible(false);
-        cancelTargetingButton->setVisible(false);
-        confirmTargetsButton->setVisible(false);
-        undoLandTapButton->setVisible(false);
+        // Multi-target spells confirm an in-progress selection; single-target ones just wait.
+        confirmTargetsButton->setVisible(targetingSources.testFlag(TargetingSource::SpellTargetSelection) &&
+                                         multiTargetMaxCount >= 0 && multiTargetSelectedCount >= 1);
         return;
     }
 
@@ -688,10 +655,17 @@ void GamePromptWidget::setLocalPlayerIsActive(bool isActive)
 
 void GamePromptWidget::refreshPromptLabel()
 {
-    if (targetingModeEnabled || spellCastPending || activatedAbilityTargetPending || triggerTargetPending ||
-        copyTargetPending || legendKeepPending || cleanupDiscardMode || ruledOpeningUiKind != 0 ||
-        resolutionHandPickRequired > 0) {
-        return;
+    switch (effectiveMode()) {
+        case PromptMode::Normal:
+            // A caller-supplied line (e.g. the opening phase's "Waiting for …") outranks the
+            // composed phase/priority line below.
+            if (!promptState.text.isEmpty()) {
+                return;
+            }
+            break;
+        default:
+            // Every other mode owns the label; applyPromptStateText / the targeting setters wrote it.
+            return;
     }
     if (currentCombatMode == CombatMode::AssignCombatDamage) {
         return;

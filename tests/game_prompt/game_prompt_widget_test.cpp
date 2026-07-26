@@ -160,6 +160,94 @@ TEST_F(GamePromptWidgetTest, TargetingModeClearedRestoresPassPriority)
     EXPECT_FALSE(btn("passPriorityButton")->isHidden());
 }
 
+// --- Prompt modes ---
+
+using PromptMode = GamePromptWidget::PromptMode;
+
+TEST_F(GamePromptWidgetTest, DefaultModeIsNormal)
+{
+    EXPECT_EQ(widget->effectiveMode(), PromptMode::Normal);
+}
+
+TEST_F(GamePromptWidgetTest, TargetingSourcesOrIntoTheTargetingMode)
+{
+    widget->setSpellCastPending(true);
+    EXPECT_EQ(widget->effectiveMode(), PromptMode::Targeting);
+    // Two sources up: dropping one must NOT drop the mode — they are independent inputs.
+    widget->setTargetingMode(true, "Bolt");
+    widget->setSpellCastPending(false);
+    EXPECT_EQ(widget->effectiveMode(), PromptMode::Targeting);
+    widget->setTargetingMode(false);
+    EXPECT_EQ(widget->effectiveMode(), PromptMode::Normal);
+}
+
+TEST_F(GamePromptWidgetTest, TakeOverModesOutrankTargeting)
+{
+    widget->setSpellCastPending(true);
+    widget->setRuledPromptState({PromptMode::CleanupDiscard, 2, 0, {}, {}});
+    EXPECT_EQ(widget->effectiveMode(), PromptMode::CleanupDiscard);
+    EXPECT_TRUE(btn("passPriorityButton")->isHidden());
+    EXPECT_TRUE(btn("cancelTargetingButton")->isHidden());
+}
+
+TEST_F(GamePromptWidgetTest, TargetingOutranksAParkedClickChoice)
+{
+    widget->setRuledPromptState({PromptMode::ClickChoice, 0, 0, "Choose a target for: Draw a card.", {}});
+    EXPECT_EQ(widget->effectiveMode(), PromptMode::ClickChoice);
+    widget->setSpellCastPending(true);
+    EXPECT_EQ(widget->effectiveMode(), PromptMode::Targeting);
+    widget->setSpellCastPending(false);
+    EXPECT_EQ(widget->effectiveMode(), PromptMode::ClickChoice);
+}
+
+TEST_F(GamePromptWidgetTest, ResolutionPickShowsConfirmEnabledOnlyWhenSatisfied)
+{
+    widget->setLocalPlayerHasPriority(true);
+    widget->setRuledPromptState({PromptMode::ResolutionPick, 2, 1, "Put two cards back.", {}});
+    EXPECT_FALSE(btn("resolutionHandPickConfirmButton")->isHidden());
+    EXPECT_FALSE(btn("resolutionHandPickConfirmButton")->isEnabled());
+    EXPECT_TRUE(btn("passPriorityButton")->isHidden());
+
+    widget->setRuledPromptState({PromptMode::ResolutionPick, 2, 2, "Put two cards back.", {}});
+    EXPECT_TRUE(btn("resolutionHandPickConfirmButton")->isEnabled());
+
+    widget->setRuledPromptState({});
+    EXPECT_TRUE(btn("resolutionHandPickConfirmButton")->isHidden());
+    EXPECT_FALSE(btn("passPriorityButton")->isHidden());
+}
+
+TEST_F(GamePromptWidgetTest, OpeningBottomDoneAppearsOnlyOnAnExactSelection)
+{
+    widget->setLocalPlayerHasPriority(true);
+    widget->setRuledPromptState({PromptMode::OpeningBottom, 2, 0, {}, {}});
+    EXPECT_TRUE(btn("passPriorityButton")->isHidden());
+    EXPECT_TRUE(btn("openingBottomDoneButton")->isHidden());
+    EXPECT_TRUE(btn("openingBottomCancelButton")->isHidden());
+
+    widget->setRuledPromptState({PromptMode::OpeningBottom, 2, 1, {}, {}});
+    EXPECT_TRUE(btn("openingBottomDoneButton")->isHidden());
+    EXPECT_FALSE(btn("openingBottomCancelButton")->isHidden());
+
+    widget->setRuledPromptState({PromptMode::OpeningBottom, 2, 2, {}, {}});
+    EXPECT_FALSE(btn("openingBottomDoneButton")->isHidden());
+}
+
+TEST_F(GamePromptWidgetTest, OpeningChooseFirstEmitsTheSeatIdItWasGiven)
+{
+    widget->setRuledPromptState({PromptMode::OpeningChooseFirst, 0, 0, {}, QVector<int>({3, 7})});
+    ASSERT_FALSE(btn("openingPickSeatButton2")->isHidden());
+    QSignalSpy spy(widget.get(), &GamePromptWidget::ruledOpeningPickSeatRequested);
+    btn("openingPickSeatButton2")->click();
+    ASSERT_EQ(spy.count(), 1);
+    EXPECT_EQ(spy.at(0).at(0).toInt(), 7);
+
+    // Re-entering with different seats rewires the buttons instead of stacking connections.
+    widget->setRuledPromptState({PromptMode::OpeningChooseFirst, 0, 0, {}, QVector<int>({9, 4})});
+    btn("openingPickSeatButton2")->click();
+    ASSERT_EQ(spy.count(), 2);
+    EXPECT_EQ(spy.at(1).at(0).toInt(), 4);
+}
+
 // --- Player names ---
 
 TEST_F(GamePromptWidgetTest, ActivePlayerNameRoundTrips)

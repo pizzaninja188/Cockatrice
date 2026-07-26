@@ -11,6 +11,8 @@
 
 #include "../game/abstract_game.h"
 #include "../game/log/message_log_widget.h"
+// For GamePromptWidget::PromptMode on refreshRuledPromptState() — ruled prompt panel (fork).
+#include "../game/prompt/game_prompt_widget.h"
 #include "../game/player/player.h"
 #include "../interface/widgets/menus/tearoff_menu.h"
 #include "../interface/widgets/replay/replay_manager.h"
@@ -150,6 +152,9 @@ private:
     void createReplayDock(GameReplay *replay);
     void clearRuledCombatArrows();
     void refreshRuledCombatArrows();
+    /// Recompute the ruled prompt panel's exclusive mode from the view model and push it as one
+    /// state. The single place the mode priority is decided; returns the mode it pushed.
+    GamePromptWidget::PromptMode refreshRuledPromptState();
     void ensureStackWindow();
     void saveStackWindowLayout();
     CardZoneLogic *findVisibleStackZone() const;

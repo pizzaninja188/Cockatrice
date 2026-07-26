@@ -244,11 +244,9 @@ void TabGame::connectToGameEventHandler()
     connect(game->getGameEventHandler(), &GameEventHandler::gameStopped, messageLog, &MessageLogWidget::prepareForNewGame);
     connect(game->getGameEventHandler()->ruled(), &RuledClientState::sessionReset, this, [this] {
         if (gamePromptWidget) {
-            gamePromptWidget->setTriggerTargetPending(false);
-            gamePromptWidget->setCopyTargetPending(false);
             gamePromptWidget->setRuledStackHasItems(false);
             gamePromptWidget->setSpellCastPending(false);
-            gamePromptWidget->setResolutionHandPickMode(-1, -1);
+            gamePromptWidget->setRuledPromptState({});
         }
     });
     connect(game->getGameEventHandler(), &GameEventHandler::gameClosed, this, &TabGame::closeGame);
@@ -314,15 +312,11 @@ void TabGame::connectToGameEventHandler()
                 });
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::enginePromptFeed, gamePromptWidget,
                 [this](const QString & /*lines*/) {
-                    auto *handler = game->getGameEventHandler()->ruled();
-                    if (handler && handler->localPlayerMustCleanupDiscard()) {
-                        gamePromptWidget->setCleanupDiscardMode(
-                            true, handler->cleanupDiscardRequiredCount(), handler->cleanupDiscardSelectedCount());
+                    // Recompute the whole prompt mode once per batch, then let the local player's
+                    // pending cast / activation overwrite the line if nothing else claimed it.
+                    if (refreshRuledPromptState() != GamePromptWidget::PromptMode::Normal) {
                         return;
                     }
-                    gamePromptWidget->setCleanupDiscardMode(false, 0, 0);
-                    // If the local player has a pending spell or ability waiting for mana, show
-                    // the remaining cost.
                     const int localId = game->getPlayerManager()->getLocalPlayerId();
                     Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
                     if (localPlayer && localPlayer->getPlayerActions()) {
@@ -337,38 +331,6 @@ void TabGame::connectToGameEventHandler()
                             return;
                         }
                     }
-                    // If a copy is waiting for the local player to choose new targets (CR 707.10c),
-                    // show that prompt using click-to-target mode.
-                    const bool copyTargetPending = handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget);
-                    gamePromptWidget->setCopyTargetPending(copyTargetPending);
-                    if (copyTargetPending) {
-                        gamePromptWidget->setPromptText(handler->pendingChoicePromptText(RuledClientState::ChoiceKind::CopyTarget) +
-                                                        tr("\nClick a target, or click the original target to keep it."));
-                        return;
-                    }
-                    // If the legend rule needs the local player to choose which duplicate legend to
-                    // keep (CR 704.5j), prompt them to click the permanent to keep on the battlefield.
-                    const bool legendKeepPending = handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::LegendKeep);
-                    gamePromptWidget->setLegendKeepPending(legendKeepPending);
-                    if (legendKeepPending) {
-                        gamePromptWidget->setPromptText(handler->pendingChoicePromptText(RuledClientState::ChoiceKind::LegendKeep) +
-                                                        tr("\nClick the permanent to keep on the battlefield."));
-                        return;
-                    }
-                    // If a triggered ability is waiting for the local player to choose a target,
-                    // show that prompt and suppress the pass-priority button.
-                    const bool triggerPending = handler && handler->hasPendingTriggerTarget();
-                    gamePromptWidget->setTriggerTargetPending(triggerPending);
-                    if (triggerPending) {
-                        gamePromptWidget->setPromptText(
-                            tr("Choose a target for: %1").arg(handler->pendingTriggerText()));
-                        return;
-                    }
-                    // Hand-pick mode (Brainstorm etc.): show the engine's prompt text directly.
-                    if (handler && handler->isResolutionHandPickActive()) {
-                        gamePromptWidget->setPromptText(handler->resolutionHandPickPromptText());
-                        return;
-                    }
                     // Refresh after the full batch has settled (state is complete here).
                     gamePromptWidget->refreshPromptLabel();
                 });
@@ -377,57 +339,17 @@ void TabGame::connectToGameEventHandler()
                     if (!gamePromptWidget) {
                         return;
                     }
-                    if (required > 0) {
-                        gamePromptWidget->setCleanupDiscardMode(true, required, selected);
+                    refreshRuledPromptState();
+                    if (required > 0 && selected == required) {
                         const int localId = game->getPlayerManager()->getLocalPlayerId();
                         Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
-                        if (localPlayer && localPlayer->getPlayerActions() && selected == required) {
+                        if (localPlayer && localPlayer->getPlayerActions()) {
                             localPlayer->getPlayerActions()->sendRuledCleanupDiscardBatchIfComplete();
                         }
-                    } else {
-                        gamePromptWidget->setCleanupDiscardMode(false, 0, 0);
                     }
                 });
-        connect(game->getGameEventHandler()->ruled(), &RuledClientState::openingUiChanged, this, [this]() {
-            if (!gamePromptWidget || !game) {
-                return;
-            }
-            auto *h = game->getGameEventHandler()->ruled();
-            const auto kind = h->getOpeningUiKind();
-            if (kind == RuledClientState::RuledOpeningUiKind::ChooseFirst) {
-                const int localId = game->getPlayerManager()->getLocalPlayerId();
-                int opponentId = -1;
-                for (int pid : game->getPlayerManager()->getPlayers().keys()) {
-                    if (pid != localId) {
-                        opponentId = pid;
-                        break;
-                    }
-                }
-                if (opponentId >= 0) {
-                    gamePromptWidget->setRuledOpeningUi(1, QVector<int>({localId, opponentId}));
-                } else {
-                    gamePromptWidget->setRuledOpeningUi(0, {});
-                }
-            } else if (kind == RuledClientState::RuledOpeningUiKind::None) {
-                gamePromptWidget->setRuledOpeningUi(0, {});
-                // During the opening phase the local player has no active action — show who we're
-                // waiting for. This must run unconditionally: activePlayerName may already be set
-                // from a prior logActivePlayer signal, so checking isEmpty() misses later rounds.
-                if (h->engineOpeningPhaseActive()) {
-                    const int localId = game->getPlayerManager()->getLocalPlayerId();
-                    for (auto *player : game->getPlayerManager()->getPlayers()) {
-                        if (player->getPlayerInfo()->getId() != localId) {
-                            gamePromptWidget->setPromptText(
-                                tr("Waiting for %1...").arg(player->getPlayerInfo()->getName()));
-                            break;
-                        }
-                    }
-                }
-            } else {
-                gamePromptWidget->setRuledOpeningUi(static_cast<int>(kind), h->getOpeningPickSeatIds(),
-                                                    h->getOpeningMulliganCount());
-            }
-        });
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::openingUiChanged, this,
+                [this]() { refreshRuledPromptState(); });
         connect(gamePromptWidget, &GamePromptWidget::ruledOpeningPickSeatRequested, game->getGameEventHandler()->ruled(),
                 &RuledClientState::openingPickFirstSeat);
         connect(gamePromptWidget, &GamePromptWidget::ruledOpeningMulliganKeepRequested, game->getGameEventHandler()->ruled(),
@@ -439,16 +361,10 @@ void TabGame::connectToGameEventHandler()
         connect(gamePromptWidget, &GamePromptWidget::ruledOpeningBottomDoneRequested, game->getGameEventHandler()->ruled(),
                 &RuledClientState::openingBottomDone);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::openingBottomUiChanged, this,
-                [this](int required, int selected) {
-                    if (gamePromptWidget) {
-                        gamePromptWidget->setRuledOpeningBottomProgress(required, selected);
-                    }
-                });
+                [this](int, int) { refreshRuledPromptState(); });
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::resolutionHandPickUiChanged, this,
-                [this](int required, int selected) {
-                    if (gamePromptWidget) {
-                        gamePromptWidget->setResolutionHandPickMode(required, selected);
-                    }
+                [this](int required, int /*selected*/) {
+                    refreshRuledPromptState();
                     // When library-search pick ends (required < 0 = cleared), close the deck zone view.
                     if (required < 0 && librarySearchView) {
                         librarySearchView->close();
@@ -668,6 +584,83 @@ TabGame::~TabGame()
     for (auto &player : game->getPlayerManager()->getPlayers()) {
         player->clear();
     }
+}
+
+GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
+{
+    using PromptMode = GamePromptWidget::PromptMode;
+    GamePromptWidget::RuledPromptState state;
+    if (!gamePromptWidget || !game) {
+        return state.mode;
+    }
+    RuledClientState *h = game->getGameEventHandler()->ruled();
+    if (!h) {
+        gamePromptWidget->setRuledPromptState(state);
+        return state.mode;
+    }
+
+    // Priority order, highest first. A parked resolution pick outranks everything (the engine is
+    // blocked on it), then the pre-game opening sequence, then the cleanup discard, then a parked
+    // click-a-permanent choice. Anything below that is the ordinary priority prompt.
+    using ChoiceKind = RuledClientState::ChoiceKind;
+    using OpeningKind = RuledClientState::RuledOpeningUiKind;
+    const OpeningKind opening = h->getOpeningUiKind();
+    if (h->isResolutionHandPickActive()) {
+        state.mode = PromptMode::ResolutionPick;
+        state.required = h->resolutionHandPickRequired();
+        state.selected = h->resolutionHandPickSelected();
+        state.text = h->resolutionHandPickPromptText();
+    } else if (opening == OpeningKind::ChooseFirst) {
+        const int localId = game->getPlayerManager()->getLocalPlayerId();
+        int opponentId = -1;
+        for (int pid : game->getPlayerManager()->getPlayers().keys()) {
+            if (pid != localId) {
+                opponentId = pid;
+                break;
+            }
+        }
+        if (opponentId >= 0) {
+            state.mode = PromptMode::OpeningChooseFirst;
+            state.openingPickSeatIds = {localId, opponentId};
+        }
+    } else if (opening == OpeningKind::MulliganChoice) {
+        state.mode = PromptMode::OpeningMulligan;
+        state.required = h->getOpeningMulliganCount();
+    } else if (opening == OpeningKind::BottomLibrary) {
+        state.mode = PromptMode::OpeningBottom;
+        state.required = h->openingBottomRequiredCount();
+        state.selected = h->openingBottomSelectedCount();
+    } else if (h->localPlayerMustCleanupDiscard()) {
+        state.mode = PromptMode::CleanupDiscard;
+        state.required = h->cleanupDiscardRequiredCount();
+        state.selected = h->cleanupDiscardSelectedCount();
+    } else if (h->hasPendingChoiceOfKind(ChoiceKind::CopyTarget)) {
+        // CR 707.10c: a spell copy is waiting for the local player to choose new targets.
+        state.mode = PromptMode::ClickChoice;
+        state.text = h->pendingChoicePromptText(ChoiceKind::CopyTarget) +
+                     tr("\nClick a target, or click the original target to keep it.");
+    } else if (h->hasPendingChoiceOfKind(ChoiceKind::LegendKeep)) {
+        // CR 704.5j: which duplicate legend to keep, chosen on the battlefield.
+        state.mode = PromptMode::ClickChoice;
+        state.text = h->pendingChoicePromptText(ChoiceKind::LegendKeep) +
+                     tr("\nClick the permanent to keep on the battlefield.");
+    } else if (h->hasPendingTriggerTarget()) {
+        state.mode = PromptMode::ClickChoice;
+        state.text = tr("Choose a target for: %1").arg(h->pendingTriggerText());
+    } else if (h->engineOpeningPhaseActive()) {
+        // Opening phase with nothing for us to do — say who we are waiting for. Runs
+        // unconditionally: activePlayerName may already be set from a prior logActivePlayer
+        // signal, so checking isEmpty() would miss later rounds.
+        const int localId = game->getPlayerManager()->getLocalPlayerId();
+        for (auto *player : game->getPlayerManager()->getPlayers()) {
+            if (player->getPlayerInfo()->getId() != localId) {
+                state.text = tr("Waiting for %1...").arg(player->getPlayerInfo()->getName());
+                break;
+            }
+        }
+    }
+    gamePromptWidget->setRuledPromptState(state);
+    return state.mode;
 }
 
 void TabGame::clearRuledCombatArrows()
