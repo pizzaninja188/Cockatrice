@@ -339,19 +339,19 @@ void TabGame::connectToGameEventHandler()
                     }
                     // If a copy is waiting for the local player to choose new targets (CR 707.10c),
                     // show that prompt using click-to-target mode.
-                    const bool copyTargetPending = handler && handler->hasPendingCopyTargetChoice();
+                    const bool copyTargetPending = handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget);
                     gamePromptWidget->setCopyTargetPending(copyTargetPending);
                     if (copyTargetPending) {
-                        gamePromptWidget->setPromptText(handler->pendingCopyTargetPromptText() +
+                        gamePromptWidget->setPromptText(handler->pendingChoicePromptText(RuledClientState::ChoiceKind::CopyTarget) +
                                                         tr("\nClick a target, or click the original target to keep it."));
                         return;
                     }
                     // If the legend rule needs the local player to choose which duplicate legend to
                     // keep (CR 704.5j), prompt them to click the permanent to keep on the battlefield.
-                    const bool legendKeepPending = handler && handler->hasPendingLegendKeepChoice();
+                    const bool legendKeepPending = handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::LegendKeep);
                     gamePromptWidget->setLegendKeepPending(legendKeepPending);
                     if (legendKeepPending) {
-                        gamePromptWidget->setPromptText(handler->pendingLegendKeepPromptText() +
+                        gamePromptWidget->setPromptText(handler->pendingChoicePromptText(RuledClientState::ChoiceKind::LegendKeep) +
                                                         tr("\nClick the permanent to keep on the battlefield."));
                         return;
                     }

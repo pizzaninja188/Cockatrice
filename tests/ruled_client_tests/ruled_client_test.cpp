@@ -1078,17 +1078,17 @@ TEST_F(RuledClientTest, TargetObjectAndLegendKeepChoicesUseClickToSelect)
         rcr->set_prompt_text("Choose new targets for the copy.");
         rcr->add_candidate_object_ids(100);
         apply(batch);
-        ASSERT_TRUE(state->hasPendingCopyTargetChoice());
-        EXPECT_TRUE(state->isValidCopyTarget(100));
-        EXPECT_FALSE(state->isValidCopyTarget(101));
+        ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget));
+        EXPECT_TRUE(state->isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopyTarget, 100));
+        EXPECT_FALSE(state->isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopyTarget, 101));
         EXPECT_FALSE(state->isResolutionHandPickActive()); // no list dialog for this kind
         EXPECT_EQ(host.dialogRequests, 0);
 
         host.sentCommands.clear();
-        state->submitCopyTargetChoice(100);
+        state->submitPendingChoiceObject(100);
         ASSERT_EQ(host.sentCommands.size(), 1);
         EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().chosen_object_ids(0), 100u);
-        EXPECT_FALSE(state->hasPendingCopyTargetChoice());
+        EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget));
     }
     {
         ruled::v1::RuledEventBatch batch;
@@ -1098,15 +1098,45 @@ TEST_F(RuledClientTest, TargetObjectAndLegendKeepChoicesUseClickToSelect)
         rcr->add_candidate_object_ids(100);
         rcr->add_candidate_object_ids(101);
         apply(batch);
-        ASSERT_TRUE(state->hasPendingLegendKeepChoice());
-        EXPECT_TRUE(state->isValidLegendKeepTarget(101));
+        ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::LegendKeep));
+        EXPECT_TRUE(state->isPendingChoiceCandidate(RuledClientState::ChoiceKind::LegendKeep, 101));
 
         host.sentCommands.clear();
-        state->submitLegendKeepChoice(101);
+        state->submitPendingChoiceObject(101);
         ASSERT_EQ(host.sentCommands.size(), 1);
         EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().chosen_object_ids(0), 101u);
-        EXPECT_FALSE(state->hasPendingLegendKeepChoice());
+        EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::LegendKeep));
     }
+}
+
+// The engine parks one choice at a time, so the holder is exclusive: installing a new choice
+// tears the previous one down — including the revealed-cards popup a pick had opened.
+TEST_F(RuledClientTest, InstallingAChoiceTearsDownTheOneItReplaces)
+{
+    ruled::v1::RuledEventBatch reveal;
+    auto *rcr = reveal.add_events()->mutable_resolution_choice_required();
+    rcr->set_deciding_player_id(kLocalPlayer);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_REVEALED);
+    rcr->set_min(1);
+    rcr->set_max(1);
+    rcr->add_candidate_object_ids(10);
+    rcr->add_candidate_server_card_ids(0);
+    rcr->add_candidate_names("Swamp");
+    apply(reveal);
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+
+    QSignalSpy revealed(state, &RuledClientState::revealedPickChanged);
+    ruled::v1::RuledEventBatch trigger;
+    auto *tnt = trigger.add_events()->mutable_trigger_needs_target();
+    tnt->set_source_permanent_id(100);
+    tnt->set_ability_text("Draw a card.");
+    tnt->set_controller_player_id(kLocalPlayer);
+    apply(trigger);
+
+    EXPECT_TRUE(state->hasPendingTriggerTarget());
+    EXPECT_FALSE(state->isResolutionHandPickActive());
+    ASSERT_EQ(revealed.count(), 1);
+    EXPECT_FALSE(revealed.at(0).at(0).toBool()); // popup told to close
 }
 
 TEST_F(RuledClientTest, UnrecognisedChoiceKindFallsBackToTheModalDialog)
@@ -1225,7 +1255,7 @@ TEST_F(RuledClientTest, ClearSessionStateResetsEverythingCarriedBetweenGames)
     actions.add_labels("Cast Grizzly Bears (hand idx 0)");
     apply(batch);
     ASSERT_TRUE(state->hasStackItems());
-    ASSERT_TRUE(state->hasPendingCopyTargetChoice());
+    ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget));
 
     QSignalSpy resetSpy(state, &RuledClientState::sessionReset);
     state->clearSessionState();
@@ -1233,7 +1263,7 @@ TEST_F(RuledClientTest, ClearSessionStateResetsEverythingCarriedBetweenGames)
     EXPECT_EQ(resetSpy.count(), 1);
     EXPECT_FALSE(state->hasStackItems());
     EXPECT_TRUE(state->stackAnnotation(900).isEmpty());
-    EXPECT_FALSE(state->hasPendingCopyTargetChoice());
+    EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget));
     EXPECT_FALSE(state->hasPendingTriggerTarget());
     EXPECT_FALSE(state->isHandActionLegal(RuledHandActionKind::CastSpell, 0));
     EXPECT_EQ(state->getOpeningUiKind(), RuledClientState::RuledOpeningUiKind::None);

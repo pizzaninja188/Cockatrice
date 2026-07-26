@@ -1460,7 +1460,7 @@ bool PlayerActions::isAwaitingRuledAbilityOrTriggerPlayerTarget() const
         return true;
     }
     RuledClientState *handler = player->getGame()->getGameEventHandler()->ruled();
-    return handler && (handler->hasPendingTriggerTarget() || handler->hasPendingCopyTargetChoice());
+    return handler && (handler->hasPendingTriggerTarget() || handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget));
 }
 
 bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
@@ -3912,7 +3912,7 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
     RuledClientState *handler = player->getGame()->getGameEventHandler()->ruled();
 
     // Check pending copy target choice first (CR 707.10c: redirect targets for a spell copy).
-    if (handler && handler->hasPendingCopyTargetChoice()) {
+    if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget)) {
         if (!card || !card->getZone()) {
             return false;
         }
@@ -3923,16 +3923,16 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
         }
         const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
         const quint32 targetOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
-        if (targetOid == 0 || !handler->isValidCopyTarget(targetOid)) {
+        if (targetOid == 0 || !handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopyTarget, targetOid)) {
             handler->emitLocalLog(tr("That is not a valid target for the copy."));
             return true;
         }
-        handler->submitCopyTargetChoice(targetOid);
+        handler->submitPendingChoiceObject(targetOid);
         return true;
     }
 
     // Check pending legend-rule keep choice (CR 704.5j: click the legend to keep on the battlefield).
-    if (handler && handler->hasPendingLegendKeepChoice()) {
+    if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::LegendKeep)) {
         if (!card || !card->getZone()) {
             return false;
         }
@@ -3942,11 +3942,11 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
         }
         const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
         const quint32 keepOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
-        if (keepOid == 0 || !handler->isValidLegendKeepTarget(keepOid)) {
+        if (keepOid == 0 || !handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::LegendKeep, keepOid)) {
             handler->emitLocalLog(tr("That is not one of the legends you must choose between."));
             return true;
         }
-        handler->submitLegendKeepChoice(keepOid);
+        handler->submitPendingChoiceObject(keepOid);
         return true;
     }
 
@@ -4030,16 +4030,16 @@ bool PlayerActions::tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer)
     RuledClientState *handler = player->getGame()->getGameEventHandler()->ruled();
 
     // Check pending copy target choice first (CR 707.10c: redirect targets for a spell copy).
-    if (handler && handler->hasPendingCopyTargetChoice()) {
+    if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget)) {
         if (!targetPlayer) {
             return false;
         }
         const quint32 targetOid = static_cast<quint32>(targetPlayer->getPlayerInfo()->getId());
-        if (!handler->isValidCopyTarget(targetOid)) {
+        if (!handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopyTarget, targetOid)) {
             handler->emitLocalLog(tr("That player is not a valid target for the copy."));
             return true;
         }
-        handler->submitCopyTargetChoice(targetOid);
+        handler->submitPendingChoiceObject(targetOid);
         return true;
     }
 

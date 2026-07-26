@@ -109,12 +109,39 @@ public:
         Revealed
     };
 
-    /// Tier-3 resolution pick: hand/deck/revealed cards clicked to build a selection.
-    /// PickZone::Hand = Brainstorm (cards in hand zone).
-    /// PickZone::Deck = Gifts Ungiven search step (cards in deck zone view).
-    /// PickZone::Revealed = Gifts Ungiven opponent-pick step (cards in revealed popup).
-    struct ResolutionHandPick
+    /// The one player choice the engine has parked on this client. The engine asks for a single
+    /// decision at a time and blocks until it is answered, so at most one of these is live —
+    /// installing a new one tears the previous one down (see setPendingChoice).
+    ///
+    /// The kinds differ only in how they are *rendered*: TriggerTarget / CopyTarget / LegendKeep
+    /// are answered by clicking a permanent on the battlefield, ResolutionPick by clicking cards in
+    /// a zone (hand, deck view, or a revealed popup). The state, the clearing and — for everything
+    /// but TriggerTarget — the SubmitResolutionChoice submission are shared.
+    struct RuledPendingChoice
     {
+        enum class Kind
+        {
+            /// CR 603.3d: a triggered ability going on the stack needs its target chosen.
+            /// Answered with ChooseTriggerTarget, not SubmitResolutionChoice.
+            TriggerTarget,
+            /// CR 707.10c: the controller of a spell copy may redirect its targets.
+            CopyTarget,
+            /// CR 704.5j: which of two-or-more same-name legends the controller keeps.
+            LegendKeep,
+            /// Tier-3 mid-resolution pick over cards in a zone (Brainstorm, Gifts Ungiven, …).
+            ResolutionPick,
+        };
+
+        Kind kind = Kind::TriggerTarget;
+        QString promptText;
+        /// Click-to-select candidates on the battlefield (CopyTarget, LegendKeep).
+        QVector<quint32> candidateOids;
+
+        // --- ResolutionPick payload ---------------------------------------------------
+        /// PickZone::Hand = Brainstorm (cards in hand zone).
+        /// PickZone::Deck = Gifts Ungiven search step (cards in deck zone view).
+        /// PickZone::Revealed = Gifts Ungiven opponent-pick step (cards in revealed popup).
+        PickZone pickZone = PickZone::Hand;
         // Mapping from server card id -> engine OID for all candidate cards.
         QHash<int, quint32> serverCardIdToOid;
         // Mapping from server card id -> oracle name (for unique-name enforcement).
@@ -124,8 +151,6 @@ public:
         int min = 0;
         int max = 0;
         bool uniqueNames = false;
-        QString promptText;
-        PickZone pickZone = PickZone::Hand;
         // Title for the Deck / Revealed popup. The popup is built on the local player's deck zone
         // purely as a scaffold, so without this it would inherit that zone's name and claim to be
         // a library even when it is showing a hand or a revealed set.
@@ -150,27 +175,6 @@ public:
         bool isDamageTargets = false;
         // DamageTargets only: extra generic mana per target beyond the first (Fireball = 1, Fire = 0).
         int extraManaPerTarget = 0;
-    };
-
-    /// Pending copy target choice (choice_kind 3): set when ResolutionChoiceRequired arrives for a
-    /// spell copy whose controller may redirect targets (CR 707.10c). Uses click-to-target mode
-    /// instead of the modal list dialog used for Brainstorm / Gifts Ungiven.
-    struct PendingCopyTargetChoice
-    {
-        bool valid = false;
-        QVector<quint32> candidateOids;
-        QString promptText;
-    };
-
-    /// Pending legend-rule keep choice (choice_kind 5, CR 704.5j): set when ResolutionChoiceRequired
-    /// arrives asking which of two-or-more same-name legends the controller keeps. Like the copy
-    /// target choice, the player selects by clicking the permanent to keep directly on the
-    /// battlefield rather than through a modal list dialog.
-    struct PendingLegendKeepChoice
-    {
-        bool valid = false;
-        QVector<quint32> candidateOids;
-        QString promptText;
     };
 
     explicit RuledClientState(RuledClientHost *host, QObject *parent = nullptr);
@@ -299,17 +303,17 @@ public:
     // -----------------------------------------------------------------------------------
     // Pending player choices.
     // -----------------------------------------------------------------------------------
-    // Pending trigger: set when engine emits TriggerNeedsTarget, cleared on ChooseTriggerTarget.
-    quint32 pendingTriggerSourceOid = 0;
-    quint32 pendingTriggerAbilityIndex = 0;
-    QString pendingTriggerAbilityText;
-    int pendingTriggerControllerPlayerId = -1;
-    bool hasPendingTrigger = false;
-    PendingCopyTargetChoice pendingCopyTargetChoice;
-    PendingLegendKeepChoice pendingLegendKeepChoice;
-    // Tier-3 resolution hand-pick state (Brainstorm, and any future HandCards resolution).
-    // nullopt when no hand-pick is in progress.
-    std::optional<ResolutionHandPick> resolutionHandPick;
+    /// The single choice the engine is waiting on us for; nullopt when it is waiting on nobody
+    /// (or on another seat). Written only through setPendingChoice / clearPendingChoice*.
+    std::optional<RuledPendingChoice> pendingChoice;
+
+    // Last TriggerNeedsTarget seen, recorded on *every* client — not just the ability's
+    // controller. This is stack bookkeeping, not a choice: it is what lets the synthetic stack
+    // card for the ability be created under the right seat and its targeting arrow start from
+    // the source permanent, on clients that never get a say in the target.
+    quint32 lastTriggerSourceOid = 0;
+    quint32 lastTriggerAbilityIndex = 0;
+    int lastTriggerControllerPlayerId = -1;
 
     // -----------------------------------------------------------------------------------
     // Key helpers.
@@ -642,89 +646,94 @@ public:
     void unregisterSyntheticStackCard(quint32 virtualOid, int fakeCardId);
 
     // -----------------------------------------------------------------------------------
-    // Pending choices.
+    // Pending choices. One holder, one teardown path; the queries below stay kind-specific
+    // because the renderers are (click a permanent vs. click cards in a zone).
     // -----------------------------------------------------------------------------------
+    using ChoiceKind = RuledPendingChoice::Kind;
+
+    /// Park `choice`, tearing down whatever was parked before (the engine only ever waits on one).
+    void setPendingChoice(RuledPendingChoice choice);
+    /// Drop the parked choice unconditionally.
+    void clearPendingChoice();
+    /// Drop the parked choice only if it is of `kind` — used where the engine's follow-up event
+    /// answers one specific kind (an ability hitting the stack, a copy being pushed).
+    void clearPendingChoiceOfKind(ChoiceKind kind);
+    [[nodiscard]] bool hasPendingChoiceOfKind(ChoiceKind kind) const
+    {
+        return pendingChoice.has_value() && pendingChoice->kind == kind;
+    }
+    /// Prompt text of the parked choice when it is of `kind`, else empty.
+    [[nodiscard]] QString pendingChoicePromptText(ChoiceKind kind) const
+    {
+        return hasPendingChoiceOfKind(kind) ? pendingChoice->promptText : QString{};
+    }
+    /// True when `oid` is one of the click-to-select candidates of a parked `kind` choice.
+    [[nodiscard]] bool isPendingChoiceCandidate(ChoiceKind kind, quint32 oid) const
+    {
+        return hasPendingChoiceOfKind(kind) && pendingChoice->candidateOids.contains(oid);
+    }
+    /// Answer a click-to-select choice (CopyTarget, LegendKeep) with the clicked permanent.
+    /// For LegendKeep the chosen permanent is the one KEPT (CR 704.5j); the engine sacrifices
+    /// the rest. Clears the choice and sends SubmitResolutionChoice.
+    void submitPendingChoiceObject(quint32 oid);
+
     [[nodiscard]] bool hasPendingTriggerTarget() const
     {
-        return hasPendingTrigger;
+        return hasPendingChoiceOfKind(ChoiceKind::TriggerTarget);
     }
     [[nodiscard]] QString pendingTriggerText() const
     {
-        return pendingTriggerAbilityText;
+        return pendingChoicePromptText(ChoiceKind::TriggerTarget);
     }
+    /// Source permanent / controller of the last triggered ability that needed a target — see
+    /// lastTriggerSourceOid: valid on every client, not only the one that gets to choose.
     [[nodiscard]] quint32 pendingTriggerSource() const
     {
-        return pendingTriggerSourceOid;
+        return lastTriggerSourceOid;
     }
     [[nodiscard]] int pendingTriggerController() const
     {
-        return pendingTriggerControllerPlayerId;
+        return lastTriggerControllerPlayerId;
     }
-    [[nodiscard]] bool hasPendingCopyTargetChoice() const
-    {
-        return pendingCopyTargetChoice.valid;
-    }
-    [[nodiscard]] bool isValidCopyTarget(quint32 oid) const
-    {
-        return pendingCopyTargetChoice.candidateOids.contains(oid);
-    }
-    [[nodiscard]] QString pendingCopyTargetPromptText() const
-    {
-        return pendingCopyTargetChoice.promptText;
-    }
-    void submitCopyTargetChoice(quint32 oid);
-    [[nodiscard]] bool hasPendingLegendKeepChoice() const
-    {
-        return pendingLegendKeepChoice.valid;
-    }
-    [[nodiscard]] bool isValidLegendKeepTarget(quint32 oid) const
-    {
-        return pendingLegendKeepChoice.candidateOids.contains(oid);
-    }
-    [[nodiscard]] QString pendingLegendKeepPromptText() const
-    {
-        return pendingLegendKeepChoice.promptText;
-    }
-    void submitLegendKeepChoice(quint32 oid);
 
     // -----------------------------------------------------------------------------------
-    // Tier-3 resolution hand-pick (Brainstorm, Gifts Ungiven, …).
+    // Tier-3 resolution pick (Brainstorm, Gifts Ungiven, …).
     // -----------------------------------------------------------------------------------
     [[nodiscard]] bool isResolutionHandPickActive() const
     {
-        return resolutionHandPick.has_value();
+        return hasPendingChoiceOfKind(ChoiceKind::ResolutionPick);
     }
     [[nodiscard]] PickZone resolutionHandPickZone() const
     {
-        return resolutionHandPick.has_value() ? resolutionHandPick->pickZone : PickZone::Hand;
+        return isResolutionHandPickActive() ? pendingChoice->pickZone : PickZone::Hand;
     }
     [[nodiscard]] bool isResolutionHandPickCardSelectable(int serverCardId) const;
     [[nodiscard]] bool isResolutionHandPickCardSelected(int serverCardId) const
     {
-        return resolutionHandPick.has_value() && resolutionHandPick->selectedServerCardIds.contains(serverCardId);
+        return isResolutionHandPickActive() && pendingChoice->selectedServerCardIds.contains(serverCardId);
     }
     /// 1-based click order for the selected card (0 if not selected).
     [[nodiscard]] int resolutionHandPickClickOrderFor(int serverCardId) const;
     [[nodiscard]] int resolutionHandPickRequired() const
     {
-        return resolutionHandPick.has_value() ? resolutionHandPick->min : 0;
+        return isResolutionHandPickActive() ? pendingChoice->min : 0;
     }
     [[nodiscard]] int resolutionHandPickSelected() const
     {
-        return resolutionHandPick.has_value() ? resolutionHandPick->selectedServerCardIds.size() : 0;
+        return isResolutionHandPickActive() ? pendingChoice->selectedServerCardIds.size() : 0;
     }
     [[nodiscard]] QString resolutionHandPickPromptText() const
     {
-        return resolutionHandPick.has_value() ? resolutionHandPick->promptText : QString{};
+        return pendingChoicePromptText(ChoiceKind::ResolutionPick);
     }
     [[nodiscard]] QStringList resolutionHandPickCandidateNames() const
     {
-        return resolutionHandPick.has_value() ? resolutionHandPick->candidateNames : QStringList{};
+        return isResolutionHandPickActive() ? pendingChoice->candidateNames : QStringList{};
     }
     /// Window title for the Deck / Revealed pick popup (empty for a hand pick, which has none).
     [[nodiscard]] QString resolutionHandPickViewTitle() const
     {
-        return resolutionHandPick.has_value() ? resolutionHandPick->viewTitle : QString{};
+        return isResolutionHandPickActive() ? pendingChoice->viewTitle : QString{};
     }
     [[nodiscard]] QVector<int> resolutionHandPickCandidateServerCardIds() const;
     void toggleResolutionHandPickCard(int serverCardId);
@@ -849,6 +858,13 @@ private:
     /// sees a live preview. No-ops outside the matching declare step or after submitting.
     void syncAttackersPreviewToServer();
     void syncBlockersPreviewToServer();
+
+    /// Drop the parked choice and undo whatever UI it opened (the revealed-cards popup).
+    /// Deliberately does *not* emit resolutionHandPickUiChanged — callers that end a pick for
+    /// good emit it themselves; the dispatcher replacing one pick with the next must not.
+    void teardownPendingChoice();
+    /// The one SubmitResolutionChoice sender: every non-trigger choice answers this way.
+    void sendResolutionChoice(const QVector<quint32> &chosenOids);
 
     RuledClientHost *host;
 };

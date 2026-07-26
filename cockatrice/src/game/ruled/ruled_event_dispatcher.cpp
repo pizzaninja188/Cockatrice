@@ -354,17 +354,17 @@ void RuledEventDispatcher::applyStackPushed(const ruled::v1::StackPushed &sp, Ba
         if (sp.card_id().empty()) {
             // A triggered ability was just placed on the stack — the pending trigger target has
             // been chosen and is no longer pending.
-            state->hasPendingTrigger = false;
+            state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::TriggerTarget);
             // Record the source permanent so the targeting arrow starts from it.
-            if (state->pendingTriggerSourceOid != 0) {
-                state->stackSourceOidByStackOid.insert(sp.object_id(), state->pendingTriggerSourceOid);
+            if (state->lastTriggerSourceOid != 0) {
+                state->stackSourceOidByStackOid.insert(sp.object_id(), state->lastTriggerSourceOid);
             }
             host->createSyntheticStackCard(sp.object_id(), QString::fromStdString(sp.description()),
-                                           state->pendingTriggerControllerPlayerId, {});
+                                           state->lastTriggerControllerPlayerId, {});
         } else if (sp.is_copy()) {
             // The copy is being placed on the stack — any pending copy-target choice has been
             // accepted by the engine.
-            state->pendingCopyTargetChoice = {};
+            state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget);
             // CR 707.10: a spell copy (Twincast/Fork) has no physical card; create a synthetic
             // stack card so the copy is visible. Inherit the original spell's printing so the copy
             // shows the same card art rather than defaulting to the newest printing.
@@ -403,62 +403,65 @@ void RuledEventDispatcher::applyStackResolved(const ruled::v1::StackResolved &sr
 
 void RuledEventDispatcher::applyTriggerNeedsTarget(const ruled::v1::TriggerNeedsTarget &tnt, BatchContext &ctx)
 {
-    state->pendingTriggerSourceOid = tnt.source_permanent_id();
-    state->pendingTriggerAbilityIndex = tnt.ability_index();
-    state->pendingTriggerAbilityText = QString::fromStdString(tnt.ability_text());
-    state->pendingTriggerControllerPlayerId = static_cast<int>(tnt.controller_player_id());
-    // Only the controller sees hasPendingTrigger = true so that only they can send
-    // ChooseTriggerTarget commands.
-    state->hasPendingTrigger = (state->pendingTriggerControllerPlayerId == host->localPlayerId());
-    if (state->hasPendingTrigger) {
-        ctx.promptFeed += QStringLiteral("Choose a target for: %1\n").arg(state->pendingTriggerAbilityText);
+    // Stack bookkeeping, recorded on every client (see RuledClientState::lastTriggerSourceOid).
+    state->lastTriggerSourceOid = tnt.source_permanent_id();
+    state->lastTriggerAbilityIndex = tnt.ability_index();
+    state->lastTriggerControllerPlayerId = static_cast<int>(tnt.controller_player_id());
+    const QString abilityText = QString::fromStdString(tnt.ability_text());
+    // Only the controller parks the choice, so that only they can send ChooseTriggerTarget.
+    if (state->lastTriggerControllerPlayerId == host->localPlayerId()) {
+        RuledClientState::RuledPendingChoice choice;
+        choice.kind = RuledClientState::ChoiceKind::TriggerTarget;
+        choice.promptText = abilityText;
+        state->setPendingChoice(std::move(choice));
+        ctx.promptFeed += QStringLiteral("Choose a target for: %1\n").arg(abilityText);
+    } else {
+        state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::TriggerTarget);
     }
-    emit state->triggerNeedsTarget(state->pendingTriggerAbilityText);
+    emit state->triggerNeedsTarget(abilityText);
 }
 
 void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::ResolutionChoiceRequired &rcr,
                                                          BatchContext &ctx)
 {
+    using PendingChoice = RuledClientState::RuledPendingChoice;
+    using ChoiceKind = RuledClientState::ChoiceKind;
+
     // Tier-3 custom resolution paused for a player choice (CR 608).
     ctx.promptFeed += QString::fromStdString(rcr.prompt_text()) + QStringLiteral("\n");
-    // Clear any stale hand-pick state from a previous resolution step.
-    if (state->resolutionHandPick.has_value() && state->resolutionHandPick->pickZone == PickZone::Revealed) {
-        emit state->revealedPickChanged(false, {}, {}, 0, 0);
-    }
-    state->resolutionHandPick.reset();
+    // Drop any stale pick from a previous resolution step. Deliberately not a full
+    // clearPendingChoice(): a parked trigger/copy/legend choice belongs to a different flow.
+    state->clearPendingChoiceOfKind(ChoiceKind::ResolutionPick);
     if (static_cast<int>(rcr.deciding_player_id()) != host->localPlayerId() || rcr.candidate_object_ids_size() <= 0) {
         return;
     }
 
-    if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_TARGET_OBJECTS) {
-        // Target objects (CR 707.10c copy retarget): click-to-target rather than a modal list.
-        state->pendingCopyTargetChoice.valid = true;
-        state->pendingCopyTargetChoice.promptText = QString::fromStdString(rcr.prompt_text());
-        state->pendingCopyTargetChoice.candidateOids.clear();
+    if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_TARGET_OBJECTS ||
+        rcr.choice_kind() == ruled::v1::CHOICE_KIND_LEGEND_KEEP) {
+        // Click-to-select on the battlefield rather than a modal list:
+        //   TARGET_OBJECTS — CR 707.10c, the controller of a spell copy may redirect its targets.
+        //   LEGEND_KEEP    — CR 704.5j, the controller clicks the legend to KEEP; the rest are
+        //                    sacrificed.
+        PendingChoice choice;
+        choice.kind = rcr.choice_kind() == ruled::v1::CHOICE_KIND_LEGEND_KEEP ? ChoiceKind::LegendKeep
+                                                                             : ChoiceKind::CopyTarget;
+        choice.promptText = QString::fromStdString(rcr.prompt_text());
         for (int i = 0; i < rcr.candidate_object_ids_size(); ++i) {
-            state->pendingCopyTargetChoice.candidateOids.append(rcr.candidate_object_ids(i));
+            choice.candidateOids.append(rcr.candidate_object_ids(i));
         }
-        return;
-    }
-
-    if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_LEGEND_KEEP) {
-        // Legend rule keep (CR 704.5j): the controller clicks the legendary permanent to KEEP
-        // directly on the battlefield; the rest are sacrificed. Click-to-select mode, like copy
-        // retarget, instead of a modal list dialog.
-        state->pendingLegendKeepChoice.valid = true;
-        state->pendingLegendKeepChoice.promptText = QString::fromStdString(rcr.prompt_text());
-        state->pendingLegendKeepChoice.candidateOids.clear();
-        for (int i = 0; i < rcr.candidate_object_ids_size(); ++i) {
-            state->pendingLegendKeepChoice.candidateOids.append(rcr.candidate_object_ids(i));
+        const bool isLegendKeep = choice.kind == ChoiceKind::LegendKeep;
+        state->setPendingChoice(std::move(choice));
+        if (isLegendKeep) {
+            emit state->combatStateChanged();
         }
-        emit state->combatStateChanged();
         return;
     }
 
     if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_HAND_CARDS &&
         rcr.candidate_server_card_ids_size() == rcr.candidate_object_ids_size()) {
         // HandCards with server card ids: use the hand-click UI.
-        RuledClientState::ResolutionHandPick pick;
+        PendingChoice pick;
+        pick.kind = ChoiceKind::ResolutionPick;
         pick.min = static_cast<int>(rcr.min());
         pick.max = static_cast<int>(rcr.max());
         pick.promptText = QString::fromStdString(rcr.prompt_text());
@@ -473,8 +476,9 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
                 }
             }
         }
-        state->resolutionHandPick = std::move(pick);
-        emit state->resolutionHandPickUiChanged(state->resolutionHandPick->min, 0);
+        const int required = pick.min;
+        state->setPendingChoice(std::move(pick));
+        emit state->resolutionHandPickUiChanged(required, 0);
         emit state->combatStateChanged();
         return;
     }
@@ -483,7 +487,8 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         rcr.candidate_server_card_ids_size() == rcr.candidate_names_size() && rcr.candidate_names_size() > 0) {
         // LibrarySearch with server card ids: deck zone-view pick.
         // unique_names is always true for Gifts Ungiven step 1.
-        RuledClientState::ResolutionHandPick pick;
+        PendingChoice pick;
+        pick.kind = ChoiceKind::ResolutionPick;
         pick.min = static_cast<int>(rcr.min());
         pick.max = static_cast<int>(rcr.max());
         pick.uniqueNames = rcr.unique_names();
@@ -502,9 +507,11 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
             pick.candidateNames.append(name);
             libScids.append(scid);
         }
-        state->resolutionHandPick = std::move(pick);
-        emit state->resolutionHandPickUiChanged(state->resolutionHandPick->min, 0);
-        emit state->librarySearchPickStarted(state->resolutionHandPick->candidateNames, libScids);
+        const int required = pick.min;
+        const QStringList pickNames = pick.candidateNames;
+        state->setPendingChoice(std::move(pick));
+        emit state->resolutionHandPickUiChanged(required, 0);
+        emit state->librarySearchPickStarted(pickNames, libScids);
         emit state->combatStateChanged();
         return;
     }
@@ -515,7 +522,8 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         // RevealedCards or PrivateRevealedHand with server card ids: zone popup pick. The deciding
         // player chooses from the revealed cards (OpponentHand = a target player's hand shown only
         // to the caster; the relay redacted it from everyone else).
-        RuledClientState::ResolutionHandPick pick;
+        PendingChoice pick;
+        pick.kind = ChoiceKind::ResolutionPick;
         pick.min = static_cast<int>(rcr.min());
         pick.max = static_cast<int>(rcr.max());
         pick.promptText = QString::fromStdString(rcr.prompt_text());
@@ -540,10 +548,11 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
             names.append(name);
             scids.append(scid);
         }
-        state->resolutionHandPick = std::move(pick);
-        emit state->resolutionHandPickUiChanged(state->resolutionHandPick->min, 0);
-        emit state->revealedPickChanged(true, names, scids, state->resolutionHandPick->min,
-                                        state->resolutionHandPick->max);
+        const int required = pick.min;
+        const int maximum = pick.max;
+        state->setPendingChoice(std::move(pick));
+        emit state->resolutionHandPickUiChanged(required, 0);
+        emit state->revealedPickChanged(true, names, scids, required, maximum);
         emit state->combatStateChanged();
         return;
     }
@@ -930,10 +939,10 @@ void RuledEventDispatcher::finishBatch(BatchContext &ctx)
     }
     // Emit graveyard-open signal for triggers whose valid targets are in the graveyard (e.g.
     // Gravedigger ETB). validTargetsByAbility is populated in this same batch.
-    const quint64 abilityKey = RuledClientState::abilityTargetKey(state->pendingTriggerSourceOid,
-                                                                  static_cast<int>(state->pendingTriggerAbilityIndex));
+    const quint64 abilityKey =
+        RuledClientState::abilityTargetKey(state->lastTriggerSourceOid, static_cast<int>(state->lastTriggerAbilityIndex));
     const bool graveyardNeeded =
-        state->hasPendingTrigger && !state->validTargetsByAbility.value(abilityKey).validGraveyardIds.isEmpty();
+        state->hasPendingTriggerTarget() && !state->validTargetsByAbility.value(abilityKey).validGraveyardIds.isEmpty();
     emit state->triggerGraveyardNeedsTarget(graveyardNeeded);
     // Defer so stack window / zone views finish layout before we resolve CardItem positions.
     host->scheduleSpellTargetArrowSync();

@@ -227,27 +227,77 @@ void RuledClientState::clearOpeningBottomSelection(bool emitUiChange)
 }
 
 // ---------------------------------------------------------------------------------------
-// Tier-3 resolution hand pick
+// Pending choices — one holder, one teardown path, one submission path
+// ---------------------------------------------------------------------------------------
+
+void RuledClientState::teardownPendingChoice()
+{
+    if (!pendingChoice.has_value()) {
+        return;
+    }
+    // A Revealed pick owns a popup window; tell the tab to close it before the state goes away.
+    if (pendingChoice->kind == ChoiceKind::ResolutionPick && pendingChoice->pickZone == PickZone::Revealed) {
+        emit revealedPickChanged(false, {}, {}, 0, 0);
+    }
+    pendingChoice.reset();
+}
+
+void RuledClientState::setPendingChoice(RuledPendingChoice choice)
+{
+    teardownPendingChoice();
+    pendingChoice = std::move(choice);
+}
+
+void RuledClientState::clearPendingChoice()
+{
+    teardownPendingChoice();
+}
+
+void RuledClientState::clearPendingChoiceOfKind(ChoiceKind kind)
+{
+    if (hasPendingChoiceOfKind(kind)) {
+        teardownPendingChoice();
+    }
+}
+
+void RuledClientState::sendResolutionChoice(const QVector<quint32> &chosenOids)
+{
+    ruled::v1::RuledCommand cmd;
+    auto *sub = cmd.mutable_submit_resolution_choice();
+    for (const quint32 oid : chosenOids) {
+        sub->add_chosen_object_ids(oid);
+    }
+    host->sendRuledCommand(cmd);
+}
+
+void RuledClientState::submitPendingChoiceObject(quint32 oid)
+{
+    clearPendingChoice();
+    sendResolutionChoice({oid});
+}
+
+// ---------------------------------------------------------------------------------------
+// Tier-3 resolution pick
 // ---------------------------------------------------------------------------------------
 
 bool RuledClientState::isResolutionHandPickCardSelectable(int serverCardId) const
 {
-    if (!resolutionHandPick.has_value()) {
+    if (!isResolutionHandPickActive()) {
         return false;
     }
-    if (!resolutionHandPick->serverCardIdToOid.contains(serverCardId)) {
+    if (!pendingChoice->serverCardIdToOid.contains(serverCardId)) {
         return false;
     }
     // Already selected: always show its highlight/number.
-    if (resolutionHandPick->selectedServerCardIds.contains(serverCardId)) {
+    if (pendingChoice->selectedServerCardIds.contains(serverCardId)) {
         return true;
     }
     // When unique-names is on, exclude candidates whose name is already taken by a
     // different selected card — they lose the faint outline and become unclickable.
-    if (resolutionHandPick->uniqueNames) {
-        const QString &name = resolutionHandPick->serverCardIdToName.value(serverCardId);
-        for (int selId : resolutionHandPick->selectedServerCardIds) {
-            if (resolutionHandPick->serverCardIdToName.value(selId) == name) {
+    if (pendingChoice->uniqueNames) {
+        const QString &name = pendingChoice->serverCardIdToName.value(serverCardId);
+        for (int selId : pendingChoice->selectedServerCardIds) {
+            if (pendingChoice->serverCardIdToName.value(selId) == name) {
                 return false;
             }
         }
@@ -257,39 +307,39 @@ bool RuledClientState::isResolutionHandPickCardSelectable(int serverCardId) cons
 
 int RuledClientState::resolutionHandPickClickOrderFor(int serverCardId) const
 {
-    if (!resolutionHandPick.has_value()) {
+    if (!isResolutionHandPickActive()) {
         return 0;
     }
-    const int pos = resolutionHandPick->selectedServerCardIds.indexOf(serverCardId);
+    const int pos = pendingChoice->selectedServerCardIds.indexOf(serverCardId);
     return pos + 1;
 }
 
 QVector<int> RuledClientState::resolutionHandPickCandidateServerCardIds() const
 {
-    if (!resolutionHandPick.has_value()) {
+    if (!isResolutionHandPickActive()) {
         return {};
     }
-    const QList<int> keys = resolutionHandPick->serverCardIdToOid.keys();
+    const QList<int> keys = pendingChoice->serverCardIdToOid.keys();
     return QVector<int>(keys.begin(), keys.end());
 }
 
 void RuledClientState::toggleResolutionHandPickCard(int serverCardId)
 {
-    if (!resolutionHandPick.has_value()) {
+    if (!isResolutionHandPickActive()) {
         return;
     }
-    if (!resolutionHandPick->serverCardIdToOid.contains(serverCardId)) {
+    if (!pendingChoice->serverCardIdToOid.contains(serverCardId)) {
         return;
     }
-    const int pos = resolutionHandPick->selectedServerCardIds.indexOf(serverCardId);
+    const int pos = pendingChoice->selectedServerCardIds.indexOf(serverCardId);
     if (pos >= 0) {
-        resolutionHandPick->selectedServerCardIds.removeAt(pos);
-    } else if (resolutionHandPick->selectedServerCardIds.size() < resolutionHandPick->max) {
-        if (resolutionHandPick->uniqueNames) {
-            const QString clickedName = resolutionHandPick->serverCardIdToName.value(serverCardId);
+        pendingChoice->selectedServerCardIds.removeAt(pos);
+    } else if (pendingChoice->selectedServerCardIds.size() < pendingChoice->max) {
+        if (pendingChoice->uniqueNames) {
+            const QString clickedName = pendingChoice->serverCardIdToName.value(serverCardId);
             bool nameTaken = false;
-            for (int selId : resolutionHandPick->selectedServerCardIds) {
-                if (resolutionHandPick->serverCardIdToName.value(selId) == clickedName) {
+            for (int selId : pendingChoice->selectedServerCardIds) {
+                if (pendingChoice->serverCardIdToName.value(selId) == clickedName) {
                     nameTaken = true;
                     break;
                 }
@@ -298,60 +348,33 @@ void RuledClientState::toggleResolutionHandPickCard(int serverCardId)
                 return;
             }
         }
-        resolutionHandPick->selectedServerCardIds.append(serverCardId);
+        pendingChoice->selectedServerCardIds.append(serverCardId);
     }
-    emit resolutionHandPickUiChanged(resolutionHandPick->min, resolutionHandPick->selectedServerCardIds.size());
+    emit resolutionHandPickUiChanged(pendingChoice->min, pendingChoice->selectedServerCardIds.size());
     emit combatStateChanged();
 }
 
 void RuledClientState::submitResolutionHandPick()
 {
-    if (!resolutionHandPick.has_value()) {
+    if (!isResolutionHandPickActive()) {
         return;
     }
-    const int n = resolutionHandPick->selectedServerCardIds.size();
-    if (n < resolutionHandPick->min || n > resolutionHandPick->max) {
+    const int n = pendingChoice->selectedServerCardIds.size();
+    if (n < pendingChoice->min || n > pendingChoice->max) {
         return;
     }
     QVector<quint32> chosen;
     chosen.reserve(n);
-    for (int scid : resolutionHandPick->selectedServerCardIds) {
-        const quint32 oid = resolutionHandPick->serverCardIdToOid.value(scid, 0);
+    for (int scid : pendingChoice->selectedServerCardIds) {
+        const quint32 oid = pendingChoice->serverCardIdToOid.value(scid, 0);
         if (oid != 0) {
             chosen.append(oid);
         }
     }
-    const bool wasRevealed = resolutionHandPick->pickZone == PickZone::Revealed;
-    resolutionHandPick.reset();
+    clearPendingChoice();
     emit resolutionHandPickUiChanged(-1, -1);
-    if (wasRevealed) {
-        emit revealedPickChanged(false, {}, {}, 0, 0);
-    }
     emit combatStateChanged();
-
-    ruled::v1::RuledCommand cmd;
-    auto *sub = cmd.mutable_submit_resolution_choice();
-    for (quint32 o : chosen) {
-        sub->add_chosen_object_ids(o);
-    }
-    host->sendRuledCommand(cmd);
-}
-
-void RuledClientState::submitCopyTargetChoice(quint32 oid)
-{
-    pendingCopyTargetChoice = {};
-    ruled::v1::RuledCommand cmd;
-    cmd.mutable_submit_resolution_choice()->add_chosen_object_ids(oid);
-    host->sendRuledCommand(cmd);
-}
-
-void RuledClientState::submitLegendKeepChoice(quint32 oid)
-{
-    // CR 704.5j: the chosen permanent is the legend to KEEP; the engine sacrifices the rest.
-    pendingLegendKeepChoice = {};
-    ruled::v1::RuledCommand cmd;
-    cmd.mutable_submit_resolution_choice()->add_chosen_object_ids(oid);
-    host->sendRuledCommand(cmd);
+    sendResolutionChoice(chosen);
 }
 
 // ---------------------------------------------------------------------------------------
@@ -925,14 +948,11 @@ void RuledClientState::unregisterSyntheticStackCard(quint32 virtualOid, int fake
 
 void RuledClientState::clearSessionState()
 {
-    // Pending trigger
-    hasPendingTrigger = false;
-    pendingTriggerSourceOid = 0;
-    pendingTriggerAbilityIndex = 0;
-    pendingTriggerAbilityText.clear();
-    pendingTriggerControllerPlayerId = -1;
-    pendingCopyTargetChoice = {};
-    pendingLegendKeepChoice = {};
+    // Pending choice + the trigger stack bookkeeping that outlives it.
+    clearPendingChoice();
+    lastTriggerSourceOid = 0;
+    lastTriggerAbilityIndex = 0;
+    lastTriggerControllerPlayerId = -1;
 
     // Stack tracking — the host removes the synthetic ability CardItems from their zones (which
     // calls back into unregisterSyntheticStackCard) before invoking this.
@@ -957,11 +977,8 @@ void RuledClientState::clearSessionState()
     openingPickSeatIds.clear();
     openingBottomSelectedIndices.clear();
 
-    // Resolution hand-pick
-    if (resolutionHandPick.has_value() && resolutionHandPick->pickZone == PickZone::Revealed) {
-        emit revealedPickChanged(false, {}, {}, 0, 0);
-    }
-    resolutionHandPick.reset();
+    // A pick may have been live when the session ended; the holder is already cleared above, but
+    // the prompt panel still needs telling.
     emit resolutionHandPickUiChanged(-1, -1);
 
     emit sessionReset();
