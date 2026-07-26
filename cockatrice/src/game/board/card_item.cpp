@@ -778,6 +778,13 @@ static bool isTableLandSingleClickLegal(const CardItem *card)
 void CardItem::handleClickedToPlay(bool shiftHeld)
 {
     if (isUnwritableRevealZone(zone)) {
+        // In ruled mode a reveal-zone popup is an engine-driven pick UI (tutor search, Thoughtseize,
+        // Gifts Ungiven), not a freeform reveal window: clicking a candidate selects it in
+        // mouseReleaseEvent, and the popup closes when the engine ends the pick. The freeform
+        // "hide this card from the window" action would silently drop a candidate from the picker.
+        if (RuledActions::isRuledGameForCard(this)) {
+            return;
+        }
         if (SettingsCache::instance().getClickPlaysAllSelected()) {
             zone->getPlayer()->getPlayerActions()->actHide();
         } else {
