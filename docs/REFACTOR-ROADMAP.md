@@ -618,6 +618,38 @@ scenario suite), so medium risk despite the width.
 
 ### Step 12 — Docs & agent navigability (after the dust settles; pull the identity glossary forward if agents struggle sooner)
 
+> **Done 2026-07-26.** [docs/ARCHITECTURE.md](ARCHITECTURE.md) landed with all ten planned sections
+> (system + ownership table, life of a command traced through a Lightning Bolt cast, identity
+> glossary, the driver's batch pipeline, trust model + fail-closed redaction, effect ordering,
+> performance posture, fork-ownership table, extension recipes, test stack). Two additions the plan
+> did not list: a **ruled command allowlist** note (`Server_AbstractParticipant::processGameCommand`
+> is where a ruled game refuses freeform manipulation — worth naming in the trust model), and a
+> `RuledGameDriver` section, since the batch pipeline is the thing readers most often need and it
+> did not fit in "life of a command".
+>
+> [`cockatrice/src/game/ruled/README.md`](../cockatrice/src/game/ruled/README.md) covers the four
+> units, a signal→consumer table, five invariants, and the test target. Writing that table surfaced
+> one dead signal: `RuledClientState::triggerNeedsTarget` is emitted but has no consumer (the text
+> reaches the panel via `enginePromptFeed`); it is documented as such rather than silently removed.
+>
+> `ruled_game_driver.h` gained the pipeline header comment — naming **five** `applyRuledBatch`
+> passes plus the two broadcast stages, matching the Step 4 follow-up's actual structure, not the
+> provisional "six passes" in the plan below.
+>
+> CLAUDE.md: extraction-never-restructure and the `ruled_` prefix were promoted from a parenthetical
+> inside the roadmap pointer to mandatory-workflow rule 6; an ARCHITECTURE.md pointer heads the
+> Architecture section; the "Ruled prompt UI" section was rewritten for the post–Step-7.3 reality
+> (`PromptMode` / `RuledPromptState` / `TabGame::refreshRuledPromptState()`, correct signal names).
+> Three stale references fixed while there: `stripRuledServerOnlyEventsForBroadcast` (gone since 8b
+> — now the reflection redactor), `Server_Game::ruledCardIdForName` (moved to `RuledGameDriver`),
+> and `primitives.rs` (a module dir since 9b). `AGENTS.md` is a byte-identical copy of `CLAUDE.md`
+> and was re-synced.
+>
+> **Not done, deliberately:** the opportunistic `oid`/`cardId`/`serverCardId`/`handSlot` renames. The
+> convention is documented in the glossary and applies to new and touched lines; a sweeping rename
+> across settled fork files is diff noise with no reader benefit. Verified: full ninja build + full
+> ctest (16/16) — the only code change is comments.
+
 - **`docs/ARCHITECTURE.md`** — the one file read before any cross-component work:
   - System diagram: client ⇄ Servatrice ⇄ tricerules; who owns what state; the engine is the
     single writer.

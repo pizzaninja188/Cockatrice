@@ -6,6 +6,37 @@
 // stack-object bookkeeping, batch application (engine events -> physical Cockatrice
 // zones/events), and the two-stage broadcast redaction. Server_Game keeps only a
 // `ruledGame` flag, the owning unique_ptr, and 1-line delegation hooks.
+//
+// See docs/ARCHITECTURE.md for the identity glossary (engine ObjectId vs tricerules card_id
+// vs Oracle name vs Server_Card.id vs hand slot) and the end-to-end "life of a command" trace.
+//
+// --- The batch pipeline -------------------------------------------------------------------
+//
+// A command's IpcResponse becomes client events in two stages. Both are ordered; neither may
+// be merged or reordered (see the comments on the individual methods for why each dependency
+// exists).
+//
+// applyRuledBatch — engine events onto the physical Cockatrice game, five passes after a
+// pre-pass that snapshots each player's engine_oid -> Server_Card.id map (the engine has
+// already dropped dead permanents, so PermanentMoved needs the *prior* mapping):
+//   1. applyTokenCreations        CR 111: mint token Server_Cards, so the zone-view sync below
+//                                 has something to bind the engine's battlefield slots to.
+//   2. applyPermanentMoves        PermanentMoved -> moveCard, resolved through the pre-batch map.
+//   3. applyPhaseStackAndZoneViews  phase/priority, stack push+resolve, and the per-player
+//                                 RuledPerPlayerView reconciliation that rebuilds the identity
+//                                 maps (must run after moves, before anything reading the maps).
+//   4. applyAttachmentRestores    AuraAttached -> Event_AttachCard (CR 303.4).
+//   5. applyLifeManaAndCombatEvents  life totals, mana-pool counters, combat declarations,
+//                                 combat damage, removal-from-combat.
+//
+// broadcastRuledResponse — the same batch out to each participant, in two stages:
+//   a. appendServerObjectMaps     inject the server-built BattlefieldObjectMap (battlefield +
+//                                 stack), HandSlotMap and GraveyardObjectMap.
+//   b. redactBatchForParticipant  per recipient: keep their own legal actions / log lines /
+//                                 hand slots / choice candidates, then clear every PER_PLAYER
+//                                 and SERVER_ONLY field by protobuf reflection and restore only
+//                                 those reviewed values. Fail-closed: an unclassified field
+//                                 fails the ruled_batch_test coverage check.
 
 #include "../server_response_containers.h"
 #include "ruled_player_binding.h"

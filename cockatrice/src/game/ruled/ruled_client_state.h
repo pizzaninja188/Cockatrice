@@ -201,7 +201,7 @@ public:
     ruled::v1::PhaseId lastEnginePhaseId = ruled::v1::PHASE_ID_UNSPECIFIED;
 
     // -----------------------------------------------------------------------------------
-    // Identity maps (see docs/ARCHITECTURE.md's identity glossary, once it exists).
+    // Identity maps (see the identity glossary in docs/ARCHITECTURE.md).
     // -----------------------------------------------------------------------------------
     // (owner player id, Server_Card.id) -> engine ObjectId, refreshed from
     // BattlefieldObjectMap events injected by the server.

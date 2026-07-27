@@ -7,11 +7,18 @@
 3. **Ruled work is end-to-end.** Unless explicitly scoped backend-only, ship **engine + proto + Servatrice relay + Cockatrice UI** together (commands, prompts, targets, phases, visible state). Minimal viable UI (button/menu/click) is enough. Any `.proto` change must keep **both C++ and Rust** buildable.
 4. **Don't break freeform.** Gate all new UI/paths on ruled mode.
 5. **Small diffs.** Preserve legacy paths unless migrating is the task.
-6. **Structural refactors follow [docs/REFACTOR-ROADMAP.md](docs/REFACTOR-ROADMAP.md)** — it fixes the execution order and the standing rules (upstream files get extraction-only treatment with thin hooks, never in-place restructuring; new fork-owned C++ files use the `ruled_` prefix; stay player-set-generic). Read it before any refactor or cross-component structural change.
+6. **Extraction, never in-place restructuring, for upstream files.** The fork delta inside an upstream file must converge toward a member pointer, one friend declaration, and 1–3-line call-site guards (`if (RuledActions::tryHandleCombatClick(this)) return;`). Everything else goes in a new fork-owned file. Never rename, reorder, or rewrite upstream code in place — every such diff is a future merge conflict. Fork-owned C++ files are prefixed **`ruled_`** (`rules_relay` predates the convention), and new client fork files live in `cockatrice/src/game/ruled/`, so `grep -rl ruled_` shows exactly what is fork territory.
+7. **Structural refactors follow [docs/REFACTOR-ROADMAP.md](docs/REFACTOR-ROADMAP.md)** — it fixes the execution order and the remaining standing rules (stay player-set-generic; prioritize by bleeding rate). Read it before any refactor or cross-component structural change.
 
 ---
 
 ## Architecture
+
+> **Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before any cross-component work.** It carries
+> the system diagram, the end-to-end "life of a command" trace, the **identity glossary** (engine
+> `ObjectId` vs tricerules `card_id` vs Oracle name vs `Server_Card.id` vs hand slot vs face index),
+> the hidden-info/trust model, where effect ordering is decided, the fork-ownership table, and the
+> per-task extension recipes. This section is the two-minute version.
 
 - **Freeform** (legacy casual) vs **ruled** (server-authoritative MTG-style engine).
 - **Servatrice** (C++ server): auth, lobby, rooms, chat, replays. It **relays** protobuf between clients and the engine and **filters** hidden info per player.
@@ -24,10 +31,11 @@
 |------|------|
 | Rust rules + sidecar | `tricerules/` (`tricerules-core`, `tricerules-cards`, `tricerules-proto`, `tricerules-server`) |
 | Shared protobufs | `libcockatrice_protocol/libcockatrice/protocol/pb/` (`ruled_v1.proto`) |
-| Server ruled integration | `libcockatrice_network/.../server/remote/game/` (`server_game`, `rules_relay`) |
+| Server ruled integration | `libcockatrice_network/.../server/remote/game/` (`ruled_game_driver`, `ruled_player_binding`, `ruled_utils`, `rules_relay`) |
 | Desktop client | `cockatrice/` |
-| Ruled client view model | `cockatrice/src/game/ruled/` (`ruled_client_state`, `ruled_event_dispatcher`, `ruled_actions`, `ruled_client_host`) |
+| Ruled client view model | `cockatrice/src/game/ruled/` (`ruled_client_state`, `ruled_event_dispatcher`, `ruled_actions`, `ruled_client_host`) — see its [README](cockatrice/src/game/ruled/README.md) |
 | Ruled prompt UI | `cockatrice/src/game/prompt/game_prompt_widget.{h,cpp}` |
+| Cross-component reference | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 
 ---
 
@@ -36,13 +44,13 @@
 | Database | Owner | Purpose |
 |----------|-------|---------|
 | `cards.xml` (Oracle/Scryfall) | Cockatrice client + freeform | **Display only**: images, names, type lines, search. Loaded by `CardDatabaseManager`. |
-| `tricerules-cards` (RON `data/` + `primitives.rs`; later `custom/` Rust) | tricerules engine | **Rules logic**: types, costs, abilities, effects. Queried via `CardRegistry::global()`. |
+| `tricerules-cards` (RON `data/` + `primitives/`; plus `custom/` Rust) | tricerules engine | **Rules logic**: types, costs, abilities, effects. Queried via `CardRegistry::global()`. |
 
 **Rules from tricerules, display from Oracle — never the other way around.**
 - For any ruled/mechanical decision, query tricerules (via protobuf or `CardRegistry`), **not** `CardDatabaseQuerier` / Oracle. Functions that query Oracle for ruled decisions are bugs — fix them.
 - Oracle is intentionally absent from `tricerules/` and must stay that way.
 
-**Card identity is engine-owned.** Decks cross IPC as Oracle *names* (`PlayerDeck.mainboard_card_name`); the engine resolves them via `CardRegistry::id_for_name` and answers with a server-only `CardCatalog` event (engine `card_id` ↔ Oracle name + types). Servatrice maps through `Server_Game::ruledCardIdForName/ruledCardNameForId` and **never derives ids from names** (the old C++ slug function is gone — don't reintroduce it). RON convention: `id == slugify(name)` (`tricerules-cards/src/slug.rs`, enforced by a registry test). Keep the catalog stripped from client broadcasts (`stripRuledServerOnlyEventsForBroadcast`).
+**Card identity is engine-owned.** Decks cross IPC as Oracle *names* (`PlayerDeck.mainboard_card_name`); the engine resolves them via `CardRegistry::id_for_name` and answers with a server-only `CardCatalog` event (engine `card_id` ↔ Oracle name + types). Servatrice maps through `RuledGameDriver::ruledCardIdForName/ruledCardNameForId` and **never derives ids from names** (the old C++ slug function is gone — don't reintroduce it). RON convention: `id == slugify(name)` (`tricerules-cards/src/slug.rs`, enforced by a registry test). The catalog is `FIELD_VISIBILITY_SERVER_ONLY`, so the reflection-based redaction in `RuledGameDriver::redactBatchForParticipant` strips it from every client broadcast automatically — see the trust model in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 **Game start is gated on deck validation.** `doStartGameIfReady` calls the stateless `ValidateDeck` IPC (registry lookups, no engine session) before starting. Any unimplemented mainboard card **blocks** the start: game-log message + `Event_NotifyUser CUSTOM` popup naming the cards per player, players un-readied, pregame continues. **Never reintroduce a silent casual fallback for unimplemented cards** (sidecar being *unreachable* still falls back to casual, but loudly via game log). The same `IpcResponse.missing_card_names` field is filled by a failing `SessionStart`.
 
@@ -53,7 +61,7 @@
 Rules logic for a card lives in `tricerules-cards`, validated at startup (`registry.rs`). Use the lowest tier that works:
 
 1. **Data (RON in `tricerules-cards/data/`)** — `spell_effect` is a `Vec<SpellEffectKind>` resolved in order, e.g. `spell_effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))]`.
-2. **Generic primitives (`primitives.rs`)** — `SpellEffectKind` variants + composable `TargetFilter { kind, not_artifact, tapped, … }` (replaces the old flat `TargetSpec`; enables characteristic-based restrictions without new variants).
+2. **Generic primitives (`tricerules-cards/src/primitives/`)** — `SpellEffectKind` variants + composable `TargetFilter { kind, not_artifact, tapped, … }` (replaces the old flat `TargetSpec`; enables characteristic-based restrictions without new variants).
 3. **Custom Rust (`tricerules-core/src/custom/` `CardEffect`)** — the escape hatch for a *resolution algorithm* data can't express. One impl per file, keyed by a card's `custom_effect: Some("key")` marker (mutually exclusive with `spell_effect`, enforced at registry load). Resolution is **resumable**: `begin`/`resume` drive a capability-narrowed `ResolutionCtx` and either finish or return a `ResolutionInterrupt` (a player choice); the engine parks it in `GameState::pending_resolution`, emits the generic `RuledEvent.resolution_choice_required`, and resumes on the `SubmitResolutionChoice` command. Determinism holds because every choice is a logged command. Implemented: **Brainstorm**, **Gifts Ungiven**.
 
 `SpellEffectKind` is shared by spells, activated abilities, and triggered abilities. `TriggeredAbilityDef.effect` is a plain `SpellEffectKind` (the old `TriggeredEffect`/`PumpSelf` wrappers are gone). A self-referencing ability uses `TargetKind::Self_` (auto-bound to the source, not "targeting" per CR 115; rejected in `spell_effect` via `EffectContext::Spell`), e.g. `PumpTarget { target: (kind: Self_) }`.
@@ -90,7 +98,7 @@ If the fetch fails or the name is ambiguous, **surface that before writing any R
 - **`oracle_text`** — authoritative; CR takes precedence for mechanics not spelled out on the card.
 - **`type_line`** — supertypes, types, subtypes.
 
-**2. Drop the RON anywhere under `tricerules-cards/data/`** — `build.rs` embeds it automatically (no `registry.rs` edit). Touch `primitives.rs` only when adding a new primitive.
+**2. Drop the RON anywhere under `tricerules-cards/data/`** — `build.rs` embeds it automatically (no `registry.rs` edit). Touch `primitives/` only when adding a new primitive.
 
 **3. Build + test** (see below). For `tricerules/**/*.rs`: server-authoritative, return `EngineError::Illegal` (never panic), reject ambiguous combat, keep priority/steps explicit, and add/update tests in `tricerules-core/tests/scenario/` (happy + illegal path; assert steps/priority/zones). Add to the best-fit existing submodule (e.g. `combat.rs`, `spell_effects.rs`, `triggers.rs`), or create a new file if the topic warrants it — the existing split is a starting point, not a constraint. When creating a new file, add a matching `#[path = "scenario/<name>.rs"] mod <name>;` entry to the root `tests/scenario.rs`.
 
@@ -135,6 +143,8 @@ Filter: `layout == "normal"`, type line contains `Creature`, integer power/tough
 ## Ruled client (`cockatrice/src/game/ruled/`)
 
 All ruled client logic is fork-owned and lives here; upstream files keep 1–3-line hooks.
+Class responsibilities, the full signal map, and the invariants are in
+[`cockatrice/src/game/ruled/README.md`](cockatrice/src/game/ruled/README.md).
 
 - **`RuledClientState`** — the client's mirror of the engine's view (identity maps, legal actions,
   combat staging, stack tracking, pending choices) plus every `ruled` signal the UI listens to.
@@ -152,9 +162,27 @@ All ruled client logic is fork-owned and lives here; upstream files keep 1–3-l
 
 ## Ruled prompt UI (`game_prompt_widget`, `tab_game`)
 
-- Logic lives in `cockatrice/src/game/prompt/game_prompt_widget.{h,cpp}`; **TabGame** does placement + signals only.
-- Prompt sits in the right **Messages** dock, **above** the game log; no extra dock unless asked.
-- Reuse existing paths (e.g. **Pass Priority** → `GameEventHandler::handleNextTurn()`) and existing signals (`ruledEnginePromptFeed`, `logActivePhaseChanged`, `logActivePlayer`) over new proto for UI text. Ruled + non-replay only; leave freeform/replay unchanged. Compact, action-first.
+Fork-owned widget in `cockatrice/src/game/prompt/game_prompt_widget.{h,cpp}`. It sits in the right
+**Messages** dock, **above** the game log — no extra dock unless asked. Ruled + non-replay only;
+leave freeform/replay unchanged. Compact, action-first.
+
+- **One exclusive mode, one entry point.** `PromptMode` (Normal / Targeting / ClickChoice /
+  CleanupDiscard / ResolutionPick / OpeningChooseFirst / OpeningMulligan / OpeningBottom) plus its
+  payload travels as a single `RuledPromptState` through `setRuledPromptState()`. `effectiveMode()`
+  holds **the** priority chain; both `updateCombatButtonsVisibility()` and `refreshPromptLabel()`
+  switch on its result. A new prompt mechanic is an enum value + a case in each switch — never a
+  new bool.
+- **The mode decision lives in `TabGame::refreshRuledPromptState()`**, called from every ruled
+  signal that can change it. TabGame otherwise does placement and `connect` lines only.
+- **Targeting is derived, not pushed.** Three independent `PlayerActions` signals raise/drop the
+  `TargetingSources` flags that OR into `PromptMode::Targeting`. Combat mode, priority and the
+  sticky blocker error stay orthogonal inputs — they legitimately coexist with the modes.
+- **Reuse existing paths and signals over new proto for UI text**: **Pass Priority** →
+  `GameEventHandler::handleNextTurn()`; prompt text from `RuledClientState::enginePromptFeed`; the
+  authoritative log from `engineTimeline`; turn/phase from `logActivePlayer` /
+  `logActivePhaseChanged`. Full signal map in
+  [`cockatrice/src/game/ruled/README.md`](cockatrice/src/game/ruled/README.md).
+- Coverage: `tests/game_prompt/` (`game_prompt_widget_test`), offscreen — use `isHidden()`.
 
 ---
 
