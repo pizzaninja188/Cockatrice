@@ -26,7 +26,11 @@ class CardItem;
 class Player;
 class RuledClientState;
 /// Defined in ruled_client_state.h; declared opaquely here so this header stays proto-free.
-enum class RuledHandActionKind : int;
+namespace ruled::v1
+{
+enum HandActionKind : int;
+}
+using RuledHandActionKind = ruled::v1::HandActionKind;
 
 namespace RuledActions
 {

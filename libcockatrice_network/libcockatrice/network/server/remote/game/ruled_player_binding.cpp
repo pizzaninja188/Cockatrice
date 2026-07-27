@@ -112,19 +112,20 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
         pool.append(c);
     }
     QStringList libWants;
-    for (const std::string &id : v.lib_ids()) {
+    for (const std::string &id : v.library_card_ids()) {
         if (!id.empty()) {
             libWants.append(QString::fromStdString(id));
         }
     }
-    if (v.hand_size() + libWants.size() != pool.size()) {
-        qWarning() << "applyRuledEngineZoneView: count mismatch hand" << v.hand_size() << "lib" << libWants.size()
-                   << "pool" << pool.size() << "lib_ids" << v.lib_ids_size();
+    if (v.hand_cards_size() + libWants.size() != pool.size()) {
+        qWarning() << "applyRuledEngineZoneView: count mismatch hand" << v.hand_cards_size() << "lib"
+                   << libWants.size() << "pool" << pool.size() << "library_card_ids"
+                   << v.library_card_ids_size();
         return result;
     }
     QList<Server_Card *> handList;
-    for (int i = 0; i < v.hand_size(); ++i) {
-        const QString want = QString::fromStdString(v.hand(i));
+    for (int i = 0; i < v.hand_cards_size(); ++i) {
+        const QString want = QString::fromStdString(v.hand_cards(i).card_id());
         int found = -1;
         for (int j = 0; j < pool.size(); ++j) {
             if (trId(pool[j]) == want) {
@@ -198,23 +199,23 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
     // Build an engine_oid -> Server_Card id map and (when permitted) sync tap state.
     // The map is rebuilt whenever the engine reports a battlefield, even if the caller
     // doesn't ask for tap propagation, so combat translation in the driver can rely on it.
-    if (v.battlefield_size() == tableZone->getCards().size() &&
-        v.battlefield_size() == v.battlefield_object_id_size()) {
+    if (v.battlefield_objects_size() == tableZone->getCards().size()) {
         QList<Server_Card *> tablePool;
         tablePool.reserve(tableZone->getCards().size());
         for (Server_Card *c : tableZone->getCards()) {
             tablePool.append(c);
         }
         QList<Server_Card *> ordered;
-        ordered.reserve(v.battlefield_size());
+        ordered.reserve(v.battlefield_objects_size());
         // Match engine slots to physical cards by stable engine ObjectId when possible.
         // Name-only matching mis-orders duplicates (e.g. two Forests), assigning the wrong
         // battlefield_tapped[] entry to each Server_Card and causing spurious tap/untap events.
         const QHash<int, quint32> prevServerCardIdToEngineOid = serverCardIdToEngineOid;
 
-        for (int i = 0; i < v.battlefield_size(); ++i) {
-            const QString want = QString::fromStdString(v.battlefield(i));
-            const quint32 wantOid = static_cast<quint32>(v.battlefield_object_id(i));
+        for (int i = 0; i < v.battlefield_objects_size(); ++i) {
+            const auto &battlefieldObject = v.battlefield_objects(i);
+            const QString want = QString::fromStdString(battlefieldObject.card_id());
+            const quint32 wantOid = static_cast<quint32>(battlefieldObject.object_id());
             int found = -1;
             if (wantOid != 0) {
                 for (int j = 0; j < tablePool.size(); ++j) {
@@ -239,21 +240,18 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
             ordered.append(tablePool.takeAt(found));
         }
 
-        if (ordered.size() == v.battlefield_size()) {
+        if (ordered.size() == v.battlefield_objects_size()) {
             // Determine expected row per card. Creatures → row 0 (top), lands → row 2
             // (bottom, preserved from play-land placement), other permanents → row 1 (middle).
-            const bool haveIsCreature = v.battlefield_is_creature_size() == v.battlefield_size();
             QList<int> expectedY;
             expectedY.reserve(ordered.size());
             for (int i = 0; i < ordered.size(); ++i) {
                 const Server_Card *c = ordered[i];
                 const int currentY = c ? c->getY() : 0;
-                if (haveIsCreature && v.battlefield_is_creature(i)) {
+                if (v.battlefield_objects(i).is_creature()) {
                     expectedY.append(0);
                 } else if (currentY == 2) {
                     expectedY.append(2); // land — keep in bottom row
-                } else if (!haveIsCreature) {
-                    expectedY.append(currentY); // no creature flags from engine — preserve row to avoid flicker
                 } else {
                     expectedY.append(1); // noncreature nonland permanent
                 }
@@ -301,31 +299,34 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
             engineOidToHaste.clear();
             engineOidToTrample.clear();
             engineOidToCreature.clear();
-            const bool haveCreatureStats = v.battlefield_power_size() == v.battlefield_size() &&
-                                           v.battlefield_toughness_size() == v.battlefield_size() &&
-                                           v.battlefield_damage_size() == v.battlefield_size() &&
-                                           v.battlefield_is_creature_size() == v.battlefield_size();
             for (int i = 0; i < ordered.size(); ++i) {
                 Server_Card *card = ordered[i];
                 if (!card) {
                     continue;
                 }
-                const quint32 oid = static_cast<quint32>(v.battlefield_object_id(i));
+                const auto &battlefieldObject = v.battlefield_objects(i);
+                const quint32 oid = static_cast<quint32>(battlefieldObject.object_id());
                 engineOidToServerCardId.insert(oid, card->getId());
                 serverCardIdToEngineOid.insert(card->getId(), oid);
-                const bool summoningSick =
-                    (i < v.battlefield_summoning_sick_size()) ? v.battlefield_summoning_sick(i) : false;
+                const bool summoningSick = battlefieldObject.summoning_sick();
                 engineOidToSummoningSick.insert(oid, summoningSick);
-                const bool hasHaste = (i < v.battlefield_haste_size()) ? v.battlefield_haste(i) : false;
+                const auto hasKeyword = [&battlefieldObject](const char *keyword) {
+                    for (const std::string &candidate : battlefieldObject.keywords()) {
+                        if (candidate == keyword) {
+                            return true;
+                        }
+                    }
+                    return false;
+                };
+                const bool hasHaste = hasKeyword("Haste");
                 engineOidToHaste.insert(oid, hasHaste);
-                const bool hasTrample = (i < v.battlefield_trample_size()) ? v.battlefield_trample(i) : false;
+                const bool hasTrample = hasKeyword("Trample");
                 engineOidToTrample.insert(oid, hasTrample);
-                const bool isCreatureFlag =
-                    (i < v.battlefield_is_creature_size()) ? v.battlefield_is_creature(i) : false;
+                const bool isCreatureFlag = battlefieldObject.is_creature();
                 engineOidToCreature.insert(oid, isCreatureFlag);
 
-                if (tapGes && i < v.battlefield_tapped_size()) {
-                    const bool desiredTapped = v.battlefield_tapped(i);
+                if (tapGes) {
+                    const bool desiredTapped = battlefieldObject.tapped();
                     if (card->getTapped() != desiredTapped) {
                         // Do not force untap from engine during non-untap batches: Cockatrice may have
                         // tapped permanents for mana (or other UI) that the engine has not yet
@@ -348,11 +349,11 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                     }
                 }
 
-                if (tapGes && haveCreatureStats) {
-                    const bool isCreature = v.battlefield_is_creature(i);
-                    const auto pwr = static_cast<uint32_t>(v.battlefield_power(i));
-                    const auto tgh = static_cast<uint32_t>(v.battlefield_toughness(i));
-                    const auto dmg = static_cast<uint32_t>(v.battlefield_damage(i));
+                if (tapGes) {
+                    const bool isCreature = battlefieldObject.is_creature();
+                    const auto pwr = static_cast<uint32_t>(battlefieldObject.power());
+                    const auto tgh = static_cast<uint32_t>(battlefieldObject.toughness());
+                    const auto dmg = static_cast<uint32_t>(battlefieldObject.damage());
 
                     if (isCreature) {
                         const QString newPt = QStringLiteral("%1/%2").arg(pwr).arg(tgh);
@@ -368,9 +369,7 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                         }
                     }
 
-                    const QString counterAnn = (i < v.battlefield_counters_annotation_size())
-                                                   ? QString::fromStdString(v.battlefield_counters_annotation(i))
-                                                   : QString();
+                    const QString counterAnn = QString::fromStdString(battlefieldObject.counters_annotation());
                     QString mergedAnn = mergeRuledDamageIntoAnnotation(card->getAnnotation(), isCreature ? dmg : 0);
                     mergedAnn = mergeRuledCountersIntoAnnotation(mergedAnn, counterAnn);
                     if (mergedAnn != card->getAnnotation()) {
@@ -391,7 +390,7 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
     // Hand OIDs (discard, bounce-to-hand, etc.): register after battlefield rebuild so
     // engineOidToServerCardId.clear() above does not drop them, and strip stale hand keys
     // before insert so moved cards do not leave orphan map entries.
-    if (v.hand_object_id_size() == v.hand_size() && v.hand_size() == handZone->getCards().size()) {
+    if (v.hand_cards_size() == handZone->getCards().size()) {
         for (Server_Card *hc : handZone->getCards()) {
             const int cid = hc->getId();
             const auto soIt = serverCardIdToEngineOid.constFind(cid);
@@ -400,8 +399,8 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                 serverCardIdToEngineOid.remove(cid);
             }
         }
-        for (int i = 0; i < v.hand_size(); ++i) {
-            const quint32 oid = static_cast<quint32>(v.hand_object_id(i));
+        for (int i = 0; i < v.hand_cards_size(); ++i) {
+            const quint32 oid = static_cast<quint32>(v.hand_cards(i).object_id());
             Server_Card *card = handZone->getCards().at(i);
             engineOidToServerCardId.insert(oid, card->getId());
             serverCardIdToEngineOid.insert(card->getId(), oid);
@@ -416,11 +415,11 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
     // index silently mismaps every card, which makes graveyard cards resolve to the wrong target
     // when clicked. Sizes still have to agree for positions to mean anything.
     Server_CardZone *graveZone = zones.value(ZoneNames::GRAVE);
-    if (graveZone && v.graveyard_object_id_size() == graveZone->getCards().size()) {
+    if (graveZone && v.graveyard_object_ids_size() == graveZone->getCards().size()) {
         graveyardEngineOidToServerCardId.clear();
-        const int graveyardSize = v.graveyard_object_id_size();
+        const int graveyardSize = v.graveyard_object_ids_size();
         for (int i = 0; i < graveyardSize; ++i) {
-            const quint32 oid = static_cast<quint32>(v.graveyard_object_id(i));
+            const quint32 oid = static_cast<quint32>(v.graveyard_object_ids(i));
             Server_Card *card = graveZone->getCards().at(graveyardSize - 1 - i);
             graveyardEngineOidToServerCardId.insert(oid, card->getId());
         }

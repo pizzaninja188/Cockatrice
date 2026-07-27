@@ -77,38 +77,6 @@ Server_Card *ruledPhysicalSpellOnCanonicalStack(Server_CardZone *stackZone, cons
     return nullptr;
 }
 
-/// Removes or redacts server-only engine output before a batch is broadcast to clients.
-void stripRuledServerOnlyEventsForBroadcast(ruled::v1::IpcResponse *resp)
-{
-    if (!resp || !resp->has_batch()) {
-        return;
-    }
-    auto *batch = resp->mutable_batch();
-    // CardCatalog enumerates every deck's contents — server-only, drop it entirely.
-    auto *events = batch->mutable_events();
-    for (int i = events->size() - 1; i >= 0; --i) {
-        if (events->Get(i).has_card_catalog()) {
-            events->DeleteSubrange(i, 1);
-        }
-    }
-    // Keep zone_view events in the broadcast but clear private per-player fields
-    // (hand cards, library order) that must not be revealed to opponents.
-    // Public combat state — first_strike_step_pending, battlefield data — is preserved
-    // so all players update the "First Strike Damage" pass-priority button correctly.
-    for (int i = 0; i < batch->events_size(); ++i) {
-        if (!batch->events(i).has_zone_view()) {
-            continue;
-        }
-        auto *zv = batch->mutable_events(i)->mutable_zone_view();
-        for (int j = 0; j < zv->per_player_size(); ++j) {
-            auto *pp = zv->mutable_per_player(j);
-            pp->clear_hand();
-            pp->clear_lib_ids();
-            pp->clear_hand_object_id();
-        }
-    }
-}
-
 /// Legacy casual fallback: the engine refused the session for a non-card reason, so the
 /// physical decks (left unshuffled for engine-ordered play) get a normal shuffle instead.
 void shuffleMainDeckForRuledFallback(Server_AbstractPlayer *player)
@@ -871,7 +839,7 @@ void RuledGameDriver::applyAttachmentRestores(const ruled::v1::RuledEventBatch &
                 continue;
             }
             for (const auto &p : e.zone_view().per_player()) {
-                if (p.battlefield_attached_to_oid_size() == 0) {
+                if (p.battlefield_objects_size() == 0) {
                     continue;
                 }
                 Server_AbstractPlayer *ownerAb = game->getPlayer(p.player_id());
@@ -879,12 +847,12 @@ void RuledGameDriver::applyAttachmentRestores(const ruled::v1::RuledEventBatch &
                     continue;
                 }
                 auto *ownerPlayer = static_cast<Server_Player *>(ownerAb);
-                for (int i = 0; i < p.battlefield_attached_to_oid_size() && i < p.battlefield_object_id_size(); ++i) {
-                    const quint32 targetOid = static_cast<quint32>(p.battlefield_attached_to_oid(i));
+                for (const auto &battlefieldObject : p.battlefield_objects()) {
+                    const quint32 targetOid = static_cast<quint32>(battlefieldObject.attached_to_oid());
                     if (targetOid == 0) {
                         continue;
                     }
-                    const quint32 attachedOid = static_cast<quint32>(p.battlefield_object_id(i));
+                    const quint32 attachedOid = static_cast<quint32>(battlefieldObject.object_id());
                     Server_Card *attachedCard = playerBinding(p.player_id()).findCardByEngineOid(ownerPlayer, attachedOid);
                     if (!attachedCard || !attachedCard->getZone()) {
                         continue;
@@ -1113,10 +1081,6 @@ void RuledGameDriver::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
     toSend.set_ok(resp.ok());
     toSend.set_error(resp.error());
     toSend.mutable_batch()->CopyFrom(resp.batch());
-    stripRuledServerOnlyEventsForBroadcast(&toSend);
-    if (!toSend.has_batch()) {
-        return;
-    }
     appendServerObjectMaps(toSend);
     const ruled::v1::RuledEventBatch &batch = toSend.batch();
     for (auto *participant : game->getParticipants()) {
@@ -1178,8 +1142,12 @@ void RuledGameDriver::appendServerObjectMaps(ruled::v1::IpcResponse &toSend)
                     entry->set_ordinal(static_cast<uint32_t>(ordinal));
                     entry->set_server_card_id(card->getId());
                     entry->set_summoning_sick(binding.isEngineOidSummoningSick(engineOid));
-                    entry->set_haste(binding.isEngineOidHaste(engineOid));
-                    entry->set_trample(binding.isEngineOidTrample(engineOid));
+                    if (binding.isEngineOidHaste(engineOid)) {
+                        entry->add_keywords("Haste");
+                    }
+                    if (binding.isEngineOidTrample(engineOid)) {
+                        entry->add_keywords("Trample");
+                    }
                     entry->set_is_creature(binding.isEngineOidCreature(engineOid));
                     ++ordinal;
                 }
@@ -1363,6 +1331,69 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
                     rcr->add_candidate_server_card_ids(ci);
                 }
             }
+        }
+    }
+
+    // HandSlotMap is recipient-private: retain only the recipient's physical hand ids.
+    for (int ei = 0; ei < filtered.events_size(); ++ei) {
+        if (!filtered.events(ei).has_hand_slot_map()) {
+            continue;
+        }
+        auto *entries = filtered.mutable_events(ei)->mutable_hand_slot_map()->mutable_entries();
+        for (int i = entries->size() - 1; i >= 0; --i) {
+            if (entries->Get(i).player_id() != participant->getPlayerId()) {
+                entries->DeleteSubrange(i, 1);
+            }
+        }
+    }
+
+    // Capture the explicitly authorized per-player values, clear every PER_PLAYER field
+    // recursively by reflection (future classified fields therefore fail closed), then restore
+    // only these reviewed cases.
+    bool hasOwnLegalActions = false;
+    ruled::v1::LegalActions ownLegalActions;
+    const auto ownLegalIt = filtered.legal_by_player().find(participant->getPlayerId());
+    if (ownLegalIt != filtered.legal_by_player().end()) {
+        ownLegalActions.CopyFrom(ownLegalIt->second);
+        hasOwnLegalActions = true;
+    }
+    QHash<int, QString> routedLogText;
+    QHash<int, ruled::v1::ResolutionChoiceRequired> routedChoices;
+    QHash<int, ruled::v1::HandSlotMap> ownHandSlotMaps;
+    for (int ei = 0; ei < filtered.events_size(); ++ei) {
+        const auto &event = filtered.events(ei);
+        if (event.has_log()) {
+            routedLogText.insert(ei, QString::fromStdString(event.log().text()));
+        } else if (event.has_resolution_choice_required()) {
+            routedChoices.insert(ei, event.resolution_choice_required());
+        } else if (event.has_hand_slot_map()) {
+            ownHandSlotMaps.insert(ei, event.hand_slot_map());
+        }
+    }
+
+    clearRuledFieldsByVisibility(&filtered, ruled::v1::FIELD_VISIBILITY_PER_PLAYER);
+    if (hasOwnLegalActions) {
+        (*filtered.mutable_legal_by_player())[participant->getPlayerId()] = ownLegalActions;
+    }
+    for (auto logIt = routedLogText.constBegin(); logIt != routedLogText.constEnd(); ++logIt) {
+        filtered.mutable_events(logIt.key())->mutable_log()->set_text(logIt.value().toStdString());
+    }
+    for (auto choiceIt = routedChoices.constBegin(); choiceIt != routedChoices.constEnd(); ++choiceIt) {
+        auto *choice = filtered.mutable_events(choiceIt.key())->mutable_resolution_choice_required();
+        choice->set_prompt_text(choiceIt.value().prompt_text());
+        choice->mutable_candidate_object_ids()->CopyFrom(choiceIt.value().candidate_object_ids());
+        choice->mutable_candidate_card_ids()->CopyFrom(choiceIt.value().candidate_card_ids());
+        choice->mutable_candidate_names()->CopyFrom(choiceIt.value().candidate_names());
+        choice->mutable_candidate_server_card_ids()->CopyFrom(choiceIt.value().candidate_server_card_ids());
+    }
+    for (auto handMapIt = ownHandSlotMaps.constBegin(); handMapIt != ownHandSlotMaps.constEnd(); ++handMapIt) {
+        filtered.mutable_events(handMapIt.key())->mutable_hand_slot_map()->CopyFrom(handMapIt.value());
+    }
+
+    clearRuledFieldsByVisibility(&filtered, ruled::v1::FIELD_VISIBILITY_SERVER_ONLY);
+    for (int ei = filtered.events_size() - 1; ei >= 0; --ei) {
+        if (filtered.events(ei).ev_case() == ruled::v1::RuledEvent::EV_NOT_SET) {
+            filtered.mutable_events()->DeleteSubrange(ei, 1);
         }
     }
     return filtered;
@@ -1646,11 +1677,11 @@ void RuledGameDriver::applyRuledStartupBatch(const ruled::v1::IpcResponse &resp,
             for (int pi = 0; pi < z.per_player_size(); ++pi) {
                 const auto &p = z.per_player(pi);
                 const int mainN = expectedMainboardSizeForStartupSync(game, p.player_id(), deckByPlayer);
-                const int needLib = mainN - p.hand_size();
-                const int libCount = p.lib_ids_size();
+                const int needLib = mainN - p.hand_cards_size();
+                const int libCount = p.library_card_ids_size();
                 if (libCount != needLib) {
                     qWarning() << "Ruled zone sync: player" << p.player_id() << "expected" << needLib
-                               << "library card ids, lib_ids has" << libCount
+                               << "library card ids, library_card_ids has" << libCount
                                << "entries — is tricerules-server up to date? "
                                   "(RulesRelay read was fixed; rebuild + restart the Rust side from this repo.)";
                     for (Server_AbstractPlayer *pl : game->getPlayers().values()) {

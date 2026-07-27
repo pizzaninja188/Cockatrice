@@ -1,4 +1,5 @@
 use crate::helpers::*;
+use tricerules_proto::ruled::v1 as rv1;
 
 /// CR 709: Fire // Ice is a split card. Each half is an independently castable instant chosen by
 /// `CastSpell.face_index`. Casting face 0 (Fire) deals 2 damage and shows the half's own name.
@@ -258,6 +259,26 @@ fn fire_ice_target_sets_are_per_face() {
     let batch = e.initial_response_batch();
 
     let legal = batch.legal_by_player.get(&0).expect("legal for P0");
+    let face_actions: Vec<_> = legal
+        .hand_actions
+        .iter()
+        .filter(|action| action.hand_index == slot)
+        .collect();
+    assert_eq!(face_actions.len(), 2, "one structured cast action per face");
+    assert_eq!(
+        face_actions[0].kind,
+        rv1::HandActionKind::HandActionCastSpell as i32
+    );
+    assert_eq!(face_actions[0].face_index, 0);
+    assert_eq!(face_actions[0].card_name, "Fire");
+    assert!(face_actions[0].needs_target);
+    assert_eq!(
+        face_actions[1].kind,
+        rv1::HandActionKind::HandActionCastSpell as i32
+    );
+    assert_eq!(face_actions[1].face_index, 1);
+    assert_eq!(face_actions[1].card_name, "Ice");
+    assert!(face_actions[1].needs_target);
     let fire_key = slot << 8; // face 0
     let ice_key = (slot << 8) | 1; // face 1
     let fire = legal

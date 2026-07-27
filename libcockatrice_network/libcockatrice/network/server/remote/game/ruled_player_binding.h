@@ -28,8 +28,8 @@ struct RuledPlayerBinding
         QHash<quint32, int> engineOidToServerCardId;
     };
 
-    // Latest mapping between engine ObjectIds (parallel to RuledPerPlayerView::battlefield
-    // and `hand_object_id`) and the corresponding Server_Card. Updated each
+    // Latest mapping between engine ObjectIds in RuledPerPlayerView::battlefield_objects /
+    // hand_cards and the corresponding Server_Card. Updated each
     // applyRuledEngineZoneView; consumed by RuledGameDriver::applyRuledBatch when translating
     // engine-side events into client-visible Cockatrice events.
     QHash<quint32, int> engineOidToServerCardId;
@@ -39,7 +39,7 @@ struct RuledPlayerBinding
     QHash<quint32, bool> engineOidToTrample;
     QHash<quint32, bool> engineOidToCreature;
     // Parallel to engineOidToServerCardId but scoped to the graveyard zone.
-    // Updated from RuledPerPlayerView::graveyard_object_id each zone-view sync.
+    // Updated from RuledPerPlayerView::graveyard_object_ids each zone-view sync.
     QHash<quint32, int> graveyardEngineOidToServerCardId;
 
     bool isEngineOidSummoningSick(quint32 engineOid) const

@@ -309,17 +309,14 @@ int resolveHandActionIndex(const RuledClientState *state, RuledHandActionKind ki
     if (!state || !card) {
         return -1;
     }
-    if (kind == RuledHandActionKind::OpeningBottom) {
-        // Every card in the opening hand is offered, so narrow by slot rather than by name: the
-        // label name and the CardItem's Oracle name need not agree, and there is nothing to gain.
-        return engineHandIndexFromLegalSlots(state, card, state->handActionLegalIndicesSorted(kind));
-    }
     // A land's client CardItem carries its front-face Oracle name (an MDFC's back face never becomes
     // a separate hand card), which the engine also uses to label each playable face of that slot —
     // so a single lookup resolves the shared hand slot for both faces of a pathway.
-    int resolved =
-        engineHandIndexFromLegalSlots(state, card, state->handActionIndicesForCardName(kind, card->getName()));
-    if (resolved >= 0 || kind != RuledHandActionKind::CastSpell) {
+    // Cleanup and opening-bottom deliberately return every legal slot here: their CardItem is
+    // identified authoritatively by HandSlotMap, and a display-name mismatch must not disable a
+    // required game action.
+    int resolved = engineHandIndexFromLegalSlots(state, card, state->handActionClickCandidates(kind, card->getName()));
+    if (resolved >= 0 || kind != ruled::v1::HAND_ACTION_CAST_SPELL) {
         return resolved;
     }
     // CR 709/712/715: the engine labels each castable face of a multi-face card (split half / MDFC
@@ -508,7 +505,8 @@ bool isSingleClickPlayLegal(const CardItem *card)
         return false;
     }
     const bool isLand = card->getCardInfo().getCardType().contains("Land", Qt::CaseInsensitive);
-    const RuledHandActionKind kind = isLand ? RuledHandActionKind::PlayLand : RuledHandActionKind::CastSpell;
+    const RuledHandActionKind kind =
+        isLand ? ruled::v1::HAND_ACTION_PLAY_LAND : ruled::v1::HAND_ACTION_CAST_SPELL;
     return resolveHandActionIndex(state, kind, card) >= 0;
 }
 

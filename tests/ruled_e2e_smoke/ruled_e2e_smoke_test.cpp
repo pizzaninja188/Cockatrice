@@ -23,7 +23,7 @@
 // Scope: engine + relay + protocol wiring only — no Qt client UI logic (that arrives with the
 // Step 5 headless client-core suite).
 //
-// The scripted clients are *reactive*: they act on the engine's LegalActions labels, zone
+// The scripted clients are *reactive*: they act on structured LegalHandAction records, display labels, zone
 // views, and object maps rather than a hardcoded move list, so the script stays legal for any
 // shuffle; the fixed seed pins the exact stream for reproducible debugging.
 //
@@ -142,7 +142,7 @@ bool waitForPortOpen(int port, int timeoutMs)
 }
 
 /// One scripted protobuf-level participant: framing, login, room/game plumbing, and a
-/// reactive per-batch policy driven by the engine's LegalActions labels.
+/// reactive per-batch policy driven by the engine's LegalActions.
 class SmokeClient
 {
 public:
@@ -222,9 +222,9 @@ public:
     bool sawBrainstormChoice = false;
     bool submittedBrainstormChoice = false;
     bool sawBrainstormResolved = false;
-    bool sawCleanupDiscardLabels = false;
+    bool sawCleanupDiscardActions = false;
     bool sentCleanupDiscard = false;
-    bool sawBottomLabel = false;
+    bool sawBottomAction = false;
     bool sentBottom = false;
     quint32 boltOid = 0;
     quint32 brainstormOid = 0;
@@ -494,14 +494,15 @@ public:
                 for (const ruled::v1::RuledPerPlayerView &pp : ev.zone_view().per_player()) {
                     auto &bf = battlefieldByPlayer[pp.player_id()];
                     bf.clear();
-                    for (int j = 0; j < pp.battlefield_size(); ++j) {
+                    for (const auto &battlefieldObject : pp.battlefield_objects()) {
                         Permanent perm;
-                        perm.cardId = QString::fromStdString(pp.battlefield(j));
-                        perm.oid = j < pp.battlefield_object_id_size() ? pp.battlefield_object_id(j) : 0;
-                        perm.tapped = j < pp.battlefield_tapped_size() && pp.battlefield_tapped(j);
-                        perm.creature = j < pp.battlefield_is_creature_size() && pp.battlefield_is_creature(j);
-                        perm.sick = j < pp.battlefield_summoning_sick_size() && pp.battlefield_summoning_sick(j);
-                        perm.haste = j < pp.battlefield_haste_size() && pp.battlefield_haste(j);
+                        perm.cardId = QString::fromStdString(battlefieldObject.card_id());
+                        perm.oid = battlefieldObject.object_id();
+                        perm.tapped = battlefieldObject.tapped();
+                        perm.creature = battlefieldObject.is_creature();
+                        perm.sick = battlefieldObject.summoning_sick();
+                        perm.haste = std::find(battlefieldObject.keywords().begin(), battlefieldObject.keywords().end(),
+                                               "Haste") != battlefieldObject.keywords().end();
                         bf.push_back(perm);
                     }
                     if (oppId < 0 && myId >= 0 && pp.player_id() != myId) {
@@ -674,6 +675,29 @@ public:
         return false;
     }
 
+    const ruled::v1::LegalHandAction *
+    handAction(ruled::v1::HandActionKind kind, const QString &cardName = QString()) const
+    {
+        for (const auto &action : latestLegal.hand_actions()) {
+            if (action.kind() == kind &&
+                (cardName.isEmpty() || QString::fromStdString(action.card_name()) == cardName)) {
+                return &action;
+            }
+        }
+        return nullptr;
+    }
+
+    QList<const ruled::v1::LegalHandAction *> handActions(ruled::v1::HandActionKind kind) const
+    {
+        QList<const ruled::v1::LegalHandAction *> result;
+        for (const auto &action : latestLegal.hand_actions()) {
+            if (action.kind() == kind) {
+                result.append(&action);
+            }
+        }
+        return result;
+    }
+
     int countOwn(const QString &cardId, bool untappedOnly) const
     {
         const auto it = battlefieldByPlayer.find(myId);
@@ -710,7 +734,7 @@ public:
             return;
         }
 
-        // --- Opening sequence (labels drive everything; no priority concept yet) ---
+        // --- Opening sequence (display labels plus structured hand actions; no priority yet) ---
         if (labelMatching(QRegularExpression(QStringLiteral("^You start \\(opening pick\\)$")))) {
             ruled::v1::RuledCommand cmd;
             // Both roles arrange for the aggressor to take the first turn.
@@ -728,16 +752,13 @@ public:
             sendRuled(cmd, takeMulligan ? QStringLiteral("mulligan") : QStringLiteral("keep hand"));
             return;
         }
-        {
-            QRegularExpressionMatch m;
-            if (labelMatching(QRegularExpression(QStringLiteral("on bottom \\(opening, hand idx (\\d+)\\)$")), &m)) {
-                sawBottomLabel = true;
-                ruled::v1::RuledCommand cmd;
-                cmd.mutable_put_opening_hand_on_bottom()->set_hand_card_index(0);
-                sentBottom = true;
-                sendRuled(cmd, QStringLiteral("bottom hand idx 0"));
-                return;
-            }
+        if (const auto *bottom = handAction(ruled::v1::HAND_ACTION_OPENING_BOTTOM)) {
+            sawBottomAction = true;
+            ruled::v1::RuledCommand cmd;
+            cmd.mutable_put_opening_hand_on_bottom()->set_hand_card_index(bottom->hand_index());
+            sentBottom = true;
+            sendRuled(cmd, QStringLiteral("bottom hand idx %1").arg(bottom->hand_index()));
+            return;
         }
 
         // --- Tier-3 resolution choice (may target either player at any point) ---
@@ -786,21 +807,15 @@ public:
 
         // --- Cleanup discard ---
         {
-            const QRegularExpression discardRe(QStringLiteral("\\(cleanup, hand idx (\\d+)\\)$"));
-            QStringList discardLabels;
-            for (const QString &l : labels) {
-                if (discardRe.match(l).hasMatch()) {
-                    discardLabels.append(l);
-                }
-            }
-            if (!discardLabels.isEmpty()) {
-                sawCleanupDiscardLabels = true;
-                const int excess = discardLabels.size() - 7;
+            const auto discardActions = handActions(ruled::v1::HAND_ACTION_CLEANUP_DISCARD);
+            if (!discardActions.isEmpty()) {
+                sawCleanupDiscardActions = true;
+                const int excess = discardActions.size() - 7;
                 if (excess > 0) {
                     ruled::v1::RuledCommand cmd;
                     auto *disc = cmd.mutable_discard_to_hand_size();
                     for (int i = 0; i < excess; ++i) {
-                        disc->add_hand_card_indices(i);
+                        disc->add_hand_card_indices(discardActions.at(i)->hand_index());
                     }
                     sentCleanupDiscard = true;
                     sendRuled(cmd, QStringLiteral("cleanup discard %1 card(s)").arg(excess));
@@ -817,20 +832,19 @@ public:
             (phase == ruled::v1::PHASE_ID_MAIN1 || phase == ruled::v1::PHASE_ID_MAIN2) && activePlayer == myId;
 
         if (role == Role::Aggressor && inMain && stackDepth == 0) {
-            QRegularExpressionMatch m;
-            if (labelMatching(QRegularExpression(QStringLiteral("^Play land Mountain \\(hand idx (\\d+)\\)$")), &m)) {
+            if (const auto *land = handAction(ruled::v1::HAND_ACTION_PLAY_LAND, QStringLiteral("Mountain"))) {
                 ruled::v1::RuledCommand cmd;
-                cmd.mutable_play_land()->set_hand_card_index(m.captured(1).toUInt());
-                sendRuled(cmd, QStringLiteral("play Mountain (idx %1)").arg(m.captured(1)));
+                cmd.mutable_play_land()->set_hand_card_index(land->hand_index());
+                sendRuled(cmd, QStringLiteral("play Mountain (idx %1)").arg(land->hand_index()));
                 return;
             }
-            if (!boltCast &&
-                labelMatching(QRegularExpression(QStringLiteral("^Cast Lightning Bolt \\(hand idx (\\d+), target\\)$")),
-                              &m)) {
+            if (const auto *bolt =
+                    !boltCast ? handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Lightning Bolt"))
+                              : nullptr) {
                 if (myPool.r >= 1) {
                     ruled::v1::RuledCommand cmd;
                     auto *cast = cmd.mutable_cast_spell();
-                    cast->set_hand_card_index(m.captured(1).toUInt());
+                    cast->set_hand_card_index(bolt->hand_index());
                     cast->add_targets()->set_object_id(static_cast<quint32>(oppId));
                     boltCast = true;
                     sendRuled(cmd, QStringLiteral("cast Lightning Bolt at player %1").arg(oppId));
@@ -845,11 +859,12 @@ public:
                     return;
                 }
             }
-            if (boltCast && !giantCast &&
-                labelMatching(QRegularExpression(QStringLiteral("^Cast Hill Giant \\(hand idx (\\d+)\\)$")), &m)) {
+            if (const auto *giant = boltCast && !giantCast
+                                        ? handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Hill Giant"))
+                                        : nullptr) {
                 if (myPool.total() >= 4) {
                     ruled::v1::RuledCommand cmd;
-                    cmd.mutable_cast_spell()->set_hand_card_index(m.captured(1).toUInt());
+                    cmd.mutable_cast_spell()->set_hand_card_index(giant->hand_index());
                     giantCast = true;
                     sendRuled(cmd, QStringLiteral("cast Hill Giant"));
                     return;
@@ -867,19 +882,20 @@ public:
         }
 
         if (role == Role::Hoarder && inMain && stackDepth == 0) {
-            QRegularExpressionMatch m;
-            if (countOwn(QStringLiteral("island"), false) < 1 &&
-                labelMatching(QRegularExpression(QStringLiteral("^Play land Island \\(hand idx (\\d+)\\)$")), &m)) {
+            if (const auto *land = countOwn(QStringLiteral("island"), false) < 1
+                                       ? handAction(ruled::v1::HAND_ACTION_PLAY_LAND, QStringLiteral("Island"))
+                                       : nullptr) {
                 ruled::v1::RuledCommand cmd;
-                cmd.mutable_play_land()->set_hand_card_index(m.captured(1).toUInt());
-                sendRuled(cmd, QStringLiteral("play Island (idx %1)").arg(m.captured(1)));
+                cmd.mutable_play_land()->set_hand_card_index(land->hand_index());
+                sendRuled(cmd, QStringLiteral("play Island (idx %1)").arg(land->hand_index()));
                 return;
             }
-            if (!brainstormCast &&
-                labelMatching(QRegularExpression(QStringLiteral("^Cast Brainstorm \\(hand idx (\\d+)\\)$")), &m)) {
+            if (const auto *brainstorm =
+                    !brainstormCast ? handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Brainstorm"))
+                                    : nullptr) {
                 if (myPool.u >= 1) {
                     ruled::v1::RuledCommand cmd;
-                    cmd.mutable_cast_spell()->set_hand_card_index(m.captured(1).toUInt());
+                    cmd.mutable_cast_spell()->set_hand_card_index(brainstorm->hand_index());
                     brainstormCast = true;
                     sendRuled(cmd, QStringLiteral("cast Brainstorm"));
                     return;
@@ -1132,14 +1148,14 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     EXPECT_TRUE(sidecarStderr.contains(seedNeedle))
         << "tricerules-server never logged a session with the forced seed " << kForcedSeed;
     EXPECT_TRUE(p2.didMulligan) << "hoarder never took its scripted mulligan";
-    EXPECT_TRUE(p2.sawBottomLabel && p2.sentBottom) << "London mulligan bottoming never happened";
+    EXPECT_TRUE(p2.sawBottomAction && p2.sentBottom) << "London mulligan bottoming never happened";
     EXPECT_TRUE(p1.sawBoltPushWithTarget) << "no targeted Lightning Bolt cast was observed on the stack";
     EXPECT_TRUE(p1.sawBoltLifeLoss) << "Lightning Bolt never dealt its 3 damage";
     EXPECT_TRUE(p1.sawAttackersDeclared) << "no combat with declared attackers was observed";
     EXPECT_TRUE(p1.sawCombatLifeLoss) << "combat damage never changed a life total";
     EXPECT_TRUE(p2.sawBrainstormChoice) << "Brainstorm's tier-3 resolution choice never arrived";
     EXPECT_TRUE(p2.sawBrainstormResolved) << "Brainstorm never finished resolving after the choice";
-    EXPECT_TRUE(p2.sawCleanupDiscardLabels && p2.sentCleanupDiscard) << "cleanup discard never happened";
+    EXPECT_TRUE(p2.sawCleanupDiscardActions && p2.sentCleanupDiscard) << "cleanup discard never happened";
     ASSERT_TRUE(p2.handSizeByPlayer.count(p2.myId));
     EXPECT_LE(p2.handSizeByPlayer[p2.myId], 7) << "hand size not enforced after cleanup discard";
 

@@ -3,7 +3,6 @@
 #include "ruled_client_host.h"
 #include "ruled_client_state.h"
 
-#include <QRegularExpression>
 #include <algorithm>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 
@@ -74,71 +73,19 @@ bool isCombatPhase(RuledCombatPhase phase)
            phase == RuledCombatPhase::CombatDamage;
 }
 
-/// How a label spec's optional third capture group is interpreted.
-enum class ThirdCapture
-{
-    Unused,     ///< the pattern has no third group
-    FaceIndex,  ///< CR 712: ", face N" — one entry per playable face of the slot
-    NeedsTarget ///< ", target" — the action needs a cast-time target
-};
-
-/// One engine legal-action label form. Capture 1 is the card name, capture 2 the engine hand slot,
-/// capture 3 whatever `third` says. A new hand mechanic is one more row here plus a
-/// RuledHandActionKind value — nothing else in the client parses labels.
-struct HandActionLabelSpec
-{
-    RuledHandActionKind kind;
-    QRegularExpression pattern;
-    ThirdCapture third;
-};
-
-const QVector<HandActionLabelSpec> &handActionLabelSpecs()
-{
-    static const QVector<HandActionLabelSpec> specs{
-        // CR 712: multi-face (MDFC) land labels append ", face N"; single-face lands omit it (face 0).
-        {RuledHandActionKind::PlayLand,
-         QRegularExpression(QStringLiteral(R"(^Play land (.*) \(hand idx (\d+)(?:, face (\d+))?\)$)")),
-         ThirdCapture::FaceIndex},
-        // Optional ", target" suffix is emitted by the engine when the spell needs a cast-time target.
-        {RuledHandActionKind::CastSpell,
-         QRegularExpression(QStringLiteral(R"(^Cast (.*) \(hand idx (\d+)(, target)?\)$)")),
-         ThirdCapture::NeedsTarget},
-        {RuledHandActionKind::CleanupDiscard,
-         QRegularExpression(QStringLiteral(R"(^Discard (.*) \(cleanup, hand idx (\d+)\)$)")), ThirdCapture::Unused},
-        {RuledHandActionKind::OpeningBottom,
-         QRegularExpression(QStringLiteral(R"(^Put (.+) on bottom \(opening, hand idx (\d+)\)$)")),
-         ThirdCapture::Unused},
-    };
-    return specs;
-}
-
-/// The one legal-action label parser: every hand-action kind at once, in a single pass over labels.
-QHash<RuledHandActionKind, RuledHandActionSet> parseHandActions(const ruled::v1::LegalActions &actions)
+/// Copies the engine's structured hand-action contract into the generic client-side indexes.
+QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::LegalActions &actions)
 {
     QHash<RuledHandActionKind, RuledHandActionSet> parsed;
-    for (const auto &label : actions.labels()) {
-        const QString text = QString::fromStdString(label);
-        for (const HandActionLabelSpec &spec : handActionLabelSpecs()) {
-            const QRegularExpressionMatch match = spec.pattern.match(text);
-            if (!match.hasMatch()) {
-                continue;
-            }
-            bool ok = false;
-            const int handIndex = match.captured(2).toInt(&ok);
-            if (!ok) {
-                break; // label matched this kind; a malformed slot is not another kind's label
-            }
-            RuledHandActionSet &set = parsed[spec.kind];
-            set.handIndices.insert(handIndex);
-            set.indicesByCardName.insert(match.captured(1), handIndex);
-            if (spec.third == ThirdCapture::FaceIndex) {
-                bool faceOk = false;
-                const int faceIndex = match.captured(3).toInt(&faceOk);
-                set.faceOptionsByIndex[handIndex].append({faceOk ? faceIndex : 0, match.captured(1)});
-            } else if (spec.third == ThirdCapture::NeedsTarget && !match.captured(3).isEmpty()) {
-                set.needsTargetIndices.insert(handIndex);
-            }
-            break;
+    for (const auto &action : actions.hand_actions()) {
+        const int handIndex = static_cast<int>(action.hand_index());
+        RuledHandActionSet &set = parsed[action.kind()];
+        set.handIndices.insert(handIndex);
+        const QString cardName = QString::fromStdString(action.card_name());
+        set.indicesByCardName.insert(cardName, handIndex);
+        set.faceOptionsByIndex[handIndex].append({static_cast<int>(action.face_index()), cardName});
+        if (action.needs_target()) {
+            set.needsTargetIndices.insert(handIndex);
         }
     }
     return parsed;
@@ -588,8 +535,14 @@ void RuledEventDispatcher::applyBattlefieldObjectMap(const ruled::v1::Battlefiel
         validOids.insert(entry.engine_object_id());
         state->engineOidOwner.insert(entry.engine_object_id(), entry.player_id());
         state->engineOidSummoningSick.insert(entry.engine_object_id(), entry.summoning_sick());
-        state->engineOidHaste.insert(entry.engine_object_id(), entry.haste());
-        state->engineOidTrample.insert(entry.engine_object_id(), entry.trample());
+        bool hasHaste = false;
+        bool hasTrample = false;
+        for (const std::string &keyword : entry.keywords()) {
+            hasHaste = hasHaste || keyword == "Haste";
+            hasTrample = hasTrample || keyword == "Trample";
+        }
+        state->engineOidHaste.insert(entry.engine_object_id(), hasHaste);
+        state->engineOidTrample.insert(entry.engine_object_id(), hasTrample);
         state->engineOidCreature.insert(entry.engine_object_id(), entry.is_creature());
         if (entry.server_card_id() >= 0) {
             state->ownerCardIdToEngineOid.insert(
@@ -672,54 +625,33 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
         if (p.first_strike_step_pending()) {
             anyFirstStrikePending = true;
         }
-        const int count = std::min(p.battlefield_object_id_size(), p.battlefield_damage_size());
-        for (int zdi = 0; zdi < count; ++zdi) {
-            const quint32 oid = p.battlefield_object_id(zdi);
-            const int damage = static_cast<int>(p.battlefield_damage(zdi));
+        for (const auto &battlefieldObject : p.battlefield_objects()) {
+            const quint32 oid = battlefieldObject.object_id();
+            const int damage = static_cast<int>(battlefieldObject.damage());
             if (oid != 0 && damage > 0) {
                 state->engineOidMarkedDamage.insert(oid, damage);
             }
-        }
-        // Parse activated ability texts and mana costs (pipe-delimited per permanent).
-        const int nAbil = std::min(p.battlefield_object_id_size(), p.battlefield_activated_ability_texts_size());
-        for (int ai = 0; ai < nAbil; ++ai) {
-            const quint32 oid = p.battlefield_object_id(ai);
             if (oid == 0) {
                 continue;
             }
-            const QString textsStr = QString::fromStdString(p.battlefield_activated_ability_texts(ai));
-            if (!textsStr.isEmpty()) {
-                state->engineOidToActivatedAbilityTexts.insert(oid, textsStr.split(QChar('|'), Qt::SkipEmptyParts));
+            QStringList texts;
+            QStringList manaCosts;
+            QStringList manaProduced;
+            QStringList costLabels;
+            for (const auto &ability : battlefieldObject.activated_abilities()) {
+                texts.append(QString::fromStdString(ability.text()));
+                manaCosts.append(QString::fromStdString(ability.mana_cost()));
+                manaProduced.append(QString::fromStdString(ability.mana_produced()));
+                costLabels.append(QString::fromStdString(ability.cost_label()));
             }
-            if (ai < p.battlefield_activated_ability_mana_costs_size()) {
-                // Split on '|'; an empty entry means no mana cost for that ability.
-                state->engineOidToActivatedAbilityManaCosts.insert(
-                    oid, QString::fromStdString(p.battlefield_activated_ability_mana_costs(ai)).split(QChar('|')));
+            if (!texts.isEmpty()) {
+                state->engineOidToActivatedAbilityTexts.insert(oid, texts);
+                state->engineOidToActivatedAbilityManaCosts.insert(oid, manaCosts);
+                state->engineOidToActivatedAbilityManaProduced.insert(oid, manaProduced);
+                state->engineOidToActivatedAbilityCostLabels.insert(oid, costLabels);
             }
-            if (ai < p.battlefield_activated_ability_mana_produced_size()) {
-                // Split on '|'; empty entry = non-mana ability (CR 605).
-                state->engineOidToActivatedAbilityManaProduced.insert(
-                    oid, QString::fromStdString(p.battlefield_activated_ability_mana_produced(ai)).split(QChar('|')));
-            }
-            if (ai < p.battlefield_activated_ability_cost_labels_size()) {
-                // Split on '|'; each entry is a display cost string.
-                state->engineOidToActivatedAbilityCostLabels.insert(
-                    oid, QString::fromStdString(p.battlefield_activated_ability_cost_labels(ai)).split(QChar('|')));
-            }
-        }
-        const int nPow = std::min(p.battlefield_object_id_size(), p.battlefield_power_size());
-        for (int pi = 0; pi < nPow; ++pi) {
-            const quint32 oid = p.battlefield_object_id(pi);
-            if (oid != 0) {
-                state->engineOidBattlefieldPower.insert(oid, static_cast<int>(p.battlefield_power(pi)));
-            }
-        }
-        const int nTough = std::min(p.battlefield_object_id_size(), p.battlefield_toughness_size());
-        for (int ti = 0; ti < nTough; ++ti) {
-            const quint32 oid = p.battlefield_object_id(ti);
-            if (oid != 0) {
-                state->engineOidBattlefieldToughness.insert(oid, static_cast<int>(p.battlefield_toughness(ti)));
-            }
+            state->engineOidBattlefieldPower.insert(oid, static_cast<int>(battlefieldObject.power()));
+            state->engineOidBattlefieldToughness.insert(oid, static_cast<int>(battlefieldObject.toughness()));
         }
     }
     if (anyFirstStrikePending != state->firstStrikeStepPending) {
@@ -845,7 +777,7 @@ void RuledEventDispatcher::applyLifeChanged(const ruled::v1::LifeChanged &lc, Ba
 
 void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &actions, BatchContext &ctx)
 {
-    state->handActions = parseHandActions(actions);
+    state->handActions = copyHandActions(actions);
 
     state->validTargetsByHandSlot.clear();
     for (const auto &entry : actions.valid_targets_by_hand_slot()) {
@@ -861,7 +793,7 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
     state->openingUiKind = RuledOpeningUiKind::None;
     state->openingPickSeatIds.clear();
     state->openingBottomSelectedIndices.clear();
-    if (!state->handActionSet(RuledHandActionKind::OpeningBottom).handIndices.isEmpty()) {
+    if (!state->handActionSet(ruled::v1::HAND_ACTION_OPENING_BOTTOM).handIndices.isEmpty()) {
         state->openingUiKind = RuledOpeningUiKind::BottomLibrary;
     } else {
         for (const auto &l : actions.labels()) {

@@ -189,6 +189,22 @@ protected:
         entry->set_is_creature(true);
         return entry;
     }
+
+    static ruled::v1::LegalHandAction *addHandAction(ruled::v1::LegalActions &actions,
+                                                     ruled::v1::HandActionKind kind,
+                                                     int handIndex,
+                                                     const std::string &cardName,
+                                                     int faceIndex = 0,
+                                                     bool needsTarget = false)
+    {
+        auto *action = actions.add_hand_actions();
+        action->set_kind(kind);
+        action->set_hand_index(static_cast<quint32>(handIndex));
+        action->set_card_name(cardName);
+        action->set_face_index(static_cast<quint32>(faceIndex));
+        action->set_needs_target(needsTarget);
+        return action;
+    }
 };
 
 // ---------------------------------------------------------------------------------------
@@ -201,9 +217,9 @@ TEST_F(RuledClientTest, BattlefieldObjectMapBuildsIdentityMapsBothWays)
     auto *ev = batch.add_events();
     auto *e1 = addPermanent(ev, kLocalPlayer, 100, 7);
     e1->set_summoning_sick(true);
-    e1->set_haste(true);
+    e1->add_keywords("Haste");
     auto *e2 = addPermanent(ev, kOpponent, 200, 9);
-    e2->set_trample(true);
+    e2->add_keywords("Trample");
     e2->set_is_creature(false);
     apply(batch);
 
@@ -260,27 +276,27 @@ TEST_F(RuledClientTest, HandSlotMapIsRebuiltFromScratchEachBatch)
 }
 
 // ---------------------------------------------------------------------------------------
-// Legal-action parsing — one case per hand-action kind
+// Structured legal hand actions — one case per kind
 // ---------------------------------------------------------------------------------------
 
-TEST_F(RuledClientTest, ParsesLandPlayLabelsIncludingMdfcFaces)
+TEST_F(RuledClientTest, AppliesStructuredLandActionsIncludingMdfcFaces)
 {
     ruled::v1::RuledEventBatch batch;
     auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
-    actions.add_labels("Play land Forest (hand idx 2)");
-    actions.add_labels("Play land Cragcrown Pathway (hand idx 4, face 0)");
-    actions.add_labels("Play land Timbercrown Pathway (hand idx 4, face 1)");
-    actions.add_labels("Cast Lightning Bolt (hand idx 1, target)");
+    addHandAction(actions, ruled::v1::HAND_ACTION_PLAY_LAND, 2, "Forest");
+    addHandAction(actions, ruled::v1::HAND_ACTION_PLAY_LAND, 4, "Cragcrown Pathway", 0);
+    addHandAction(actions, ruled::v1::HAND_ACTION_PLAY_LAND, 4, "Timbercrown Pathway", 1);
+    addHandAction(actions, ruled::v1::HAND_ACTION_CAST_SPELL, 1, "Lightning Bolt", 0, true);
     apply(batch);
 
-    constexpr auto kLand = RuledHandActionKind::PlayLand;
+    constexpr auto kLand = ruled::v1::HAND_ACTION_PLAY_LAND;
     EXPECT_TRUE(state->isHandActionLegal(kLand, 2));
     EXPECT_TRUE(state->isHandActionLegal(kLand, 4));
     EXPECT_FALSE(state->isHandActionLegal(kLand, 3));
     EXPECT_EQ(state->handActionIndicesForCardName(kLand, "Forest"), QList<int>({2}));
-    // A cast label never lands in the PlayLand set (one parser, one kind per label).
+    // A cast action never lands in the PlayLand set.
     EXPECT_FALSE(state->isHandActionLegal(kLand, 1));
-    EXPECT_TRUE(state->isHandActionLegal(RuledHandActionKind::CastSpell, 1));
+    EXPECT_TRUE(state->isHandActionLegal(ruled::v1::HAND_ACTION_CAST_SPELL, 1));
 
     // CR 712: one hand slot, two playable faces, sorted by face index.
     const QVector<RuledFaceOption> faces = state->handActionFaceOptions(kLand, 4);
@@ -294,15 +310,15 @@ TEST_F(RuledClientTest, ParsesLandPlayLabelsIncludingMdfcFaces)
     EXPECT_EQ(state->handActionFaceOptions(kLand, 2)[0].faceIndex, 0);
 }
 
-TEST_F(RuledClientTest, ParsesSpellCastLabelsAndTargetRequirement)
+TEST_F(RuledClientTest, AppliesStructuredCastActionsAndTargetRequirement)
 {
     ruled::v1::RuledEventBatch batch;
     auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
-    actions.add_labels("Cast Lightning Bolt (hand idx 1, target)");
-    actions.add_labels("Cast Llanowar Elves (hand idx 3)");
+    addHandAction(actions, ruled::v1::HAND_ACTION_CAST_SPELL, 1, "Lightning Bolt", 0, true);
+    addHandAction(actions, ruled::v1::HAND_ACTION_CAST_SPELL, 3, "Llanowar Elves");
     apply(batch);
 
-    constexpr auto kCast = RuledHandActionKind::CastSpell;
+    constexpr auto kCast = ruled::v1::HAND_ACTION_CAST_SPELL;
     EXPECT_TRUE(state->isHandActionLegal(kCast, 1));
     EXPECT_TRUE(state->handActionNeedsTarget(kCast, 1));
     EXPECT_TRUE(state->isHandActionLegal(kCast, 3));
@@ -311,19 +327,23 @@ TEST_F(RuledClientTest, ParsesSpellCastLabelsAndTargetRequirement)
     EXPECT_EQ(state->handActionIndexForCard(kCast, "Nonexistent", 0), -1);
 }
 
-TEST_F(RuledClientTest, ParsesCleanupDiscardLabelsAndRequiredCount)
+TEST_F(RuledClientTest, AppliesStructuredCleanupDiscardActionsAndRequiredCount)
 {
     ruled::v1::RuledEventBatch batch;
     auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
     // CR 514.1: nine cards in hand means two must be discarded.
     for (int i = 0; i < 9; ++i) {
-        actions.add_labels(("Discard Card" + std::to_string(i) + " (cleanup, hand idx " + std::to_string(i) + ")"));
+        addHandAction(actions, ruled::v1::HAND_ACTION_CLEANUP_DISCARD, i, "Card" + std::to_string(i));
     }
     apply(batch);
 
     EXPECT_TRUE(state->localPlayerMustCleanupDiscard());
     EXPECT_EQ(state->cleanupDiscardRequiredCount(), 2);
     EXPECT_EQ(state->cleanupDiscardSelectedCount(), 0);
+    // Cleanup clicks resolve by authoritative hand-slot identity. A client display-name mismatch
+    // must not empty the candidate list and make the required discard unclickable.
+    EXPECT_EQ(state->handActionClickCandidates(ruled::v1::HAND_ACTION_CLEANUP_DISCARD, "Different display name"),
+              QList<int>({0, 1, 2, 3, 4, 5, 6, 7, 8}));
 
     state->toggleCleanupDiscardHandIndex(0);
     state->toggleCleanupDiscardHandIndex(4);
@@ -362,12 +382,12 @@ TEST_F(RuledClientTest, ParsesOpeningLabelsIntoTheThreeOpeningModes)
         ruled::v1::RuledEventBatch batch;
         auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
         actions.add_labels("Keep opening hand (opening)");
-        actions.add_labels("Put Forest on bottom (opening, hand idx 0)");
-        actions.add_labels("Put Mountain on bottom (opening, hand idx 5)");
+        addHandAction(actions, ruled::v1::HAND_ACTION_OPENING_BOTTOM, 0, "Forest");
+        addHandAction(actions, ruled::v1::HAND_ACTION_OPENING_BOTTOM, 5, "Mountain");
         apply(batch);
         // The bottoming step wins over the mulligan prompt when both labels are present.
         EXPECT_EQ(state->getOpeningUiKind(), RuledClientState::RuledOpeningUiKind::BottomLibrary);
-        constexpr auto kBottom = RuledHandActionKind::OpeningBottom;
+        constexpr auto kBottom = ruled::v1::HAND_ACTION_OPENING_BOTTOM;
         EXPECT_TRUE(state->isHandActionLegal(kBottom, 0));
         EXPECT_TRUE(state->isHandActionLegal(kBottom, 5));
         EXPECT_EQ(state->handActionLegalIndicesSorted(kBottom), QList<int>({0, 5}));
@@ -419,7 +439,7 @@ TEST_F(RuledClientTest, RequirementSetsSurviveABatchWithoutLegalActions)
 {
     ruled::v1::RuledEventBatch withActions;
     auto &actions = (*withActions.mutable_legal_by_player())[kLocalPlayer];
-    actions.add_labels("Cast Grizzly Bears (hand idx 0)");
+    addHandAction(actions, ruled::v1::HAND_ACTION_CAST_SPELL, 0, "Grizzly Bears");
     actions.add_required_attacker_ids(100); // CR 508.1d
     actions.add_required_blocker_ids(200);  // CR 509.1c
     apply(withActions);
@@ -433,7 +453,7 @@ TEST_F(RuledClientTest, RequirementSetsSurviveABatchWithoutLegalActions)
     ap->add_attacker_object_ids(100);
     apply(preview);
 
-    EXPECT_FALSE(state->isHandActionLegal(RuledHandActionKind::CastSpell, 0));
+    EXPECT_FALSE(state->isHandActionLegal(ruled::v1::HAND_ACTION_CAST_SPELL, 0));
     EXPECT_TRUE(state->requiredAttackerOids.contains(100));
     EXPECT_TRUE(state->requiredBlockerOids.contains(200));
     EXPECT_TRUE(state->remoteAttackerPreviewOids.contains(100));
@@ -458,9 +478,9 @@ TEST_F(RuledClientTest, LegalActionsForAnotherPlayerAreIgnored)
 {
     ruled::v1::RuledEventBatch batch;
     auto &actions = (*batch.mutable_legal_by_player())[kOpponent];
-    actions.add_labels("Cast Lightning Bolt (hand idx 1, target)");
+    addHandAction(actions, ruled::v1::HAND_ACTION_CAST_SPELL, 1, "Lightning Bolt", 0, true);
     apply(batch);
-    EXPECT_FALSE(state->isHandActionLegal(RuledHandActionKind::CastSpell, 1));
+    EXPECT_FALSE(state->isHandActionLegal(ruled::v1::HAND_ACTION_CAST_SPELL, 1));
 }
 
 // ---------------------------------------------------------------------------------------
@@ -817,15 +837,13 @@ TEST_F(RuledClientTest, MultipleBlockersQueueAnAssignmentSeededLethalFirst)
     addPermanent(ev, kOpponent, 201, 3);
     auto *view = batch.add_events()->mutable_zone_view()->add_per_player();
     view->set_player_id(kLocalPlayer);
-    for (const quint32 oid : {100u, 200u, 201u}) {
-        view->add_battlefield_object_id(oid);
+    for (const auto &[oid, power, toughness] :
+         std::initializer_list<std::tuple<quint32, quint32, quint32>>{{100, 5, 5}, {200, 2, 2}, {201, 3, 3}}) {
+        auto *object = view->add_battlefield_objects();
+        object->set_object_id(oid);
+        object->set_power(power);
+        object->set_toughness(toughness);
     }
-    view->add_battlefield_power(5);
-    view->add_battlefield_power(2);
-    view->add_battlefield_power(3);
-    view->add_battlefield_toughness(5);
-    view->add_battlefield_toughness(2);
-    view->add_battlefield_toughness(3);
     auto *bd = batch.add_events()->mutable_blockers_declared();
     for (const quint32 blocker : {200u, 201u}) {
         auto *pair = bd->add_block_pairs();
@@ -856,16 +874,18 @@ TEST_F(RuledClientTest, TrampleAssignsLethalToBlockerAndTheRemainderToThePlayer)
     apply(phaseBatch(ruled::v1::PHASE_ID_DECLARE_BLOCKERS, kLocalPlayer));
     ruled::v1::RuledEventBatch batch;
     auto *ev = batch.add_events();
-    addPermanent(ev, kLocalPlayer, 100, 1)->set_trample(true); // CR 702.19
+    addPermanent(ev, kLocalPlayer, 100, 1)->add_keywords("Trample"); // CR 702.19
     addPermanent(ev, kOpponent, 200, 2);
     auto *view = batch.add_events()->mutable_zone_view()->add_per_player();
     view->set_player_id(kLocalPlayer);
-    view->add_battlefield_object_id(100);
-    view->add_battlefield_object_id(200);
-    view->add_battlefield_power(6);
-    view->add_battlefield_power(1);
-    view->add_battlefield_toughness(6);
-    view->add_battlefield_toughness(2);
+    auto *attackerView = view->add_battlefield_objects();
+    attackerView->set_object_id(100);
+    attackerView->set_power(6);
+    attackerView->set_toughness(6);
+    auto *blockerView = view->add_battlefield_objects();
+    blockerView->set_object_id(200);
+    blockerView->set_power(1);
+    blockerView->set_toughness(2);
     auto *pair = batch.add_events()->mutable_blockers_declared()->add_block_pairs();
     pair->set_attacker_id(100);
     pair->set_blocker_id(200);
@@ -913,12 +933,17 @@ TEST_F(RuledClientTest, ZoneViewParsesDamageAndPipeDelimitedAbilities)
     auto *view = batch.add_events()->mutable_zone_view()->add_per_player();
     view->set_player_id(kLocalPlayer);
     view->set_first_strike_step_pending(true);
-    view->add_battlefield_object_id(100);
-    view->add_battlefield_damage(3);
-    view->add_battlefield_activated_ability_texts("Add {G}.|Sacrifice this: draw a card.");
-    view->add_battlefield_activated_ability_mana_costs("|1");
-    view->add_battlefield_activated_ability_mana_produced("G|");
-    view->add_battlefield_activated_ability_cost_labels("{T}|Sacrifice this");
+    auto *object = view->add_battlefield_objects();
+    object->set_object_id(100);
+    object->set_damage(3);
+    auto *manaAbility = object->add_activated_abilities();
+    manaAbility->set_text("Add {G}.");
+    manaAbility->set_mana_produced("G");
+    manaAbility->set_cost_label("{T}");
+    auto *drawAbility = object->add_activated_abilities();
+    drawAbility->set_text("Sacrifice this: draw a card.");
+    drawAbility->set_mana_cost("1");
+    drawAbility->set_cost_label("Sacrifice this");
     apply(batch);
 
     EXPECT_EQ(state->markedDamageForEngineOid(100), 3);
@@ -1217,7 +1242,7 @@ TEST_F(RuledClientTest, OpeningBottomSendsIndicesAdjustedForPriorRemovals)
     auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
     actions.add_labels("Keep opening hand (opening)");
     for (int i = 0; i < 7; ++i) {
-        actions.add_labels("Put Card on bottom (opening, hand idx " + std::to_string(i) + ")");
+        addHandAction(actions, ruled::v1::HAND_ACTION_OPENING_BOTTOM, i, "Card");
     }
     apply(batch);
     ASSERT_EQ(state->getOpeningUiKind(), RuledClientState::RuledOpeningUiKind::BottomLibrary);
@@ -1244,7 +1269,7 @@ TEST_F(RuledClientTest, OpeningBottomAdjustsLaterIndicesForEarlierRemovals)
     ruled::v1::RuledEventBatch batch;
     auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
     for (int i = 0; i < 7; ++i) {
-        actions.add_labels("Put Card on bottom (opening, hand idx " + std::to_string(i) + ")");
+        addHandAction(actions, ruled::v1::HAND_ACTION_OPENING_BOTTOM, i, "Card");
     }
     apply(batch);
     state->openingMulliganRedraw();
@@ -1290,7 +1315,7 @@ TEST_F(RuledClientTest, ClearSessionStateResetsEverythingCarriedBetweenGames)
     rcr->set_choice_kind(ruled::v1::CHOICE_KIND_TARGET_OBJECTS);
     rcr->add_candidate_object_ids(100);
     auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
-    actions.add_labels("Cast Grizzly Bears (hand idx 0)");
+    addHandAction(actions, ruled::v1::HAND_ACTION_CAST_SPELL, 0, "Grizzly Bears");
     apply(batch);
     ASSERT_TRUE(state->hasStackItems());
     ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget));
@@ -1303,7 +1328,7 @@ TEST_F(RuledClientTest, ClearSessionStateResetsEverythingCarriedBetweenGames)
     EXPECT_TRUE(state->stackAnnotation(900).isEmpty());
     EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget));
     EXPECT_FALSE(state->hasPendingTriggerTarget());
-    EXPECT_FALSE(state->isHandActionLegal(RuledHandActionKind::CastSpell, 0));
+    EXPECT_FALSE(state->isHandActionLegal(ruled::v1::HAND_ACTION_CAST_SPELL, 0));
     EXPECT_EQ(state->getOpeningUiKind(), RuledClientState::RuledOpeningUiKind::None);
     EXPECT_EQ(state->getOpeningMulliganCount(), 0);
     // Phantom graveyard targets are the reason this map must not survive a game boundary.

@@ -482,6 +482,15 @@ feeds in, so it only tests the parser against itself — the *contract* is check
 mechanic gets no cross-language check at all, and the failure mode is silent (no regex match → empty
 set → the card is simply unclickable, no error anywhere).
 
+> **Completed 2026-07-26.** `RuledPerPlayerView` now carries structured hand, battlefield,
+> ability, and graveyard data; both zone-view consumers use it directly, and battlefield keywords
+> are generic strings. Every broadcast-reachable field has a `FieldVisibility` protobuf option,
+> enforced by a reflection test, while Servatrice clears per-player and server-only data
+> generically and restores only explicitly routed recipient data. `LegalHandAction` and
+> `HandActionKind` are the gameplay contract for all four hand actions; labels remain display-only
+> and the client label parser is gone. The Rust suite, clippy/fmt gates, full Windows Ninja build,
+> full C++ test suite, client contract tests, and ruled end-to-end smoke test all pass.
+
 ### Step 9 — Rust: resolution split + primitives split (~3 days; before mass primitive growth)
 
 **9a. `resolution.rs` → `engine/resolution/` directory.** The file (1,814 lines) holds one

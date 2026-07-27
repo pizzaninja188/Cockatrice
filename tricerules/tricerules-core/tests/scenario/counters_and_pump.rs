@@ -462,27 +462,24 @@ fn zone_view_reports_counter_annotation() {
         .iter()
         .find(|p| p.player_id == 0)
         .expect("p0 view");
-    assert_eq!(
-        p0.battlefield_counters_annotation.len(),
-        p0.battlefield.len(),
-        "annotation array parallels battlefield"
-    );
     let bear_pos = p0
-        .battlefield_object_id
+        .battlefield_objects
         .iter()
-        .position(|&oid| oid == bear)
+        .position(|object| object.object_id == bear)
         .expect("bear in view");
     assert_eq!(
-        p0.battlefield_counters_annotation[bear_pos], "1 +1/+1 counter(s)",
+        p0.battlefield_objects[bear_pos].counters_annotation, "1 +1/+1 counter(s)",
         "bear with one +1/+1 counter is annotated"
     );
     let plain_pos = p0
-        .battlefield_object_id
+        .battlefield_objects
         .iter()
-        .position(|&oid| oid == plain)
+        .position(|object| object.object_id == plain)
         .expect("plain creature in view");
     assert!(
-        p0.battlefield_counters_annotation[plain_pos].is_empty(),
+        p0.battlefield_objects[plain_pos]
+            .counters_annotation
+            .is_empty(),
         "counter-free permanent has no annotation"
     );
 }

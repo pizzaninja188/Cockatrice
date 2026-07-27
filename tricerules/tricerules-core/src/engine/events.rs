@@ -104,19 +104,23 @@ impl GameEngine {
             .iter()
             .map(|p| rv1::RuledPerPlayerView {
                 player_id: p.id,
-                hand: p
+                hand_cards: p
                     .hand
                     .iter()
                     .map(|&oid| {
-                        self.state
+                        let card_id = self
+                            .state
                             .objects
                             .get(&oid)
                             .map(|o| o.card_id.clone())
-                            .unwrap_or_default()
+                            .unwrap_or_default();
+                        rv1::HandCard {
+                            card_id,
+                            object_id: oid,
+                        }
                     })
                     .collect(),
-                hand_object_id: p.hand.clone(),
-                lib_ids: p
+                library_card_ids: p
                     .library
                     .iter()
                     .map(|&oid| {
@@ -127,121 +131,106 @@ impl GameEngine {
                             .unwrap_or_default()
                     })
                     .collect::<Vec<_>>(),
-                battlefield: p
+                battlefield_objects: p
                     .battlefield
                     .iter()
                     .map(|&oid| {
-                        self.state
-                            .objects
-                            .get(&oid)
-                            .map(|o| o.card_id.clone())
-                            .unwrap_or_default()
-                    })
-                    .collect(),
-                battlefield_tapped: p
-                    .battlefield
-                    .iter()
-                    .map(|&oid| {
-                        self.state
-                            .objects
-                            .get(&oid)
-                            .map(|o| o.tapped)
-                            .unwrap_or(false)
-                    })
-                    .collect(),
-                battlefield_object_id: p.battlefield.to_vec(),
-                battlefield_summoning_sick: p
-                    .battlefield
-                    .iter()
-                    .map(|&oid| {
-                        self.state
-                            .objects
-                            .get(&oid)
-                            .map(|o| o.summoning_sick)
-                            .unwrap_or(false)
-                    })
-                    .collect(),
-                battlefield_power: p
-                    .battlefield
-                    .iter()
-                    .map(|&oid| {
-                        if self
-                            .state
-                            .objects
-                            .get(&oid)
-                            .is_some_and(|o| o.is_creature(self.registry))
-                        {
-                            self.effective_power(oid).unwrap_or(0)
-                        } else {
-                            0
+                        let Some(object) = self.state.objects.get(&oid) else {
+                            return rv1::BattlefieldObject {
+                                object_id: oid,
+                                ..Default::default()
+                            };
+                        };
+                        let is_creature = object.is_creature(self.registry);
+                        let face = self
+                            .registry
+                            .get(&object.card_id)
+                            .and_then(|definition| definition.face(object.face_up_index));
+                        let activated_abilities = face
+                            .map(|face| {
+                                face.activated_abilities
+                                    .iter()
+                                    .map(|ability| {
+                                        let mana_cost = match &ability.cost {
+                                            AbilityCost::Mana(cost)
+                                            | AbilityCost::TapAndMana(cost) => cost.to_string(),
+                                            _ => String::new(),
+                                        };
+                                        let mana_produced = match &ability.effect {
+                                            SpellEffectKind::ProduceMana { options } => options
+                                                .iter()
+                                                .map(mana_amount_symbols)
+                                                .collect::<Vec<_>>()
+                                                .join("/"),
+                                            _ => String::new(),
+                                        };
+                                        let cost_label = match &ability.cost {
+                                            AbilityCost::Tap => "{T}".to_string(),
+                                            AbilityCost::Mana(cost) => cost.to_string(),
+                                            AbilityCost::TapAndMana(cost) => {
+                                                format!("{{T}}, {cost}")
+                                            }
+                                            AbilityCost::Sacrifice => "Sacrifice this".to_string(),
+                                        };
+                                        rv1::AbilityInfo {
+                                            text: ability.text.clone(),
+                                            mana_cost,
+                                            mana_produced,
+                                            cost_label,
+                                        }
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        let keywords = [
+                            tricerules_cards::Keyword::Flying,
+                            tricerules_cards::Keyword::Reach,
+                            tricerules_cards::Keyword::Intimidate,
+                            tricerules_cards::Keyword::Vigilance,
+                            tricerules_cards::Keyword::Lifelink,
+                            tricerules_cards::Keyword::Haste,
+                            tricerules_cards::Keyword::Deathtouch,
+                            tricerules_cards::Keyword::Menace,
+                            tricerules_cards::Keyword::Trample,
+                            tricerules_cards::Keyword::FirstStrike,
+                            tricerules_cards::Keyword::DoubleStrike,
+                            tricerules_cards::Keyword::Indestructible,
+                            tricerules_cards::Keyword::Hexproof,
+                            tricerules_cards::Keyword::Shroud,
+                            tricerules_cards::Keyword::Defender,
+                            tricerules_cards::Keyword::Flash,
+                        ]
+                        .into_iter()
+                        .filter(|&keyword| self.effective_has_keyword(oid, keyword))
+                        .map(|keyword| match keyword {
+                            tricerules_cards::Keyword::FirstStrike => "FirstStrike".to_string(),
+                            tricerules_cards::Keyword::DoubleStrike => "DoubleStrike".to_string(),
+                            _ => keyword.as_str().to_string(),
+                        })
+                        .collect();
+                        rv1::BattlefieldObject {
+                            object_id: oid,
+                            card_id: object.card_id.clone(),
+                            tapped: object.tapped,
+                            summoning_sick: object.summoning_sick,
+                            is_creature,
+                            power: if is_creature {
+                                self.effective_power(oid).unwrap_or(0)
+                            } else {
+                                0
+                            },
+                            toughness: if is_creature {
+                                self.effective_toughness(oid).unwrap_or(0)
+                            } else {
+                                0
+                            },
+                            damage: if is_creature { object.damage } else { 0 },
+                            keywords,
+                            activated_abilities,
+                            counters_annotation: object.counter_annotation(),
+                            attached_to_oid: object.attached_to.unwrap_or(0),
+                            face_up_index: object.face_up_index as u32,
                         }
-                    })
-                    .collect(),
-                battlefield_toughness: p
-                    .battlefield
-                    .iter()
-                    .map(|&oid| {
-                        if self
-                            .state
-                            .objects
-                            .get(&oid)
-                            .is_some_and(|o| o.is_creature(self.registry))
-                        {
-                            self.effective_toughness(oid).unwrap_or(0)
-                        } else {
-                            0
-                        }
-                    })
-                    .collect(),
-                battlefield_damage: p
-                    .battlefield
-                    .iter()
-                    .map(|&oid| {
-                        self.state
-                            .objects
-                            .get(&oid)
-                            .filter(|o| o.is_creature(self.registry))
-                            .map_or(0, |o| o.damage)
-                    })
-                    .collect(),
-                battlefield_is_creature: p
-                    .battlefield
-                    .iter()
-                    .map(|&oid| {
-                        self.state
-                            .objects
-                            .get(&oid)
-                            .map(|o| o.is_creature(self.registry))
-                            .unwrap_or(false)
-                    })
-                    .collect(),
-                // CR 702.10: clients use this to suppress the summoning-sick indicator
-                // and allow attacker selection for creatures that entered this turn.
-                battlefield_haste: p
-                    .battlefield
-                    .iter()
-                    .map(|&oid| self.effective_has_keyword(oid, tricerules_cards::Keyword::Haste))
-                    .collect(),
-                // CR 702.19: clients use this to enable trample damage assignment UI.
-                battlefield_trample: p
-                    .battlefield
-                    .iter()
-                    .map(|&oid| self.effective_has_keyword(oid, tricerules_cards::Keyword::Trample))
-                    .collect(),
-                // CR 702.7: informational flag for the client UI (independent of pending state).
-                battlefield_first_strike: p
-                    .battlefield
-                    .iter()
-                    .map(|&oid| {
-                        self.effective_has_keyword(oid, tricerules_cards::Keyword::FirstStrike)
-                    })
-                    .collect(),
-                // CR 702.4: informational flag for the client UI.
-                battlefield_double_strike: p
-                    .battlefield
-                    .iter()
-                    .map(|&oid| {
-                        self.effective_has_keyword(oid, tricerules_cards::Keyword::DoubleStrike)
                     })
                     .collect(),
                 // CR 510.4: true while combat is set up with at least one attacker or blocker
@@ -255,163 +244,8 @@ impl GameEngine {
                             && combat::combat_needs_first_strike_step(self, c)
                     })
                     .unwrap_or(false),
-                // Pipe-delimited activated ability texts per battlefield permanent (empty if none).
-                // CR 712.4: read activated abilities from the active face for multi-face cards
-                // so the relay builds the correct context menu (e.g. pathway land mana ability).
-                battlefield_activated_ability_texts: p
-                    .battlefield
-                    .iter()
-                    .map(|&oid| {
-                        self.state
-                            .objects
-                            .get(&oid)
-                            .and_then(|o| {
-                                self.registry
-                                    .get(&o.card_id)
-                                    .and_then(|d| d.face(o.face_up_index))
-                                    .map(|f| {
-                                        f.activated_abilities
-                                            .iter()
-                                            .map(|a| a.text.as_str())
-                                            .collect::<Vec<_>>()
-                                            .join("|")
-                                    })
-                            })
-                            .unwrap_or_default()
-                    })
-                    .collect(),
-                // Parallel to `battlefield_activated_ability_texts`: pipe-delimited mana cost
-                // strings extracted from AbilityCost in canonical Scryfall brace form. Tap/Sacrifice
-                // → "", Mana/TapAndMana → "{4}"/"{R}"/etc. The client parses both braces and the
-                // legacy compact form (see PlayerActions::parseSimpleManaCost).
-                battlefield_activated_ability_mana_costs: p
-                    .battlefield
-                    .iter()
-                    .map(|&oid| {
-                        self.state
-                            .objects
-                            .get(&oid)
-                            .and_then(|o| {
-                                self.registry
-                                    .get(&o.card_id)
-                                    .and_then(|d| d.face(o.face_up_index))
-                                    .map(|f| {
-                                        f.activated_abilities
-                                            .iter()
-                                            .map(|a| match &a.cost {
-                                                AbilityCost::Mana(c)
-                                                | AbilityCost::TapAndMana(c) => c.to_string(),
-                                                _ => String::new(),
-                                            })
-                                            .collect::<Vec<_>>()
-                                            .join("|")
-                                    })
-                            })
-                            .unwrap_or_default()
-                    })
-                    .collect(),
-                // Parallel to `battlefield_activated_ability_texts`: mana-ability production (CR 605).
-                battlefield_activated_ability_mana_produced: p
-                    .battlefield
-                    .iter()
-                    .map(|&oid| {
-                        self.state
-                            .objects
-                            .get(&oid)
-                            .and_then(|o| {
-                                self.registry
-                                    .get(&o.card_id)
-                                    .and_then(|d| d.face(o.face_up_index))
-                                    .map(|f| {
-                                        f.activated_abilities
-                                            .iter()
-                                            .map(|a| match &a.effect {
-                                                SpellEffectKind::ProduceMana { options } => options
-                                                    .iter()
-                                                    .map(mana_amount_symbols)
-                                                    .collect::<Vec<_>>()
-                                                    .join("/"),
-                                                _ => String::new(),
-                                            })
-                                            .collect::<Vec<_>>()
-                                            .join("|")
-                                    })
-                            })
-                            .unwrap_or_default()
-                    })
-                    .collect(),
-                // Parallel to `battlefield_activated_ability_texts`: pipe-delimited display-cost
-                // labels for each ability (e.g. "{T}", "{4}", "{T}, {4}", "Sacrifice this").
-                // Used by the client to build "cost: text" labels in the activation context menu.
-                battlefield_activated_ability_cost_labels: p
-                    .battlefield
-                    .iter()
-                    .map(|&oid| {
-                        self.state
-                            .objects
-                            .get(&oid)
-                            .and_then(|o| self.registry.get(&o.card_id))
-                            .map(|def| {
-                                def.activated_abilities
-                                    .iter()
-                                    .map(|a| match &a.cost {
-                                        AbilityCost::Tap => "{T}".to_string(),
-                                        AbilityCost::Mana(c) => c.to_string(),
-                                        AbilityCost::TapAndMana(c) => {
-                                            format!("{{T}}, {c}")
-                                        }
-                                        AbilityCost::Sacrifice => "Sacrifice this".to_string(),
-                                    })
-                                    .collect::<Vec<_>>()
-                                    .join("|")
-                            })
-                            .unwrap_or_default()
-                    })
-                    .collect(),
-                // Parallel to `battlefield`: per-permanent counter annotation for client display
-                // (e.g. "1 +1/+1 counter(s)"). Empty when the permanent has no counters.
-                battlefield_counters_annotation: p
-                    .battlefield
-                    .iter()
-                    .map(|&oid| {
-                        self.state
-                            .objects
-                            .get(&oid)
-                            .map(|o| o.counter_annotation())
-                            .unwrap_or_default()
-                    })
-                    .collect(),
-                // Parallel to `battlefield`: the ObjectId of the permanent this aura/equipment
-                // is attached to, or 0 if not attached. C++ relay uses this to issue
-                // Event_AttachCard so clients stack attached permanents visually.
-                battlefield_attached_to_oid: p
-                    .battlefield
-                    .iter()
-                    .map(|&oid| {
-                        self.state
-                            .objects
-                            .get(&oid)
-                            .and_then(|o| o.attached_to)
-                            .unwrap_or(0)
-                    })
-                    .collect(),
                 // Engine ObjectIds for each card in this player's graveyard (in graveyard order).
-                // Relay uses these to build the graveyard OID→server-card-id map for targeting.
-                graveyard_object_id: p.graveyard.clone(),
-                // Parallel to `battlefield`: active face index (0 = front) per permanent.
-                // Non-zero only for MDFC/Transform/Flip permanents that entered or transformed
-                // as a non-front face. Always 0 for Normal single-face cards.
-                battlefield_face_up_index: p
-                    .battlefield
-                    .iter()
-                    .map(|&oid| {
-                        self.state
-                            .objects
-                            .get(&oid)
-                            .map(|o| o.face_up_index as u32)
-                            .unwrap_or(0)
-                    })
-                    .collect(),
+                graveyard_object_ids: p.graveyard.clone(),
             })
             .collect();
         RuledEvent {

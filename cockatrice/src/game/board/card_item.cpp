@@ -278,8 +278,9 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
             ruledHandler->localPlayerMustCleanupDiscard()) {
             if (zone->getCards().indexOf(const_cast<CardItem *>(this)) >= 0) {
                 const int ri =
-                    RuledActions::resolveHandActionIndex(ruledHandler, RuledHandActionKind::CleanupDiscard, this);
-                if (ri >= 0 && ruledHandler->isHandActionLegal(RuledHandActionKind::CleanupDiscard, ri) &&
+                    RuledActions::resolveHandActionIndex(ruledHandler, ruled::v1::HAND_ACTION_CLEANUP_DISCARD, this);
+                if (ri >= 0 &&
+                    ruledHandler->isHandActionLegal(ruled::v1::HAND_ACTION_CLEANUP_DISCARD, ri) &&
                     ruledHandler->isCleanupDiscardHandIndexSelected(ri)) {
                     painter->save();
                     painter->setRenderHint(QPainter::Antialiasing, true);
@@ -296,7 +297,7 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
             ruledHandler->getOpeningUiKind() == RuledClientState::RuledOpeningUiKind::BottomLibrary) {
             if (zone->getCards().indexOf(const_cast<CardItem *>(this)) >= 0) {
                 const int ri =
-                    RuledActions::resolveHandActionIndex(ruledHandler, RuledHandActionKind::OpeningBottom, this);
+                    RuledActions::resolveHandActionIndex(ruledHandler, ruled::v1::HAND_ACTION_OPENING_BOTTOM, this);
                 if (ri >= 0) {
                     const int clickOrder = ruledHandler->openingBottomClickOrderFor(ri);
                     if (clickOrder > 0) {

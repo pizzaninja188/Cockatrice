@@ -44,8 +44,7 @@ class RuledClientHost;
 /// game's legal actions and opening prompt have already been applied, and clearing them strands the
 /// opening — the engine is blocked waiting for ChooseStartingPlayer and never re-sends the prompt.
 ///
-/// Fixed underlying type so `game_event_handler.h` can forward-declare it, per the same convention
-/// `RuledHandActionKind` uses below — keep the two declarations in step.
+/// Fixed underlying type so `game_event_handler.h` can forward-declare it.
 enum class RuledSessionResetScope : int
 {
     /// Game-stop transition: nothing from the finished session may survive.
@@ -65,18 +64,8 @@ struct RuledFaceOption
     QString faceName;
 };
 
-/// Every kind of action the engine can offer on a card in hand. Adding a hand mechanic (cycling,
-/// foretell, …) is an enum value here plus a label spec in the dispatcher's parse table — the
-/// storage, the legality queries and the clicked-card resolver below are already generic.
-/// The fixed underlying type lets `ruled_actions.h` forward-declare this without dragging the
-/// generated proto header into every one of its consumers — keep the two declarations in step.
-enum class RuledHandActionKind : int
-{
-    PlayLand,
-    CastSpell,
-    CleanupDiscard,
-    OpeningBottom,
-};
+/// Shared engine/client hand-action kind from ruled_v1.proto. Labels are display-only.
+using RuledHandActionKind = ruled::v1::HandActionKind;
 
 /// The engine's offer for one hand-action kind, rebuilt from LegalActions every batch.
 struct RuledHandActionSet
@@ -241,7 +230,7 @@ public:
     QHash<quint64, SpellTargetData> validTargetsByAbility;
     // Engine ObjectId -> marked damage currently shown in ruled ZoneView.
     QHash<quint32, int> engineOidMarkedDamage;
-    // From ZoneViewSync battlefield_power / battlefield_toughness (ruled creatures).
+    // From ZoneViewSync BattlefieldObject power / toughness (ruled creatures).
     QHash<quint32, int> engineOidBattlefieldPower;
     QHash<quint32, int> engineOidBattlefieldToughness;
 
@@ -409,6 +398,10 @@ public:
     [[nodiscard]] QList<int> handActionLegalIndicesSorted(RuledHandActionKind kind) const;
     /// Legal slots holding `cardName`, ascending.
     [[nodiscard]] QList<int> handActionIndicesForCardName(RuledHandActionKind kind, const QString &cardName) const;
+    /// Candidate slots for resolving a clicked CardItem. Cleanup and opening-bottom operate on
+    /// every offered hand slot, so their identity comes from the hand-slot map rather than display
+    /// names; land and cast actions still narrow by the offered face name.
+    [[nodiscard]] QList<int> handActionClickCandidates(RuledHandActionKind kind, const QString &cardName) const;
     /// `preferredHandIndex` when it is one of the slots holding `cardName`, else the lowest such
     /// slot, else -1.
     [[nodiscard]] int

@@ -54,6 +54,14 @@ QList<int> RuledClientState::handActionIndicesForCardName(RuledHandActionKind ki
     return matching;
 }
 
+QList<int> RuledClientState::handActionClickCandidates(RuledHandActionKind kind, const QString &cardName) const
+{
+    if (kind == ruled::v1::HAND_ACTION_CLEANUP_DISCARD || kind == ruled::v1::HAND_ACTION_OPENING_BOTTOM) {
+        return handActionLegalIndicesSorted(kind);
+    }
+    return handActionIndicesForCardName(kind, cardName);
+}
+
 int RuledClientState::handActionIndexForCard(RuledHandActionKind kind,
                                              const QString &cardName,
                                              int preferredHandIndex) const
@@ -88,12 +96,12 @@ void RuledClientState::clearHandActions()
 
 bool RuledClientState::localPlayerMustCleanupDiscard() const
 {
-    return !handActionSet(RuledHandActionKind::CleanupDiscard).handIndices.isEmpty();
+    return !handActionSet(ruled::v1::HAND_ACTION_CLEANUP_DISCARD).handIndices.isEmpty();
 }
 
 int RuledClientState::cleanupDiscardRequiredCount() const
 {
-    const int n = handActionSet(RuledHandActionKind::CleanupDiscard).handIndices.size();
+    const int n = handActionSet(ruled::v1::HAND_ACTION_CLEANUP_DISCARD).handIndices.size();
     if (n <= 7) {
         return 0;
     }
@@ -123,7 +131,7 @@ QList<int> RuledClientState::cleanupDiscardSelectedIndicesSorted() const
 
 void RuledClientState::toggleCleanupDiscardHandIndex(int ruledHandIndex)
 {
-    if (!isHandActionLegal(RuledHandActionKind::CleanupDiscard, ruledHandIndex)) {
+    if (!isHandActionLegal(ruled::v1::HAND_ACTION_CLEANUP_DISCARD, ruledHandIndex)) {
         return;
     }
     const int need = cleanupDiscardRequiredCount();
@@ -153,7 +161,7 @@ void RuledClientState::clearCleanupDiscardSelection(bool emitUiChange)
 
 void RuledClientState::pruneCleanupDiscardSelectionAndEmitUi()
 {
-    const QSet<int> &legal = handActionSet(RuledHandActionKind::CleanupDiscard).handIndices;
+    const QSet<int> &legal = handActionSet(ruled::v1::HAND_ACTION_CLEANUP_DISCARD).handIndices;
     if (legal.isEmpty()) {
         cleanupDiscardSelectedIndices.clear();
         emit cleanupDiscardUiChanged(0, 0);
@@ -198,7 +206,7 @@ int RuledClientState::openingBottomClickOrderFor(int handIndex) const
 
 void RuledClientState::toggleOpeningBottomHandIndex(int ruledHandIndex)
 {
-    if (!isHandActionLegal(RuledHandActionKind::OpeningBottom, ruledHandIndex)) {
+    if (!isHandActionLegal(ruled::v1::HAND_ACTION_OPENING_BOTTOM, ruledHandIndex)) {
         return;
     }
     const int need = openingBottomRequiredCount();

@@ -363,22 +363,17 @@ fn zone_view_includes_battlefield_object_ids() {
         .iter()
         .find(|p| p.player_id == 0)
         .expect("p0 view");
-    assert_eq!(p0.battlefield_object_id.len(), p0.battlefield.len());
-    assert_eq!(p0.battlefield_power.len(), p0.battlefield.len());
-    assert_eq!(p0.battlefield_toughness.len(), p0.battlefield.len());
-    assert_eq!(p0.battlefield_damage.len(), p0.battlefield.len());
-    assert_eq!(p0.battlefield_is_creature.len(), p0.battlefield.len());
-    assert_eq!(p0.hand_object_id.len(), p0.hand.len());
     let pos = p0
-        .battlefield
+        .battlefield_objects
         .iter()
-        .position(|c| c == "grizzly_bears")
+        .position(|object| object.card_id == "grizzly_bears")
         .expect("bears in view");
-    assert_eq!(p0.battlefield_object_id[pos], bears);
-    assert!(p0.battlefield_is_creature[pos]);
-    assert_eq!(p0.battlefield_power[pos], 2);
-    assert_eq!(p0.battlefield_toughness[pos], 2);
-    assert_eq!(p0.battlefield_damage[pos], 0);
+    let bears_view = &p0.battlefield_objects[pos];
+    assert_eq!(bears_view.object_id, bears);
+    assert!(bears_view.is_creature);
+    assert_eq!(bears_view.power, 2);
+    assert_eq!(bears_view.toughness, 2);
+    assert_eq!(bears_view.damage, 0);
 }
 
 #[test]

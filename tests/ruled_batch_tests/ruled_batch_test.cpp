@@ -3,7 +3,7 @@
 // These tests feed synthetic ruled::v1::IpcResponse batches to the server and assert that
 // the engine -> Cockatrice translation produces the expected state changes:
 //   * battlefield engine_oid <-> Server_Card.id mapping is built from RuledPerPlayerView
-//   * tap state propagates from `battlefield_tapped`; forced untaps only in untap-step batches
+//   * tap state propagates from `BattlefieldObject.tapped`; forced untaps only in untap-step batches
 //   * PermanentMoved -> Server_Card moveCard from TABLE/HAND/STACK to destination zone
 //   * LifeChanged    -> per-player life counter updated
 //   * AttackersDeclared -> Server_Card::attacking flag flipped
@@ -15,6 +15,7 @@
 // peekBatchResult) which the test bodies invoke.
 
 #include "game/ruled_game_driver.h"
+#include "game/ruled_utils.h"
 #include "game/server_abstract_player.h"
 #include "game/server_card.h"
 #include "game/server_cardzone.h"
@@ -26,14 +27,98 @@
 #include "server_test_helpers.h"
 
 #include <QString>
+#include <google/protobuf/dynamic_message.h>
 #include <gtest/gtest.h>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_user.pb.h>
 #include <libcockatrice/rng/rng_abstract.h>
 #include <libcockatrice/utility/color.h>
 #include <libcockatrice/utility/zone_names.h>
+#include <algorithm>
+#include <memory>
 
 RNG_Abstract *rng = nullptr; // required by other server code
+
+namespace {
+
+void collectBroadcastFields(const google::protobuf::Descriptor *message,
+                            QSet<const google::protobuf::Descriptor *> &visited,
+                            QList<const google::protobuf::FieldDescriptor *> &fields)
+{
+    if (!message || visited.contains(message)) {
+        return;
+    }
+    visited.insert(message);
+    for (int i = 0; i < message->field_count(); ++i) {
+        const auto *field = message->field(i);
+        fields.append(field);
+        if (field->cpp_type() != google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE) {
+            continue;
+        }
+        const auto *nested = field->message_type();
+        if (nested->options().map_entry()) {
+            const auto *value = nested->FindFieldByName("value");
+            if (value && value->cpp_type() == google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE) {
+                collectBroadcastFields(value->message_type(), visited, fields);
+            }
+        } else {
+            collectBroadcastFields(nested, visited, fields);
+        }
+    }
+}
+
+void setFieldToNonDefault(google::protobuf::Message *message, const google::protobuf::FieldDescriptor *field)
+{
+    const auto *reflection = message->GetReflection();
+    const bool repeated = field->is_repeated();
+    switch (field->cpp_type()) {
+        case google::protobuf::FieldDescriptor::CPPTYPE_INT32:
+            repeated ? reflection->AddInt32(message, field, 1) : reflection->SetInt32(message, field, 1);
+            break;
+        case google::protobuf::FieldDescriptor::CPPTYPE_INT64:
+            repeated ? reflection->AddInt64(message, field, 1) : reflection->SetInt64(message, field, 1);
+            break;
+        case google::protobuf::FieldDescriptor::CPPTYPE_UINT32:
+            repeated ? reflection->AddUInt32(message, field, 1) : reflection->SetUInt32(message, field, 1);
+            break;
+        case google::protobuf::FieldDescriptor::CPPTYPE_UINT64:
+            repeated ? reflection->AddUInt64(message, field, 1) : reflection->SetUInt64(message, field, 1);
+            break;
+        case google::protobuf::FieldDescriptor::CPPTYPE_DOUBLE:
+            repeated ? reflection->AddDouble(message, field, 1.0) : reflection->SetDouble(message, field, 1.0);
+            break;
+        case google::protobuf::FieldDescriptor::CPPTYPE_FLOAT:
+            repeated ? reflection->AddFloat(message, field, 1.0f) : reflection->SetFloat(message, field, 1.0f);
+            break;
+        case google::protobuf::FieldDescriptor::CPPTYPE_BOOL:
+            repeated ? reflection->AddBool(message, field, true) : reflection->SetBool(message, field, true);
+            break;
+        case google::protobuf::FieldDescriptor::CPPTYPE_ENUM: {
+            const auto *value = field->enum_type()->value(field->enum_type()->value_count() > 1 ? 1 : 0);
+            repeated ? reflection->AddEnum(message, field, value) : reflection->SetEnum(message, field, value);
+            break;
+        }
+        case google::protobuf::FieldDescriptor::CPPTYPE_STRING:
+            repeated ? reflection->AddString(message, field, "classified")
+                     : reflection->SetString(message, field, "classified");
+            break;
+        case google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE:
+            if (repeated) {
+                reflection->AddMessage(message, field);
+            } else {
+                reflection->MutableMessage(message, field);
+            }
+            break;
+    }
+}
+
+bool fieldIsPresent(const google::protobuf::Message &message, const google::protobuf::FieldDescriptor *field)
+{
+    const auto *reflection = message.GetReflection();
+    return field->is_repeated() ? reflection->FieldSize(message, field) > 0 : reflection->HasField(message, field);
+}
+
+} // namespace
 
 class RuledBatchTest : public ::testing::Test
 {
@@ -133,6 +218,12 @@ protected:
         return out;
     }
 
+    ruled::v1::RuledEventBatch redactFor(const ruled::v1::RuledEventBatch &batch,
+                                         Server_AbstractParticipant *participant)
+    {
+        return game->ruled()->redactBatchForParticipant(batch, participant);
+    }
+
     static void setupPlayerZonesAndCounters(Server_Player *p)
     {
         auto *deck = new Server_CardZone(p, ZoneNames::DECK, false, ServerInfo_Zone::HiddenZone);
@@ -170,19 +261,116 @@ protected:
     {
         ruled::v1::RuledPerPlayerView v;
         v.set_player_id(p->getPlayerId());
-        // Empty library: leave the repeated lib_ids field empty.
+        // Empty library: leave library_card_ids empty.
         Server_CardZone *table = p->getZones().value(ZoneNames::TABLE);
         const auto &cards = table->getCards();
         for (int i = 0; i < cards.size(); ++i) {
             Server_Card *c = cards[i];
             QString id = c->getName().toLower().replace(' ', '_');
-            v.add_battlefield(id.toStdString());
-            v.add_battlefield_tapped(i < tapped.size() ? tapped[i] : false);
-            v.add_battlefield_object_id(i < engineOids.size() ? engineOids[i] : 0);
+            auto *object = v.add_battlefield_objects();
+            object->set_card_id(id.toStdString());
+            object->set_tapped(i < tapped.size() ? tapped[i] : false);
+            object->set_object_id(i < engineOids.size() ? engineOids[i] : 0);
         }
         return v;
     }
 };
+
+TEST(RuledProtocolVisibilityTest, EveryBroadcastReachableFieldIsClassifiedAndClearable)
+{
+    QSet<const google::protobuf::Descriptor *> visited;
+    QList<const google::protobuf::FieldDescriptor *> fields;
+    collectBroadcastFields(ruled::v1::RuledEventBatch::descriptor(), visited, fields);
+    ASSERT_FALSE(fields.isEmpty());
+
+    google::protobuf::DynamicMessageFactory factory;
+    for (const auto *field : fields) {
+        EXPECT_TRUE(field->options().HasExtension(ruled::v1::field_visibility))
+            << field->full_name() << " is broadcast-reachable but unclassified";
+        if (!field->options().HasExtension(ruled::v1::field_visibility)) {
+            continue;
+        }
+        const auto visibility = field->options().GetExtension(ruled::v1::field_visibility);
+        EXPECT_NE(visibility, ruled::v1::FIELD_VISIBILITY_UNSPECIFIED) << field->full_name();
+        if (visibility == ruled::v1::FIELD_VISIBILITY_PUBLIC) {
+            continue;
+        }
+
+        const auto *prototype = factory.GetPrototype(field->containing_type());
+        ASSERT_NE(prototype, nullptr) << field->containing_type()->full_name();
+        std::unique_ptr<google::protobuf::Message> message(prototype->New());
+        setFieldToNonDefault(message.get(), field);
+        ASSERT_TRUE(fieldIsPresent(*message, field)) << field->full_name();
+        clearRuledFieldsByVisibility(message.get(), visibility);
+        EXPECT_FALSE(fieldIsPresent(*message, field))
+            << field->full_name() << " was classified private but survived the reflection clear";
+    }
+}
+
+TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
+{
+    ruled::v1::RuledEventBatch batch;
+    batch.add_events()->mutable_card_catalog()->add_entries()->set_card_id("secret_deck_card");
+    auto *view = batch.add_events()->mutable_zone_view()->add_per_player();
+    view->set_player_id(1);
+    view->add_hand_cards()->set_card_id("secret_hand_card");
+    view->add_library_card_ids("secret_top_card");
+    auto *publicPermanent = view->add_battlefield_objects();
+    publicPermanent->set_object_id(101);
+    publicPermanent->set_card_id("grizzly_bears");
+
+    (*batch.mutable_legal_by_player())[1].add_labels("P1 legal");
+    (*batch.mutable_legal_by_player())[2].add_labels("P2 legal");
+    auto *handMap = batch.add_events()->mutable_hand_slot_map();
+    handMap->add_entries()->set_player_id(1);
+    handMap->add_entries()->set_player_id(2);
+
+    auto *privateLog = batch.add_events()->mutable_log();
+    privateLog->set_text("P1 only");
+    privateLog->set_visible_to_player_id(1);
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(1);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
+    choice->set_prompt_text("Choose a secret card");
+    choice->add_candidate_object_ids(42);
+    choice->add_candidate_card_ids("secret_hand_card");
+    choice->add_candidate_names("Secret Hand Card");
+
+    const auto forP1 = redactFor(batch, p1);
+    ASSERT_EQ(forP1.legal_by_player_size(), 1);
+    EXPECT_TRUE(forP1.legal_by_player().contains(1));
+    const auto forP2 = redactFor(batch, p2);
+    ASSERT_EQ(forP2.legal_by_player_size(), 1);
+    EXPECT_TRUE(forP2.legal_by_player().contains(2));
+
+    for (const auto *redacted : {&forP1, &forP2}) {
+        EXPECT_TRUE(std::none_of(redacted->events().begin(), redacted->events().end(),
+                                 [](const auto &event) { return event.has_card_catalog(); }));
+        const auto zoneIt = std::find_if(redacted->events().begin(), redacted->events().end(),
+                                         [](const auto &event) { return event.has_zone_view(); });
+        ASSERT_NE(zoneIt, redacted->events().end());
+        const auto &redactedView = zoneIt->zone_view().per_player(0);
+        EXPECT_EQ(redactedView.hand_cards_size(), 0);
+        EXPECT_EQ(redactedView.library_card_ids_size(), 0);
+        ASSERT_EQ(redactedView.battlefield_objects_size(), 1);
+        EXPECT_EQ(redactedView.battlefield_objects(0).object_id(), 101u);
+    }
+
+    const auto p1ChoiceIt = std::find_if(forP1.events().begin(), forP1.events().end(),
+                                         [](const auto &event) { return event.has_resolution_choice_required(); });
+    ASSERT_NE(p1ChoiceIt, forP1.events().end());
+    EXPECT_EQ(p1ChoiceIt->resolution_choice_required().candidate_object_ids_size(), 1);
+    const auto p2ChoiceIt = std::find_if(forP2.events().begin(), forP2.events().end(),
+                                         [](const auto &event) { return event.has_resolution_choice_required(); });
+    ASSERT_NE(p2ChoiceIt, forP2.events().end());
+    EXPECT_EQ(p2ChoiceIt->resolution_choice_required().candidate_object_ids_size(), 0);
+    EXPECT_EQ(p2ChoiceIt->resolution_choice_required().prompt_text(), "Opponent is making a resolution choice.");
+
+    EXPECT_TRUE(std::any_of(forP1.events().begin(), forP1.events().end(),
+                            [](const auto &event) { return event.has_log() && event.log().text() == "P1 only"; }));
+    EXPECT_TRUE(std::none_of(forP2.events().begin(), forP2.events().end(),
+                             [](const auto &event) { return event.has_log(); }));
+}
 
 TEST_F(RuledBatchTest, ZoneViewBuildsOidMapAndPropagatesTapState)
 {

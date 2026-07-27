@@ -2,6 +2,23 @@ syntax = "proto3";
 
 package ruled.v1;
 
+import "google/protobuf/descriptor.proto";
+
+// Every field reachable from RuledEventBatch must declare one of these. The relay's
+// reflection-based redaction clears SERVER_ONLY fields from every client copy and clears
+// PER_PLAYER fields by default before explicitly restoring the values authorized for one
+// recipient. See the classification coverage in ruled_batch_test.
+enum FieldVisibility {
+  FIELD_VISIBILITY_UNSPECIFIED = 0;
+  FIELD_VISIBILITY_PUBLIC = 1;
+  FIELD_VISIBILITY_PER_PLAYER = 2;
+  FIELD_VISIBILITY_SERVER_ONLY = 3;
+}
+
+extend google.protobuf.FieldOptions {
+  FieldVisibility field_visibility = 50000;
+}
+
 // Intent from a client; carried inside GameCommand Command_RuledPayload.payload
 message RuledCommand {
   reserved 15;
@@ -67,8 +84,8 @@ message SubmitResolutionChoice {
 
 // Per-blocker damage from one attacker during assign combat damage.
 message DamagePair {
-  uint32 blocker_id = 1;
-  uint32 damage = 2;
+  uint32 blocker_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 damage = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message AssignCombatDamage {
@@ -113,9 +130,9 @@ message FlexPipPayment {
 }
 
 message TargetRef {
-  uint32 object_id = 1;
+  uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // Per-target damage amount for DamageTargets (Fireball, Fire); 0 = unused.
-  uint32 damage_amount = 2;
+  uint32 damage_amount = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message PlayLand {
@@ -152,8 +169,8 @@ message DeclareAttackers {
 }
 
 message BlockPair {
-  uint32 attacker_id = 1;
-  uint32 blocker_id = 2;
+  uint32 attacker_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 blocker_id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // Defending player assigns blockers; multiple BlockPairs may share an attacker_id
@@ -174,8 +191,8 @@ message PreviewDeclareAttackers {
 
 // Engine output batch; carried inside GameEvent Event_RuledPayload.payload
 message RuledEventBatch {
-  repeated RuledEvent events = 1;
-  map<int32, LegalActions> legal_by_player = 2;
+  repeated RuledEvent events = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  map<int32, LegalActions> legal_by_player = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // Engine-computed targeting data for one spell or activated ability. Clients use this
@@ -183,154 +200,173 @@ message RuledEventBatch {
 // sole source of truth; clients must not replicate this logic from Oracle card text.
 message SpellTargets {
   // Battlefield permanents this player may legally target with this spell/ability.
-  repeated uint32 valid_permanent_ids = 1;
+  repeated uint32 valid_permanent_ids = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Stack spells this player may legally counter (CounterTargetSpell effects only).
-  repeated uint32 valid_stack_ids = 2;
+  repeated uint32 valid_stack_ids = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Whether the local player (caster/activator) is a legal player target.
-  bool can_target_self = 3;
+  bool can_target_self = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Whether each opponent is a legal player target.
-  bool can_target_opponent = 4;
+  bool can_target_opponent = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Graveyard card OIDs valid for ReturnFromGraveyard (and future graveyard-targeting effects).
   // The relay maps these engine OIDs to server card ids via the graveyard OID map.
-  repeated uint32 valid_graveyard_ids = 5;
+  repeated uint32 valid_graveyard_ids = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // DamageTargets spells only (Fireball, Fire): client must collect up to this many targets and
   // prompt for per-target damage allocation. 0 means no cap (Fireball). Absent for non-DamageTargets.
-  uint32 max_targets = 6;
+  uint32 max_targets = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // DamageTargets spells only: fixed total damage to distribute among chosen targets.
   // 0 when the amount is determined by {X} chosen at cast time; client uses its chosen x_value instead.
-  uint32 fixed_damage = 7;
+  uint32 fixed_damage = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // True when this spell uses DamageTargets (requires per-target damage_amount on TargetRef).
-  bool is_damage_targets = 8;
+  bool is_damage_targets = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // DamageTargets spells only: extra generic mana per target beyond the first (CR 601.2f).
   // Fireball = 1 ("{1} more for each target beyond the first"); Fire = 0. The client adds
   // (targets - 1) * this to the generic mana it collects so the local prompt matches the
   // engine's real cost (the engine independently recomputes this — this is display parity only).
-  uint32 extra_mana_per_target = 9;
+  uint32 extra_mana_per_target = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+enum HandActionKind {
+  HAND_ACTION_PLAY_LAND = 0;
+  HAND_ACTION_CAST_SPELL = 1;
+  HAND_ACTION_CLEANUP_DISCARD = 2;
+  HAND_ACTION_OPENING_BOTTOM = 3;
+}
+
+message LegalHandAction {
+  HandActionKind kind = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 hand_index = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  string card_name = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // CR 712: one entry per (slot, face), including face 0 for single-face cards.
+  uint32 face_index = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // CastSpell only: the chosen face needs at least one cast-time target.
+  bool needs_target = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message LegalActions {
-  repeated string labels = 1;
+  // Display-only prompt feed. Gameplay consumes hand_actions, never these strings.
+  repeated string labels = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Valid targets per castable face of a hand card that needs a target. Key encodes both the
   // engine hand slot and the face index: key = (hand_slot << 8) | face_index. Single-face cards
   // use face 0 (key == hand_slot << 8); multi-face cards (split / MDFC) emit one entry per face
   // whose half targets, so clients can offer the chosen face's targets and not the union (CR
   // 709/712/715 — e.g. Fire targets "any target", Ice targets "any permanent").
-  map<uint32, SpellTargets> valid_targets_by_hand_slot = 3;
+  map<uint32, SpellTargets> valid_targets_by_hand_slot = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Per-activated-ability valid targets. Key = (permanent_id << 32 | ability_index).
   // Presence of a key means the ability at that index requires a target.
-  map<uint64, SpellTargets> valid_targets_by_ability = 4;
+  map<uint64, SpellTargets> valid_targets_by_ability = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Count of this player's mana abilities that are currently undoable via UndoManaAbility (CR 605
   // float courtesy). Non-zero only while strictly inconsequential; clients show an Undo affordance
   // when > 0. Drops to 0 the moment mana is spent, a spell/ability is cast, or priority passes.
-  uint32 undoable_mana_abilities = 5;
+  uint32 undoable_mana_abilities = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // CR 508.1d: battlefield creatures this player MUST declare as attackers this combat ("attacks
   // if able" — untapped, not summoning-sick unless Haste, non-Defender, with a defending player).
   // Populated only for the active player during declare-attackers, before attackers are locked in.
   // The engine rejects a declaration that omits any of these, so clients disable the confirm-
   // attackers control until every id is among the staged attackers (mirrors set_attackers).
-  repeated uint32 required_attacker_ids = 6;
+  repeated uint32 required_attacker_ids = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // CR 509.1c: battlefield creatures this player MUST declare as blockers this combat ("blocks if
   // able" — untapped and able to legally block at least one declared attacker). Populated only for
   // the defending player after attackers are declared and before blocks are locked in. Clients
   // disable the confirm-blockers control until every id is staged as a blocker (mirrors set_blockers).
-  repeated uint32 required_blocker_ids = 7;
+  repeated uint32 required_blocker_ids = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated LegalHandAction hand_actions = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // Servatrice-injected each ruled broadcast: engine hand slot index -> Server_Card.id for that player,
 // after server hand zones are synced to the engine (zone_view is stripped for clients).
 message HandSlotMap {
   message Entry {
-    int32 player_id = 1;
-    uint32 hand_index = 2;
-    int32 server_card_id = 3;
+    int32 player_id = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+    uint32 hand_index = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+    int32 server_card_id = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   }
-  repeated Entry entries = 1;
+  repeated Entry entries = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message RuledEvent {
   reserved 18;
   reserved "damage_order_assigned";
   oneof ev {
-    PhaseChanged phase_changed = 1;
-    PriorityChanged priority_changed = 2;
-    StackPushed stack_pushed = 3;
-    StackResolved stack_resolved = 4;
-    SbasApplied sbas_applied = 5;
-    GameSnapshot snapshot = 6;
-    ReplayState replay_state = 7;
-    LogMessage log = 8;
-    ZoneViewSync zone_view = 9;
-    PermanentMoved permanent_moved = 10;
-    LifeChanged life_changed = 11;
-    BattlefieldObjectMap battlefield_object_map = 12;
-    AttackersDeclared attackers_declared = 13;
-    HandSlotMap hand_slot_map = 14;
+    PhaseChanged phase_changed = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    PriorityChanged priority_changed = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    StackPushed stack_pushed = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    StackResolved stack_resolved = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    SbasApplied sbas_applied = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    GameSnapshot snapshot = 6 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    ReplayState replay_state = 7 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    LogMessage log = 8 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    ZoneViewSync zone_view = 9 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    PermanentMoved permanent_moved = 10 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    LifeChanged life_changed = 11 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    BattlefieldObjectMap battlefield_object_map = 12 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    AttackersDeclared attackers_declared = 13 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    HandSlotMap hand_slot_map = 14 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
     // After a successful DeclareBlockers (or defender pass = no blocks). Same BlockPair
     // semantics as the intent; both players' clients use this for combat arrows.
-    BlockersDeclared blockers_declared = 15;
+    BlockersDeclared blockers_declared = 15 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
     // Servatrice-synthesized from PreviewDeclareBlockers; not emitted by the engine.
-    BlockersPreview blockers_preview = 16;
+    BlockersPreview blockers_preview = 16 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
     // Servatrice-synthesized from PreviewDeclareAttackers; not emitted by the engine.
-    AttackersPreview attackers_preview = 17;
+    AttackersPreview attackers_preview = 17 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
     // Engine-emitted after active player assigns combat damage for a multiply-blocked attacker.
-    CombatDamageAssigned combat_damage_assigned = 19;
+    CombatDamageAssigned combat_damage_assigned = 19 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
     // Engine-emitted when a triggered ability fires and needs the controller to choose a target
     // before the ability is placed on the stack (CR 603.3d).
-    TriggerNeedsTarget trigger_needs_target = 20;
+    TriggerNeedsTarget trigger_needs_target = 20 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
     // Engine-provided card identity map for the session's decks; emitted once in the
     // SessionStart response batch. Server-only (enumerates deck contents): Servatrice
     // strips it from client broadcasts alongside zone_view private fields.
-    CardCatalog card_catalog = 21;
+    CardCatalog card_catalog = 21 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
     // A token came into existence on the battlefield (CR 111). The relay creates a physical
     // token card from the inline identity (tokens have no deck card / CardCatalog entry).
-    TokenCreated token_created = 22;
+    TokenCreated token_created = 22 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
     // A tier-3 custom resolution paused and needs a player to choose among candidates (CR 608).
     // Generic across every custom card; the client renders it as an ordered/multi-select pick.
-    ResolutionChoiceRequired resolution_choice_required = 23;
+    ResolutionChoiceRequired resolution_choice_required = 23 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
     // A player's mana pool changed (CR 106): engine-authoritative pool after a mana ability
     // produced mana, a cost was paid, or the pool emptied on a step/phase change. The relay
     // mirrors it onto that player's ruled mana-pool counters (Event_SetCounter).
-    ManaPoolUpdated mana_pool_updated = 24;
+    ManaPoolUpdated mana_pool_updated = 24 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
     // An Aura permanent entered the battlefield and attached to an enchanted permanent (CR 303.4).
     // The relay translates this into Event_AttachCard so the client stacks the aura under the
     // enchanted permanent. Also emitted on zone-view reconnect to restore the attachment.
-    AuraAttached aura_attached = 25;
+    AuraAttached aura_attached = 25 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
     // One or more creatures were removed from combat mid-step (CR 701.15a: regeneration; also
     // covers future tap-out-of-combat effects). Clients remove the corresponding arrows.
-    CreaturesRemovedFromCombat removed_from_combat = 26;
+    CreaturesRemovedFromCombat removed_from_combat = 26 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
     // Server-built graveyard OID map (parallel to battlefield_object_map) so clients can
     // resolve ReturnFromGraveyard valid_graveyard_ids to physical CardItems.
-    GraveyardObjectMap graveyard_object_map = 27;
+    GraveyardObjectMap graveyard_object_map = 27 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
     // A Transform/Flip layout permanent changed its active face (CR 710/712.8). The relay
     // updates the client's card face display. face_up_index 0 = front, 1 = back.
-    FaceChanged face_changed = 28;
+    FaceChanged face_changed = 28 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   }
 }
 
 // An Aura spell resolved and attached to a permanent on the battlefield (CR 303.4).
 // The relay calls Event_AttachCard: aura_object_id attaches to enchanted_object_id.
 message AuraAttached {
-  uint32 aura_object_id = 1;
-  uint32 enchanted_object_id = 2;
+  uint32 aura_object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 enchanted_object_id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // A permanent changed its active face (CR 710/712.8: transform does not trigger ETB).
 message FaceChanged {
-  uint32 object_id = 1;
-  int32 owner_player_id = 2;
-  uint32 face_up_index = 3;
+  uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  int32 owner_player_id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 face_up_index = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // Engine-authoritative mana pool snapshot for one player (CR 106). Absolute counts (not deltas),
 // so the relay can set the client's mana-pool counters directly. Emitted whenever a pool changes.
 message ManaPoolUpdated {
-  int32 player_id = 1;
-  uint32 w = 2;
-  uint32 u = 3;
-  uint32 b = 4;
-  uint32 r = 5;
-  uint32 g = 6;
-  uint32 c = 7;
+  int32 player_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 w = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 u = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 b = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 r = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 g = 6 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 c = 7 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // What the candidate object ids of a ResolutionChoiceRequired refer to, so the client can present
@@ -365,60 +401,60 @@ enum ChoiceKind {
 // opponent of the spell's controller (Gifts Ungiven).
 message ResolutionChoiceRequired {
   // Engine PlayerId who must answer; only that player's client prompts.
-  int32 deciding_player_id = 1;
+  int32 deciding_player_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // The in-flight spell's object id (the stack object being resolved), for display/context.
-  uint32 source_object_id = 2;
+  uint32 source_object_id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // Display-only prompt (server-only; the relay does not look up Oracle text for this).
-  string prompt_text = 3;
+  string prompt_text = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // What the candidate ids refer to (see ChoiceKind for the per-value semantics and which
   // kinds Servatrice redacts). Wire-identical to the untyped int32 this used to be.
-  ChoiceKind choice_kind = 4;
+  ChoiceKind choice_kind = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // Candidate object ids to choose among (engine ObjectIds).
-  repeated uint32 candidate_object_ids = 5;
+  repeated uint32 candidate_object_ids = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Parallel to candidate_object_ids: tricerules card id for each candidate, so the relay/client
   // can show names (resolve to Oracle names via CardCatalog) without an oid->card lookup.
-  repeated string candidate_card_ids = 6;
+  repeated string candidate_card_ids = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Inclusive bounds on how many candidates must be chosen.
-  uint32 min = 7;
-  uint32 max = 8;
+  uint32 min = 7 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 max = 8 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // True when the chosen order is significant (Brainstorm: order cards put back on top).
-  bool ordered = 9;
+  bool ordered = 9 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // Parallel to candidate_object_ids: each candidate's display (Oracle) name, so the deciding
   // player's client renders the choice without a card-id lookup. For CHOICE_KIND_HAND_CARDS
   // these are private; Servatrice redacts candidate_* for everyone but the deciding player.
-  repeated string candidate_names = 10;
+  repeated string candidate_names = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Parallel to candidate_object_ids: Servatrice's physical card id (Server_Card::getId()) for
   // each candidate, injected by the relay so the client can map engine OIDs to physical hand
   // CardItems without a separate OID→serverCardId table. Only populated for private
   // CHOICE_KIND_HAND_CARDS on the deciding player's copy; empty for other players and other kinds.
-  repeated int32 candidate_server_card_ids = 11;
+  repeated int32 candidate_server_card_ids = 11 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // When true, all chosen candidates must have distinct card names (Gifts Ungiven: "four cards
   // with different names"). The client enforces this before submission; the engine re-validates.
-  bool unique_names = 12;
+  bool unique_names = 12 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // A token entered the battlefield (CR 111). Unlike a resolved permanent spell, a token has no
 // physical card in any deck/hand/stack and no Oracle cards.xml entry, so it is self-describing:
 // the relay builds a token Server_Card from `identity` and binds it to `object_id`.
 message TokenCreated {
-  uint32 object_id = 1;
-  int32 controller_player_id = 2;
+  uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  int32 controller_player_id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // Engine token id (e.g. "soldier_w_1_1"); intentionally absent from the deck CardCatalog.
-  string card_id = 3;
-  TokenIdentity identity = 4;
+  string card_id = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  TokenIdentity identity = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // Self-describing token characteristics for the relay and client (tokens are absent from the
 // Oracle card database and the session CardCatalog). Public once the token is on the battlefield.
 message TokenIdentity {
-  string name = 1;            // e.g. "Soldier"
-  string pt = 2;              // "1/1" for creatures; empty for noncreature tokens
-  string color = 3;           // Cockatrice color string, lowercase wubrg; empty = colorless
-  repeated string types = 4;  // e.g. ["Creature", "Soldier"]
-  bool is_creature = 5;
+  string name = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];            // e.g. "Soldier"
+  string pt = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];              // "1/1" for creatures; empty for noncreature tokens
+  string color = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];           // Cockatrice color string, lowercase wubrg; empty = colorless
+  repeated string types = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];  // e.g. ["Creature", "Soldier"]
+  bool is_creature = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // Static keyword abilities, MTG spelling (e.g. ["Flying"], ["Lifelink"]). Lets the client pick
   // the matching Oracle token art among same-name variants (e.g. vanilla vs. vigilance Knight).
-  repeated string keywords = 6;
+  repeated string keywords = 6 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // The single source of card identity for a ruled session: Servatrice sends Oracle names
@@ -426,20 +462,20 @@ message TokenIdentity {
 // back to a name through this catalog — no name->id derivation happens in C++.
 message CardCatalog {
   message Entry {
-    string card_id = 1;        // engine id, e.g. "lightning_bolt" or "fire_ice"
-    string name = 2;           // whole-card Oracle name, e.g. "Lightning Bolt" / "Fire // Ice"
-    repeated string types = 3; // from CardDefinition.types (primary face for multi-face cards)
-    bool is_permanent = 4;     // CR 110.4: resolves to the battlefield, not the graveyard
+    string card_id = 1 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];        // engine id, e.g. "lightning_bolt" or "fire_ice"
+    string name = 2 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];           // whole-card Oracle name, e.g. "Lightning Bolt" / "Fire // Ice"
+    repeated string types = 3 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY]; // from CardDefinition.types (primary face for multi-face cards)
+    bool is_permanent = 4 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];     // CR 110.4: resolves to the battlefield, not the graveyard
     // CR 709/712/715: per-face Oracle names in face order (e.g. ["Fire", "Ice"]). Empty for
     // single-face cards. Lets the relay display the cast/active half by its own name.
-    repeated string face_names = 5;
+    repeated string face_names = 5 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
   }
-  repeated Entry entries = 1;
+  repeated Entry entries = 1 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
 }
 
 message CombatDamageAssigned {
-  uint32 attacker_id = 1;
-  repeated DamagePair assignments = 2;
+  uint32 attacker_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  repeated DamagePair assignments = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // Where the engine is in the turn structure (CR 500-514), plus the fork's two opening-procedure
@@ -478,37 +514,37 @@ message PhaseChanged {
   // Was `string phase`, a free label re-parsed by the relay and the client independently.
   reserved 1;
   reserved "phase";
-  int32 active_player_id = 2;
-  PhaseId phase_id = 3;
+  int32 active_player_id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  PhaseId phase_id = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message PriorityChanged {
-  int32 player_id = 1;
+  int32 player_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message StackPushed {
-  uint32 object_id = 1;
-  string description = 2;
+  uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  string description = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // Chosen targets for this spell/ability while it is on the stack (object ids; player targets
   // use the engine's PlayerId as object_id, same as CastSpell.targets).
-  repeated TargetRef targets = 3;
+  repeated TargetRef targets = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // Text the client overlays on the stack card as an annotation: the ability text for
   // activated/triggered abilities, "X = N" for an X spell (CR 107.3), or the cast face name of a
   // multi-face spell (e.g. "Fire" / "Ice"). Empty for ordinary single-face spells. card_id (below)
   // distinguishes a spell (non-empty: the physical card is already on the stack and only the
   // annotation is overlaid) from an ability (empty: the client builds a synthetic stack card).
-  string ability_annotation = 4;
+  string ability_annotation = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // Engine card id of the pushed spell (e.g. "lightning_bolt"); empty for abilities,
   // which have no physical card on the stack. Resolve to an Oracle name via CardCatalog.
-  string card_id = 5;
+  string card_id = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // CR 707.10: true when this stack item is a *copy* of a spell (Twincast/Fork), not a cast
   // object. Like an ability it has no physical card on the shared stack; the client shows it via
   // card_id + the "(copy)" ability_annotation and expects no permanent/graveyard card on resolve.
-  bool is_copy = 6;
+  bool is_copy = 6 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // For copies (is_copy == true): the object_id of the original stack item being copied. The
   // client uses this to inherit the original spell's Oracle printing (set/provider) so the copy
   // displays the same card art instead of defaulting to the newest printing.
-  uint32 copy_source_object_id = 7;
+  uint32 copy_source_object_id = 7 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message ActivateAbility {
@@ -529,10 +565,10 @@ message ChooseTriggerTarget {
 }
 
 message TriggerNeedsTarget {
-  uint32 source_permanent_id = 1;
-  uint32 ability_index = 2;
-  string ability_text = 3;     // Oracle text of the triggered ability (shown in prompt widget)
-  int32 controller_player_id = 4; // PlayerId of the player who controls the trigger
+  uint32 source_permanent_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 ability_index = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  string ability_text = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];     // Oracle text of the triggered ability (shown in prompt widget)
+  int32 controller_player_id = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC]; // PlayerId of the player who controls the trigger
 }
 
 // Where the resolved spell object ends up (Servatrice maps this to TABLE vs GRAVE).
@@ -543,131 +579,97 @@ enum StackResolveDestination {
 }
 
 message StackResolved {
-  uint32 object_id = 1;
-  StackResolveDestination destination = 2;
+  uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  StackResolveDestination destination = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message SbasApplied {
-  string description = 1;
+  string description = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
-// Authoritative hand + library from the rules engine, for server to sync physical zones
-// (engine card ids, lowercase_underscore; resolve to Oracle names via CardCatalog).
-// Library ids (`lib_ids`): top of library (next draw) first.
-// Fields 3 and 4 are reserved: field 3 was a repeated string whose tag collided with a singular
-// string on the C++ side (merged 53 submessages into one wrong value); field 4 (`lib_ids_csv`) was a
-// comma-joined string that silently corrupted any card id containing a comma — and card ids DO contain
-// commas (the slug keeps them verbatim, e.g. "kokusho,_the_evening_star"), which split one id into two
-// entries and tore down the ruled session at game start. Use the repeated `lib_ids` instead.
+// One activated ability on a battlefield permanent, in registry order. Keeping each property
+// structured avoids a second delimiter-based protocol inside protobuf.
+message AbilityInfo {
+  string text = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  string mana_cost = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  string mana_produced = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  string cost_label = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+}
+
+message BattlefieldObject {
+  uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  string card_id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  bool tapped = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  bool summoning_sick = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  bool is_creature = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 power = 6 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 toughness = 7 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 damage = 8 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Effective Keyword variant names (e.g. "Haste", "FirstStrike"). Adding a keyword does not
+  // require a protobuf field or synchronized relay/client boolean.
+  repeated string keywords = 9 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  repeated AbilityInfo activated_abilities = 10 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  string counters_annotation = 11 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 attached_to_oid = 12 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 face_up_index = 13 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+}
+
+message HandCard {
+  string card_id = 1 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+  uint32 object_id = 2 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+}
+
+// Authoritative per-player zone view. Servatrice consumes the server-only concealed zones to
+// synchronize physical cards, then the reflection redactor removes them from every client copy.
 message RuledPerPlayerView {
-  int32 player_id = 1;
-  repeated string hand = 2;
-  reserved 3, 4;
-  reserved "lib_ids_csv";
-  // Library card ids, top of library (next draw) first (tricerules ids, lowercase_underscore).
-  repeated string lib_ids = 27;
-  // Battlefield card ids in controller order (tricerules ids, lowercase_underscore).
-  repeated string battlefield = 5;
-  // Parallel array to `battlefield`, true if that permanent is tapped.
-  repeated bool battlefield_tapped = 6;
-  // Parallel array to `battlefield`: engine-owned ObjectId for each permanent.
-  // Stable for the lifetime of the permanent on the battlefield. Used to map
-  // server-side Server_Card instances to engine objects for combat intents.
-  repeated uint32 battlefield_object_id = 7;
-  // Parallel array to `battlefield`, true if that permanent is summoning sick.
-  repeated bool battlefield_summoning_sick = 8;
-  // Parallel array to `battlefield`: engine creature stats for Servatrice/UI sync.
-  // When `battlefield_is_creature` is false, ignore power/toughness/damage for that slot.
-  repeated uint32 battlefield_power = 9;
-  repeated uint32 battlefield_toughness = 10;
-  repeated uint32 battlefield_damage = 11;
-  repeated bool battlefield_is_creature = 12;
-  // Parallel array to `hand`: engine ObjectId for each card in hand order.
-  repeated uint32 hand_object_id = 13;
-  // Parallel array to `battlefield`, true if that permanent has the Haste keyword
-  // (CR 702.10). Used by clients to suppress the summoning-sick indicator and
-  // allow attacker selection even when summoning_sick is still true.
-  repeated bool battlefield_haste = 14;
-  // Parallel array to `battlefield`, true if that permanent has the Trample keyword
-  // (CR 702.19). Used by clients to enable trample damage assignment UI.
-  repeated bool battlefield_trample = 15;
-  // Parallel array to `battlefield`, true if that permanent has the First Strike keyword
-  // (CR 702.7). Informational for UI; combat-step routing uses `first_strike_step_pending`.
-  repeated bool battlefield_first_strike = 16;
-  // Parallel array to `battlefield`, true if that permanent has the Double Strike keyword
-  // (CR 702.4). Informational for UI; combat-step routing uses `first_strike_step_pending`.
-  repeated bool battlefield_double_strike = 17;
-  // True while the current combat will (or did) include a first-strike damage substep
-  // (CR 510.4): set whenever any attacker or blocker has First Strike or Double Strike and
-  // the first-strike step has not yet resolved for the current combat. Drives the
-  // "First Strike Damage" pass-priority button label.
-  bool first_strike_step_pending = 18;
-  // Parallel array to `battlefield`: pipe-delimited ("|") activated ability texts for each permanent.
-  // Empty string for permanents with no activated abilities. Indexed by battlefield position.
-  // Used by clients to build the activation context menu.
-  repeated string battlefield_activated_ability_texts = 19;
-  // Parallel array to `battlefield_activated_ability_texts`: pipe-delimited mana cost strings
-  // for each ability, in the same order. Derived from AbilityCost (Tap/Sacrifice → "", Mana/TapAndMana → "4"/"R"/etc.).
-  // Clients use this for mana payment without re-parsing the display text.
-  repeated string battlefield_activated_ability_mana_costs = 20;
-  // Parallel array to `battlefield_activated_ability_texts`: which abilities are mana abilities
-  // (CR 605) and what they produce, so the client drives "tap for mana" from engine data rather
-  // than guessing colors from Oracle text. Per permanent: abilities joined by "|"; a non-mana
-  // ability is the empty string; a mana ability is its ProduceMana options joined by "/", each
-  // option a brace-less symbol run ("G", "WU", "CC"). Multiple options (e.g. "W/U") mean the
-  // client prompts for a color → ActivateAbility.mana_option_index. Empty string = no abilities.
-  repeated string battlefield_activated_ability_mana_produced = 21;
-  // Parallel array to `battlefield_activated_ability_texts`: pipe-delimited display-cost strings
-  // for each ability (e.g. "{T}", "{4}", "{T}, {4}", "Sacrifice this"). Empty entry means no
-  // cost label for that ability. Used by clients to show the full "cost: text" label in the
-  // activation context menu.
-  repeated string battlefield_activated_ability_cost_labels = 23;
-  // Parallel array to `battlefield`: human-readable counter annotation for each permanent
-  // (e.g. "1 +1/+1 counter(s)"), one line per counter kind. Empty string for permanents with
-  // no counters. Clients overlay this on the card annotation alongside ruled damage.
-  repeated string battlefield_counters_annotation = 22;
-  // Parallel array to `battlefield`: for Aura/Equipment permanents, the ObjectId of the
-  // permanent they are currently attached to, or 0 if unattached. Used by the C++ relay
-  // to issue Event_AttachCard after every zone-view sync so clients stack attached permanents
-  // visually. Non-aura / non-equipment permanents always carry 0.
-  repeated uint32 battlefield_attached_to_oid = 24;
-  // Engine ObjectIds for cards in this player's graveyard, in graveyard order.
-  // Parallel to the graveyard content the relay already tracks via PermanentMoved.
-  // Used by the relay and client to build the graveyard OID→server-card-id map so
-  // ReturnFromGraveyard targets can be resolved client-side.
-  repeated uint32 graveyard_object_id = 25;
-  // Parallel array to `battlefield`: which face is currently showing (0 = front face). Always 0
-  // for Normal single-face cards. Non-zero only for MDFC/Transform/Flip permanents after a face
-  // change. The relay uses this to display the correct face image from cards.xml.
-  repeated uint32 battlefield_face_up_index = 26;
+  int32 player_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  reserved 2 to 27;
+  reserved "hand", "lib_ids_csv", "lib_ids", "battlefield", "battlefield_tapped",
+           "battlefield_object_id", "battlefield_summoning_sick", "battlefield_power",
+           "battlefield_toughness", "battlefield_damage", "battlefield_is_creature",
+           "hand_object_id", "battlefield_haste", "battlefield_trample",
+           "battlefield_first_strike", "battlefield_double_strike",
+           "battlefield_activated_ability_texts", "battlefield_activated_ability_mana_costs",
+           "battlefield_activated_ability_mana_produced",
+           "battlefield_activated_ability_cost_labels", "battlefield_counters_annotation",
+           "battlefield_attached_to_oid", "graveyard_object_id", "battlefield_face_up_index";
+  repeated HandCard hand_cards = 28 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+  // Top of library first. Card ids and order are server-only concealed information.
+  repeated string library_card_ids = 29 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+  // Public permanents in controller order.
+  repeated BattlefieldObject battlefield_objects = 30 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Engine ObjectIds in public graveyard order, used for target identity mapping.
+  repeated uint32 graveyard_object_ids = 31 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Drives the distinct first-strike damage prompt within CR 510.4 combat damage processing.
+  bool first_strike_step_pending = 32 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message ZoneViewSync {
-  repeated RuledPerPlayerView per_player = 1;
+  repeated RuledPerPlayerView per_player = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message GameSnapshot {
-  string summary = 1;
+  string summary = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message ReplayState {
-  uint64 seed = 1;
-  uint64 command_index = 2;
+  uint64 seed = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint64 command_index = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message LogMessage {
-  string text = 1;
+  string text = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // If set, the relay delivers this message only to that player. Absent = broadcast to all.
-  optional int32 visible_to_player_id = 2;
+  optional int32 visible_to_player_id = 2 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
   // If set, the relay drops this message for that player and delivers it to everyone else.
-  optional int32 hidden_from_player_id = 3;
+  optional int32 hidden_from_player_id = 3 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
 }
 
 // A permanent left the battlefield (currently only graveyard via SBAs / destroy effects).
 // Servers translate this into a Cockatrice moveCard from TABLE to the destination zone.
 message PermanentMoved {
-  uint32 object_id = 1;
-  int32 owner_player_id = 2;
+  uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  int32 owner_player_id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   enum Destination {
     DESTINATION_UNSPECIFIED = 0;
     DESTINATION_GRAVEYARD = 1;
@@ -677,17 +679,17 @@ message PermanentMoved {
     // Used by ReturnFromGraveyard with GraveyardDestination::Battlefield (reanimation).
     DESTINATION_BATTLEFIELD = 5;
   }
-  Destination destination = 3;
+  Destination destination = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // tricerules card id (lowercase_underscore). Lets servers resolve cards that
   // have no engine-oid mapping (e.g. milled library cards) by name within a zone.
-  string card_id = 4;
+  string card_id = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // A player's life total changed. delta is signed (negative = loss).
 message LifeChanged {
-  int32 player_id = 1;
-  int32 new_total = 2;
-  int32 delta = 3;
+  int32 player_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  int32 new_total = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  int32 delta = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // Server-built mapping so clients can map graveyard CardItems to engine ObjectIds for
@@ -696,12 +698,12 @@ message LifeChanged {
 // is implicit from the zone the card is in on the client).
 message GraveyardObjectMap {
   message Entry {
-    int32 player_id = 1;
-    uint32 engine_object_id = 2;
+    int32 player_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    uint32 engine_object_id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
     // Server_Card.id for the graveyard card; -1 if unknown.
-    int32 server_card_id = 3;
+    int32 server_card_id = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   }
-  repeated Entry entries = 1;
+  repeated Entry entries = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // Server-built mapping (not engine-emitted) so clients can map a CardItem (whose
@@ -709,61 +711,57 @@ message GraveyardObjectMap {
 // Sent alongside ruled batches whenever battlefield membership changes.
 message BattlefieldObjectMap {
   message Entry {
-    int32 player_id = 1;
-    uint32 engine_object_id = 2;
+    int32 player_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    uint32 engine_object_id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
     // tricerules card id (lowercase_underscore)
-    string card_id = 3;
+    string card_id = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
     // 0-based position within the controller's battlefield
-    uint32 ordinal = 4;
+    uint32 ordinal = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
     // Server_Card.id for the same permanent on the Cockatrice side; -1 if unknown.
-    int32 server_card_id = 5;
+    int32 server_card_id = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
     // True if this permanent currently has summoning sickness.
-    bool summoning_sick = 6;
-    // True if this permanent has the Haste keyword (CR 702.10). A creature with
-    // haste can attack even while summoning_sick is true.
-    bool haste = 7;
-    // True if this permanent has the Trample keyword (CR 702.19). A trample
-    // attacker may assign excess combat damage to the defending player.
-    bool trample = 8;
+    bool summoning_sick = 6 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    reserved 7, 8, 9;
+    reserved "haste", "trample", "activated_ability_texts";
     // Oracle-style texts for each activated ability on this permanent, in index order.
     // Empty for permanents with no activated abilities. Used by clients to build the
     // activation context menu.
-    repeated string activated_ability_texts = 9;
     // True if this permanent is a creature (engine-authoritative, from the tricerules
     // registry — NOT the Oracle display DB). Clients use this for combat eligibility so
     // engine-minted tokens (which have no Oracle entry) can be declared as attackers/blockers.
-    bool is_creature = 10;
+    bool is_creature = 10 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    repeated string keywords = 11 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   }
-  repeated Entry entries = 1;
+  repeated Entry entries = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // Engine-emitted after a successful set_attackers; lists the attacking creatures
 // so defenders' clients can highlight attackers (also drives Event_SetCardAttr
 // (AttrAttacking) translation server-side).
 message AttackersDeclared {
-  int32 attacking_player_id = 1;
-  repeated uint32 attacker_object_ids = 2;
+  int32 attacking_player_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  repeated uint32 attacker_object_ids = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message BlockersDeclared {
-  repeated BlockPair block_pairs = 1;
+  repeated BlockPair block_pairs = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message BlockersPreview {
-  int32 declaring_player_id = 1;
-  repeated BlockPair block_pairs = 2;
+  int32 declaring_player_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  repeated BlockPair block_pairs = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message AttackersPreview {
-  int32 declaring_player_id = 1;
-  repeated uint32 attacker_object_ids = 2;
+  int32 declaring_player_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  repeated uint32 attacker_object_ids = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // Engine-emitted when one or more creatures are removed from combat mid-step (CR 701.15a).
 // Covers regeneration and any future effect that taps or otherwise ejects a creature from combat.
 // Clients remove the corresponding attacker/blocker arrows for the listed engine object ids.
 message CreaturesRemovedFromCombat {
-  repeated uint32 object_ids = 1;
+  repeated uint32 object_ids = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // --- Sidecar TCP framing (length-prefixed IpcEnvelope) ---

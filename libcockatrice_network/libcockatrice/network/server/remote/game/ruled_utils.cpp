@@ -1,5 +1,39 @@
 #include "ruled_utils.h"
 
+#include <google/protobuf/descriptor.h>
+#include <google/protobuf/reflection.h>
+#include <vector>
+
+void clearRuledFieldsByVisibility(google::protobuf::Message *message, ruled::v1::FieldVisibility visibility)
+{
+    if (!message) {
+        return;
+    }
+    const google::protobuf::Reflection *reflection = message->GetReflection();
+    std::vector<const google::protobuf::FieldDescriptor *> presentFields;
+    reflection->ListFields(*message, &presentFields);
+    for (const google::protobuf::FieldDescriptor *field : presentFields) {
+        const auto classified = field->options().HasExtension(ruled::v1::field_visibility)
+                                    ? field->options().GetExtension(ruled::v1::field_visibility)
+                                    : ruled::v1::FIELD_VISIBILITY_UNSPECIFIED;
+        if (classified == visibility) {
+            reflection->ClearField(message, field);
+            continue;
+        }
+        if (field->cpp_type() != google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE) {
+            continue;
+        }
+        if (field->is_repeated()) {
+            const int count = reflection->FieldSize(*message, field);
+            for (int i = 0; i < count; ++i) {
+                clearRuledFieldsByVisibility(reflection->MutableRepeatedMessage(message, field, i), visibility);
+            }
+        } else if (reflection->HasField(*message, field)) {
+            clearRuledFieldsByVisibility(reflection->MutableMessage(message, field), visibility);
+        }
+    }
+}
+
 bool isRuledModeManaPoolCounterName(const QString &name)
 {
     const QString n = name.trimmed().toLower();

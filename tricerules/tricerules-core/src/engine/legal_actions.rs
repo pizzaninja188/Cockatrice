@@ -8,6 +8,7 @@ use super::*;
 pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
     for p in &eng.state.players {
         let labels = legal_labels(eng, p.id);
+        let hand_actions = legal_hand_actions(eng, p.id);
         let mut valid_targets_by_hand_slot = BTreeMap::new();
         let mut valid_targets_by_ability = BTreeMap::new();
 
@@ -125,9 +126,140 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 undoable_mana_abilities,
                 required_attacker_ids,
                 required_blocker_ids,
+                hand_actions,
             },
         );
     }
+}
+
+fn hand_action(
+    kind: rv1::HandActionKind,
+    hand_index: usize,
+    card_name: &str,
+    face_index: usize,
+    needs_target: bool,
+) -> rv1::LegalHandAction {
+    rv1::LegalHandAction {
+        kind: kind as i32,
+        hand_index: hand_index as u32,
+        card_name: card_name.to_string(),
+        face_index: face_index as u32,
+        needs_target,
+    }
+}
+
+fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandAction> {
+    if let Some(opening) = &eng.state.opening {
+        let Some((bottoming_player, _)) = opening.bottom else {
+            return Vec::new();
+        };
+        if pid != bottoming_player {
+            return Vec::new();
+        }
+        let Some(player_index) = eng.state.player_idx(pid) else {
+            return Vec::new();
+        };
+        return eng.state.players[player_index]
+            .hand
+            .iter()
+            .enumerate()
+            .map(|(hand_index, &oid)| {
+                let name = object_display_name(&eng.state, eng.registry, oid);
+                hand_action(
+                    rv1::HandActionKind::HandActionOpeningBottom,
+                    hand_index,
+                    &name,
+                    0,
+                    false,
+                )
+            })
+            .collect();
+    }
+    if eng.state.pending_resolution.is_some() || eng.state.pending_triggers.front().is_some() {
+        return Vec::new();
+    }
+    if eng.state.combat.as_ref().is_some_and(|combat| {
+        combat.blockers_declared
+            && combat.damage_assignment_needed
+            && combat.assign_combat_damage_phase
+    }) {
+        return Vec::new();
+    }
+    if eng.state.priority_player_id() != pid {
+        return Vec::new();
+    }
+
+    let Some(player_index) = eng.state.player_idx(pid) else {
+        return Vec::new();
+    };
+    if eng.state.turn_step == TurnStep::Cleanup {
+        if eng.state.cleanup_discard_player == Some(pid)
+            && eng.state.players[player_index].hand.len() > MAX_HAND_SIZE
+        {
+            return eng.state.players[player_index]
+                .hand
+                .iter()
+                .enumerate()
+                .map(|(hand_index, &oid)| {
+                    let name = object_display_name(&eng.state, eng.registry, oid);
+                    hand_action(
+                        rv1::HandActionKind::HandActionCleanupDiscard,
+                        hand_index,
+                        &name,
+                        0,
+                        false,
+                    )
+                })
+                .collect();
+        }
+        return Vec::new();
+    }
+
+    let instant_ok = instant_timing_step_allowed(eng.state.turn_step);
+    let sorcery_ok = sorcery_speed_available(&eng.state, pid);
+    let combat_decl_lock = priority_locked_for_combat_declaration(&eng.state);
+    let mut actions = Vec::new();
+    for (hand_index, &oid) in eng.state.players[player_index].hand.iter().enumerate() {
+        let Some(card_id) = eng.state.objects.get(&oid).map(|object| &object.card_id) else {
+            continue;
+        };
+        let Some(definition) = eng.registry.get(card_id) else {
+            continue;
+        };
+        for (face_index, face) in definition.faces_iter().enumerate() {
+            if face.is_land {
+                let max_lands = 1 + eng.extra_land_plays_for(pid);
+                if sorcery_ok && eng.state.lands_played_this_turn < max_lands {
+                    actions.push(hand_action(
+                        rv1::HandActionKind::HandActionPlayLand,
+                        hand_index,
+                        face.name,
+                        face_index,
+                        false,
+                    ));
+                }
+                continue;
+            }
+            if combat_decl_lock {
+                continue;
+            }
+            let cast_ok = if castable_at_instant_speed(&face) {
+                instant_ok
+            } else {
+                sorcery_ok
+            };
+            if cast_ok {
+                actions.push(hand_action(
+                    rv1::HandActionKind::HandActionCastSpell,
+                    hand_index,
+                    face.name,
+                    face_index,
+                    face.spell_effect.iter().any(spell_effect_kind_needs_target),
+                ));
+            }
+        }
+    }
+    actions
 }
 
 fn opening_legal_labels(eng: &GameEngine, pid: PlayerId, op: &OpeningSequence) -> Vec<String> {

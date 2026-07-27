@@ -41,10 +41,8 @@ fn initial_batch_includes_card_catalog_then_zone_view_for_cockatrice() {
         Some(Ev::ZoneView(z)) => {
             assert_eq!(z.per_player.len(), 2);
             for p in &z.per_player {
-                assert_eq!(p.hand.len(), 7, "opening hand");
-                assert_eq!(p.lib_ids.len(), 60 - 7, "rest in library");
-                assert_eq!(p.battlefield_power.len(), p.battlefield.len());
-                assert_eq!(p.battlefield_is_creature.len(), p.battlefield.len());
+                assert_eq!(p.hand_cards.len(), 7, "opening hand");
+                assert_eq!(p.library_card_ids.len(), 60 - 7, "rest in library");
             }
         }
         _ => panic!("expected ZoneView, got {:?}", e1.ev),
@@ -77,14 +75,16 @@ fn library_ids_preserve_comma_bearing_card_ids() {
         .expect("zone view present in initial batch");
     for p in &zv.per_player {
         assert_eq!(
-            p.lib_ids.len(),
+            p.library_card_ids.len(),
             3,
             "3 library cards; a comma must not be miscounted"
         );
         assert!(
-            p.lib_ids.iter().any(|id| id == "kokusho,_the_evening_star"),
+            p.library_card_ids
+                .iter()
+                .any(|id| id == "kokusho,_the_evening_star"),
             "comma-bearing id must survive as a single lib_ids entry, got {:?}",
-            p.lib_ids
+            p.library_card_ids
         );
     }
 }
