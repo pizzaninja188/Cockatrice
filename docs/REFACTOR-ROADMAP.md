@@ -493,6 +493,17 @@ set → the card is simply unclickable, no error anywhere).
 
 ### Step 9 — Rust: resolution split + primitives split (~3 days; before mass primitive growth)
 
+> **Completed 2026-07-26.** `engine/resolution.rs` is now the
+> `engine/resolution/` module: `mod.rs` retains stack setup, fizzle/custom handoff, shared
+> helpers, and the single exhaustive `SpellEffectKind` dispatch; resolution logic lives in
+> `damage`, `life`, `zones`, `pump_counters`, `mass`, `tokens`, `stack_ops`, and `misc`.
+> `EffectCx` carries the shared resolution inputs, and an internal outcome preserves the
+> existing early-exit behavior of effects that park a choice. `primitives.rs` is likewise a
+> re-exporting `primitives/` module split into `effects`, `targeting`, `costs`, `abilities`,
+> and `keywords`, leaving every existing `primitives::X` path and RON serde shape unchanged.
+> Verified with the full Rust workspace test suite (including 271 scenarios and registry
+> conformance), `cargo clippy -- -D warnings`, and `cargo fmt --check`.
+
 **9a. `resolution.rs` → `engine/resolution/` directory.** The file (1,814 lines) holds one
 36-arm `match effect { SpellEffectKind::… }` with some arms dozens of lines inline. Convert:
 `mod.rs` keeps `resolve_top`, the fizzle check, the custom-resolution handoff, and the
