@@ -251,3 +251,18 @@ iterating, build and test only the components your change touches:
   (roadmap Step 3). It SKIPs if the servatrice or tricerules-server binary is missing.
 - Before **commit**: full build of the affected side(s) + full ctest and/or `cargo test`,
   clippy, fmt — per the blocks above.
+
+### Manual verification (Windows)
+
+Automated tests stop at the view model; the real Qt UI is checked by playing a game. One command
+brings up sidecar + servatrice + two clients already readied into a ruled game:
+
+```powershell
+./scripts/launch-ruled-game.ps1            # -DeckA/-DeckB, -Seed, -Freeform, -NoServers
+./scripts/launch-ruled-game.ps1 -Stop      # tear down (run before rebuilding — a live
+                                           # servatrice/tricerules-server holds its .exe)
+```
+
+Both seats drive themselves to ready via the `--autopilot` flag
+([`ruled_autopilot`](cockatrice/src/game/ruled/README.md#dev-loop-autopilot)) and stop at game
+start. Default decks live in `scripts/decks/` and use only implemented cards.

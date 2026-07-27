@@ -24,6 +24,7 @@
 #include "client/settings/cache_settings.h"
 #include "client/sound_engine.h"
 #include "database/interface/settings_card_preference_provider.h"
+#include "game/ruled/ruled_autopilot.h"
 #include "interface/logger.h"
 #include "interface/pixel_map_generator.h"
 #include "interface/theme_manager.h"
@@ -228,7 +229,9 @@ int main(int argc, char *argv[])
 
     parser.addOptions(
         {{{"c", "connect"}, QCoreApplication::translate("main", "Connect on startup"), "user:pass@host:port"},
-         {{"d", "debug-output"}, QCoreApplication::translate("main", "Debug to file")}});
+         {{"d", "debug-output"}, QCoreApplication::translate("main", "Debug to file")},
+         {"autopilot", QCoreApplication::translate("main", "Dev loop: drive this client to ready"), "host|join"},
+         {"autopilot-deck", QCoreApplication::translate("main", "Deck the autopilot loads"), "file"}});
 
     parser.process(app);
 
@@ -257,6 +260,7 @@ int main(int argc, char *argv[])
     if (parser.isSet("connect")) {
         ui.setConnectTo(parser.value("connect"));
     }
+    RuledAutopilot::installFromCommandLine(&ui, parser.value("autopilot"), parser.value("autopilot-deck"));
     qCInfo(MainLog) << "MainWindow constructor finished";
 
     ui.setWindowIcon(QPixmap("theme:cockatrice"));

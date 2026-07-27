@@ -12,6 +12,9 @@ this a legal target, is this a creature — is answered from what the engine sen
 
 ## The four units
 
+(Plus `ruled_autopilot.{h,cpp}`, which is dev tooling rather than view model — see
+[Dev-loop autopilot](#dev-loop-autopilot) at the end.)
+
 ```
              RuledEventBatch (Event_RuledPayload)
                         │
@@ -160,3 +163,33 @@ The `connect` lines live in `tab_game.cpp` and are the accepted residual fork de
 Widget behaviour is covered offscreen by `tests/game_prompt/` (`game_prompt_widget_test`); use
 `isHidden()`, not `isVisible()`, since the widget is never shown. Qt module additions for tests go
 in `cmake/FindQtRuntime.cmake` (`_TEST_NEEDED`), not per-test `CMakeLists`.
+
+---
+
+## Dev-loop autopilot
+
+`ruled_autopilot.{h,cpp}` — `RuledAutopilot`. Not part of the view model: it is the client half of
+`scripts/launch-ruled-game.ps1`, which brings up sidecar + servatrice + two clients already sitting
+in a started ruled game. Manual verification is the only check the ruled UI has (there is
+deliberately no GUI click automation — see the roadmap's "Do NOT do"), so the pre-game ceremony
+being ten clicks every time was the thing making manual runs rare.
+
+Off unless `--autopilot host|join` is passed; a normally-launched client never constructs one.
+
+It drives the pre-game sequence only, and stops at game start — everything from the opening hand on
+is the real UI under a human. It sends the same commands the buttons send (`Command_CreateGame`,
+`Command_JoinGame`, then `DeckViewContainer::loadDeckFromFile` / `readyAndUpdate`), so there is no
+second code path to keep correct, and it never touches engine state.
+
+Two things worth knowing before changing it:
+
+- **Room and game discovery is polled, not signal-driven.** A room's initial game list arrives in
+  the `Response_JoinRoom` *response*, and only later changes come as `Event_ListGames`. An
+  event-only trigger therefore misses a game created before this client logged in. The joining seat
+  polls `Command_GetGamesOfUser` for the host instead, which is race-free either way.
+- **Ready is sent exactly once** (`readySent`). A failed ruled deck validation un-readies both
+  players; re-readying automatically would loop the game start against an unimplemented card.
+
+Upstream cost: one option pair in `main.cpp` plus one `installFromCommandLine` call, and a
+`friend class RuledAutopilot` on `TabSupervisor` (find the game tab) and `TabGame` (find this
+seat's deck view).

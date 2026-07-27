@@ -83,6 +83,8 @@ class TabSupervisor : public QTabWidget
 {
     Q_OBJECT
 
+    friend class RuledAutopilot; // fork: dev-loop autopilot needs to find a joined game's tab
+
 public:
     enum DeckEditorType
     {

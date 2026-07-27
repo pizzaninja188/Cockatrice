@@ -714,9 +714,8 @@ Unscheduled by design. Each entry fires on its trigger, not before.
 - **CR 616 replacement-effect ordering** — *trigger: first time two replacement effects can
   apply to one event.* Same: slot exists, machinery deferred.
 - **Dev-loop tooling** — *trigger: when manual-testing pain outweighs ~3–4 days.* Three
-  pieces, impact order: (1) **one-command game launch** (extend `scripts/`): server + sidecar
-  + two clients auto-created/joined/ready into a ruled game, decks by CLI arg — removes all
-  pre-game clicking, no engine changes (~½ day). (2) **Dev console + `DevCommand`**: a
+  pieces, impact order: (1) **one-command game launch** — **done 2026-07-27**, see below.
+  (2) **Dev console + `DevCommand`**: a
   debug-gated proto command with cheat primitives (put named card in zone, draw N, set life,
   add counters, skip to phase/turn, act-as-player). Design rule: dev commands are **ordinary
   logged engine commands** — never local state pokes — so determinism and replay hold. The
@@ -727,6 +726,26 @@ Unscheduled by design. Each entry fires on its trigger, not before.
   determinism): "save" dumps `(seed, command log)`; "load" replays into a fresh session and
   hands control to live clients — reusable tricky-board fixtures, shareable with the E2E
   harness. Pulls forward well right after Step 3 (shared plumbing).
+
+  > **Piece (1) done 2026-07-27.** `scripts/launch-ruled-game.ps1` starts the sidecar, servatrice
+  > and two clients, and both seats reach "ready" on their own — measured ~2 s from the command to
+  > `startRuledSidecarSession`. `-Stop` tears the set down again (also the fix for the stale-`.exe`
+  > link failure). Decks are `-DeckA` / `-DeckB`, defaulting to two implemented-card decks in
+  > `scripts/decks/`; `-Seed` pins `COCKATRICE_RULED_SEED` so a board state can be replayed;
+  > `-Freeform` and `-NoServers` cover the other two cases.
+  >
+  > **Deviation from "no engine changes / extend `scripts/` only":** there was no automation
+  > surface to script against — the pre-game sequence is pure GUI. The autopilot is therefore a
+  > new fork-owned client unit, `cockatrice/src/game/ruled/ruled_autopilot.{h,cpp}`, off unless
+  > `--autopilot host|join` is passed. Upstream cost is one option pair plus one call in
+  > `main.cpp`, and one `friend class RuledAutopilot` each on `TabSupervisor` and `TabGame`.
+  > No engine, proto, or server change. It sends only the commands the buttons send and stops at
+  > game start, so it drives the real UI rather than substituting for it.
+  >
+  > One thing the design pass surfaced, worth remembering for piece (2): a room's initial game list
+  > rides in the `Response_JoinRoom` response, and only later changes arrive as `Event_ListGames` —
+  > so an event-only trigger silently never fires for a game created before you logged in.
+  > `Command_GetGamesOfUser` is the race-free lookup.
 - **Security audit checklist** — *trigger: before any public deployment.* Verify and
   document: command sender identity is bound to the authenticated session server-side (never
   client-supplied player ids); the sidecar port (`TRICERULES_HOST`, default 127.0.0.1) is a

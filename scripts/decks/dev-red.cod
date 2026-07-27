@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <lastLoadedTimestamp>Mon Jul 27 00:26:21 2026</lastLoadedTimestamp>
+    <deckname>Dev red</deckname>
+    <format></format>
+    <bannerCard providerId=""></bannerCard>
+    <comments>Dev-loop deck for launch-ruled-game.ps1. Every card is implemented in tricerules, so the ruled deck-validation gate passes. Mirrors the aggressor deck in tests/ruled_e2e_smoke.</comments>
+    <tags/>
+    <zone name="main">
+        <card number="24" name="Mountain"/>
+        <card number="8" name="Hill Giant"/>
+        <card number="8" name="Lightning Bolt"/>
+    </zone>
+</cockatrice_deck>

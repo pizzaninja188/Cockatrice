@@ -63,6 +63,9 @@ class GamePromptWidget;
 class TabGame : public Tab
 {
     Q_OBJECT
+
+    friend class RuledAutopilot; // fork: dev-loop autopilot needs this seat's deck view
+
 private:
     AbstractGame *game;
     const UserListProxy *userListProxy;
