@@ -1,4 +1,4 @@
-use crate::card_def::CardDefinition;
+use crate::card_def::{CardDefinition, RawCardDefinition};
 use crate::primitives::{EffectContext, SpellEffectKind};
 use crate::token_def::TokenDefinition;
 use once_cell::sync::Lazy;
@@ -70,13 +70,19 @@ impl CardRegistry {
             }
         }
         for chunk in chunks {
-            let mut card: CardDefinition = RON_OPTS.from_str(chunk)?;
+            // Authored RON (flat for single-face cards) is normalized into the faces-only runtime
+            // shape here — the one place that knows about the flat authoring schema.
+            let raw: RawCardDefinition = RON_OPTS.from_str(chunk)?;
+            let id = raw.id.clone();
+            let mut card = raw
+                .into_definition()
+                .map_err(|reason| RegistryError::InvalidCard { id, reason })?;
             // Type flags are derived from `types`/`supertypes`, not authored in RON (per face).
             card.derive_type_flags();
-            // Validate every face's effects at startup. `face(0)` of a Normal card is the flat
-            // fields; multi-face cards (CR 709/712/715) validate each face uniformly. Spell
-            // effects have no source permanent, so `Self_` target filters are rejected here
-            // (EffectContext::Spell); activated/triggered effects bind to a source (Ability).
+            // Validate every face's effects at startup — multi-face cards (CR 709/712/715)
+            // validate each face uniformly. Spell effects have no source permanent, so `Self_`
+            // target filters are rejected here (EffectContext::Spell); activated/triggered
+            // effects bind to a source (Ability).
             for face in card.faces_iter() {
                 // One resolution owner per face (CR 608): a custom (tier-3) effect and a
                 // data-driven `spell_effect` list cannot both resolve the same face. The
@@ -90,7 +96,7 @@ impl CardRegistry {
                             .into(),
                     });
                 }
-                for effect in face.spell_effect {
+                for effect in &face.spell_effect {
                     effect.validate(EffectContext::Spell).map_err(|reason| {
                         RegistryError::InvalidCard {
                             id: card.id.clone(),
@@ -109,7 +115,7 @@ impl CardRegistry {
                                 .into(),
                     });
                 }
-                for aa in face.activated_abilities {
+                for aa in &face.activated_abilities {
                     aa.effect
                         .validate(EffectContext::Ability)
                         .map_err(|reason| RegistryError::InvalidCard {
@@ -117,7 +123,7 @@ impl CardRegistry {
                             reason,
                         })?;
                 }
-                for ta in face.triggered_abilities {
+                for ta in &face.triggered_abilities {
                     ta.effect
                         .validate(EffectContext::Ability)
                         .map_err(|reason| RegistryError::InvalidCard {
@@ -278,7 +284,8 @@ mod tests {
             types: ["Instant"],
             spell_effect: [TargetPlayerGainsLife(amount: 3, target: (kind: Creature))],
         )"#;
-        let card: CardDefinition = RON_OPTS.from_str(bad).unwrap();
+        let raw: RawCardDefinition = RON_OPTS.from_str(bad).unwrap();
+        let card = raw.into_definition().unwrap();
         assert!(card.primary_face().spell_effect[0]
             .validate(crate::primitives::EffectContext::Spell)
             .is_err());
@@ -372,6 +379,59 @@ mod tests {
         assert_eq!(ice.name, "Ice");
         assert!(fire.is_instant && ice.is_instant);
         assert!(!fire.is_permanent() && !ice.is_permanent());
+    }
+
+    /// The flat authoring schema (`mana_cost`/`types`/… at the top level) is normalized into
+    /// `faces[0]` at load, so the runtime definition is faces-only for single-face cards too.
+    #[test]
+    fn flat_authoring_becomes_a_single_face() {
+        let reg = CardRegistry::from_embedded().unwrap();
+        let def = reg.get("grizzly_bears").expect("grizzly_bears loaded");
+        assert_eq!(def.face_count(), 1);
+        assert!(!def.is_multiface());
+        let face = def.primary_face();
+        assert_eq!(face.name, def.name);
+        assert_eq!(face.mana_cost.to_string(), "{1}{G}");
+        assert_eq!((face.power, face.toughness), (Some(2), Some(2)));
+        assert!(face.is_creature && face.is_permanent());
+    }
+
+    /// The layout and the authored `faces` list must agree: a multi-face layout has to author
+    /// faces, and a `Normal` card must not (its lone face is the flat fields).
+    #[test]
+    fn load_rejects_layout_and_faces_disagreement() {
+        let faceless_split = r#"(
+            id: "faceless_split",
+            name: "Faceless Split",
+            layout: Split,
+            mana_cost: "{R}",
+            types: ["Instant"],
+        )"#;
+        let err = CardRegistry::from_chunks(&[faceless_split]).unwrap_err();
+        match err {
+            RegistryError::InvalidCard { id, reason } => {
+                assert_eq!(id, "faceless_split");
+                assert!(reason.contains("requires an authored `faces` list"));
+            }
+            other => panic!("expected InvalidCard, got {other:?}"),
+        }
+
+        let normal_with_faces = r#"(
+            id: "normal_with_faces",
+            name: "Normal With Faces",
+            faces: [
+                (name: "A", mana_cost: "{R}", types: ["Instant"]),
+                (name: "B", mana_cost: "{U}", types: ["Instant"]),
+            ],
+        )"#;
+        let err = CardRegistry::from_chunks(&[normal_with_faces]).unwrap_err();
+        match err {
+            RegistryError::InvalidCard { id, reason } => {
+                assert_eq!(id, "normal_with_faces");
+                assert!(reason.contains("Normal-layout card"));
+            }
+            other => panic!("expected InvalidCard, got {other:?}"),
+        }
     }
 
     #[test]

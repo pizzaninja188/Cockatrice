@@ -182,7 +182,7 @@ impl GameEngine {
                 .registry
                 .get(&card_id)
                 .and_then(|d| d.face(top.face_index))
-                .and_then(|f| f.custom_effect.map(str::to_string));
+                .and_then(|f| f.custom_effect.clone());
             if let Some(custom_key) = custom_key {
                 return self.begin_custom_resolution(top, custom_key, events);
             }

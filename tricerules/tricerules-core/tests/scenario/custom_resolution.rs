@@ -332,7 +332,7 @@ fn every_custom_effect_key_has_an_impl() {
     let reg = tricerules_cards::CardRegistry::global();
     for def in reg.definitions() {
         for face in def.faces_iter() {
-            if let Some(key) = face.custom_effect {
+            if let Some(key) = face.custom_effect.as_deref() {
                 assert!(
                     tricerules_core::custom::lookup(key).is_some(),
                     "card '{}' has custom_effect '{}' with no registered CardEffect",

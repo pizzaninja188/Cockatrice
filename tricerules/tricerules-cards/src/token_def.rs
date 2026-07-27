@@ -9,7 +9,7 @@
 //! registry's token map — `CardRegistry::get` falls back to it, so the engine never branches on
 //! token-ness for a characteristic lookup.
 
-use crate::card_def::CardDefinition;
+use crate::card_def::{CardDefinition, CardFace};
 use crate::primitives::{Color, Keyword};
 use serde::{Deserialize, Serialize};
 
@@ -46,19 +46,23 @@ pub struct TokenDefinition {
 }
 
 impl TokenDefinition {
-    /// Project this token into a [`CardDefinition`] so the engine's characteristic queries
-    /// (`is_creature`, P/T base, `keywords`, `colors`) work uniformly. The type flags are
+    /// Project this token into a single-face [`CardDefinition`] so the engine's characteristic
+    /// queries (`is_creature`, P/T base, `keywords`, `colors`) work uniformly. The type flags are
     /// derived by the caller via [`CardDefinition::derive_type_flags`] after construction.
     pub fn to_card_def(&self) -> CardDefinition {
         CardDefinition {
             id: self.id.clone(),
             name: self.name.clone(),
-            types: self.types.clone(),
-            supertypes: self.supertypes.clone(),
-            power: self.power,
-            toughness: self.toughness,
-            keywords: self.keywords.clone(),
-            colors_override: Some(self.colors.clone()),
+            faces: vec![CardFace {
+                name: self.name.clone(),
+                types: self.types.clone(),
+                supertypes: self.supertypes.clone(),
+                power: self.power,
+                toughness: self.toughness,
+                keywords: self.keywords.clone(),
+                colors_override: Some(self.colors.clone()),
+                ..Default::default()
+            }],
             ..Default::default()
         }
     }

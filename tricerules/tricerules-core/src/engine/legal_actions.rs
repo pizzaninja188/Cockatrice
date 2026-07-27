@@ -25,7 +25,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                     {
                         continue;
                     }
-                    let t = compute_spell_targets(eng, p.id, face.spell_effect);
+                    let t = compute_spell_targets(eng, p.id, &face.spell_effect);
                     let key = (slot as u32) << 8 | face_index as u32;
                     valid_targets_by_hand_slot.insert(key, t);
                 }
@@ -223,7 +223,7 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                     actions.push(hand_action(
                         rv1::HandActionKind::HandActionPlayLand,
                         hand_index,
-                        face.name,
+                        &face.name,
                         face_index,
                         false,
                     ));
@@ -242,7 +242,7 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                 actions.push(hand_action(
                     rv1::HandActionKind::HandActionCastSpell,
                     hand_index,
-                    face.name,
+                    &face.name,
                     face_index,
                     face.spell_effect.iter().any(spell_effect_kind_needs_target),
                 ));
@@ -366,7 +366,7 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
         let cid = &eng.state.objects.get(&oid).unwrap().card_id;
         if let Some(def) = eng.registry.get(cid) {
             for (face_index, face) in def.faces_iter().enumerate() {
-                let name = face.name;
+                let name = &face.name;
                 if face.is_land {
                     let max_lands = 1 + eng.extra_land_plays_for(pid);
                     if sorcery_ok && eng.state.lands_played_this_turn < max_lands {

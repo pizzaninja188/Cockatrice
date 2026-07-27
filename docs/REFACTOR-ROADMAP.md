@@ -568,6 +568,36 @@ ordering. The pipeline is built with slots for both.
 
 ### Step 11 — `CardDefinition` → faces-only (2 PRs, ~2–3 days; before mass per-card attributes)
 
+> **Done 2026-07-26** (2 commits, one per planned PR).
+>
+> **11.1 (mechanical).** Every engine read of a flat `CardDefinition` field now goes through
+> `face(i)` / `primary_face()` / a new `any_face(pred)`. `FaceRef` first gained the per-face data
+> those call sites needed (`is_aura`, `must_attack_if_able`, `must_block_if_able`,
+> `colors_override`, plus `colors()`); `CardFace` gained the matching `colors_override` slot.
+> Three multi-face behaviours changed as a side effect, all in the direction of correctness —
+> flat fields are *empty* for multi-face cards, so those reads previously answered "no": library
+> and graveyard type filters now consult every face (CR 709.4; a split card is findable by
+> Mystical Tutor, covered by a new scenario test), `GameEvent::SpellCast` carries the cast
+> `face_index` so cast triggers filter on the face on the stack, and the conformance sweep plays
+> a multi-face *land* face as a land instead of trying to cast it.
+>
+> **11.2 (storage flip).** `RawCardDefinition` is the serde-only authoring schema — today's RON
+> byte-for-byte, flat fields and all — and `RawCardDefinition::into_definition()` in
+> `registry.rs` is the single place that knows about it. Runtime `CardDefinition` is
+> `{ id, name, layout, faces, partial }` with a **non-empty** `faces` vec; `FaceRef<'a>` is now
+> literally `pub type FaceRef<'a> = &'a CardFace;` and the borrowed-mirror struct is gone, so a
+> new per-card characteristic is declared once on `CardFace` instead of three times. The
+> conversion also enforces the layout/faces invariant both ways (a non-`Normal` layout must author
+> `faces`; a `Normal` card must not), with tests. `CardDefinition` no longer derives serde at all.
+>
+> Deviation from the plan below: `colors_override` moved onto `CardFace` rather than staying a
+> whole-card field, because color is a face characteristic (CR 202.2a / 111.4) and `FaceRef` has
+> to answer `colors()` without reaching back to the card. Tokens project to a one-face definition.
+>
+> Verified per commit: `cargo test` (273 scenarios + registry + conformance resolving every
+> card), `clippy --all-features -D warnings`, `fmt --check`, and the checklist `--check` gate
+> (855 full + 6 partial, unchanged). Rust-only — no C++ build needed.
+
 `card_def.rs` carries three parallel representations of a card's characteristics: flat
 top-level fields, a `faces: Vec<CardFace>` repeating the same fields, and a borrowed
 `FaceRef<'a>` mirror — every new per-card attribute is added three times. Unify without
