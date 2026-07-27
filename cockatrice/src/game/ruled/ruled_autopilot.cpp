@@ -2,6 +2,7 @@
 
 #include "../../interface/widgets/tabs/tab_game.h"
 #include "../../interface/widgets/tabs/tab_supervisor.h"
+#include "../../interface/deck_loader/deck_loader.h"
 #include "../../interface/window_main.h"
 #include "../abstract_game.h"
 #include "../deckview/deck_view_container.h"
@@ -264,11 +265,22 @@ void RuledAutopilot::prepareDeck()
     connect(tab->getGame()->getGameEventHandler(), &GameEventHandler::playerPropertiesChanged, this,
             &RuledAutopilot::handlePlayerProperties);
 
+    // Deliberately not DeckViewContainer::loadDeckFromFile: that loads as a *user request*, which
+    // stamps lastLoadedTimestamp back into the deck file. An autopilot load is not a user request,
+    // and a dev script has no business rewriting the deck it was pointed at.
+    const std::optional<LoadedDeck> loaded =
+        DeckLoader::loadFromFile(config.deckFile, DeckFileFormat::getFormatFromName(config.deckFile),
+                                 /*userRequest=*/false);
+    if (!loaded) {
+        giveUp(QStringLiteral("could not load deck: %1").arg(config.deckFile));
+        return;
+    }
+
     stage = Stage::WaitingForDeckAck;
     qCInfo(RuledAutopilotLog) << "loading deck" << config.deckFile;
-    // The normal client path: it sends Command_DeckSelect and updates the deck view, so the UI
-    // shows exactly what it would after a manual load.
-    deckView->loadDeckFromFile(config.deckFile);
+    // From here it is the normal client path: sends Command_DeckSelect and updates the deck view,
+    // so the UI shows exactly what it would after a manual load.
+    deckView->loadDeckFromDeckList(loaded->deckList);
 }
 
 void RuledAutopilot::handlePlayerProperties(const ServerInfo_PlayerProperties &prop, int propPlayerId)
