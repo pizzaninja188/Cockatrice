@@ -30,8 +30,10 @@ pub(super) fn pump_target(
             .state
             .objects
             .get(&tid)
-            .map(|t| t.zone == Zone::Battlefield && t.is_creature(engine.registry))
-            .unwrap_or(false);
+            .is_some_and(|t| t.zone == Zone::Battlefield)
+            && engine
+                .characteristics(tid)
+                .is_some_and(|value| value.is_creature());
         if is_valid_target {
             let tgt = object_display_name(&engine.state, engine.registry, tid);
             engine.state.continuous_effects.push(ContinuousEffect {
@@ -156,8 +158,10 @@ pub(super) fn put_counters(
             .state
             .objects
             .get(&tid)
-            .map(|t| t.zone == Zone::Battlefield && t.is_creature(engine.registry))
-            .unwrap_or(false);
+            .is_some_and(|t| t.zone == Zone::Battlefield)
+            && engine
+                .characteristics(tid)
+                .is_some_and(|value| value.is_creature());
         if is_valid_target {
             let tgt = object_display_name(&engine.state, engine.registry, tid);
             if let Some(t) = engine.state.objects.get_mut(&tid) {

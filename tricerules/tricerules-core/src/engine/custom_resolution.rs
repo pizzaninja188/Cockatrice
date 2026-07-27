@@ -41,7 +41,7 @@ impl GameEngine {
             damage_amount: 0,
         }];
         if let Some(kind) = effect {
-            validate_effect_targets(&self.state, self.registry, player, kind, target_ref)?;
+            validate_effect_targets(self, player, kind, target_ref)?;
         }
 
         let virtual_id = self.state.next_object_id;
@@ -341,6 +341,9 @@ impl GameEngine {
             .map(|o| o.card_id.clone())
             .unwrap_or_default();
         let controller = owner;
+        let was_creature = self
+            .characteristics(oid)
+            .is_some_and(|value| value.is_creature());
 
         sacrifice_permanent(&mut self.state, oid)?;
 
@@ -362,6 +365,7 @@ impl GameEngine {
                 object_id: oid,
                 card_id,
                 controller,
+                was_creature,
             },
             &mut ev,
         );
@@ -390,6 +394,9 @@ impl GameEngine {
             }
             let owner = self.state.objects.get(&oid).map(|o| o.owner);
             let card_id = self.state.objects.get(&oid).map(|o| o.card_id.clone());
+            let was_creature = self
+                .characteristics(oid)
+                .is_some_and(|value| value.is_creature());
             if sacrifice_permanent(&mut self.state, oid).is_ok() {
                 if let Some(owner_id) = owner {
                     ev.push(permanent_moved_event(
@@ -405,6 +412,7 @@ impl GameEngine {
                             object_id: oid,
                             card_id: cid,
                             controller: ctrl,
+                            was_creature,
                         },
                         &mut ev,
                     );

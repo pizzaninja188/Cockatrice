@@ -8,10 +8,10 @@ impl GameEngine {
     /// keyword evasion abilities. Checks all active blocking restrictions in order.
     pub(super) fn can_block(&self, attacker_id: ObjectId, blocker_id: ObjectId) -> bool {
         use tricerules_cards::Keyword;
-        let Some(att) = self.state.objects.get(&attacker_id) else {
+        if !self.state.objects.contains_key(&attacker_id) {
             return false;
         };
-        let Some(blk) = self.state.objects.get(&blocker_id) else {
+        if !self.state.objects.contains_key(&blocker_id) {
             return false;
         };
 
@@ -26,15 +26,20 @@ impl GameEngine {
         // CR 702.13b — intimidate: can only be blocked by artifact creatures and/or
         // creatures that share a color with the intimidate creature.
         if self.effective_has_keyword(attacker_id, Keyword::Intimidate) {
-            let blk_def = self.registry.get(&blk.card_id);
-            let blk_is_artifact = blk_def.map(|d| d.is_artifact).unwrap_or(false);
+            let att_characteristics = self.characteristics(attacker_id);
+            let blk_characteristics = self.characteristics(blocker_id);
+            let blk_is_artifact = blk_characteristics
+                .as_ref()
+                .is_some_and(Characteristics::is_artifact);
             if !blk_is_artifact {
-                let att_colors = self
-                    .registry
-                    .get(&att.card_id)
-                    .map(|d| d.colors())
+                let att_colors = att_characteristics
+                    .as_ref()
+                    .map(|value| value.colors.as_slice())
                     .unwrap_or_default();
-                let blk_colors = blk_def.map(|d| d.colors()).unwrap_or_default();
+                let blk_colors = blk_characteristics
+                    .as_ref()
+                    .map(|value| value.colors.as_slice())
+                    .unwrap_or_default();
                 let shares_color = att_colors.iter().any(|c| blk_colors.contains(c));
                 if !shares_color {
                     return false;
@@ -61,7 +66,9 @@ impl GameEngine {
                     self.effective_has_keyword(*oid, tricerules_cards::Keyword::Defender);
                 o.zone == Zone::Battlefield
                     && o.owner == ap
-                    && o.is_creature(self.registry)
+                    && self
+                        .characteristics(*oid)
+                        .is_some_and(|value| value.is_creature())
                     && !effectively_sick
                     && !o.tapped
                     && !has_defender
@@ -96,7 +103,9 @@ impl GameEngine {
                 self.state.objects.get(&oid).is_some_and(|o| {
                     o.zone == Zone::Battlefield
                         && o.owner == dp
-                        && o.is_creature(self.registry)
+                        && self
+                            .characteristics(oid)
+                            .is_some_and(|value| value.is_creature())
                         && !o.tapped
                 })
             })
@@ -145,16 +154,19 @@ impl GameEngine {
             if !obj.must_attack_if_able {
                 continue;
             }
-            if !obj.is_creature(self.registry) {
+            let Some(characteristics) = self.characteristics(oid) else {
+                continue;
+            };
+            if !characteristics.is_creature() {
                 continue;
             }
             if obj.tapped {
                 continue;
             }
-            if obj.summoning_sick && !obj.has_keyword(self.registry, Keyword::Haste) {
+            if obj.summoning_sick && !characteristics.has_keyword(Keyword::Haste) {
                 continue;
             }
-            if obj.has_keyword(self.registry, Keyword::Defender) {
+            if characteristics.has_keyword(Keyword::Defender) {
                 continue;
             }
             out.push(oid);
@@ -190,7 +202,10 @@ impl GameEngine {
             if !obj.must_block_if_able {
                 continue;
             }
-            if !obj.is_creature(self.registry) {
+            if !self
+                .characteristics(oid)
+                .is_some_and(|value| value.is_creature())
+            {
                 continue;
             }
             if obj.tapped {
@@ -254,7 +269,10 @@ impl GameEngine {
             if o.owner != ap || o.zone != Zone::Battlefield {
                 return Err(EngineError::Illegal("illegal attacker"));
             }
-            if !o.is_creature(self.registry) {
+            if !self
+                .characteristics(oid)
+                .is_some_and(|value| value.is_creature())
+            {
                 return Err(EngineError::Illegal("not creature"));
             }
             // CR 702.3b: a creature with defender can't attack.
@@ -382,7 +400,10 @@ impl GameEngine {
             if bobj.owner != defending_player {
                 return Err(EngineError::Illegal("not your blocker"));
             }
-            if !bobj.is_creature(self.registry) {
+            if !self
+                .characteristics(p.blocker_id)
+                .is_some_and(|value| value.is_creature())
+            {
                 return Err(EngineError::Illegal("blocker not creature"));
             }
             if bobj.tapped {

@@ -527,6 +527,22 @@ rename, not a redesign.
 
 ### Step 10 — Characteristics pipeline + `continuous.rs` split (with or right after 9a; strictly before any clone / control-change / type-change card)
 
+> **Completed 2026-07-26.** `GameEngine::characteristics(oid)` now returns one owned
+> `Characteristics` snapshot for controller, types/supertypes, colors, keywords, and P/T through
+> explicit CR 613 layer slots. Layers 1–5 and the not-yet-needed layer-7 sublayers are named
+> identity stages; layer 6 keyword grants and layer 7c/7d modifiers/counters moved into the
+> pipeline in timestamp order. The ordered-effect boundary is the documented insertion point for
+> deferred CR 613.8 dependency ordering, and the pure state/registry calculation is ready for
+> memoization without changing callers. Battlefield legality, combat, zone views, triggered
+> permanent-type checks, and last-known creature state for dies triggers now consume the pipeline.
+>
+> `continuous.rs` retains effect creation/expiry only; the characteristics evaluator lives in
+> `characteristics.rs` and the CR 704 fixed-point loop plus its tests live in `state_based.rs`.
+> The paired deterministic big-board scenario drives 200 creatures through a full turn with 20
+> global layer effects and enforces the roadmap's <2s release bound. Verified with the targeted
+> scenario/unit tests, release stress scenario, full Rust workspace test suite,
+> `cargo clippy -- -D warnings`, and `cargo fmt --check`.
+
 The engine's ordering skeleton is genuinely good: continuous effects carry CR 613.7
 timestamps, layers 6/7c/7d apply in explicit order, a CR 704.4 fixed-point SBA loop runs
 per-rule passes (704.5f/g/h/j/m/p), and prevention shields (CR 614.1a) and regeneration are

@@ -40,8 +40,11 @@ pub(super) fn damage_target(
             }
         } else {
             let tgt = object_display_name(&engine.state, engine.registry, tid);
+            let is_creature = engine
+                .characteristics(tid)
+                .is_some_and(|value| value.is_creature());
             if let Some(t) = engine.state.objects.get_mut(&tid) {
-                if t.zone == Zone::Battlefield && t.is_creature(engine.registry) {
+                if t.zone == Zone::Battlefield && is_creature {
                     t.damage += amount;
                     if amount > 0 {
                         events.push(ev_log(format!(
@@ -77,13 +80,7 @@ pub(super) fn damage_targets(
         if damage_amount == 0 {
             continue;
         }
-        if !super::targeting::target_filter_legal_at_resolution(
-            &engine.state,
-            engine.registry,
-            &filter,
-            tid,
-            controller,
-        ) {
+        if !super::targeting::target_filter_legal_at_resolution(engine, &filter, tid, controller) {
             events.push(ev_log(format!(
                 "{spell_label}: target {} is no longer legal, skipping.",
                 tid
@@ -105,8 +102,11 @@ pub(super) fn damage_targets(
             )));
         } else {
             let tgt = object_display_name(&engine.state, engine.registry, tid);
+            let is_creature = engine
+                .characteristics(tid)
+                .is_some_and(|value| value.is_creature());
             if let Some(t) = engine.state.objects.get_mut(&tid) {
-                if t.zone == Zone::Battlefield && t.is_creature(engine.registry) {
+                if t.zone == Zone::Battlefield && is_creature {
                     t.damage += damage_amount;
                     events.push(ev_log(format!(
                         "{spell_label} deals {damage_amount} damage to {tgt}"

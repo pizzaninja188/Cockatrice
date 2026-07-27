@@ -25,8 +25,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                     {
                         continue;
                     }
-                    let t =
-                        compute_spell_targets(&eng.state, eng.registry, p.id, face.spell_effect);
+                    let t = compute_spell_targets(eng, p.id, face.spell_effect);
                     let key = (slot as u32) << 8 | face_index as u32;
                     valid_targets_by_hand_slot.insert(key, t);
                 }
@@ -46,12 +45,8 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 };
                 for (ai, ability) in face.activated_abilities.iter().enumerate() {
                     if spell_effect_kind_needs_target(&ability.effect) {
-                        let targets = compute_spell_targets(
-                            &eng.state,
-                            eng.registry,
-                            p.id,
-                            std::slice::from_ref(&ability.effect),
-                        );
+                        let targets =
+                            compute_spell_targets(eng, p.id, std::slice::from_ref(&ability.effect));
                         let key = (poid as u64) << 32 | ai as u64;
                         valid_targets_by_ability.insert(key, targets);
                     }
@@ -76,12 +71,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                     .and_then(|def| def.triggered_abilities.get(pt.ability_index))
                     .map(|ta| &ta.effect)
                 {
-                    let targets = compute_spell_targets(
-                        &eng.state,
-                        eng.registry,
-                        p.id,
-                        std::slice::from_ref(effect),
-                    );
+                    let targets = compute_spell_targets(eng, p.id, std::slice::from_ref(effect));
                     let key = (pt.source_permanent_id as u64) << 32 | pt.ability_index as u64;
                     valid_targets_by_ability.insert(key, targets);
                 }

@@ -35,8 +35,10 @@ impl GameEngine {
                 };
                 let entering_id = *object_id;
                 let entering_card_id = obj.card_id.clone();
-                let entering_controller = obj.owner;
-                let entering_def = self.registry.get(&entering_card_id).cloned();
+                let Some(entering_characteristics) = self.characteristics(entering_id) else {
+                    return vec![];
+                };
+                let entering_controller = entering_characteristics.controller;
 
                 let mut out = Vec::new();
                 out.extend(self.matching_triggered_abilities(
@@ -56,7 +58,6 @@ impl GameEngine {
                         }
                     }
                 }
-                let entering_def_ref = entering_def.as_ref();
                 for (src_id, src_card, src_ctrl) in sources {
                     out.extend(self.matching_triggered_abilities(
                         &src_card,
@@ -87,9 +88,18 @@ impl GameEngine {
                                 return false;
                             }
                             match permanent_type {
-                                Some(pt) => entering_def_ref
-                                    .map(|d| d.is_permanent_type(*pt))
-                                    .unwrap_or(false),
+                                Some(tricerules_cards::PermanentTypeFilter::Creature) => {
+                                    entering_characteristics.is_creature()
+                                }
+                                Some(tricerules_cards::PermanentTypeFilter::Artifact) => {
+                                    entering_characteristics.is_artifact()
+                                }
+                                Some(tricerules_cards::PermanentTypeFilter::Enchantment) => {
+                                    entering_characteristics.has_type("Enchantment")
+                                }
+                                Some(tricerules_cards::PermanentTypeFilter::Land) => {
+                                    entering_characteristics.has_type("Land")
+                                }
                                 None => true,
                             }
                         },
@@ -101,6 +111,7 @@ impl GameEngine {
                 object_id: dying_id,
                 card_id: dying_card_id,
                 controller: dying_controller,
+                was_creature,
             } => {
                 let mut out = self.matching_triggered_abilities(
                     dying_card_id,
@@ -120,12 +131,7 @@ impl GameEngine {
                         }
                     }
                 }
-                let dying_is_creature = self
-                    .registry
-                    .get(dying_card_id)
-                    .map(|d| d.is_creature)
-                    .unwrap_or(false);
-                if dying_is_creature {
+                if *was_creature {
                     // Check the dying creature itself for WheneverCreatureDies (exclude_self: false).
                     // It has already left the battlefield, so it won't appear in `sources`, but its
                     // card definition is still in the registry — same path as WhenSelfDies.

@@ -3,21 +3,29 @@ use super::*;
 use tricerules_cards::primitives::{GraveyardCardType, GraveyardFilter, GraveyardOwner};
 
 /// Player or creature permanent on the battlefield (matches cast validation for `bolt`).
-fn damage_spell_target_legal(state: &GameState, registry: &CardRegistry, tid: ObjectId) -> bool {
-    if state.player_idx(tid as i32).is_some() {
+fn damage_spell_target_legal(engine: &GameEngine, tid: ObjectId) -> bool {
+    if engine.state.player_idx(tid as i32).is_some() {
         return true;
     }
-    state
+    engine
+        .state
         .objects
         .get(&tid)
-        .is_some_and(|o| o.zone == Zone::Battlefield && o.is_creature(registry))
+        .is_some_and(|o| o.zone == Zone::Battlefield)
+        && engine
+            .characteristics(tid)
+            .is_some_and(|value| value.is_creature())
 }
 
-fn destroy_spell_target_legal(state: &GameState, registry: &CardRegistry, tid: ObjectId) -> bool {
-    state
+fn destroy_spell_target_legal(engine: &GameEngine, tid: ObjectId) -> bool {
+    engine
+        .state
         .objects
         .get(&tid)
-        .is_some_and(|o| o.zone == Zone::Battlefield && o.is_creature(registry))
+        .is_some_and(|o| o.zone == Zone::Battlefield)
+        && engine
+            .characteristics(tid)
+            .is_some_and(|value| value.is_creature())
 }
 
 /// Target must be an active player (not lost).
@@ -38,13 +46,12 @@ fn any_battlefield_permanent_target_legal(state: &GameState, tid: ObjectId) -> b
 /// Check if `oid` is a legal graveyard target for a [`GraveyardFilter`].
 /// Graveyard cards have no Hexproof/Shroud (those keywords only apply on the battlefield).
 pub(super) fn graveyard_target_legal(
-    state: &GameState,
-    registry: &CardRegistry,
+    engine: &GameEngine,
     filter: &GraveyardFilter,
     oid: ObjectId,
     caster: PlayerId,
 ) -> bool {
-    let Some(obj) = state.objects.get(&oid) else {
+    let Some(obj) = engine.state.objects.get(&oid) else {
         return false;
     };
     if obj.zone != Zone::Graveyard {
@@ -61,7 +68,7 @@ pub(super) fn graveyard_target_legal(
     }
     // Card-type restriction.
     if let Some(card_type) = filter.card_type {
-        let Some(def) = registry.get(&obj.card_id) else {
+        let Some(def) = engine.registry.get(&obj.card_id) else {
             return false;
         };
         match card_type {
@@ -79,22 +86,17 @@ pub(super) fn graveyard_target_legal(
 
 /// CR 702.16 / CR 702.18: returns false when `tid` is a permanent that the `caster` cannot
 /// legally target due to Shroud or Hexproof. Players are never shielded by these keywords.
-fn object_targetable_by(
-    state: &GameState,
-    registry: &CardRegistry,
-    tid: ObjectId,
-    caster: PlayerId,
-) -> bool {
-    let Some(obj) = state.objects.get(&tid) else {
+fn object_targetable_by(engine: &GameEngine, tid: ObjectId, caster: PlayerId) -> bool {
+    let Some(_obj) = engine.state.objects.get(&tid) else {
         return true; // object gone — legality checked elsewhere
     };
-    let Some(def) = registry.get(&obj.card_id) else {
+    let Some(characteristics) = engine.characteristics(tid) else {
         return true;
     };
-    if def.keywords.contains(&Keyword::Shroud) {
+    if characteristics.has_keyword(Keyword::Shroud) {
         return false;
     }
-    if def.keywords.contains(&Keyword::Hexproof) && obj.owner != caster {
+    if characteristics.has_keyword(Keyword::Hexproof) && characteristics.controller != caster {
         return false;
     }
     true
@@ -107,19 +109,21 @@ fn object_targetable_by(
 /// ignores hexproof/shroud (CR 702.11e — untargeted effects affect them normally) and only
 /// honors the object kinds and characteristic constraints the filter carries.
 pub(super) fn object_matches_mass_filter(
-    state: &GameState,
-    registry: &CardRegistry,
+    engine: &GameEngine,
     oid: ObjectId,
     filter: &TargetFilter,
 ) -> bool {
-    let Some(o) = state.objects.get(&oid) else {
+    let Some(o) = engine.state.objects.get(&oid) else {
         return false;
     };
     if o.zone != Zone::Battlefield {
         return false;
     }
+    let Some(characteristics) = engine.characteristics(oid) else {
+        return false;
+    };
     let kind_ok = match filter.kind {
-        TargetKind::Creature => o.is_creature(registry),
+        TargetKind::Creature => characteristics.is_creature(),
         TargetKind::AnyPermanent => true,
         // Player / AnyTarget / Self_ kinds are rejected at registry load for mass effects.
         _ => false,
@@ -127,12 +131,7 @@ pub(super) fn object_matches_mass_filter(
     if !kind_ok {
         return false;
     }
-    if filter.not_artifact
-        && registry
-            .get(&o.card_id)
-            .map(|d| d.is_artifact)
-            .unwrap_or(false)
-    {
+    if filter.not_artifact && characteristics.is_artifact() {
         return false;
     }
     if let Some(tapped_req) = filter.tapped {
@@ -146,14 +145,13 @@ pub(super) fn object_matches_mass_filter(
 /// Collect every battlefield permanent matching a mass-effect filter, in deterministic
 /// player-then-battlefield order (no HashMap iteration, so replays stay reproducible).
 pub(super) fn battlefield_objects_matching(
-    state: &GameState,
-    registry: &CardRegistry,
+    engine: &GameEngine,
     filter: &TargetFilter,
 ) -> Vec<ObjectId> {
     let mut out = Vec::new();
-    for p in &state.players {
+    for p in &engine.state.players {
         for &oid in &p.battlefield {
-            if object_matches_mass_filter(state, registry, oid, filter) {
+            if object_matches_mass_filter(engine, oid, filter) {
                 out.push(oid);
             }
         }
@@ -163,28 +161,28 @@ pub(super) fn battlefield_objects_matching(
 
 /// Public wrapper used by resolution for per-target legality checks in `DamageTargets`.
 pub(super) fn target_filter_legal_at_resolution(
-    state: &GameState,
-    registry: &CardRegistry,
+    engine: &GameEngine,
     filter: &TargetFilter,
     tid: ObjectId,
     caster: PlayerId,
 ) -> bool {
-    target_filter_legal(state, registry, filter, tid, caster)
+    target_filter_legal(engine, filter, tid, caster)
 }
 
 fn target_filter_legal(
-    state: &GameState,
-    registry: &CardRegistry,
+    engine: &GameEngine,
     filter: &TargetFilter,
     tid: ObjectId,
     caster: PlayerId,
 ) -> bool {
     let kind_ok = match filter.kind {
-        TargetKind::AnyTarget => damage_spell_target_legal(state, registry, tid),
-        TargetKind::Creature => destroy_spell_target_legal(state, registry, tid),
-        TargetKind::AnyPlayer => player_target_legal(state, tid),
-        TargetKind::OpponentPlayer => player_target_legal(state, tid) && tid as i32 != caster,
-        TargetKind::AnyPermanent => any_battlefield_permanent_target_legal(state, tid),
+        TargetKind::AnyTarget => damage_spell_target_legal(engine, tid),
+        TargetKind::Creature => destroy_spell_target_legal(engine, tid),
+        TargetKind::AnyPlayer => player_target_legal(&engine.state, tid),
+        TargetKind::OpponentPlayer => {
+            player_target_legal(&engine.state, tid) && tid as i32 != caster
+        }
+        TargetKind::AnyPermanent => any_battlefield_permanent_target_legal(&engine.state, tid),
         // `Self_` is auto-bound to the ability's source, never a chosen target (CR 115), so it
         // is never legal to *pick*. The engine binds it directly at resolution.
         TargetKind::Self_ => false,
@@ -194,22 +192,18 @@ fn target_filter_legal(
     }
     // Characteristic filters — only apply to non-player targets.
     if !filter.is_player() {
-        if !object_targetable_by(state, registry, tid, caster) {
+        if !object_targetable_by(engine, tid, caster) {
             return false;
         }
-        if filter.not_artifact {
-            if let Some(obj) = state.objects.get(&tid) {
-                if registry
-                    .get(&obj.card_id)
-                    .map(|d| d.is_artifact)
-                    .unwrap_or(false)
-                {
-                    return false;
-                }
-            }
+        if filter.not_artifact
+            && engine
+                .characteristics(tid)
+                .is_some_and(|value| value.is_artifact())
+        {
+            return false;
         }
         if let Some(tapped_req) = filter.tapped {
-            match state.objects.get(&tid) {
+            match engine.state.objects.get(&tid) {
                 Some(obj) if obj.tapped != tapped_req => return false,
                 None => return false,
                 _ => {}
@@ -217,27 +211,21 @@ fn target_filter_legal(
         }
         // CR 105/202.2: "nonblack", "nonwhite", … — reject a target of the excluded color.
         if let Some(c) = filter.not_color {
-            match state.objects.get(&tid) {
-                Some(obj)
-                    if registry
-                        .get(&obj.card_id)
-                        .is_some_and(|d| d.colors().contains(&c)) =>
-                {
-                    return false
-                }
+            match engine.characteristics(tid) {
+                Some(value) if value.colors.contains(&c) => return false,
                 None => return false,
-                _ => {}
+                Some(_) => {}
             }
         }
         // CR 508/509: "target attacking or blocking creature" — must be in combat right now.
-        if filter.attacking_or_blocking && !is_attacking_or_blocking(state, tid) {
+        if filter.attacking_or_blocking && !is_attacking_or_blocking(&engine.state, tid) {
             return false;
         }
         // "target creature you control" (equip, regenerate, …). Ownership == control until
         // control-changing effects exist (CR 109.4).
         if filter.only_controller {
-            if let Some(obj) = state.objects.get(&tid) {
-                if obj.owner != caster {
+            if let Some(value) = engine.characteristics(tid) {
+                if value.controller != caster {
                     return false;
                 }
             } else {
@@ -289,8 +277,7 @@ fn stack_spell_target_legal(
 /// For `DamageTargets`, the spell fizzles only when ALL chosen targets are gone (partial-fizzle
 /// per CR 608.2b — if at least one is still legal, the spell still resolves for it).
 pub(super) fn spell_has_no_legal_targets_at_resolution(
-    state: &GameState,
-    registry: &CardRegistry,
+    engine: &GameEngine,
     effects: &[SpellEffectKind],
     targets: &[ObjectId],
     caster: PlayerId,
@@ -304,21 +291,20 @@ pub(super) fn spell_has_no_legal_targets_at_resolution(
             if targets.is_empty() {
                 return true;
             }
-            return targets.iter().all(|&tid| {
-                !effect_target_legal_at_resolution(state, registry, effect, tid, caster)
-            });
+            return targets
+                .iter()
+                .all(|&tid| !effect_target_legal_at_resolution(engine, effect, tid, caster));
         }
         let Some(&tid) = targets.first() else {
             return true; // needs target but none provided
         };
-        !effect_target_legal_at_resolution(state, registry, effect, tid, caster)
+        !effect_target_legal_at_resolution(engine, effect, tid, caster)
     })
 }
 
 /// Returns true if `tid` is a legal target for `effect` at resolution time.
 fn effect_target_legal_at_resolution(
-    state: &GameState,
-    registry: &CardRegistry,
+    engine: &GameEngine,
     effect: &SpellEffectKind,
     tid: ObjectId,
     caster: PlayerId,
@@ -329,40 +315,35 @@ fn effect_target_legal_at_resolution(
         | SpellEffectKind::TargetPlayerGainsLife { target, .. }
         | SpellEffectKind::TargetPlayerLosesLife { target, .. }
         | SpellEffectKind::MillTargetPlayer { target, .. }
-        | SpellEffectKind::TapTarget { target } => {
-            target_filter_legal(state, registry, target, tid, caster)
-        }
+        | SpellEffectKind::TapTarget { target } => target_filter_legal(engine, target, tid, caster),
         SpellEffectKind::DestroyTarget { target }
         | SpellEffectKind::PumpTarget { target, .. }
         | SpellEffectKind::PutCounters { target, .. }
         | SpellEffectKind::Equip { target }
         | SpellEffectKind::Regenerate { target } => {
-            target_filter_legal(state, registry, target, tid, caster)
+            target_filter_legal(engine, target, tid, caster)
         }
         SpellEffectKind::ExileTarget
         | SpellEffectKind::ExileTargetGainLifeEqualToPower
         | SpellEffectKind::ReturnTargetCreatureToHand => {
-            destroy_spell_target_legal(state, registry, tid)
-                && object_targetable_by(state, registry, tid, caster)
+            destroy_spell_target_legal(engine, tid) && object_targetable_by(engine, tid, caster)
         }
         SpellEffectKind::ReturnTargetPermanentToHand => {
-            any_battlefield_permanent_target_legal(state, tid)
-                && object_targetable_by(state, registry, tid, caster)
+            any_battlefield_permanent_target_legal(&engine.state, tid)
+                && object_targetable_by(engine, tid, caster)
         }
         // CR 115.2 / 707.10b: counter and copy effects target *spells* on the stack, not
         // activated/triggered abilities. The optional `spell_filter` further restricts which
         // spell types are legal (Essence Scatter, Negate, Twincast).
         SpellEffectKind::CounterTargetSpell { spell_filter } => {
-            stack_spell_target_legal(state, registry, tid, *spell_filter)
+            stack_spell_target_legal(&engine.state, engine.registry, tid, *spell_filter)
         }
         SpellEffectKind::CopyTargetSpell { spell_filter, .. } => {
-            stack_spell_target_legal(state, registry, tid, *spell_filter)
+            stack_spell_target_legal(&engine.state, engine.registry, tid, *spell_filter)
         }
-        SpellEffectKind::AuraAttach { target } => {
-            target_filter_legal(state, registry, target, tid, caster)
-        }
+        SpellEffectKind::AuraAttach { target } => target_filter_legal(engine, target, tid, caster),
         SpellEffectKind::ReturnFromGraveyard { filter, .. } => {
-            graveyard_target_legal(state, registry, filter, tid, caster)
+            graveyard_target_legal(engine, filter, tid, caster)
         }
         _ => true,
     }
@@ -402,8 +383,7 @@ pub(super) fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
 
 /// Validate targets for a `SpellEffectKind` directly (used by ability activation/trigger target selection).
 pub(super) fn validate_effect_targets(
-    state: &GameState,
-    registry: &CardRegistry,
+    engine: &GameEngine,
     caster: PlayerId,
     effect: &SpellEffectKind,
     targets: &[rv1::TargetRef],
@@ -413,7 +393,7 @@ pub(super) fn validate_effect_targets(
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one target"));
             }
-            if !target_filter_legal(state, registry, filter, targets[0].object_id, caster) {
+            if !target_filter_legal(engine, filter, targets[0].object_id, caster) {
                 return Err(EngineError::Illegal(
                     "target must be a creature on the battlefield",
                 ));
@@ -423,7 +403,7 @@ pub(super) fn validate_effect_targets(
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one target"));
             }
-            if !target_filter_legal(state, registry, filter, targets[0].object_id, caster) {
+            if !target_filter_legal(engine, filter, targets[0].object_id, caster) {
                 return Err(EngineError::Illegal(
                     "target must be a permanent on the battlefield",
                 ));
@@ -433,7 +413,7 @@ pub(super) fn validate_effect_targets(
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one target"));
             }
-            if !target_filter_legal(state, registry, filter, targets[0].object_id, caster) {
+            if !target_filter_legal(engine, filter, targets[0].object_id, caster) {
                 return Err(EngineError::Illegal("illegal target for damage effect"));
             }
         }
@@ -451,7 +431,7 @@ pub(super) fn validate_effect_targets(
                 if !seen.insert(t.object_id) {
                     return Err(EngineError::Illegal("duplicate target"));
                 }
-                if !target_filter_legal(state, registry, filter, t.object_id, caster) {
+                if !target_filter_legal(engine, filter, t.object_id, caster) {
                     return Err(EngineError::Illegal("illegal target for damage effect"));
                 }
             }
@@ -468,7 +448,7 @@ pub(super) fn validate_effect_targets(
                 if targets.len() != 1 {
                     return Err(EngineError::Illegal("requires exactly one target"));
                 }
-                if !target_filter_legal(state, registry, filter, targets[0].object_id, caster) {
+                if !target_filter_legal(engine, filter, targets[0].object_id, caster) {
                     return Err(EngineError::Illegal(
                         "target must be a creature on the battlefield",
                     ));
@@ -481,12 +461,12 @@ pub(super) fn validate_effect_targets(
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one creature target"));
             }
-            if !destroy_spell_target_legal(state, registry, targets[0].object_id) {
+            if !destroy_spell_target_legal(engine, targets[0].object_id) {
                 return Err(EngineError::Illegal(
                     "target must be a creature on the battlefield",
                 ));
             }
-            if !object_targetable_by(state, registry, targets[0].object_id, caster) {
+            if !object_targetable_by(engine, targets[0].object_id, caster) {
                 return Err(EngineError::Illegal("target has hexproof or shroud"));
             }
         }
@@ -496,12 +476,12 @@ pub(super) fn validate_effect_targets(
                     "requires exactly one permanent target",
                 ));
             }
-            if !any_battlefield_permanent_target_legal(state, targets[0].object_id) {
+            if !any_battlefield_permanent_target_legal(&engine.state, targets[0].object_id) {
                 return Err(EngineError::Illegal(
                     "target must be a permanent on the battlefield",
                 ));
             }
-            if !object_targetable_by(state, registry, targets[0].object_id, caster) {
+            if !object_targetable_by(engine, targets[0].object_id, caster) {
                 return Err(EngineError::Illegal("target has hexproof or shroud"));
             }
         }
@@ -514,7 +494,7 @@ pub(super) fn validate_effect_targets(
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one player target"));
             }
-            if !target_filter_legal(state, registry, filter, targets[0].object_id, caster) {
+            if !target_filter_legal(engine, filter, targets[0].object_id, caster) {
                 return Err(EngineError::Illegal("target must be a player in the game"));
             }
             if matches!(filter.kind, TargetKind::OpponentPlayer)
@@ -527,7 +507,7 @@ pub(super) fn validate_effect_targets(
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("aura requires exactly one enchant target"));
             }
-            if !target_filter_legal(state, registry, filter, targets[0].object_id, caster) {
+            if !target_filter_legal(engine, filter, targets[0].object_id, caster) {
                 return Err(EngineError::Illegal(
                     "enchant target must be a valid permanent on the battlefield",
                 ));
@@ -537,7 +517,7 @@ pub(super) fn validate_effect_targets(
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one target"));
             }
-            if !target_filter_legal(state, registry, filter, targets[0].object_id, caster) {
+            if !target_filter_legal(engine, filter, targets[0].object_id, caster) {
                 return Err(EngineError::Illegal(
                     "equip target must be a creature you control on the battlefield",
                 ));
@@ -547,7 +527,7 @@ pub(super) fn validate_effect_targets(
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one target"));
             }
-            if !target_filter_legal(state, registry, filter, targets[0].object_id, caster) {
+            if !target_filter_legal(engine, filter, targets[0].object_id, caster) {
                 return Err(EngineError::Illegal("illegal target for damage prevention"));
             }
         }
@@ -555,7 +535,7 @@ pub(super) fn validate_effect_targets(
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one graveyard card target"));
             }
-            if !graveyard_target_legal(state, registry, filter, targets[0].object_id, caster) {
+            if !graveyard_target_legal(engine, filter, targets[0].object_id, caster) {
                 return Err(EngineError::Illegal(
                     "target must be a matching card in the correct graveyard",
                 ));
@@ -591,8 +571,7 @@ pub(super) fn validate_effect_targets(
 }
 
 pub(super) fn validate_spell_targets(
-    state: &GameState,
-    registry: &CardRegistry,
+    engine: &GameEngine,
     caster: PlayerId,
     effects: &[SpellEffectKind],
     targets: &[rv1::TargetRef],
@@ -605,7 +584,7 @@ pub(super) fn validate_spell_targets(
     if has_multi_target {
         for effect in effects {
             if matches!(effect, SpellEffectKind::DamageTargets { .. }) {
-                validate_effect_targets(state, registry, caster, effect, targets)?;
+                validate_effect_targets(engine, caster, effect, targets)?;
             }
         }
         return Ok(());
@@ -621,7 +600,7 @@ pub(super) fn validate_spell_targets(
             if !spell_effect_kind_needs_target(effect) {
                 continue;
             }
-            spell_target_legality_error(state, registry, effect, tid, caster)?;
+            spell_target_legality_error(engine, effect, tid, caster)?;
         }
     } else if !targets.is_empty() {
         return Err(EngineError::Illegal("this spell takes no targets"));
@@ -631,8 +610,7 @@ pub(super) fn validate_spell_targets(
 
 /// Returns `Err` with a specific human-readable message when `tid` is not a legal target for `effect`.
 pub(super) fn spell_target_legality_error(
-    state: &GameState,
-    registry: &CardRegistry,
+    engine: &GameEngine,
     effect: &SpellEffectKind,
     tid: ObjectId,
     caster: PlayerId,
@@ -647,7 +625,7 @@ pub(super) fn spell_target_legality_error(
         | SpellEffectKind::PumpTarget { target: filter, .. }
         | SpellEffectKind::PutCounters { target: filter, .. }
         | SpellEffectKind::PreventNextDamage { target: filter, .. }
-            if !target_filter_legal(state, registry, filter, tid, caster) =>
+            if !target_filter_legal(engine, filter, tid, caster) =>
         {
             return Err(EngineError::Illegal(
                 "target must be a creature or player on the battlefield",
@@ -656,7 +634,7 @@ pub(super) fn spell_target_legality_error(
         SpellEffectKind::ExileTarget
         | SpellEffectKind::ExileTargetGainLifeEqualToPower
         | SpellEffectKind::ReturnTargetCreatureToHand
-            if !destroy_spell_target_legal(state, registry, tid) =>
+            if !destroy_spell_target_legal(engine, tid) =>
         {
             return Err(EngineError::Illegal(
                 "target must be a creature on the battlefield",
@@ -665,19 +643,19 @@ pub(super) fn spell_target_legality_error(
         SpellEffectKind::ExileTarget
         | SpellEffectKind::ExileTargetGainLifeEqualToPower
         | SpellEffectKind::ReturnTargetCreatureToHand
-            if !object_targetable_by(state, registry, tid, caster) =>
+            if !object_targetable_by(engine, tid, caster) =>
         {
             return Err(EngineError::Illegal("target has hexproof or shroud"));
         }
         SpellEffectKind::ReturnTargetPermanentToHand
-            if !any_battlefield_permanent_target_legal(state, tid) =>
+            if !any_battlefield_permanent_target_legal(&engine.state, tid) =>
         {
             return Err(EngineError::Illegal(
                 "target must be a permanent on the battlefield",
             ));
         }
         SpellEffectKind::ReturnTargetPermanentToHand
-            if !object_targetable_by(state, registry, tid, caster) =>
+            if !object_targetable_by(engine, tid, caster) =>
         {
             return Err(EngineError::Illegal("target has hexproof or shroud"));
         }
@@ -687,7 +665,7 @@ pub(super) fn spell_target_legality_error(
         | SpellEffectKind::MillTargetPlayer { target: filter, .. }
         | SpellEffectKind::DiscardCards { target: filter, .. }
         | SpellEffectKind::TargetPlayerSacrifices { target: filter, .. } => {
-            if !player_target_legal(state, tid) {
+            if !player_target_legal(&engine.state, tid) {
                 return Err(EngineError::Illegal("target must be a player in the game"));
             }
             if matches!(filter.kind, TargetKind::OpponentPlayer) && tid as i32 == caster {
@@ -699,28 +677,28 @@ pub(super) fn spell_target_legality_error(
         // CR 115.2 / 707.10b: counter and copy effects target spells, not abilities. The optional
         // `spell_filter` further restricts the spell type (Essence Scatter, Negate, Twincast).
         SpellEffectKind::CounterTargetSpell { spell_filter }
-            if !stack_spell_target_legal(state, registry, tid, *spell_filter) =>
+            if !stack_spell_target_legal(&engine.state, engine.registry, tid, *spell_filter) =>
         {
             return Err(EngineError::Illegal(
                 "target must be a spell of the required type on the stack",
             ));
         }
         SpellEffectKind::CopyTargetSpell { spell_filter, .. }
-            if !stack_spell_target_legal(state, registry, tid, *spell_filter) =>
+            if !stack_spell_target_legal(&engine.state, engine.registry, tid, *spell_filter) =>
         {
             return Err(EngineError::Illegal(
                 "target must be a spell of the required type on the stack",
             ));
         }
         SpellEffectKind::AuraAttach { target: filter }
-            if !target_filter_legal(state, registry, filter, tid, caster) =>
+            if !target_filter_legal(engine, filter, tid, caster) =>
         {
             return Err(EngineError::Illegal(
                 "enchant target must be a valid permanent on the battlefield",
             ));
         }
         SpellEffectKind::ReturnFromGraveyard { filter, .. }
-            if !graveyard_target_legal(state, registry, filter, tid, caster) =>
+            if !graveyard_target_legal(engine, filter, tid, caster) =>
         {
             return Err(EngineError::Illegal(
                 "target must be a matching card in the correct graveyard",
@@ -735,8 +713,7 @@ pub(super) fn spell_target_legality_error(
 /// can legally send this set of effects at, given the current game state. Only effects that
 /// need a target are considered; non-targeted effects in the same spell are ignored.
 pub(super) fn compute_spell_targets(
-    state: &GameState,
-    registry: &CardRegistry,
+    engine: &GameEngine,
     caster: PlayerId,
     effects: &[SpellEffectKind],
 ) -> rv1::SpellTargets {
@@ -746,11 +723,11 @@ pub(super) fn compute_spell_targets(
     let mut can_target_self = false;
     let mut can_target_opponent = false;
 
-    for obj in state.objects.values() {
+    for obj in engine.state.objects.values() {
         let legal = effects
             .iter()
             .filter(|e| spell_effect_kind_needs_target(e))
-            .all(|e| spell_target_legality_error(state, registry, e, obj.id, caster).is_ok());
+            .all(|e| spell_target_legality_error(engine, e, obj.id, caster).is_ok());
         if legal {
             match obj.zone {
                 Zone::Battlefield => valid_permanent_ids.push(obj.id),
@@ -761,7 +738,7 @@ pub(super) fn compute_spell_targets(
         }
     }
 
-    for p in &state.players {
+    for p in &engine.state.players {
         if p.has_lost {
             continue;
         }
@@ -769,7 +746,7 @@ pub(super) fn compute_spell_targets(
         let legal = effects
             .iter()
             .filter(|e| spell_effect_kind_needs_target(e))
-            .all(|e| spell_target_legality_error(state, registry, e, tid, caster).is_ok());
+            .all(|e| spell_target_legality_error(engine, e, tid, caster).is_ok());
         if legal {
             if p.id == caster {
                 can_target_self = true;

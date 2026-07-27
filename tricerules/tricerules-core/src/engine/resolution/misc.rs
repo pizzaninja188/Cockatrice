@@ -25,6 +25,9 @@ pub(super) fn destroy_target(
             events.push(ev_log(format!("{spell_label} destroys {tgt}")));
             let owner = engine.state.objects.get(&tid).map(|o| o.owner);
             let card_id_t = engine.state.objects.get(&tid).map(|o| o.card_id.clone());
+            let was_creature = engine
+                .characteristics(tid)
+                .is_some_and(|value| value.is_creature());
             destroy_permanent(&mut engine.state, tid)?;
             if let Some(owner_id) = owner {
                 events.push(permanent_moved_event(
@@ -40,6 +43,7 @@ pub(super) fn destroy_target(
                         object_id: tid,
                         card_id: cid,
                         controller: ctrl,
+                        was_creature,
                     },
                     events,
                 );
@@ -102,8 +106,10 @@ pub(super) fn equip(
             .state
             .objects
             .get(&target_id)
-            .map(|t| t.zone == Zone::Battlefield && t.is_creature(engine.registry))
-            .unwrap_or(false);
+            .is_some_and(|t| t.zone == Zone::Battlefield)
+            && engine
+                .characteristics(target_id)
+                .is_some_and(|value| value.is_creature());
         let equip_on_battlefield = engine
             .state
             .objects
@@ -206,8 +212,10 @@ pub(super) fn regenerate(
             .state
             .objects
             .get(&tid)
-            .map(|o| o.zone == Zone::Battlefield && o.is_creature(engine.registry))
-            .unwrap_or(false);
+            .is_some_and(|o| o.zone == Zone::Battlefield)
+            && engine
+                .characteristics(tid)
+                .is_some_and(|value| value.is_creature());
         if is_creature {
             let tgt = object_display_name(&engine.state, engine.registry, tid);
             if let Some(o) = engine.state.objects.get_mut(&tid) {

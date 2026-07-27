@@ -19,8 +19,8 @@ pub(super) fn destroy_all(
     // then their "dies" triggers fire together. Indestructible permanents survive
     // (CR 702.12b). `prevent_regeneration` bypasses shields (Wrath of God).
     // Untargeted, so hexproof/shroud are irrelevant.
-    let victims = battlefield_objects_matching(&engine.state, engine.registry, &kind);
-    let mut destroyed: Vec<(ObjectId, String, PlayerId)> = Vec::new();
+    let victims = battlefield_objects_matching(engine, &kind);
+    let mut destroyed: Vec<(ObjectId, String, PlayerId, bool)> = Vec::new();
     for tid in victims {
         let indestructible = engine.effective_has_keyword(tid, Keyword::Indestructible);
         let tgt = object_display_name(&engine.state, engine.registry, tid);
@@ -37,6 +37,9 @@ pub(super) fn destroy_all(
         }
         let owner = engine.state.objects.get(&tid).map(|o| o.owner);
         let card_id_t = engine.state.objects.get(&tid).map(|o| o.card_id.clone());
+        let was_creature = engine
+            .characteristics(tid)
+            .is_some_and(|value| value.is_creature());
         destroy_permanent(&mut engine.state, tid)?;
         events.push(ev_log(format!("{spell_label} destroys {tgt}")));
         if let Some(owner_id) = owner {
@@ -48,15 +51,16 @@ pub(super) fn destroy_all(
             ));
         }
         if let (Some(cid), Some(ctrl)) = (card_id_t, owner) {
-            destroyed.push((tid, cid, ctrl));
+            destroyed.push((tid, cid, ctrl, was_creature));
         }
     }
-    for (tid, cid, ctrl) in destroyed {
+    for (tid, cid, ctrl, was_creature) in destroyed {
         engine.fire_triggers(
             GameEvent::Dies {
                 object_id: tid,
                 card_id: cid,
                 controller: ctrl,
+                was_creature,
             },
             events,
         );
@@ -79,7 +83,7 @@ pub(super) fn damage_all(
     // CR 119: deal damage to each matching permanent. Marking damage mirrors
     // DamageTarget; lethal-damage destruction is left to state-based actions
     // (CR 704.5g), which run immediately after this spell resolves.
-    let affected = battlefield_objects_matching(&engine.state, engine.registry, &kind);
+    let affected = battlefield_objects_matching(engine, &kind);
     for tid in &affected {
         let tgt = object_display_name(&engine.state, engine.registry, *tid);
         if let Some(o) = engine.state.objects.get_mut(tid) {

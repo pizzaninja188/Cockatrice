@@ -81,16 +81,6 @@ pub struct GameObject {
 }
 
 impl GameObject {
-    /// CR 712.4: true if the active face is a creature type. For Normal cards this reads the flat
-    /// `is_creature` flag; for multi-face cards it reads the active face via `face_up_index`.
-    pub fn is_creature(&self, registry: &tricerules_cards::CardRegistry) -> bool {
-        registry
-            .get(&self.card_id)
-            .and_then(|c| c.face(self.face_up_index))
-            .map(|f| f.is_creature)
-            .unwrap_or(false)
-    }
-
     /// True if this object is a token (CR 111): created by an effect, not backed by a deck card.
     /// Tokens cease to exist as a state-based action once they leave the battlefield (CR 111.7).
     pub fn is_token(&self, registry: &tricerules_cards::CardRegistry) -> bool {
@@ -130,20 +120,6 @@ impl GameObject {
             .map(|(kind, &n)| format!("{} {} counter(s)", n, kind.label()))
             .collect::<Vec<_>>()
             .join("\n")
-    }
-
-    /// CR 712.4: true if the active face has the given keyword. For Normal cards reads the flat
-    /// keyword list; for multi-face cards reads the active face via `face_up_index`.
-    pub fn has_keyword(
-        &self,
-        registry: &tricerules_cards::CardRegistry,
-        kw: tricerules_cards::Keyword,
-    ) -> bool {
-        registry
-            .get(&self.card_id)
-            .and_then(|c| c.face(self.face_up_index))
-            .map(|f| f.keywords.contains(&kw))
-            .unwrap_or(false)
     }
 }
 

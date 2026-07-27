@@ -100,12 +100,7 @@ pub(super) fn copy_target_spell(
                 // CR 707.10c: prompt for new targets on the first copy; push any
                 // additional copies immediately with the original targets.
                 if needs_target_choice && copy_num == 0 {
-                    let sp = compute_spell_targets(
-                        &engine.state,
-                        engine.registry,
-                        controller,
-                        &src_effects,
-                    );
+                    let sp = compute_spell_targets(engine, controller, &src_effects);
                     let mut candidates: Vec<ObjectId> = sp.valid_permanent_ids.clone();
                     candidates.extend(sp.valid_stack_ids.iter().copied());
                     for p in &engine.state.players {

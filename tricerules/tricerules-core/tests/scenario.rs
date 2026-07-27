@@ -29,6 +29,8 @@ mod mana;
 mod multi_face;
 #[path = "scenario/opening.rs"]
 mod opening;
+#[path = "scenario/performance.rs"]
+mod performance;
 #[path = "scenario/priority_and_turns.rs"]
 mod priority_and_turns;
 #[path = "scenario/regenerate.rs"]

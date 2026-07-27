@@ -28,6 +28,7 @@ use tricerules_proto::ruled::v1::{
 const MAX_HAND_SIZE: usize = 7;
 
 mod casting;
+mod characteristics;
 mod combat;
 mod continuous;
 mod custom_resolution;
@@ -36,11 +37,13 @@ mod legal_actions;
 mod opening;
 mod priority;
 mod resolution;
+mod state_based;
 mod targeting;
 mod triggers;
 
 // Re-export the two helpers that are called from outside the `engine` module tree
 // (`crate::custom`) so their long-standing `crate::engine::<fn>` paths keep resolving.
+pub use characteristics::Characteristics;
 pub(crate) use opening::shuffle_player_library;
 pub(crate) use resolution::move_object_to_zone;
 pub(crate) use resolution::permanent_moved_event;
@@ -68,6 +71,7 @@ enum GameEvent {
         object_id: ObjectId,
         card_id: String,
         controller: PlayerId,
+        was_creature: bool,
     },
     Attacks {
         attacker_ids: Vec<ObjectId>,

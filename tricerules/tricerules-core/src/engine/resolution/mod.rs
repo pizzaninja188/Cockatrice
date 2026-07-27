@@ -189,13 +189,7 @@ impl GameEngine {
             }
         }
 
-        let fizzle = spell_has_no_legal_targets_at_resolution(
-            &self.state,
-            self.registry,
-            &effects,
-            &targets,
-            controller,
-        );
+        let fizzle = spell_has_no_legal_targets_at_resolution(self, &effects, &targets, controller);
         if fizzle {
             events.push(ev_log(format!("{spell_label} fizzles (no legal targets).")));
             return Ok(());

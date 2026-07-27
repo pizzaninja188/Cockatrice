@@ -141,7 +141,10 @@ impl GameEngine {
                                 ..Default::default()
                             };
                         };
-                        let is_creature = object.is_creature(self.registry);
+                        let characteristics = self.characteristics(oid);
+                        let is_creature = characteristics
+                            .as_ref()
+                            .is_some_and(Characteristics::is_creature);
                         let face = self
                             .registry
                             .get(&object.card_id)
@@ -201,7 +204,11 @@ impl GameEngine {
                             tricerules_cards::Keyword::Flash,
                         ]
                         .into_iter()
-                        .filter(|&keyword| self.effective_has_keyword(oid, keyword))
+                        .filter(|&keyword| {
+                            characteristics
+                                .as_ref()
+                                .is_some_and(|value| value.has_keyword(keyword))
+                        })
                         .map(|keyword| match keyword {
                             tricerules_cards::Keyword::FirstStrike => "FirstStrike".to_string(),
                             tricerules_cards::Keyword::DoubleStrike => "DoubleStrike".to_string(),
@@ -215,12 +222,18 @@ impl GameEngine {
                             summoning_sick: object.summoning_sick,
                             is_creature,
                             power: if is_creature {
-                                self.effective_power(oid).unwrap_or(0)
+                                characteristics
+                                    .as_ref()
+                                    .and_then(|value| value.power)
+                                    .unwrap_or(0)
                             } else {
                                 0
                             },
                             toughness: if is_creature {
-                                self.effective_toughness(oid).unwrap_or(0)
+                                characteristics
+                                    .as_ref()
+                                    .and_then(|value| value.toughness)
+                                    .unwrap_or(0)
                             } else {
                                 0
                             },

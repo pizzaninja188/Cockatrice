@@ -242,7 +242,7 @@ impl GameEngine {
                 "must choose trigger target before casting",
             ));
         }
-        validate_spell_targets(&self.state, self.registry, player, &face_effects, targets)?;
+        validate_spell_targets(self, player, &face_effects, targets)?;
         let has_x = face_mana.has_x();
         if x_value != 0 && !has_x {
             return Err(EngineError::Illegal("x_value given but cost has no {X}"));
@@ -440,7 +440,7 @@ impl GameEngine {
 
         self.state.undoable_mana_abilities.clear();
 
-        validate_effect_targets(&self.state, self.registry, player, &ability.effect, targets)?;
+        validate_effect_targets(self, player, &ability.effect, targets)?;
 
         let (sacrifice_ev, life_paid) = self.pay_ability_cost(
             player,
@@ -563,13 +563,11 @@ impl GameEngine {
     pub(super) fn check_tappable(
         &self,
         permanent_id: ObjectId,
-        card_id: &str,
+        _card_id: &str,
     ) -> Result<(), EngineError> {
         let has_haste = self
-            .registry
-            .get(card_id)
-            .map(|d| d.keywords.contains(&tricerules_cards::Keyword::Haste))
-            .unwrap_or(false);
+            .characteristics(permanent_id)
+            .is_some_and(|value| value.has_keyword(tricerules_cards::Keyword::Haste));
         let o = self
             .state
             .objects

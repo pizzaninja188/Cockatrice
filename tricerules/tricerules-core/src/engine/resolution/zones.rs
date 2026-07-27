@@ -350,9 +350,7 @@ pub(super) fn target_player_sacrifices(
                 .battlefield
                 .iter()
                 .copied()
-                .filter(|&oid| {
-                    object_matches_mass_filter(&engine.state, engine.registry, oid, &filter)
-                })
+                .filter(|&oid| object_matches_mass_filter(engine, oid, &filter))
                 .collect();
             if qualifying.is_empty() {
                 events.push(ev_log(format!(
