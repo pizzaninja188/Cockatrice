@@ -69,20 +69,16 @@ impl GameEngine {
         } else {
             // CR 709/712/715: permanence is the *cast face's* (Ice resolves to graveyard; an MDFC
             // permanent face resolves to the battlefield as that face).
-            let resolves_to_battlefield_raw = self
+            let resolving_face = self
                 .registry
                 .get(&card_id)
-                .and_then(|d| d.face(top.face_index))
-                .map(|f| f.is_permanent())
-                .unwrap_or(false);
+                .and_then(|d| d.face(top.face_index));
+            let resolves_to_battlefield_raw =
+                resolving_face.map(|f| f.is_permanent()).unwrap_or(false);
             // CR 303.4f: an aura whose enchant target is no longer on the battlefield at resolution
             // is countered (goes to owner's graveyard) rather than entering the battlefield orphaned.
-            let is_aura = resolves_to_battlefield_raw
-                && self
-                    .registry
-                    .get(&card_id)
-                    .map(|d| d.is_aura)
-                    .unwrap_or(false);
+            let is_aura =
+                resolves_to_battlefield_raw && resolving_face.map(|f| f.is_aura).unwrap_or(false);
             let aura_target_valid = !is_aura
                 || targets.first().is_some_and(|&tid| {
                     self.state
@@ -150,12 +146,15 @@ impl GameEngine {
             let name = def
                 .map(|d| d.name.clone())
                 .unwrap_or_else(|| "Ability".into());
+            // Ability indices are relative to the face recorded on the stack item, which is `0`
+            // for abilities (see `StackItem::face_index`) — the same face `activate_ability`
+            // and the trigger scan read them from.
+            let face = def.and_then(|d| d.face(top.face_index));
             let abilities = if top.is_triggered {
-                def.map(|d| &d.triggered_abilities[..])
-                    .and_then(|a| a.get(ability_index))
+                face.and_then(|f| f.triggered_abilities.get(ability_index))
                     .map(|a| a.effect.clone())
             } else {
-                def.and_then(|d| d.activated_abilities.get(ability_index))
+                face.and_then(|f| f.activated_abilities.get(ability_index))
                     .map(|a| a.effect.clone())
             };
             (vec![abilities.unwrap_or(SpellEffectKind::None)], name)
@@ -338,16 +337,18 @@ impl GameEngine {
             return;
         };
         let name = def.name.clone();
-        let is_creature = def.is_creature;
-        let power = def.power;
-        let toughness = def.toughness;
-        let types = def.types.clone();
-        let keywords: Vec<String> = def
+        // A token definition is always single-face (CR 111.4 identity is one characteristic tuple).
+        let face = def.primary_face();
+        let is_creature = face.is_creature;
+        let power = face.power;
+        let toughness = face.toughness;
+        let types = face.types.to_vec();
+        let keywords: Vec<String> = face
             .keywords
             .iter()
             .map(|k| k.as_str().to_string())
             .collect();
-        let color = color_string(&def.colors());
+        let color = color_string(&face.colors());
         let pt = if is_creature {
             format!("{}/{}", power.unwrap_or(0), toughness.unwrap_or(0))
         } else {
@@ -603,7 +604,8 @@ fn counter_label(kind: CounterKind) -> &'static str {
 }
 
 /// Return true if the library card `oid` satisfies `filter` (None = any card).
-/// Uses the card's derived type flags from `CardDefinition`.
+/// A card in the library shows no face, so any face may satisfy the filter (see
+/// [`CardDefinition::any_face`](tricerules_cards::CardDefinition::any_face)).
 pub(super) fn library_card_matches_filter(
     state: &GameState,
     registry: &'static CardRegistry,
@@ -620,13 +622,13 @@ pub(super) fn library_card_matches_filter(
         return false;
     };
     match filter {
-        SpellTypeFilter::Instant => def.is_instant,
-        SpellTypeFilter::Sorcery => def.is_sorcery,
-        SpellTypeFilter::InstantOrSorcery => def.is_instant || def.is_sorcery,
-        SpellTypeFilter::Creature => def.is_creature,
-        SpellTypeFilter::Artifact => def.is_artifact,
-        SpellTypeFilter::Enchantment => def.is_enchantment,
-        SpellTypeFilter::Noncreature => !def.is_creature,
+        SpellTypeFilter::Instant => def.any_face(|f| f.is_instant),
+        SpellTypeFilter::Sorcery => def.any_face(|f| f.is_sorcery),
+        SpellTypeFilter::InstantOrSorcery => def.any_face(|f| f.is_instant || f.is_sorcery),
+        SpellTypeFilter::Creature => def.any_face(|f| f.is_creature),
+        SpellTypeFilter::Artifact => def.any_face(|f| f.is_artifact),
+        SpellTypeFilter::Enchantment => def.any_face(|f| f.is_enchantment),
+        SpellTypeFilter::Noncreature => !def.any_face(|f| f.is_creature),
     }
 }
 

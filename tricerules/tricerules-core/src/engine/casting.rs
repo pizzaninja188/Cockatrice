@@ -366,6 +366,7 @@ impl GameEngine {
             GameEvent::SpellCast {
                 caster: player,
                 card_id: cast_card_id,
+                face_index,
             },
             &mut batch.events,
         );

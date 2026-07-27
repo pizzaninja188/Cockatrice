@@ -68,17 +68,13 @@ impl GameEngine {
         let definition = self.registry.get(&object.card_id)?;
         let face = definition.face(object.face_up_index)?;
 
-        let colors = definition
-            .colors_override
-            .clone()
-            .unwrap_or_else(|| face.mana_cost.colors());
         let mut result = Characteristics {
             // CR 109.4 simplification: control-changing effects are not implemented yet, so the
             // object's owner is its controller before the layer-2 identity stage.
             controller: object.owner,
             types: face.types.to_vec(),
             supertypes: face.supertypes.to_vec(),
-            colors,
+            colors: face.colors(),
             keywords: face.keywords.to_vec(),
             // Object snapshots take precedence for tokens and scenario overrides. Multi-face
             // objects leave these unset and read the active face.

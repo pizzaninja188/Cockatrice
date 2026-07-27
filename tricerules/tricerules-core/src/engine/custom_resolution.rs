@@ -32,6 +32,7 @@ impl GameEngine {
             .ok_or_else(|| EngineError::MissingCard(pending.card_id.clone()))?;
 
         let effect = def
+            .primary_face()
             .triggered_abilities
             .get(pending.ability_index)
             .map(|a| &a.effect);

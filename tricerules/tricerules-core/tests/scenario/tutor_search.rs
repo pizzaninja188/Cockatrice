@@ -292,3 +292,50 @@ fn search_library_choice_kind_is_library_search() {
         "LibrarySearch choice_kind signals relay to redact candidates from opponents"
     );
 }
+
+/// CR 709.4: a split card has the combined characteristics of both halves everywhere but the
+/// stack, so Fire // Ice is an instant card while it sits in the library and Mystical Tutor can
+/// find it. The type filter reads the card's faces, not whole-card flags (which multi-face cards
+/// do not carry).
+#[test]
+fn mystical_tutor_finds_a_split_card_by_face_type() {
+    let decks = Some(vec![
+        {
+            let mut d = vec!["mystical_tutor".to_string()];
+            while d.len() < 20 {
+                d.push("island".to_string());
+            }
+            d
+        },
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(4, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    ensure_in_hand(&mut e, 0, "mystical_tutor");
+
+    let fire_ice_oid = inject_library_card(&mut e, 0, "fire_ice");
+
+    let batch = cast_instant_and_resolve(
+        &mut e,
+        0,
+        "mystical_tutor",
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+
+    let req = find_resolution_choice(&batch).expect("resolution choice required");
+    assert!(
+        req.candidate_object_ids.contains(&fire_ice_oid),
+        "Fire // Ice is an instant card in the library"
+    );
+
+    e.apply_command(0, &submit_resolution_choice(vec![fire_ice_oid]))
+        .expect("submit");
+    assert_eq!(
+        e.state.players[0].library.front().copied(),
+        Some(fire_ice_oid),
+        "Fire // Ice is now on top of the library"
+    );
+}

@@ -456,9 +456,7 @@ pub(super) fn return_from_graveyard(
             let type_ok = if let Some(ct) = filter.card_type {
                 obj.and_then(|o| engine.registry.get(&o.card_id))
                     .is_some_and(|def| match ct {
-                        GraveyardCardType::Creature => {
-                            def.is_creature || def.faces.iter().any(|f| f.is_creature)
-                        }
+                        GraveyardCardType::Creature => def.any_face(|f| f.is_creature),
                     })
             } else {
                 true

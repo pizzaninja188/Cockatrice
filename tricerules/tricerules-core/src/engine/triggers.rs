@@ -236,13 +236,18 @@ impl GameEngine {
             GameEvent::SpellCast {
                 caster,
                 card_id: cast_card_id,
+                face_index,
             } => {
-                let cast_def = self.registry.get(cast_card_id);
-                let is_enchantment = cast_def.map(|d| d.is_enchantment).unwrap_or(false);
-                let is_instant = cast_def.map(|d| d.is_instant).unwrap_or(false);
-                let is_sorcery = cast_def.map(|d| d.is_sorcery).unwrap_or(false);
-                let is_creature = cast_def.map(|d| d.is_creature).unwrap_or(false);
-                let is_artifact = cast_def.map(|d| d.is_artifact).unwrap_or(false);
+                // CR 709.4/712.4: a spell on the stack has the characteristics of the cast face.
+                let cast_face = self
+                    .registry
+                    .get(cast_card_id)
+                    .and_then(|d| d.face(*face_index));
+                let is_enchantment = cast_face.is_some_and(|f| f.is_enchantment);
+                let is_instant = cast_face.is_some_and(|f| f.is_instant);
+                let is_sorcery = cast_face.is_some_and(|f| f.is_sorcery);
+                let is_creature = cast_face.is_some_and(|f| f.is_creature);
+                let is_artifact = cast_face.is_some_and(|f| f.is_artifact);
 
                 let mut ordered: Vec<usize> = (0..self.state.players.len()).collect();
                 ordered.sort_by_key(|&i| (self.state.players[i].id != ap) as u8);
@@ -300,7 +305,11 @@ impl GameEngine {
         let Some(def) = self.registry.get(card_id) else {
             return vec![];
         };
-        def.triggered_abilities
+        // Triggered-ability indices are face-0-relative everywhere (`StackItem::face_index` is `0`
+        // for abilities); the back face of a transforming permanent granting its own triggers is
+        // the point at which this must read the source object's active face instead.
+        def.primary_face()
+            .triggered_abilities
             .iter()
             .enumerate()
             .filter(|(_, ta)| filter(&ta.trigger))
@@ -330,6 +339,7 @@ impl GameEngine {
             None => return,
         };
         let needs_target = def
+            .primary_face()
             .triggered_abilities
             .get(ability_index)
             .map(|ta| spell_effect_kind_needs_target(&ta.effect))

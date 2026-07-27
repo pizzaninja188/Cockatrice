@@ -68,7 +68,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 if let Some(effect) = eng
                     .registry
                     .get(&pt.card_id)
-                    .and_then(|def| def.triggered_abilities.get(pt.ability_index))
+                    .and_then(|def| def.primary_face().triggered_abilities.get(pt.ability_index))
                     .map(|ta| &ta.effect)
                 {
                     let targets = compute_spell_targets(eng, p.id, std::slice::from_ref(effect));

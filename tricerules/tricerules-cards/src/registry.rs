@@ -238,13 +238,16 @@ mod tests {
     fn spell_effects_deserialize_from_ron() {
         let reg = CardRegistry::from_embedded().unwrap();
         assert_eq!(
-            reg.get("angels_mercy").unwrap().spell_effect,
+            reg.get("angels_mercy").unwrap().primary_face().spell_effect,
             vec![SpellEffectKind::GainLife {
                 amount: Amount::Fixed(7)
             }]
         );
         assert_eq!(
-            reg.get("lightning_bolt").unwrap().spell_effect,
+            reg.get("lightning_bolt")
+                .unwrap()
+                .primary_face()
+                .spell_effect,
             vec![SpellEffectKind::DamageTarget {
                 amount: Amount::Fixed(3),
                 target: TargetFilter {
@@ -254,7 +257,7 @@ mod tests {
             }]
         );
         assert_eq!(
-            reg.get("mind_sculpt").unwrap().spell_effect,
+            reg.get("mind_sculpt").unwrap().primary_face().spell_effect,
             vec![SpellEffectKind::MillTargetPlayer {
                 count: 7,
                 target: TargetFilter {
@@ -276,7 +279,7 @@ mod tests {
             spell_effect: [TargetPlayerGainsLife(amount: 3, target: (kind: Creature))],
         )"#;
         let card: CardDefinition = RON_OPTS.from_str(bad).unwrap();
-        assert!(card.spell_effect[0]
+        assert!(card.primary_face().spell_effect[0]
             .validate(crate::primitives::EffectContext::Spell)
             .is_err());
     }
@@ -430,10 +433,11 @@ mod tests {
         let soldier = reg.get("soldier_w_1_1").expect("soldier token");
         assert!(reg.is_token("soldier_w_1_1"));
         assert!(!reg.is_token("lightning_bolt"));
-        assert!(soldier.is_creature);
-        assert_eq!((soldier.power, soldier.toughness), (Some(1), Some(1)));
+        let face = soldier.primary_face();
+        assert!(face.is_creature);
+        assert_eq!((face.power, face.toughness), (Some(1), Some(1)));
         // CR 111.4: color comes from the creating effect, not a (nonexistent) mana cost.
-        assert_eq!(soldier.colors(), vec![Color::White]);
+        assert_eq!(face.colors(), vec![Color::White]);
         // Tokens never appear in the name index or the implemented-card iterator.
         assert_eq!(reg.id_for_name("Soldier"), None);
         assert!(reg.definitions().all(|d| !reg.is_token(&d.id)));

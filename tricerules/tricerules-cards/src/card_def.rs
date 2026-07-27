@@ -66,6 +66,12 @@ pub struct CardFace {
     /// CR 509.1c: "blocks each combat if able". See [`CardDefinition::must_block_if_able`].
     #[serde(default)]
     pub must_block_if_able: bool,
+    /// Explicit colors for a face synthesized from a
+    /// [`TokenDefinition`](crate::token_def::TokenDefinition) (CR 111.4: a token's color comes from
+    /// the creating effect, not a mana cost). `None` for printed faces, whose colors derive from
+    /// `mana_cost` — see [`FaceRef::colors`]. Never authored in card RON.
+    #[serde(skip)]
+    pub colors_override: Option<Vec<Color>>,
     // Derived type/supertype flags — same convention as CardDefinition (never authored in RON).
     #[serde(skip)]
     pub is_land: bool,
@@ -121,6 +127,12 @@ pub struct FaceRef<'a> {
     pub activated_abilities: &'a [ActivatedAbilityDef],
     pub triggered_abilities: &'a [TriggeredAbilityDef],
     pub static_abilities: &'a [StaticAbilityDef],
+    /// CR 508.1d: "attacks each combat if able" (see [`CardFace::must_attack_if_able`]).
+    pub must_attack_if_able: bool,
+    /// CR 509.1c: "blocks each combat if able" (see [`CardFace::must_block_if_able`]).
+    pub must_block_if_able: bool,
+    /// Explicit colors for token faces (CR 111.4); `None` derives colors from `mana_cost`.
+    pub colors_override: Option<&'a [Color]>,
     pub is_land: bool,
     pub is_creature: bool,
     pub is_instant: bool,
@@ -128,12 +140,34 @@ pub struct FaceRef<'a> {
     pub is_artifact: bool,
     pub is_enchantment: bool,
     pub is_legendary: bool,
+    pub is_aura: bool,
 }
 
 impl FaceRef<'_> {
     /// True for permanent faces (CR 110.4): resolves to the battlefield, not the graveyard.
     pub fn is_permanent(&self) -> bool {
         !self.is_instant && !self.is_sorcery
+    }
+
+    /// This face's colors, derived from its mana cost (CR 202.2a), or the explicit
+    /// [`colors_override`](Self::colors_override) for token faces (CR 111.4). A face is colorless
+    /// when its mana cost carries no color symbols (lands, `{0}`, generic-only costs).
+    pub fn colors(&self) -> Vec<Color> {
+        match self.colors_override {
+            Some(colors) => colors.to_vec(),
+            None => self.mana_cost.colors(),
+        }
+    }
+
+    /// True if this face's types satisfy a [`PermanentTypeFilter`] (ETB-watcher triggers like
+    /// Soul Warden / landfall / constellation). Reads the derived type flags.
+    pub fn is_permanent_type(&self, filter: PermanentTypeFilter) -> bool {
+        match filter {
+            PermanentTypeFilter::Creature => self.is_creature,
+            PermanentTypeFilter::Artifact => self.is_artifact,
+            PermanentTypeFilter::Enchantment => self.is_enchantment,
+            PermanentTypeFilter::Land => self.is_land,
+        }
     }
 }
 
@@ -284,6 +318,9 @@ impl CardDefinition {
                     activated_abilities: &self.activated_abilities,
                     triggered_abilities: &self.triggered_abilities,
                     static_abilities: &self.static_abilities,
+                    must_attack_if_able: self.must_attack_if_able,
+                    must_block_if_able: self.must_block_if_able,
+                    colors_override: self.colors_override.as_deref(),
                     is_land: self.is_land,
                     is_creature: self.is_creature,
                     is_instant: self.is_instant,
@@ -291,6 +328,7 @@ impl CardDefinition {
                     is_artifact: self.is_artifact,
                     is_enchantment: self.is_enchantment,
                     is_legendary: self.is_legendary,
+                    is_aura: self.is_aura,
                 })
             } else {
                 None
@@ -309,6 +347,9 @@ impl CardDefinition {
             activated_abilities: &f.activated_abilities,
             triggered_abilities: &f.triggered_abilities,
             static_abilities: &f.static_abilities,
+            must_attack_if_able: f.must_attack_if_able,
+            must_block_if_able: f.must_block_if_able,
+            colors_override: f.colors_override.as_deref(),
             is_land: f.is_land,
             is_creature: f.is_creature,
             is_instant: f.is_instant,
@@ -316,6 +357,7 @@ impl CardDefinition {
             is_artifact: f.is_artifact,
             is_enchantment: f.is_enchantment,
             is_legendary: f.is_legendary,
+            is_aura: f.is_aura,
         })
     }
 
@@ -332,6 +374,17 @@ impl CardDefinition {
     /// True if this card has more than one face (any non-`Normal` layout).
     pub fn is_multiface(&self) -> bool {
         !self.faces.is_empty()
+    }
+
+    /// True if *any* face satisfies `pred` — the "is this a creature card?" question asked of a
+    /// card sitting in a library or graveyard, where no face is up.
+    ///
+    /// CR 709.4: a split card has the combined characteristics of both halves in every zone but
+    /// the stack, so any-face is exactly right there. CR 712.4a: a double-faced card shows only
+    /// its front face outside the battlefield/stack, so this deliberately over-approximates for
+    /// DFCs; tighten it when a DFC's back face carries a type the front one lacks.
+    pub fn any_face(&self, pred: impl Fn(FaceRef<'_>) -> bool) -> bool {
+        self.faces_iter().any(pred)
     }
 
     /// True for permanent cards (CR 110.4): the spell resolves to the battlefield rather

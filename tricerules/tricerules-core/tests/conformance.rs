@@ -27,10 +27,14 @@ fn pass() -> RuledCommand {
 }
 
 fn play_land(hand_card_index: u32) -> RuledCommand {
+    play_land_face(hand_card_index, 0)
+}
+
+fn play_land_face(hand_card_index: u32, face_index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::PlayLand(PlayLand {
             hand_card_index,
-            face_index: 0,
+            face_index,
         })),
     }
 }
@@ -200,9 +204,9 @@ fn assert_zone_integrity(e: &GameEngine, expected_objects: usize, ctx: &str) {
     );
 }
 
-/// Cast one face of `card_id` (CR 709/712/715) in a fresh game and assert zone integrity.
+/// Play or cast one face of `card_id` (CR 709/712/715) in a fresh game and assert zone integrity.
 /// Used to exercise the non-front faces of a multi-face card, which the front-face sweep skips.
-fn exercise_spell_face_in_fresh_game(card_id: &str, face_index: u32) {
+fn exercise_face_in_fresh_game(card_id: &str, face_index: u32) {
     let mut p0_deck: Vec<String> = std::iter::repeat_n(card_id.to_string(), 20).collect();
     p0_deck.extend(std::iter::repeat_n("grizzly_bears".to_string(), 10));
     p0_deck.extend(std::iter::repeat_n("forest".to_string(), 10));
@@ -217,6 +221,16 @@ fn exercise_spell_face_in_fresh_game(card_id: &str, face_index: u32) {
     let me = e.state.players[0].id as u32;
     let baseline = e.state.objects.len();
     let slot = put_card_in_hand(&mut e, card_id);
+    let is_land = CardRegistry::global()
+        .get(card_id)
+        .and_then(|def| def.face(face_index as usize))
+        .is_some_and(|face| face.is_land);
+    if is_land {
+        // A land face is played, not cast; a per-turn-limit rejection is acceptable.
+        let _ = e.apply_command(0, &play_land_face(slot, face_index));
+        assert_zone_integrity(&e, baseline, &format!("{card_id} face {face_index} (land)"));
+        return;
+    }
     let candidates: Vec<Vec<TargetRef>> = vec![
         vec![],
         vec![tref(opp)],
@@ -270,7 +284,17 @@ fn every_registered_card_resolves_without_panic() {
 
         let baseline = e.state.objects.len();
 
-        if def.is_land {
+        // CR 712.4a: a card in hand shows its front face, so front-face characteristics decide
+        // how this sweep exercises it. Each additional face gets its own fresh game below.
+        let front = def.primary_face();
+
+        // CR 709/712/715: the sweep here plays/casts the front face (index 0); exercise every
+        // other face of a multi-face card (split half / MDFC face) separately.
+        for face_index in 1..def.face_count() as u32 {
+            exercise_face_in_fresh_game(card_id, face_index);
+        }
+
+        if front.is_land {
             let slot = put_card_in_hand(&mut e, card_id);
             // play_land never needs a target; a per-turn-limit rejection is acceptable.
             let _ = e.apply_command(0, &play_land(slot));
@@ -302,16 +326,8 @@ fn every_registered_card_resolves_without_panic() {
         }
         assert_zone_integrity(&e, baseline, &format!("{card_id} (spell)"));
 
-        // CR 709/712/715: the sweep above casts the front face (index 0). Exercise each
-        // additional face of a multi-face card (split half / MDFC face) in its own fresh game.
-        if def.is_multiface() {
-            for face_index in 1..def.face_count() as u32 {
-                exercise_spell_face_in_fresh_game(card_id, face_index);
-            }
-        }
-
         // Activated abilities: exercise each on a battlefield copy of the card (permanents only).
-        if def.is_permanent() && !def.activated_abilities.is_empty() {
+        if front.is_permanent() && !front.activated_abilities.is_empty() {
             let deck = Some(vec![
                 std::iter::repeat_n(card_id.to_string(), 20)
                     .chain(std::iter::repeat_n("grizzly_bears".to_string(), 10))
@@ -326,7 +342,7 @@ fn every_registered_card_resolves_without_panic() {
             let their_c = deploy(&mut ae, 1, "grizzly_bears");
             let opp_a = ae.state.players[1].id as u32;
             let base = ae.state.objects.len();
-            for ai in 0..def.activated_abilities.len() as u32 {
+            for ai in 0..front.activated_abilities.len() as u32 {
                 let candidates: Vec<Vec<TargetRef>> = vec![
                     vec![],
                     vec![tref(their_c)],

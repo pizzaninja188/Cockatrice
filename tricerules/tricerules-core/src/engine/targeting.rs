@@ -74,8 +74,7 @@ pub(super) fn graveyard_target_legal(
         match card_type {
             GraveyardCardType::Creature => {
                 // A card is a creature card if it has "Creature" in its type line on any face.
-                let is_creature = def.is_creature || def.faces.iter().any(|f| f.is_creature);
-                if !is_creature {
+                if !def.any_face(|f| f.is_creature) {
                     return false;
                 }
             }

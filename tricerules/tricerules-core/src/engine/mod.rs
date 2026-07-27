@@ -85,6 +85,9 @@ enum GameEvent {
     SpellCast {
         caster: PlayerId,
         card_id: String,
+        /// CR 709/712: the half/face that was cast. On the stack a multi-face spell has only that
+        /// face's characteristics, so cast triggers filter on it rather than on the whole card.
+        face_index: usize,
     },
 }
 
@@ -133,6 +136,9 @@ impl GameEngine {
                 let def = registry
                     .get(&card_id)
                     .ok_or_else(|| EngineError::MissingCard(card_id.clone()))?;
+                // A library card shows its front face (CR 712.4a), which is also the face whose
+                // printed P/T and combat requirements seed the object.
+                let front = def.primary_face();
                 let oid = next_object_id;
                 next_object_id += 1;
                 objects.insert(
@@ -143,16 +149,16 @@ impl GameEngine {
                         card_id: card_id.clone(),
                         zone: Zone::Library,
                         tapped: false,
-                        summoning_sick: def.is_creature,
-                        power: def.power,
-                        toughness: def.toughness,
+                        summoning_sick: front.is_creature,
+                        power: front.power,
+                        toughness: front.toughness,
                         damage: 0,
                         deathtouch_damage: false,
                         counters: BTreeMap::new(),
                         attached_to: None,
                         regeneration_shields: 0,
-                        must_attack_if_able: def.must_attack_if_able,
-                        must_block_if_able: def.must_block_if_able,
+                        must_attack_if_able: front.must_attack_if_able,
+                        must_block_if_able: front.must_block_if_able,
                         face_up_index: 0,
                     },
                 );
