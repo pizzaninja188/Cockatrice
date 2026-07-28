@@ -107,6 +107,8 @@ set(cockatrice_SOURCES
     src/game/ruled/ruled_actions.cpp
     src/game/ruled/ruled_autopilot.cpp
     src/game/ruled/ruled_client_state.cpp
+    src/game/ruled/ruled_dev_command_parser.cpp
+    src/game/ruled/ruled_dev_console.cpp
     src/game/ruled/ruled_event_dispatcher.cpp
     src/game/zones/card_zone.cpp
     src/game/zones/hand_zone.cpp

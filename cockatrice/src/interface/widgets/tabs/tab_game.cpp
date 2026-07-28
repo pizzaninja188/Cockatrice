@@ -17,6 +17,8 @@
 #include "../game/replay.h"
 #include "../game/ruled/ruled_actions.h"
 #include "../game/ruled/ruled_client_state.h"
+#include "../game/ruled/ruled_dev_command_parser.h"
+#include "../game/ruled/ruled_dev_console.h"
 #include "../game/zones/view_zone.h"
 #include "../game/zones/view_zone_widget.h"
 #include "../interface/card_picture_loader/card_picture_loader.h"
@@ -1036,6 +1038,32 @@ void TabGame::actSay()
         emit chatMessageSent(sayEdit->text());
         sayEdit->clear();
     }
+}
+
+// Fork: one dev-console line. Parse it, send it, or report why not. Kept short on purpose —
+// anything more than transport belongs in RuledDevCommandParser, which is testable headless.
+void TabGame::actDevConsoleCommand(const QString &line)
+{
+    if (!devConsoleWidget) {
+        return;
+    }
+    // Seats ascending; QMap is key-ordered, so ordinal 1 is the lowest player id.
+    const QVector<int> seatIds(game->getPlayerManager()->getPlayers().keys().begin(),
+                               game->getPlayerManager()->getPlayers().keys().end());
+    const RuledDevCommandParser::Result parsed =
+        RuledDevCommandParser::parse(line, game->getPlayerManager()->getLocalPlayerId(), seatIds);
+
+    if (parsed.handledLocally) {
+        devConsoleWidget->setStatus(parsed.message, false);
+        return;
+    }
+    if (!parsed.ok) {
+        devConsoleWidget->setStatus(parsed.error, true);
+        return;
+    }
+    // The engine has the final say and reports rejections through the game log, which is right
+    // above the console — so there is nothing useful to echo here on success.
+    RuledActions::sendRuledCommand(game, parsed.command);
 }
 
 void TabGame::addPlayerToAutoCompleteList(QString playerName)
@@ -2072,6 +2100,16 @@ void TabGame::createMessageDock(bool bReplay)
         messageLogLayout->addWidget(gamePromptWidget);
     } else {
         gamePromptWidget = nullptr;
+    }
+
+    // Fork: dev-loop console, under the prompt panel in the same dock. Hidden unless explicitly
+    // asked for; the enforcing gate is engine-side, this only keeps it out of a normal session.
+    if (!bReplay && RuledActions::isRuledGame(game) && RuledDevConsoleWidget::isEnabled()) {
+        devConsoleWidget = new RuledDevConsoleWidget(this);
+        connect(devConsoleWidget, &RuledDevConsoleWidget::commandSubmitted, this, &TabGame::actDevConsoleCommand);
+        messageLogLayout->addWidget(devConsoleWidget);
+    } else {
+        devConsoleWidget = nullptr;
     }
 
     // message log

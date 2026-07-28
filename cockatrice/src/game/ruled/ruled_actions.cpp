@@ -15,6 +15,7 @@
 #include "../player/player_target.h"
 #include "../zones/logic/card_zone_logic.h"
 #include "../zones/logic/view_zone_logic.h"
+#include "ruled_client_host.h"
 #include "ruled_client_state.h"
 
 #include <algorithm>
@@ -97,6 +98,21 @@ RuledClientState *stateFor(const AbstractGame *game)
     }
     GameEventHandler *handler = const_cast<AbstractGame *>(game)->getGameEventHandler();
     return handler ? handler->ruled() : nullptr;
+}
+
+void sendRuledCommand(const AbstractGame *game, const ruled::v1::RuledCommand &command)
+{
+    if (!isRuledGame(game)) {
+        return;
+    }
+    GameEventHandler *handler = const_cast<AbstractGame *>(game)->getGameEventHandler();
+    if (!handler) {
+        return;
+    }
+    // Through the host interface, where the method is public. GameEventHandler keeps its
+    // RuledClientHost overrides private so the view model is the only thing that normally sends;
+    // this is the one documented exception, rather than widening that class's interface.
+    static_cast<RuledClientHost *>(handler)->sendRuledCommand(command);
 }
 
 RuledClientState *stateForCard(const CardItem *card)

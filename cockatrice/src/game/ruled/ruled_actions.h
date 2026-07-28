@@ -29,6 +29,7 @@ class RuledClientState;
 namespace ruled::v1
 {
 enum HandActionKind : int;
+class RuledCommand;
 }
 using RuledHandActionKind = ruled::v1::HandActionKind;
 
@@ -45,6 +46,15 @@ namespace RuledActions
 /// The ruled view model for this game, or nullptr when the game is freeform / unavailable.
 [[nodiscard]] RuledClientState *stateFor(const AbstractGame *game);
 [[nodiscard]] RuledClientState *stateForCard(const CardItem *card);
+
+/// Send a ready-built ruled command that does not originate in the view model — today only the
+/// dev console, whose input is text rather than a click or an engine event.
+///
+/// Every other ruled send goes through a `RuledClientState` slot, and `GameEventHandler` keeps its
+/// `RuledClientHost` overrides private so that stays true. Routing the console through here keeps
+/// its transport among the other ruled sends instead of putting one in an upstream file.
+/// No-op outside a ruled game.
+void sendRuledCommand(const AbstractGame *game, const ruled::v1::RuledCommand &command);
 
 // ---------------------------------------------------------------------------------------
 // CardItem lookup by engine identity.

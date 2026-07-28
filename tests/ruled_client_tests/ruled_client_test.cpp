@@ -12,6 +12,7 @@
 
 #include "game/ruled/ruled_client_host.h"
 #include "game/ruled/ruled_client_state.h"
+#include "game/ruled/ruled_dev_command_parser.h"
 #include "game/ruled/ruled_event_dispatcher.h"
 
 #include <QSignalSpy>
@@ -1372,6 +1373,170 @@ TEST_F(RuledClientTest, EveryBatchSchedulesAnArrowResync)
 TEST_F(RuledClientTest, MalformedPayloadIsRejectedWithoutCrashing)
 {
     EXPECT_FALSE(dispatcher->processPayload(std::string("\xff\xff\xff\xff", 4)));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Dev console grammar (RuledDevCommandParser)
+//
+// The console is the one ruled input that starts as free text, so the grammar is the only place a
+// typo turns into a wrong command rather than a compile error. Seats here are ids {7, 9} rather
+// than {0, 1} so an ordinal can never accidentally equal the id it resolves to.
+// ---------------------------------------------------------------------------------------------
+
+namespace
+{
+const QVector<int> kSeats = {7, 9};
+constexpr int kMe = 7;
+
+RuledDevCommandParser::Result parseLine(const QString &line)
+{
+    return RuledDevCommandParser::parse(line, kMe, kSeats);
+}
+} // namespace
+
+TEST(RuledDevCommandParserTest, PutDefaultsToTheLocalSeat)
+{
+    const auto r = parseLine(QStringLiteral("put hand Serra Angel"));
+    ASSERT_TRUE(r.ok) << r.error.toStdString();
+    const auto &dev = r.command.dev_command();
+    EXPECT_EQ(dev.target_player_id(), kMe);
+    EXPECT_EQ(dev.put_card_in_zone().card_name(), "Serra Angel");
+    EXPECT_EQ(dev.put_card_in_zone().zone(), ruled::v1::DEV_ZONE_HAND);
+    EXPECT_FALSE(dev.put_card_in_zone().ready());
+}
+
+TEST(RuledDevCommandParserTest, SeatIsAOneBasedOrdinalNotAPlayerId)
+{
+    const auto r = parseLine(QStringLiteral("put 2 gy Lightning Bolt"));
+    ASSERT_TRUE(r.ok) << r.error.toStdString();
+    EXPECT_EQ(r.command.dev_command().target_player_id(), 9) << "ordinal 2 is the second seat";
+    EXPECT_EQ(r.command.dev_command().put_card_in_zone().zone(), ruled::v1::DEV_ZONE_GRAVEYARD);
+}
+
+TEST(RuledDevCommandParserTest, OutOfRangeSeatIsRejected)
+{
+    const auto r = parseLine(QStringLiteral("put 5 hand Serra Angel"));
+    EXPECT_FALSE(r.ok);
+    EXPECT_FALSE(r.error.isEmpty());
+}
+
+TEST(RuledDevCommandParserTest, EveryZoneAliasResolves)
+{
+    const QVector<QPair<QString, ruled::v1::DevZone>> cases = {
+        {QStringLiteral("hand"), ruled::v1::DEV_ZONE_HAND},
+        {QStringLiteral("bf"), ruled::v1::DEV_ZONE_BATTLEFIELD},
+        {QStringLiteral("battlefield"), ruled::v1::DEV_ZONE_BATTLEFIELD},
+        {QStringLiteral("board"), ruled::v1::DEV_ZONE_BATTLEFIELD},
+        {QStringLiteral("gy"), ruled::v1::DEV_ZONE_GRAVEYARD},
+        {QStringLiteral("graveyard"), ruled::v1::DEV_ZONE_GRAVEYARD},
+        {QStringLiteral("exile"), ruled::v1::DEV_ZONE_EXILE},
+        {QStringLiteral("lib"), ruled::v1::DEV_ZONE_LIBRARY},
+        {QStringLiteral("library"), ruled::v1::DEV_ZONE_LIBRARY},
+        {QStringLiteral("deck"), ruled::v1::DEV_ZONE_LIBRARY},
+    };
+    for (const auto &[word, zone] : cases) {
+        const auto r = parseLine(QStringLiteral("put %1 Grizzly Bears").arg(word));
+        ASSERT_TRUE(r.ok) << word.toStdString() << ": " << r.error.toStdString();
+        EXPECT_EQ(r.command.dev_command().put_card_in_zone().zone(), zone) << word.toStdString();
+    }
+}
+
+TEST(RuledDevCommandParserTest, UnknownZoneIsRejected)
+{
+    EXPECT_FALSE(parseLine(QStringLiteral("put sideboard Serra Angel")).ok);
+}
+
+TEST(RuledDevCommandParserTest, ReadyIsStrippedOnlyAsATrailingToken)
+{
+    const auto readied = parseLine(QStringLiteral("put bf Grizzly Bears ready"));
+    ASSERT_TRUE(readied.ok);
+    EXPECT_TRUE(readied.command.dev_command().put_card_in_zone().ready());
+    EXPECT_EQ(readied.command.dev_command().put_card_in_zone().card_name(), "Grizzly Bears");
+
+    // A card named "ready" is still a card name: the flag is only consumed when something
+    // precedes it, so the grammar does not depend on what is in the card pool.
+    const auto named = parseLine(QStringLiteral("put bf ready"));
+    ASSERT_TRUE(named.ok);
+    EXPECT_FALSE(named.command.dev_command().put_card_in_zone().ready());
+    EXPECT_EQ(named.command.dev_command().put_card_in_zone().card_name(), "ready");
+}
+
+TEST(RuledDevCommandParserTest, PutWithoutACardNameIsRejected)
+{
+    EXPECT_FALSE(parseLine(QStringLiteral("put bf")).ok);
+    EXPECT_FALSE(parseLine(QStringLiteral("put")).ok);
+}
+
+TEST(RuledDevCommandParserTest, ManaCountsColourPipsAndGenericDigits)
+{
+    const auto r = parseLine(QStringLiteral("mana 3RR"));
+    ASSERT_TRUE(r.ok) << r.error.toStdString();
+    const auto &m = r.command.dev_command().add_mana();
+    EXPECT_EQ(m.c(), 3u);
+    EXPECT_EQ(m.r(), 2u);
+    EXPECT_EQ(m.w(), 0u);
+
+    const auto multi = parseLine(QStringLiteral("mana WWU"));
+    ASSERT_TRUE(multi.ok);
+    EXPECT_EQ(multi.command.dev_command().add_mana().w(), 2u);
+    EXPECT_EQ(multi.command.dev_command().add_mana().u(), 1u);
+
+    // Digits form one number, so this is twelve generic rather than one and two. It also has to
+    // survive the seat rule: a lone leading number is symbols, not an out-of-range seat.
+    const auto twelve = parseLine(QStringLiteral("mana 12"));
+    ASSERT_TRUE(twelve.ok) << twelve.error.toStdString();
+    EXPECT_EQ(twelve.command.dev_command().add_mana().c(), 12u);
+    EXPECT_EQ(twelve.command.dev_command().target_player_id(), kMe);
+}
+
+TEST(RuledDevCommandParserTest, ManaSeatOnlyWinsWhenItIsAValidOrdinalWithSymbolsAfterIt)
+{
+    // "2 UU" is the second seat; "3 RR" cannot be (there is no seat 3), so it falls back to
+    // reading as mana rather than erroring — three generic and two red.
+    const auto notASeat = parseLine(QStringLiteral("mana 3 RR"));
+    ASSERT_TRUE(notASeat.ok) << notASeat.error.toStdString();
+    EXPECT_EQ(notASeat.command.dev_command().target_player_id(), kMe);
+    EXPECT_EQ(notASeat.command.dev_command().add_mana().c(), 3u);
+    EXPECT_EQ(notASeat.command.dev_command().add_mana().r(), 2u);
+
+    // And the unambiguous spelling of the same thing.
+    const auto joined = parseLine(QStringLiteral("mana 3RR"));
+    ASSERT_TRUE(joined.ok);
+    EXPECT_EQ(joined.command.dev_command().target_player_id(), kMe);
+}
+
+TEST(RuledDevCommandParserTest, ManaAcceptsASeatAndRejectsJunkSymbols)
+{
+    const auto seated = parseLine(QStringLiteral("mana 2 UU"));
+    ASSERT_TRUE(seated.ok) << seated.error.toStdString();
+    EXPECT_EQ(seated.command.dev_command().target_player_id(), 9);
+    EXPECT_EQ(seated.command.dev_command().add_mana().u(), 2u);
+
+    EXPECT_FALSE(parseLine(QStringLiteral("mana XYZ")).ok);
+    EXPECT_FALSE(parseLine(QStringLiteral("mana")).ok);
+}
+
+TEST(RuledDevCommandParserTest, LeadingSlashAndCaseAreTolerated)
+{
+    const auto slashed = parseLine(QStringLiteral("/PUT Hand Serra Angel"));
+    ASSERT_TRUE(slashed.ok) << slashed.error.toStdString();
+    EXPECT_EQ(slashed.command.dev_command().put_card_in_zone().zone(), ruled::v1::DEV_ZONE_HAND);
+    // The card name keeps its typed casing — the engine matches Oracle names case-insensitively,
+    // but the log should read the way the user wrote it.
+    EXPECT_EQ(slashed.command.dev_command().put_card_in_zone().card_name(), "Serra Angel");
+}
+
+TEST(RuledDevCommandParserTest, HelpIsHandledLocallyAndUnknownVerbsAreNot)
+{
+    const auto help = parseLine(QStringLiteral("help"));
+    EXPECT_FALSE(help.ok);
+    EXPECT_TRUE(help.handledLocally);
+    EXPECT_FALSE(help.message.isEmpty());
+
+    const auto unknown = parseLine(QStringLiteral("summon Serra Angel"));
+    EXPECT_FALSE(unknown.ok);
+    EXPECT_FALSE(unknown.handledLocally);
+    EXPECT_FALSE(unknown.error.isEmpty());
 }
 
 } // namespace
