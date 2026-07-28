@@ -995,15 +995,15 @@ void RuledGameDriver::applyLifeManaAndCombatEvents(const ruled::v1::RuledEventBa
             }
             auto *targetPlayer = static_cast<Server_Player *>(target);
             // CR 106: the engine is the sole owner of the mana pool. Mirror its absolute snapshot
-            // onto the player's single-letter mana counters (w/u/b/r/g/c). Because it is absolute,
+            // onto the player's single-letter mana counters (w/u/b/r/g/x). Cockatrice's existing
+            // upper general counter is named "x" and displayed as Colorless; the lower one is the
+            // unrelated storm counter. Because the snapshot is absolute,
             // this one handler covers production (mana abilities), payment (pay_mana), and the
             // empty-on-step/phase-change case — so no separate server-side pool clear is needed.
-            // Colorless ("c") has no display counter yet; it is harmlessly skipped until a
-            // colorless-producing card (and counter) is added.
             const QHash<QString, int> desired = {
                 {QStringLiteral("w"), static_cast<int>(mp.w())}, {QStringLiteral("u"), static_cast<int>(mp.u())},
                 {QStringLiteral("b"), static_cast<int>(mp.b())}, {QStringLiteral("r"), static_cast<int>(mp.r())},
-                {QStringLiteral("g"), static_cast<int>(mp.g())}, {QStringLiteral("c"), static_cast<int>(mp.c())},
+                {QStringLiteral("g"), static_cast<int>(mp.g())}, {QStringLiteral("x"), static_cast<int>(mp.c())},
             };
             for (Server_Counter *counter : targetPlayer->getCounters()) {
                 if (!counter) {

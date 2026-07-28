@@ -678,6 +678,25 @@ TEST_F(RuledBatchTest, ApplyRuledBatchUpdatesLifeCounter)
     EXPECT_EQ(p1Life->getCount(), 20);
 }
 
+TEST_F(RuledBatchTest, ApplyRuledBatchUsesUpperGeneralCounterForColorlessMana)
+{
+    auto *colorless = new Server_Counter(6, "x", makeColor(255, 255, 255), 20, 0);
+    auto *storm = new Server_Counter(7, "storm", makeColor(255, 150, 30), 20, 0);
+    p2->addCounter(colorless);
+    p2->addCounter(storm);
+
+    ruled::v1::IpcResponse resp;
+    resp.set_ok(true);
+    auto *pool = resp.mutable_batch()->add_events()->mutable_mana_pool_updated();
+    pool->set_player_id(2);
+    pool->set_c(3);
+
+    callBatchApply(resp);
+
+    EXPECT_EQ(colorless->getCount(), 3);
+    EXPECT_EQ(storm->getCount(), 0);
+}
+
 TEST_F(RuledBatchTest, ApplyRuledBatchMarksAttackers)
 {
     Server_Card *bear = addCardToTable(p1, "Grizzly Bears");
