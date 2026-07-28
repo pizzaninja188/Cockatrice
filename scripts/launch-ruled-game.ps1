@@ -34,7 +34,11 @@
         mana 4WW                      then cast it, with no lands in play
         put bf Grizzly Bears ready    a permanent that can attack this turn
         put 2 bf Hill Giant           give the other seat a blocker
+        move gy Serra Angel           relocate something that already exists
         help                          the full grammar
+
+    put always conjures, so repeating it builds multiples. move relocates an existing object and
+    is the only way to reach graveyard, exile or library.
 
     Run -Stop first if servers are already up: the sidecar reads its half of the gate from its
     own environment at startup, so a reused one refuses dev commands.

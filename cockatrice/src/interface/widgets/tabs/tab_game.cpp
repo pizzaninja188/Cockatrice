@@ -1065,9 +1065,16 @@ void TabGame::actDevConsoleCommand(const QString &line)
         devConsoleWidget->setStatus(parsed.error, true);
         return;
     }
-    // The engine has the final say and reports rejections through the game log, which is right
-    // above the console — so there is nothing useful to echo here on success.
-    RuledActions::sendRuledCommand(game, parsed.command);
+    // The engine has the final say, and it refuses plenty of legitimate-looking lines — moving a
+    // card you do not own, conjuring into a zone with no minting path. Without an ack those look
+    // like nothing happened, so report a rejection rather than leaving the console silent.
+    // QPointer: the response arrives asynchronously and the tab may be gone by then.
+    QPointer<RuledDevConsoleWidget> console(devConsoleWidget);
+    RuledActions::sendRuledCommandExpectingAck(game, parsed.command, [console](bool accepted) {
+        if (!accepted && console) {
+            console->setStatus(QObject::tr("Rejected by the engine — see the game log."), true);
+        }
+    });
 }
 
 void TabGame::addPlayerToAutoCompleteList(QString playerName)

@@ -37,6 +37,11 @@ struct Result
 /**
  * Parse one console line.
  *
+ * Verbs: `put` (conjure a new card), `move` (relocate one the seat owns), `mana`, `help`.
+ * `put` and `move` are deliberately separate rather than one verb that guesses: overloading them
+ * made "give me a second Serra Angel" impossible to express, and silently yanked the existing one
+ * off the battlefield instead.
+ *
  * @param line        raw input; a leading `/` is accepted and ignored so chat muscle memory works.
  * @param localPlayerId  seat used when the line names none.
  * @param seatIds     every seat in the game, ascending. Seats are addressed by 1-based ordinal

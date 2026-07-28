@@ -749,10 +749,14 @@ Unscheduled by design. Each entry fires on its trigger, not before.
   > act-as-player are designed for but deliberately unbuilt; skip-to-phase is the one to add when
   > upkeep/draw triggers become the next pain.
   >
-  > **`put` conjures, not just tutors.** A card in no decklist is minted from outside the game
-  > (CR 400.11-shaped), which is what removes deck editing entirely; a card the seat already owns
-  > is moved instead, so tutoring does not silently duplicate. Conjuring is hand/battlefield only
-  > — graveyard, exile and library keep separate physical binding maps, and are two steps away.
+  > **`put` conjures; `move` relocates.** A card in no decklist is minted from outside the game
+  > (CR 400.11-shaped), which is what removes deck editing entirely. `put` was briefly a single
+  > verb that guessed — move an existing copy if there was one, else conjure — on the theory that
+  > tutoring should not silently duplicate. That was wrong: it made "give me a second Serra Angel"
+  > impossible to express, and re-issuing `put bf` on a permanent yanked it off the board and
+  > re-applied summoning sickness. Split into two explicit verbs. Conjuring is hand/battlefield
+  > only — graveyard, exile and library keep separate physical binding maps, and `move` is how you
+  > reach them (conjure to hand, then move).
   > This cost more than the tutor-only design, almost all of it in Servatrice, and the blocker was
   > not the obvious one: `applyRuledEngineZoneView` resolves physical cards by translating their
   > names through the **session card catalog**, built once from the decklists. An unknown name

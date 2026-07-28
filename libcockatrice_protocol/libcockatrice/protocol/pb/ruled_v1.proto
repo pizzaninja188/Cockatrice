@@ -99,6 +99,7 @@ message DevCommand {
   oneof dev {
     DevPutCardInZone put_card_in_zone = 2;
     DevAddMana add_mana = 3;
+    DevMoveCard move_card = 4;
   }
 }
 
@@ -113,10 +114,12 @@ enum DevZone {
   DEV_ZONE_LIBRARY = 4;
 }
 
-// Put a named card into a zone. If the target player already owns a copy it is moved (searching
-// library, graveyard, exile, hand, battlefield in that order) so the common "tutor it out of my
-// deck" case does not silently create a second copy; otherwise the card is conjured from outside
-// the game (CR 400.11-shaped, though it obeys none of the restrictions real wishes do).
+// Conjure a named card from outside the game (CR 400.11-shaped, though it obeys none of the
+// restrictions real wishes do) into a zone.
+//
+// *Always* creates a new object, even when the player already owns a copy, so repeating the
+// command builds multiples — which is the whole point when assembling a board. Use DevMoveCard to
+// relocate something that already exists.
 //
 // Entering the battlefield fires GameEvent::EntersBattlefield, so CR 603.6a ETB triggers fire and
 // static abilities register exactly as for a cast permanent, while CR 601 cast triggers correctly
@@ -125,11 +128,27 @@ message DevPutCardInZone {
   // Oracle card name, resolved through CardRegistry::id_for_name. Never a client-derived slug:
   // card identity is engine-owned.
   string card_name = 1;
+  // Hand or battlefield only: the other zones keep separate physical binding maps on the relay
+  // side, so reach them by conjuring to hand and then moving.
   DevZone zone = 2;
   // Deliberately violate CR 302.6: the permanent enters without summoning sickness so it can
   // attack or use a tap ability the turn it arrives. Battlefield only; ignored elsewhere.
   // Not implemented as "grant haste" — haste is a real keyword with layer-6 semantics a test may
   // be trying to observe, so the cheat clears the flag directly instead.
+  bool ready = 3;
+}
+
+// Relocate a card the target player already owns, searching library, graveyard, exile, hand then
+// battlefield and taking the first copy found. Creates nothing — it is the counterpart to
+// DevPutCardInZone, and the only way to reach graveyard, exile or library, which conjuring cannot.
+//
+// Rejected when the player owns no copy: silently conjuring one instead would make "move" and
+// "put" indistinguishable again.
+message DevMoveCard {
+  string card_name = 1;
+  DevZone zone = 2;
+  // As DevPutCardInZone.ready. Worth having here too: move_object_to_zone re-asserts summoning
+  // sickness on battlefield entry, so moving a permanent onto the battlefield sickens it.
   bool ready = 3;
 }
 

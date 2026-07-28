@@ -1467,6 +1467,38 @@ TEST(RuledDevCommandParserTest, PutWithoutACardNameIsRejected)
     EXPECT_FALSE(parseLine(QStringLiteral("put")).ok);
 }
 
+TEST(RuledDevCommandParserTest, MoveSharesPutsGrammarButBuildsTheOtherPayload)
+{
+    const auto r = parseLine(QStringLiteral("move 2 gy Serra Angel"));
+    ASSERT_TRUE(r.ok) << r.error.toStdString();
+    const auto &dev = r.command.dev_command();
+    EXPECT_EQ(dev.target_player_id(), 9);
+    ASSERT_TRUE(dev.has_move_card()) << "move must not build a put payload";
+    EXPECT_FALSE(dev.has_put_card_in_zone());
+    EXPECT_EQ(dev.move_card().card_name(), "Serra Angel");
+    EXPECT_EQ(dev.move_card().zone(), ruled::v1::DEV_ZONE_GRAVEYARD);
+
+    // `ready` applies to move too: relocating onto the battlefield re-sickens the permanent.
+    const auto readied = parseLine(QStringLiteral("move bf Grizzly Bears ready"));
+    ASSERT_TRUE(readied.ok);
+    EXPECT_TRUE(readied.command.dev_command().move_card().ready());
+
+    EXPECT_FALSE(parseLine(QStringLiteral("move gy")).ok);
+    EXPECT_FALSE(parseLine(QStringLiteral("move")).ok);
+}
+
+TEST(RuledDevCommandParserTest, PutAndMoveAreDistinctVerbs)
+{
+    // The whole point of the split: the same line with a different verb produces a different
+    // payload, so "give me a card" and "relocate this one" can no longer be confused.
+    const auto put = parseLine(QStringLiteral("put bf Serra Angel"));
+    const auto moved = parseLine(QStringLiteral("move bf Serra Angel"));
+    ASSERT_TRUE(put.ok);
+    ASSERT_TRUE(moved.ok);
+    EXPECT_TRUE(put.command.dev_command().has_put_card_in_zone());
+    EXPECT_TRUE(moved.command.dev_command().has_move_card());
+}
+
 TEST(RuledDevCommandParserTest, ManaCountsColourPipsAndGenericDigits)
 {
     const auto r = parseLine(QStringLiteral("mana 3RR"));

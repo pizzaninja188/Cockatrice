@@ -92,15 +92,16 @@ namespace RuledDevCommandParser {
 QString helpText()
 {
     return QStringLiteral(
-        "put [seat] <zone> <card name> [ready]  — put a card into a zone.\n"
-        "    Moved if that seat already owns one, otherwise conjured from outside the game.\n"
-        "    zone: hand | bf | gy | exile | library   (conjuring supports hand and bf only)\n"
+        "put [seat] <zone> <card name> [ready]  — conjure a new card from outside the game.\n"
+        "    Always creates one, so repeating it builds multiples. zone: hand | bf.\n"
         "    ready: enters without summoning sickness, so it can attack this turn.\n"
+        "move [seat] <zone> <card name> [ready] — relocate a card that seat already owns.\n"
+        "    Creates nothing, and reaches zones put cannot: gy | exile | library.\n"
         "mana [seat] <symbols>                  — add mana, e.g. 3RR or WWU. Empties at the\n"
         "    next step change, like real mana, so add it in the phase you will spend it.\n"
         "    Write generic without a space (mana 2UU): a lone leading number is read as a seat.\n"
         "seat: 1-based ordinal; omit for yourself.\n"
-        "Examples:  put hand Serra Angel  |  put bf Grizzly Bears ready  |  mana 3RR");
+        "Examples:  put hand Serra Angel  |  put bf Grizzly Bears ready  |  move gy Serra Angel");
 }
 
 Result parse(const QString &line, int localPlayerId, const QVector<int> &seatIds)
@@ -127,13 +128,16 @@ Result parse(const QString &line, int localPlayerId, const QVector<int> &seatIds
 
     int seat = localPlayerId;
 
-    if (verb == QLatin1String("put")) {
+    // `put` and `move` share a grammar and differ only in which payload they build: put always
+    // conjures a new card, move relocates one the seat already owns.
+    const bool isPut = verb == QLatin1String("put");
+    if (isPut || verb == QLatin1String("move")) {
         QString seatError;
         if (!takeSeatForPut(tokens, seatIds, localPlayerId, seat, seatError)) {
             return failure(seatError);
         }
         if (tokens.isEmpty()) {
-            return failure(QStringLiteral("put needs a zone and a card name."));
+            return failure(QStringLiteral("%1 needs a zone and a card name.").arg(verb));
         }
         ruled::v1::DevZone zone{};
         if (!zoneForWord(tokens.first(), zone)) {
@@ -154,17 +158,24 @@ Result parse(const QString &line, int localPlayerId, const QVector<int> &seatIds
         // already disambiguated, so there are no quoting rules to get wrong.
         const QString cardName = tokens.join(QLatin1Char(' '));
         if (cardName.isEmpty()) {
-            return failure(QStringLiteral("put needs a card name."));
+            return failure(QStringLiteral("%1 needs a card name.").arg(verb));
         }
 
         Result r;
         r.ok = true;
         auto *dev = r.command.mutable_dev_command();
         dev->set_target_player_id(seat);
-        auto *put = dev->mutable_put_card_in_zone();
-        put->set_card_name(cardName.toStdString());
-        put->set_zone(zone);
-        put->set_ready(ready);
+        if (isPut) {
+            auto *put = dev->mutable_put_card_in_zone();
+            put->set_card_name(cardName.toStdString());
+            put->set_zone(zone);
+            put->set_ready(ready);
+        } else {
+            auto *mv = dev->mutable_move_card();
+            mv->set_card_name(cardName.toStdString());
+            mv->set_zone(zone);
+            mv->set_ready(ready);
+        }
         return r;
     }
 

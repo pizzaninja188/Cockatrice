@@ -275,8 +275,12 @@ put hand Serra Angel          # conjure any implemented card, even one no deck c
 mana 4WW                      # then cast it, with no lands in play
 put bf Grizzly Bears ready    # a permanent that can attack this turn (cheats CR 302.6)
 put 2 bf Hill Giant           # give the other seat a blocker
+move gy Serra Angel           # relocate something that already exists
 help                          # the full grammar
 ```
+
+`put` **always conjures**, so repeating it builds multiples; `move` relocates an existing object
+and is the only way to reach graveyard, exile or library (conjuring is hand/battlefield only).
 
 Cheat commands are **engine-gated**, not client-hidden: the engine accepts them only when
 `SessionStart.dev_commands_enabled` (from `COCKATRICE_RULED_DEV`) *and* the sidecar's own

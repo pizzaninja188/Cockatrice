@@ -53,7 +53,7 @@ RuledDevConsoleWidget::RuledDevConsoleWidget(QWidget *parent) : QWidget(parent)
 void RuledDevConsoleWidget::retranslateUi()
 {
     promptLabel->setText(tr("dev>"));
-    input->setPlaceholderText(tr("put hand Serra Angel · mana 3RR · help"));
+    input->setPlaceholderText(tr("put hand Serra Angel · move gy Serra Angel · mana 3RR · help"));
 }
 
 void RuledDevConsoleWidget::setStatus(const QString &text, bool isError)

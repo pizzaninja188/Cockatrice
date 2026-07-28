@@ -17,6 +17,19 @@
 use super::events::{ev_log, finish_with_events};
 use super::*;
 
+/// What a placement verb hands to the tail the two of them share. A struct rather than seven
+/// positional parameters, mirroring `EffectCx` in `engine::resolution`.
+struct Placement<'a> {
+    target: PlayerId,
+    oid: ObjectId,
+    zone: Zone,
+    ready: bool,
+    /// Oracle name, for the game log.
+    name: &'a str,
+    /// How the log should describe what happened ("conjures" / "moves").
+    verb: &'a str,
+}
+
 impl GameEngine {
     /// Dispatch one dev command. Gated in [`GameEngine::apply_command`]; by the time we get here
     /// the session is known to allow dev commands.
@@ -34,57 +47,102 @@ impl GameEngine {
             Some(rv1::dev_command::Dev::PutCardInZone(p)) => {
                 self.dev_put_card_in_zone(target, p, &mut ev)?
             }
+            Some(rv1::dev_command::Dev::MoveCard(m)) => self.dev_move_card(target, m, &mut ev)?,
             Some(rv1::dev_command::Dev::AddMana(m)) => self.dev_add_mana(target, m, &mut ev)?,
         }
         Ok(finish_with_events(self, ev))
     }
 
-    /// Put a named card into a zone, moving a copy the player already owns when there is one and
-    /// otherwise conjuring one from outside the game.
+    /// Conjure a named card from outside the game into a zone.
     ///
-    /// The move-first rule keeps the common "tutor it out of my deck" case from silently leaving
-    /// a duplicate behind; only a genuine miss mints a new object.
+    /// Always mints a new object, even when the player already owns a copy: assembling a board
+    /// means asking for two Serra Angels and getting two. Relocating something that already
+    /// exists is [`Self::dev_move_card`]'s job — overloading one verb with both made it
+    /// impossible to express the first, and surprising when it silently did the second.
     fn dev_put_card_in_zone(
         &mut self,
         target: PlayerId,
         put: &rv1::DevPutCardInZone,
         ev: &mut Vec<RuledEvent>,
     ) -> Result<(), EngineError> {
-        let name = put.card_name.trim();
-        let card_id = self
-            .registry
-            .id_for_name(name)
-            .ok_or_else(|| EngineError::MissingCard(name.to_string()))?
-            .to_string();
+        let name = put.card_name.trim().to_string();
+        let card_id = self.resolve_card_id(&name)?;
         let zone = dev_zone_to_zone(put.zone());
+        let oid = self.conjure_card(target, &card_id, zone, ev)?;
+        self.finish_dev_placement(
+            Placement {
+                target,
+                oid,
+                zone,
+                ready: put.ready,
+                name: &name,
+                verb: "conjures",
+            },
+            ev,
+        );
+        Ok(())
+    }
 
-        let (oid, conjured) = match self.find_owned_object(target, &card_id) {
-            Some(existing) => {
-                move_object_to_zone(&mut self.state, existing, zone)?;
-                ev.push(permanent_moved_event(
-                    &self.state,
-                    existing,
-                    target,
-                    zone_to_destination(zone),
-                ));
-                (existing, false)
-            }
-            None => (self.conjure_card(target, &card_id, zone, ev)?, true),
-        };
+    /// Relocate a card the player already owns. Creates nothing, and unlike conjuring it can reach
+    /// the graveyard, exile and library.
+    fn dev_move_card(
+        &mut self,
+        target: PlayerId,
+        mv: &rv1::DevMoveCard,
+        ev: &mut Vec<RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let name = mv.card_name.trim().to_string();
+        let card_id = self.resolve_card_id(&name)?;
+        let zone = dev_zone_to_zone(mv.zone());
+        // Falling back to a conjure here would collapse the two verbs back into one.
+        let oid = self
+            .find_owned_object(target, &card_id)
+            .ok_or(EngineError::Illegal(
+                "no copy of that card in any of your zones — use put to conjure one",
+            ))?;
+        move_object_to_zone(&mut self.state, oid, zone)?;
+        ev.push(permanent_moved_event(
+            &self.state,
+            oid,
+            target,
+            zone_to_destination(zone),
+        ));
+        self.finish_dev_placement(
+            Placement {
+                target,
+                oid,
+                zone,
+                ready: mv.ready,
+                name: &name,
+                verb: "moves",
+            },
+            ev,
+        );
+        Ok(())
+    }
 
+    /// The tail both placement verbs share: apply `ready`, log, and announce a battlefield entry.
+    fn finish_dev_placement(&mut self, p: Placement<'_>, ev: &mut Vec<RuledEvent>) {
+        let Placement {
+            target,
+            oid,
+            zone,
+            ready,
+            name,
+            verb,
+        } = p;
         // CR 302.6 says a permanent that has not been controlled since its controller's turn began
-        // is summoning sick, and `move_object_to_zone` asserts exactly that on battlefield entry.
-        // Clearing it must therefore come *after* the move, or it is immediately overwritten.
+        // is summoning sick, and both placement paths assert exactly that on battlefield entry.
+        // Clearing it must therefore come *after* the placement, or it is immediately overwritten.
         // Deliberately not implemented as "grant haste": haste is a real keyword with layer-6
         // semantics a test may be trying to observe, so the cheat must not fake it.
-        let readied = put.ready && zone == Zone::Battlefield;
+        let readied = ready && zone == Zone::Battlefield;
         if readied {
             if let Some(o) = self.state.objects.get_mut(&oid) {
                 o.summoning_sick = false;
             }
         }
 
-        let verb = if conjured { "conjures" } else { "moves" };
         let suffix = if readied { ", ready" } else { "" };
         ev.push(ev_log(format!(
             "[dev] P{target} {verb} {name} into {}{suffix}.",
@@ -99,7 +157,14 @@ impl GameEngine {
         if zone == Zone::Battlefield {
             self.fire_triggers(GameEvent::EntersBattlefield { object_id: oid }, ev);
         }
-        Ok(())
+    }
+
+    /// Oracle name -> engine card id. The name is engine-owned identity, never a client slug.
+    fn resolve_card_id(&self, name: &str) -> Result<String, EngineError> {
+        self.registry
+            .id_for_name(name)
+            .map(|id| id.to_string())
+            .ok_or_else(|| EngineError::MissingCard(name.to_string()))
     }
 
     /// Mint a brand-new object for `card_id` from outside the game (CR 400.11-shaped, though it

@@ -115,6 +115,20 @@ void sendRuledCommand(const AbstractGame *game, const ruled::v1::RuledCommand &c
     static_cast<RuledClientHost *>(handler)->sendRuledCommand(command);
 }
 
+void sendRuledCommandExpectingAck(const AbstractGame *game,
+                                  const ruled::v1::RuledCommand &command,
+                                  std::function<void(bool accepted)> onFinished)
+{
+    if (!isRuledGame(game)) {
+        return;
+    }
+    GameEventHandler *handler = const_cast<AbstractGame *>(game)->getGameEventHandler();
+    if (!handler) {
+        return;
+    }
+    static_cast<RuledClientHost *>(handler)->sendRuledCommandExpectingAck(command, std::move(onFinished));
+}
+
 RuledClientState *stateForCard(const CardItem *card)
 {
     if (!card || !card->getOwner()) {

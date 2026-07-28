@@ -226,8 +226,13 @@ calling `GameEventHandler` directly — that class keeps its `RuledClientHost` o
 the view model is normally the only thing that sends, and routing through `RuledActions` keeps this
 transport with the others instead of widening an upstream class.
 
-Two grammar rules worth knowing before extending it:
+Three grammar rules worth knowing before extending it:
 
+- **`put` and `move` are separate verbs on purpose.** `put` always conjures a new card; `move`
+  relocates one the seat already owns and is the only way to reach graveyard, exile or library.
+  They were one verb that guessed (move if a copy exists, else conjure), which made "give me a
+  second Serra Angel" impossible to express and silently pulled the existing one off the
+  battlefield instead. If you add a third placement verb, keep the intent explicit.
 - **`ready` is stripped only as a trailing token, and only when something precedes it**, so a card
   actually named "ready" still parses. None is today; the grammar should not depend on the pool.
 - **A leading number is ambiguous for `mana`** — `mana 12` is twelve generic, `mana 2 UU` is the

@@ -7,7 +7,7 @@
 
 use crate::helpers::*;
 use tricerules_proto::ruled::v1::dev_command::Dev;
-use tricerules_proto::ruled::v1::{DevAddMana, DevCommand, DevPutCardInZone, DevZone};
+use tricerules_proto::ruled::v1::{DevAddMana, DevCommand, DevMoveCard, DevPutCardInZone, DevZone};
 
 fn dev(target: i32, payload: Dev) -> RuledCommand {
     RuledCommand {
@@ -29,6 +29,17 @@ fn put_ready(target: i32, zone: DevZone, card_name: &str, ready: bool) -> RuledC
             card_name: card_name.to_string(),
             zone: zone as i32,
             ready,
+        }),
+    )
+}
+
+fn mv(target: i32, zone: DevZone, card_name: &str) -> RuledCommand {
+    dev(
+        target,
+        Dev::MoveCard(DevMoveCard {
+            card_name: card_name.to_string(),
+            zone: zone as i32,
+            ready: false,
         }),
     )
 }
@@ -108,49 +119,87 @@ fn dev_command_rejected_during_opening() {
 // put: move vs conjure
 // ---------------------------------------------------------------------------------------------
 
-/// A card the player already owns is *moved*, not duplicated — the common "tutor it out of my
-/// deck" case must not silently leave a second copy behind.
+/// `put` always conjures, even when the seat already owns a copy. Assembling a board means
+/// asking for two Serra Angels and getting two; the earlier move-first behaviour made that
+/// impossible to express and silently yanked the existing one out of play instead.
 #[test]
-fn dev_put_moves_an_owned_card_rather_than_duplicating_it() {
+fn dev_put_always_conjures_so_repeating_it_builds_multiples() {
+    let mut e = basics_engine(902);
+    e.apply_command(0, &put(0, DevZone::Battlefield, "Serra Angel"))
+        .expect("first conjure");
+    e.apply_command(0, &put(0, DevZone::Battlefield, "Serra Angel"))
+        .expect("second conjure");
+
+    let on_battlefield = e.state.players[0]
+        .battlefield
+        .iter()
+        .filter(|oid| e.state.objects[oid].card_id == "serra_angel")
+        .count();
+    assert_eq!(on_battlefield, 2, "two distinct Serra Angels");
+
+    // And a copy in the library is left alone rather than being tutored out.
     let decks = Some(vec![
         deck_with("mountain", &["lightning_bolt"]),
         vec!["forest".into(); 12],
     ]);
-    let mut e = GameEngine::new(902, &[0, 1], 20, decks, true).expect("new");
+    let mut e2 = GameEngine::new(9021, &[0, 1], 20, decks, true).expect("new");
+    e2.enable_dev_commands();
+    advance_to_main1_from_game_start(&mut e2);
+    e2.apply_command(0, &put(0, DevZone::Hand, "Lightning Bolt"))
+        .expect("conjure a Bolt");
+    let total = e2
+        .state
+        .objects
+        .values()
+        .filter(|o| o.card_id == "lightning_bolt")
+        .count();
+    assert_eq!(total, 2, "the deck's copy plus the conjured one");
+}
+
+/// `move` is the counterpart: it relocates what already exists and creates nothing.
+#[test]
+fn dev_move_relocates_an_owned_card_without_duplicating_it() {
+    let decks = Some(vec![
+        deck_with("mountain", &["lightning_bolt"]),
+        vec!["forest".into(); 12],
+    ]);
+    let mut e = GameEngine::new(9022, &[0, 1], 20, decks, true).expect("new");
     e.enable_dev_commands();
     advance_to_main1_from_game_start(&mut e);
 
-    let total_before = e
-        .state
-        .objects
-        .values()
-        .filter(|o| o.card_id == "lightning_bolt")
-        .count();
-    assert_eq!(total_before, 1, "exactly one Bolt in the deck");
-
     let batch = e
-        .apply_command(0, &put(0, DevZone::Hand, "Lightning Bolt"))
+        .apply_command(0, &mv(0, DevZone::Hand, "Lightning Bolt"))
         .expect("move bolt to hand");
 
-    let total_after = e
+    let total = e
         .state
         .objects
         .values()
         .filter(|o| o.card_id == "lightning_bolt")
         .count();
-    assert_eq!(total_after, 1, "moved, not conjured a second copy");
-    assert_eq!(
-        hand_index_for_card(&e, 0, "lightning_bolt"),
-        e.state.players[0]
-            .hand
-            .iter()
-            .position(|oid| e.state.objects[oid].card_id == "lightning_bolt")
-            .unwrap()
-    );
+    assert_eq!(total, 1, "moved, not duplicated");
+    assert!(e.state.players[0]
+        .hand
+        .iter()
+        .any(|oid| e.state.objects[oid].card_id == "lightning_bolt"));
     // A move reports itself so the relay relocates the physical card.
     let moved = permanents_moved_in(&batch);
     assert_eq!(moved.len(), 1, "one PermanentMoved for the move path");
     assert_eq!(moved[0].card_id, "lightning_bolt");
+}
+
+/// Moving something the seat does not own is an error rather than a silent conjure — otherwise
+/// the two verbs would collapse back into one.
+#[test]
+fn dev_move_without_an_owned_copy_is_rejected() {
+    let mut e = basics_engine(9023);
+    let err = e
+        .apply_command(0, &mv(0, DevZone::Hand, "Serra Angel"))
+        .expect_err("nothing to move");
+    assert!(
+        err.to_string().contains("no copy of that card"),
+        "unexpected error: {err}"
+    );
 }
 
 /// The headline capability: a card in nobody's decklist can be put into hand and then cast.
@@ -238,9 +287,10 @@ fn dev_put_unknown_card_name_is_rejected() {
     );
 }
 
-/// A move into the graveyard is fine — it is only *conjuring* into it that is restricted.
+/// The graveyard is reachable by moving even though conjuring into it is restricted — which is
+/// the main reason `move` exists as its own verb rather than a flag on `put`.
 #[test]
-fn dev_put_moves_an_owned_card_into_the_graveyard() {
+fn dev_move_reaches_zones_conjuring_cannot() {
     let decks = Some(vec![
         deck_with("mountain", &["lightning_bolt"]),
         vec!["forest".into(); 12],
@@ -249,9 +299,25 @@ fn dev_put_moves_an_owned_card_into_the_graveyard() {
     e.enable_dev_commands();
     advance_to_main1_from_game_start(&mut e);
 
-    e.apply_command(0, &put(0, DevZone::Graveyard, "Lightning Bolt"))
+    e.apply_command(0, &mv(0, DevZone::Graveyard, "Lightning Bolt"))
         .expect("move to graveyard");
     assert_eq!(count_card_id_in_graveyard(&e, 0, "lightning_bolt"), 1);
+
+    e.apply_command(0, &mv(0, DevZone::Exile, "Lightning Bolt"))
+        .expect("move on to exile");
+    assert_eq!(count_card_id_in_graveyard(&e, 0, "lightning_bolt"), 0);
+    assert_eq!(e.state.players[0].exile.len(), 1);
+}
+
+/// The documented two-step for a zone conjuring cannot reach: conjure to hand, then move it on.
+#[test]
+fn dev_conjure_then_move_reaches_the_graveyard() {
+    let mut e = basics_engine(9071);
+    e.apply_command(0, &put(0, DevZone::Hand, "Serra Angel"))
+        .expect("conjure into hand");
+    e.apply_command(0, &mv(0, DevZone::Graveyard, "Serra Angel"))
+        .expect("then move it to the graveyard");
+    assert_eq!(count_card_id_in_graveyard(&e, 0, "serra_angel"), 1);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -374,7 +440,7 @@ fn dev_put_onto_battlefield_registers_static_abilities() {
     );
 
     // And the reverse direction: leaving the battlefield drains it (CR 604.3/611.3).
-    e.apply_command(0, &put(0, DevZone::Hand, "Glorious Anthem"))
+    e.apply_command(0, &mv(0, DevZone::Hand, "Glorious Anthem"))
         .expect("move the anthem off the battlefield");
     assert_eq!(power_of(&e, bears), 2, "the anthem stops applying on leave");
 }
@@ -410,7 +476,7 @@ fn dev_conjured_permanent_is_not_a_token() {
         .expect("conjure");
     let oid = battlefield_object_for_card(&e, 0, "grizzly_bears");
 
-    e.apply_command(0, &put(0, DevZone::Graveyard, "Grizzly Bears"))
+    e.apply_command(0, &mv(0, DevZone::Graveyard, "Grizzly Bears"))
         .expect("move it to the graveyard");
 
     assert_eq!(count_card_id_in_graveyard(&e, 0, "grizzly_bears"), 1);
