@@ -25,6 +25,7 @@
 #include "client/sound_engine.h"
 #include "database/interface/settings_card_preference_provider.h"
 #include "game/ruled/ruled_autopilot.h"
+#include "game/ruled/ruled_dev_console.h"
 #include "interface/logger.h"
 #include "interface/pixel_map_generator.h"
 #include "interface/theme_manager.h"
@@ -231,7 +232,8 @@ int main(int argc, char *argv[])
         {{{"c", "connect"}, QCoreApplication::translate("main", "Connect on startup"), "user:pass@host:port"},
          {{"d", "debug-output"}, QCoreApplication::translate("main", "Debug to file")},
          {"autopilot", QCoreApplication::translate("main", "Dev loop: drive this client to ready"), "host|join"},
-         {"autopilot-deck", QCoreApplication::translate("main", "Deck the autopilot loads"), "file"}});
+         {"autopilot-deck", QCoreApplication::translate("main", "Deck the autopilot loads"), "file"},
+         {"dev-console", QCoreApplication::translate("main", "Dev loop: show the ruled dev console")}});
 
     parser.process(app);
 
@@ -261,6 +263,7 @@ int main(int argc, char *argv[])
         ui.setConnectTo(parser.value("connect"));
     }
     RuledAutopilot::installFromCommandLine(&ui, parser.value("autopilot"), parser.value("autopilot-deck"));
+    RuledDevConsoleWidget::setEnabledFromCommandLine(parser.isSet("dev-console"));
     qCInfo(MainLog) << "MainWindow constructor finished";
 
     ui.setWindowIcon(QPixmap("theme:cockatrice"));

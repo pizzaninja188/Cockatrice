@@ -17,6 +17,8 @@ mod combat_keywords;
 mod counters_and_pump;
 #[path = "scenario/custom_resolution.rs"]
 mod custom_resolution;
+#[path = "scenario/dev_commands.rs"]
+mod dev_commands;
 #[path = "scenario/equipment.rs"]
 mod equipment;
 #[path = "scenario/helpers.rs"]

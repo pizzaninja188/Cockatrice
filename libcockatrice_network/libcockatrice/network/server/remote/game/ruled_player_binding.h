@@ -74,6 +74,26 @@ struct RuledPlayerBinding
                           quint32 engineOid,
                           const ruled::v1::TokenIdentity &identity,
                           GameEventStorage &ges);
+    // Mint a physical Server_Card for a dev-conjured card (see DevCardConjured) into the hand or
+    // the table, binding it to `engineOid` the same way createRuledToken does — the zone-view sync
+    // later in this batch must find a physical card for the engine's new slot, or it abandons the
+    // whole reconcile with only a warning. Returns true if a card was created.
+    //
+    // Unlike a token this is a real card: no "Token" annotation and no destroy-on-zone-change, so
+    // it survives leaving the battlefield exactly as its engine object does (CR 111.7 applies to
+    // tokens only). Display data (art, P/T, types) comes from the client's Oracle database by
+    // name, so unlike TokenIdentity nothing has to be described inline.
+    //
+    // Only a table conjure enqueues a creation event. A hand conjure deliberately enqueues
+    // nothing: Event_CreateToken's plain path broadcasts to every player, which would reveal the
+    // conjured card to the opponent. The caller forces the ordinary full-state resync instead,
+    // which redacts private zones per recipient.
+    bool createRuledDevCard(Server_Player *player,
+                            quint32 engineOid,
+                            const QString &cardName,
+                            bool isCreature,
+                            bool toBattlefield,
+                            GameEventStorage &ges);
 };
 
 #endif

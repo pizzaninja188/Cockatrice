@@ -118,7 +118,8 @@ bool RulesRelay::readFrame(QByteArray &out)
 }
 
 bool RulesRelay::sessionStart(quint64 gameId, quint64 seed, const QList<int> &playerIds,
-                              const QList<QPair<int, QStringList>> *playerDecks, ruled::v1::IpcResponse &out)
+                              const QList<QPair<int, QStringList>> *playerDecks, bool devCommandsEnabled,
+                              ruled::v1::IpcResponse &out)
 {
     if (!connectIfNeeded()) {
         return false;
@@ -128,6 +129,7 @@ bool RulesRelay::sessionStart(quint64 gameId, quint64 seed, const QList<int> &pl
     ss->set_game_id(gameId);
     ss->set_seed(seed);
     ss->set_servatrice_build(VERSION_STRING); // version handshake (logged by the sidecar)
+    ss->set_dev_commands_enabled(devCommandsEnabled);
     for (int pid : playerIds) {
         ss->add_player_ids(pid);
     }

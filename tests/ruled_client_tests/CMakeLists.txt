@@ -1,9 +1,13 @@
 # Headless client-core tests: the ruled view model compiled on its own, with no Qt widgets and
 # no game objects. Only ruled_client_state.cpp / ruled_event_dispatcher.cpp are pulled in —
 # `RuledActions` (which does depend on CardItem/Player) deliberately stays out.
+#
+# ruled_dev_command_parser.cpp qualifies for the same reason: it is pure text -> protobuf, with no
+# widget or game-object dependency, so the dev-console grammar is covered without a running game.
 add_executable(
   ruled_client_test ruled_client_test.cpp
   ${CMAKE_SOURCE_DIR}/cockatrice/src/game/ruled/ruled_client_state.cpp
+  ${CMAKE_SOURCE_DIR}/cockatrice/src/game/ruled/ruled_dev_command_parser.cpp
   ${CMAKE_SOURCE_DIR}/cockatrice/src/game/ruled/ruled_event_dispatcher.cpp
 )
 

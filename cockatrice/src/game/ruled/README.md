@@ -160,9 +160,13 @@ The `connect` lines live in `tab_game.cpp` and are the accepted residual fork de
 `ruled::v1` batches through the dispatcher, and asserts on the state — no rendering, no
 `AbstractGame`. Add a case there for every dispatcher method you add.
 
-Widget behaviour is covered offscreen by `tests/game_prompt/` (`game_prompt_widget_test`); use
-`isHidden()`, not `isVisible()`, since the widget is never shown. Qt module additions for tests go
-in `cmake/FindQtRuntime.cmake` (`_TEST_NEEDED`), not per-test `CMakeLists`.
+`ruled_dev_command_parser.cpp` links into the same target for the same reason — it is pure text →
+protobuf with no widget or game-object dependency.
+
+Widget behaviour is covered offscreen by `tests/game_prompt/` (`game_prompt_widget_test`) and
+`tests/dev_console/` (`ruled_dev_console_test`); use `isHidden()`, not `isVisible()`, since the
+widget is never shown. Qt module additions for tests go in `cmake/FindQtRuntime.cmake`
+(`_TEST_NEEDED`), not per-test `CMakeLists`.
 
 ---
 
@@ -193,3 +197,47 @@ Two things worth knowing before changing it:
 Upstream cost: one option pair in `main.cpp` plus one `installFromCommandLine` call, and a
 `friend class RuledAutopilot` on `TabSupervisor` (find the game tab) and `TabGame` (find this
 seat's deck view).
+
+---
+
+## Dev-loop console
+
+`ruled_dev_command_parser.{h,cpp}` + `ruled_dev_console.{h,cpp}`. The other half of the dev loop:
+the autopilot gets you into a game, the console gets you to the board state you wanted to test —
+without editing a deck file, playing lands, or passing turns.
+
+Off unless `--dev-console` is passed, and only built for a ruled non-replay game. **That gate is
+cosmetic.** The enforcing one is engine-side (`tricerules-core/src/engine/dev.rs`), because a
+client is never trusted; see the roadmap's dev-loop backlog entry for both halves.
+
+Split in two on purpose:
+
+- **`RuledDevCommandParser`** is pure `QString` → `ruled::v1::RuledCommand`, with no widget and no
+  game-object dependency, so it links into the headless `ruled_client_test` target. This is where
+  the text stops being text — everything past it is a typed oneof, which is what keeps the wire
+  contract self-documenting and the replay log readable (the fork's no-scripting-DSL rule).
+- **`RuledDevConsoleWidget`** follows `GamePromptWidget`'s discipline: it emits
+  `commandSubmitted(QString)` and sends nothing. It lives in the existing Messages dock under the
+  prompt panel, not in a dock of its own. Command history is the one thing it owns that the chat
+  entry could not have given us.
+
+`TabGame::actDevConsoleCommand` parses and sends, via `RuledActions::sendRuledCommand` rather than
+calling `GameEventHandler` directly — that class keeps its `RuledClientHost` overrides private so
+the view model is normally the only thing that sends, and routing through `RuledActions` keeps this
+transport with the others instead of widening an upstream class.
+
+Three grammar rules worth knowing before extending it:
+
+- **`put` and `move` are separate verbs on purpose.** `put` always conjures a new card; `move`
+  relocates one the seat already owns and is the only way to reach graveyard, exile or library.
+  They were one verb that guessed (move if a copy exists, else conjure), which made "give me a
+  second Serra Angel" impossible to express and silently pulled the existing one off the
+  battlefield instead. If you add a third placement verb, keep the intent explicit.
+- **`ready` is stripped only as a trailing token, and only when something precedes it**, so a card
+  actually named "ready" still parses. None is today; the grammar should not depend on the pool.
+- **A leading number is ambiguous for `mana`** — `mana 12` is twelve generic, `mana 2 UU` is the
+  second seat. It is read as a seat only when it is a valid ordinal *with* symbols after it, so
+  `mana 3 RR` falls back to mana rather than erroring on a seat that cannot exist. `put` has no
+  such ambiguity (no zone word is numeric). Seats are 1-based ordinals, never raw player ids.
+
+Adding a primitive is a proto arm, a `parse` case, and an engine handler — no new UI.

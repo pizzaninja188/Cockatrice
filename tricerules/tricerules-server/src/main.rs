@@ -14,6 +14,21 @@ use tricerules_proto::ruled::v1::{IpcEnvelope, IpcResponse, PlayerDeck};
 /// This sidecar's build id, reported to Servatrice in the SessionStart handshake.
 const ENGINE_BUILD: &str = env!("CARGO_PKG_VERSION");
 
+/// Whether this sidecar process was started with cheat commands permitted.
+/// Split from the env read so the gate is testable without mutating process environment.
+fn dev_commands_allowed(env_value: Option<&str>) -> bool {
+    matches!(env_value, Some("1") | Some("true"))
+}
+
+/// The dev gate, both halves (see `SessionStart.dev_commands_enabled` and `DevCommand`).
+///
+/// Servatrice must ask for dev commands *and* this sidecar process must have been started with
+/// `TRICERULES_DEV_COMMANDS` set. Requiring both means a production sidecar cannot be talked into
+/// dev mode from upstream: enabling cheats takes access to the machine running the engine.
+fn dev_commands_enabled_for_session(requested: bool, env_value: Option<&str>) -> bool {
+    requested && dev_commands_allowed(env_value)
+}
+
 /// Failure response shared by ValidateDeck and SessionStart name resolution:
 /// `missing` must be the sorted, deduplicated unimplemented Oracle names.
 fn missing_cards_response(missing: Vec<String>) -> IpcResponse {
@@ -94,7 +109,18 @@ async fn handle_connection(
                 match resolve_deck_names(&pids, &s.player_decks) {
                     Err(missing) => missing_cards_response(missing),
                     Ok(decks) => match GameEngine::new(s.seed, &pids, 20, decks, false) {
-                        Ok(e) => {
+                        Ok(mut e) => {
+                            let dev_env = env::var("TRICERULES_DEV_COMMANDS").ok();
+                            if dev_commands_enabled_for_session(
+                                s.dev_commands_enabled,
+                                dev_env.as_deref(),
+                            ) {
+                                eprintln!(
+                                    "tricerules: DEV COMMANDS ENABLED for game {} — cheat commands are accepted",
+                                    s.game_id
+                                );
+                                e.enable_dev_commands();
+                            }
                             let batch = e.initial_response_batch();
                             engine = Some(e);
                             // Version handshake: stamp the sidecar build + card-data hash so
@@ -290,6 +316,35 @@ mod tests {
         let resp = validate_deck_response(&[]);
         assert!(resp.ok);
         assert!(resp.missing_card_names.is_empty());
+    }
+
+    /// Both halves of the dev gate are required. The asymmetry is the point: Servatrice asking
+    /// is not enough on its own, so a production sidecar (which has no env var set) cannot be
+    /// talked into accepting cheat commands by anything upstream of it.
+    #[test]
+    fn dev_gate_needs_both_the_session_request_and_the_sidecar_env() {
+        assert!(dev_commands_enabled_for_session(true, Some("1")));
+        assert!(dev_commands_enabled_for_session(true, Some("true")));
+
+        assert!(
+            !dev_commands_enabled_for_session(true, None),
+            "a session may ask, but an unflagged sidecar refuses"
+        );
+        assert!(
+            !dev_commands_enabled_for_session(false, Some("1")),
+            "a dev sidecar still only enables sessions that asked"
+        );
+        assert!(!dev_commands_enabled_for_session(false, None));
+    }
+
+    #[test]
+    fn dev_env_values_other_than_1_or_true_do_not_open_the_gate() {
+        for value in ["", "0", "false", "yes", "TRUE", "on"] {
+            assert!(
+                !dev_commands_allowed(Some(value)),
+                "{value:?} must not enable dev commands"
+            );
+        }
     }
 
     #[test]

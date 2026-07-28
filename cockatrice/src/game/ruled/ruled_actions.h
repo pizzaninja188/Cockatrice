@@ -19,6 +19,7 @@
 #include <QList>
 #include <QString>
 #include <QtGlobal>
+#include <functional>
 
 class AbstractGame;
 class ArrowTarget;
@@ -29,6 +30,7 @@ class RuledClientState;
 namespace ruled::v1
 {
 enum HandActionKind : int;
+class RuledCommand;
 }
 using RuledHandActionKind = ruled::v1::HandActionKind;
 
@@ -45,6 +47,22 @@ namespace RuledActions
 /// The ruled view model for this game, or nullptr when the game is freeform / unavailable.
 [[nodiscard]] RuledClientState *stateFor(const AbstractGame *game);
 [[nodiscard]] RuledClientState *stateForCard(const CardItem *card);
+
+/// Send a ready-built ruled command that does not originate in the view model — today only the
+/// dev console, whose input is text rather than a click or an engine event.
+///
+/// Every other ruled send goes through a `RuledClientState` slot, and `GameEventHandler` keeps its
+/// `RuledClientHost` overrides private so that stays true. Routing the console through here keeps
+/// its transport among the other ruled sends instead of putting one in an upstream file.
+/// No-op outside a ruled game.
+void sendRuledCommand(const AbstractGame *game, const ruled::v1::RuledCommand &command);
+
+/// As `sendRuledCommand`, but reports whether the server accepted it. The dev console uses this:
+/// the engine legitimately refuses commands (moving a card you do not own, conjuring into a zone
+/// that has no minting path), and without an ack those look like nothing happened at all.
+void sendRuledCommandExpectingAck(const AbstractGame *game,
+                                  const ruled::v1::RuledCommand &command,
+                                  std::function<void(bool accepted)> onFinished);
 
 // ---------------------------------------------------------------------------------------
 // CardItem lookup by engine identity.

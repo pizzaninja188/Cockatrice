@@ -59,6 +59,7 @@ class LineEditCompleter;
 class QDockWidget;
 class QStackedWidget;
 class GamePromptWidget;
+class RuledDevConsoleWidget;
 
 class TabGame : public Tab
 {
@@ -89,6 +90,9 @@ private:
     QWidget *gamePlayAreaWidget, *deckViewContainerWidget;
     QDockWidget *cardInfoDock, *messageLayoutDock, *playerListDock, *replayDock;
     GamePromptWidget *gamePromptWidget;
+    /// Fork: dev-loop command entry. Null unless --dev-console was passed on a ruled, non-replay
+    /// game — guard every use, the way replayDock is guarded.
+    RuledDevConsoleWidget *devConsoleWidget;
     QList<QPointer<ArrowItem>> ruledCombatArrows;
     /// The graveyard view a pending trigger opened for us, so it can be closed again without
     /// touching one the player opened themselves. Null when we have none open.
@@ -190,6 +194,9 @@ private slots:
     void actRotateViewCCW();
     void actToggleStackWindow();
     void actSay();
+    /// Fork: parse one dev-console line and send it. The only new upstream slot the console needs;
+    /// everything it does beyond the send lives in RuledDevCommandParser.
+    void actDevConsoleCommand(const QString &line);
     void actPhaseAction();
     void actNextPhase();
     void actNextPhaseAction();

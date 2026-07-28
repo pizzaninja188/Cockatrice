@@ -557,6 +557,103 @@ TEST_F(RuledBatchTest, ApplyRuledBatchCreatesTokenOnControllerTable)
     EXPECT_EQ(p2->getZones().value(ZoneNames::TABLE)->getCards().size(), 0);
 }
 
+TEST_F(RuledBatchTest, ApplyRuledBatchIndexesAMidGameCardCatalog)
+{
+    // The catalog used to be indexed only from the startup batch, which meant a card that was in
+    // no decklist could never be resolved by name — and the zone reconcile, which translates every
+    // physical card's name through this index, would silently abandon its sync. Dev conjuring
+    // re-emits the catalog mid-game, so applyRuledBatch has to pick it up too.
+    EXPECT_TRUE(game->ruled()->ruledCardIdForName(QStringLiteral("Serra Angel")).isEmpty());
+
+    ruled::v1::IpcResponse resp;
+    resp.set_ok(true);
+    auto *entry = resp.mutable_batch()->add_events()->mutable_card_catalog()->add_entries();
+    entry->set_card_id("serra_angel");
+    entry->set_name("Serra Angel");
+
+    callBatchApply(resp);
+
+    EXPECT_EQ(game->ruled()->ruledCardIdForName(QStringLiteral("Serra Angel")),
+              QStringLiteral("serra_angel"));
+    EXPECT_EQ(game->ruled()->ruledCardNameForId(QStringLiteral("serra_angel")),
+              QStringLiteral("Serra Angel"));
+}
+
+TEST_F(RuledBatchTest, ApplyRuledBatchLeavesTheCatalogAloneWhenTheBatchHasNone)
+{
+    // The common case: almost every batch carries no CardCatalog. Indexing must not treat that as
+    // "the catalog is now empty", or the first ordinary command after startup would wipe the index
+    // and break every name lookup for the rest of the game.
+    seedCardCatalog({QStringLiteral("Lightning Bolt")});
+    ASSERT_EQ(game->ruled()->ruledCardIdForName(QStringLiteral("Lightning Bolt")),
+              QStringLiteral("lightning_bolt"));
+
+    ruled::v1::IpcResponse resp;
+    resp.set_ok(true);
+    resp.mutable_batch()->add_events()->mutable_life_changed()->set_player_id(1);
+
+    callBatchApply(resp);
+
+    EXPECT_EQ(game->ruled()->ruledCardIdForName(QStringLiteral("Lightning Bolt")),
+              QStringLiteral("lightning_bolt"));
+}
+
+TEST_F(RuledBatchTest, ApplyRuledBatchMintsConjuredCardOnTableAsARealCardNotAToken)
+{
+    // A dev-conjured card has no deck card behind it, so the relay must mint one -- but unlike a
+    // token it is a real card: the CR 111.7 "ceases to exist" treatment must NOT be applied, or it
+    // would vanish client-side the moment the engine moved it off the battlefield.
+    Server_CardZone *p1Table = p1->getZones().value(ZoneNames::TABLE);
+    ASSERT_NE(p1Table, nullptr);
+    EXPECT_EQ(p1Table->getCards().size(), 0);
+
+    ruled::v1::IpcResponse resp;
+    resp.set_ok(true);
+    auto *dc = resp.mutable_batch()->add_events()->mutable_dev_card_conjured();
+    dc->set_object_id(701u);
+    dc->set_owner_player_id(1);
+    dc->set_card_name("Serra Angel");
+    dc->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+    dc->set_is_creature(true);
+
+    callBatchApply(resp);
+
+    ASSERT_EQ(p1Table->getCards().size(), 1);
+    Server_Card *conjured = p1Table->getCards().first();
+    EXPECT_EQ(conjured->getName(), QStringLiteral("Serra Angel"));
+    EXPECT_FALSE(conjured->getDestroyOnZoneChange()) << "a conjured card is not a token";
+    EXPECT_NE(conjured->getAnnotation(), QStringLiteral("Token"));
+    // Bound to the engine ObjectId, or the zone-view sync in this same batch finds no physical
+    // card for the engine's new slot and abandons the whole reconcile.
+    EXPECT_EQ(findCardByEngineOid(p1, 701u), conjured);
+    EXPECT_EQ(p2->getZones().value(ZoneNames::TABLE)->getCards().size(), 0);
+}
+
+TEST_F(RuledBatchTest, ApplyRuledBatchMintsConjuredCardIntoHandAndFlagsAResync)
+{
+    // Conjuring into a hand deliberately broadcasts no creation event -- Event_CreateToken's plain
+    // path goes to every player, which would reveal the card to the opponent. Instead the hand is
+    // flagged as changed so the caller issues the ordinary full-state resync, which redacts
+    // private zones per recipient.
+    Server_CardZone *p1Hand = p1->getZones().value(ZoneNames::HAND);
+    ASSERT_NE(p1Hand, nullptr);
+    const int handBefore = p1Hand->getCards().size();
+
+    ruled::v1::IpcResponse resp;
+    resp.set_ok(true);
+    auto *dc = resp.mutable_batch()->add_events()->mutable_dev_card_conjured();
+    dc->set_object_id(702u);
+    dc->set_owner_player_id(1);
+    dc->set_card_name("Lightning Bolt");
+    dc->set_zone(ruled::v1::DEV_ZONE_HAND);
+
+    BatchOutcome r = callBatchApply(resp);
+
+    ASSERT_EQ(p1Hand->getCards().size(), handBefore + 1);
+    EXPECT_EQ(p1Hand->getCards().last()->getName(), QStringLiteral("Lightning Bolt"));
+    EXPECT_TRUE(r.handOrLibraryChanged) << "a hand conjure must trigger the redacted full resync";
+}
+
 TEST_F(RuledBatchTest, ApplyRuledBatchUpdatesLifeCounter)
 {
     Server_Counter *p2Life = p2->getCounters().value(0, nullptr);

@@ -258,7 +258,7 @@ Automated tests stop at the view model; the real Qt UI is checked by playing a g
 brings up sidecar + servatrice + two clients already readied into a ruled game:
 
 ```powershell
-./scripts/launch-ruled-game.ps1            # -DeckA/-DeckB, -Seed, -Freeform, -NoServers
+./scripts/launch-ruled-game.ps1            # -DeckA/-DeckB, -Seed, -Dev, -Freeform, -NoServers
 ./scripts/launch-ruled-game.ps1 -Stop      # tear down (run before rebuilding — a live
                                            # servatrice/tricerules-server holds its .exe)
 ```
@@ -266,3 +266,25 @@ brings up sidecar + servatrice + two clients already readied into a ruled game:
 Both seats drive themselves to ready via the `--autopilot` flag
 ([`ruled_autopilot`](cockatrice/src/game/ruled/README.md#dev-loop-autopilot)) and stop at game
 start. Default decks live in `scripts/decks/` and use only implemented cards.
+
+**`-Dev` adds the dev console** ([`ruled_dev_console`](cockatrice/src/game/ruled/README.md#dev-loop-console)),
+a command entry in the Messages dock, so a board state needs no deck editing and no turns passed:
+
+```
+put hand Serra Angel          # conjure any implemented card, even one no deck contains
+mana 4WW                      # then cast it, with no lands in play
+put bf Grizzly Bears ready    # a permanent that can attack this turn (cheats CR 302.6)
+put 2 bf Hill Giant           # give the other seat a blocker
+move gy Serra Angel           # relocate something that already exists
+help                          # the full grammar
+```
+
+`put` **always conjures**, so repeating it builds multiples; `move` relocates an existing object
+and is the only way to reach graveyard, exile or library (conjuring is hand/battlefield only).
+
+Cheat commands are **engine-gated**, not client-hidden: the engine accepts them only when
+`SessionStart.dev_commands_enabled` (from `COCKATRICE_RULED_DEV`) *and* the sidecar's own
+`TRICERULES_DEV_COMMANDS` are both set — `-Dev` sets both, but only for servers it starts, so run
+`-Stop` first if any are already up. They are ordinary logged commands, so a dev-built board still
+replays. `put bf` fires ETB triggers and registers static abilities but no cast triggers, matching
+a real put-onto-the-battlefield effect; `put gy` deliberately fires no dies triggers.

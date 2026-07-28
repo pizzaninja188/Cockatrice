@@ -18,7 +18,7 @@ use tricerules_cards::primitives::{
     CounterKind, EffectDuration, Keyword, SearchDestination, SpellEffectKind, SpellTypeFilter,
     StaticAbilityDef, TargetFilter, TargetKind, TokenController, TriggerCondition,
 };
-use tricerules_cards::CardRegistry;
+use tricerules_cards::{CardRegistry, FaceRef};
 use tricerules_proto::ruled::v1 as rv1;
 use tricerules_proto::ruled::v1::{
     IpcResponse, LegalActions, RuledCommand, RuledEvent, RuledEventBatch,
@@ -32,6 +32,7 @@ mod characteristics;
 mod combat;
 mod continuous;
 mod custom_resolution;
+mod dev;
 mod events;
 mod legal_actions;
 mod opening;
@@ -95,6 +96,44 @@ pub struct GameEngine {
     pub state: GameState,
     /// Shared process-wide registry (`CardRegistry::global()`); read-only.
     registry: &'static CardRegistry,
+    /// Debug-only: whether this session accepts `DevCommand` (see `engine::dev`). Off unless the
+    /// sidecar explicitly enabled it; never settable by a command.
+    dev_commands_enabled: bool,
+}
+
+/// Build a fresh [`GameObject`] for `card_id` owned by `owner`, seeded from `face`.
+///
+/// Callers pass the front face (CR 712.4a: a card outside the battlefield shows its front face,
+/// whose printed P/T and combat requirements seed the object). Shared by initial library
+/// construction and dev conjuring, so a new per-object characteristic is wired up in one place.
+///
+/// Tokens deliberately do not use this: `create_tokens` forces the combat-requirement flags to
+/// false rather than reading them from the token definition.
+fn new_object_from_card(
+    oid: ObjectId,
+    owner: PlayerId,
+    card_id: &str,
+    zone: Zone,
+    face: FaceRef<'_>,
+) -> GameObject {
+    GameObject {
+        id: oid,
+        owner,
+        card_id: card_id.to_string(),
+        zone,
+        tapped: false,
+        summoning_sick: face.is_creature,
+        power: face.power,
+        toughness: face.toughness,
+        damage: 0,
+        deathtouch_damage: false,
+        counters: BTreeMap::new(),
+        attached_to: None,
+        regeneration_shields: 0,
+        must_attack_if_able: face.must_attack_if_able,
+        must_block_if_able: face.must_block_if_able,
+        face_up_index: 0,
+    }
 }
 
 impl GameEngine {
@@ -138,29 +177,11 @@ impl GameEngine {
                     .ok_or_else(|| EngineError::MissingCard(card_id.clone()))?;
                 // A library card shows its front face (CR 712.4a), which is also the face whose
                 // printed P/T and combat requirements seed the object.
-                let front = def.primary_face();
                 let oid = next_object_id;
                 next_object_id += 1;
                 objects.insert(
                     oid,
-                    GameObject {
-                        id: oid,
-                        owner: pid,
-                        card_id: card_id.clone(),
-                        zone: Zone::Library,
-                        tapped: false,
-                        summoning_sick: front.is_creature,
-                        power: front.power,
-                        toughness: front.toughness,
-                        damage: 0,
-                        deathtouch_damage: false,
-                        counters: BTreeMap::new(),
-                        attached_to: None,
-                        regeneration_shields: 0,
-                        must_attack_if_able: front.must_attack_if_able,
-                        must_block_if_able: front.must_block_if_able,
-                        face_up_index: 0,
-                    },
+                    new_object_from_card(oid, pid, &card_id, Zone::Library, def.primary_face()),
                 );
                 p.library.push_back(oid);
             }
@@ -230,7 +251,11 @@ impl GameEngine {
             prevent_all_combat_damage_this_turn: false,
             undoable_mana_abilities: Vec::new(),
         };
-        let mut eng = GameEngine { state, registry };
+        let mut eng = GameEngine {
+            state,
+            registry,
+            dev_commands_enabled: false,
+        };
         let mut e = vec![];
         let _ = eng.apply_sbas(&mut e);
         Ok(eng)
@@ -242,6 +267,16 @@ impl GameEngine {
         starting_life: i32,
     ) -> Result<Self, EngineError> {
         Self::new(seed, player_ids, starting_life, None, true)
+    }
+
+    /// Debug-only: allow `DevCommand` in this session (see `engine::dev`).
+    ///
+    /// Deliberately an opt-in setter rather than a `new` parameter: `new` has dozens of call
+    /// sites across the scenario suite, and this way only the tests that actually exercise dev
+    /// commands mention them. Callable only by the sidecar at session start — never by a command,
+    /// so the gate cannot be flipped from the wire.
+    pub fn enable_dev_commands(&mut self) {
+        self.dev_commands_enabled = true;
     }
 
     /// CR 712.8 / 710: flip the active face of a Transform or Flip layout permanent.
@@ -316,6 +351,14 @@ impl GameEngine {
         ) {
             return Err(EngineError::Illegal("preview is not a game command"));
         }
+        // The dev-command gate (see `engine::dev`). Rejecting here rather than inside
+        // `dispatch_command` is deliberate: the command never reaches state, `command_index` below
+        // is left untouched, and Servatrice — which appends to the replay log only on an ok
+        // response — never records it. A refused dev command is therefore invisible to replay by
+        // construction, so a replay of a production session can never resurrect one.
+        if !self.dev_commands_enabled && matches!(cmd.cmd.as_ref(), Some(Cmd::DevCommand(_))) {
+            return Err(EngineError::Illegal("dev commands are not enabled"));
+        }
         let result = self.dispatch_command(player, cmd);
         // Replay determinism: `command_index` seeds shuffles (mulligan/search) and stamps
         // continuous-effect timestamps (CR 613.7). Only a command that is actually applied may
@@ -340,6 +383,19 @@ impl GameEngine {
         // a player can bail out of the choose-first / mulligan sequence.
         if matches!(cmd.cmd.as_ref(), Some(Cmd::Concede(_))) {
             return self.concede_batch(player);
+        }
+        // Refuse dev commands explicitly rather than letting them fall into the two guards below.
+        // During the opening procedure a zone move would desync the mulligan bookkeeping, and a
+        // parked tier-3 resolution holds candidate object ids that a zone move could invalidate.
+        // Explicit beats implicit here: `apply_opening_command`'s rejection message would be
+        // misleading, and the parked-resolution guard is an allowlist that would silently widen
+        // if a future command joined it.
+        if matches!(cmd.cmd.as_ref(), Some(Cmd::DevCommand(_)))
+            && (self.state.opening.is_some() || self.state.pending_resolution.is_some())
+        {
+            return Err(EngineError::Illegal(
+                "dev command not allowed during opening or a parked resolution",
+            ));
         }
         if self.state.opening.is_some() {
             return self.apply_opening_command(player, cmd);
@@ -447,6 +503,8 @@ impl GameEngine {
                 self.play_land(player, pl.hand_card_index as usize, pl.face_index as usize)
             }
             Some(Cmd::TransformPermanent(tp)) => self.transform_permanent(player, tp.permanent_id),
+            // Gated in `apply_command`; unreachable here unless the session enabled dev commands.
+            Some(Cmd::DevCommand(dc)) => self.apply_dev_command(dc),
             Some(Cmd::DiscardToHandSize(d)) => self.discard_to_hand_size(player, d),
             Some(Cmd::AssignCombatDamage(acd)) => {
                 if self.state.active_player_id() != player {
