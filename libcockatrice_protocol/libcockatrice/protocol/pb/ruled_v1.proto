@@ -139,11 +139,17 @@ message DevPutCardInZone {
 }
 
 // Relocate a card the target player already owns, searching library, graveyard, exile, hand then
-// battlefield and taking the first copy found. Creates nothing — it is the counterpart to
-// DevPutCardInZone, and the only way to reach graveyard, exile or library, which conjuring cannot.
+// battlefield and taking the first copy found *that is not already in the destination*. Creates
+// nothing — it is the counterpart to DevPutCardInZone, and the only way to reach graveyard, exile
+// or library, which conjuring cannot.
+//
+// Skipping the destination is what lets a repeated move walk through multiple copies: otherwise
+// the second `move gy X` finds the copy the first one put there, re-moves it to the zone it is
+// already in, and reports success while changing nothing.
 //
 // Rejected when the player owns no copy: silently conjuring one instead would make "move" and
-// "put" indistinguishable again.
+// "put" indistinguishable again. Rejected distinctly when every copy is already in the
+// destination, so "nothing left to move" does not read as "you do not own one".
 message DevMoveCard {
   string card_name = 1;
   DevZone zone = 2;

@@ -188,6 +188,51 @@ fn dev_move_relocates_an_owned_card_without_duplicating_it() {
     assert_eq!(moved[0].card_id, "lightning_bolt");
 }
 
+/// Repeating a move has to keep finding the *next* copy. The search runs library, graveyard,
+/// exile, hand, battlefield, so once one copy is in the graveyard a second `move gy` used to find
+/// that one, move it to the graveyard it was already in, and log success while changing nothing —
+/// leaving the copy on the battlefield untouched.
+#[test]
+fn dev_move_skips_copies_already_in_the_destination() {
+    let mut e = basics_engine(9024);
+    e.apply_command(0, &put(0, DevZone::Battlefield, "Serra Angel"))
+        .expect("first conjure");
+    e.apply_command(0, &put(0, DevZone::Battlefield, "Serra Angel"))
+        .expect("second conjure");
+
+    let on_battlefield = |e: &GameEngine| {
+        e.state.players[0]
+            .battlefield
+            .iter()
+            .filter(|oid| e.state.objects[oid].card_id == "serra_angel")
+            .count()
+    };
+    assert_eq!(on_battlefield(&e), 2);
+
+    e.apply_command(0, &mv(0, DevZone::Graveyard, "Serra Angel"))
+        .expect("move the first");
+    assert_eq!(count_card_id_in_graveyard(&e, 0, "serra_angel"), 1);
+    assert_eq!(on_battlefield(&e), 1);
+
+    e.apply_command(0, &mv(0, DevZone::Graveyard, "Serra Angel"))
+        .expect("move the second");
+    assert_eq!(
+        count_card_id_in_graveyard(&e, 0, "serra_angel"),
+        2,
+        "the second move must find the copy still on the battlefield"
+    );
+    assert_eq!(on_battlefield(&e), 0);
+
+    // With nothing left to move, say so distinctly rather than claiming the card does not exist.
+    let err = e
+        .apply_command(0, &mv(0, DevZone::Graveyard, "Serra Angel"))
+        .expect_err("every copy is already there");
+    assert!(
+        err.to_string().contains("already in that zone"),
+        "unexpected error: {err}"
+    );
+}
+
 /// Moving something the seat does not own is an error rather than a silent conjure — otherwise
 /// the two verbs would collapse back into one.
 #[test]
