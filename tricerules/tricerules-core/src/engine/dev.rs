@@ -95,11 +95,22 @@ impl GameEngine {
         let card_id = self.resolve_card_id(&name)?;
         let zone = dev_zone_to_zone(mv.zone());
         // Falling back to a conjure here would collapse the two verbs back into one.
-        let oid = self
-            .find_owned_object(target, &card_id)
-            .ok_or(EngineError::Illegal(
-                "no copy of that card in any of your zones — use put to conjure one",
-            ))?;
+        let oid = match self.find_owned_object(target, &card_id, Some(zone)) {
+            Some(oid) => oid,
+            // Distinguish "you own none" from "they are all already there": the second is what
+            // repeating a move looks like, and reporting it as the first would send the caller
+            // hunting for a card that is sitting right where they asked for it.
+            None if self.find_owned_object(target, &card_id, None).is_some() => {
+                return Err(EngineError::Illegal(
+                    "every copy you own is already in that zone",
+                ));
+            }
+            None => {
+                return Err(EngineError::Illegal(
+                    "no copy of that card in any of your zones — use put to conjure one",
+                ));
+            }
+        };
         move_object_to_zone(&mut self.state, oid, zone)?;
         ev.push(permanent_moved_event(
             &self.state,
@@ -261,14 +272,24 @@ impl GameEngine {
     /// First object owned by `player` with this `card_id`, searching library, graveyard, exile,
     /// hand, then battlefield. Library first so the command prefers an unused copy over
     /// cannibalising the board the caller is in the middle of setting up.
-    fn find_owned_object(&self, player: PlayerId, card_id: &str) -> Option<ObjectId> {
+    ///
+    /// `not_in` excludes copies already sitting in the destination. Without it the search happily
+    /// returns a card that is already where it is being sent — a no-op that still logs success,
+    /// while the copy the caller actually meant is never considered. That is what made a second
+    /// `move gy X` appear to do nothing once the first had put a copy in the graveyard.
+    fn find_owned_object(
+        &self,
+        player: PlayerId,
+        card_id: &str,
+        not_in: Option<Zone>,
+    ) -> Option<ObjectId> {
         let idx = self.state.player_idx(player)?;
         let p = &self.state.players[idx];
         let matches = |oid: &ObjectId| {
             self.state
                 .objects
                 .get(oid)
-                .is_some_and(|o| o.card_id == card_id)
+                .is_some_and(|o| o.card_id == card_id && Some(o.zone) != not_in)
         };
         p.library
             .iter()
