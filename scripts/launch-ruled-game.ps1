@@ -25,6 +25,20 @@
     Fixes the engine's RNG seed, so shuffles and opening hands repeat exactly. Use it to re-run a
     board state you are debugging.
 
+.PARAMETER Dev
+    Enable the dev console: shows the command entry in each client's Messages dock and enables
+    cheat commands in the engine (both gate halves — see engine::dev). Lets you build a board
+    state without editing decks or passing turns:
+
+        put hand Serra Angel          conjure a card, even one no deck contains
+        mana 4WW                      then cast it, with no lands in play
+        put bf Grizzly Bears ready    a permanent that can attack this turn
+        put 2 bf Hill Giant           give the other seat a blocker
+        help                          the full grammar
+
+    Run -Stop first if servers are already up: the sidecar reads its half of the gate from its
+    own environment at startup, so a reused one refuses dev commands.
+
 .PARAMETER Freeform
     Create a legacy freeform game instead of a ruled one.
 
@@ -41,6 +55,9 @@
     ./scripts/launch-ruled-game.ps1 -DeckA ./scripts/decks/dev-blue.cod -Seed 12345
 
 .EXAMPLE
+    ./scripts/launch-ruled-game.ps1 -Dev
+
+.EXAMPLE
     ./scripts/launch-ruled-game.ps1 -Stop
 #>
 
@@ -50,6 +67,7 @@ param(
     [string]$DeckB,
     [string]$GameName,
     [int]$Seed = 0,
+    [switch]$Dev,
     [switch]$Freeform,
     [switch]$NoServers,
     [switch]$Stop
@@ -166,8 +184,26 @@ if (-not $NoServers) {
 
     Write-Host "Starting servers..." -ForegroundColor Cyan
 
+    # Both halves of the dev-command gate, set before either server starts so both inherit them.
+    # They are deliberately separate variables: servatrice asks (COCKATRICE_RULED_DEV) and the
+    # sidecar permits (TRICERULES_DEV_COMMANDS), so neither alone enables cheats and a production
+    # sidecar cannot be talked into it from upstream. Setting both is the whole point of -Dev.
+    if ($Dev) {
+        $env:COCKATRICE_RULED_DEV = "1"
+        $env:TRICERULES_DEV_COMMANDS = "1"
+        Write-Host "  dev commands enabled - the engine will accept cheat commands" -ForegroundColor DarkGray
+    } else {
+        Remove-Item Env:\COCKATRICE_RULED_DEV -ErrorAction SilentlyContinue
+        Remove-Item Env:\TRICERULES_DEV_COMMANDS -ErrorAction SilentlyContinue
+    }
+
     if (Test-PortOpen -Port $rulesPort) {
         Write-Host "  tricerules-server already listening on $rulesPort - reusing it" -ForegroundColor DarkGray
+        if ($Dev) {
+            # The gate is read from the sidecar's own environment at startup, so a sidecar that was
+            # already running will refuse dev commands no matter what this run asks for.
+            Write-Host "  warning: reused sidecar was started without TRICERULES_DEV_COMMANDS; dev commands will be refused. Run -Stop first." -ForegroundColor Yellow
+        }
     } else {
         $sidecar = Start-Process -FilePath $sidecarExe -PassThru -WorkingDirectory $repoRoot
         Register-LaunchedProcess -Process $sidecar -Label "tricerules-server"
@@ -202,16 +238,20 @@ if ($Freeform) { $env:COCKATRICE_AUTOPILOT_RULED = "0" } else { $env:COCKATRICE_
 
 Write-Host "Starting clients..." -ForegroundColor Cyan
 
-$hostClient = Start-Process -FilePath $cockatriceExe -PassThru -ArgumentList `
-    "-c", "p1:pass@127.0.0.1:$serverPort", "--autopilot", "host", "--autopilot-deck", "`"$deckAPath`""
+# Shows the console widget in the Messages dock. Cosmetic only — the engine gate above is what
+# decides whether the commands it sends are honoured.
+$devArgs = if ($Dev) { @("--dev-console") } else { @() }
+
+$hostClient = Start-Process -FilePath $cockatriceExe -PassThru -ArgumentList (@(
+    "-c", "p1:pass@127.0.0.1:$serverPort", "--autopilot", "host", "--autopilot-deck", "`"$deckAPath`"") + $devArgs)
 Register-LaunchedProcess -Process $hostClient -Label "cockatrice p1 (host)"
 
 # The joining seat retries on every game-list update, so it is allowed to lose this race; the
 # stagger just keeps the log readable.
 Start-Sleep -Milliseconds 750
 
-$joinClient = Start-Process -FilePath $cockatriceExe -PassThru -ArgumentList `
-    "-c", "p2:pass@127.0.0.1:$serverPort", "--autopilot", "join", "--autopilot-deck", "`"$deckBPath`""
+$joinClient = Start-Process -FilePath $cockatriceExe -PassThru -ArgumentList (@(
+    "-c", "p2:pass@127.0.0.1:$serverPort", "--autopilot", "join", "--autopilot-deck", "`"$deckBPath`"") + $devArgs)
 Register-LaunchedProcess -Process $joinClient -Label "cockatrice p2 (join)"
 
 Write-Host ""

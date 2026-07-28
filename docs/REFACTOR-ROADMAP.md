@@ -704,25 +704,19 @@ Unscheduled by design. Each entry fires on its trigger, not before.
   startup becomes a single deserialize; RON syntax errors move to compile time; the
   `card_data_hash` determinism stamp hashes the blob. Keep embedding — the single-binary
   sidecar and replay hash depend on it; do **not** move to runtime file loading.
-- **Big-board stress test** — *trigger: pairs with Step 10 landing.* One seeded deterministic
-  stress scenario (a few hundred tokens + anthems, full turn cycle incl. combat) under
-  `--release` with a generous wall-time assertion (< 2s), so growth shows up as a failing test
-  long before players feel it. No optimization work until it (or real play) surfaces a number;
-  the deterministic replay makes profiling exactly reproducible.
+- **Big-board stress test** — **done 2026-07-26**, with Step 10. Lives in
+  `tricerules-core/tests/scenario/performance.rs`: a seeded deterministic scenario driving 200
+  creatures through a full turn with 20 global layer effects, asserting the < 2 s release bound.
+  No optimization work until it (or real play) surfaces a number; the deterministic replay makes
+  profiling exactly reproducible.
 - **CR 613.8 dependency ordering** — *trigger: first card whose layers interact by dependency
   (Humility-class).* The Step 10 pipeline is built with a slot for it.
 - **CR 616 replacement-effect ordering** — *trigger: first time two replacement effects can
   apply to one event.* Same: slot exists, machinery deferred.
 - **Dev-loop tooling** — *trigger: when manual-testing pain outweighs ~3–4 days.* Three
   pieces, impact order: (1) **one-command game launch** — **done 2026-07-27**, see below.
-  (2) **Dev console + `DevCommand`**: a
-  debug-gated proto command with cheat primitives (put named card in zone, draw N, set life,
-  add counters, skip to phase/turn, act-as-player). Design rule: dev commands are **ordinary
-  logged engine commands** — never local state pokes — so determinism and replay hold. The
-  engine rejects `DevCommand` unless the session started with a dev flag (sidecar env var +
-  `SessionStart` field); the gate is engine-side (a security boundary), not client-side
-  hiding. Client UI: minimal text-input dock, fork-owned, ruled+dev-gated. Ships end-to-end
-  per CLAUDE.md (~2–3 days). (3) **Scenario save/load via replay** (near-free from
+  (2) **Dev console + `DevCommand`** — **done 2026-07-27**, see below.
+  (3) **Scenario save/load via replay** (near-free from
   determinism): "save" dumps `(seed, command log)`; "load" replays into a fresh session and
   hands control to live clients — reusable tricky-board fixtures, shareable with the E2E
   harness. Pulls forward well right after Step 3 (shared plumbing).
@@ -746,6 +740,57 @@ Unscheduled by design. Each entry fires on its trigger, not before.
   > rides in the `Response_JoinRoom` response, and only later changes arrive as `Event_ListGames` —
   > so an event-only trigger silently never fires for a game created before you logged in.
   > `Command_GetGamesOfUser` is the race-free lookup.
+  >
+  > **Piece (2) done 2026-07-27** (5 commits). `./scripts/launch-ruled-game.ps1 -Dev` gets a
+  > command entry in each client's Messages dock. Two commands, not the six sketched above:
+  > `put [seat] <zone> <card name> [ready]` and `mana [seat] <symbols>`. Those two kill both
+  > measured pains — no deck editing, no lands, no turns passed — and `ready` closes the third
+  > (attacking the turn a creature arrives). Draw N / set life / add counters / skip-to-phase /
+  > act-as-player are designed for but deliberately unbuilt; skip-to-phase is the one to add when
+  > upkeep/draw triggers become the next pain.
+  >
+  > **`put` conjures, not just tutors.** A card in no decklist is minted from outside the game
+  > (CR 400.11-shaped), which is what removes deck editing entirely; a card the seat already owns
+  > is moved instead, so tutoring does not silently duplicate. Conjuring is hand/battlefield only
+  > — graveyard, exile and library keep separate physical binding maps, and are two steps away.
+  > This cost more than the tutor-only design, almost all of it in Servatrice, and the blocker was
+  > not the obvious one: `applyRuledEngineZoneView` resolves physical cards by translating their
+  > names through the **session card catalog**, built once from the decklists. An unknown name
+  > matches nothing, and the reconcile then abandons the whole sync with only a `qWarning` — a
+  > silent client desync. Hence `indexCardCatalogEvents` as batch pass 0 (extracted first, as pure
+  > motion) and the engine re-emitting the catalog on conjure. `createRuledDevCard` is a sibling of
+  > `createRuledToken`, not a reuse: a real card gets no `"Token"` annotation and no
+  > `destroyOnZoneChange`, which a token needs for CR 111.7 but which would make a conjured
+  > Lightning Bolt vanish on leaving the battlefield.
+  >
+  > **`put bf` fires `EntersBattlefield`, and that is load-bearing.** `fire_triggers`' arm for it
+  > is the only path to `emit_static_abilities_on_enter`, so skipping it would leave a conjured
+  > anthem granting nothing — no error, no log line. CR 601 cast triggers correctly stay silent
+  > (nothing was cast), giving the same event profile as a real put-onto-the-battlefield effect.
+  > Deliberately **not** covered: `put gy` does not fire dies triggers (CR 700.4 is specifically
+  > battlefield → graveyard, and most uses come from the library or outside the game).
+  >
+  > The gate is two independent halves ANDed engine-side — `SessionStart.dev_commands_enabled`
+  > from `COCKATRICE_RULED_DEV`, plus the sidecar's own `TRICERULES_DEV_COMMANDS` — so a production
+  > sidecar cannot be talked into dev mode from upstream. The rejection sits in `apply_command`
+  > *before* the `command_index` bump, so a refused command perturbs no determinism input and,
+  > since Servatrice appends to `ruled_command_log` only on an ok response, never enters a replay.
+  > Accepted ones are ordinary logged commands, so a dev-built board still replays exactly. Note
+  > `RuledCommand`'s `reserved 9`: `AddManaToPool` was deleted because a tampered client could mint
+  > mana, and `add_mana` re-opens exactly that surface — which is why the gate is not optional.
+  > Both new event types are `SERVER_ONLY`, so a hand conjure cannot leak the card name; the
+  > client learns of it through the redacted full-state resync instead of a broadcast event.
+  >
+  > Client: `ruled_dev_command_parser` (pure text → typed proto, linked into the headless test
+  > target) and `ruled_dev_console` (the widget, which emits and never sends). The parse deviates
+  > from the plan in one place worth knowing: a leading number is ambiguous for `mana` — `mana 12`
+  > is twelve generic, `mana 2 UU` is the second seat — so it is read as a seat only when it is a
+  > valid ordinal *with* symbols after it. Seats are 1-based ordinals, never raw player ids, since
+  > with ids 0 and 1 the two readings collide. Verified: 20 scenario tests, 12 parser tests, a new
+  > offscreen `ruled_dev_console_test`, 2 `ruled_batch_test` cases each for catalog indexing and
+  > conjure minting, and the E2E smoke now conjures a Serra Angel (in neither decklist) and adds
+  > mana — the only cross-language check that a C++-built `DevCommand` decodes in Rust. Full ninja
+  > build + full ctest (17/17) and `cargo test` + `clippy -D warnings` + `fmt` per commit.
 - **Security audit checklist** — *trigger: before any public deployment.* Verify and
   document: command sender identity is bound to the authenticated session server-side (never
   client-supplied player ids); the sidecar port (`TRICERULES_HOST`, default 127.0.0.1) is a
