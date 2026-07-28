@@ -504,3 +504,48 @@ void RuledPlayerBinding::createRuledToken(Server_Player *player,
     engineOidToServerCardId.insert(engineOid, card->getId());
     serverCardIdToEngineOid.insert(card->getId(), engineOid);
 }
+
+bool RuledPlayerBinding::createRuledDevCard(Server_Player *player,
+                                            quint32 engineOid,
+                                            const QString &cardName,
+                                            bool isCreature,
+                                            bool toBattlefield,
+                                            GameEventStorage &ges)
+{
+    if (cardName.isEmpty()) {
+        return false;
+    }
+    Server_CardZone *zone = player->getZones().value(toBattlefield ? ZoneNames::TABLE : ZoneNames::HAND);
+    if (!zone) {
+        return false;
+    }
+
+    if (!toBattlefield) {
+        // Hand: append so the physical order matches the engine's (it pushes to the end of its own
+        // hand vector too), which is what the zone reconcile's name matching lines up against.
+        auto *card = new Server_Card({cardName, QString()}, player->newCardId(), 0, 0);
+        card->moveToThread(player->thread());
+        zone->insertCard(card, -1, 0);
+        engineOidToServerCardId.insert(engineOid, card->getId());
+        serverCardIdToEngineOid.insert(card->getId(), engineOid);
+        return true;
+    }
+
+    // Table: same row split and grid placement createRuledToken uses, so a conjured permanent
+    // lands where a legitimately played one would.
+    int y = isCreature ? 0 : 1;
+    int x = 0;
+    if (zone->hasCoords()) {
+        x = zone->getFreeGridColumn(-1, y, cardName, true);
+    }
+    if (x < 0) {
+        x = 0;
+    }
+    auto *card = new Server_Card({cardName, QString()}, player->newCardId(), x, y);
+    card->moveToThread(player->thread());
+    zone->insertCard(card, x, y);
+    player->sendCreateTokenEvents(zone, card, x, y, ges);
+    engineOidToServerCardId.insert(engineOid, card->getId());
+    serverCardIdToEngineOid.insert(card->getId(), engineOid);
+    return true;
+}

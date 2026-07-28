@@ -158,6 +158,10 @@ private:
     /// batch carried one. Runs at startup and as the first batch pass, since the zone reconcile
     /// resolves physical cards by translating their names through this index.
     bool indexCardCatalogEvents(const ruled::v1::RuledEventBatch &batch);
+    /// Mint physical Server_Cards for dev-conjured cards, which have no deck card behind them.
+    /// Sets `result.handOrLibraryChanged` for a hand conjure, whose card is deliberately revealed
+    /// by the redacted full-state resync rather than by a broadcast creation event.
+    void applyDevCardConjures(const ruled::v1::RuledEventBatch &batch, RuledBatchApplyResult &result);
     void applyTokenCreations(const ruled::v1::RuledEventBatch &batch);
     void applyPermanentMoves(const ruled::v1::RuledEventBatch &batch,
                              const QHash<int, QHash<quint32, int>> &preBatchOidMaps);

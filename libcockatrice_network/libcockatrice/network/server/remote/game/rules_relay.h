@@ -27,8 +27,11 @@ public:
 
     /// @param playerDecks optional: one entry per player id with mainboard Oracle card names
     /// (the engine resolves names to its card ids); nullptr = use engine default
+    /// @param devCommandsEnabled ask the sidecar to accept debug cheat commands. Only half the
+    /// gate: the sidecar grants it solely if its own TRICERULES_DEV_COMMANDS env var is also set.
     bool sessionStart(quint64 gameId, quint64 seed, const QList<int> &playerIds,
-                      const QList<QPair<int, QStringList>> *playerDecks, ruled::v1::IpcResponse &out);
+                      const QList<QPair<int, QStringList>> *playerDecks, bool devCommandsEnabled,
+                      ruled::v1::IpcResponse &out);
     bool playerCommand(int playerId, const QByteArray &ruledCommandBytes, ruled::v1::IpcResponse &out);
     /// Stateless implemented-card check (no engine session): out.ok() iff every Oracle
     /// name resolves; otherwise out.missing_card_names() lists them sorted, deduplicated.

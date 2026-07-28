@@ -476,6 +476,7 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
     // Mid-game catalog refresh. Almost every batch carries no CardCatalog and leaves the index
     // untouched; a batch that does carries the whole catalog and replaces it.
     indexCardCatalogEvents(batch);
+    applyDevCardConjures(batch, result);
 
     // Capture the pre-batch engine_oid -> Server_Card map per player. The engine has
     // already removed dead permanents from its battlefield, so the upcoming zone-view
@@ -495,6 +496,49 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
     applyAttachmentRestores(batch);
     applyLifeManaAndCombatEvents(batch);
     return result;
+}
+
+// A dev command conjured a card that was in no decklist (see DevCardConjured), so there is no
+// physical Server_Card behind the engine's new object. Mint one before the zone-view sync below,
+// for the same reason applyTokenCreations runs early: the reconcile matches engine slots to
+// physical cards and abandons the whole sync if it cannot.
+//
+// Runs before applyTokenCreations and applyPermanentMoves because a card conjured by this batch
+// may also be moved by it.
+void RuledGameDriver::applyDevCardConjures(const ruled::v1::RuledEventBatch &batch, RuledBatchApplyResult &result)
+{
+    GameEventStorage conjureGes;
+    bool conjureGesHasEvents = false;
+    for (int ei = 0; ei < batch.events_size(); ++ei) {
+        const auto &e = batch.events(ei);
+        if (!e.has_dev_card_conjured()) {
+            continue;
+        }
+        const auto &dc = e.dev_card_conjured();
+        Server_AbstractPlayer *owner = game->getPlayer(dc.owner_player_id());
+        if (!owner) {
+            continue;
+        }
+        const bool toBattlefield = dc.zone() == ruled::v1::DEV_ZONE_BATTLEFIELD;
+        const bool created = playerBinding(dc.owner_player_id())
+                                 .createRuledDevCard(static_cast<Server_Player *>(owner), dc.object_id(),
+                                                     QString::fromStdString(dc.card_name()), dc.is_creature(),
+                                                     toBattlefield, conjureGes);
+        if (!created) {
+            continue;
+        }
+        if (toBattlefield) {
+            conjureGesHasEvents = true;
+        } else {
+            // A hand conjure broadcasts no creation event of its own — that would reveal the card
+            // to the opponent. Flagging the hand as changed makes processRuledPayload issue the
+            // ordinary full-state resync, which redacts private zones per recipient.
+            result.handOrLibraryChanged = true;
+        }
+    }
+    if (conjureGesHasEvents) {
+        conjureGes.sendToGame(game);
+    }
 }
 
 // Tokens (CR 111) appear on the engine battlefield with no physical card behind them. Mint
@@ -1540,6 +1584,14 @@ bool RuledGameDriver::startRuledSidecarSession()
             qWarning() << "startRuledSidecarSession: using forced seed from COCKATRICE_RULED_SEED:" << ruledSeed;
         }
     }
+    // Dev gate, half 1 of 2: ask the sidecar to accept debug cheat commands. It grants them only
+    // if its own TRICERULES_DEV_COMMANDS is also set, so this flag alone cannot enable cheats —
+    // that takes access to the machine running the engine. Unset in production.
+    const QString devEnv = qEnvironmentVariable("COCKATRICE_RULED_DEV");
+    const bool devCommandsRequested = devEnv == QLatin1String("1") || devEnv == QLatin1String("true");
+    if (devCommandsRequested) {
+        qWarning() << "startRuledSidecarSession: COCKATRICE_RULED_DEV set — requesting dev commands";
+    }
     QList<int> ids;
     for (auto *p : game->getPlayers().values()) {
         ids.append(p->getPlayerId());
@@ -1554,7 +1606,8 @@ bool RuledGameDriver::startRuledSidecarSession()
         }
     }
     const QList<QPair<int, QStringList>> *deckPtr = anyMainboard ? &deckByPlayer : nullptr;
-    if (!rulesRelay->sessionStart(static_cast<quint64>(game->getGameId()), ruledSeed, ids, deckPtr, resp)) {
+    if (!rulesRelay->sessionStart(static_cast<quint64>(game->getGameId()), ruledSeed, ids, deckPtr,
+                                  devCommandsRequested, resp)) {
         qWarning() << "startRuledSidecarSession: tricerules connection failed";
         // The sidecar went away between pregame validation and SessionStart. We cannot run a
         // ruled game without it and cannot downgrade the already-ruled clients to casual, so
