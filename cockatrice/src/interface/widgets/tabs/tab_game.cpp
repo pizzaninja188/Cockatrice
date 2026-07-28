@@ -1048,8 +1048,12 @@ void TabGame::actDevConsoleCommand(const QString &line)
         return;
     }
     // Seats ascending; QMap is key-ordered, so ordinal 1 is the lowest player id.
-    const QVector<int> seatIds(game->getPlayerManager()->getPlayers().keys().begin(),
-                               game->getPlayerManager()->getPlayers().keys().end());
+    //
+    // keys() returns a list *by value*. It must be materialised into a named variable before
+    // taking iterators from it: calling keys().begin() and keys().end() would produce two
+    // separate temporaries, both dead by the end of the statement, leaving the iterators dangling.
+    const QList<int> seatKeys = game->getPlayerManager()->getPlayers().keys();
+    const QVector<int> seatIds(seatKeys.cbegin(), seatKeys.cend());
     const RuledDevCommandParser::Result parsed =
         RuledDevCommandParser::parse(line, game->getPlayerManager()->getLocalPlayerId(), seatIds);
 
