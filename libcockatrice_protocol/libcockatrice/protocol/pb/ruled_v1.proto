@@ -69,12 +69,80 @@ message RuledCommand {
     // Flip the active face of a Transform/Flip layout permanent (CR 710/712.8). The controller
     // sends this; the engine validates layout and emits FaceChanged.
     TransformPermanent transform_permanent = 21;
+    // Debug-only cheat command. The engine rejects it outright unless the session was started
+    // with dev commands enabled; see DevCommand.
+    DevCommand dev_command = 22;
   }
 }
 
 // Undo the most recent undoable mana ability for the commanding player (no payload needed; the
 // engine pops its own per-player undo stack). See RuledCommand.undo_mana_ability.
 message UndoManaAbility {}
+
+// Debug-only cheat commands for the dev console, so a board state can be built without editing
+// deck files or playing turns to reach it.
+//
+// These are ordinary logged engine commands (they advance command_index and enter the replay
+// command log), so determinism and (seed, command log) replay hold. They are gated engine-side,
+// not hidden client-side: the engine refuses them unless SessionStart.dev_commands_enabled was
+// set AND the sidecar's own TRICERULES_DEV_COMMANDS env var is set. Both halves are required so
+// a production sidecar cannot be talked into dev mode from upstream.
+//
+// Note RuledCommand's `reserved 9`: AddManaToPool was deleted precisely because a tampered
+// client could mint mana. DevCommand.add_mana deliberately re-opens that surface, which is
+// exactly why the gate is not optional.
+message DevCommand {
+  // The seat the effect applies to. This is NOT act-as-player: the engine still attributes the
+  // command to its sender (PlayerCommand.player_id stays server-filled from the authenticated
+  // session), this only names whose zone/pool is affected.
+  int32 target_player_id = 1;
+  oneof dev {
+    DevPutCardInZone put_card_in_zone = 2;
+    DevAddMana add_mana = 3;
+  }
+}
+
+// Destination zone for DevPutCardInZone. HAND and BATTLEFIELD may be conjured into; the rest are
+// move-only (they have separate physical binding maps on the relay side, so reach them by
+// conjuring to hand and then moving).
+enum DevZone {
+  DEV_ZONE_HAND = 0;
+  DEV_ZONE_BATTLEFIELD = 1;
+  DEV_ZONE_GRAVEYARD = 2;
+  DEV_ZONE_EXILE = 3;
+  DEV_ZONE_LIBRARY = 4;
+}
+
+// Put a named card into a zone. If the target player already owns a copy it is moved (searching
+// library, graveyard, exile, hand, battlefield in that order) so the common "tutor it out of my
+// deck" case does not silently create a second copy; otherwise the card is conjured from outside
+// the game (CR 400.11-shaped, though it obeys none of the restrictions real wishes do).
+//
+// Entering the battlefield fires GameEvent::EntersBattlefield, so CR 603.6a ETB triggers fire and
+// static abilities register exactly as for a cast permanent, while CR 601 cast triggers correctly
+// stay silent — the same event profile as a real put-onto-the-battlefield effect.
+message DevPutCardInZone {
+  // Oracle card name, resolved through CardRegistry::id_for_name. Never a client-derived slug:
+  // card identity is engine-owned.
+  string card_name = 1;
+  DevZone zone = 2;
+  // Deliberately violate CR 302.6: the permanent enters without summoning sickness so it can
+  // attack or use a tap ability the turn it arrives. Battlefield only; ignored elsewhere.
+  // Not implemented as "grant haste" — haste is a real keyword with layer-6 semantics a test may
+  // be trying to observe, so the cheat clears the flag directly instead.
+  bool ready = 3;
+}
+
+// Add mana to a player's pool. Additive, not an absolute pool. Emptied by the next step/phase
+// change exactly like legitimately produced mana (CR 106.4).
+message DevAddMana {
+  uint32 w = 1;
+  uint32 u = 2;
+  uint32 b = 3;
+  uint32 r = 4;
+  uint32 g = 5;
+  uint32 c = 6;
+}
 
 // A player's answer to a ResolutionChoiceRequired: the chosen object ids (in order when the
 // request was `ordered`). The engine validates them against the parked request's candidates.
@@ -340,7 +408,26 @@ message RuledEvent {
     // A Transform/Flip layout permanent changed its active face (CR 710/712.8). The relay
     // updates the client's card face display. face_up_index 0 = front, 1 = back.
     FaceChanged face_changed = 28 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    // A dev command conjured a card that was in no decklist, so the relay must create the
+    // backing Server_Card. Server-only: no client ever receives it, which is what keeps
+    // conjuring into a hand from leaking the card name to the opponent.
+    DevCardConjured dev_card_conjured = 29 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
   }
+}
+
+// A dev command minted a card from outside the game (see DevPutCardInZone). Servatrice creates
+// the backing Server_Card and pre-registers the engine-oid binding before the zone-view sync
+// later in the same batch, which would otherwise find no physical card and abandon the reconcile.
+// Clients learn about the card through the ordinary redacted zone-view/game-state resync.
+message DevCardConjured {
+  uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+  int32 owner_player_id = 2 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+  // Oracle display name for the physical Server_Card.
+  string card_name = 3 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+  // Only DEV_ZONE_HAND and DEV_ZONE_BATTLEFIELD are emitted.
+  DevZone zone = 4 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+  // Battlefield row placement, mirroring TokenIdentity.is_creature.
+  bool is_creature = 5 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
 }
 
 // An Aura spell resolved and attached to a permanent on the battlefield (CR 303.4).
@@ -802,6 +889,11 @@ message SessionStart {
   repeated PlayerDeck player_decks = 4;
   // Servatrice's VERSION_STRING, logged by the sidecar for build-skew observability.
   string servatrice_build = 5;
+  // Dev gate, half 1 of 2: Servatrice asks for DevCommand support (from its own
+  // COCKATRICE_RULED_DEV env var). The sidecar grants it only if its own
+  // TRICERULES_DEV_COMMANDS env var is also set, so a production sidecar cannot be talked
+  // into dev mode from upstream. See DevCommand.
+  bool dev_commands_enabled = 6;
 }
 
 message PlayerCommand {
