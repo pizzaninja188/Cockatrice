@@ -19,6 +19,9 @@
 //   * a tier-3 resolution choice: Brainstorm's ordered 2-card put-back
 //     (ResolutionChoiceRequired / SubmitResolutionChoice)
 //   * cleanup discard: DiscardToHandSize back down to 7
+//   * dev commands (backlog dev-loop piece 2): a conjured Serra Angel — in neither decklist, so
+//     it drives the mid-game catalog refresh and the minted Server_Card — and added mana. This
+//     is the only cross-language check that a C++-built DevCommand decodes and applies in Rust.
 //
 // Scope: engine + relay + protocol wiring only — no Qt client UI logic (that arrives with the
 // Step 5 headless client-core suite).
@@ -213,6 +216,8 @@ public:
     bool brainstormCast = false;
     bool attackersSentThisCombat = false;
     bool blockersSentThisCombat = false;
+    bool devConjureSent = false;
+    bool devManaSent = false;
 
     // Milestone observations (asserted by the fixture)
     bool sawBoltPushWithTarget = false;
@@ -226,6 +231,8 @@ public:
     bool sentCleanupDiscard = false;
     bool sawBottomAction = false;
     bool sentBottom = false;
+    bool sawDevConjuredPermanent = false;
+    bool sawDevMana = false;
     quint32 boltOid = 0;
     quint32 brainstormOid = 0;
     bool inCombatDamageWindow = false;
@@ -824,6 +831,15 @@ public:
             }
         }
 
+        // Dev-command effects, observed the same way as any other engine state: the conjured
+        // permanent has to reach the battlefield object map, and the minted mana the pool.
+        if (devConjureSent && countOwn(QStringLiteral("serra_angel"), false) > 0) {
+            sawDevConjuredPermanent = true;
+        }
+        if (devManaSent && myPool.g >= 2) {
+            sawDevMana = true;
+        }
+
         // --- Priority-gated actions ---
         if (priorityPlayer != myId) {
             return;
@@ -832,6 +848,37 @@ public:
             (phase == ruled::v1::PHASE_ID_MAIN1 || phase == ruled::v1::PHASE_ID_MAIN2) && activePlayer == myId;
 
         if (role == Role::Aggressor && inMain && stackDepth == 0) {
+            // --- Dev commands (roadmap backlog dev-loop piece 2) ---------------------------
+            // The only cross-language check that a C++-built DevCommand decodes and applies in
+            // Rust; the behaviour itself is covered by the engine's scenario suite. Serra Angel
+            // is in neither decklist, so this drives the whole conjure path: the mid-game catalog
+            // refresh that lets the zone reconcile resolve an unknown name, and the physical
+            // Server_Card the relay has to mint for it. If either were missing, the reconcile
+            // would abandon its sync with only a qWarning and the permanent would never appear.
+            if (!devConjureSent) {
+                devConjureSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                auto *put = dev->mutable_put_card_in_zone();
+                put->set_card_name("Serra Angel");
+                put->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+                put->set_ready(true);
+                sendRuled(cmd, QStringLiteral("dev: conjure Serra Angel onto the battlefield"));
+                return;
+            }
+            if (!devManaSent) {
+                devManaSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                // Green: nothing in this deck produces or spends it, so the added mana cannot
+                // change which spells the rest of the script decides it can afford.
+                dev->mutable_add_mana()->set_g(2);
+                sendRuled(cmd, QStringLiteral("dev: add {G}{G}"));
+                return;
+            }
+
             if (const auto *land = handAction(ruled::v1::HAND_ACTION_PLAY_LAND, QStringLiteral("Mountain"))) {
                 ruled::v1::RuledCommand cmd;
                 cmd.mutable_play_land()->set_hand_card_index(land->hand_index());
@@ -1047,6 +1094,11 @@ protected:
         QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
         env.insert(QStringLiteral("TRICERULES_PORT"), QString::number(kTriceRulesPort));
         env.insert(QStringLiteral("COCKATRICE_RULED_SEED"), QString::number(kForcedSeed));
+        // Both halves of the dev-command gate: servatrice asks (COCKATRICE_RULED_DEV) and the
+        // sidecar permits (TRICERULES_DEV_COMMANDS). Neither alone opens it — which is why both
+        // go into the environment both processes inherit.
+        env.insert(QStringLiteral("COCKATRICE_RULED_DEV"), QStringLiteral("1"));
+        env.insert(QStringLiteral("TRICERULES_DEV_COMMANDS"), QStringLiteral("1"));
 
         sidecar.setProcessEnvironment(env);
         sidecar.start(sidecarExe, {});
@@ -1124,7 +1176,8 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
         return p2.sentBottom && p1.sawBoltPushWithTarget && p1.sawBoltLifeLoss &&
                p1.sawAttackersDeclared && p1.sawCombatLifeLoss && p2.sawBrainstormChoice &&
                p2.submittedBrainstormChoice && p2.sawBrainstormResolved && p2.sentCleanupDiscard &&
-               p2.handSizeByPlayer.count(p2.myId) && p2.handSizeByPlayer[p2.myId] <= 7;
+               p1.sawDevConjuredPermanent && p1.sawDevMana && p2.handSizeByPlayer.count(p2.myId) &&
+               p2.handSizeByPlayer[p2.myId] <= 7;
     };
     QElapsedTimer deadline;
     deadline.start();
@@ -1162,6 +1215,16 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     // Battlefield object map / zone views should show both basic lands in play.
     EXPECT_GE(p1.countOwn(QStringLiteral("mountain"), false), 1) << "no Mountain on the aggressor's battlefield";
     EXPECT_GE(p2.countOwn(QStringLiteral("island"), false), 1) << "no Island on the hoarder's battlefield";
+
+    // Dev commands crossed the language boundary: a C++-built DevCommand decoded in Rust, and its
+    // effects came back through the ordinary event path. Serra Angel is in neither decklist, so
+    // its presence also proves the mid-game catalog refresh and the minted Server_Card both work
+    // — without them the zone reconcile would have bailed out silently.
+    EXPECT_TRUE(p1.sawDevConjuredPermanent)
+        << "dev conjure never put Serra Angel on the battlefield (check the servatrice log for "
+           "'applyRuledEngineZoneView: count mismatch' or 'missing')";
+    EXPECT_GE(p1.countOwn(QStringLiteral("serra_angel"), false), 1) << "conjured permanent missing at end of game";
+    EXPECT_TRUE(p1.sawDevMana) << "dev mana never reached the aggressor's pool";
 
     if (::testing::Test::HasFailure()) {
         ADD_FAILURE() << "milestones incomplete after " << deadline.elapsed() << " ms; see transcript below";
