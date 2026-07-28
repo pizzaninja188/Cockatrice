@@ -467,10 +467,15 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
     const ruled::v1::RuledEventBatch &batch = resp.batch();
 
     // One named method per pass. The pass order is load-bearing — never merge or reorder:
-    // the pre-batch oid capture feeds PermanentMoved translation, tokens must exist before
+    // the catalog must be indexed before anything resolves a card name through it, the
+    // pre-batch oid capture feeds PermanentMoved translation, tokens must exist before
     // the zone-view sync binds battlefield slots, PermanentMoved must run before zone views
     // reconcile hand/library counts, and attachment restore plus life/mana/combat
     // translation need the fresh post-zone-view oid maps.
+
+    // Mid-game catalog refresh. Almost every batch carries no CardCatalog and leaves the index
+    // untouched; a batch that does carries the whole catalog and replaces it.
+    indexCardCatalogEvents(batch);
 
     // Capture the pre-batch engine_oid -> Server_Card map per player. The engine has
     // already removed dead permanents from its battlefield, so the upcoming zone-view
@@ -1627,21 +1632,24 @@ QString RuledGameDriver::ruledActiveFaceName(const QString &cardId, int faceInde
     return QString::fromStdString(it->name());
 }
 
-void RuledGameDriver::applyRuledStartupBatch(const ruled::v1::IpcResponse &resp,
-                                             const QList<QPair<int, QStringList>> &deckByPlayer)
+// Index every CardCatalog event in `batch` into the name/id lookups the zone reconcile resolves
+// physical cards through. Returns true if the batch carried a catalog at all.
+//
+// A catalog event always carries the whole catalog, so a batch that has one fully replaces the
+// index; a batch with none leaves it untouched. That distinction is why the clear is inside the
+// loop rather than above it — most batches carry no catalog and must not wipe the index.
+bool RuledGameDriver::indexCardCatalogEvents(const ruled::v1::RuledEventBatch &batch)
 {
-    if (!resp.has_batch()) {
-        return;
-    }
-
-    // The catalog must be indexed before any zone-view application below: syncing
-    // physical zones resolves card names through it.
-    ruledCardCatalogById.clear();
-    ruledCardIdByLowerName.clear();
-    for (int ei = 0; ei < resp.batch().events_size(); ++ei) {
-        const auto &e = resp.batch().events(ei);
+    bool sawCatalog = false;
+    for (int ei = 0; ei < batch.events_size(); ++ei) {
+        const auto &e = batch.events(ei);
         if (!e.has_card_catalog()) {
             continue;
+        }
+        if (!sawCatalog) {
+            ruledCardCatalogById.clear();
+            ruledCardIdByLowerName.clear();
+            sawCatalog = true;
         }
         for (const auto &entry : e.card_catalog().entries()) {
             const QString cardId = QString::fromStdString(entry.card_id());
@@ -1654,6 +1662,19 @@ void RuledGameDriver::applyRuledStartupBatch(const ruled::v1::IpcResponse &resp,
             }
         }
     }
+    return sawCatalog;
+}
+
+void RuledGameDriver::applyRuledStartupBatch(const ruled::v1::IpcResponse &resp,
+                                             const QList<QPair<int, QStringList>> &deckByPlayer)
+{
+    if (!resp.has_batch()) {
+        return;
+    }
+
+    // The catalog must be indexed before any zone-view application below: syncing
+    // physical zones resolves card names through it.
+    indexCardCatalogEvents(resp.batch());
     if (ruledCardCatalogById.isEmpty()) {
         qWarning() << "applyRuledStartupBatch: no CardCatalog in startup batch — "
                       "is tricerules-server rebuilt from this tree? Zone sync will not resolve names.";

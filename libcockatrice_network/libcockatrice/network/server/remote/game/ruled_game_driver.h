@@ -16,9 +16,11 @@
 // be merged or reordered (see the comments on the individual methods for why each dependency
 // exists).
 //
-// applyRuledBatch — engine events onto the physical Cockatrice game, five passes after a
+// applyRuledBatch — engine events onto the physical Cockatrice game, six passes after a
 // pre-pass that snapshots each player's engine_oid -> Server_Card.id map (the engine has
 // already dropped dead permanents, so PermanentMoved needs the *prior* mapping):
+//   0. indexCardCatalogEvents     refresh the name/id index if this batch carries a catalog
+//                                 (dev conjuring does); everything below resolves names through it.
 //   1. applyTokenCreations        CR 111: mint token Server_Cards, so the zone-view sync below
 //                                 has something to bind the engine's battlefield slots to.
 //   2. applyPermanentMoves        PermanentMoved -> moveCard, resolved through the pre-batch map.
@@ -152,6 +154,10 @@ private:
     RuledBatchApplyResult applyRuledBatch(const ruled::v1::IpcResponse &resp, int forceUntapForPlayerId = -1);
     // applyRuledBatch passes, in call order (order dependencies are load-bearing — see the
     // comment in applyRuledBatch; never merge or reorder these):
+    /// Index every CardCatalog event in `batch` into the name/id lookups. Returns true if the
+    /// batch carried one. Runs at startup and as the first batch pass, since the zone reconcile
+    /// resolves physical cards by translating their names through this index.
+    bool indexCardCatalogEvents(const ruled::v1::RuledEventBatch &batch);
     void applyTokenCreations(const ruled::v1::RuledEventBatch &batch);
     void applyPermanentMoves(const ruled::v1::RuledEventBatch &batch,
                              const QHash<int, QHash<quint32, int>> &preBatchOidMaps);

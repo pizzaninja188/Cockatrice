@@ -557,6 +557,47 @@ TEST_F(RuledBatchTest, ApplyRuledBatchCreatesTokenOnControllerTable)
     EXPECT_EQ(p2->getZones().value(ZoneNames::TABLE)->getCards().size(), 0);
 }
 
+TEST_F(RuledBatchTest, ApplyRuledBatchIndexesAMidGameCardCatalog)
+{
+    // The catalog used to be indexed only from the startup batch, which meant a card that was in
+    // no decklist could never be resolved by name — and the zone reconcile, which translates every
+    // physical card's name through this index, would silently abandon its sync. Dev conjuring
+    // re-emits the catalog mid-game, so applyRuledBatch has to pick it up too.
+    EXPECT_TRUE(game->ruled()->ruledCardIdForName(QStringLiteral("Serra Angel")).isEmpty());
+
+    ruled::v1::IpcResponse resp;
+    resp.set_ok(true);
+    auto *entry = resp.mutable_batch()->add_events()->mutable_card_catalog()->add_entries();
+    entry->set_card_id("serra_angel");
+    entry->set_name("Serra Angel");
+
+    callBatchApply(resp);
+
+    EXPECT_EQ(game->ruled()->ruledCardIdForName(QStringLiteral("Serra Angel")),
+              QStringLiteral("serra_angel"));
+    EXPECT_EQ(game->ruled()->ruledCardNameForId(QStringLiteral("serra_angel")),
+              QStringLiteral("Serra Angel"));
+}
+
+TEST_F(RuledBatchTest, ApplyRuledBatchLeavesTheCatalogAloneWhenTheBatchHasNone)
+{
+    // The common case: almost every batch carries no CardCatalog. Indexing must not treat that as
+    // "the catalog is now empty", or the first ordinary command after startup would wipe the index
+    // and break every name lookup for the rest of the game.
+    seedCardCatalog({QStringLiteral("Lightning Bolt")});
+    ASSERT_EQ(game->ruled()->ruledCardIdForName(QStringLiteral("Lightning Bolt")),
+              QStringLiteral("lightning_bolt"));
+
+    ruled::v1::IpcResponse resp;
+    resp.set_ok(true);
+    resp.mutable_batch()->add_events()->mutable_life_changed()->set_player_id(1);
+
+    callBatchApply(resp);
+
+    EXPECT_EQ(game->ruled()->ruledCardIdForName(QStringLiteral("Lightning Bolt")),
+              QStringLiteral("lightning_bolt"));
+}
+
 TEST_F(RuledBatchTest, ApplyRuledBatchUpdatesLifeCounter)
 {
     Server_Counter *p2Life = p2->getCounters().value(0, nullptr);
