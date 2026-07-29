@@ -26,10 +26,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Lands used to have a quick animation when tapping, but this stopped working after the engine-owned mana update and lands tap instantly. Animations also never worked for untapping.
   - Priority: Low
 
-- [ ] #19 [feature] Modal spell mode selection (Charm cycles, Cryptic Command)
-  - Details: Modal spells (CR 700.2) require the casting player to choose one or more modes at cast time. Add a `modes: Vec<Vec<SpellEffectKind>>` field to `CardFace` as a tier-1 primitive; during spell casting, if a card has modes, emit a `resolution_choice_required` interrupt (reusing the existing proto pair) before targeting to collect the mode selection. The chosen mode's effects are then treated exactly like the card's `spell_effect` list for targeting and resolution. Implement Boros Charm (indestructible / double strike / 3 damage to player) as the reference card, and add scenario tests for each mode. This machinery also covers Entwine (pay extra to get all modes) and future Charm cycles with minimal additions.
-  - Priority: Low
-
 - [ ] #20 [feature] Reanimation spells (graveyard → battlefield)
   - Details: Add `ReturnFromGraveyardToBattlefield { filter, enters_tapped: bool }` as a tier-1 `SpellEffectKind` variant. This differs from graveyard-to-hand (#14) in that the card enters as a permanent and fires ETB effects. Implement Reanimate (return target creature from any graveyard to your battlefield, you lose life equal to its converted mana cost). For enchantment-based reanimation (Animate Dead, Necromancy), defer the aura-attachment part until auras (#10) are implemented, but stub the card as partial. Add scenario tests: reanimated creature has ETB triggers fired, original owner retains ownership, creature leaving battlefield via reanimation enchantment works correctly.
   - Priority: Low
