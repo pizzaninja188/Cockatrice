@@ -7,7 +7,7 @@ pub mod registry;
 pub mod slug;
 pub mod token_def;
 
-pub use card_def::{CardDefinition, CardFace, FaceRef, Layout};
+pub use card_def::{CardDefinition, CardFace, FaceRef, Layout, ModalSpellDef, SpellModeDef};
 pub use mana::{ColorPip, ManaCost, ManaSymbol};
 pub use primitives::{
     AbilityCost, ActivatedAbilityDef, Amount, CastTriggerPlayer, Color, ContinuousEffectKind,

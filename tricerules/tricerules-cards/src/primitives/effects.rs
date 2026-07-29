@@ -159,6 +159,11 @@ pub enum SpellEffectKind {
     TapTarget {
         target: TargetFilter,
     },
+    /// Tap every creature controlled by the selected relative player set. This is untargeted and
+    /// snapshots the battlefield as it resolves. Covers Cryptic Command and Tempest Caller.
+    TapAllCreatures {
+        players: RelativePlayerSet,
+    },
     /// CR 701.5: counter target spell on the stack. `spell_filter` narrows which spells are legal
     /// targets — `None` is unrestricted (Counterspell), `Some(Creature)` is Essence Scatter,
     /// `Some(Noncreature)` is Negate. Reuses [`SpellTypeFilter`] so any future "counter target
@@ -207,6 +212,20 @@ pub enum SpellEffectKind {
     GrantKeywordsAll {
         #[serde(default)]
         filter: AnthemFilter,
+        keywords: Vec<Keyword>,
+    },
+    /// CR 613 layer 6: grant one or more keyword abilities to target permanent until end of
+    /// turn. Covers Boros Charm (Double Strike) and Temur Battle Rage (Double Strike + Trample).
+    GrantKeywordsTarget {
+        #[serde(default = "TargetFilter::default_creature")]
+        target: TargetFilter,
+        keywords: Vec<Keyword>,
+    },
+    /// CR 613 layer 6: grant keywords until end of turn to the permanents matching `filter`.
+    /// The affected set is snapshotted as this effect resolves, rather than remaining dynamic.
+    /// Covers Boros Charm and Heroic Intervention.
+    GrantKeywordsAllPermanents {
+        filter: TargetFilter,
         keywords: Vec<Keyword>,
     },
     GainLife {
@@ -424,6 +443,16 @@ pub enum TokenController {
     EachPlayer,
 }
 
+/// Which players' creatures a mass one-shot effect affects, relative to the effect controller.
+/// Kept separate from target selection because these effects do not target. Covers Cryptic
+/// Command / Tempest Caller (`Opponents`) and controller-only mass tap/untap effects (`Controller`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RelativePlayerSet {
+    Controller,
+    Opponents,
+    All,
+}
+
 impl SpellEffectKind {
     /// The target filter(s) this effect selects against, if any. Used by validation and by
     /// the engine's generic legality/targeting paths (one place to enumerate target-bearing
@@ -434,6 +463,7 @@ impl SpellEffectKind {
             | SpellEffectKind::DamageTargets { target, .. }
             | SpellEffectKind::DestroyTarget { target }
             | SpellEffectKind::PumpTarget { target, .. }
+            | SpellEffectKind::GrantKeywordsTarget { target, .. }
             | SpellEffectKind::TapTarget { target }
             | SpellEffectKind::TargetPlayerGainsLife { target, .. }
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
@@ -531,6 +561,30 @@ impl SpellEffectKind {
                         "mass effect kind must be Creature or AnyPermanent, got {:?}",
                         kind.kind
                     ))
+                }
+            }
+            SpellEffectKind::GrantKeywordsTarget { target, keywords } => {
+                if target.is_player() {
+                    Err(format!(
+                        "GrantKeywordsTarget cannot target players, got {:?}",
+                        target.kind
+                    ))
+                } else if keywords.is_empty() {
+                    Err("GrantKeywordsTarget requires at least one keyword".into())
+                } else {
+                    Ok(())
+                }
+            }
+            SpellEffectKind::GrantKeywordsAllPermanents { filter, keywords } => {
+                if !matches!(filter.kind, TargetKind::Creature | TargetKind::AnyPermanent) {
+                    Err(format!(
+                        "GrantKeywordsAllPermanents filter must be Creature or AnyPermanent, got {:?}",
+                        filter.kind
+                    ))
+                } else if keywords.is_empty() {
+                    Err("GrantKeywordsAllPermanents requires at least one keyword".into())
+                } else {
+                    Ok(())
                 }
             }
             // CR 605.1a: a mana ability is an activated/triggered ability — never a spell. An

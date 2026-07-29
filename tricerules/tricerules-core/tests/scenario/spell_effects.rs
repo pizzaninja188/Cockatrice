@@ -172,7 +172,7 @@ fn healing_salve_shield_fully_consumed_by_bolt() {
         },
     );
     let salve_idx = hand_index_for_card(&e, 0, "healing_salve");
-    e.apply_command(0, &cast_spell(salve_idx, target_player(1)))
+    e.apply_command(0, &cast_modal_spell(salve_idx, vec![(1, target_player(1))]))
         .expect("cast salve on P1");
     e.apply_command(0, &pass()).expect("p0 pass");
     e.apply_command(1, &pass()).expect("p1 pass resolves salve");
@@ -246,7 +246,7 @@ fn healing_salve_double_shield_partially_consumed_by_bolt() {
             },
         );
         let salve_idx = hand_index_for_card(&e, 0, "healing_salve");
-        e.apply_command(0, &cast_spell(salve_idx, target_player(1)))
+        e.apply_command(0, &cast_modal_spell(salve_idx, vec![(1, target_player(1))]))
             .expect("cast salve");
         e.apply_command(0, &pass()).expect("p0 pass");
         e.apply_command(1, &pass()).expect("p1 pass resolves salve");

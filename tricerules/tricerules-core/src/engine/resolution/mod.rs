@@ -6,8 +6,8 @@
 
 use super::events::{color_string, ev_log, object_display_name};
 use super::targeting::{
-    battlefield_objects_matching, compute_spell_targets, object_matches_mass_filter,
-    spell_has_no_legal_targets_at_resolution,
+    battlefield_objects_matching, compute_spell_targets, effect_has_legal_target_at_resolution,
+    object_matches_mass_filter, spell_effect_kind_needs_target, target_filter_legal_at_resolution,
 };
 use super::*;
 use rand::seq::SliceRandom;
@@ -27,6 +27,7 @@ struct EffectCx<'a> {
     engine: &'a mut GameEngine,
     events: &'a mut Vec<rv1::RuledEvent>,
     targets: &'a [ObjectId],
+    target_damage: &'a [u32],
     top: &'a StackItem,
     controller: PlayerId,
     spell_label: &'a str,
@@ -188,18 +189,64 @@ impl GameEngine {
             }
         }
 
-        let fizzle = spell_has_no_legal_targets_at_resolution(self, &effects, &targets, controller);
+        let mut resolution_effects: Vec<(SpellEffectKind, Vec<ObjectId>, Vec<u32>)> = Vec::new();
+        if !is_ability && !top.chosen_modes.is_empty() {
+            if let Some(modal) = self
+                .registry
+                .get(&card_id)
+                .and_then(|definition| definition.face(top.face_index))
+                .and_then(|face| face.modal_spell.as_ref())
+            {
+                for chosen in &top.chosen_modes {
+                    if let Some(mode) = modal.modes.get(chosen.mode_index) {
+                        for effect in &mode.effects {
+                            resolution_effects.push((
+                                effect.clone(),
+                                chosen.targets.clone(),
+                                chosen.target_damage.clone(),
+                            ));
+                        }
+                    }
+                }
+            }
+        } else {
+            resolution_effects.extend(
+                effects
+                    .into_iter()
+                    .map(|effect| (effect, targets.clone(), top.target_damage.clone())),
+            );
+        }
+
+        let targeted_effects: Vec<_> = resolution_effects
+            .iter()
+            .filter(|(effect, _, _)| spell_effect_kind_needs_target(effect))
+            .collect();
+        let fizzle = !targeted_effects.is_empty()
+            && targeted_effects.iter().all(|(effect, mode_targets, _)| {
+                !effect_has_legal_target_at_resolution(self, effect, mode_targets, controller)
+            });
         if fizzle {
             events.push(ev_log(format!("{spell_label} fizzles (no legal targets).")));
             return Ok(());
         }
 
-        for effect in effects {
+        for (effect, effect_targets, effect_target_damage) in resolution_effects {
+            if spell_effect_kind_needs_target(&effect)
+                && !effect_has_legal_target_at_resolution(
+                    self,
+                    &effect,
+                    &effect_targets,
+                    controller,
+                )
+            {
+                continue;
+            }
             let outcome = {
                 let mut cx = EffectCx {
                     engine: self,
                     events,
-                    targets: &targets,
+                    targets: &effect_targets,
+                    target_damage: &effect_target_damage,
                     top: &top,
                     controller,
                     spell_label: &spell_label,
@@ -220,6 +267,12 @@ impl GameEngine {
                     }
                     effect @ SpellEffectKind::GrantKeywordsAll { .. } => {
                         pump_counters::grant_keywords_all(&mut cx, effect)?
+                    }
+                    effect @ SpellEffectKind::GrantKeywordsTarget { .. } => {
+                        pump_counters::grant_keywords_target(&mut cx, effect)?
+                    }
+                    effect @ SpellEffectKind::GrantKeywordsAllPermanents { .. } => {
+                        pump_counters::grant_keywords_all_permanents(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::PutCounters { .. } => {
                         pump_counters::put_counters(&mut cx, effect)?
@@ -265,6 +318,9 @@ impl GameEngine {
                     }
                     effect @ SpellEffectKind::TapTarget { .. } => {
                         misc::tap_target(&mut cx, effect)?
+                    }
+                    effect @ SpellEffectKind::TapAllCreatures { .. } => {
+                        misc::tap_all_creatures(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::DestroyAll { .. } => {
                         mass::destroy_all(&mut cx, effect)?

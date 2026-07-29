@@ -13,8 +13,8 @@
 //     knows the seed could predict shuffles)
 //   * opening: ChooseStartingPlayer, one London mulligan + PutOpeningHandOnBottom, keeps
 //   * land plays (battlefield object map gains basic lands)
-//   * a targeted cast: Lightning Bolt at the opponent (StackPushed with a target, resolve,
-//     LifeChanged -3)
+//   * targeted casts: Lightning Bolt and modal Boros Charm at the opponent (StackPushed
+//     targets/chosen-mode metadata, resolve, LifeChanged)
 //   * one combat: DeclareAttackers (Hill Giant), empty DeclareBlockers, combat LifeChanged
 //   * a tier-3 resolution choice: Brainstorm's ordered 2-card put-back
 //     (ResolutionChoiceRequired / SubmitResolutionChoice)
@@ -212,16 +212,20 @@ public:
     // Policy progress flags
     bool didMulligan = false;
     bool boltCast = false;
+    bool borosCharmCast = false;
     bool giantCast = false;
     bool brainstormCast = false;
     bool attackersSentThisCombat = false;
     bool blockersSentThisCombat = false;
     bool devConjureSent = false;
+    bool devBorosCharmSent = false;
     bool devManaSent = false;
 
     // Milestone observations (asserted by the fixture)
     bool sawBoltPushWithTarget = false;
     bool sawBoltLifeLoss = false;
+    bool sawBorosCharmPushWithMode = false;
+    bool sawBorosCharmLifeLoss = false;
     bool sawAttackersDeclared = false;
     bool sawCombatLifeLoss = false;
     bool sawBrainstormChoice = false;
@@ -234,6 +238,7 @@ public:
     bool sawDevConjuredPermanent = false;
     bool sawDevMana = false;
     quint32 boltOid = 0;
+    quint32 borosCharmOid = 0;
     quint32 brainstormOid = 0;
     bool inCombatDamageWindow = false;
 
@@ -459,6 +464,12 @@ public:
                     sawBoltPushWithTarget = true;
                     boltOid = sp.object_id();
                 }
+                if (cardId == QLatin1String("boros_charm") && sp.targets_size() == 1 &&
+                    sp.chosen_mode_indices_size() == 1 && sp.chosen_mode_indices(0) == 0 &&
+                    sp.chosen_mode_labels_size() == 1) {
+                    sawBorosCharmPushWithMode = true;
+                    borosCharmOid = sp.object_id();
+                }
                 if (cardId == QLatin1String("brainstorm")) {
                     brainstormOid = sp.object_id();
                 }
@@ -476,6 +487,9 @@ public:
                         .arg(lc.delta()));
                 if (lc.delta() == -3 && boltOid != 0 && !sawBoltLifeLoss && !inCombatDamageWindow) {
                     sawBoltLifeLoss = true;
+                }
+                if (lc.delta() == -4 && borosCharmOid != 0 && !sawBorosCharmLifeLoss && !inCombatDamageWindow) {
+                    sawBorosCharmLifeLoss = true;
                 }
                 if (lc.delta() < 0 && inCombatDamageWindow && sawAttackersDeclared) {
                     sawCombatLifeLoss = true;
@@ -867,6 +881,17 @@ public:
                 sendRuled(cmd, QStringLiteral("dev: conjure Serra Angel onto the battlefield"));
                 return;
             }
+            if (!devBorosCharmSent) {
+                devBorosCharmSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                auto *put = dev->mutable_put_card_in_zone();
+                put->set_card_name("Boros Charm");
+                put->set_zone(ruled::v1::DEV_ZONE_HAND);
+                sendRuled(cmd, QStringLiteral("dev: conjure Boros Charm into hand"));
+                return;
+            }
             if (!devManaSent) {
                 devManaSent = true;
                 ruled::v1::RuledCommand cmd;
@@ -875,7 +900,9 @@ public:
                 // Green: nothing in this deck produces or spends it, so the added mana cannot
                 // change which spells the rest of the script decides it can afford.
                 dev->mutable_add_mana()->set_g(2);
-                sendRuled(cmd, QStringLiteral("dev: add {G}{G}"));
+                dev->mutable_add_mana()->set_r(1);
+                dev->mutable_add_mana()->set_w(1);
+                sendRuled(cmd, QStringLiteral("dev: add {G}{G}{R}{W}"));
                 return;
             }
 
@@ -903,6 +930,22 @@ public:
                     ability->set_permanent_id(*oid);
                     ability->set_ability_index(0);
                     sendRuled(cmd, QStringLiteral("tap Mountain oid %1 (for Bolt)").arg(*oid));
+                    return;
+                }
+            }
+            if (const auto *charm =
+                    boltCast && !borosCharmCast
+                        ? handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Boros Charm"))
+                        : nullptr) {
+                if (myPool.r >= 1 && myPool.w >= 1) {
+                    ruled::v1::RuledCommand cmd;
+                    auto *cast = cmd.mutable_cast_spell();
+                    cast->set_hand_card_index(charm->hand_index());
+                    auto *mode = cast->add_selected_modes();
+                    mode->set_mode_index(0);
+                    mode->add_targets()->set_object_id(static_cast<quint32>(oppId));
+                    borosCharmCast = true;
+                    sendRuled(cmd, QStringLiteral("cast Boros Charm damage mode at player %1").arg(oppId));
                     return;
                 }
             }
@@ -1174,6 +1217,7 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     // --- Drive the scripted game until every milestone is observed ---
     const auto milestonesDone = [&] {
         return p2.sentBottom && p1.sawBoltPushWithTarget && p1.sawBoltLifeLoss &&
+               p1.sawBorosCharmPushWithMode && p1.sawBorosCharmLifeLoss &&
                p1.sawAttackersDeclared && p1.sawCombatLifeLoss && p2.sawBrainstormChoice &&
                p2.submittedBrainstormChoice && p2.sawBrainstormResolved && p2.sentCleanupDiscard &&
                p1.sawDevConjuredPermanent && p1.sawDevMana && p2.handSizeByPlayer.count(p2.myId) &&
@@ -1204,6 +1248,8 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     EXPECT_TRUE(p2.sawBottomAction && p2.sentBottom) << "London mulligan bottoming never happened";
     EXPECT_TRUE(p1.sawBoltPushWithTarget) << "no targeted Lightning Bolt cast was observed on the stack";
     EXPECT_TRUE(p1.sawBoltLifeLoss) << "Lightning Bolt never dealt its 3 damage";
+    EXPECT_TRUE(p1.sawBorosCharmPushWithMode) << "Boros Charm chosen-mode metadata was not observed on the stack";
+    EXPECT_TRUE(p1.sawBorosCharmLifeLoss) << "Boros Charm's damage mode never dealt its 4 damage";
     EXPECT_TRUE(p1.sawAttackersDeclared) << "no combat with declared attackers was observed";
     EXPECT_TRUE(p1.sawCombatLifeLoss) << "combat damage never changed a life total";
     EXPECT_TRUE(p2.sawBrainstormChoice) << "Brainstorm's tier-3 resolution choice never arrived";

@@ -1,6 +1,7 @@
 #include "game_prompt_widget.h"
 
 #include <QApplication>
+#include <QLabel>
 #include <QPushButton>
 #include <QSignalSpy>
 #include <gtest/gtest.h>
@@ -14,6 +15,11 @@ protected:
     QPushButton *btn(const char *objectName)
     {
         return widget->findChild<QPushButton *>(objectName);
+    }
+
+    QLabel *label(const char *objectName)
+    {
+        return widget->findChild<QLabel *>(objectName);
     }
 };
 
@@ -138,9 +144,26 @@ TEST_F(GamePromptWidgetTest, ResetBlockersSignalEmitted)
 
 TEST_F(GamePromptWidgetTest, TargetingModeShowsCancelButton)
 {
-    widget->setTargetingMode(true, "Lightning Bolt");
+    widget->setTargetingMode(true, "Counter target spell");
     EXPECT_FALSE(btn("cancelTargetingButton")->isHidden());
     EXPECT_TRUE(btn("passPriorityButton")->isHidden());
+    EXPECT_EQ(label("promptLabel")->text(),
+              QString::fromUtf8("Choose a target for “Counter target spell”, or press Cancel."));
+}
+
+TEST_F(GamePromptWidgetTest, TargetingModeUpdatesForTheNextSelectedMode)
+{
+    widget->setTargetingMode(true, "Counter target spell");
+    widget->setTargetingMode(true, "Return target permanent to its owner's hand");
+    EXPECT_EQ(label("promptLabel")->text(),
+              QString::fromUtf8("Choose a target for “Return target permanent to its owner's hand”, or press Cancel."));
+}
+
+TEST_F(GamePromptWidgetTest, ActivatedAbilityTargetingUsesAbilityText)
+{
+    widget->setActivatedAbilityTargetPending(true, "{T}: Tap target permanent");
+    EXPECT_EQ(label("promptLabel")->text(),
+              QString::fromUtf8("Choose a target for “{T}: Tap target permanent”, or press Cancel."));
 }
 
 TEST_F(GamePromptWidgetTest, TargetingModeCancelSignalEmitted)

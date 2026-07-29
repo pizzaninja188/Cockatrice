@@ -212,6 +212,11 @@ message CastSpell {
   // CR 709/712/715: which face of a multi-face card to cast (split half, MDFC face, adventure
   // half). 0 (default) is the front/primary face, so single-face casts need not set it.
   uint32 face_index = 5;
+  // CR 601.2b / 700.2: selected modal choices and each mode's independent target group.
+  // Modal spells use this field and leave the legacy `targets` field empty. Mode indices are
+  // distinct and the engine resolves selected modes in printed order regardless of submission
+  // order.
+  repeated SelectedSpellMode selected_modes = 6;
 }
 
 // A payment decision for one flexible mana pip (CR 107.4d–f). Currently only Phyrexian pips
@@ -226,6 +231,13 @@ message TargetRef {
   uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // Per-target damage amount for DamageTargets (Fireball, Fire); 0 = unused.
   uint32 damage_amount = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+}
+
+message SelectedSpellMode {
+  // Zero-based index into the chosen face's ModalSpellDef.modes list.
+  uint32 mode_index = 1;
+  // Targets chosen specifically for this mode.
+  repeated TargetRef targets = 2;
 }
 
 message PlayLand {
@@ -318,6 +330,17 @@ message SpellTargets {
   uint32 extra_mana_per_target = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
+// Authoritative legal data for one printed mode of a modal spell.
+message LegalSpellMode {
+  uint32 mode_index = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  string label = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // False when this mode cannot currently be chosen, usually because it requires a target and
+  // no legal target exists.
+  bool selectable = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool needs_target = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  SpellTargets targets = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
 enum HandActionKind {
   HAND_ACTION_PLAY_LAND = 0;
   HAND_ACTION_CAST_SPELL = 1;
@@ -333,6 +356,10 @@ message LegalHandAction {
   uint32 face_index = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // CastSpell only: the chosen face needs at least one cast-time target.
   bool needs_target = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Modal CastSpell only. The bounds and mode list are engine-authoritative.
+  uint32 min_modes = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 max_modes = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated LegalSpellMode modes = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message LegalActions {
@@ -657,6 +684,10 @@ message StackPushed {
   // client uses this to inherit the original spell's Oracle printing (set/provider) so the copy
   // displays the same card art instead of defaulting to the newest printing.
   uint32 copy_source_object_id = 7 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Public modal choices in printed order. Indices are stable rules identity; labels are
+  // display metadata so clients never reconstruct Oracle-mode text.
+  repeated uint32 chosen_mode_indices = 8 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  repeated string chosen_mode_labels = 9 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message ActivateAbility {

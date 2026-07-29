@@ -8,13 +8,32 @@ pub(crate) use tricerules_proto::ruled::v1::{
     ActivateAbility, AssignCombatDamage, BlockPair, CastSpell, ChoiceKind, ChooseTriggerTarget,
     DamagePair, DeclareAttackers, DeclareBlockers, DiscardToHandSize, FlexPipPayment, PassPriority,
     PlayLand, PreviewDeclareAttackers, PreviewDeclareBlockers, PrimitiveYieldStructured,
-    ResolutionChoiceRequired, RuledCommand, RuledEventBatch, SubmitResolutionChoice, TargetRef,
-    TransformPermanent, UndoManaAbility,
+    ResolutionChoiceRequired, RuledCommand, RuledEventBatch, SelectedSpellMode,
+    SubmitResolutionChoice, TargetRef, TransformPermanent, UndoManaAbility,
 };
 
 pub(crate) fn pass() -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::PassPriority(PassPriority {})),
+    }
+}
+
+pub(crate) fn cast_modal_spell(
+    hand_card_index: usize,
+    modes: Vec<(u32, Vec<TargetRef>)>,
+) -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::CastSpell(CastSpell {
+            hand_card_index: hand_card_index as u32,
+            selected_modes: modes
+                .into_iter()
+                .map(|(mode_index, targets)| SelectedSpellMode {
+                    mode_index,
+                    targets,
+                })
+                .collect(),
+            ..Default::default()
+        })),
     }
 }
 

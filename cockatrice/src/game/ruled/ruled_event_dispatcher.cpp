@@ -73,24 +73,6 @@ bool isCombatPhase(RuledCombatPhase phase)
            phase == RuledCombatPhase::CombatDamage;
 }
 
-/// Copies the engine's structured hand-action contract into the generic client-side indexes.
-QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::LegalActions &actions)
-{
-    QHash<RuledHandActionKind, RuledHandActionSet> parsed;
-    for (const auto &action : actions.hand_actions()) {
-        const int handIndex = static_cast<int>(action.hand_index());
-        RuledHandActionSet &set = parsed[action.kind()];
-        set.handIndices.insert(handIndex);
-        const QString cardName = QString::fromStdString(action.card_name());
-        set.indicesByCardName.insert(cardName, handIndex);
-        set.faceOptionsByIndex[handIndex].append({static_cast<int>(action.face_index()), cardName});
-        if (action.needs_target()) {
-            set.needsTargetIndices.insert(handIndex);
-        }
-    }
-    return parsed;
-}
-
 RuledClientState::SpellTargetData parseSpellTargets(const ruled::v1::SpellTargets &src)
 {
     RuledClientState::SpellTargetData data;
@@ -110,6 +92,39 @@ RuledClientState::SpellTargetData parseSpellTargets(const ruled::v1::SpellTarget
     data.isDamageTargets = src.is_damage_targets();
     data.extraManaPerTarget = static_cast<int>(src.extra_mana_per_target());
     return data;
+}
+
+/// Copies the engine's structured hand-action contract into the generic client-side indexes.
+QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::LegalActions &actions)
+{
+    QHash<RuledHandActionKind, RuledHandActionSet> parsed;
+    for (const auto &action : actions.hand_actions()) {
+        const int handIndex = static_cast<int>(action.hand_index());
+        const int faceIndex = static_cast<int>(action.face_index());
+        const int castKey = RuledClientState::spellTargetKey(handIndex, faceIndex);
+        RuledHandActionSet &set = parsed[action.kind()];
+        set.handIndices.insert(handIndex);
+        const QString cardName = QString::fromStdString(action.card_name());
+        set.indicesByCardName.insert(cardName, handIndex);
+        set.faceOptionsByIndex[handIndex].append({faceIndex, cardName});
+        if (action.needs_target()) {
+            set.needsTargetIndices.insert(handIndex);
+        }
+        if (action.modes_size() > 0) {
+            set.modalMinModesByCastKey.insert(castKey, static_cast<int>(action.min_modes()));
+            set.modalMaxModesByCastKey.insert(castKey, static_cast<int>(action.max_modes()));
+            QVector<RuledModalSpellOption> modes;
+            modes.reserve(action.modes_size());
+            for (const auto &mode : action.modes()) {
+                modes.append({static_cast<int>(mode.mode_index()), QString::fromStdString(mode.label()),
+                              mode.selectable(), mode.needs_target(),
+                              mode.has_targets() ? parseSpellTargets(mode.targets())
+                                                 : RuledClientState::SpellTargetData{}});
+            }
+            set.modalOptionsByCastKey.insert(castKey, modes);
+        }
+    }
+    return parsed;
 }
 
 } // namespace
@@ -361,7 +376,7 @@ void RuledEventDispatcher::applyTriggerNeedsTarget(const ruled::v1::TriggerNeeds
         choice.kind = RuledClientState::ChoiceKind::TriggerTarget;
         choice.promptText = abilityText;
         state->setPendingChoice(std::move(choice));
-        ctx.promptFeed += QStringLiteral("Choose a target for: %1\n").arg(abilityText);
+        ctx.promptFeed += QStringLiteral("Choose a target for “%1”.\n").arg(abilityText);
     } else {
         state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::TriggerTarget);
     }

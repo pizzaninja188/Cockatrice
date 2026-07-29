@@ -9,6 +9,7 @@
 #define COCKATRICE_PLAYER_ACTIONS_H
 #include "../dialogs/dlg_create_token.h"
 #include "../dialogs/dlg_move_top_cards_until.h"
+#include "../ruled/ruled_pending_cast.h"
 #include "event_processing_options.h"
 #include "player.h"
 
@@ -17,6 +18,7 @@
 #include <QMap>
 #include <QPair>
 #include <QVector>
+#include <memory>
 #include <libcockatrice/card/relation/card_relation_type.h>
 #include <libcockatrice/filters/filter_string.h>
 #include <libcockatrice/protocol/pb/card_attributes.pb.h>
@@ -44,7 +46,7 @@ signals:
     void logSetAnnotation(Player *player, CardItem *card, QString newAnnotation);
     void logSetDoesntUntap(Player *player, CardItem *card, bool doesntUntap);
     void logSetPT(Player *player, CardItem *card, QString newPT);
-    void ruledSpellTargetingChanged(bool active, const QString &cardName);
+    void ruledSpellTargetingChanged(bool active, const QString &effectText);
     void ruledMultiTargetSelectionUpdated(int selectedCount, int maxTargets);
     void landTapUndoAvailableChanged(bool available);
     void ruledSpellCastPendingChanged(bool pending);
@@ -256,81 +258,6 @@ public slots:
     void setRuledUndoableManaCount(int count);
 
 private:
-    // A flexible mana pip (CR 107.4d–f) parsed from a Scryfall brace cost, with its ordinal
-    // position so the engine can match the player's payment choice to the right pip.
-    struct RuledFlexPip
-    {
-        quint32 pipIndex = 0; // position among all pips in the cost ({G/U} in "{1}{G/U}" is index 1)
-        QChar colorA;         // first/only color letter (W/U/B/R/G)
-        QChar colorB;         // hybrid second color; null otherwise
-        int generic = 0;      // mono-hybrid generic alternative N ({2/W} -> 2); 0 if not mono-hybrid
-        bool phyrexian = false; // Phyrexian {C/P}: payable with the color or 2 life
-        // Mono-hybrid only: how many of `generic` have been paid so far with off-color/colorless
-        // mana. The pip is satisfied once it reaches `generic` (or earlier via the color).
-        int genericPaid = 0;
-    };
-
-    struct PendingActivatedAbility
-    {
-        bool valid = false;
-        quint32 permanentOid = 0;
-        int abilityIndex = -1;
-        QString abilityText;
-        QString cardName;
-        bool needsTarget = false;
-        bool waitingForTarget = false;
-        quint32 selectedTargetOid = 0;
-        bool waitingForMana = false;
-        QMap<QChar, int> remainingCost;
-        // CR 107.4d–f: unresolved flexible pips (hybrid/mono-hybrid/Phyrexian) in the ability
-        // cost. Resolved as mana is tapped (hybrid/mono) or via a self-portrait click (Phyrexian
-        // life), mirroring the spell-cast flow — no upfront prompt.
-        QVector<RuledFlexPip> flexPips;
-        // CR 107.4f: pip indices the player chose to pay with 2 life. Sent as FlexPipPayment.
-        QVector<quint32> lifePipIndices;
-    };
-
-    struct PendingRuledSpellCast
-    {
-        int handIndex = -1;
-        // CR 709/712/715: which face of a multi-face card is being cast (split half / MDFC face).
-        // 0 (front/primary) for single-face cards; sent as CastSpell.face_index.
-        int faceIndex = 0;
-        QString cardName;
-        QMap<QChar, int> remainingCost;
-        QVector<quint32> selectedTargetOids;
-        // Per-target damage allocation parallel to selectedTargetOids; populated for DamageTargets.
-        QVector<quint32> selectedTargetDamages;
-        bool waitingForTarget = false;
-        bool valid = false;
-        // DamageTargets: max targets (0 = unlimited/Fireball), fixed total damage (0 = X-spell).
-        int maxTargets = 0;
-        int fixedDamage = 0;
-        bool isDamageTargets = false;
-        // CR 601.2f: extra generic mana per target beyond the first (Fireball = 1, Fire = 0).
-        // Added to remainingCost once the target count is known so the mana prompt matches the
-        // engine's real cost.
-        int extraManaPerTarget = 0;
-        // Interactive damage allocation mode: entered after targets are chosen for multi-target
-        // DamageTargets spells. Each entry is parallel to selectedTargetOids (min 1 each).
-        bool inDamageAllocationMode = false;
-        int damageAllocationTotal = 0;
-        QVector<int> targetDamageAllocations;
-        // CR 107.3: value chosen for X when the cost has an X pip; 0 otherwise. The number of
-        // X pips in the cost (folded into remainingCost's generic bucket at parse time); 0 when
-        // the cost has no X. Used to defer the X prompt until after targeting.
-        int xPips = 0;
-        // Value chosen for X, sent on the CastSpell command. Chosen after targets but before
-        // paying mana (CR 601.2b orders X before costs; we prompt for targets first for UX).
-        int xValue = 0;
-        // CR 107.4d–f: unresolved flexible pips (hybrid/mono-hybrid/Phyrexian). Resolved as mana
-        // is tapped (hybrid/mono) or via a self-portrait click (Phyrexian life) — no upfront prompt.
-        QVector<RuledFlexPip> flexPips;
-        // CR 107.4f: pip indices (into the full mana cost) the player chose to pay with life
-        // for Phyrexian pips. Sent as FlexPipPayment{pay_life} on the CastSpell command.
-        QVector<quint32> lifePipIndices;
-    };
-
     struct LandTapUndoEntry
     {
         int cardId;
@@ -348,6 +275,7 @@ private:
     // Handles the toggle-cancel, {X}, hybrid/Phyrexian pip, target and mana-payment flow.
     bool beginRuledSpellCast(CardItem *card, int ruledHandIndex, int faceIndex, const QString &castName,
                              const QString &castCost);
+    bool storeCurrentModalTargetsAndAdvance();
     static QMap<QChar, int> parseSimpleManaCost(const QString &manaCost);
     static QVector<RuledFlexPip> parseFlexPips(const QString &manaCost);
     static QString formatSimpleManaCost(const QMap<QChar, int> &cost);
@@ -422,8 +350,9 @@ private:
     FilterString movingCardsUntilFilter;
     int movingCardsUntilCounter = 0;
     MoveTopCardsUntilOptions movingCardsUntilOptions;
-    PendingRuledSpellCast pendingRuledSpellCast;
-    PendingActivatedAbility pendingActivatedAbility;
+    std::unique_ptr<RuledPendingCast> ruledPendingCast;
+    PendingRuledSpellCast &pendingRuledSpellCast;
+    PendingActivatedAbility &pendingActivatedAbility;
     QVector<LandTapUndoEntry> landTapUndoStack;
     QVector<LandTapUndoEntry> midCastLandTapStack;
     QVector<int> manaPaymentCounterIds;

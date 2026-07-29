@@ -55,6 +55,29 @@ enum class RuledSessionResetScope : int
     KeepCurrentBatch,
 };
 
+/// Engine-authoritative targeting data for one spell, mode, or activated ability.
+struct RuledSpellTargetData
+{
+    QSet<quint32> validPermanentIds;
+    QSet<quint32> validStackIds;
+    QSet<quint32> validGraveyardIds;
+    bool canTargetSelf = false;
+    bool canTargetOpponent = false;
+    int maxTargets = 0;
+    int fixedDamage = 0;
+    bool isDamageTargets = false;
+    int extraManaPerTarget = 0;
+};
+
+struct RuledModalSpellOption
+{
+    int modeIndex = -1;
+    QString label;
+    bool selectable = false;
+    bool needsTarget = false;
+    RuledSpellTargetData targets;
+};
+
 // CR 712: one playable face of a hand card the engine offers for a hand action. An MDFC land
 // (pathway) yields more than one option for a single hand slot (front + back), each with its own
 // face index and Oracle face name for the side-picker menu.
@@ -80,6 +103,10 @@ struct RuledHandActionSet
     QHash<int, QVector<RuledFaceOption>> faceOptionsByIndex;
     /// Slots whose action needs a cast-time target (CastSpell only).
     QSet<int> needsTargetIndices;
+    /// Modal metadata keyed by RuledClientState::spellTargetKey(hand slot, face index).
+    QHash<int, QVector<RuledModalSpellOption>> modalOptionsByCastKey;
+    QHash<int, int> modalMinModesByCastKey;
+    QHash<int, int> modalMaxModesByCastKey;
 };
 
 class RuledClientState : public QObject
@@ -170,20 +197,7 @@ public:
 
     /// Engine-authoritative targeting data, refreshed from LegalActions each RuledEventBatch.
     /// Replaces all Oracle/card-name-based target filtering in the client.
-    struct SpellTargetData
-    {
-        QSet<quint32> validPermanentIds;
-        QSet<quint32> validStackIds;
-        QSet<quint32> validGraveyardIds;
-        bool canTargetSelf = false;
-        bool canTargetOpponent = false;
-        // DamageTargets only: max targets (0 = unlimited/Fireball), fixed total damage (0 = X-spell).
-        int maxTargets = 0;
-        int fixedDamage = 0;
-        bool isDamageTargets = false;
-        // DamageTargets only: extra generic mana per target beyond the first (Fireball = 1, Fire = 0).
-        int extraManaPerTarget = 0;
-    };
+    using SpellTargetData = RuledSpellTargetData;
 
     explicit RuledClientState(RuledClientHost *host, QObject *parent = nullptr);
 

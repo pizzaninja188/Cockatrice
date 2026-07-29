@@ -2,8 +2,8 @@
 
 use crate::custom::{self, ResolutionChoice, ResolutionCtx, ResolutionStep};
 use crate::state::{
-    AffectedScope, CombatState, ContinuousEffect, GameObject, GameState, ObjectId, OpeningSequence,
-    PendingResolution, PendingTrigger, PlayerId, PlayerState, StackItem, TurnStep,
+    AffectedScope, ChosenSpellMode, CombatState, ContinuousEffect, GameObject, GameState, ObjectId,
+    OpeningSequence, PendingResolution, PendingTrigger, PlayerId, PlayerState, StackItem, TurnStep,
     UndoableManaAbility, Zone,
 };
 use prost::Message;
@@ -15,8 +15,8 @@ use thiserror::Error;
 use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
     AbilityCost, AnthemController, AnthemFilter, CastTriggerPlayer, Color, ContinuousEffectKind,
-    CounterKind, EffectDuration, Keyword, SearchDestination, SpellEffectKind, SpellTypeFilter,
-    StaticAbilityDef, TargetFilter, TargetKind, TokenController, TriggerCondition,
+    CounterKind, EffectDuration, Keyword, RelativePlayerSet, SearchDestination, SpellEffectKind,
+    SpellTypeFilter, StaticAbilityDef, TargetFilter, TargetKind, TokenController, TriggerCondition,
 };
 use tricerules_cards::{CardRegistry, FaceRef};
 use tricerules_proto::ruled::v1 as rv1;
@@ -476,14 +476,7 @@ impl GameEngine {
                 }
             }
             Some(Cmd::PrimitiveYieldStructured(_)) => self.primitive_yield_structured(player),
-            Some(Cmd::CastSpell(cs)) => self.cast_spell(
-                player,
-                cs.hand_card_index as usize,
-                &cs.targets,
-                cs.x_value,
-                &cs.flex_payments,
-                cs.face_index as usize,
-            ),
+            Some(Cmd::CastSpell(cs)) => self.cast_spell(player, cs),
             Some(Cmd::ActivateAbility(aa)) => self.activate_ability(
                 player,
                 aa.permanent_id,

@@ -289,6 +289,13 @@ RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &c
                     for (int ti = 0; ti < ruledCmd.cast_spell().targets_size(); ++ti) {
                         pending.targetOids.append(static_cast<quint32>(ruledCmd.cast_spell().targets(ti).object_id()));
                     }
+                    // Modal targets are grouped on the atomic command for rules resolution, but
+                    // Cockatrice's visual arrow/binding layer consumes one flat target list.
+                    for (const auto &mode : ruledCmd.cast_spell().selected_modes()) {
+                        for (const auto &target : mode.targets()) {
+                            pending.targetOids.append(static_cast<quint32>(target.object_id()));
+                        }
+                    }
                     ruledPendingCastVisualQueue.append(pending);
                     CardToMove cardToMove;
                     cardToMove.set_card_id(card->getId());

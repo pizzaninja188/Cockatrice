@@ -50,7 +50,9 @@
 static constexpr int MOVE_TOP_CARD_UNTIL_INTERVAL = 100;
 
 PlayerActions::PlayerActions(Player *_player)
-    : QObject(_player), player(_player), lastTokenTableRow(0), movingCardsUntil(false)
+    : QObject(_player), player(_player), lastTokenTableRow(0), movingCardsUntil(false),
+      ruledPendingCast(std::make_unique<RuledPendingCast>()), pendingRuledSpellCast(ruledPendingCast->spell),
+      pendingActivatedAbility(ruledPendingCast->ability)
 {
     moveTopCardTimer = new QTimer(this);
     moveTopCardTimer->setInterval(MOVE_TOP_CARD_UNTIL_INTERVAL);
@@ -124,7 +126,7 @@ QString PlayerActions::formatSimpleManaCost(const QMap<QChar, int> &cost)
     return out;
 }
 
-QVector<PlayerActions::RuledFlexPip> PlayerActions::parseFlexPips(const QString &manaCost)
+QVector<RuledFlexPip> PlayerActions::parseFlexPips(const QString &manaCost)
 {
     // Walk the Scryfall brace groups in order so each pip's index matches the engine's
     // ManaCost pip order. Flexible pips (CR 107.4d–f) contain a slash: {G/U} hybrid,
@@ -592,11 +594,25 @@ bool PlayerActions::completePendingRuledSpellCast()
     cast->set_x_value(static_cast<quint32>(pendingRuledSpellCast.xValue));
     // CR 709/712/715: which face of a multi-face card to cast (0 for single-face cards).
     cast->set_face_index(static_cast<quint32>(pendingRuledSpellCast.faceIndex));
-    for (int i = 0; i < pendingRuledSpellCast.selectedTargetOids.size(); ++i) {
-        auto *target = cast->add_targets();
-        target->set_object_id(pendingRuledSpellCast.selectedTargetOids.at(i));
-        if (i < pendingRuledSpellCast.selectedTargetDamages.size()) {
-            target->set_damage_amount(pendingRuledSpellCast.selectedTargetDamages.at(i));
+    if (pendingRuledSpellCast.selectedModes.isEmpty()) {
+        for (int i = 0; i < pendingRuledSpellCast.selectedTargetOids.size(); ++i) {
+            auto *target = cast->add_targets();
+            target->set_object_id(pendingRuledSpellCast.selectedTargetOids.at(i));
+            if (i < pendingRuledSpellCast.selectedTargetDamages.size()) {
+                target->set_damage_amount(pendingRuledSpellCast.selectedTargetDamages.at(i));
+            }
+        }
+    } else {
+        for (const auto &mode : pendingRuledSpellCast.selectedModes) {
+            auto *selectedMode = cast->add_selected_modes();
+            selectedMode->set_mode_index(static_cast<quint32>(mode.modeIndex));
+            for (int i = 0; i < mode.selectedTargetOids.size(); ++i) {
+                auto *target = selectedMode->add_targets();
+                target->set_object_id(mode.selectedTargetOids.at(i));
+                if (i < mode.selectedTargetDamages.size()) {
+                    target->set_damage_amount(mode.selectedTargetDamages.at(i));
+                }
+            }
         }
     }
     // CR 107.4f: Phyrexian pips the player chose to pay with life.
@@ -1173,7 +1189,7 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
     return beginRuledSpellCast(card, ruledHandIndex, 0, card->getName(), card->getCardInfo().getManaCost());
 }
 
-bool PlayerActions::beginRuledSpellCast(CardItem *card,
+bool PlayerActions::beginRuledSpellCast(CardItem *,
                                         int ruledHandIndex,
                                         int faceIndex,
                                         const QString &castName,
@@ -1194,6 +1210,29 @@ bool PlayerActions::beginRuledSpellCast(CardItem *card,
         return true;
     }
 
+    const auto actionIt = geh->handActions.constFind(ruled::v1::HAND_ACTION_CAST_SPELL);
+    const int castKey = RuledClientState::spellTargetKey(ruledHandIndex, faceIndex);
+    QVector<PendingRuledSpellCast::SelectedMode> selectedModes;
+    if (actionIt != geh->handActions.constEnd() && actionIt->modalOptionsByCastKey.contains(castKey)) {
+        const auto &modeOptions = actionIt->modalOptionsByCastKey.value(castKey);
+        const auto selected = RuledPendingCast::chooseModes(
+            player->getGame()->getTab(), castName, modeOptions,
+            actionIt->modalMinModesByCastKey.value(castKey),
+            actionIt->modalMaxModesByCastKey.value(castKey));
+        if (!selected.has_value()) {
+            return true;
+        }
+        for (const int modeIndex : *selected) {
+            const auto option =
+                std::find_if(modeOptions.cbegin(), modeOptions.cend(),
+                             [modeIndex](const auto &mode) { return mode.modeIndex == modeIndex; });
+            if (option != modeOptions.cend()) {
+                selectedModes.append(
+                    {option->modeIndex, option->label, option->needsTarget, option->targets, {}, {}});
+            }
+        }
+    }
+
     // Timing legality (sorcery vs. instant speed, flash, combat-declaration locks, priority) is
     // decided by the engine and surfaced via the CastSpell legality check above — the single
     // source of truth. We deliberately do NOT re-gate by card type here: doing so would block
@@ -1210,6 +1249,7 @@ bool PlayerActions::beginRuledSpellCast(CardItem *card,
     pendingRuledSpellCast.xValue = 0;
     pendingRuledSpellCast.cardName = castName;
     pendingRuledSpellCast.remainingCost = parseSimpleManaCost(castCost);
+    pendingRuledSpellCast.selectedModes = selectedModes;
 
     // CR 107.3: record how many X pips the cost has; X is chosen before target selection
     // (see promptForRuledSpellXIfNeeded). parseSimpleManaCost folds each X pip
@@ -1225,12 +1265,30 @@ bool PlayerActions::beginRuledSpellCast(CardItem *card,
     // alternative — and a Phyrexian pip can be paid with 2 life by clicking the player's portrait.
     pendingRuledSpellCast.flexPips = parseFlexPips(rawCost);
 
-    pendingRuledSpellCast.waitingForTarget =
-        geh->handActionNeedsTarget(ruled::v1::HAND_ACTION_CAST_SPELL, ruledHandIndex);
-    pendingRuledSpellCast.isDamageTargets = geh->spellIsDamageTargets(ruledHandIndex, faceIndex);
-    pendingRuledSpellCast.maxTargets = geh->spellMaxTargets(ruledHandIndex, faceIndex);
-    pendingRuledSpellCast.fixedDamage = geh->spellFixedDamage(ruledHandIndex, faceIndex);
-    pendingRuledSpellCast.extraManaPerTarget = geh->spellExtraManaPerTarget(ruledHandIndex, faceIndex);
+    pendingRuledSpellCast.activeModePosition = -1;
+    if (!selectedModes.isEmpty()) {
+        for (int i = 0; i < selectedModes.size(); ++i) {
+            if (selectedModes.at(i).needsTarget) {
+                pendingRuledSpellCast.activeModePosition = i;
+                break;
+            }
+        }
+    }
+    pendingRuledSpellCast.waitingForTarget = pendingRuledSpellCast.activeModePosition >= 0 ||
+        (selectedModes.isEmpty() &&
+         geh->handActionNeedsTarget(ruled::v1::HAND_ACTION_CAST_SPELL, ruledHandIndex));
+    if (pendingRuledSpellCast.activeModePosition >= 0) {
+        const auto &targetData = selectedModes.at(pendingRuledSpellCast.activeModePosition).targets;
+        pendingRuledSpellCast.isDamageTargets = targetData.isDamageTargets;
+        pendingRuledSpellCast.maxTargets = targetData.maxTargets;
+        pendingRuledSpellCast.fixedDamage = targetData.fixedDamage;
+        pendingRuledSpellCast.extraManaPerTarget = targetData.extraManaPerTarget;
+    } else {
+        pendingRuledSpellCast.isDamageTargets = geh->spellIsDamageTargets(ruledHandIndex, faceIndex);
+        pendingRuledSpellCast.maxTargets = geh->spellMaxTargets(ruledHandIndex, faceIndex);
+        pendingRuledSpellCast.fixedDamage = geh->spellFixedDamage(ruledHandIndex, faceIndex);
+        pendingRuledSpellCast.extraManaPerTarget = geh->spellExtraManaPerTarget(ruledHandIndex, faceIndex);
+    }
     emit landTapUndoAvailableChanged(false);
     emit ruledSpellCastPendingChanged(true);
 
@@ -1240,15 +1298,12 @@ bool PlayerActions::beginRuledSpellCast(CardItem *card,
     }
 
     if (pendingRuledSpellCast.waitingForTarget) {
-        emit ruledSpellTargetingChanged(true, pendingRuledSpellCast.cardName);
-        if (card->getName().trimmed().compare(QStringLiteral("Lightning Bolt"), Qt::CaseInsensitive) == 0) {
-            player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-                tr("Cast %1 selected. Click a player's portrait or a creature, or press Cancel.")
-                    .arg(pendingRuledSpellCast.cardName));
-        } else {
-            player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-                tr("Cast %1 selected. Select a target card, or press Cancel.").arg(pendingRuledSpellCast.cardName));
-        }
+        const QString effectText = pendingRuledSpellCast.activeModePosition >= 0
+            ? pendingRuledSpellCast.selectedModes.at(pendingRuledSpellCast.activeModePosition).label
+            : pendingRuledSpellCast.cardName;
+        emit ruledSpellTargetingChanged(true, effectText);
+        player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
+            tr("Choose a target for “%1”, or press Cancel.").arg(effectText));
         return true;
     }
 
@@ -1280,15 +1335,21 @@ bool PlayerActions::tryRuledSpellCastFaceMenu(CardItem *card)
     if (card->getZone()->getName() != ZoneNames::HAND) {
         return false;
     }
-    // Only multi-face cards (split / MDFC) use the side picker; single-face cards keep their direct
-    // single-click cast (CR 709/712/715: each face is cast separately via CastSpell.face_index).
-    const QStringList faceNames = card->getName().split(QStringLiteral(" // "), Qt::SkipEmptyParts);
-    if (faceNames.size() < 2) {
-        return false;
-    }
     RuledClientState *const geh = player->getGame()->getGameEventHandler()->ruled();
     if (!geh) {
         return false;
+    }
+    const QStringList faceNames = card->getName().split(QStringLiteral(" // "), Qt::SkipEmptyParts);
+    if (faceNames.size() < 2) {
+        const int handIndex =
+            RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_CAST_SPELL, card);
+        const auto actionIt = geh->handActions.constFind(ruled::v1::HAND_ACTION_CAST_SPELL);
+        const int castKey = RuledClientState::spellTargetKey(handIndex, 0);
+        if (handIndex < 0 || actionIt == geh->handActions.constEnd() ||
+            !actionIt->modalOptionsByCastKey.contains(castKey)) {
+            return false;
+        }
+        return beginRuledSpellCast(card, handIndex, 0, card->getName(), card->getCardInfo().getManaCost());
     }
 
     // Collect the faces that are currently castable. Timing/zone legality is already reflected in the
@@ -1378,9 +1439,17 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
                 .arg(pendingRuledSpellCast.cardName));
         return true;
     }
-    const bool valid = isOnBattlefield  ? handler->isValidSpellTarget(slot, face, targetOid)
-                       : isOnGraveyard  ? handler->isValidSpellGraveyardTarget(slot, face, targetOid)
-                                        : handler->isValidSpellStackTarget(slot, face, targetOid);
+    const bool hasModalTarget = pendingRuledSpellCast.activeModePosition >= 0;
+    const auto *modalTarget = hasModalTarget
+        ? &pendingRuledSpellCast.selectedModes.at(pendingRuledSpellCast.activeModePosition).targets
+        : nullptr;
+    const bool valid = modalTarget
+        ? (isOnBattlefield ? modalTarget->validPermanentIds.contains(targetOid)
+                           : isOnGraveyard ? modalTarget->validGraveyardIds.contains(targetOid)
+                                           : modalTarget->validStackIds.contains(targetOid))
+        : (isOnBattlefield ? handler->isValidSpellTarget(slot, face, targetOid)
+                           : isOnGraveyard ? handler->isValidSpellGraveyardTarget(slot, face, targetOid)
+                                           : handler->isValidSpellStackTarget(slot, face, targetOid));
     if (!valid) {
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
             tr("That is not a legal target for %1.").arg(pendingRuledSpellCast.cardName));
@@ -1457,6 +1526,11 @@ bool PlayerActions::isAwaitingRuledPlayerTargetSelection() const
     }
     const int slot = pendingRuledSpellCast.handIndex;
     const int face = pendingRuledSpellCast.faceIndex;
+    if (pendingRuledSpellCast.activeModePosition >= 0) {
+        const auto &targets =
+            pendingRuledSpellCast.selectedModes.at(pendingRuledSpellCast.activeModePosition).targets;
+        return targets.canTargetSelf || targets.canTargetOpponent;
+    }
     return handler->canSpellTargetSelf(slot, face) || handler->canSpellTargetOpponent(slot, face);
 }
 
@@ -1494,12 +1568,18 @@ bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
     const int slot = pendingRuledSpellCast.handIndex;
     const int face = pendingRuledSpellCast.faceIndex;
     const bool isSelf = (targetPlayerId == player->getPlayerInfo()->getId());
-    if (isSelf && !handler->canSpellTargetSelf(slot, face)) {
+    const auto *modalTarget = pendingRuledSpellCast.activeModePosition >= 0
+        ? &pendingRuledSpellCast.selectedModes.at(pendingRuledSpellCast.activeModePosition).targets
+        : nullptr;
+    const bool canTargetSelf = modalTarget ? modalTarget->canTargetSelf : handler->canSpellTargetSelf(slot, face);
+    const bool canTargetOpponent =
+        modalTarget ? modalTarget->canTargetOpponent : handler->canSpellTargetOpponent(slot, face);
+    if (isSelf && !canTargetSelf) {
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
             tr("%1 must target an opponent.").arg(pendingRuledSpellCast.cardName));
         return true;
     }
-    if (!isSelf && !handler->canSpellTargetOpponent(slot, face)) {
+    if (!isSelf && !canTargetOpponent) {
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
             tr("%1 cannot target opponents.").arg(pendingRuledSpellCast.cardName));
         return true;
@@ -1559,6 +1639,40 @@ int PlayerActions::effectiveDamageTargetsMax() const
     return total;
 }
 
+bool PlayerActions::storeCurrentModalTargetsAndAdvance()
+{
+    const int current = pendingRuledSpellCast.activeModePosition;
+    if (current < 0 || current >= pendingRuledSpellCast.selectedModes.size()) {
+        return false;
+    }
+    auto &mode = pendingRuledSpellCast.selectedModes[current];
+    mode.selectedTargetOids = pendingRuledSpellCast.selectedTargetOids;
+    mode.selectedTargetDamages = pendingRuledSpellCast.selectedTargetDamages;
+
+    for (int next = current + 1; next < pendingRuledSpellCast.selectedModes.size(); ++next) {
+        const auto &nextMode = pendingRuledSpellCast.selectedModes.at(next);
+        if (!nextMode.needsTarget) {
+            continue;
+        }
+        pendingRuledSpellCast.activeModePosition = next;
+        pendingRuledSpellCast.selectedTargetOids.clear();
+        pendingRuledSpellCast.selectedTargetDamages.clear();
+        pendingRuledSpellCast.isDamageTargets = nextMode.targets.isDamageTargets;
+        pendingRuledSpellCast.maxTargets = nextMode.targets.maxTargets;
+        pendingRuledSpellCast.fixedDamage = nextMode.targets.fixedDamage;
+        pendingRuledSpellCast.extraManaPerTarget = nextMode.targets.extraManaPerTarget;
+        pendingRuledSpellCast.waitingForTarget = true;
+        emit ruledSpellTargetingChanged(true, nextMode.label);
+        player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
+            tr("Choose a target for “%1”, or press Cancel.").arg(nextMode.label));
+        player->getGame()->getGameEventHandler()->ruled()->emitSpellTargetSelectionChanged();
+        player->getGameScene()->update();
+        return true;
+    }
+    pendingRuledSpellCast.activeModePosition = -1;
+    return false;
+}
+
 bool PlayerActions::finalizeTargetSelectionAndContinue()
 {
     pendingRuledSpellCast.waitingForTarget = false;
@@ -1609,6 +1723,10 @@ bool PlayerActions::finalizeTargetSelectionAndContinue()
                     .arg(total).arg(numTargets));
             return true; // wait for the player to confirm via the prompt button
         }
+    }
+
+    if (storeCurrentModalTargetsAndAdvance()) {
+        return true;
     }
 
     // CR 107.4d–f: front-load hybrid/Phyrexian choices.
@@ -1720,6 +1838,7 @@ void PlayerActions::confirmSpellDamageAllocation()
     pendingRuledSpellCast.inDamageAllocationMode = false;
     player->getGame()->getGameEventHandler()->ruled()->emitSpellDamageAllocationUiChanged();
 
+    if (storeCurrentModalTargetsAndAdvance()) return;
     if (!resolvePendingSpellFlexiblePips()) return;
     if (totalRemainingForCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips) == 0) {
         completePendingRuledSpellCast();

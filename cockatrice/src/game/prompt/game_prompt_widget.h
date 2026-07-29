@@ -88,7 +88,7 @@ public slots:
     /// must-attack / must-block creature that isn't staged, so the confirm (OK) button is disabled
     /// to prevent submitting an illegal declaration that the engine would reject (softlock).
     void setCombatMode(CombatMode mode, bool localPlayerHasButtons, bool declarationSatisfied = true);
-    void setTargetingMode(bool enabled, const QString &cardName = {});
+    void setTargetingMode(bool enabled, const QString &effectText = {});
     void setRuledStackHasItems(bool hasItems);
     /// CR 510.4: true while the engine reports a pending first-strike damage substep.
     /// Drives the "First Strike Damage" vs "Combat Damage" pass-priority button label

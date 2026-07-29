@@ -135,7 +135,18 @@ fn hand_action(
         card_name: card_name.to_string(),
         face_index: face_index as u32,
         needs_target,
+        min_modes: 0,
+        max_modes: 0,
+        modes: vec![],
     }
+}
+
+fn spell_targets_have_candidate(targets: &rv1::SpellTargets) -> bool {
+    !targets.valid_permanent_ids.is_empty()
+        || !targets.valid_stack_ids.is_empty()
+        || !targets.valid_graveyard_ids.is_empty()
+        || targets.can_target_self
+        || targets.can_target_opponent
 }
 
 fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandAction> {
@@ -239,13 +250,42 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                 sorcery_ok
             };
             if cast_ok {
-                actions.push(hand_action(
+                let mut action = hand_action(
                     rv1::HandActionKind::HandActionCastSpell,
                     hand_index,
                     &face.name,
                     face_index,
                     face.spell_effect.iter().any(spell_effect_kind_needs_target),
-                ));
+                );
+                if let Some(modal) = &face.modal_spell {
+                    action.min_modes = modal.min_modes;
+                    action.max_modes = modal.max_modes;
+                    action.modes = modal
+                        .modes
+                        .iter()
+                        .enumerate()
+                        .map(|(mode_index, mode)| {
+                            let needs_target =
+                                mode.effects.iter().any(spell_effect_kind_needs_target);
+                            let targets = compute_spell_targets(eng, pid, &mode.effects);
+                            let selectable =
+                                !needs_target || spell_targets_have_candidate(&targets);
+                            rv1::LegalSpellMode {
+                                mode_index: mode_index as u32,
+                                label: mode.label.clone(),
+                                selectable,
+                                needs_target,
+                                targets: Some(targets),
+                            }
+                        })
+                        .collect();
+                    let selectable_count =
+                        action.modes.iter().filter(|mode| mode.selectable).count();
+                    if selectable_count < modal.min_modes as usize {
+                        continue;
+                    }
+                }
+                actions.push(action);
             }
         }
     }

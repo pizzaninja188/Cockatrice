@@ -27,6 +27,8 @@ mod helpers;
 mod legend_rule;
 #[path = "scenario/mana.rs"]
 mod mana;
+#[path = "scenario/modal_spells.rs"]
+mod modal_spells;
 #[path = "scenario/multi_face.rs"]
 mod multi_face;
 #[path = "scenario/opening.rs"]

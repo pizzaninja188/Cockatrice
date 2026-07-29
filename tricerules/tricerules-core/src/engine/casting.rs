@@ -182,12 +182,14 @@ impl GameEngine {
     pub(super) fn cast_spell(
         &mut self,
         player: PlayerId,
-        hand_idx: usize,
-        targets: &[rv1::TargetRef],
-        x_value: u32,
-        flex_payments: &[rv1::FlexPipPayment],
-        face_index: usize,
+        command: &rv1::CastSpell,
     ) -> Result<RuledEventBatch, EngineError> {
+        let hand_idx = command.hand_card_index as usize;
+        let targets = command.targets.as_slice();
+        let x_value = command.x_value;
+        let flex_payments = command.flex_payments.as_slice();
+        let face_index = command.face_index as usize;
+        let selected_modes = command.selected_modes.as_slice();
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("not your priority"));
         }
@@ -219,6 +221,7 @@ impl GameEngine {
         let face_name = face.name.to_string();
         let is_multiface = def.is_multiface();
         let face_effects: Vec<SpellEffectKind> = face.spell_effect.to_vec();
+        let modal_spell = face.modal_spell.clone();
         let sorcery_ok = super::priority::sorcery_speed_available(&self.state, player);
         let instant_ok = super::priority::instant_timing_step_allowed(self.state.turn_step);
         if face_is_sorcery {
@@ -242,43 +245,107 @@ impl GameEngine {
                 "must choose trigger target before casting",
             ));
         }
-        validate_spell_targets(self, player, &face_effects, targets)?;
         let has_x = face_mana.has_x();
         if x_value != 0 && !has_x {
             return Err(EngineError::Illegal("x_value given but cost has no {X}"));
         }
         let chosen_x = if has_x { x_value } else { 0 };
-        // Validate DamageTargets damage allocation: sum of per-target amounts must equal total.
-        for effect in &face_effects {
-            if let SpellEffectKind::DamageTargets { amount, .. } = effect {
-                let total = amount.resolve(chosen_x);
-                let allocated: u32 = targets.iter().map(|t| t.damage_amount).sum();
-                if allocated != total {
-                    return Err(EngineError::Illegal(
-                        "damage amounts must sum to the total damage (X)",
-                    ));
-                }
+
+        let mut public_targets: Vec<rv1::TargetRef> = Vec::new();
+        let mut chosen_modes: Vec<ChosenSpellMode> = Vec::new();
+        let mut chosen_mode_indices: Vec<u32> = Vec::new();
+        let mut chosen_mode_labels: Vec<String> = Vec::new();
+        let mut extra_generic = 0;
+        if let Some(modal) = &modal_spell {
+            if !targets.is_empty() {
+                return Err(EngineError::Illegal(
+                    "modal spells use selected_modes targets",
+                ));
             }
-        }
-        // Compute extra mana for DamageTargets (e.g. Fireball: {1} per target beyond first).
-        let extra_generic = face_effects
-            .iter()
-            .find_map(|e| {
+            if selected_modes.len() < modal.min_modes as usize
+                || selected_modes.len() > modal.max_modes as usize
+            {
+                return Err(EngineError::Illegal("illegal number of selected modes"));
+            }
+            let mut seen = HashSet::new();
+            let mut ordered: Vec<&rv1::SelectedSpellMode> = selected_modes.iter().collect();
+            ordered.sort_by_key(|selection| selection.mode_index);
+            for selection in ordered {
+                if !seen.insert(selection.mode_index) {
+                    return Err(EngineError::Illegal("a mode may be selected only once"));
+                }
+                let mode = modal
+                    .modes
+                    .get(selection.mode_index as usize)
+                    .ok_or(EngineError::Illegal("bad spell mode index"))?;
+                validate_spell_targets(self, player, &mode.effects, &selection.targets)?;
+                for effect in &mode.effects {
+                    if let SpellEffectKind::DamageTargets {
+                        amount,
+                        extra_mana_per_target,
+                        ..
+                    } = effect
+                    {
+                        let allocated: u32 = selection
+                            .targets
+                            .iter()
+                            .map(|target| target.damage_amount)
+                            .sum();
+                        if allocated != amount.resolve(chosen_x) {
+                            return Err(EngineError::Illegal(
+                                "damage amounts must sum to the total damage (X)",
+                            ));
+                        }
+                        if selection.targets.len() > 1 {
+                            extra_generic +=
+                                *extra_mana_per_target * (selection.targets.len() as u32 - 1);
+                        }
+                    }
+                }
+                public_targets.extend(selection.targets.iter().cloned());
+                chosen_mode_indices.push(selection.mode_index);
+                chosen_mode_labels.push(mode.label.clone());
+                chosen_modes.push(ChosenSpellMode {
+                    mode_index: selection.mode_index as usize,
+                    targets: selection
+                        .targets
+                        .iter()
+                        .map(|target| target.object_id)
+                        .collect(),
+                    target_damage: selection
+                        .targets
+                        .iter()
+                        .map(|target| target.damage_amount)
+                        .collect(),
+                });
+            }
+        } else {
+            if !selected_modes.is_empty() {
+                return Err(EngineError::Illegal(
+                    "selected_modes given for a nonmodal spell",
+                ));
+            }
+            validate_spell_targets(self, player, &face_effects, targets)?;
+            for effect in &face_effects {
                 if let SpellEffectKind::DamageTargets {
+                    amount,
                     extra_mana_per_target,
                     ..
-                } = e
+                } = effect
                 {
-                    if *extra_mana_per_target > 0 && targets.len() > 1 {
-                        Some(*extra_mana_per_target * (targets.len() as u32 - 1))
-                    } else {
-                        None
+                    let allocated: u32 = targets.iter().map(|target| target.damage_amount).sum();
+                    if allocated != amount.resolve(chosen_x) {
+                        return Err(EngineError::Illegal(
+                            "damage amounts must sum to the total damage (X)",
+                        ));
                     }
-                } else {
-                    None
+                    if targets.len() > 1 {
+                        extra_generic += *extra_mana_per_target * (targets.len() as u32 - 1);
+                    }
                 }
-            })
-            .unwrap_or(0);
+            }
+            public_targets.extend_from_slice(targets);
+        }
         let life_paid = pay_mana(
             &mut self.state,
             idx,
@@ -289,13 +356,19 @@ impl GameEngine {
         )?;
 
         self.state.players[idx].hand.retain(|&x| x != oid);
-        let trefs: Vec<ObjectId> = targets.iter().map(|t| t.object_id).collect();
+        let trefs: Vec<ObjectId> = public_targets
+            .iter()
+            .map(|target| target.object_id)
+            .collect();
         // For DamageTargets, store per-target damage allocations parallel to targets.
         let target_damage: Vec<u32> = if face_effects
             .iter()
             .any(|e| matches!(e, SpellEffectKind::DamageTargets { .. }))
         {
-            targets.iter().map(|t| t.damage_amount).collect()
+            public_targets
+                .iter()
+                .map(|target| target.damage_amount)
+                .collect()
         } else {
             vec![]
         };
@@ -314,6 +387,7 @@ impl GameEngine {
             chosen_x,
             face_index,
             target_damage,
+            chosen_modes,
         });
         if let Some(o) = self.state.objects.get_mut(&oid) {
             o.zone = Zone::Stack;
@@ -329,16 +403,24 @@ impl GameEngine {
         } else {
             String::new()
         };
+        let modes_line = if chosen_mode_labels.is_empty() {
+            String::new()
+        } else {
+            format!(" [{}]", chosen_mode_labels.join("; "))
+        };
         batch.events.push(ev_log(format!(
-            "P{} casts {}{}{}",
-            player, face_name, x_line, tgt_line
+            "P{} casts {}{}{}{}",
+            player, face_name, modes_line, x_line, tgt_line
         )));
-        let stack_annotation = match (is_multiface, has_x) {
+        let mut stack_annotation = match (is_multiface, has_x) {
             (true, true) => format!("{face_name} (X = {chosen_x})"),
             (true, false) => face_name.clone(),
             (false, true) => format!("X = {chosen_x}"),
             (false, false) => String::new(),
         };
+        if !chosen_mode_labels.is_empty() {
+            stack_annotation = chosen_mode_labels.join("\n");
+        }
         if life_paid > 0 {
             batch.events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
@@ -355,11 +437,13 @@ impl GameEngine {
             ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
                 object_id: oid,
                 description: face_name.clone(),
-                targets: targets.to_vec(),
+                targets: public_targets,
                 ability_annotation: stack_annotation,
                 card_id: cast_card_id.clone(),
                 is_copy: false,
                 copy_source_object_id: 0,
+                chosen_mode_indices,
+                chosen_mode_labels,
             })),
         });
         self.fire_triggers(
@@ -476,6 +560,7 @@ impl GameEngine {
             chosen_x: 0,
             face_index: 0,
             target_damage: vec![],
+            chosen_modes: vec![],
         });
         self.state.passes_since_stack_change = 0;
         self.state.priority_idx = idx;
@@ -509,6 +594,8 @@ impl GameEngine {
                 card_id: String::new(),
                 is_copy: false,
                 copy_source_object_id: 0,
+                chosen_mode_indices: vec![],
+                chosen_mode_labels: vec![],
             })),
         });
         batch.events.push(ev_priority_changed(self));

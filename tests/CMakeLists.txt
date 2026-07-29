@@ -72,6 +72,7 @@ add_subdirectory(card_zone_algorithms)
 add_subdirectory(carddatabase)
 add_subdirectory(dev_console)
 add_subdirectory(game_prompt)
+add_subdirectory(modal_cast_menu)
 add_subdirectory(loading_from_clipboard)
 add_subdirectory(movecard_tests)
 add_subdirectory(oracle)
@@ -79,4 +80,47 @@ add_subdirectory(ruled_batch_tests)
 add_subdirectory(ruled_client_tests)
 if(TARGET servatrice)
   add_subdirectory(ruled_e2e_smoke)
+endif()
+
+# Windows CTest can successfully launch one Qt/vcpkg-linked test and then report
+# STATUS_DLL_NOT_FOUND (0xc0000135) for later tests in the same CTest process, even though every
+# executable succeeds when run alone with the same PATH. Give each test a tiny launcher process
+# and declare its runtime environment here so a normal combined `ctest` invocation is reliable
+# and callers no longer need to edit PATH by hand.
+if(WIN32)
+  set(_cockatrice_test_names
+      dummy_test
+      expression_test
+      test_age_formatting
+      password_hash_test
+      ruled_utils_test
+      deck_hash_performance_test
+      card_zone_algorithms_test
+      carddatabase_test
+      filter_string_test
+      ruled_dev_console_test
+      game_prompt_widget_test
+      modal_cast_menu_test
+      loading_from_clipboard_test
+      reverse_card_move_test
+      parse_cipt_test
+      ruled_batch_test
+      ruled_client_test
+  )
+  if(TARGET ruled_e2e_smoke_test)
+    list(APPEND _cockatrice_test_names ruled_e2e_smoke_test)
+  endif()
+
+  # TEST_LAUNCHER was added in CMake 3.29. Older supported CMake versions still receive the
+  # original direct test command; current Windows developer/CI CMake versions use the repository
+  # launcher to supply the runtime environment and avoid the repeated-launch loader failure.
+  if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.29)
+    foreach(_test_target IN LISTS _cockatrice_test_names)
+      set_property(
+        TARGET ${_test_target}
+        PROPERTY TEST_LAUNCHER
+                 "powershell.exe;-NoProfile;-ExecutionPolicy;Bypass;-File;${CMAKE_SOURCE_DIR}/scripts/run-windows-test.ps1;-QtBin;$<TARGET_FILE_DIR:${COCKATRICE_QT_VERSION_NAME}::Core>;-VcpkgBin;${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/bin"
+      )
+    endforeach()
+  endif()
 endif()

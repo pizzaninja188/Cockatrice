@@ -79,7 +79,28 @@ pub(super) fn copy_target_spell(
                 .and_then(|d| d.face(src.face_index))
                 .map(|f| f.spell_effect.to_vec())
                 .unwrap_or_default();
-            let needs_target_choice = !src.targets.is_empty();
+            // Modal copies retain their complete per-mode target groups atomically. The existing
+            // single-target retarget prompt cannot represent multiple groups, so CR 707.10c
+            // retargeting remains available only for nonmodal copies for now.
+            let needs_target_choice = !src.targets.is_empty() && src.chosen_modes.is_empty();
+            let chosen_mode_indices: Vec<u32> = src
+                .chosen_modes
+                .iter()
+                .map(|mode| mode.mode_index as u32)
+                .collect();
+            let chosen_mode_labels: Vec<String> = engine
+                .registry
+                .get(&src.card_id)
+                .and_then(|definition| definition.face(src.face_index))
+                .and_then(|face| face.modal_spell.as_ref())
+                .map(|modal| {
+                    src.chosen_modes
+                        .iter()
+                        .filter_map(|chosen| modal.modes.get(chosen.mode_index))
+                        .map(|mode| mode.label.clone())
+                        .collect()
+                })
+                .unwrap_or_default();
             for copy_num in 0..count {
                 let copy_id = engine.state.next_object_id;
                 engine.state.next_object_id += 1;
@@ -96,6 +117,7 @@ pub(super) fn copy_target_spell(
                     chosen_x: src.chosen_x,
                     face_index: src.face_index,
                     target_damage: src.target_damage.clone(),
+                    chosen_modes: src.chosen_modes.clone(),
                 };
                 // CR 707.10c: prompt for new targets on the first copy; push any
                 // additional copies immediately with the original targets.
@@ -202,6 +224,8 @@ pub(super) fn copy_target_spell(
                             card_id: src.card_id.clone(),
                             is_copy: true,
                             copy_source_object_id: src.id,
+                            chosen_mode_indices: chosen_mode_indices.clone(),
+                            chosen_mode_labels: chosen_mode_labels.clone(),
                         })),
                     });
                     events.push(ev_log(format!(

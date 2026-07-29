@@ -658,7 +658,7 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
                      tr("\nClick the permanent to keep on the battlefield.");
     } else if (h->hasPendingTriggerTarget()) {
         state.mode = PromptMode::ClickChoice;
-        state.text = tr("Choose a target for: %1").arg(h->pendingTriggerText());
+        state.text = tr("Choose a target for “%1”.").arg(h->pendingTriggerText());
     } else if (h->engineOpeningPhaseActive()) {
         // Opening phase with nothing for us to do — say who we are waiting for. Runs
         // unconditionally: activePlayerName may already be set from a prior logActivePlayer

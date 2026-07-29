@@ -387,6 +387,7 @@ impl GameEngine {
                 chosen_x: 0,
                 face_index: 0,
                 target_damage: vec![],
+                chosen_modes: vec![],
             });
             self.state.passes_since_stack_change = 0;
             events.push(rv1::RuledEvent {
@@ -398,6 +399,8 @@ impl GameEngine {
                     card_id: String::new(),
                     is_copy: false,
                     copy_source_object_id: 0,
+                    chosen_mode_indices: vec![],
+                    chosen_mode_labels: vec![],
                 })),
             });
             events.push(ev_log(format!("Triggered: {card_name} — {ability_text}")));

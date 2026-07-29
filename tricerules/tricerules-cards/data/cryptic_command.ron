@@ -1,0 +1,28 @@
+(
+  id: "cryptic_command",
+  name: "Cryptic Command",
+  mana_cost: "{1}{U}{U}{U}",
+  types: ["Instant"],
+  modal_spell: (
+    min_modes: 2,
+    max_modes: 2,
+    modes: [
+      (
+        label: "Counter target spell",
+        effects: [CounterTargetSpell(spell_filter: None)],
+      ),
+      (
+        label: "Return target permanent to its owner's hand",
+        effects: [ReturnTargetPermanentToHand],
+      ),
+      (
+        label: "Tap all creatures your opponents control",
+        effects: [TapAllCreatures(players: Opponents)],
+      ),
+      (
+        label: "Draw a card",
+        effects: [Draw(count: 1)],
+      ),
+    ],
+  ),
+)

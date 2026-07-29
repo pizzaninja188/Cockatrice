@@ -84,15 +84,18 @@ impl CardRegistry {
             // target filters are rejected here (EffectContext::Spell); activated/triggered
             // effects bind to a source (Ability).
             for face in card.faces_iter() {
-                // One resolution owner per face (CR 608): a custom (tier-3) effect and a
-                // data-driven `spell_effect` list cannot both resolve the same face. The
+                // One resolution owner per face (CR 608): ordinary data, modal data, and a
+                // custom (tier-3) effect are mutually exclusive. The
                 // matching custom impl is validated to exist on the `tricerules-core` side
                 // (it owns the `CardEffect` lookup; this crate has no engine access).
-                if face.custom_effect.is_some() && !face.spell_effect.is_empty() {
+                let resolution_owners = usize::from(!face.spell_effect.is_empty())
+                    + usize::from(face.modal_spell.is_some())
+                    + usize::from(face.custom_effect.is_some());
+                if resolution_owners > 1 {
                     return Err(RegistryError::InvalidCard {
                         id: card.id.clone(),
-                        reason: "face has both spell_effect and custom_effect (one resolution \
-                                 owner allowed)"
+                        reason: "face has more than one of spell_effect, modal_spell, and \
+                                 custom_effect (one resolution owner allowed)"
                             .into(),
                     });
                 }
@@ -103,6 +106,48 @@ impl CardRegistry {
                             reason,
                         }
                     })?;
+                }
+                if let Some(modal) = &face.modal_spell {
+                    if modal.min_modes == 0
+                        || modal.max_modes < modal.min_modes
+                        || modal.max_modes as usize > modal.modes.len()
+                    {
+                        return Err(RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason: format!(
+                                "modal_spell requires 1 <= min_modes <= max_modes <= mode count \
+                                 (got {}..={} with {} modes)",
+                                modal.min_modes,
+                                modal.max_modes,
+                                modal.modes.len()
+                            ),
+                        });
+                    }
+                    for mode in &modal.modes {
+                        if mode.label.trim().is_empty() {
+                            return Err(RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason: "modal_spell mode label must not be empty".into(),
+                            });
+                        }
+                        if mode.effects.is_empty() {
+                            return Err(RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason: format!(
+                                    "modal_spell mode '{}' must contain at least one effect",
+                                    mode.label
+                                ),
+                            });
+                        }
+                        for effect in &mode.effects {
+                            effect.validate(EffectContext::Spell).map_err(|reason| {
+                                RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason,
+                                }
+                            })?;
+                        }
+                    }
                 }
                 // CR 604.2: static abilities exist only on permanents (they generate continuous
                 // effects while the source is on the battlefield). An instant/sorcery with one is
@@ -144,6 +189,20 @@ impl CardRegistry {
                                 id: card.id.clone(),
                                 reason: format!("CreateTokens references unknown token '{token}'"),
                             });
+                        }
+                    }
+                }
+                if let Some(modal) = &face.modal_spell {
+                    for effect in modal.modes.iter().flat_map(|mode| &mode.effects) {
+                        if let SpellEffectKind::CreateTokens { token, .. } = effect {
+                            if !reg.tokens.contains_key(token) {
+                                return Err(RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason: format!(
+                                        "CreateTokens references unknown token '{token}'"
+                                    ),
+                                });
+                            }
                         }
                     }
                 }
@@ -558,6 +617,98 @@ mod tests {
             }
             other => panic!("expected InvalidCard, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn modal_spell_deserializes_and_validates() {
+        let good = r#"(
+            id: "modal_test",
+            name: "Modal Test",
+            mana_cost: "{W}",
+            types: ["Instant"],
+            modal_spell: (
+                min_modes: 1,
+                max_modes: 2,
+                modes: [
+                    (label: "Gain life", effects: [GainLife(amount: 3)]),
+                    (label: "Draw a card", effects: [Draw(count: 1)]),
+                ],
+            ),
+        )"#;
+        let registry = CardRegistry::from_chunks(&[good]).unwrap();
+        let modal = registry
+            .get("modal_test")
+            .unwrap()
+            .primary_face()
+            .modal_spell
+            .as_ref()
+            .unwrap();
+        assert_eq!((modal.min_modes, modal.max_modes), (1, 2));
+        assert_eq!(modal.modes.len(), 2);
+    }
+
+    #[test]
+    fn load_rejects_invalid_modal_spell_definitions() {
+        let invalid = [
+            r#"(
+                id: "bad_bounds",
+                name: "Bad Bounds",
+                types: ["Instant"],
+                modal_spell: (
+                    min_modes: 2,
+                    max_modes: 1,
+                    modes: [(label: "Draw", effects: [Draw(count: 1)])],
+                ),
+            )"#,
+            r#"(
+                id: "empty_label",
+                name: "Empty Label",
+                types: ["Instant"],
+                modal_spell: (
+                    min_modes: 1,
+                    max_modes: 1,
+                    modes: [(label: " ", effects: [Draw(count: 1)])],
+                ),
+            )"#,
+            r#"(
+                id: "empty_effects",
+                name: "Empty Effects",
+                types: ["Instant"],
+                modal_spell: (
+                    min_modes: 1,
+                    max_modes: 1,
+                    modes: [(label: "Nothing", effects: [])],
+                ),
+            )"#,
+        ];
+        for bad in invalid {
+            assert!(
+                matches!(
+                    CardRegistry::from_chunks(&[bad]),
+                    Err(RegistryError::InvalidCard { .. })
+                ),
+                "expected invalid modal definition to be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn load_rejects_modal_spell_with_another_resolution_owner() {
+        let bad = r#"(
+            id: "modal_double_owner",
+            name: "Modal Double Owner",
+            types: ["Instant"],
+            spell_effect: [Draw(count: 1)],
+            modal_spell: (
+                min_modes: 1,
+                max_modes: 1,
+                modes: [(label: "Gain life", effects: [GainLife(amount: 3)])],
+            ),
+        )"#;
+        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        assert!(
+            matches!(err, RegistryError::InvalidCard { ref reason, .. } if reason.contains("one resolution owner"))
+        );
     }
 
     #[test]

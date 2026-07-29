@@ -128,6 +128,77 @@ pub(super) fn grant_keywords_all(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn grant_keywords_target(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::GrantKeywordsTarget { target, keywords } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let Some(tid) = cx.targets.first().copied() else {
+        return Ok(EffectOutcome::Continue);
+    };
+    if !target_filter_legal_at_resolution(cx.engine, &target, tid, cx.controller) {
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let target_name = object_display_name(&cx.engine.state, cx.engine.registry, tid);
+    let keyword_names: Vec<&str> = keywords.iter().map(|keyword| keyword.as_str()).collect();
+    for keyword in keywords {
+        cx.engine.state.continuous_effects.push(ContinuousEffect {
+            source_id: Some(cx.top.id),
+            affected: AffectedScope::Single(tid),
+            kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: cx.engine.state.command_index,
+        });
+    }
+    cx.events.push(ev_log(format!(
+        "{} grants {} to {target_name} until end of turn",
+        cx.spell_label,
+        keyword_names.join(", ")
+    )));
+    Ok(EffectOutcome::Continue)
+}
+
+pub(super) fn grant_keywords_all_permanents(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::GrantKeywordsAllPermanents { filter, keywords } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+
+    // Snapshot the affected permanents now. A permanent entering later in the turn was not
+    // affected by this resolving one-shot effect (CR 611.2c).
+    let mut affected = battlefield_objects_matching(cx.engine, &filter);
+    if filter.only_controller {
+        affected.retain(|oid| {
+            cx.engine
+                .characteristics(*oid)
+                .is_some_and(|value| value.controller == cx.controller)
+        });
+    }
+    let keyword_names: Vec<&str> = keywords.iter().map(|keyword| keyword.as_str()).collect();
+    for oid in affected {
+        for keyword in &keywords {
+            cx.engine.state.continuous_effects.push(ContinuousEffect {
+                source_id: Some(cx.top.id),
+                affected: AffectedScope::Single(oid),
+                kind: ContinuousEffectKind::Layer6AddKeyword(*keyword),
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: cx.engine.state.command_index,
+            });
+        }
+    }
+    cx.events.push(ev_log(format!(
+        "{} grants {} to each affected permanent until end of turn",
+        cx.spell_label,
+        keyword_names.join(", ")
+    )));
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn put_counters(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

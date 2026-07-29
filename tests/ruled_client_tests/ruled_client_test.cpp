@@ -328,6 +328,38 @@ TEST_F(RuledClientTest, AppliesStructuredCastActionsAndTargetRequirement)
     EXPECT_EQ(state->handActionIndexForCard(kCast, "Nonexistent", 0), -1);
 }
 
+TEST_F(RuledClientTest, AppliesAuthoritativeModalModeDataPerFace)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    auto *cast = addHandAction(actions, ruled::v1::HAND_ACTION_CAST_SPELL, 5, "Boros Charm");
+    cast->set_min_modes(1);
+    cast->set_max_modes(1);
+    auto *damage = cast->add_modes();
+    damage->set_mode_index(0);
+    damage->set_label("Deal 4 damage");
+    damage->set_selectable(true);
+    damage->set_needs_target(true);
+    damage->mutable_targets()->set_can_target_opponent(true);
+    auto *disabled = cast->add_modes();
+    disabled->set_mode_index(2);
+    disabled->set_label("Creature gains double strike");
+    disabled->set_selectable(false);
+    disabled->set_needs_target(true);
+    apply(batch);
+
+    const auto &set = state->handActions[ruled::v1::HAND_ACTION_CAST_SPELL];
+    const int key = RuledClientState::spellTargetKey(5, 0);
+    ASSERT_TRUE(set.modalOptionsByCastKey.contains(key));
+    EXPECT_EQ(set.modalMinModesByCastKey.value(key), 1);
+    EXPECT_EQ(set.modalMaxModesByCastKey.value(key), 1);
+    const auto modes = set.modalOptionsByCastKey.value(key);
+    ASSERT_EQ(modes.size(), 2);
+    EXPECT_EQ(modes[0].modeIndex, 0);
+    EXPECT_TRUE(modes[0].targets.canTargetOpponent);
+    EXPECT_FALSE(modes[1].selectable);
+}
+
 TEST_F(RuledClientTest, AppliesStructuredCleanupDiscardActionsAndRequiredCount)
 {
     ruled::v1::RuledEventBatch batch;

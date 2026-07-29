@@ -1,0 +1,35 @@
+(
+  id: "boros_charm",
+  name: "Boros Charm",
+  mana_cost: "{R}{W}",
+  types: ["Instant"],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 1,
+    modes: [
+      (
+        label: "Deal 4 damage to target player",
+        effects: [DamageTarget(amount: 4, target: (kind: AnyPlayer))],
+      ),
+      (
+        label: "Permanents you control gain indestructible",
+        effects: [
+          GrantKeywordsAllPermanents(
+            filter: (kind: AnyPermanent, only_controller: true),
+            keywords: [Indestructible],
+          ),
+        ],
+      ),
+      (
+        label: "Target creature gains double strike",
+        effects: [
+          GrantKeywordsTarget(
+            target: (kind: Creature),
+            keywords: [DoubleStrike],
+          ),
+        ],
+      ),
+    ],
+  ),
+  partial: "damage mode cannot target planeswalkers",
+)

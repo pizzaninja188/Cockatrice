@@ -217,8 +217,9 @@ Release preset: `unix-ninja-release` (drop `-DTEST=ON`).
 ./scripts/build-ninja.ps1                       # full tree
 ./scripts/build-ninja.ps1 --target servatrice   # targeted (any cmake --build args pass through)
 
-# C++ tests — Qt DLLs must be on PATH; use offscreen for headless (single-config: no -C):
-$env:PATH = "C:\Users\pizza\CodingProjects\Cockatrice\6.6.3\msvc2019_64\bin;$env:PATH"
+# C++ tests — with CMake 3.29+, the Windows test launcher supplies Qt/vcpkg DLL paths, offscreen
+# Qt, and per-test process isolation (avoids repeated 0xc0000135 loader failures). Single-config
+# Ninja tree: no -C and no manual PATH setup. Upgrade CMake rather than running tests one-by-one.
 ctest --test-dir build/windows-ninja-all --output-on-failure
 
 # Rust / CI checks:

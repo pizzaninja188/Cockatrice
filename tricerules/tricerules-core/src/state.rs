@@ -222,6 +222,13 @@ pub struct PendingResolution {
 }
 
 #[derive(Debug, Clone)]
+pub struct ChosenSpellMode {
+    pub mode_index: usize,
+    pub targets: Vec<ObjectId>,
+    pub target_damage: Vec<u32>,
+}
+
+#[derive(Debug, Clone)]
 pub struct StackItem {
     pub id: ObjectId,
     pub controller: PlayerId,
@@ -252,6 +259,8 @@ pub struct StackItem {
     /// `target_damage[i]` is the damage allocated to `targets[i]` by the casting player.
     /// Empty for all other effects (no overhead for non-Fireball spells).
     pub target_damage: Vec<u32>,
+    /// Atomic modal choices in printed order. Empty for nonmodal spells and abilities.
+    pub chosen_modes: Vec<ChosenSpellMode>,
 }
 
 /// Pre-game: choose first player, then London-style mulligans (redraw to 7, then put N on bottom).

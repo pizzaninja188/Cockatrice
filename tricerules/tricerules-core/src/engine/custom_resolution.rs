@@ -71,6 +71,7 @@ impl GameEngine {
             chosen_x: 0,
             face_index: 0,
             target_damage: vec![],
+            chosen_modes: vec![],
         });
         self.state.passes_since_stack_change = 0;
 
@@ -90,6 +91,8 @@ impl GameEngine {
                 card_id: String::new(),
                 is_copy: false,
                 copy_source_object_id: 0,
+                chosen_mode_indices: vec![],
+                chosen_mode_labels: vec![],
             })),
         });
 
@@ -305,6 +308,8 @@ impl GameEngine {
                     card_id: card_id.clone(),
                     is_copy: true,
                     copy_source_object_id,
+                    chosen_mode_indices: vec![],
+                    chosen_mode_labels: vec![],
                 })),
             },
             ev_log(format!(

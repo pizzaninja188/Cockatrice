@@ -79,6 +79,53 @@ pub(super) fn tap_target(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn tap_all_creatures(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::TapAllCreatures { players } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let controller = cx.controller;
+    let affected: Vec<_> = cx
+        .engine
+        .state
+        .objects
+        .keys()
+        .copied()
+        .filter(|oid| {
+            cx.engine
+                .characteristics(*oid)
+                .is_some_and(|characteristics| {
+                    characteristics.is_creature()
+                        && match players {
+                            RelativePlayerSet::Controller => {
+                                characteristics.controller == controller
+                            }
+                            RelativePlayerSet::Opponents => {
+                                characteristics.controller != controller
+                            }
+                            RelativePlayerSet::All => true,
+                        }
+                })
+        })
+        .collect();
+    let mut tapped = 0;
+    for oid in affected {
+        if let Some(object) = cx.engine.state.objects.get_mut(&oid) {
+            if object.zone == Zone::Battlefield && !object.tapped {
+                object.tapped = true;
+                tapped += 1;
+            }
+        }
+    }
+    cx.events.push(ev_log(format!(
+        "{} taps {tapped} affected creature(s)",
+        cx.spell_label
+    )));
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn equip(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

@@ -69,14 +69,13 @@ pub(super) fn damage_targets(
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let targets = cx.targets;
-    let top = cx.top;
     let controller = cx.controller;
     let spell_label = cx.spell_label;
 
     // CR 608.2b: skip targets that became illegal at resolution; apply damage
     // to each remaining legal target using its allocated amount.
     for (i, &tid) in targets.iter().enumerate() {
-        let damage_amount = top.target_damage.get(i).copied().unwrap_or(0);
+        let damage_amount = cx.target_damage.get(i).copied().unwrap_or(0);
         if damage_amount == 0 {
             continue;
         }

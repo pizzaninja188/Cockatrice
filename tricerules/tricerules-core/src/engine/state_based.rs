@@ -321,6 +321,7 @@ impl GameEngine {
                 face_index: 0,
                 chosen_x: 0,
                 target_damage: vec![],
+                chosen_modes: vec![],
             };
             self.state.pending_resolution = Some(PendingResolution {
                 item: dummy_item,

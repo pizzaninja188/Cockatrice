@@ -436,12 +436,12 @@ void GamePromptWidget::setTargetingSource(TargetingSource source, bool active)
     refreshPromptLabel();
 }
 
-void GamePromptWidget::setTargetingMode(bool enabled, const QString &cardName)
+void GamePromptWidget::setTargetingMode(bool enabled, const QString &effectText)
 {
     // Unlike the other two sources this one always re-announces itself: re-entering targeting for
-    // a different spell must replace the card name on the label.
+    // a different mode of the same spell must replace the effect text on the label.
     if (enabled) {
-        setPromptText(tr("Cast %1 selected. Select a target card, or press Cancel.").arg(cardName));
+        setPromptText(tr("Choose a target for “%1”, or press Cancel.").arg(effectText));
     }
     setTargetingSource(TargetingSource::SpellTargetSelection, enabled);
     updateCombatButtonsVisibility();
@@ -496,7 +496,7 @@ void GamePromptWidget::setActivatedAbilityTargetPending(bool pending, const QStr
         return;
     }
     if (pending) {
-        setPromptText(tr("Activate %1: choose a target, or press Cancel.").arg(abilityText));
+        setPromptText(tr("Choose a target for “%1”, or press Cancel.").arg(abilityText));
     }
     setTargetingSource(TargetingSource::AbilityTargetPending, pending);
 }

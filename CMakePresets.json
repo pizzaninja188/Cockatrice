@@ -197,7 +197,7 @@
     {
       "name": "windows-ninja-all",
       "displayName": "CTest (Ninja tree)",
-      "description": "Single-config Ninja tree; remember Qt bin on PATH (see CLAUDE.md).",
+        "description": "Single-config Ninja tree; the Windows test launcher configures Qt/vcpkg runtime paths automatically.",
       "configurePreset": "windows-ninja-all",
       "output": { "outputOnFailure": true },
       "execution": { "noTestsAction": "error" }

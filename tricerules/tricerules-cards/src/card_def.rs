@@ -20,6 +20,26 @@ use crate::primitives::{
 };
 use serde::{Deserialize, Serialize};
 
+/// One printed mode of a modal spell. Its effects resolve in authored order.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SpellModeDef {
+    /// Short client-facing description of the mode, without the card name.
+    pub label: String,
+    /// Data-driven effects for this mode, resolved from this mode's own target group.
+    #[serde(default)]
+    pub effects: Vec<SpellEffectKind>,
+}
+
+/// The choose-N definition of a modal spell (CR 700.2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModalSpellDef {
+    pub min_modes: u32,
+    pub max_modes: u32,
+    /// Modes in printed order. A mode may be selected at most once in the initial implementation.
+    #[serde(default)]
+    pub modes: Vec<SpellModeDef>,
+}
+
 /// Physical card layout (CR 709/710/712/715). Drives how many faces a card has and how each
 /// face becomes castable. `Normal` is the overwhelming majority — one face, authored flat.
 /// The multi-face variants author [`RawCardDefinition::faces`] explicitly.
@@ -67,6 +87,10 @@ pub struct CardFace {
     /// (see [`SpellEffectKind`]). RON: `spell_effect: [DamageTarget(...), Draw(count: 1)]`.
     #[serde(default)]
     pub spell_effect: Vec<SpellEffectKind>,
+    /// Modal data-driven spell effects. Mutually exclusive with `spell_effect` and
+    /// `custom_effect`; selected modes resolve in printed order.
+    #[serde(default)]
+    pub modal_spell: Option<ModalSpellDef>,
     /// Tier-3 escape hatch (CR-faithful per-card algorithm). `Some(key)` routes this face's
     /// resolution to a `CardEffect` in `tricerules-core`'s `custom` module instead of the
     /// data-driven `spell_effect` list — for cards whose resolution is a unique algorithm
@@ -215,6 +239,8 @@ pub struct RawCardDefinition {
     #[serde(default)]
     pub spell_effect: Vec<SpellEffectKind>,
     #[serde(default)]
+    pub modal_spell: Option<ModalSpellDef>,
+    #[serde(default)]
     pub custom_effect: Option<String>,
     #[serde(default)]
     pub keywords: Vec<Keyword>,
@@ -255,6 +281,7 @@ impl RawCardDefinition {
                 power: self.power,
                 toughness: self.toughness,
                 spell_effect: self.spell_effect,
+                modal_spell: self.modal_spell,
                 custom_effect: self.custom_effect,
                 keywords: self.keywords,
                 activated_abilities: self.activated_abilities,

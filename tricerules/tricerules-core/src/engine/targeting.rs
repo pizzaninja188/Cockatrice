@@ -272,33 +272,23 @@ fn stack_spell_target_legal(
     }
 }
 
-/// CR 608.2b-style: if any targeted effect has no legal target, the whole spell fizzles.
-/// For `DamageTargets`, the spell fizzles only when ALL chosen targets are gone (partial-fizzle
-/// per CR 608.2b — if at least one is still legal, the spell still resolves for it).
-pub(super) fn spell_has_no_legal_targets_at_resolution(
+pub(super) fn effect_has_legal_target_at_resolution(
     engine: &GameEngine,
-    effects: &[SpellEffectKind],
+    effect: &SpellEffectKind,
     targets: &[ObjectId],
     caster: PlayerId,
 ) -> bool {
-    effects.iter().any(|effect| {
-        if !spell_effect_kind_needs_target(effect) {
-            return false; // untargeted effects never fizzle
-        }
-        // DamageTargets: spell fizzles only if ALL targets are now illegal.
-        if matches!(effect, SpellEffectKind::DamageTargets { .. }) {
-            if targets.is_empty() {
-                return true;
-            }
-            return targets
-                .iter()
-                .all(|&tid| !effect_target_legal_at_resolution(engine, effect, tid, caster));
-        }
-        let Some(&tid) = targets.first() else {
-            return true; // needs target but none provided
-        };
-        !effect_target_legal_at_resolution(engine, effect, tid, caster)
-    })
+    if !spell_effect_kind_needs_target(effect) {
+        return true;
+    }
+    if matches!(effect, SpellEffectKind::DamageTargets { .. }) {
+        return targets
+            .iter()
+            .any(|&target| effect_target_legal_at_resolution(engine, effect, target, caster));
+    }
+    targets
+        .first()
+        .is_some_and(|&target| effect_target_legal_at_resolution(engine, effect, target, caster))
 }
 
 /// Returns true if `tid` is a legal target for `effect` at resolution time.
@@ -317,6 +307,7 @@ fn effect_target_legal_at_resolution(
         | SpellEffectKind::TapTarget { target } => target_filter_legal(engine, target, tid, caster),
         SpellEffectKind::DestroyTarget { target }
         | SpellEffectKind::PumpTarget { target, .. }
+        | SpellEffectKind::GrantKeywordsTarget { target, .. }
         | SpellEffectKind::PutCounters { target, .. }
         | SpellEffectKind::Equip { target }
         | SpellEffectKind::Regenerate { target } => {
@@ -353,6 +344,7 @@ pub(super) fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
         // A `Self_`-filtered pump or counter-placement is auto-bound to its source (CR 115) — it
         // takes no chosen target and prompts nobody; any other filter requires a selected target.
         SpellEffectKind::PumpTarget { target, .. }
+        | SpellEffectKind::GrantKeywordsTarget { target, .. }
         | SpellEffectKind::PutCounters { target, .. }
         | SpellEffectKind::Regenerate { target } => !matches!(target.kind, TargetKind::Self_),
         SpellEffectKind::DamageTarget { .. }
@@ -436,6 +428,7 @@ pub(super) fn validate_effect_targets(
             }
         }
         SpellEffectKind::PumpTarget { target: filter, .. }
+        | SpellEffectKind::GrantKeywordsTarget { target: filter, .. }
         | SpellEffectKind::PutCounters { target: filter, .. }
         | SpellEffectKind::Regenerate { target: filter } => {
             // `Self_` pumps / counter placements / regen are auto-bound and take no chosen target.
@@ -551,8 +544,10 @@ pub(super) fn validate_effect_targets(
         | SpellEffectKind::CopyTargetSpell { .. }
         | SpellEffectKind::DestroyAll { .. }
         | SpellEffectKind::DamageAll { .. }
+        | SpellEffectKind::TapAllCreatures { .. }
         | SpellEffectKind::PumpAll { .. }
         | SpellEffectKind::GrantKeywordsAll { .. }
+        | SpellEffectKind::GrantKeywordsAllPermanents { .. }
         | SpellEffectKind::CreateTokens { .. }
         | SpellEffectKind::PreventAllCombatDamageTurn
         // CR 605.1a: a mana ability is untargeted by definition.
