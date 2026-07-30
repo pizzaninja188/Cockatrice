@@ -287,6 +287,17 @@ void TabGame::connectToGameEventHandler()
                     }
                 }
             });
+    // A ruled targeting arrow to a graveyard card points at the card while its pile is open and at
+    // the pile itself otherwise, so opening or closing any view has to re-resolve the endpoints.
+    // Batch events and the stack window already trigger a refresh; zone views did not.
+    connect(scene, &GameScene::zoneViewsChanged, this, [this] {
+        if (!game || !RuledActions::isRuledGame(game)) {
+            return;
+        }
+        if (GameEventHandler *geh = game->getGameEventHandler()) {
+            geh->refreshRuledSpellTargetArrows();
+        }
+    });
     connect(game->getGameEventHandler()->ruled(), &RuledClientState::graveyardTargetsNeeded, this,
             [this](const QList<int> &playerIds) {
                 if (!game || !scene) {

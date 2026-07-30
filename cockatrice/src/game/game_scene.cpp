@@ -458,6 +458,7 @@ void GameScene::toggleZoneView(Player *player, const QString &zoneName, int numb
     else
         pos = QPointF(340, 80);
     item->setPos(cascadedZoneViewPos(pos, item));
+    emit zoneViewsChanged();
 }
 
 QPointF GameScene::cascadedZoneViewPos(const QPointF &preferred, const ZoneViewWidget *newView) const
@@ -498,6 +499,7 @@ void GameScene::addRevealedZoneView(Player *player,
     connect(item, &ZoneViewWidget::closePressed, this, &GameScene::removeZoneView);
     addItem(item);
     item->setPos(600, 80);
+    emit zoneViewsChanged();
 }
 
 /**
@@ -508,6 +510,7 @@ void GameScene::removeZoneView(ZoneViewWidget *item)
 {
     zoneViews.removeOne(item);
     removeItem(item);
+    emit zoneViewsChanged();
 }
 
 /**

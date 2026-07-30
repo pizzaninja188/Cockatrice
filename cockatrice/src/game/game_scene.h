@@ -214,6 +214,10 @@ signals:
     void sigStartRubberBand(const QPointF &selectionOrigin);
     void sigResizeRubberBand(const QPointF &cursorPoint, int selectedCount);
     void sigStopRubberBand();
+    /// A zone view was opened or closed. Anything anchored to a card *inside* a view has to be
+    /// recomputed: ruled targeting arrows point at the card while its pile is open and at the pile
+    /// itself when it is not, and nothing else tells them the view came or went.
+    void zoneViewsChanged();
 };
 
 #endif
