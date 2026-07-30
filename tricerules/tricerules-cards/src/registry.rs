@@ -107,6 +107,14 @@ impl CardRegistry {
                         }
                     })?;
                 }
+                // Rules that depend on sibling effects (e.g. an amount read from another
+                // effect's target) can only be checked over the whole list.
+                SpellEffectKind::validate_list(&face.spell_effect).map_err(|reason| {
+                    RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    }
+                })?;
                 if let Some(modal) = &face.modal_spell {
                     if modal.min_modes == 0
                         || modal.max_modes < modal.min_modes
@@ -147,6 +155,14 @@ impl CardRegistry {
                                 }
                             })?;
                         }
+                        // A mode's effects are the resolution list for that mode (CR 700.2),
+                        // so the sibling-dependent rules apply per mode.
+                        SpellEffectKind::validate_list(&mode.effects).map_err(|reason| {
+                            RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason,
+                            }
+                        })?;
                     }
                 }
                 // CR 604.2: static abilities exist only on permanents (they generate continuous
@@ -348,6 +364,60 @@ mod tests {
         assert!(card.primary_face().spell_effect[0]
             .validate(crate::primitives::EffectContext::Spell)
             .is_err());
+    }
+
+    /// `LoseLife(amount: TargetManaValue)` reads a sibling effect's target, so a list without
+    /// an object-targeting effect is invalid data — it would silently resolve to 0 life.
+    #[test]
+    fn load_rejects_target_mana_value_without_an_object_target() {
+        let bad = r#"(
+            id: "bad_lose_life",
+            name: "Bad Lose Life",
+            mana_cost: "{B}",
+            types: ["Sorcery"],
+            spell_effect: [LoseLife(amount: TargetManaValue)],
+        )"#;
+        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        assert!(matches!(err, RegistryError::InvalidCard { ref id, .. } if id == "bad_lose_life"));
+
+        // A player target is not enough either — players have no mana value.
+        let bad_player_target = r#"(
+            id: "bad_lose_life_player",
+            name: "Bad Lose Life Player",
+            mana_cost: "{B}",
+            types: ["Sorcery"],
+            spell_effect: [
+                MillTargetPlayer(count: 2, target: (kind: AnyPlayer)),
+                LoseLife(amount: TargetManaValue),
+            ],
+        )"#;
+        let err = CardRegistry::from_chunks(&[bad_player_target]).unwrap_err();
+        assert!(
+            matches!(err, RegistryError::InvalidCard { ref id, .. } if id == "bad_lose_life_player")
+        );
+
+        // Paired with a graveyard-card target (Reanimate's shape) it loads.
+        let good = r#"(
+            id: "good_lose_life",
+            name: "Good Lose Life",
+            mana_cost: "{B}",
+            types: ["Sorcery"],
+            spell_effect: [
+                ReturnFromGraveyard(filter: (owner: AnyPlayer, card_type: Some(Creature)), destination: Battlefield),
+                LoseLife(amount: TargetManaValue),
+            ],
+        )"#;
+        assert!(CardRegistry::from_chunks(&[good]).is_ok());
+
+        // A fixed amount never needs a target.
+        let fixed = r#"(
+            id: "fixed_lose_life",
+            name: "Fixed Lose Life",
+            mana_cost: "{B}",
+            types: ["Sorcery"],
+            spell_effect: [LoseLife(amount: Fixed(2))],
+        )"#;
+        assert!(CardRegistry::from_chunks(&[fixed]).is_ok());
     }
 
     #[test]

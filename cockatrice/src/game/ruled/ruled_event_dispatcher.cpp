@@ -619,11 +619,18 @@ void RuledEventDispatcher::applyHandSlotMap(const ruled::v1::HandSlotMap &map)
 
 void RuledEventDispatcher::applyGraveyardObjectMap(const ruled::v1::GraveyardObjectMap &map)
 {
-    state->graveyardEngineOidToServerCardId.clear();
+    state->ownedGraveyardCardToEngineOid.clear();
+    state->graveyardOidToPlayerId.clear();
+    state->graveyardOidToServerCardId.clear();
     for (int gi = 0; gi < map.entries_size(); ++gi) {
         const auto &ent = map.entries(gi);
-        state->graveyardEngineOidToServerCardId.insert(static_cast<quint32>(ent.engine_object_id()),
-                                                       ent.server_card_id());
+        // Key on (owner, card id): the entry's player_id has always been on the wire, and it is
+        // what keeps two graveyards holding the same Server_Card.id apart.
+        state->ownedGraveyardCardToEngineOid.insert(
+            RuledClientState::makeOwnedCardKey(ent.player_id(), ent.server_card_id()),
+            static_cast<quint32>(ent.engine_object_id()));
+        state->graveyardOidToPlayerId.insert(static_cast<quint32>(ent.engine_object_id()), ent.player_id());
+        state->graveyardOidToServerCardId.insert(static_cast<quint32>(ent.engine_object_id()), ent.server_card_id());
     }
 }
 
@@ -884,13 +891,10 @@ void RuledEventDispatcher::finishBatch(BatchContext &ctx)
     if (ctx.combatStateDirty) {
         emit state->combatStateChanged();
     }
-    // Emit graveyard-open signal for triggers whose valid targets are in the graveyard (e.g.
-    // Gravedigger ETB). validTargetsByAbility is populated in this same batch.
-    const quint64 abilityKey =
-        RuledClientState::abilityTargetKey(state->lastTriggerSourceOid, static_cast<int>(state->lastTriggerAbilityIndex));
-    const bool graveyardNeeded =
-        state->hasPendingTriggerTarget() && !state->validTargetsByAbility.value(abilityKey).validGraveyardIds.isEmpty();
-    emit state->triggerGraveyardNeedsTarget(graveyardNeeded);
+    // Which graveyards need to be open: a pending trigger's targets (Gravedigger ETB) unioned
+    // with any pending cast's. `validTargetsByAbility` and the graveyard OID map are both
+    // populated in this same batch, so recompute after applying it.
+    state->emitGraveyardTargetsNeeded();
     // Defer so stack window / zone views finish layout before we resolve CardItem positions.
     host->scheduleSpellTargetArrowSync();
 }

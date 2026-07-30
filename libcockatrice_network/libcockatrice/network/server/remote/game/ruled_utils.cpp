@@ -1,8 +1,45 @@
 #include "ruled_utils.h"
 
+#include "server_cardzone.h"
+#include "server_game.h"
+
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/reflection.h>
+#include <libcockatrice/utility/zone_names.h>
 #include <vector>
+
+bool ruledAllowsCrossPlayerMove(const Server_Game *game,
+                                const Server_CardZone *startZone,
+                                const Server_CardZone *targetZone)
+{
+    if (!game || !game->getRuledGame() || !startZone || !targetZone) {
+        return false;
+    }
+    if (startZone->getPlayer() == targetZone->getPlayer()) {
+        return false; // Not a cross-player move; upstream's guard does not apply.
+    }
+    const QString from = startZone->getName();
+    const QString to = targetZone->getName();
+
+    // 1. Casting: the caster's hand -> the single canonical shared stack zone, which belongs to
+    //    the lowest player id so every client sees one merged stack.
+    if (from == ZoneNames::HAND && to == ZoneNames::STACK) {
+        return true;
+    }
+    // 2. Resolving: the shared stack -> the caster's own public, coordinate-less zones. Without
+    //    this a non-active player's instant could not reach their graveyard in a 1v1.
+    if (from == ZoneNames::STACK && targetZone->getType() == ServerInfo_Zone::PublicZone &&
+        !targetZone->hasCoords() && (to == ZoneNames::GRAVE || to == ZoneNames::EXILE)) {
+        return true;
+    }
+    // 3. Leaving the battlefield: a permanent controlled by someone who does not own it goes to
+    //    its OWNER's zone (CR 400.3). The reverse trip (into the controller's TABLE) needs no
+    //    exemption — upstream already allows cross-player moves into a public zone with coords.
+    if (from == ZoneNames::TABLE) {
+        return true;
+    }
+    return false;
+}
 
 void clearRuledFieldsByVisibility(google::protobuf::Message *message, ruled::v1::FieldVisibility visibility)
 {

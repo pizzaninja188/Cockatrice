@@ -28,7 +28,7 @@ pub(super) fn counter_target_spell(
             // missing object and corrupt the already-popped stack.
             if !st.is_copy {
                 let owner = engine.state.objects.get(&st.id).map(|o| o.owner);
-                move_object_to_zone(&mut engine.state, st.id, Zone::Graveyard)?;
+                move_object_to_zone(&mut engine.state, st.id, Zone::Graveyard, None)?;
                 if let Some(owner) = owner {
                     events.push(permanent_moved_event(
                         &engine.state,

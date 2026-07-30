@@ -1,0 +1,13 @@
+(
+  id: "reanimate",
+  name: "Reanimate",
+  mana_cost: "{B}",
+  types: ["Sorcery"],
+  // "from a graveyard" — any player's (GraveyardOwner::AnyPlayer), entering under the caster's
+  // control (CR 110.2). LoseLife is untargeted and reads the mana value of the same target the
+  // ReturnFromGraveyard declared, so the two must stay in one effect list.
+  spell_effect: [
+    ReturnFromGraveyard(filter: (owner: AnyPlayer, card_type: Some(Creature)), destination: Battlefield),
+    LoseLife(amount: TargetManaValue),
+  ],
+)

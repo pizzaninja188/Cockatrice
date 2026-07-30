@@ -13,6 +13,8 @@ mod casting_and_lands;
 mod combat;
 #[path = "scenario/combat_keywords.rs"]
 mod combat_keywords;
+#[path = "scenario/control.rs"]
+mod control;
 #[path = "scenario/counters_and_pump.rs"]
 mod counters_and_pump;
 #[path = "scenario/custom_resolution.rs"]

@@ -100,6 +100,23 @@ RuledClientState *stateFor(const AbstractGame *game)
     return handler ? handler->ruled() : nullptr;
 }
 
+void updateGraveyardTargetHint(const Player *player, int handSlot, int faceIndex)
+{
+    if (!player) {
+        return;
+    }
+    RuledClientState *state = stateFor(player->getGame());
+    if (!state) {
+        return;
+    }
+    QSet<quint32> oids;
+    if (handSlot >= 0) {
+        oids = state->validTargetsByHandSlot.value(RuledClientState::spellTargetKey(handSlot, faceIndex))
+                   .validGraveyardIds;
+    }
+    state->setPendingCastGraveyardTargets(oids);
+}
+
 void sendRuledCommand(const AbstractGame *game, const ruled::v1::RuledCommand &command)
 {
     if (!isRuledGame(game)) {
@@ -261,6 +278,34 @@ CardItem *findStackCardItemByEngineOid(AbstractGame *game, quint32 stackOid)
     return nullptr;
 }
 
+CardItem *findGraveyardCardItemByEngineOid(AbstractGame *game, quint32 engineOid)
+{
+    RuledClientState *state = stateFor(game);
+    if (!game || !state) {
+        return nullptr;
+    }
+    const auto pidIt = state->graveyardOidToPlayerId.constFind(engineOid);
+    if (pidIt == state->graveyardOidToPlayerId.constEnd()) {
+        return nullptr;
+    }
+    const int playerId = pidIt.value();
+    const int serverCardId = state->graveyardOidToServerCardId.value(engineOid, -1);
+    if (serverCardId < 0) {
+        return nullptr;
+    }
+    // Prefer the copy in an open zone view: a graveyard pile paints only its front card, so that
+    // is the only place the *targeted* card has a position of its own to point at.
+    if (TabGame *tab = game->getTab()) {
+        if (CardItem *visible = tab->findVisibleGraveyardCardItem(playerId, serverCardId)) {
+            return visible;
+        }
+    }
+    // Pile closed: fall back to the card in the pile zone. `PileZone::reorganizeCards` never lays
+    // its cards out, so they all sit at the pile's own position — an arrow to any of them points
+    // at the graveyard, which is exactly what should happen when the card itself is not visible.
+    return game->getCard(playerId, QString::fromLatin1(ZoneNames::GRAVE), serverCardId);
+}
+
 ArrowTarget *resolveSpellTargetItem(AbstractGame *game, RuledClientState *state, quint32 targetOid)
 {
     if (!game || !state) {
@@ -293,6 +338,9 @@ ArrowTarget *resolveSpellTargetItem(AbstractGame *game, RuledClientState *state,
                 return stk;
             }
         }
+    }
+    if (CardItem *grave = findGraveyardCardItemByEngineOid(game, targetOid)) {
+        return grave;
     }
     return findBattlefieldCardItemByEngineOid(game, targetOid);
 }

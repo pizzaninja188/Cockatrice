@@ -1,5 +1,6 @@
 #include "server_abstract_player.h"
 
+#include "ruled_utils.h"
 #include "server_arrow.h"
 #include "server_card.h"
 #include "server_cardzone.h"
@@ -275,21 +276,11 @@ Response::ResponseCode Server_AbstractPlayer::moveCard(GameEventStorage &ges,
                                                        bool undoingDraw,
                                                        bool isReversed)
 {
-    // Disallow controller change to other zones than the table.
-    // Ruled MTG stack is shared: cast_spell moves from the caster's hand onto one canonical stack zone
-    // (see Server_Game::processRuledPayload), which may belong to another player in this data model.
-    const bool ruledHandToSharedStack = game && game->getRuledGame() &&
-                                        startzone->getName() == ZoneNames::HAND &&
-                                        targetzone->getName() == ZoneNames::STACK;
-    // Stack objects live on the canonical player's STACK zone, but instants/sorceries resolve to the caster's
-    // graveyard (or exile). Without this, applyRuledStackResolvedEvent's moveCard fails for NAP casts in 1v1.
-    const bool ruledSharedStackToCasterPublicNoCoords =
-        game && game->getRuledGame() && startzone->getName() == ZoneNames::STACK &&
-        targetzone->getType() == ServerInfo_Zone::PublicZone && !targetzone->hasCoords() &&
-        (targetzone->getName() == ZoneNames::GRAVE || targetzone->getName() == ZoneNames::EXILE);
+    // Disallow controller change to other zones than the table. The engine-decided ruled moves
+    // that legitimately cross players are enumerated in ruledAllowsCrossPlayerMove (ruled_utils).
     if (((targetzone->getType() != ServerInfo_Zone::PublicZone) || !targetzone->hasCoords()) &&
-        (startzone->getPlayer() != targetzone->getPlayer()) && !judge && !ruledHandToSharedStack &&
-        !ruledSharedStackToCasterPublicNoCoords) {
+        (startzone->getPlayer() != targetzone->getPlayer()) && !judge &&
+        !ruledAllowsCrossPlayerMove(game, startzone, targetzone)) {
         return Response::RespContextError;
     }
 

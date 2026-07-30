@@ -42,7 +42,29 @@ pub enum Zone {
 #[derive(Debug, Clone)]
 pub struct GameObject {
     pub id: ObjectId,
+    /// CR 108.3: the player who started the game with this card in their deck. **Never changes**
+    /// for the life of the object. Decides which zone the card goes to when it leaves the
+    /// battlefield (CR 400.3), which player's hand/library/graveyard/exile it belongs to, and
+    /// therefore what the hidden-info redaction is allowed to show whom.
     pub owner: PlayerId,
+    /// CR 110.2: the player who currently controls this permanent. Equal to [`Self::owner`]
+    /// except while a permanent is on the battlefield under someone else's control (reanimation
+    /// today; Mind Control / Threaten when layer-2 *continuous* control lands). Decides untap and
+    /// summoning sickness (CR 302.6/502), attack and block legality, ability control and APNAP
+    /// order (CR 603.3), and anthem / "you control" scoping.
+    ///
+    /// This is the CR 613 layer-2 **base value**: `GameEngine::characteristics()` reads it and
+    /// then applies control-changing continuous effects on top (none exist yet).
+    /// Reset to `owner` whenever the object leaves the battlefield (CR 400.7 — new object).
+    ///
+    /// **Invariant**, asserted at the end of `apply_sbas`:
+    /// ```text
+    /// oid ∈ players[i].battlefield  ⟺  objects[oid].zone == Battlefield
+    ///                               &&  objects[oid].controller == players[i].id
+    /// ```
+    /// i.e. `PlayerState::battlefield` is the *control* list, while `hand`/`library`/`graveyard`/
+    /// `exile` are *owner* lists.
+    pub controller: PlayerId,
     pub card_id: String,
     pub zone: Zone,
     pub tapped: bool,

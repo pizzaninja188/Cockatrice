@@ -61,6 +61,19 @@ struct RuledPlayerBinding
     Server_Card *findCardByEngineOid(const Server_Player *player, quint32 engineOid) const;
     Server_Card *findGraveyardCardByEngineOid(const Server_Player *player, quint32 engineOid) const;
 
+    /// Bind `engineOid` to `serverCardId` outside a zone-view sync.
+    ///
+    /// Needed when a permanent arrives on this seat's table from another seat (control change):
+    /// the oid is not in this binding until the next sync, and `applyRuledEngineZoneView`'s
+    /// fallback for an unknown slot is to match by card_id — which, with two identical
+    /// permanents, can hand this slot the card belonging to the other one and silently swap the
+    /// pairing. Registering the pair up front means the sync recognises the slot.
+    void registerEngineOid(quint32 engineOid, int serverCardId)
+    {
+        engineOidToServerCardId.insert(engineOid, serverCardId);
+        serverCardIdToEngineOid.insert(serverCardId, engineOid);
+    }
+
     RuledZoneSyncResult applyRuledEngineZoneView(Server_Player *player,
                                                  const ruled::v1::RuledPerPlayerView &v,
                                                  GameEventStorage *tapGes = nullptr,

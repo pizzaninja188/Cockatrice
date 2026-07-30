@@ -220,8 +220,8 @@ fn target_filter_legal(
         if filter.attacking_or_blocking && !is_attacking_or_blocking(&engine.state, tid) {
             return false;
         }
-        // "target creature you control" (equip, regenerate, …). Ownership == control until
-        // control-changing effects exist (CR 109.4).
+        // "target creature you control" (equip, regenerate, …) — CR 110.2 control, read through
+        // the layer pipeline, so a permanent you control but do not own qualifies.
         if filter.only_controller {
             if let Some(value) = engine.characteristics(tid) {
                 if value.controller != caster {
@@ -536,6 +536,9 @@ pub(super) fn validate_effect_targets(
         // Non-targeted effects require no targets.
         SpellEffectKind::Draw { .. }
         | SpellEffectKind::GainLife { .. }
+        // CR 115.1: "you lose life" does not target. `LifeAmount::TargetManaValue` reads a
+        // *sibling* effect's target, so LoseLife itself never declares one.
+        | SpellEffectKind::LoseLife { .. }
         | SpellEffectKind::EachOpponentLosesLifeYouGainEqual { .. }
         // Counter/copy target *spells*; they are never put on an ability, so this ability-only
         // validator only needs them present for exhaustiveness (spell targets go through

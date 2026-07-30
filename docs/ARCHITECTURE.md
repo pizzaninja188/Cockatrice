@@ -232,6 +232,15 @@ security-audit backlog entry.
 
 Do not re-derive this per card.
 
+- **Owner vs controller.** A permanent carries both at once and they can differ (reanimation).
+  `GameObject::owner` is fixed for the object's life and decides which zone a card returns to
+  (CR 400.3), zone membership everywhere off the battlefield, and hidden-info redaction.
+  `GameObject::controller` is the CR 110.2 layer-2 **base** value and decides untap and summoning
+  sickness, attack/block legality, ability control and APNAP order, and anthem scoping. The
+  per-player `battlefield` list is the **control index** — `oid ∈ players[i].battlefield` iff
+  `objects[oid].controller == players[i].id` (asserted in `apply_sbas`). Continuous
+  control-change effects (Mind Control, Threaten) are still deferred; `apply_layer_2_control`
+  documents what its first implementation must not do naively.
 - **Characteristics.** `GameEngine::characteristics(oid)` (`engine/characteristics.rs`) is the
   **single** entry point for derived controller, types, supertypes, colors, keywords, and P/T. It
   walks the CR 613 layers explicitly: 1 copy → 2 control → 3 text → 4 type → 5 color → 6

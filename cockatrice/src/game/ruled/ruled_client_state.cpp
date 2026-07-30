@@ -13,15 +13,57 @@ RuledClientState::RuledClientState(RuledClientHost *_host, QObject *parent) : QO
 // Identity
 // ---------------------------------------------------------------------------------------
 
-quint32 RuledClientState::graveyardEngineOidForServerCardId(int serverCardId) const
+void RuledClientState::setPendingCastGraveyardTargets(const QSet<quint32> &oids)
 {
-    for (auto it = graveyardEngineOidToServerCardId.constBegin(); it != graveyardEngineOidToServerCardId.constEnd();
-         ++it) {
-        if (it.value() == serverCardId) {
-            return it.key();
+    if (pendingCastGraveyardOids == oids) {
+        return;
+    }
+    pendingCastGraveyardOids = oids;
+    emitGraveyardTargetsNeeded();
+}
+
+void RuledClientState::emitGraveyardTargetsNeeded()
+{
+    // Union of the three things that can want a graveyard open. All go through here so the "which
+    // views are open" decision has a single owner — the alternative is several signals racing to
+    // open and close the same widget.
+    //
+    // 1. the pending cast's legal targets (choosing a target for Raise Dead / Reanimate);
+    QSet<quint32> oids = pendingCastGraveyardOids;
+    // 2. a pending trigger's legal targets (Gravedigger ETB);
+    if (hasPendingTriggerTarget()) {
+        const quint64 abilityKey = abilityTargetKey(lastTriggerSourceOid, static_cast<int>(lastTriggerAbilityIndex));
+        const auto &triggerTargets = validTargetsByAbility.value(abilityKey).validGraveyardIds;
+        for (quint32 oid : triggerTargets) {
+            oids.insert(oid);
         }
     }
-    return 0;
+    // 3. the graveyard targets of anything still *on the stack*. A spell that has been cast keeps
+    //    its graveyard open until it resolves or is countered, so the targeting arrow stays
+    //    anchored to the card rather than to a pile the player can no longer see. Falls out of the
+    //    stack order automatically the moment the spell leaves the stack.
+    const QList<quint32> stackOrder = getStackOidOrder();
+    for (auto it = stackTargetsByStackOid.constBegin(); it != stackTargetsByStackOid.constEnd(); ++it) {
+        if (!stackOrder.contains(it.key())) {
+            continue;
+        }
+        for (quint32 target : it.value()) {
+            if (graveyardOidToPlayerId.contains(target)) {
+                oids.insert(target);
+            }
+        }
+    }
+
+    QList<int> playerIds;
+    for (quint32 oid : oids) {
+        const int pid = graveyardOidToPlayerId.value(oid, -1);
+        if (pid >= 0 && !playerIds.contains(pid)) {
+            playerIds.append(pid);
+        }
+    }
+    // Deterministic order so the views open the same way every time (QSet iteration is not).
+    std::sort(playerIds.begin(), playerIds.end());
+    emit graveyardTargetsNeeded(playerIds);
 }
 
 // ---------------------------------------------------------------------------------------
@@ -971,10 +1013,12 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     syntheticAbilityControllerPid.clear();
     syntheticAbilityFakeIds.clear();
 
-    // Engine oid -> Server_Card.id for graveyard cards: rebuilt per batch from the server's
-    // GraveyardObjectMap, but that event is only sent when non-empty, so a stale map would
-    // otherwise survive into the next game and offer phantom targets.
-    graveyardEngineOidToServerCardId.clear();
+    // Graveyard identity maps: rebuilt per batch from the server's GraveyardObjectMap, but that
+    // event is only sent when non-empty, so a stale map would otherwise survive into the next
+    // game and offer phantom targets.
+    ownedGraveyardCardToEngineOid.clear();
+    graveyardOidToPlayerId.clear();
+    pendingCastGraveyardOids.clear();
 
     // Legal actions + opening sequence. Skipped on the game-start transition: the incoming
     // session's first batch has already populated these (see SessionResetScope), and clearing

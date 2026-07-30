@@ -1,0 +1,7 @@
+(
+  id: "zombify",
+  name: "Zombify",
+  mana_cost: "{3}{B}",
+  types: ["Sorcery"],
+  spell_effect: [ReturnFromGraveyard(filter: (owner: Controller, card_type: Some(Creature)), destination: Battlefield)],
+)

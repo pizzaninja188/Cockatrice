@@ -412,6 +412,7 @@ pub(crate) fn inject_creature_on_battlefield(
         tricerules_core::state::GameObject {
             id,
             owner: player_id,
+            controller: player_id,
             card_id: card_id.to_string(),
             zone: tricerules_core::Zone::Battlefield,
             tapped: false,
@@ -447,6 +448,7 @@ pub(crate) fn inject_permanent_on_battlefield(
         tricerules_core::state::GameObject {
             id,
             owner: player_id,
+            controller: player_id,
             card_id: card_id.to_string(),
             zone: tricerules_core::Zone::Battlefield,
             tapped: false,
@@ -478,6 +480,7 @@ pub(crate) fn inject_library_card(e: &mut GameEngine, player: usize, card_id: &s
         tricerules_core::state::GameObject {
             id,
             owner: player_id,
+            controller: player_id,
             card_id: card_id.to_string(),
             zone: tricerules_core::Zone::Library,
             tapped: false,
@@ -495,6 +498,79 @@ pub(crate) fn inject_library_card(e: &mut GameEngine, player: usize, card_id: &s
         },
     );
     e.state.players[player].library.push_back(id);
+    id
+}
+
+/// Inject a creature onto `controller`'s battlefield that is **owned by someone else** — the
+/// shape a reanimated permanent has (CR 108.3 owner vs CR 110.2 controller). Untapped and not
+/// summoning sick, so combat tests can use it immediately.
+pub(crate) fn inject_creature_under_foreign_control(
+    e: &mut GameEngine,
+    owner: usize,
+    controller: usize,
+    card_id: &str,
+) -> u32 {
+    let id = e.state.next_object_id;
+    e.state.next_object_id += 1;
+    let owner_id = e.state.players[owner].id;
+    let controller_id = e.state.players[controller].id;
+    e.state.objects.insert(
+        id,
+        tricerules_core::state::GameObject {
+            id,
+            owner: owner_id,
+            controller: controller_id,
+            card_id: card_id.to_string(),
+            zone: tricerules_core::Zone::Battlefield,
+            tapped: false,
+            summoning_sick: false,
+            power: None,
+            toughness: None,
+            damage: 0,
+            deathtouch_damage: false,
+            counters: std::collections::BTreeMap::new(),
+            attached_to: None,
+            regeneration_shields: 0,
+            must_attack_if_able: false,
+            must_block_if_able: false,
+            face_up_index: 0,
+        },
+    );
+    // The battlefield list is the control index, so the permanent goes on the *controller's*.
+    e.state.players[controller].battlefield.push(id);
+    id
+}
+
+/// Put a fresh card object straight into `player`'s graveyard, bypassing the game (no dies
+/// trigger, no zone-change events) — the graveyard equivalent of [`inject_library_card`], for
+/// setting up reanimation and graveyard-targeting scenarios.
+pub(crate) fn inject_graveyard_card(e: &mut GameEngine, player: usize, card_id: &str) -> u32 {
+    let id = e.state.next_object_id;
+    e.state.next_object_id += 1;
+    let player_id = e.state.players[player].id;
+    e.state.objects.insert(
+        id,
+        tricerules_core::state::GameObject {
+            id,
+            owner: player_id,
+            controller: player_id,
+            card_id: card_id.to_string(),
+            zone: tricerules_core::Zone::Graveyard,
+            tapped: false,
+            summoning_sick: false,
+            power: None,
+            toughness: None,
+            damage: 0,
+            deathtouch_damage: false,
+            counters: std::collections::BTreeMap::new(),
+            attached_to: None,
+            regeneration_shields: 0,
+            must_attack_if_able: false,
+            must_block_if_able: false,
+            face_up_index: 0,
+        },
+    );
+    e.state.players[player].graveyard.push(id);
     id
 }
 
@@ -683,6 +759,7 @@ pub(crate) fn inject_creature_with_stats(
         tricerules_core::state::GameObject {
             id,
             owner: player_id,
+            controller: player_id,
             card_id: card_id.to_string(),
             zone: tricerules_core::Zone::Battlefield,
             tapped: false,

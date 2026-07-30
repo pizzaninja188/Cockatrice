@@ -10,6 +10,7 @@
 
 #include <QBasicTimer>
 #include <QDebug>
+#include <algorithm>
 #include <QGraphicsSceneMouseEvent>
 #include <QGraphicsView>
 #include <QSet>
@@ -449,12 +450,35 @@ void GameScene::toggleZoneView(Player *player, const QString &zoneName, int numb
     connect(item, &ZoneViewWidget::closePressed, this, &GameScene::removeZoneView);
     addItem(item);
 
+    QPointF pos;
     if (zoneName == ZoneNames::GRAVE)
-        item->setPos(360, 100);
+        pos = QPointF(360, 100);
     else if (zoneName == ZoneNames::EXILE)
-        item->setPos(380, 120);
+        pos = QPointF(380, 120);
     else
-        item->setPos(340, 80);
+        pos = QPointF(340, 80);
+    item->setPos(cascadedZoneViewPos(pos, item));
+}
+
+QPointF GameScene::cascadedZoneViewPos(const QPointF &preferred, const ZoneViewWidget *newView) const
+{
+    // The base position depends only on the zone *name*, so two players' graveyards would land on
+    // exactly the same spot with one hiding the other. Cascade off any view already sitting there
+    // so every open view keeps a grabbable title bar.
+    static constexpr qreal step = 30;
+    static constexpr int maxSteps = 8; // then start over rather than marching off the board
+    QPointF pos = preferred;
+    for (int i = 0; i < maxSteps; ++i) {
+        const bool occupied = std::any_of(zoneViews.constBegin(), zoneViews.constEnd(),
+                                          [&](const ZoneViewWidget *view) {
+                                              return view != newView && view->pos() == pos;
+                                          });
+        if (!occupied) {
+            return pos;
+        }
+        pos = preferred + QPointF(step * (i + 1), step * (i + 1));
+    }
+    return preferred;
 }
 
 /**

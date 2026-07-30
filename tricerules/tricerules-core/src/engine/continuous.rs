@@ -32,7 +32,10 @@ impl GameEngine {
         let Some(object) = self.state.objects.get(&object_id) else {
             return;
         };
-        let controller = object.owner;
+        // CR 604.2 / 611.2: a static ability's continuous effect is created by the permanent's
+        // controller, and `AnthemController::YouControl` scopes off this value. Reading the owner
+        // here would make a reanimated Glorious Anthem pump its *former* controller's creatures.
+        let controller = object.controller;
         let card_id = object.card_id.clone();
         let face_up_index = object.face_up_index;
         let statics: Vec<StaticAbilityDef> = match self.registry.get(&card_id) {

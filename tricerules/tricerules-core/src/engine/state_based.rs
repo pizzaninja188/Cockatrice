@@ -7,7 +7,56 @@ impl GameEngine {
     /// nothing left to do. Stops early if a legend-rule SBA pauses for player choice.
     pub(super) fn apply_sbas(&mut self, out: &mut Vec<rv1::RuledEvent>) -> Result<(), EngineError> {
         while self.state.pending_resolution.is_none() && self.apply_sbas_once(out)? {}
+        self.debug_assert_battlefield_control_index();
         Ok(())
+    }
+
+    /// The battlefield lists are the *control* index (see [`GameObject::controller`]). Every zone
+    /// mutation has to keep them in sync, and getting it wrong produces a ghost permanent that
+    /// still blocks and still gets SBA-checked — silent, and far from its cause. Assert the
+    /// invariant in both directions once the board has settled.
+    ///
+    /// Debug-only: this is O(board) per settled SBA loop, and the release build must not pay for
+    /// it (see the `performance.rs` wall-time bound).
+    fn debug_assert_battlefield_control_index(&self) {
+        #[cfg(debug_assertions)]
+        {
+            for player in &self.state.players {
+                for oid in &player.battlefield {
+                    let Some(object) = self.state.objects.get(oid) else {
+                        panic!("oid {oid} in P{}'s battlefield has no object", player.id);
+                    };
+                    assert_eq!(
+                        object.zone,
+                        Zone::Battlefield,
+                        "oid {oid} is in P{}'s battlefield list but its zone is {:?}",
+                        player.id,
+                        object.zone
+                    );
+                    assert_eq!(
+                        object.controller, player.id,
+                        "oid {oid} is in P{}'s battlefield list but is controlled by P{}",
+                        player.id, object.controller
+                    );
+                }
+            }
+            for (oid, object) in &self.state.objects {
+                if object.zone != Zone::Battlefield {
+                    continue;
+                }
+                let listed = self
+                    .state
+                    .players
+                    .iter()
+                    .any(|p| p.id == object.controller && p.battlefield.contains(oid));
+                assert!(
+                    listed,
+                    "oid {oid} is on the battlefield controlled by P{} but is not in that \
+                     player's battlefield list",
+                    object.controller
+                );
+            }
+        }
     }
 
     /// One state-based-action pass (CR 704.5). Returns `true` if it changed game state.
@@ -167,10 +216,12 @@ impl GameEngine {
             .map(|(id, _)| *id)
             .collect();
         for id in vanished {
-            if let Some(o) = self.state.objects.remove(&id) {
+            if self.state.objects.remove(&id).is_some() {
                 changed = true;
-                if let Some(pidx) = self.state.player_idx(o.owner) {
-                    let p = &mut self.state.players[pidx];
+                // Sweep every player, not just the owner: the battlefield list is keyed by
+                // controller, so a token that changed control would otherwise leave a dangling
+                // oid behind.
+                for p in &mut self.state.players {
                     p.hand.retain(|&x| x != id);
                     p.battlefield.retain(|&x| x != id);
                     p.graveyard.retain(|&x| x != id);
@@ -366,6 +417,7 @@ mod sba_tests {
             GameObject {
                 id,
                 owner,
+                controller: owner,
                 card_id: "walking_corpse".to_string(),
                 zone: Zone::Battlefield,
                 tapped: false,
@@ -410,7 +462,7 @@ mod sba_tests {
             .continuous_effects
             .push(anthem(src, 1, EffectDuration::WhileSourceOnBattlefield));
         assert_eq!(e.effective_toughness(other), Some(2)); // base 1 + anthem +1
-        move_object_to_zone(&mut e.state, src, Zone::Graveyard).unwrap();
+        move_object_to_zone(&mut e.state, src, Zone::Graveyard, None).unwrap();
         assert_eq!(e.effective_toughness(other), Some(1)); // anthem gone
         assert!(e.state.continuous_effects.is_empty());
     }
@@ -432,7 +484,7 @@ mod sba_tests {
             duration: EffectDuration::UntilEndOfTurn,
             timestamp: 0,
         });
-        move_object_to_zone(&mut e.state, src, Zone::Graveyard).unwrap();
+        move_object_to_zone(&mut e.state, src, Zone::Graveyard, None).unwrap();
         assert_eq!(e.effective_toughness(target), Some(3)); // still buffed
     }
 

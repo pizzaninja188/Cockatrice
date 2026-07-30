@@ -108,6 +108,10 @@ impl GameEngine {
                 } else {
                     Zone::Graveyard
                 },
+                // CR 110.2a: a permanent spell's controller becomes the permanent's controller.
+                // Identical to the owner for a spell cast from its owner's hand, which is every
+                // case today, but it is the spell's controller that is authoritative.
+                Some(top.controller),
             )?;
             if resolves_to_battlefield {
                 // CR 712.4: a permanent enters the battlefield showing the face that was cast.
@@ -287,6 +291,7 @@ impl GameEngine {
                         stack_ops::copy_target_spell(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::GainLife { .. } => life::gain_life(&mut cx, effect)?,
+                    effect @ SpellEffectKind::LoseLife { .. } => life::lose_life(&mut cx, effect)?,
                     effect @ SpellEffectKind::TargetPlayerGainsLife { .. } => {
                         life::target_player_gains_life(&mut cx, effect)?
                     }
@@ -357,6 +362,12 @@ impl GameEngine {
                 }
             };
             if outcome == EffectOutcome::Suspended {
+                // KNOWN GAP: the `finish_*` paths in `custom_resolution.rs` complete the parked
+                // effect and end the resolution, so any effect *after* a suspending one in this
+                // list never runs. Harmless today only because every card either suspends in its
+                // last effect or not at all (Thoughtseize's RON reorders for exactly this
+                // reason). Resuming the tail means parking the remaining effect index alongside
+                // the choice — do that before shipping a card that needs it.
                 return Ok(());
             }
         }
@@ -434,7 +445,10 @@ impl GameEngine {
                     oid,
                     GameObject {
                         id: oid,
+                        // CR 111.3: a token's owner is the player who controlled the effect that
+                        // created it, so owner and controller coincide at creation.
                         owner: pid,
+                        controller: pid,
                         card_id: token_id.to_string(),
                         zone: Zone::Battlefield,
                         tapped: false,
@@ -506,12 +520,22 @@ pub(crate) fn permanent_moved_event(
         .get(&oid)
         .map(|o| o.card_id.clone())
         .unwrap_or_default();
+    // Callers emit this *after* the move, so the object already carries its post-move controller:
+    // the new controller for a battlefield entry, and the owner again everywhere else (CR 400.7).
+    // Always populated — proto3 scalars have no presence and player id 0 is valid, so a defaulted
+    // 0 would be indistinguishable from "player 0 controls it".
+    let controller_player_id = state
+        .objects
+        .get(&oid)
+        .map(|o| o.controller)
+        .unwrap_or(owner_player_id);
     rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::PermanentMoved(rv1::PermanentMoved {
             object_id: oid,
             owner_player_id,
             destination: destination as i32,
             card_id,
+            controller_player_id,
         })),
     }
 }
@@ -540,10 +564,16 @@ pub(super) fn resolve_anthem_scope(
     }
 }
 
+/// Move `oid` into zone `z`, maintaining every zone list and the CR 400.7 new-object resets.
+///
+/// `controller` names the player the permanent enters the battlefield **under** (CR 110.2);
+/// `None` means "its owner controls it", which is what every non-control-changing caller passes.
+/// It is ignored for non-battlefield zones — those belong to the owner (CR 400.3).
 pub(crate) fn move_object_to_zone(
     state: &mut GameState,
     oid: ObjectId,
     z: Zone,
+    controller: Option<PlayerId>,
 ) -> Result<(), EngineError> {
     let owner = state
         .objects
@@ -579,13 +609,28 @@ pub(crate) fn move_object_to_zone(
         }
     }
 
-    let idx = state.player_idx(owner).unwrap();
+    // Remove from *every* player's lists, not just the owner's: `battlefield` is keyed by
+    // controller, so a permanent under someone else's control lives in their vec. Scoping this to
+    // the owner would strand a ghost oid that still blocks, still gets SBA-checked, and desyncs
+    // the zone-view size check in the relay's `applyRuledEngineZoneView`.
+    for p in &mut state.players {
+        p.library.retain(|&x| x != oid);
+        p.hand.retain(|&x| x != oid);
+        p.battlefield.retain(|&x| x != oid);
+        p.graveyard.retain(|&x| x != oid);
+        p.exile.retain(|&x| x != oid);
+    }
+    // CR 400.3: the battlefield is entered under a *controller*; every other zone belongs to the
+    // card's owner, so that is where a permanent goes when it leaves.
+    let holder = if z == Zone::Battlefield {
+        controller.unwrap_or(owner)
+    } else {
+        owner
+    };
+    let idx = state
+        .player_idx(holder)
+        .ok_or(EngineError::Illegal("no such player"))?;
     let p = &mut state.players[idx];
-    p.library.retain(|&x| x != oid);
-    p.hand.retain(|&x| x != oid);
-    p.battlefield.retain(|&x| x != oid);
-    p.graveyard.retain(|&x| x != oid);
-    p.exile.retain(|&x| x != oid);
     match z {
         Zone::Graveyard => p.graveyard.push(oid),
         Zone::Hand => p.hand.push(oid),
@@ -596,6 +641,13 @@ pub(crate) fn move_object_to_zone(
     }
     if let Some(o) = state.objects.get_mut(&oid) {
         o.zone = z;
+        // CR 110.2 / 400.7: control is a battlefield-only property, and a zone change makes this a
+        // new object — so entering sets the new controller and leaving resets it to the owner.
+        o.controller = if z == Zone::Battlefield {
+            holder
+        } else {
+            o.owner
+        };
         // CR 302.6: a permanent entering the battlefield has not been controlled continuously
         // since its controller's most recent turn began, so it is summoning sick. Assert this on
         // entry rather than trusting a persisted flag — a prior bounce/leave clears transient
@@ -609,14 +661,14 @@ pub(crate) fn move_object_to_zone(
 }
 
 pub(super) fn destroy_permanent(state: &mut GameState, oid: ObjectId) -> Result<(), EngineError> {
-    move_object_to_zone(state, oid, Zone::Graveyard)
+    move_object_to_zone(state, oid, Zone::Graveyard, None)
 }
 
 /// Sacrifice a permanent (CR 701.17). Unlike destroy, sacrifice bypasses indestructible and
 /// regeneration — it is always a cost, never a triggered or replacement effect that can be
 /// redirected.
 pub(super) fn sacrifice_permanent(state: &mut GameState, oid: ObjectId) -> Result<(), EngineError> {
-    move_object_to_zone(state, oid, Zone::Graveyard)
+    move_object_to_zone(state, oid, Zone::Graveyard, None)
 }
 
 /// CR 608.2m: "As the final part of an instant or sorcery spell's resolution, the spell is put

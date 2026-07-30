@@ -598,28 +598,50 @@ void RuledGameDriver::applyPermanentMoves(const ruled::v1::RuledEventBatch &batc
             continue;
         }
         Server_Card *card = nullptr;
-        const auto preIt = preBatchOidMaps.constFind(ownerId);
-        if (preIt != preBatchOidMaps.constEnd()) {
-            const auto cardIdIt = preIt->constFind(oid);
-            if (cardIdIt != preIt->constEnd()) {
-                for (const char *zn : {ZoneNames::TABLE, ZoneNames::HAND, ZoneNames::STACK, ZoneNames::DECK}) {
-                    Server_CardZone *z = owner->getZones().value(zn);
-                    if (!z) {
-                        continue;
-                    }
-                    if (Server_Card *c = z->getCard(*cardIdIt, nullptr, false)) {
-                        card = c;
-                        break;
+        // A permanent is registered under the player who *controls* it, which is not always its
+        // owner (reanimation). Search every seat, owner first so the ordinary no-control-change
+        // case behaves exactly as before. Getting this wrong is not a miss but a mis-hit: the
+        // card_id fallback further down would happily pull a same-named card out of the owner's
+        // deck instead.
+        QList<int> searchOrder;
+        searchOrder.append(ownerId);
+        for (int pid : game->getPlayers().keys()) {
+            if (pid != ownerId) {
+                searchOrder.append(pid);
+            }
+        }
+        for (int pid : searchOrder) {
+            if (card) {
+                break;
+            }
+            Server_AbstractPlayer *holder = game->getPlayer(pid);
+            if (!holder) {
+                continue;
+            }
+            const auto preIt = preBatchOidMaps.constFind(pid);
+            if (preIt != preBatchOidMaps.constEnd()) {
+                const auto cardIdIt = preIt->constFind(oid);
+                if (cardIdIt != preIt->constEnd()) {
+                    for (const char *zn : {ZoneNames::TABLE, ZoneNames::HAND, ZoneNames::STACK, ZoneNames::DECK}) {
+                        Server_CardZone *z = holder->getZones().value(zn);
+                        if (!z) {
+                            continue;
+                        }
+                        if (Server_Card *c = z->getCard(*cardIdIt, nullptr, false)) {
+                            card = c;
+                            break;
+                        }
                     }
                 }
             }
-        }
-        // ReturnFromGraveyard: the card may be in the graveyard zone, not in the battlefield/hand
-        // OID map. Try the graveyard map maintained by the player's binding.
-        if (!card) {
-            if (auto *sp = qobject_cast<Server_Player *>(owner)) {
-                if (Server_Card *c = playerBinding(ownerId).findGraveyardCardByEngineOid(sp, oid)) {
-                    card = c;
+            // ReturnFromGraveyard: the card may be in the graveyard zone, not in the
+            // battlefield/hand OID map. Try the graveyard map maintained by the seat's binding.
+            // Reanimate reads the *opponent's* graveyard, so this is not owner-scoped either.
+            if (!card) {
+                if (auto *sp = qobject_cast<Server_Player *>(holder)) {
+                    if (Server_Card *c = playerBinding(pid).findGraveyardCardByEngineOid(sp, oid)) {
+                        card = c;
+                    }
                 }
             }
         }
@@ -709,7 +731,17 @@ void RuledGameDriver::applyPermanentMoves(const ruled::v1::RuledEventBatch &batc
                 destX = 0;
                 break;
         }
-        Server_CardZone *targetZone = owner->getZones().value(destZone);
+        // CR 110.2 vs CR 400.3: a permanent enters the battlefield under its *controller*, but
+        // every other zone belongs to its owner — so only the battlefield destination follows
+        // controller_player_id. The engine always sets that field (proto3 scalars carry no
+        // presence and player id 0 is valid), and it equals the owner when control is unchanged.
+        Server_AbstractPlayer *destPlayer = owner;
+        if (pm.destination() == ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD) {
+            if (Server_AbstractPlayer *controller = game->getPlayer(pm.controller_player_id())) {
+                destPlayer = controller;
+            }
+        }
+        Server_CardZone *targetZone = destPlayer->getZones().value(destZone);
         if (!targetZone) {
             continue;
         }
@@ -726,9 +758,21 @@ void RuledGameDriver::applyPermanentMoves(const ruled::v1::RuledEventBatch &batc
         }
         CardToMove cardToMove;
         cardToMove.set_card_id(moveCardId);
-        if (owner->moveCard(permanentMoveGes, startZone, QList<const CardToMove *>() << &cardToMove, targetZone, destX,
+        // Move through the seat that physically holds the card, not the owner: for a permanent
+        // controlled by someone else the card sits on the *controller's* table, and moveCard
+        // builds its event from startzone->getPlayer().
+        Server_AbstractPlayer *mover = startZone->getPlayer() ? startZone->getPlayer() : owner;
+        if (mover->moveCard(permanentMoveGes, startZone, QList<const CardToMove *>() << &cardToMove, targetZone, destX,
                             0, true) == Response::RespOk) {
             permanentMoveGesHasEvents = true;
+            // A cross-player move reissues Server_Card::id from the destination player's space
+            // (server_abstract_player.cpp), and the engine oid is absent from the destination
+            // seat's binding until the next zone-view sync. Register it now: otherwise
+            // applyRuledEngineZoneView falls back to matching by card_id, which can silently
+            // swap the oid<->Server_Card pairing between two identical permanents.
+            if (destPlayer != mover && pm.destination() == ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD) {
+                playerBinding(destPlayer->getPlayerId()).registerEngineOid(oid, card->getId());
+            }
         }
     }
     if (permanentMoveGesHasEvents) {

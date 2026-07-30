@@ -755,6 +755,12 @@ message BattlefieldObject {
   string counters_annotation = 11 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   uint32 attached_to_oid = 12 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   uint32 face_up_index = 13 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // CR 108.3 owner. The per-player view this object appears in already identifies its CR 110.2
+  // *controller* (the engine's battlefield list is the control index), so this is the other half
+  // of the identity — the two differ only for a permanent controlled by someone who does not own
+  // it (reanimation). The relay uses it to annotate such a permanent with "Owner: <name>" and to
+  // route the card home when it leaves the battlefield (CR 400.3).
+  int32 owner_player_id = 14 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message HandCard {
@@ -826,6 +832,12 @@ message PermanentMoved {
   // tricerules card id (lowercase_underscore). Lets servers resolve cards that
   // have no engine-oid mapping (e.g. milled library cards) by name within a zone.
   string card_id = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // CR 110.2: the player whose battlefield the permanent lands under. Meaningful only for
+  // DESTINATION_BATTLEFIELD; every other destination belongs to `owner_player_id` (CR 400.3).
+  // **Always set by the engine**, and equal to `owner_player_id` whenever control does not
+  // change — player id 0 is valid and proto3 scalars carry no presence, so a defaulted 0 could
+  // not be told apart from "player 0 controls it".
+  int32 controller_player_id = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // A player's life total changed. delta is signed (negative = loss).
