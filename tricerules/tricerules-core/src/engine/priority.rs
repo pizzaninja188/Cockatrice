@@ -503,7 +503,7 @@ impl GameEngine {
                 .get(&self.state.objects.get(&oid).unwrap().card_id)
                 .map(|d| d.name.clone())
                 .unwrap_or_else(|| "card".into());
-            move_object_to_zone(&mut self.state, oid, Zone::Graveyard)?;
+            move_object_to_zone(&mut self.state, oid, Zone::Graveyard, None)?;
             ev.push(ev_log(format!("P{player} discards {card_name} (cleanup)")));
             ev.push(permanent_moved_event(
                 &self.state,
@@ -559,8 +559,8 @@ impl GameEngine {
         // is a battlefield-only action (cards in hand/graveyard/library/exile have no tap state),
         // and a permanent is untapped by its controller, not its owner — untapping by owner would
         // wrongly untap a permanent its owner no longer controls and skip one they took control of.
-        // (The battlefield zone list currently is the control list — owner == controller until
-        // control-changing effects are modeled.)
+        // The battlefield zone list *is* the control list (see `GameObject::controller`), so this
+        // is correct even when a permanent is controlled by someone other than its owner.
         if let Some(idx) = self.state.player_idx(ap) {
             for &oid in &self.state.players[idx].battlefield.clone() {
                 if let Some(c) = self.state.objects.get_mut(&oid) {

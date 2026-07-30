@@ -668,7 +668,7 @@ impl GameEngine {
                 .map(|o| o.owner)
                 .ok_or(EngineError::Illegal("chosen card object not found"))?;
             let discard_name = object_display_name(&self.state, self.registry, oid);
-            move_object_to_zone(&mut self.state, oid, Zone::Graveyard)?;
+            move_object_to_zone(&mut self.state, oid, Zone::Graveyard, None)?;
             ev.push(permanent_moved_event(
                 &self.state,
                 oid,

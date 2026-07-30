@@ -94,9 +94,11 @@ private:
     /// game — guard every use, the way replayDock is guarded.
     RuledDevConsoleWidget *devConsoleWidget;
     QList<QPointer<ArrowItem>> ruledCombatArrows;
-    /// The graveyard view a pending trigger opened for us, so it can be closed again without
-    /// touching one the player opened themselves. Null when we have none open.
-    QPointer<ZoneViewWidget> ruledAutoOpenedGraveyardView;
+    /// Graveyard views a pending trigger or cast opened for us, keyed by the player whose
+    /// graveyard it is, so each can be closed again without touching one the player opened
+    /// themselves. A spell may target any graveyard (Reanimate), so this is per-player rather
+    /// than a single widget. Empty when we have none open.
+    QHash<int, QPointer<ZoneViewWidget>> ruledAutoOpenedGraveyardViews;
     QPointer<ZoneViewWidget> stackView;
     CardZoneLogic *stackViewZone = nullptr;
     // Deck zone view auto-opened for LibrarySearch (Gifts Ungiven search step).
@@ -250,6 +252,11 @@ public:
     /// When the ruled stack window is open, stack `CardItem`s live in the zone view (visible positions).
     /// Returns nullptr if the window is closed or the id is not found in the view.
     [[nodiscard]] CardItem *findVisibleStackSpellCardItem(int serverCardId) const;
+
+    /// As above for a graveyard pile: when `playerId`'s graveyard is open in a zone view, its
+    /// `CardItem`s have visible positions a targeting arrow can point at. Returns nullptr when the
+    /// view is closed, in which case the caller should fall back to the pile itself.
+    [[nodiscard]] CardItem *findVisibleGraveyardCardItem(int playerId, int serverCardId) const;
 
 public slots:
     void viewCardInfo(const CardRef &cardRef = {}) const;

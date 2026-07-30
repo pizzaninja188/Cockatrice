@@ -3,6 +3,15 @@
   name: "Thoughtseize",
   mana_cost: "{B}",
   types: ["Sorcery"],
-  spell_effect: [DiscardCards(count: 1, target: (kind: AnyPlayer))],
-  partial: "nonland restriction not enforced; you-lose-2-life not implemented",
+  // Oracle order is discard-then-lose-life, but `DiscardCards(random: false)` suspends
+  // resolution for the caster's choice, and a suspended effect ends the resolution without
+  // running the rest of the list (see the `EffectOutcome::Suspended` early return in
+  // engine/resolution/mod.rs). Life loss is therefore declared first so it always happens.
+  // Unobservable reordering: SBAs are not checked while a resolution is parked, so a player
+  // taken to 0 by this loses at the same moment either way.
+  spell_effect: [
+    LoseLife(amount: Fixed(2)),
+    DiscardCards(count: 1, target: (kind: AnyPlayer)),
+  ],
+  partial: "nonland restriction not enforced",
 )

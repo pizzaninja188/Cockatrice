@@ -48,6 +48,15 @@ namespace RuledActions
 [[nodiscard]] RuledClientState *stateFor(const AbstractGame *game);
 [[nodiscard]] RuledClientState *stateForCard(const CardItem *card);
 
+/// Tell the view model which graveyard OIDs the pending cast of `handSlot`/`faceIndex` may target,
+/// so `TabGame` can open the right players' graveyard views. Pass `handSlot < 0` to retract the
+/// hint (no cast pending). No-op outside a ruled game.
+///
+/// Casting Raise Dead used to require the player to open their own graveyard by hand — the view
+/// auto-opened only for a pending *trigger*. Reanimate makes that worse, because the card may sit
+/// in an opponent's graveyard.
+void updateGraveyardTargetHint(const Player *player, int handSlot, int faceIndex);
+
 /// Send a ready-built ruled command that does not originate in the view model — today only the
 /// dev console, whose input is text rather than a click or an engine event.
 ///
@@ -76,7 +85,12 @@ void sendRuledCommandExpectingAck(const AbstractGame *game,
 [[nodiscard]] CardItem *findStackCardItemByServerCardId(AbstractGame *game, int serverCardId);
 /// Stack CardItem for an engine ObjectId (id map first, then a scan of every stack zone).
 [[nodiscard]] CardItem *findStackCardItemByEngineOid(AbstractGame *game, quint32 stackOid);
-/// Arrow endpoint for a spell/ability target: a player seat, a stack item, or a permanent.
+/// Graveyard CardItem for an engine ObjectId: the copy in an open zone view if there is one, else
+/// the card in the pile (which sits at the pile's own position, so an arrow to it points at the
+/// graveyard rather than at an invisible card). Null when the oid is not in any graveyard.
+[[nodiscard]] CardItem *findGraveyardCardItemByEngineOid(AbstractGame *game, quint32 engineOid);
+/// Arrow endpoint for a spell/ability target: a player seat, a stack item, a graveyard card, or a
+/// permanent.
 [[nodiscard]] ArrowTarget *resolveSpellTargetItem(AbstractGame *game, RuledClientState *state, quint32 targetOid);
 
 // ---------------------------------------------------------------------------------------

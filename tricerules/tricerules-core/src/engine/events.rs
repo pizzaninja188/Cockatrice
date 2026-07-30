@@ -243,6 +243,11 @@ impl GameEngine {
                             counters_annotation: object.counter_annotation(),
                             attached_to_oid: object.attached_to.unwrap_or(0),
                             face_up_index: object.face_up_index as u32,
+                            // CR 108.3. The per-player view already says who *controls* this
+                            // permanent (it is listed under its controller); the owner is the
+                            // half the relay needs for the "Owner:" annotation and for routing
+                            // the card home when it leaves the battlefield.
+                            owner_player_id: object.owner,
                         }
                     })
                     .collect(),

@@ -234,8 +234,19 @@ public:
     QHash<quint32, bool> engineOidCreature;
     // Servatrice HandSlotMap: (owner player id, Server_Card.id) -> engine hand index for ruled commands.
     QHash<quint64, int> ownedCardToEngineHandSlot;
-    // Servatrice GraveyardObjectMap: engine OID -> Server_Card.id for graveyard cards (all players).
-    QHash<quint32, int> graveyardEngineOidToServerCardId;
+    // Servatrice GraveyardObjectMap: (owner player id, Server_Card.id) -> engine OID for graveyard
+    // cards. Keyed by owner, not by card id alone: `Server_Card.id` is only unique within its
+    // owner's zones, so two players' graveyards can hold the same id. That never mattered while
+    // the only graveyard-targeting cards read "your graveyard"; Reanimate reads *a* graveyard.
+    QHash<quint64, quint32> ownedGraveyardCardToEngineOid;
+    // Reverse indexes of the same map: engine OID -> whose graveyard it is in, and -> the physical
+    // card there. The first lets a pending cast work out which player's graveyard view to open;
+    // the second lets a targeting arrow find the CardItem to point at.
+    QHash<quint32, int> graveyardOidToPlayerId;
+    QHash<quint32, int> graveyardOidToServerCardId;
+    // Graveyard OIDs the in-progress cast may target. Client-local UI state (not engine state):
+    // set by the pending-cast state machine, cleared when the cast completes or is cancelled.
+    QSet<quint32> pendingCastGraveyardOids;
 
     // Key = (engine hand slot << 8 | face index); see spellTargetKey(). One entry per castable
     // face of a hand card that needs a target (single-face cards use face 0).
@@ -369,8 +380,23 @@ public:
     {
         return ownerCardIdToEngineOid.value(makeOwnedCardKey(ownerPlayerId, cardId), 0);
     }
-    /// Engine OID for a graveyard card given its Server_Card.id, or 0 if not found.
-    [[nodiscard]] quint32 graveyardEngineOidForServerCardId(int serverCardId) const;
+    /// Record the graveyard OIDs the in-progress cast may target (empty = no pending cast, or it
+    /// targets nothing in a graveyard), then re-emit `graveyardTargetsNeeded`. Called from the
+    /// pending-cast state machine; the trigger side feeds the same emitter from the dispatcher, so
+    /// there is exactly one place that decides which graveyards should be open.
+    void setPendingCastGraveyardTargets(const QSet<quint32> &oids);
+
+    /// Recompute and emit `graveyardTargetsNeeded` from the pending trigger and pending cast.
+    void emitGraveyardTargetsNeeded();
+
+    /// Engine OID for a graveyard card, given the player whose graveyard it is in and its
+    /// `Server_Card.id`, or 0 if not found. The owner is required: card ids are unique only
+    /// within one player's zones, so an id-only lookup can return the wrong player's card once a
+    /// spell can target any graveyard (Reanimate).
+    [[nodiscard]] quint32 graveyardEngineOidForOwnedCard(int ownerPlayerId, int serverCardId) const
+    {
+        return ownedGraveyardCardToEngineOid.value(makeOwnedCardKey(ownerPlayerId, serverCardId), 0);
+    }
     [[nodiscard]] int cardIdForEngineOid(quint32 engineOid) const
     {
         return engineOidToCardId.value(engineOid, -1);
@@ -857,9 +883,13 @@ signals:
     void stackOrderChanged(const QList<quint32> &orderedOids);
     /// Emitted when a triggered ability fires and needs the local player to choose a target.
     void triggerNeedsTarget(QString abilityText);
-    /// Emitted each ruled batch to notify whether a pending trigger requires a graveyard target
-    /// (e.g. Gravedigger ETB). `true` = graveyard window should be open; `false` = may close.
-    void triggerGraveyardNeedsTarget(bool needed);
+    /// Whose graveyard views should be open because something currently needs a target there —
+    /// a pending trigger (Gravedigger ETB) or a pending cast (Raise Dead, Reanimate). Empty list
+    /// = nothing needs one, close whatever we opened.
+    ///
+    /// Carries player ids rather than a bool because a spell may read *any* graveyard (Reanimate),
+    /// so "open the graveyard" is not enough — the view has to be the right player's.
+    void graveyardTargetsNeeded(const QList<int> &playerIds);
     /// Emitted when the engine's `first_strike_step_pending` flag flips. Drives the
     /// "First Strike Damage" vs "Combat Damage" pass-priority button label on the prompt widget.
     void firstStrikeStepPendingChanged(bool pending);

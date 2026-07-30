@@ -79,6 +79,35 @@ QString mergeRuledCountersIntoAnnotation(const QString &baseAnn, const QString &
     }
     return without + QLatin1Char('\n') + counterAnn;
 }
+
+// CR 108.3 vs CR 110.2: a permanent controlled by someone who does not own it needs to say whose
+// card it is, or the board is unreadable after a reanimation. Same shape as the damage/counter
+// lines: driven from the engine every sync, so it appears when control diverges and disappears
+// again the moment the card goes home. `ownerName` empty means "owner == controller, strip it".
+//
+// This deliberately does not reuse upstream's Server_AbstractPlayer::onCardBeingMoved annotation
+// (which ruled mode opts out of): that fires once at move time and never clears, so it would
+// outlive the control change.
+QString mergeRuledOwnerIntoAnnotation(const QString &baseAnn, const QString &ownerName)
+{
+    const QString marker = QStringLiteral("Owner: ");
+    QStringList kept;
+    for (const QString &line : baseAnn.split(QLatin1Char('\n'))) {
+        if (line.trimmed().startsWith(marker)) {
+            continue;
+        }
+        kept.append(line);
+    }
+    QString without = kept.join(QLatin1Char('\n')).trimmed();
+    if (ownerName.isEmpty()) {
+        return without;
+    }
+    const QString ownerLine = marker + ownerName;
+    if (without.isEmpty()) {
+        return ownerLine;
+    }
+    return without + QLatin1Char('\n') + ownerLine;
+}
 } // namespace
 
 RuledPlayerBinding::RuledZoneSyncResult
@@ -370,8 +399,21 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                     }
 
                     const QString counterAnn = QString::fromStdString(battlefieldObject.counters_annotation());
+                    // The permanent is listed in *this* seat's view, so this seat controls it
+                    // (the engine battlefield list is the control index). Name the owner only
+                    // when the two differ; an empty name strips any stale line.
+                    QString ownerName;
+                    if (battlefieldObject.owner_player_id() != playerId) {
+                        if (Server_Game *g = player->getGame()) {
+                            if (Server_AbstractPlayer *ownerPlayer =
+                                    g->getPlayer(battlefieldObject.owner_player_id())) {
+                                ownerName = QString::fromStdString(ownerPlayer->getUserInfo()->name());
+                            }
+                        }
+                    }
                     QString mergedAnn = mergeRuledDamageIntoAnnotation(card->getAnnotation(), isCreature ? dmg : 0);
                     mergedAnn = mergeRuledCountersIntoAnnotation(mergedAnn, counterAnn);
+                    mergedAnn = mergeRuledOwnerIntoAnnotation(mergedAnn, ownerName);
                     if (mergedAnn != card->getAnnotation()) {
                         card->setAnnotation(mergedAnn);
                         result.tapStateChanged = true;

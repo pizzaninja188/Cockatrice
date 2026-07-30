@@ -109,7 +109,7 @@ Every signal is declared on `RuledClientState` and emitted by it or by the dispa
 | `battlefieldMapUpdated()` | `CardItem`, `TabGame` | Repaint after the identity maps change. |
 | `stackHasItemsChanged(bool)` | `TabGame`, `GamePromptWidget` | Stack window visibility; pass-priority button text. |
 | `stackOrderChanged(QList<quint32>)` | `TabGame` | Re-sort the stack window (LIFO; `Event_MoveCard` may arrive before `stack_pushed`). |
-| `triggerGraveyardNeedsTarget(bool)` | `TabGame` | Open/close the graveyard view for a trigger that targets there. |
+| `graveyardTargetsNeeded(QList<int>)` | `TabGame` | Open/close graveyard views. Three sources union in `emitGraveyardTargetsNeeded()`: a pending cast's legal targets, a pending trigger's, and the graveyard targets of anything still on the stack (so a view stays open until the spell resolves and its arrow stays anchored). Names players, not a bool: a spell may target any graveyard (Reanimate). |
 | `firstStrikeStepPendingChanged(bool)` | `GamePromptWidget` | "First Strike Damage" vs "Combat Damage" button label. |
 | `firstStrikeDamageStepActiveChanged(bool)` | `GamePromptWidget` | Same, once inside the substep (CR 510.4). |
 | `undoableManaAbilitiesChanged(int)` | `TabGame` | The undo-land-tap affordance (CR 605 float courtesy). |

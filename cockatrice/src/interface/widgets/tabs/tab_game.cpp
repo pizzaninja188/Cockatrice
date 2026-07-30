@@ -287,32 +287,38 @@ void TabGame::connectToGameEventHandler()
                     }
                 }
             });
-    connect(game->getGameEventHandler()->ruled(), &RuledClientState::triggerGraveyardNeedsTarget, this,
-            [this](bool needed) {
+    connect(game->getGameEventHandler()->ruled(), &RuledClientState::graveyardTargetsNeeded, this,
+            [this](const QList<int> &playerIds) {
                 if (!game || !scene) {
                     return;
                 }
-                const int localId = game->getPlayerManager()->getLocalPlayerId();
-                Player *localPlayer = game->getPlayerManager()->getPlayer(localId);
-                if (!localPlayer) {
-                    return;
-                }
                 const QString graveName = QStringLiteral("grave");
-                if (needed) {
-                    // Leave a graveyard the player opened themselves alone — we only ever tidy up
-                    // after ourselves.
-                    if (!scene->isZoneViewOpen(localPlayer, graveName)) {
-                        scene->toggleZoneView(localPlayer, graveName, -1);
-                        ruledAutoOpenedGraveyardView = scene->zoneViewWidgetFor(localPlayer, graveName);
+                // Open any newly-needed graveyard. Leave one the player opened themselves alone —
+                // we only ever tidy up after ourselves.
+                for (int pid : playerIds) {
+                    if (ruledAutoOpenedGraveyardViews.contains(pid)) {
+                        continue;
                     }
-                } else if (ruledAutoOpenedGraveyardView) {
-                    // Close only the exact view we opened. A bare "did we open one?" flag is not
-                    // enough: the player may have closed ours and opened their own while the
-                    // trigger was still pending, and that one is theirs to keep.
-                    if (scene->zoneViewWidgetFor(localPlayer, graveName) == ruledAutoOpenedGraveyardView) {
-                        ruledAutoOpenedGraveyardView->close();
+                    Player *owner = game->getPlayerManager()->getPlayer(pid);
+                    if (!owner || scene->isZoneViewOpen(owner, graveName)) {
+                        continue;
                     }
-                    ruledAutoOpenedGraveyardView = nullptr;
+                    scene->toggleZoneView(owner, graveName, -1);
+                    ruledAutoOpenedGraveyardViews.insert(pid, scene->zoneViewWidgetFor(owner, graveName));
+                }
+                // Close the ones no longer needed, and only the exact widgets we opened. A bare
+                // "did we open one?" flag is not enough: the player may have closed ours and
+                // opened their own while the target was still pending, and that one is theirs.
+                for (auto it = ruledAutoOpenedGraveyardViews.begin(); it != ruledAutoOpenedGraveyardViews.end();) {
+                    if (playerIds.contains(it.key())) {
+                        ++it;
+                        continue;
+                    }
+                    Player *owner = game->getPlayerManager()->getPlayer(it.key());
+                    if (owner && it.value() && scene->zoneViewWidgetFor(owner, graveName) == it.value()) {
+                        it.value()->close();
+                    }
+                    it = ruledAutoOpenedGraveyardViews.erase(it);
                 }
             });
     if (gamePromptWidget) {
@@ -1260,6 +1266,34 @@ CardItem *TabGame::findVisibleStackSpellCardItem(int serverCardId) const
     }
     tgDbgLog(QStringLiteral("findVisibleStackSpellCardItem sid=%1 windowPid=%2 MISS (not in window zone)")
                  .arg(serverCardId).arg(windowPid));
+    return nullptr;
+}
+
+CardItem *TabGame::findVisibleGraveyardCardItem(int playerId, int serverCardId) const
+{
+    // A graveyard pile renders only its front card, so a targeting arrow can only point *at the
+    // targeted card* when the pile is open in a zone view. That view holds its own CardItems with
+    // the same server ids — the same relationship the stack window has to the stack zone.
+    if (serverCardId < 0 || !game || !scene) {
+        return nullptr;
+    }
+    Player *owner = game->getPlayerManager()->getPlayer(playerId);
+    if (!owner) {
+        return nullptr;
+    }
+    ZoneViewWidget *view = scene->zoneViewWidgetFor(owner, QStringLiteral("grave"));
+    if (!view || !view->getZone()) {
+        return nullptr;
+    }
+    CardZoneLogic *logic = view->getZone()->getLogic();
+    if (!logic) {
+        return nullptr;
+    }
+    for (CardItem *c : logic->getCards()) {
+        if (c && c->getId() == serverCardId) {
+            return c;
+        }
+    }
     return nullptr;
 }
 

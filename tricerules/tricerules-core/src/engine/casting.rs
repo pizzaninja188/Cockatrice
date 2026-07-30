@@ -865,6 +865,10 @@ impl GameEngine {
         self.state.players[idx].battlefield.push(oid);
         if let Some(o) = self.state.objects.get_mut(&oid) {
             o.zone = Zone::Battlefield;
+            // CR 305.1: the player who plays a land controls it. Same seat as the owner here —
+            // you may only play a land from your own hand — but the battlefield list is keyed by
+            // controller, so the field has to agree with the list it was pushed onto.
+            o.controller = player;
             // CR 712.4: set the active face from the chosen face so characteristics (mana
             // abilities, types) are read from the correct face on the battlefield.
             o.face_up_index = face_index;

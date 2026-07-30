@@ -54,7 +54,7 @@ impl GameEngine {
                 for pi in ordered {
                     for &sid in &self.state.players[pi].battlefield {
                         if let Some(o) = self.state.objects.get(&sid) {
-                            sources.push((sid, o.card_id.clone(), o.owner));
+                            sources.push((sid, o.card_id.clone(), o.controller));
                         }
                     }
                 }
@@ -127,7 +127,7 @@ impl GameEngine {
                 for pi in ordered {
                     for &sid in &self.state.players[pi].battlefield {
                         if let Some(o) = self.state.objects.get(&sid) {
-                            sources.push((sid, o.card_id.clone(), o.owner));
+                            sources.push((sid, o.card_id.clone(), o.controller));
                         }
                     }
                 }
@@ -179,11 +179,13 @@ impl GameEngine {
             }
             GameEvent::Attacks { attacker_ids } => {
                 let mut sorted = attacker_ids.clone();
+                // CR 603.3b APNAP: the active player's triggers go on the stack first. A trigger
+                // belongs to the seat that *controls* its source, not the seat that owns the card.
                 sorted.sort_by_key(|&oid| {
                     self.state
                         .objects
                         .get(&oid)
-                        .map(|o| (o.owner != ap) as u8)
+                        .map(|o| (o.controller != ap) as u8)
                         .unwrap_or(1)
                 });
                 sorted
@@ -193,7 +195,7 @@ impl GameEngine {
                             return vec![];
                         };
                         let card_id = obj.card_id.clone();
-                        let controller = obj.owner;
+                        let controller = obj.controller;
                         self.matching_triggered_abilities(&card_id, att, controller, |tc| {
                             *tc == TriggerCondition::WheneverSelfAttacks
                         })
@@ -208,7 +210,7 @@ impl GameEngine {
                     return vec![];
                 };
                 let card_id = obj.card_id.clone();
-                let controller = obj.owner;
+                let controller = obj.controller;
                 let defender = *defender_id;
                 self.matching_triggered_abilities(&card_id, *attacker_id, controller, |tc| match tc
                 {
@@ -226,7 +228,7 @@ impl GameEngine {
                             return vec![];
                         };
                         let card_id = obj.card_id.clone();
-                        let controller = obj.owner;
+                        let controller = obj.controller;
                         self.matching_triggered_abilities(&card_id, oid, controller, |tc| {
                             *tc == TriggerCondition::AtBeginningOfControllerUpkeep
                         })
@@ -255,7 +257,7 @@ impl GameEngine {
                 for pi in ordered {
                     for &sid in &self.state.players[pi].battlefield {
                         if let Some(o) = self.state.objects.get(&sid) {
-                            sources.push((sid, o.card_id.clone(), o.owner));
+                            sources.push((sid, o.card_id.clone(), o.controller));
                         }
                     }
                 }

@@ -81,6 +81,23 @@ impl<'de> Deserialize<'de> for Amount {
     }
 }
 
+/// How much life a [`SpellEffectKind::LoseLife`] costs.
+///
+/// Kept separate from [`Amount`] on purpose: `Amount::resolve(x)` answers from the cast-time X
+/// alone, while `TargetManaValue` needs the resolving spell's target, so folding it into `Amount`
+/// would force a context argument through ~15 call sites where it is meaningless.
+///
+/// Named for widening — a later `TargetPower` (Rite of Consumption, Fling) or
+/// `ManaValueOfRevealedCard` (Dark Confidant) is an added variant, not a rename.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LifeAmount {
+    /// A literal amount baked into the card data (Thoughtseize: `Fixed(2)`).
+    Fixed(u32),
+    /// CR 202.3: the mana value of the object this spell targets (Reanimate). Legal only in an
+    /// effect list that also contains a target-bearing effect — enforced at registry load.
+    TargetManaValue,
+}
+
 /// A kind of counter that can sit on a permanent (CR 122.1). Only the two counter kinds
 /// with engine rules interactions exist so far: the +1/+1 / -1/-1 pair, which modify P/T in
 /// CR 613.4 layer 7d and annihilate as a state-based action (CR 122.3). Loyalty, charge, and
@@ -230,6 +247,14 @@ pub enum SpellEffectKind {
     },
     GainLife {
         amount: Amount,
+    },
+    /// CR 118: the effect's controller loses life. **Untargeted** — "you lose life" does not
+    /// target (CR 115.1), so this is deliberately absent from `spell_effect_kind_needs_target`
+    /// and from [`SpellEffectKind::target_filters`]. Adding it to either would make every
+    /// `LoseLife`-only card demand a target.
+    /// Two cards: Thoughtseize (`Fixed(2)`), Reanimate (`TargetManaValue`).
+    LoseLife {
+        amount: LifeAmount,
     },
     TargetPlayerGainsLife {
         amount: u32,
@@ -478,6 +503,40 @@ impl SpellEffectKind {
             | SpellEffectKind::PreventNextDamage { target, .. } => vec![target],
             _ => vec![],
         }
+    }
+
+    /// True if this effect selects an *object* target (not a player). Used by the effect-list
+    /// validation below to decide whether a `LifeAmount::TargetManaValue` has something to read.
+    fn targets_an_object(&self) -> bool {
+        // `ReturnFromGraveyard` carries a `GraveyardFilter`, not a `TargetFilter`, so it is
+        // invisible to `target_filters()` — it still targets an object (a graveyard card).
+        matches!(self, SpellEffectKind::ReturnFromGraveyard { .. })
+            || self.target_filters().iter().any(|f| !f.is_player())
+    }
+
+    /// Startup validation for a whole effect list (one face's `spell_effect`, or one mode's
+    /// effects). Rules that depend on *sibling* effects live here; per-effect rules live in
+    /// [`SpellEffectKind::validate`], which the caller runs too.
+    pub fn validate_list(effects: &[SpellEffectKind]) -> Result<(), String> {
+        // `TargetManaValue` reads the mana value of the spell's target, so the list must contain
+        // an effect that declares an object target (Reanimate: `ReturnFromGraveyard`). Without
+        // one there is nothing to read and the amount would silently resolve to 0.
+        if effects.iter().any(|e| {
+            matches!(
+                e,
+                SpellEffectKind::LoseLife {
+                    amount: LifeAmount::TargetManaValue
+                }
+            )
+        }) && !effects.iter().any(|e| e.targets_an_object())
+        {
+            return Err(
+                "LoseLife(amount: TargetManaValue) requires an object-targeting effect in the \
+                 same effect list to read the mana value from"
+                    .into(),
+            );
+        }
+        Ok(())
     }
 
     /// Startup validation: reject effect/filter combinations the engine cannot honor.

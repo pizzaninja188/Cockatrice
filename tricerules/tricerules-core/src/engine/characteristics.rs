@@ -69,9 +69,9 @@ impl GameEngine {
         let face = definition.face(object.face_up_index)?;
 
         let mut result = Characteristics {
-            // CR 109.4 simplification: control-changing effects are not implemented yet, so the
-            // object's owner is its controller before the layer-2 identity stage.
-            controller: object.owner,
+            // CR 110.2 base value: the controller recorded on the object, set when it entered the
+            // battlefield. Layer 2 below applies control-*changing* continuous effects on top.
+            controller: object.controller,
             types: face.types.to_vec(),
             supertypes: face.supertypes.to_vec(),
             colors: face.colors(),
@@ -98,7 +98,33 @@ impl GameEngine {
     // fill its existing slot rather than creating another characteristics path.
     fn apply_layer_1_copy(&self, _result: &mut Characteristics) {}
 
+    /// CR 613 layer 2 — control-changing *continuous* effects (Mind Control, Threaten,
+    /// Confiscate). Still empty: the only control changes modelled so far are decided when a
+    /// permanent enters the battlefield, and those live in `GameObject::controller`, which is
+    /// this layer's base value.
+    ///
+    /// When the first such card lands, note two things this slot cannot do naively:
+    /// 1. it must **not** use [`GameEngine::ordered_effects`] — that is computed after layer 5 and
+    ///    its `effect_affects` reads `pre_layer_6.controller`, which is circular for a
+    ///    `CreaturesMatching { controller }` scope (this is exactly CR 613.8 dependency
+    ///    ordering). It needs its own earlier pass over `AffectedScope::Single` effects, sorted by
+    ///    the same `(timestamp, index)` key;
+    /// 2. once the derived controller can differ from `GameObject::controller`, the battlefield
+    ///    lists stop being a valid control index, so they must be rebuilt whenever
+    ///    `continuous_effects` changes. Until then the `debug_assert` in `apply_sbas` holds the
+    ///    two in sync.
     fn apply_layer_2_control(&self, _result: &mut Characteristics) {}
+
+    /// CR 110.2 controller of `oid`, through the layer pipeline.
+    ///
+    /// Prefer this over reading `GameObject::owner` anywhere the question is "whose permanent is
+    /// this?" — owner and controller coincide only until a permanent changes hands. Hot loops that
+    /// run per-permanent per-event may read the `controller` field directly instead (it is the
+    /// layer-2 base value, identical while no continuous control effect exists) rather than paying
+    /// for an unmemoized characteristics computation.
+    pub(super) fn controller_of(&self, oid: ObjectId) -> Option<PlayerId> {
+        self.characteristics(oid).map(|c| c.controller)
+    }
 
     fn apply_layer_3_text(&self, _result: &mut Characteristics) {}
 
@@ -244,6 +270,7 @@ mod tests {
             GameObject {
                 id: oid,
                 owner: 0,
+                controller: 0,
                 card_id: "grizzly_bears".to_string(),
                 zone: Zone::Battlefield,
                 tapped: false,

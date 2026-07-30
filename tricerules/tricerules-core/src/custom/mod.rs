@@ -173,13 +173,17 @@ impl<'a> ResolutionCtx<'a> {
             let Some(idx) = self.state.player_idx(owner) else {
                 continue;
             };
-            let p = &mut self.state.players[idx];
-            p.hand.retain(|&x| x != oid);
-            p.library.retain(|&x| x != oid);
-            p.battlefield.retain(|&x| x != oid);
-            p.graveyard.retain(|&x| x != oid);
-            p.exile.retain(|&x| x != oid);
-            p.library.push_front(oid);
+            // Not `move_object_to_zone`: that appends to the *bottom* of the library, and the
+            // whole point here is the top. Removal still has to sweep every player — `battlefield`
+            // is keyed by controller, so an owner-only retain would strand a ghost oid there.
+            for p in &mut self.state.players {
+                p.hand.retain(|&x| x != oid);
+                p.library.retain(|&x| x != oid);
+                p.battlefield.retain(|&x| x != oid);
+                p.graveyard.retain(|&x| x != oid);
+                p.exile.retain(|&x| x != oid);
+            }
+            self.state.players[idx].library.push_front(oid);
             if let Some(o) = self.state.objects.get_mut(&oid) {
                 o.zone = Zone::Library;
             }
@@ -211,22 +215,14 @@ impl<'a> ResolutionCtx<'a> {
         let Some(idx) = self.state.player_idx(owner) else {
             return;
         };
-        let p = &mut self.state.players[idx];
-        p.library.retain(|&x| x != oid);
-        p.hand.retain(|&x| x != oid);
-        p.battlefield.retain(|&x| x != oid);
-        p.graveyard.retain(|&x| x != oid);
-        p.exile.retain(|&x| x != oid);
-        match zone {
-            Zone::Graveyard => p.graveyard.push(oid),
-            Zone::Hand => p.hand.push(oid),
-            Zone::Battlefield => p.battlefield.push(oid),
-            Zone::Library => p.library.push_back(oid),
-            Zone::Exile => p.exile.push(oid),
-            Zone::Stack => {}
-        }
-        if let Some(o) = self.state.objects.get_mut(&oid) {
-            o.zone = zone;
+        let _ = idx;
+        // Delegate rather than re-implementing zone bookkeeping: the canonical mover also removes
+        // the oid from *every* player's lists (`battlefield` is keyed by controller, not owner),
+        // resets the CR 400.7 new-object state, and drains the source's continuous effects. Both
+        // of today's callers move library/hand cards, so those extra branches are inert here —
+        // but a second copy of this logic is exactly how the owner-only-retain bug spreads.
+        if crate::engine::move_object_to_zone(self.state, oid, zone, None).is_err() {
+            return;
         }
         let dest = match zone {
             Zone::Graveyard => Some(rv1::permanent_moved::Destination::Graveyard),

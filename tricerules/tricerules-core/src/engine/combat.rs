@@ -64,8 +64,11 @@ impl GameEngine {
                 // CR 702.3b: defenders can't attack, so they don't count as eligible attackers.
                 let has_defender =
                     self.effective_has_keyword(*oid, tricerules_cards::Keyword::Defender);
+                // CR 506.2: only the *controller* of a creature can declare it as an attacker.
+                // The list already scopes to `ap`'s controlled permanents; the field check keeps
+                // the two in agreement.
                 o.zone == Zone::Battlefield
-                    && o.owner == ap
+                    && o.controller == ap
                     && self
                         .characteristics(*oid)
                         .is_some_and(|value| value.is_creature())
@@ -101,8 +104,9 @@ impl GameEngine {
             .iter()
             .filter(|&&oid| {
                 self.state.objects.get(&oid).is_some_and(|o| {
+                    // CR 509.1a: a creature blocks for the player who controls it.
                     o.zone == Zone::Battlefield
-                        && o.owner == dp
+                        && o.controller == dp
                         && self
                             .characteristics(oid)
                             .is_some_and(|value| value.is_creature())
@@ -266,7 +270,10 @@ impl GameEngine {
                 .objects
                 .get(&oid)
                 .ok_or(EngineError::Illegal("attacker id"))?;
-            if o.owner != ap || o.zone != Zone::Battlefield {
+            // CR 506.2: attacking is a controller's privilege, not an owner's — a creature you
+            // control but do not own attacks for you. Command validation runs once per command,
+            // so it reads control through the layer pipeline rather than the base field.
+            if o.zone != Zone::Battlefield || self.controller_of(oid) != Some(ap) {
                 return Err(EngineError::Illegal("illegal attacker"));
             }
             if !self
@@ -397,7 +404,8 @@ impl GameEngine {
             if bobj.zone != Zone::Battlefield {
                 return Err(EngineError::Illegal("blocker zone"));
             }
-            if bobj.owner != defending_player {
+            // CR 509.1a: likewise for blocking — control, not ownership.
+            if self.controller_of(p.blocker_id) != Some(defending_player) {
                 return Err(EngineError::Illegal("not your blocker"));
             }
             if !self
@@ -802,7 +810,13 @@ impl GameEngine {
             let att_power = self.effective_power(att).unwrap_or(0);
             let att_has_lifelink = self.effective_has_keyword(att, Keyword::Lifelink);
             let att_has_deathtouch = self.effective_has_keyword(att, Keyword::Deathtouch);
-            let att_owner = self.state.objects.get(&att).map(|o| o.owner).unwrap_or(ap);
+            // CR 702.15b: lifelink credits the source's *controller*, not its owner.
+            let att_controller = self
+                .state
+                .objects
+                .get(&att)
+                .map(|o| o.controller)
+                .unwrap_or(ap);
             let att_has_trample = self.effective_has_keyword(att, Keyword::Trample);
 
             let blockers = c.blockers.get(&att).map(|v| v.as_slice()).unwrap_or(&[]);
@@ -826,7 +840,7 @@ impl GameEngine {
                     }
                     // CR 702.15b: attacker with lifelink causes its controller to gain that much life.
                     if att_has_lifelink && p > 0 {
-                        lifelink_gains.push((att_owner, p));
+                        lifelink_gains.push((att_controller, p));
                     }
                 }
             } else if blockers.len() == 1 && !att_has_trample {
@@ -839,7 +853,12 @@ impl GameEngine {
                 let bpw = self.effective_power(blk).unwrap_or(0);
                 let blk_has_lifelink = self.effective_has_keyword(blk, Keyword::Lifelink);
                 let blk_has_deathtouch = self.effective_has_keyword(blk, Keyword::Deathtouch);
-                let blk_owner = self.state.objects.get(&blk).map(|o| o.owner).unwrap_or(dfd);
+                let blk_controller = self
+                    .state
+                    .objects
+                    .get(&blk)
+                    .map(|o| o.controller)
+                    .unwrap_or(dfd);
                 if blocker_participates {
                     let dmg_to_att = apply_prevention_shield(
                         &mut self.state.damage_prevention_shields,
@@ -856,7 +875,7 @@ impl GameEngine {
                     }
                     // CR 702.15b: blocker with lifelink gains life = damage dealt to attacker.
                     if blk_has_lifelink && dmg_to_att > 0 {
-                        lifelink_gains.push((blk_owner, dmg_to_att));
+                        lifelink_gains.push((blk_controller, dmg_to_att));
                     }
                 }
                 if attacker_participates {
@@ -875,7 +894,7 @@ impl GameEngine {
                     }
                     // CR 702.15b: attacker with lifelink gains life = damage dealt to blocker.
                     if att_has_lifelink && dmg_to_blk > 0 {
-                        lifelink_gains.push((att_owner, dmg_to_blk));
+                        lifelink_gains.push((att_controller, dmg_to_blk));
                     }
                 }
             } else {
@@ -890,11 +909,16 @@ impl GameEngine {
                         let pw = self.effective_power(blk).unwrap_or(0);
                         let has_ll = self.effective_has_keyword(blk, Keyword::Lifelink);
                         let has_dt = self.effective_has_keyword(blk, Keyword::Deathtouch);
-                        let owner = self.state.objects.get(&blk).map(|o| o.owner).unwrap_or(dfd);
+                        let controller = self
+                            .state
+                            .objects
+                            .get(&blk)
+                            .map(|o| o.controller)
+                            .unwrap_or(dfd);
                         let participates = object_participates_in_pass(self, c, pass, blk, false)
                             && self.state.objects.get(&blk).map(|o| o.zone)
                                 == Some(Zone::Battlefield);
-                        (blk, pw, has_ll, has_dt, owner, participates)
+                        (blk, pw, has_ll, has_dt, controller, participates)
                     })
                     .collect();
                 let total_blocker_power: u32 = blocker_info
@@ -967,14 +991,14 @@ impl GameEngine {
                     }
                     // CR 702.15b: attacker with lifelink gains life = damage dealt to all blockers.
                     if att_has_lifelink && total_att_lifelink > 0 {
-                        lifelink_gains.push((att_owner, total_att_lifelink));
+                        lifelink_gains.push((att_controller, total_att_lifelink));
                     }
                 }
                 // CR 702.15b: each participating blocker with lifelink gains life = damage it dealt
                 // to the attacker (which may have been shielded — use dmg_to_att proportionally).
-                for (_, blk_pw, blk_has_ll, _, blk_owner, blk_participates) in blocker_info {
+                for (_, blk_pw, blk_has_ll, _, blk_controller, blk_participates) in blocker_info {
                     if blk_participates && blk_has_ll && blk_pw > 0 {
-                        lifelink_gains.push((blk_owner, blk_pw));
+                        lifelink_gains.push((blk_controller, blk_pw));
                     }
                 }
             }

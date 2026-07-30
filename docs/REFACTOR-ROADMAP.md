@@ -527,6 +527,22 @@ rename, not a redesign.
 
 ### Step 10 — Characteristics pipeline + `continuous.rs` split (with or right after 9a; strictly before any clone / control-change / type-change card)
 
+> **Layer-2 slot filled 2026-07-29 (entry-time control only), by issue #20 / Reanimate.**
+> `GameObject::controller` is now the CR 110.2 base value that `characteristics()` reads, and the
+> per-player `battlefield` list became the control index (invariant asserted in `apply_sbas`). The
+> sweep converted every `owner`-means-controller read — combat attack/block legality and lifelink
+> attribution, trigger controllers and APNAP ordering, `emit_static_abilities_on_enter`'s anthem
+> scoping — and fixed three owner-only `retain`s that would have stranded ghost permanents.
+> `PermanentMoved.controller_player_id` and `BattlefieldObject.owner_player_id` carry the pair to
+> the relay, which moves the physical card to the controller's table and annotates it
+> `Owner: <name>`.
+>
+> **Still deferred:** layer-2 *continuous* control-change effects (Mind Control, Threaten,
+> Confiscate). `apply_layer_2_control` remains an empty stub and documents the two traps its first
+> implementation faces: it cannot use `ordered_effects` (circular via `pre_layer_6.controller` —
+> CR 613.8), and once the derived controller can diverge from the field, the battlefield lists stop
+> being a valid control index and need rebuilding. **Trigger: the first control-change card.**
+
 > **Completed 2026-07-26.** `GameEngine::characteristics(oid)` now returns one owned
 > `Characteristics` snapshot for controller, types/supertypes, colors, keywords, and P/T through
 > explicit CR 613 layer slots. Layers 1–5 and the not-yet-needed layer-7 sublayers are named

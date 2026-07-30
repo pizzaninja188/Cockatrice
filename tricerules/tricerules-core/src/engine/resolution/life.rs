@@ -30,6 +30,71 @@ pub(super) fn gain_life(
     Ok(EffectOutcome::Continue)
 }
 
+/// CR 118: the effect's controller loses life. Untargeted (CR 115.1).
+///
+/// `LifeAmount::TargetManaValue` (CR 202.3) reads the mana value of the object the *spell*
+/// targets — a sibling effect declared it, this one only borrows it. Position relative to that
+/// sibling does not matter: the object keeps its `card_id` across a zone change, so Reanimate's
+/// `[ReturnFromGraveyard, LoseLife]` reads the same value before or after the creature moves.
+/// Position relative to a *suspending* effect does matter — see the `EffectOutcome::Suspended`
+/// early return in the caller, and Thoughtseize's RON for the one card that has to care.
+pub(super) fn lose_life(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::LoseLife { amount } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let engine = &mut *cx.engine;
+    let events = &mut *cx.events;
+    let targets = cx.targets;
+    let controller = cx.controller;
+    let spell_label = cx.spell_label;
+
+    let amount = match amount {
+        LifeAmount::Fixed(n) => n,
+        LifeAmount::TargetManaValue => targets
+            .first()
+            .and_then(|tid| engine.state.objects.get(tid))
+            .and_then(|o| {
+                let def = engine.registry.get(&o.card_id)?;
+                // CR 202.3b: a face with no printed cost (a transforming DFC's back face) has
+                // the mana value of the front face, so fall back rather than reading 0.
+                let face = def
+                    .face(o.face_up_index)
+                    .unwrap_or_else(|| def.primary_face());
+                let cost = if face.mana_cost.is_empty() {
+                    &def.primary_face().mana_cost
+                } else {
+                    &face.mana_cost
+                };
+                Some(cost.mana_value())
+            })
+            // Unreachable in practice: registry load requires an object-targeting sibling, and
+            // the CR 608.2b fizzle check kills the whole spell before resolution when that
+            // target is gone. Resolve to 0 rather than panicking if it ever is.
+            .unwrap_or(0),
+    };
+
+    if amount == 0 {
+        return Ok(EffectOutcome::Continue);
+    }
+    let pi = engine.state.player_idx(controller).unwrap();
+    engine.state.players[pi].life -= amount as i32;
+    events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+            player_id: controller,
+            new_total: engine.state.players[pi].life,
+            delta: -(amount as i32),
+        })),
+    });
+    events.push(ev_log(format!(
+        "P{controller} loses {amount} life ({spell_label})."
+    )));
+
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn target_player_gains_life(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

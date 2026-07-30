@@ -16,7 +16,7 @@ fn mulligan_redraw(state: &mut GameState, player: PlayerId) -> Result<(), Engine
         .ok_or(EngineError::UnknownPlayer(player))?;
     let hand: Vec<ObjectId> = state.players[idx].hand.drain(..).collect();
     for oid in hand {
-        move_object_to_zone(state, oid, Zone::Library)?;
+        move_object_to_zone(state, oid, Zone::Library, None)?;
     }
     shuffle_player_library(
         state,
@@ -185,7 +185,7 @@ impl GameEngine {
                     .hand
                     .get(hi)
                     .ok_or(EngineError::Illegal("bad hand index"))?;
-                move_object_to_zone(&mut self.state, oid, Zone::Library)?;
+                move_object_to_zone(&mut self.state, oid, Zone::Library, None)?;
                 let rem_after = rem_before - 1;
                 events.push(permanent_moved_event(
                     &self.state,

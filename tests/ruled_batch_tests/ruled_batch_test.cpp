@@ -257,7 +257,8 @@ protected:
     // and applyRuledEngineZoneView refuses to apply a sync where counts disagree).
     static ruled::v1::RuledPerPlayerView buildPerPlayerView(Server_Player *p,
                                                             const QList<quint32> &engineOids,
-                                                            const QList<bool> &tapped)
+                                                            const QList<bool> &tapped,
+                                                            const QList<int> &ownerIds = {})
     {
         ruled::v1::RuledPerPlayerView v;
         v.set_player_id(p->getPlayerId());
@@ -271,6 +272,10 @@ protected:
             object->set_card_id(id.toStdString());
             object->set_tapped(i < tapped.size() ? tapped[i] : false);
             object->set_object_id(i < engineOids.size() ? engineOids[i] : 0);
+            // The view a permanent appears in identifies its controller; owner defaults to the
+            // same seat, which is every permanent that has not changed hands. `ownerIds` names a
+            // different owner to build the reanimated shape.
+            object->set_owner_player_id(i < ownerIds.size() ? ownerIds[i] : p->getPlayerId());
         }
         return v;
     }
@@ -479,6 +484,163 @@ TEST_F(RuledBatchTest, ApplyRuledBatchMovesPermanentToGraveyard)
     if (p1Table->getCards().size() == 1) {
         EXPECT_EQ(p1Table->getCards().first(), wolf);
     }
+}
+
+// --------------------------------------------------------------------------------------------
+// CR 110.2 control vs CR 108.3 ownership across the relay (reanimation).
+
+// A permanent entering the battlefield under a player who does not own it must land on the
+// *controller's* table, and the identity map must report it under the controller.
+TEST_F(RuledBatchTest, PermanentMovedToBattlefieldUsesControllerNotOwner)
+{
+    // P1 owns a bear sitting in their graveyard; the engine puts it onto P2's battlefield.
+    Server_CardZone *p1Grave = p1->getZones().value(ZoneNames::GRAVE);
+    Server_CardZone *p2Table = p2->getZones().value(ZoneNames::TABLE);
+    ASSERT_NE(p1Grave, nullptr);
+    ASSERT_NE(p2Table, nullptr);
+    auto *bear = new Server_Card({"Grizzly Bears", "grizzly_bears"}, p1->newCardId(), 0, 0);
+    p1Grave->insertCard(bear, 0, 0);
+
+    // Seed the graveyard oid map so the driver can resolve the card by engine oid.
+    {
+        ruled::v1::IpcResponse seedResp;
+        seedResp.set_ok(true);
+        auto *evZv = seedResp.mutable_batch()->add_events()->mutable_zone_view();
+        auto v1 = buildPerPlayerView(p1, {}, {});
+        v1.add_graveyard_object_ids(901u);
+        *evZv->add_per_player() = v1;
+        *evZv->add_per_player() = buildPerPlayerView(p2, {}, {});
+        callBatchApply(seedResp);
+    }
+
+    {
+        ruled::v1::IpcResponse resp;
+        resp.set_ok(true);
+        auto *moved = resp.mutable_batch()->add_events()->mutable_permanent_moved();
+        moved->set_object_id(901u);
+        moved->set_owner_player_id(1);
+        moved->set_controller_player_id(2);
+        moved->set_destination(ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD);
+        callBatchApply(resp);
+    }
+
+    EXPECT_EQ(p1Grave->getCards().size(), 0) << "the card left its owner's graveyard";
+    ASSERT_EQ(p2Table->getCards().size(), 1) << "and landed on the CONTROLLER's table";
+    EXPECT_EQ(p2Table->getCards().first()->getName(), QString("Grizzly Bears"));
+}
+
+// The return trip: a permanent controlled by a non-owner goes to its OWNER's graveyard
+// (CR 400.3), which is a cross-player move into a coordinate-less public zone — the case
+// upstream's moveCard guard rejects unless ruledAllowsCrossPlayerMove lets it through.
+TEST_F(RuledBatchTest, ForeignControlledPermanentDiesToItsOwnersGraveyard)
+{
+    // P1 owns the bear but P2 controls it: physically on P2's table, reported in P2's view.
+    Server_CardZone *p2Table = p2->getZones().value(ZoneNames::TABLE);
+    Server_CardZone *p1Grave = p1->getZones().value(ZoneNames::GRAVE);
+    ASSERT_NE(p2Table, nullptr);
+    ASSERT_NE(p1Grave, nullptr);
+    auto *bear = new Server_Card({"Grizzly Bears", "grizzly_bears"}, p2->newCardId(), 0, 0);
+    p2Table->insertCard(bear, -1, 0);
+
+    {
+        ruled::v1::IpcResponse seedResp;
+        seedResp.set_ok(true);
+        auto *evZv = seedResp.mutable_batch()->add_events()->mutable_zone_view();
+        *evZv->add_per_player() = buildPerPlayerView(p1, {}, {});
+        *evZv->add_per_player() = buildPerPlayerView(p2, {902u}, {false}, {1});
+        callBatchApply(seedResp);
+    }
+
+    {
+        ruled::v1::IpcResponse resp;
+        resp.set_ok(true);
+        auto *moved = resp.mutable_batch()->add_events()->mutable_permanent_moved();
+        moved->set_object_id(902u);
+        moved->set_owner_player_id(1);
+        // Control ends with the permanent; the engine reports the owner again (CR 400.7).
+        moved->set_controller_player_id(1);
+        moved->set_destination(ruled::v1::PermanentMoved::DESTINATION_GRAVEYARD);
+        callBatchApply(resp);
+    }
+
+    EXPECT_EQ(p2Table->getCards().size(), 0) << "the controller's table lets go of it";
+    ASSERT_EQ(p1Grave->getCards().size(), 1) << "CR 400.3: it goes to its OWNER's graveyard";
+    EXPECT_EQ(p1Grave->getCards().first()->getName(), QString("Grizzly Bears"));
+}
+
+// A permanent whose owner differs from the seat controlling it is annotated "Owner: <name>",
+// and the annotation is removed again once the two agree.
+TEST_F(RuledBatchTest, ForeignControlledPermanentIsAnnotatedWithItsOwner)
+{
+    Server_Card *bear = addCardToTable(p2, "Grizzly Bears");
+
+    {
+        ruled::v1::IpcResponse resp;
+        resp.set_ok(true);
+        auto *evZv = resp.mutable_batch()->add_events()->mutable_zone_view();
+        *evZv->add_per_player() = buildPerPlayerView(p1, {}, {});
+        *evZv->add_per_player() = buildPerPlayerView(p2, {903u}, {false}, {1});
+        callBatchApply(resp);
+    }
+    EXPECT_TRUE(bear->getAnnotation().contains(QStringLiteral("Owner: ")))
+        << "annotation was: " << bear->getAnnotation().toStdString();
+
+    // Same permanent, now owned by the seat that controls it: the line must disappear.
+    {
+        ruled::v1::IpcResponse resp;
+        resp.set_ok(true);
+        auto *evZv = resp.mutable_batch()->add_events()->mutable_zone_view();
+        *evZv->add_per_player() = buildPerPlayerView(p1, {}, {});
+        *evZv->add_per_player() = buildPerPlayerView(p2, {903u}, {false});
+        callBatchApply(resp);
+    }
+    EXPECT_FALSE(bear->getAnnotation().contains(QStringLiteral("Owner: ")))
+        << "annotation was: " << bear->getAnnotation().toStdString();
+}
+
+// ruledAllowsCrossPlayerMove decides which engine-driven moves may cross seats. It lives in
+// ruled_utils, but is exercised here because it needs a real Server_Game and zone pair.
+TEST_F(RuledBatchTest, CrossPlayerMovePredicateAllowsOnlyEngineDrivenRuledMoves)
+{
+    Server_CardZone *p1Table = p1->getZones().value(ZoneNames::TABLE);
+    Server_CardZone *p1Hand = p1->getZones().value(ZoneNames::HAND);
+    Server_CardZone *p2Grave = p2->getZones().value(ZoneNames::GRAVE);
+    Server_CardZone *p2Stack = p2->getZones().value(ZoneNames::STACK);
+    Server_CardZone *p2Table = p2->getZones().value(ZoneNames::TABLE);
+    ASSERT_NE(p1Table, nullptr);
+    ASSERT_NE(p1Hand, nullptr);
+    ASSERT_NE(p2Grave, nullptr);
+    ASSERT_NE(p2Stack, nullptr);
+    ASSERT_NE(p2Table, nullptr);
+
+    // Leaving a foreign-controlled battlefield for the owner's zones — reanimation's return trip.
+    EXPECT_TRUE(ruledAllowsCrossPlayerMove(game, p1Table, p2Grave));
+    // Casting onto the shared stack.
+    EXPECT_TRUE(ruledAllowsCrossPlayerMove(game, p1Hand, p2Stack));
+    // Resolving off the shared stack into the caster's graveyard.
+    EXPECT_TRUE(ruledAllowsCrossPlayerMove(game, p2Stack, p1->getZones().value(ZoneNames::GRAVE)));
+    // Not a cross-player move at all.
+    EXPECT_FALSE(ruledAllowsCrossPlayerMove(game, p1Table, p1Hand));
+    // A client-style hand-to-hand grab stays refused.
+    EXPECT_FALSE(ruledAllowsCrossPlayerMove(game, p1Hand, p2->getZones().value(ZoneNames::HAND)));
+    // A null game is never exempt.
+    EXPECT_FALSE(ruledAllowsCrossPlayerMove(nullptr, p1Table, p2Grave));
+
+    // Nothing is exempt outside a ruled game either — freeform's trust model is upstream's
+    // business, and widening this predicate must never loosen it.
+    auto *freeformGame = new Server_Game(userA, 1, "", "", 2, QList<int>(), false, false, false, false, false, false,
+                                         20, false, false /* ruledGame */, room);
+    auto *f1 = new Server_Player(freeformGame, 1, userA, false, nullptr);
+    auto *f2 = new Server_Player(freeformGame, 2, userB, false, nullptr);
+    setupPlayerZonesAndCounters(f1);
+    setupPlayerZonesAndCounters(f2);
+    EXPECT_FALSE(ruledAllowsCrossPlayerMove(freeformGame, f1->getZones().value(ZoneNames::TABLE),
+                                            f2->getZones().value(ZoneNames::GRAVE)));
+    EXPECT_FALSE(ruledAllowsCrossPlayerMove(freeformGame, f1->getZones().value(ZoneNames::HAND),
+                                            f2->getZones().value(ZoneNames::STACK)));
+    delete f1;
+    delete f2;
+    delete freeformGame;
 }
 
 TEST_F(RuledBatchTest, ApplyRuledBatchPutsMostRecentGraveyardCardAtTheFrontOfThePile)

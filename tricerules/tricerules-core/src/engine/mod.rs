@@ -15,8 +15,9 @@ use thiserror::Error;
 use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
     AbilityCost, AnthemController, AnthemFilter, CastTriggerPlayer, Color, ContinuousEffectKind,
-    CounterKind, EffectDuration, Keyword, RelativePlayerSet, SearchDestination, SpellEffectKind,
-    SpellTypeFilter, StaticAbilityDef, TargetFilter, TargetKind, TokenController, TriggerCondition,
+    CounterKind, EffectDuration, Keyword, LifeAmount, RelativePlayerSet, SearchDestination,
+    SpellEffectKind, SpellTypeFilter, StaticAbilityDef, TargetFilter, TargetKind, TokenController,
+    TriggerCondition,
 };
 use tricerules_cards::{CardRegistry, FaceRef};
 use tricerules_proto::ruled::v1 as rv1;
@@ -119,6 +120,10 @@ fn new_object_from_card(
     GameObject {
         id: oid,
         owner,
+        // CR 110.2: a card outside the battlefield has no controller; seeding it to the owner
+        // keeps the base value meaningful the moment it enters. `move_object_to_zone` sets the
+        // real controller on battlefield entry.
+        controller: owner,
         card_id: card_id.to_string(),
         zone,
         tapped: false,
@@ -295,7 +300,8 @@ impl GameEngine {
         if obj.zone != Zone::Battlefield {
             return Err(EngineError::Illegal("not on battlefield"));
         }
-        if obj.owner != player {
+        // CR 701.28: transforming is done by the permanent's controller.
+        if obj.controller != player {
             return Err(EngineError::Illegal("not your permanent"));
         }
         let card_id = obj.card_id.clone();

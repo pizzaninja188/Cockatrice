@@ -725,6 +725,7 @@ fn tome_scour_mills_five_cards_from_target_player() {
             tricerules_core::state::GameObject {
                 id,
                 owner: 0,
+                controller: 0,
                 card_id: "tome_scour".into(),
                 zone: tricerules_core::Zone::Hand,
                 tapped: false,
@@ -805,6 +806,7 @@ fn tome_scour_caps_at_library_size() {
             tricerules_core::state::GameObject {
                 id,
                 owner: 0,
+                controller: 0,
                 card_id: "tome_scour".into(),
                 zone: tricerules_core::Zone::Hand,
                 tapped: false,
@@ -859,6 +861,7 @@ fn tome_scour_can_target_controller() {
             tricerules_core::state::GameObject {
                 id,
                 owner: 0,
+                controller: 0,
                 card_id: "tome_scour".into(),
                 zone: tricerules_core::Zone::Hand,
                 tapped: false,
@@ -918,6 +921,7 @@ fn tome_scour_self_mill_puts_the_spell_under_the_milled_cards() {
             tricerules_core::state::GameObject {
                 id,
                 owner: 0,
+                controller: 0,
                 card_id: "tome_scour".into(),
                 zone: tricerules_core::Zone::Hand,
                 tapped: false,
@@ -1074,6 +1078,7 @@ fn disentomb_returns_creature_from_graveyard_to_hand() {
             tricerules_core::state::GameObject {
                 id,
                 owner: 0,
+                controller: 0,
                 card_id: "grizzly_bears".into(),
                 zone: tricerules_core::Zone::Graveyard,
                 tapped: false,
@@ -1101,6 +1106,7 @@ fn disentomb_returns_creature_from_graveyard_to_hand() {
             tricerules_core::state::GameObject {
                 id,
                 owner: 0,
+                controller: 0,
                 card_id: "disentomb".into(),
                 zone: tricerules_core::Zone::Hand,
                 tapped: false,
@@ -1193,6 +1199,7 @@ fn return_from_graveyard_fizzles_when_target_removed_before_resolution() {
             tricerules_core::state::GameObject {
                 id,
                 owner: 0,
+                controller: 0,
                 card_id: "disentomb".into(),
                 zone: tricerules_core::Zone::Hand,
                 tapped: false,
@@ -1222,6 +1229,7 @@ fn return_from_graveyard_fizzles_when_target_removed_before_resolution() {
             tricerules_core::state::GameObject {
                 id,
                 owner: 0,
+                controller: 0,
                 card_id: "grizzly_bears".into(),
                 zone: tricerules_core::Zone::Graveyard,
                 tapped: false,
@@ -1267,15 +1275,20 @@ fn return_from_graveyard_fizzles_when_target_removed_before_resolution() {
     )
     .expect("cast disentomb");
 
-    // Before resolution, move dummy OID off the graveyard (simulate exile).
+    // Before resolution, move dummy OID off the graveyard (simulate exile). Exile, not the
+    // battlefield: the battlefield lists are the control index, so parking a `Zone::Battlefield`
+    // object outside every list builds a board the engine cannot represent (and the CR 704 SBA
+    // invariant check rightly rejects). Either zone proves the same thing — the target is no
+    // longer a legal graveyard target at resolution.
     let pos = e.state.players[0]
         .graveyard
         .iter()
         .position(|&oid| oid == dummy_oid)
         .unwrap();
     e.state.players[0].graveyard.remove(pos);
+    e.state.players[0].exile.push(dummy_oid);
     if let Some(o) = e.state.objects.get_mut(&dummy_oid) {
-        o.zone = tricerules_core::Zone::Battlefield;
+        o.zone = tricerules_core::Zone::Exile;
     }
 
     // Resolution should fizzle gracefully (no panic, no error).
@@ -1306,6 +1319,7 @@ fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
             tricerules_core::state::GameObject {
                 id,
                 owner: 0,
+                controller: 0,
                 card_id: "grizzly_bears".into(),
                 zone: tricerules_core::Zone::Graveyard,
                 tapped: false,
@@ -1333,6 +1347,7 @@ fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
             tricerules_core::state::GameObject {
                 id,
                 owner: 0,
+                controller: 0,
                 card_id: "gravedigger".into(),
                 zone: tricerules_core::Zone::Hand,
                 tapped: false,
@@ -1518,6 +1533,7 @@ fn inject_card_into_hand(e: &mut GameEngine, player: usize, player_id: i32, card
         tricerules_core::state::GameObject {
             id,
             owner: player_id,
+            controller: player_id,
             card_id: card_id.to_string(),
             zone: tricerules_core::Zone::Hand,
             tapped: false,
@@ -1725,6 +1741,230 @@ fn coercion_caster_chooses_which_card_to_discard() {
         "grizzly_bears is in P1 graveyard"
     );
 }
+// ---------------------------------------------------------------------------
+// ReturnFromGraveyard -> Battlefield (Zombify)
+
+/// Zombify returns a creature card from its controller's own graveyard onto the battlefield.
+/// Owner == controller here, so this exercises the reanimation path without any control change:
+/// the creature enters, fires its ETB trigger (CR 603.6), and is summoning sick (CR 302.6).
+#[test]
+fn zombify_returns_creature_from_graveyard_to_battlefield() {
+    let decks = Some(vec![
+        deck_with("swamp", &["zombify"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(3020, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Elvish Visionary's ETB draws a card, so the trigger is observable as a hand-size change.
+    let visionary = inject_graveyard_card(&mut e, 0, "elvish_visionary");
+    relocate_to_hand(&mut e, 0, "zombify");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+
+    let idx = hand_index_for_card(&e, 0, "zombify");
+    e.apply_command(
+        0,
+        &cast_spell(
+            idx,
+            vec![TargetRef {
+                object_id: visionary,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast zombify");
+    let hand_before_resolution = e.state.players[0].hand.len();
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass())
+        .expect("p1 pass — zombify resolves");
+
+    assert!(
+        !e.state.players[0].graveyard.contains(&visionary),
+        "the creature left the graveyard"
+    );
+    assert!(
+        e.state.players[0].battlefield.contains(&visionary),
+        "the creature is on its controller's battlefield"
+    );
+    assert_eq!(
+        e.state.objects.get(&visionary).expect("obj").zone,
+        tricerules_core::Zone::Battlefield
+    );
+    assert!(
+        e.state.objects.get(&visionary).expect("obj").summoning_sick,
+        "CR 302.6: a reanimated creature is summoning sick"
+    );
+
+    // The ETB trigger uses the stack, so resolve it before checking the draw.
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(
+        e.state.players[0].hand.len(),
+        hand_before_resolution + 1,
+        "the ETB trigger drew a card"
+    );
+}
+
+/// A noncreature card in the graveyard is not a legal Zombify target
+/// (`GraveyardCardType::Creature`), and the engine rejects the cast rather than fizzling later.
+#[test]
+fn zombify_cannot_target_a_noncreature_graveyard_card() {
+    let decks = Some(vec![
+        deck_with("swamp", &["zombify"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(3021, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let sorcery = inject_graveyard_card(&mut e, 0, "divination");
+    relocate_to_hand(&mut e, 0, "zombify");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+
+    let idx = hand_index_for_card(&e, 0, "zombify");
+    let err = e.apply_command(
+        0,
+        &cast_spell(
+            idx,
+            vec![TargetRef {
+                object_id: sorcery,
+                damage_amount: 0,
+            }],
+        ),
+    );
+    assert!(
+        err.is_err(),
+        "a noncreature graveyard card is an illegal target, got {err:?}"
+    );
+}
+
+/// A creature card in the *opponent's* graveyard is not a legal target for
+/// `GraveyardOwner::Controller` — Zombify reads "your graveyard".
+#[test]
+fn zombify_cannot_target_an_opponents_graveyard() {
+    let decks = Some(vec![
+        deck_with("swamp", &["zombify"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(3022, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let their_bear = inject_graveyard_card(&mut e, 1, "grizzly_bears");
+    relocate_to_hand(&mut e, 0, "zombify");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+
+    let idx = hand_index_for_card(&e, 0, "zombify");
+    let err = e.apply_command(
+        0,
+        &cast_spell(
+            idx,
+            vec![TargetRef {
+                object_id: their_bear,
+                damage_amount: 0,
+            }],
+        ),
+    );
+    assert!(
+        err.is_err(),
+        "another player's graveyard is out of range for owner: Controller,
+ controller: Controller, got {err:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// LoseLife (Thoughtseize)
+
+/// Thoughtseize costs its caster 2 life on resolution (CR 118), and does so even though the
+/// discard half suspends resolution for the caster's choice.
+#[test]
+fn thoughtseize_caster_loses_two_life() {
+    let decks = Some(vec![
+        deck_with("swamp", &["thoughtseize"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(3010, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Two cards in P1's hand so the choice is a real one and the resolution parks.
+    let cleared: Vec<_> = e.state.players[1].hand.drain(..).collect();
+    e.state.players[1].library.extend(cleared);
+    let bear_oid = inject_card_into_hand(&mut e, 1, 1, "grizzly_bears");
+    inject_card_into_hand(&mut e, 1, 1, "storm_crow");
+
+    relocate_to_hand(&mut e, 0, "thoughtseize");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            ..Default::default()
+        },
+    );
+    let life_before = e.state.players[0].life;
+    let opponent_life_before = e.state.players[1].life;
+
+    let idx = hand_index_for_card(&e, 0, "thoughtseize");
+    e.apply_command(0, &cast_spell(idx, target_player(1)))
+        .expect("cast thoughtseize");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    let resolve_batch = e
+        .apply_command(1, &pass())
+        .expect("p1 pass — thoughtseize parks for the discard choice");
+
+    // The life loss is declared before the suspending discard, so it has already been applied
+    // while the engine waits for the choice.
+    assert_eq!(
+        e.state.players[0].life,
+        life_before - 2,
+        "caster loses 2 life"
+    );
+    assert!(
+        life_changes_in(&resolve_batch)
+            .iter()
+            .any(|lc| lc.player_id == 0 && lc.delta == -2),
+        "a LifeChanged(-2) event reaches the clients"
+    );
+    assert_eq!(
+        e.state.players[1].life, opponent_life_before,
+        "the target player's life is untouched"
+    );
+
+    e.apply_command(0, &submit_resolution_choice(vec![bear_oid]))
+        .expect("P0 submits choice");
+
+    assert!(
+        e.state.players[1].graveyard.contains(&bear_oid),
+        "the chosen card is discarded"
+    );
+    assert_eq!(
+        e.state.players[0].life,
+        life_before - 2,
+        "life loss is not applied twice across the park/resume"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // TargetPlayerSacrifices (Diabolic Edict)
 // ---------------------------------------------------------------------------

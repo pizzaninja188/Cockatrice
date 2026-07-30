@@ -393,6 +393,9 @@ void PlayerActions::clearPendingRuledSpellCast()
         emit ruledSpellCastPendingChanged(false);
         player->getGame()->getGameEventHandler()->ruled()->emitSpellTargetSelectionChanged();
     }
+    // Every exit from a pending cast runs through here, so this is the one place that has to
+    // retract the graveyard-view hint.
+    RuledActions::updateGraveyardTargetHint(player, -1, 0);
 }
 
 bool PlayerActions::promptForRuledSpellXIfNeeded()
@@ -1302,6 +1305,10 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
             ? pendingRuledSpellCast.selectedModes.at(pendingRuledSpellCast.activeModePosition).label
             : pendingRuledSpellCast.cardName;
         emit ruledSpellTargetingChanged(true, effectText);
+        // Open the graveyard view(s) this spell can target, so a reanimation/regrowth target is
+        // reachable without the player opening the pile by hand first.
+        RuledActions::updateGraveyardTargetHint(player, pendingRuledSpellCast.handIndex,
+                                                pendingRuledSpellCast.faceIndex);
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
             tr("Choose a target for “%1”, or press Cancel.").arg(effectText));
         return true;
@@ -1417,7 +1424,7 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
     const bool isOnGraveyard = (zoneName == ZoneNames::GRAVE);
     if (!isOnBattlefield && !isOnStack && !isOnGraveyard) {
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            tr("Select a target on the battlefield (or stack), or press Cancel."));
+            tr("Select a target on the battlefield, stack, or a graveyard, or press Cancel."));
         return true;
     }
 
@@ -1425,12 +1432,14 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
     const int slot = pendingRuledSpellCast.handIndex;
     const int face = pendingRuledSpellCast.faceIndex;
 
+    const int ownerPlayerId = card && card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
     quint32 targetOid = 0;
     if (isOnGraveyard) {
-        // Graveyard cards are tracked via the GraveyardObjectMap (not the battlefield OID map).
-        targetOid = handler ? handler->graveyardEngineOidForServerCardId(card->getId()) : 0;
+        // Graveyard cards are tracked via the GraveyardObjectMap (not the battlefield OID map),
+        // and that map is keyed by owner: Server_Card ids repeat across players' zones, so a
+        // spell that can read any graveyard (Reanimate) needs the owner to disambiguate.
+        targetOid = handler ? handler->graveyardEngineOidForOwnedCard(ownerPlayerId, card->getId()) : 0;
     } else {
-        const int ownerPlayerId = card && card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
         targetOid = handler ? handler->engineOidForCardId(ownerPlayerId, card->getId()) : 0;
     }
     if (targetOid == 0) {
@@ -1663,6 +1672,8 @@ bool PlayerActions::storeCurrentModalTargetsAndAdvance()
         pendingRuledSpellCast.extraManaPerTarget = nextMode.targets.extraManaPerTarget;
         pendingRuledSpellCast.waitingForTarget = true;
         emit ruledSpellTargetingChanged(true, nextMode.label);
+        RuledActions::updateGraveyardTargetHint(player, pendingRuledSpellCast.handIndex,
+                                                pendingRuledSpellCast.faceIndex);
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
             tr("Choose a target for “%1”, or press Cancel.").arg(nextMode.label));
         player->getGame()->getGameEventHandler()->ruled()->emitSpellTargetSelectionChanged();
@@ -4085,11 +4096,11 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
         if (zoneName != ZoneNames::TABLE && zoneName != ZoneNames::STACK && !triggerIsGraveyard) {
             return false;
         }
+        const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
         quint32 targetOid = 0;
         if (triggerIsGraveyard) {
-            targetOid = handler->graveyardEngineOidForServerCardId(card->getId());
+            targetOid = handler->graveyardEngineOidForOwnedCard(ownerPlayerId, card->getId());
         } else {
-            const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
             targetOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
         }
         if (targetOid == 0) {
