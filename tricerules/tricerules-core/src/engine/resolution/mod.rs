@@ -14,7 +14,9 @@ use rand::seq::SliceRandom;
 use rand::SeedableRng;
 
 mod damage;
-mod life;
+/// `pub(super)` so the combat damage step can reach `life::apply_life_gain` — lifelink is the one
+/// life-gain edge outside stack resolution, and it must go through the same funnel.
+pub(super) mod life;
 mod mass;
 mod misc;
 mod pump_counters;

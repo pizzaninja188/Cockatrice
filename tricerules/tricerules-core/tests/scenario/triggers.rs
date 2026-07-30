@@ -661,3 +661,122 @@ fn two_blood_artists_both_trigger_on_one_death() {
         "P1 loses 2 life from two Blood Artist drains"
     );
 }
+
+// ===========================================================================
+// "Whenever you gain life" (CR 118.3) — Ajani's Pridemate, Bloodthirsty Aerialist
+// ===========================================================================
+
+/// The gain funnel fires the trigger once per life-gain event, whatever the amount:
+/// Angel's Mercy gains 7 life and grows Ajani's Pridemate by exactly one counter.
+#[test]
+fn pridemate_grows_on_spell_life_gain() {
+    let mut e = anthem_engine(9101, "angels_mercy");
+    let pridemate = inject_creature_on_battlefield(&mut e, 0, "ajanis_pridemate");
+    let life_before = e.state.players[0].life;
+
+    grant_pool(&mut e, 0);
+    let idx = hand_index_for_card(&e, 0, "angels_mercy");
+    e.apply_command(0, &cast_spell(idx, vec![])).expect("cast");
+    resolve_entire_stack_two_player(&mut e); // the spell, then its trigger
+
+    assert_eq!(e.state.players[0].life, life_before + 7, "Angel's Mercy");
+    assert_eq!(e.effective_power(pridemate), Some(3), "2/2 + one counter");
+    assert_eq!(e.effective_toughness(pridemate), Some(3));
+}
+
+/// Two life-gain events are two triggers — the ability watches events, not totals.
+#[test]
+fn two_life_gain_events_trigger_separately() {
+    let decks = Some(vec![
+        deck_with("plains", &["angels_mercy", "angels_mercy"]),
+        island_only_deck(),
+    ]);
+    let mut e = GameEngine::new(9102, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let pridemate = inject_creature_on_battlefield(&mut e, 0, "ajanis_pridemate");
+
+    for _ in 0..2 {
+        grant_pool(&mut e, 0);
+        ensure_in_hand(&mut e, 0, "angels_mercy");
+        let idx = hand_index_for_card(&e, 0, "angels_mercy");
+        e.apply_command(0, &cast_spell(idx, vec![])).expect("cast");
+        resolve_entire_stack_two_player(&mut e);
+    }
+
+    assert_eq!(e.effective_power(pridemate), Some(4), "two counters");
+}
+
+/// CR 702.15b: lifelink life gain is an ordinary life-gain event, and each lifelinker's damage is
+/// its own event — two attacking Children of Night grow the Pridemate twice, not once.
+#[test]
+fn pridemate_grows_once_per_lifelink_creature() {
+    let decks = Some(vec![forest_only_deck(), island_only_deck()]);
+    let mut e = GameEngine::new(9103, &[0, 1], 20, decks, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let pridemate = inject_creature_on_battlefield(&mut e, 0, "ajanis_pridemate");
+    let vamp_a = inject_creature_on_battlefield(&mut e, 0, "child_of_night");
+    let vamp_b = inject_creature_on_battlefield(&mut e, 0, "child_of_night");
+    let life_before = e.state.players[0].life;
+
+    e.apply_command(0, &declare_attackers(vec![vamp_a, vamp_b]))
+        .expect("declare attackers");
+    pass_both_players(&mut e); // declare attackers -> declare blockers
+    pass_both_players(&mut e); // no blockers -> combat damage
+    resolve_entire_stack_two_player(&mut e); // the two lifegain triggers
+
+    assert_eq!(
+        e.state.players[0].life,
+        life_before + 4,
+        "two 2-power lifelinkers"
+    );
+    assert_eq!(
+        e.effective_power(pridemate),
+        Some(4),
+        "one counter per lifelink gain event, not one for the combined 4 life"
+    );
+}
+
+/// CR 118.4: gaining 0 life is not a life-gain event. Swords to Plowshares on a 0-power creature
+/// exiles it and gains nothing, so the Pridemate stays 2/2.
+#[test]
+fn zero_life_gain_does_not_trigger() {
+    let mut e = anthem_engine(9104, "swords_to_plowshares");
+    let pridemate = inject_creature_on_battlefield(&mut e, 0, "ajanis_pridemate");
+    let wall = inject_creature_with_stats(&mut e, 1, "grizzly_bears", 0, 4);
+    let life_before = e.state.players[0].life;
+
+    grant_pool(&mut e, 0);
+    let idx = hand_index_for_card(&e, 0, "swords_to_plowshares");
+    e.apply_command(0, &cast_spell(idx, targets_with_damage(vec![(wall, 0)])))
+        .expect("cast swords");
+    resolve_entire_stack_two_player(&mut e);
+
+    assert_eq!(e.state.players[0].life, life_before, "0 power, 0 life");
+    assert!(e.state.stack.is_empty(), "no trigger was put on the stack");
+    assert_eq!(e.effective_power(pridemate), Some(2), "still 2/2");
+}
+
+/// "Whenever *you* gain life" (`CastTriggerPlayer::Controller`): an opponent's Pridemate does not
+/// grow when P0 gains life.
+#[test]
+fn opponents_pridemate_does_not_grow_on_your_life_gain() {
+    let mut e = anthem_engine(9105, "angels_mercy");
+    let mine = inject_creature_on_battlefield(&mut e, 0, "ajanis_pridemate");
+    let theirs = inject_creature_on_battlefield(&mut e, 1, "bloodthirsty_aerialist");
+
+    grant_pool(&mut e, 0);
+    let idx = hand_index_for_card(&e, 0, "angels_mercy");
+    e.apply_command(0, &cast_spell(idx, vec![])).expect("cast");
+    resolve_entire_stack_two_player(&mut e);
+
+    assert_eq!(
+        e.effective_power(mine),
+        Some(3),
+        "controller's payoff grows"
+    );
+    assert_eq!(
+        e.effective_power(theirs),
+        Some(2),
+        "opponent's payoff is untouched by P0's life gain"
+    );
+}

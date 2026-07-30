@@ -97,19 +97,7 @@ pub(super) fn exile_target_gain_life_equal_to_power(
                 rv1::permanent_moved::Destination::Exile,
             ));
         }
-        if power > 0 {
-            if let Some(pi) = engine.state.player_idx(target_controller) {
-                engine.state.players[pi].life += power as i32;
-                events.push(rv1::RuledEvent {
-                    ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
-                        player_id: target_controller,
-                        new_total: engine.state.players[pi].life,
-                        delta: power as i32,
-                    })),
-                });
-                events.push(ev_log(format!("P{target_controller} gains {power} life.")));
-            }
-        }
+        super::life::apply_life_gain(engine, events, target_controller, power, spell_label);
     }
 
     Ok(EffectOutcome::Continue)

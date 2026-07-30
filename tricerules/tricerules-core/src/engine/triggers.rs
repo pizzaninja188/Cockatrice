@@ -235,6 +235,38 @@ impl GameEngine {
                     })
                     .collect()
             }
+            GameEvent::LifeGained { player: gaining } => {
+                // Every player's permanents watch, in APNAP order (CR 603.3b) — the amount is
+                // irrelevant, one gain event fires each matching ability once.
+                let mut ordered: Vec<usize> = (0..self.state.players.len()).collect();
+                ordered.sort_by_key(|&i| (self.state.players[i].id != ap) as u8);
+                let mut sources: Vec<(ObjectId, String, PlayerId)> = Vec::new();
+                for pi in ordered {
+                    for &sid in &self.state.players[pi].battlefield {
+                        if let Some(o) = self.state.objects.get(&sid) {
+                            sources.push((sid, o.card_id.clone(), o.controller));
+                        }
+                    }
+                }
+                sources
+                    .into_iter()
+                    .flat_map(|(oid, card_id, source_controller)| {
+                        self.matching_triggered_abilities(&card_id, oid, source_controller, |tc| {
+                            let TriggerCondition::WheneverPlayerGainsLife {
+                                player: player_filter,
+                            } = tc
+                            else {
+                                return false;
+                            };
+                            match player_filter {
+                                CastTriggerPlayer::Controller => *gaining == source_controller,
+                                CastTriggerPlayer::Opponent => *gaining != source_controller,
+                                CastTriggerPlayer::AnyPlayer => true,
+                            }
+                        })
+                    })
+                    .collect()
+            }
             GameEvent::SpellCast {
                 caster,
                 card_id: cast_card_id,
