@@ -53,5 +53,7 @@ mod tokens;
 mod triggers;
 #[path = "scenario/tutor_search.rs"]
 mod tutor_search;
+#[path = "scenario/untap.rs"]
+mod untap;
 #[path = "scenario/x_multi_target.rs"]
 mod x_multi_target;

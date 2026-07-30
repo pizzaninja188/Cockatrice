@@ -102,6 +102,29 @@ pub struct GameEngine {
     dev_commands_enabled: bool,
 }
 
+/// CR 701.19 / 701.20: set `oid`'s tap status, returning whether it actually changed.
+///
+/// The single funnel for every *becomes tapped* / *becomes untapped* edge — cost payment,
+/// attacking (CR 508.1f), the untap step (CR 502.2), tap/untap effects, and the regeneration
+/// shield's tap (CR 701.15a). "Becomes" is an edge, not a state: a permanent that is already
+/// tapped does not become tapped again, which is exactly the returned bool. A later
+/// `WheneverPermanentBecomesTapped` trigger hangs off that bool here instead of auditing every
+/// mutation site.
+///
+/// Deliberately **not** used by the zone-change reset in `move_object_to_zone`: CR 400.7 makes
+/// that a new object with no tap state, not a permanent becoming untapped.
+///
+/// A no-op (returning `false`) for an unknown object or one already in the requested state.
+fn set_tapped(state: &mut GameState, oid: ObjectId, tapped: bool) -> bool {
+    match state.objects.get_mut(&oid) {
+        Some(o) if o.tapped != tapped => {
+            o.tapped = tapped;
+            true
+        }
+        _ => false,
+    }
+}
+
 /// Build a fresh [`GameObject`] for `card_id` owned by `owner`, seeded from `face`.
 ///
 /// Callers pass the front face (CR 712.4a: a card outside the battlefield shows its front face,

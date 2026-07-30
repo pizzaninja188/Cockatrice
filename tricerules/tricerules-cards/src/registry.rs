@@ -366,6 +366,31 @@ mod tests {
             .is_err());
     }
 
+    /// CR 701.19 / 701.20: tapping and untapping act on permanents, so a player-kind filter on
+    /// either is invalid card data and must not survive registry load.
+    #[test]
+    fn load_rejects_tap_or_untap_aimed_at_a_player() {
+        for effect in ["TapTarget", "UntapTarget"] {
+            let bad = format!(
+                r#"(
+            id: "bad_{}",
+            name: "Bad {}",
+            mana_cost: "{{U}}",
+            types: ["Instant"],
+            spell_effect: [{}(target: (kind: AnyPlayer))],
+        )"#,
+                effect.to_lowercase(),
+                effect,
+                effect
+            );
+            let err = CardRegistry::from_chunks(&[&bad]).unwrap_err();
+            assert!(
+                matches!(err, RegistryError::InvalidCard { .. }),
+                "{effect} at a player should be rejected, got {err:?}"
+            );
+        }
+    }
+
     /// `LoseLife(amount: TargetManaValue)` reads a sibling effect's target, so a list without
     /// an object-targeting effect is invalid data — it would silently resolve to 0 life.
     #[test]

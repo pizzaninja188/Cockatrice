@@ -304,7 +304,10 @@ fn effect_target_legal_at_resolution(
         | SpellEffectKind::TargetPlayerGainsLife { target, .. }
         | SpellEffectKind::TargetPlayerLosesLife { target, .. }
         | SpellEffectKind::MillTargetPlayer { target, .. }
-        | SpellEffectKind::TapTarget { target } => target_filter_legal(engine, target, tid, caster),
+        | SpellEffectKind::TapTarget { target }
+        | SpellEffectKind::UntapTarget { target } => {
+            target_filter_legal(engine, target, tid, caster)
+        }
         SpellEffectKind::DestroyTarget { target }
         | SpellEffectKind::PumpTarget { target, .. }
         | SpellEffectKind::GrantKeywordsTarget { target, .. }
@@ -361,6 +364,7 @@ pub(super) fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
         | SpellEffectKind::MillTargetPlayer { .. }
         | SpellEffectKind::DiscardCards { .. }
         | SpellEffectKind::TapTarget { .. }
+        | SpellEffectKind::UntapTarget { .. }
         | SpellEffectKind::CounterTargetSpell { .. }
         | SpellEffectKind::CopyTargetSpell { .. }
         | SpellEffectKind::AuraAttach { .. }
@@ -390,7 +394,8 @@ pub(super) fn validate_effect_targets(
                 ));
             }
         }
-        SpellEffectKind::TapTarget { target: filter } => {
+        SpellEffectKind::TapTarget { target: filter }
+        | SpellEffectKind::UntapTarget { target: filter } => {
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one target"));
             }
@@ -548,6 +553,7 @@ pub(super) fn validate_effect_targets(
         | SpellEffectKind::DestroyAll { .. }
         | SpellEffectKind::DamageAll { .. }
         | SpellEffectKind::TapAllCreatures { .. }
+        | SpellEffectKind::UntapAll { .. }
         | SpellEffectKind::PumpAll { .. }
         | SpellEffectKind::GrantKeywordsAll { .. }
         | SpellEffectKind::GrantKeywordsAllPermanents { .. }
@@ -619,6 +625,7 @@ pub(super) fn spell_target_legality_error(
         | SpellEffectKind::DamageTarget { target: filter, .. }
         | SpellEffectKind::DamageTargets { target: filter, .. }
         | SpellEffectKind::TapTarget { target: filter }
+        | SpellEffectKind::UntapTarget { target: filter }
         | SpellEffectKind::PumpTarget { target: filter, .. }
         | SpellEffectKind::PutCounters { target: filter, .. }
         | SpellEffectKind::PreventNextDamage { target: filter, .. }

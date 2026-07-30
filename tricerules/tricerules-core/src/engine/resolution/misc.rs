@@ -1,4 +1,5 @@
 use super::*;
+use crate::engine::set_tapped;
 
 pub(super) fn destroy_target(
     cx: &mut EffectCx<'_>,
@@ -54,13 +55,12 @@ pub(super) fn destroy_target(
     Ok(EffectOutcome::Continue)
 }
 
-pub(super) fn tap_target(
-    cx: &mut EffectCx<'_>,
-    effect: SpellEffectKind,
-) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::TapTarget { .. } = effect else {
-        return Err(EngineError::Illegal("resolution dispatch mismatch"));
-    };
+/// CR 701.19 / 701.20: tap or untap the single declared target.
+///
+/// One body for both directions — they differ only in the flag and the log verb. The target is
+/// left alone if it is no longer on the battlefield (CR 608.2b: it changed zones after targeting),
+/// and a permanent already in the requested state is a legal target that simply does nothing.
+fn set_target_tapped(cx: &mut EffectCx<'_>, tapped: bool) -> Result<EffectOutcome, EngineError> {
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let targets = cx.targets;
@@ -68,15 +68,38 @@ pub(super) fn tap_target(
 
     if let Some(&tid) = targets.first() {
         let tgt = object_display_name(&engine.state, engine.registry, tid);
-        if let Some(o) = engine.state.objects.get_mut(&tid) {
-            if o.zone == Zone::Battlefield && !o.tapped {
-                o.tapped = true;
-                events.push(ev_log(format!("{spell_label} taps {tgt}")));
-            }
+        let on_battlefield = engine
+            .state
+            .objects
+            .get(&tid)
+            .is_some_and(|o| o.zone == Zone::Battlefield);
+        if on_battlefield && set_tapped(&mut engine.state, tid, tapped) {
+            let verb = if tapped { "taps" } else { "untaps" };
+            events.push(ev_log(format!("{spell_label} {verb} {tgt}")));
         }
     }
 
     Ok(EffectOutcome::Continue)
+}
+
+pub(super) fn tap_target(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::TapTarget { .. } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    set_target_tapped(cx, true)
+}
+
+pub(super) fn untap_target(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::UntapTarget { .. } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    set_target_tapped(cx, false)
 }
 
 pub(super) fn tap_all_creatures(
@@ -112,11 +135,14 @@ pub(super) fn tap_all_creatures(
         .collect();
     let mut tapped = 0;
     for oid in affected {
-        if let Some(object) = cx.engine.state.objects.get_mut(&oid) {
-            if object.zone == Zone::Battlefield && !object.tapped {
-                object.tapped = true;
-                tapped += 1;
-            }
+        let on_battlefield = cx
+            .engine
+            .state
+            .objects
+            .get(&oid)
+            .is_some_and(|o| o.zone == Zone::Battlefield);
+        if on_battlefield && set_tapped(&mut cx.engine.state, oid, true) {
+            tapped += 1;
         }
     }
     cx.events.push(ev_log(format!(

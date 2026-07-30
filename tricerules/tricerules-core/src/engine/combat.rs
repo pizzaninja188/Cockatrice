@@ -302,9 +302,7 @@ impl GameEngine {
             let has_vigilance =
                 self.effective_has_keyword(oid, tricerules_cards::Keyword::Vigilance);
             if !has_vigilance {
-                if let Some(c) = self.state.objects.get_mut(&oid) {
-                    c.tapped = true;
-                }
+                super::set_tapped(&mut self.state, oid, true);
             }
         }
         let attackers_for_event = list.clone();

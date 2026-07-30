@@ -678,9 +678,7 @@ impl GameEngine {
         card_id: &str,
     ) -> Result<(), EngineError> {
         self.check_tappable(permanent_id, card_id)?;
-        if let Some(o) = self.state.objects.get_mut(&permanent_id) {
-            o.tapped = true;
-        }
+        super::set_tapped(&mut self.state, permanent_id, true);
         Ok(())
     }
 
@@ -799,9 +797,7 @@ impl GameEngine {
         pool.green -= p.g;
         pool.colorless -= p.c;
 
-        if let Some(o) = self.state.objects.get_mut(&entry.source) {
-            o.tapped = false;
-        }
+        super::set_tapped(&mut self.state, entry.source, false);
 
         let card_name = self
             .state
