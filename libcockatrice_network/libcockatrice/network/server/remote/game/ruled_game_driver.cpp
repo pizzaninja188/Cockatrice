@@ -1372,12 +1372,13 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
     {
         // Redact private candidates of a tier-3 resolution choice (CR 608) from everyone but the
         // deciding player. Private kinds expose a concealed zone (see isPrivateChoiceKind):
-        // HAND_CARDS reveals a player's hand, LIBRARY_SEARCH their library, OPPONENT_HAND another
-        // player's hand, so only the decider sees the candidate object ids / names; the public
-        // kinds (REVEALED, TARGET_OBJECTS, LEGEND_KEEP) pass through.
+        // HAND_CARDS reveals a player's hand, LIBRARY_SEARCH their library, LIBRARY_TOP the top of
+        // their library, OPPONENT_HAND another player's hand, so only the decider sees the
+        // candidate object ids / names; the public kinds (REVEALED, TARGET_OBJECTS, LEGEND_KEEP)
+        // pass through.
         // For HAND_CARDS, inject candidate_server_card_ids for the deciding player
         // so the client can map engine OIDs to physical hand CardItems for the hand-click UI.
-        // For LIBRARY_SEARCH, inject by name-matching from the decider's deck zone
+        // For LIBRARY_SEARCH and LIBRARY_TOP, inject by name-matching from the decider's deck zone
         // so the client can open the deck zone view and use deck-card click-to-pick (like Gifts Ungiven
         // search step). For REVEALED, inject from the non-deciding player's deck
         // so the client can render the revealed cards in a zone popup for the opponent's pick step.
@@ -1403,8 +1404,10 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
                         rcr->add_candidate_server_card_ids(sc ? sc->getId() : -1);
                     }
                 }
-            } else if (rcr->choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH) {
-                // LibrarySearch: assign each candidate a sequential index as its server card ID.
+            } else if (rcr->choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH ||
+                       rcr->choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP) {
+                // LibrarySearch / LibraryTop (CR 701.18 scry): assign each candidate a sequential
+                // index as its server card ID.
                 // Deck cards are not in engineOidToServerCardId (only battlefield/hand/stack are),
                 // so there is no server-side lookup available. Sequential indices give every
                 // physical card (including duplicate-named ones) a unique client-side ID.

@@ -1174,6 +1174,76 @@ TEST_F(RuledClientTest, LibrarySearchChoiceEnforcesUniqueNamesAndOpensTheDeckVie
     EXPECT_EQ(state->resolutionHandPickSelected(), 2);
 }
 
+// CR 701.18 scry reuses the library-search deck popup, retitled. The ordering step submits in
+// click order, which is how the engine reads `ordered: true` (same convention as Brainstorm).
+TEST_F(RuledClientTest, LibraryTopChoiceOpensTheScryViewAndSubmitsInClickOrder)
+{
+    QSignalSpy started(state, &RuledClientState::librarySearchPickStarted);
+    ruled::v1::RuledEventBatch batch;
+    auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+    rcr->set_deciding_player_id(kLocalPlayer);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_LIBRARY_TOP); // Preordain, ordering step
+    rcr->set_min(2);
+    rcr->set_max(2);
+    rcr->set_ordered(true);
+    for (const quint32 oid : {21u, 22u}) {
+        rcr->add_candidate_object_ids(oid);
+    }
+    for (const int scid : {0, 1}) {
+        rcr->add_candidate_server_card_ids(scid);
+    }
+    rcr->add_candidate_names("Island");
+    rcr->add_candidate_names("Island");
+    apply(batch);
+
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    EXPECT_EQ(state->resolutionHandPickZone(), RuledClientState::PickZone::Deck);
+    EXPECT_EQ(state->resolutionHandPickViewTitle(), QStringLiteral("Scry"));
+    ASSERT_EQ(started.count(), 1);
+    EXPECT_EQ(started.at(0).at(0).toStringList(), QStringList({QStringLiteral("Island"), QStringLiteral("Island")}));
+    // Duplicate names must both stay pickable — scry never sets unique_names.
+    EXPECT_TRUE(state->isResolutionHandPickCardSelectable(0));
+    EXPECT_TRUE(state->isResolutionHandPickCardSelectable(1));
+
+    state->toggleResolutionHandPickCard(1);
+    state->toggleResolutionHandPickCard(0);
+    EXPECT_EQ(state->resolutionHandPickSelected(), 2);
+
+    host.sentCommands.clear();
+    state->submitResolutionHandPick();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const auto &sub = host.sentCommands[0].submit_resolution_choice();
+    ASSERT_EQ(sub.chosen_object_ids_size(), 2);
+    // First clicked goes on top, so the engine reads the list top-first.
+    EXPECT_EQ(sub.chosen_object_ids(0), 22u);
+    EXPECT_EQ(sub.chosen_object_ids(1), 21u);
+    EXPECT_FALSE(state->isResolutionHandPickActive());
+}
+
+// A scry step that keeps every card on top submits nothing: min 0 must be answerable.
+TEST_F(RuledClientTest, LibraryTopChoiceAllowsSubmittingAnEmptyBottomPile)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+    rcr->set_deciding_player_id(kLocalPlayer);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_LIBRARY_TOP); // Opt, scry 1
+    rcr->set_min(0);
+    rcr->set_max(1);
+    rcr->add_candidate_object_ids(31u);
+    rcr->add_candidate_server_card_ids(0);
+    rcr->add_candidate_names("Island");
+    apply(batch);
+
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    EXPECT_EQ(state->resolutionHandPickRequired(), 0);
+
+    host.sentCommands.clear();
+    state->submitResolutionHandPick();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().chosen_object_ids_size(), 0);
+    EXPECT_FALSE(state->isResolutionHandPickActive());
+}
+
 TEST_F(RuledClientTest, RevealedChoiceAnnouncesAndClosesThePopup)
 {
     QSignalSpy revealed(state, &RuledClientState::revealedPickChanged);

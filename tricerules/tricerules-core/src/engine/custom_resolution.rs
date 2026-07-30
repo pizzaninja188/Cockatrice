@@ -209,6 +209,11 @@ impl GameEngine {
             return self.finish_library_search(pending, chosen);
         }
 
+        // CR 701.18: scry — step 0 picks the cards going to the bottom, step 1 orders the rest.
+        if pending.custom_key == "__scry" {
+            return self.finish_scry(pending, chosen);
+        }
+
         // DiscardCards (caster-chooses): move each chosen card from the target's hand to graveyard.
         if pending.custom_key == "__discard_chosen" {
             return self.finish_discard_chosen(pending, chosen);
@@ -377,12 +382,7 @@ impl GameEngine {
         );
         let _ = self.apply_sbas(&mut ev);
 
-        if let Some(i) = self.state.player_idx(self.state.active_player_id()) {
-            self.state.priority_idx = i;
-        }
-        ev.push(ev_priority_changed(self));
-
-        Ok(finish_with_events(self, ev))
+        self.complete_parked_resolution(pending.item, pending.resume_effect_index, ev)
     }
 
     /// CR 704.5j: the controller has chosen which legend to keep. Sacrifice all other candidates
@@ -435,6 +435,177 @@ impl GameEngine {
             if self.state.pending_resolution.is_none() {
                 ev.push(ev_priority_changed(self));
             }
+        }
+        Ok(finish_with_events(self, ev))
+    }
+
+    /// CR 701.18: apply one step of a scry.
+    ///
+    /// Step 0's `chosen` is the set going to the bottom of the library, in the order they end up
+    /// there; the cards left over stay on top. If two or more stay on top the player still has an
+    /// ordering decision to make (CR 701.18a "in any order"), so a second interrupt is parked for
+    /// it — skipped when 0 or 1 card remains, where the "choice" has exactly one answer. Scry 1
+    /// therefore never reaches step 1.
+    ///
+    /// Step 1's `chosen` is that ordering, **top first** — `chosen[0]` becomes the next card
+    /// drawn. (Brainstorm's tier-3 effect takes the opposite convention and reverses; the prompt
+    /// text here spells this one out, because the player sees the difference.)
+    ///
+    /// Both steps are pure reorders of the library `VecDeque`: scry looks at cards without moving
+    /// them between zones, so nothing here goes through `move_object_to_zone` and no zone-change
+    /// trigger fires.
+    fn finish_scry(
+        &mut self,
+        pending: PendingResolution,
+        chosen: &[u32],
+    ) -> Result<RuledEventBatch, EngineError> {
+        let controller = pending.deciding_player;
+        let Some(idx) = self.state.player_idx(controller) else {
+            return Err(EngineError::Illegal("scrying player missing"));
+        };
+        let mut ev = vec![];
+
+        if pending.step == 0 {
+            // Everything looked at that was not sent to the bottom stays on top, keeping the
+            // library order it already had.
+            let remaining: Vec<ObjectId> = pending
+                .scratch
+                .iter()
+                .copied()
+                .filter(|oid| !chosen.contains(oid))
+                .collect();
+
+            if !chosen.is_empty() {
+                let names = self.object_names(chosen);
+                self.state.players[idx]
+                    .library
+                    .retain(|o| !chosen.contains(o));
+                for &oid in chosen {
+                    self.state.players[idx].library.push_back(oid);
+                }
+                let noun = if chosen.len() == 1 { "card" } else { "cards" };
+                ev.push(ev_log(format!(
+                    "P{controller} puts {} {noun} on the bottom of their library.",
+                    chosen.len()
+                )));
+                ev.push(ev_log_private(
+                    format!("P{controller} bottoms {}.", names.join(", ")),
+                    controller,
+                ));
+            } else {
+                ev.push(ev_log(format!(
+                    "P{controller} keeps every scried card on top."
+                )));
+            }
+
+            if remaining.len() > 1 {
+                return self.park_scry_ordering(pending, remaining, ev);
+            }
+        } else {
+            // Step 1: `chosen` is every remaining card, top first. Pull them out and re-seat them
+            // in front, back-to-front, so `chosen[0]` ends up as the next draw.
+            self.state.players[idx]
+                .library
+                .retain(|o| !chosen.contains(o));
+            for &oid in chosen.iter().rev() {
+                self.state.players[idx].library.push_front(oid);
+            }
+            ev.push(ev_log(format!(
+                "P{controller} orders {} cards on top of their library.",
+                chosen.len()
+            )));
+            ev.push(ev_log_private(
+                format!(
+                    "P{controller} puts {} back on top, in that order.",
+                    self.object_names(chosen).join(", ")
+                ),
+                controller,
+            ));
+        }
+
+        self.complete_parked_resolution(pending.item, pending.resume_effect_index, ev)
+    }
+
+    /// Park scry's second interrupt: order the cards staying on top (CR 701.18a "in any order").
+    /// Same `item` and `resume_effect_index` as step 0, so the spell's tail still resumes after.
+    fn park_scry_ordering(
+        &mut self,
+        pending: PendingResolution,
+        remaining: Vec<ObjectId>,
+        mut ev: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let controller = pending.deciding_player;
+        let n = remaining.len() as u32;
+        let (candidate_card_ids, candidate_names) =
+            super::resolution::candidate_identities(self, &remaining);
+        let prompt = format!(
+            "Scry: click the {n} cards staying on top in order — the first one you click is the \
+             next card you draw."
+        );
+        ev.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    deciding_player_id: controller,
+                    source_object_id: pending.item.id,
+                    prompt_text: prompt.clone(),
+                    choice_kind: rv1::ChoiceKind::LibraryTop as i32,
+                    candidate_object_ids: remaining.clone(),
+                    candidate_card_ids,
+                    candidate_names,
+                    min: n,
+                    max: n,
+                    ordered: true,
+                    unique_names: false,
+                    candidate_server_card_ids: Vec::new(),
+                },
+            )),
+        });
+        ev.push(ev_log_private(prompt.clone(), controller));
+        self.state.pending_resolution = Some(PendingResolution {
+            step: 1,
+            scratch: vec![],
+            candidates: remaining,
+            min: n,
+            max: n,
+            ordered: true,
+            prompt,
+            ..pending
+        });
+        Ok(finish_with_events(self, ev))
+    }
+
+    /// Display names for `oids`, in order (registry lookup, never Oracle).
+    fn object_names(&self, oids: &[ObjectId]) -> Vec<String> {
+        oids.iter()
+            .map(|&oid| object_display_name(&self.state, self.registry, oid))
+            .collect()
+    }
+
+    /// Close out a parked *primitive* resolution once its choice has been applied.
+    ///
+    /// CR 608.2: a spell resolves its whole effect list. When the parked effect was not the last
+    /// one, `resume_effect_index` says where to pick the list back up — `build_resolution_effects`
+    /// re-derives it from the stack item, so nothing had to be stored across the park. Running the
+    /// tail is also what emits the closing "resolves." log and seats the spell in the graveyard
+    /// (CR 608.2m), which is why the `finish_*` callers do not log that themselves.
+    ///
+    /// Priority returns to the active player only if the tail did not park again (a second
+    /// suspending effect in the same list, e.g. a hypothetical `[Scry, DiscardCards]`).
+    fn complete_parked_resolution(
+        &mut self,
+        item: StackItem,
+        resume_effect_index: Option<u32>,
+        mut ev: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        if let Some(start) = resume_effect_index {
+            let (effects, spell_label) = self.build_resolution_effects(&item);
+            self.run_effect_list(&item, &spell_label, effects, start as usize, &mut ev)?;
+        }
+        if self.state.pending_resolution.is_none() {
+            if let Some(i) = self.state.player_idx(self.state.active_player_id()) {
+                self.state.priority_idx = i;
+            }
+            ev.push(ev_priority_changed(self));
         }
         Ok(finish_with_events(self, ev))
     }
@@ -516,6 +687,10 @@ impl GameEngine {
             search_destination: SearchDestination::Hand,
             search_shuffle: false,
             search_reveal: false,
+            // Tier-3 (CR 608): the `CardEffect` owns the whole resolution — `resolve_top_of_stack`
+            // hands off before building any primitive list — so there is never a tail to resume,
+            // including across the repeated re-parks of a multi-step effect like Gifts Ungiven.
+            resume_effect_index: None,
         });
     }
 
@@ -527,13 +702,6 @@ impl GameEngine {
         chosen: &[u32],
     ) -> Result<RuledEventBatch, EngineError> {
         let controller = pending.item.controller;
-        let face_index = pending.item.face_index;
-        let spell_name = self
-            .registry
-            .get(&pending.item.card_id)
-            .and_then(|d| d.face(face_index))
-            .map(|f| f.name.to_string())
-            .unwrap_or_else(|| pending.item.card_id.clone());
 
         let mut ev = vec![];
 
@@ -634,14 +802,7 @@ impl GameEngine {
             }
         }
 
-        ev.push(ev_log(format!("{spell_name} resolves.")));
-
-        if let Some(i) = self.state.player_idx(self.state.active_player_id()) {
-            self.state.priority_idx = i;
-        }
-        ev.push(ev_priority_changed(self));
-
-        Ok(finish_with_events(self, ev))
+        self.complete_parked_resolution(pending.item, pending.resume_effect_index, ev)
     }
 
     /// Resolve a caster-chooses DiscardCards interrupt: move chosen cards from the target's hand
@@ -679,13 +840,6 @@ impl GameEngine {
                 "P{owner} discards {discard_name} ({card_name})."
             )));
         }
-        ev.push(ev_log(format!("{card_name} resolves.")));
-
-        if let Some(i) = self.state.player_idx(self.state.active_player_id()) {
-            self.state.priority_idx = i;
-        }
-        ev.push(ev_priority_changed(self));
-
-        Ok(finish_with_events(self, ev))
+        self.complete_parked_resolution(pending.item, pending.resume_effect_index, ev)
     }
 }

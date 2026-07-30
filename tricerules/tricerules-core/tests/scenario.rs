@@ -41,6 +41,8 @@ mod performance;
 mod priority_and_turns;
 #[path = "scenario/regenerate.rs"]
 mod regenerate;
+#[path = "scenario/scry.rs"]
+mod scry;
 #[path = "scenario/spell_effects.rs"]
 mod spell_effects;
 #[path = "scenario/stack_and_counterspells.rs"]

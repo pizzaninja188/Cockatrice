@@ -157,6 +157,17 @@ pub enum SpellEffectKind {
     Draw {
         count: Amount,
     },
+    /// CR 701.18: look at the top `count` cards of your library, put any number of them on the
+    /// bottom of it in any order, and the rest back on top in any order. The cards never leave the
+    /// library, so this fires no zone-change triggers.
+    ///
+    /// Resolution suspends for the player's decision — up to two interrupts, the second (ordering
+    /// the cards kept on top) skipped when it would be a no-op. Because it suspends, any effect
+    /// declared after it resumes via `PendingResolution::resume_effect_index`; `[Scry, Draw]` is
+    /// Preordain and Opt.
+    Scry {
+        count: u32,
+    },
     /// Destroy target matching `target` filter (default: any creature on the battlefield).
     /// Characteristic restrictions (e.g. `tapped: true` for Royal Assassin) live in the filter.
     DestroyTarget {
@@ -662,6 +673,15 @@ impl SpellEffectKind {
             SpellEffectKind::SearchLibrary { .. } => {
                 if context != EffectContext::Spell {
                     Err("SearchLibrary is only valid on a spell, not a mana ability".into())
+                } else {
+                    Ok(())
+                }
+            }
+            // CR 701.18: scry is legal on spells and on abilities alike (scry lands, Sensei's
+            // Divining Top-style activations), so the only malformed case is scrying zero cards.
+            SpellEffectKind::Scry { count } => {
+                if *count == 0 {
+                    Err("Scry requires a count of at least 1".into())
                 } else {
                     Ok(())
                 }
