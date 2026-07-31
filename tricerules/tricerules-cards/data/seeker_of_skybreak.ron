@@ -1,0 +1,15 @@
+(
+  id: "seeker_of_skybreak",
+  name: "Seeker of Skybreak",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Elf"],
+  power: 2,
+  toughness: 1,
+  activated_abilities: [
+    (
+      cost: Tap,
+      effect: UntapTarget(target: (kind: Creature)),
+      text: "{T}: Untap target creature.",
+    ),
+  ],
+)

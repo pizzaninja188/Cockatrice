@@ -368,9 +368,13 @@ impl GameEngine {
                     effect @ SpellEffectKind::TapTarget { .. } => {
                         misc::tap_target(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::UntapTarget { .. } => {
+                        misc::untap_target(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::TapAllCreatures { .. } => {
                         misc::tap_all_creatures(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::UntapAll { .. } => mass::untap_all(&mut cx, effect)?,
                     effect @ SpellEffectKind::DestroyAll { .. } => {
                         mass::destroy_all(&mut cx, effect)?
                     }
@@ -849,11 +853,13 @@ pub(super) fn consume_regen_shield(
     if shields == 0 {
         return false;
     }
+    // CR 701.15a: regenerating taps the permanent — a real "becomes tapped" edge, so it goes
+    // through the shared funnel rather than writing the flag inline.
+    super::set_tapped(state, oid, true);
     if let Some(o) = state.objects.get_mut(&oid) {
         o.regeneration_shields -= 1;
         o.damage = 0;
         o.deathtouch_damage = false;
-        o.tapped = true;
     }
     // CR 701.15a: remove from combat (attacker/blocker lists). This mirrors what happens when
     // a creature is removed from combat by a tap effect.

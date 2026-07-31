@@ -197,9 +197,12 @@ protected:
     RuledPlayerBinding::RuledZoneSyncResult applyZoneView(Server_Player *p,
                                                           const ruled::v1::RuledPerPlayerView &v,
                                                           GameEventStorage *tapGes,
-                                                          bool allowUntapReset = true)
+                                                          bool allowUntapReset = true,
+                                                          const QSet<quint32> *engineUntappedOids = nullptr)
     {
-        return game->ruled()->playerBinding(p->getPlayerId()).applyRuledEngineZoneView(p, v, tapGes, allowUntapReset);
+        return game->ruled()
+            ->playerBinding(p->getPlayerId())
+            .applyRuledEngineZoneView(p, v, tapGes, allowUntapReset, engineUntappedOids);
     }
 
     Server_Card *findCardByEngineOid(Server_Player *p, quint32 engineOid)
@@ -465,6 +468,60 @@ TEST_F(RuledBatchTest, ZoneViewForcesUntapDuringUntapStepBatch)
     GameEventStorage tapGes;
     RuledPlayerBinding::RuledZoneSyncResult result = applyZoneView(p1, v, &tapGes, true);
     EXPECT_TRUE(result.tapStateChanged);
+    EXPECT_FALSE(bear->getTapped());
+}
+
+// CR 701.20: an untap *effect* (Seeker of Skybreak, Vitalize) resolves mid-turn, so the untap-step
+// guard above would swallow it and leave the client drawing an untapped permanent sideways. The
+// engine names the objects it genuinely untapped, and those are applied regardless of the guard.
+TEST_F(RuledBatchTest, ZoneViewAppliesEngineReportedUntapOutsideUntapStep)
+{
+    Server_Card *bear = addCardToTable(p1, "Grizzly Bears");
+    bear->setTapped(true);
+    ruled::v1::RuledPerPlayerView v = buildPerPlayerView(p1, {101u}, {false});
+
+    const QSet<quint32> untapped{101u};
+    GameEventStorage tapGes;
+    RuledPlayerBinding::RuledZoneSyncResult result = applyZoneView(p1, v, &tapGes, false, &untapped);
+    EXPECT_TRUE(result.tapStateChanged);
+    EXPECT_FALSE(bear->getTapped());
+}
+
+// Only the named objects are exempt: a permanent the engine did not report stays put, so a manual
+// tap the engine has not seen yet is still protected.
+TEST_F(RuledBatchTest, ZoneViewUntapExemptionIsPerObject)
+{
+    Server_Card *bear = addCardToTable(p1, "Grizzly Bears");
+    Server_Card *wolf = addCardToTable(p1, "Timber Wolves");
+    bear->setTapped(true);
+    wolf->setTapped(true);
+    ruled::v1::RuledPerPlayerView v = buildPerPlayerView(p1, {101u, 102u}, {false, false});
+
+    const QSet<quint32> untapped{101u};
+    GameEventStorage tapGes;
+    applyZoneView(p1, v, &tapGes, false, &untapped);
+    EXPECT_FALSE(bear->getTapped());
+    EXPECT_TRUE(wolf->getTapped());
+}
+
+// End to end through applyRuledBatch: a PermanentsUntapped event anywhere in the batch (here
+// *after* the zone view, as the engine emits it) reaches the binding, with no untap-step phase
+// change to fall back on.
+TEST_F(RuledBatchTest, ApplyRuledBatchAppliesUntapEffectMidTurn)
+{
+    Server_Card *bear = addCardToTable(p1, "Grizzly Bears");
+    bear->setTapped(true);
+
+    ruled::v1::IpcResponse resp;
+    resp.set_ok(true);
+    auto *batch = resp.mutable_batch();
+    auto *evZv = batch->add_events()->mutable_zone_view();
+    *evZv->add_per_player() = buildPerPlayerView(p1, {101u}, {false});
+    batch->add_events()->mutable_permanents_untapped()->add_object_ids(101u);
+
+    BatchOutcome r = callBatchApply(resp);
+    EXPECT_TRUE(r.zoneViewApplied);
+    EXPECT_TRUE(r.tapStateEventsQueued);
     EXPECT_FALSE(bear->getTapped());
 }
 

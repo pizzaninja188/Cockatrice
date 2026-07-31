@@ -192,6 +192,25 @@ pub enum SpellEffectKind {
     TapAllCreatures {
         players: RelativePlayerSet,
     },
+    /// CR 701.20: untap target permanent matching `target` filter. The mirror of
+    /// [`Self::TapTarget`], and deliberately *not* restricted to tapped permanents — an untapped
+    /// permanent is a legal target and the effect simply does nothing (add `tapped: Some(true)`
+    /// to the filter only for a card whose own text demands it). Covers Seeker of Skybreak
+    /// (`{T}: Untap target creature`) and Aphetto Alchemist.
+    UntapTarget {
+        target: TargetFilter,
+    },
+    /// CR 701.20: untap every permanent matching `filter` controlled by `players`. Untargeted, and
+    /// snapshots the battlefield as it resolves, like [`Self::TapAllCreatures`]. Controller scope
+    /// lives in `players` rather than in the filter's `only_controller`, because untargeted mass
+    /// selection goes through `battlefield_objects_matching`, which has no activating player to
+    /// compare against. Covers Vitalize (`Controller` + creature) and Early Harvest / Turnabout
+    /// (a player's lands).
+    UntapAll {
+        players: RelativePlayerSet,
+        #[serde(default = "TargetFilter::default_creature")]
+        filter: TargetFilter,
+    },
     /// CR 701.5: counter target spell on the stack. `spell_filter` narrows which spells are legal
     /// targets — `None` is unrestricted (Counterspell), `Some(Creature)` is Essence Scatter,
     /// `Some(Noncreature)` is Negate. Reuses [`SpellTypeFilter`] so any future "counter target
@@ -501,6 +520,7 @@ impl SpellEffectKind {
             | SpellEffectKind::PumpTarget { target, .. }
             | SpellEffectKind::GrantKeywordsTarget { target, .. }
             | SpellEffectKind::TapTarget { target }
+            | SpellEffectKind::UntapTarget { target }
             | SpellEffectKind::TargetPlayerGainsLife { target, .. }
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
             | SpellEffectKind::DrainTarget { target, .. }
@@ -583,10 +603,11 @@ impl SpellEffectKind {
                     ))
                 }
             }
-            SpellEffectKind::TapTarget { target } => {
+            // CR 701.19/701.20: tapping and untapping act on permanents, never players.
+            SpellEffectKind::TapTarget { target } | SpellEffectKind::UntapTarget { target } => {
                 if target.is_player() {
                     Err(format!(
-                        "TapTarget cannot target players, got {:?}",
+                        "tap/untap cannot target players, got {:?}",
                         target.kind
                     ))
                 } else {
@@ -623,7 +644,9 @@ impl SpellEffectKind {
             }
             // Mass effects select objects, not players, and never use Self_/AnyTarget (which
             // include players). Only Creature / AnyPermanent are honored by the engine.
-            SpellEffectKind::DestroyAll { kind, .. } | SpellEffectKind::DamageAll { kind, .. } => {
+            SpellEffectKind::DestroyAll { kind, .. }
+            | SpellEffectKind::DamageAll { kind, .. }
+            | SpellEffectKind::UntapAll { filter: kind, .. } => {
                 if matches!(kind.kind, TargetKind::Creature | TargetKind::AnyPermanent) {
                     Ok(())
                 } else {

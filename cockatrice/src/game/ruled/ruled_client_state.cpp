@@ -42,13 +42,19 @@ void RuledClientState::emitGraveyardTargetsNeeded()
     //    its graveyard open until it resolves or is countered, so the targeting arrow stays
     //    anchored to the card rather than to a pile the player can no longer see. Falls out of the
     //    stack order automatically the moment the spell leaves the stack.
+    //
+    //    Read from the latch, never from the live graveyard map: a permanent that dies while an
+    //    ability targeting it is on the stack lands in that map, and testing it would pop both
+    //    players' graveyard views open for an ability that never targeted a graveyard at all.
+    //    Only a target chosen *in* a graveyard (Reanimate) is latched Graveyard — see
+    //    `RuledEventDispatcher::applyStackPushed`.
     const QList<quint32> stackOrder = getStackOidOrder();
     for (auto it = stackTargetsByStackOid.constBegin(); it != stackTargetsByStackOid.constEnd(); ++it) {
         if (!stackOrder.contains(it.key())) {
             continue;
         }
         for (quint32 target : it.value()) {
-            if (graveyardOidToPlayerId.contains(target)) {
+            if (latchedTargetKind(it.key(), target) == RuledTargetItemKind::Graveyard) {
                 oids.insert(target);
             }
         }
@@ -1008,6 +1014,7 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     // calls back into unregisterSyntheticStackCard) before invoking this.
     stackOidOrder.clear();
     stackTargetsByStackOid.clear();
+    stackTargetKindByStackAndTargetOid.clear();
     stackAnnotationByOid.clear();
     stackSourceOidByStackOid.clear();
     syntheticAbilityControllerPid.clear();

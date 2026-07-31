@@ -2596,7 +2596,7 @@ Legend: `[x]` = fully implemented · `[ ] 🟡 partial` = partially implemented 
 - [ ] Urborg Justice
 - [ ] Urborg Stalker
 - [ ] Veteran Explorer
-- [ ] Vitalize
+- [x] Vitalize
 - [ ] Vodalian Illusionist
 - [ ] Volunteer Reserves
 - [ ] Wave of Terror
@@ -2833,7 +2833,7 @@ Legend: `[x]` = fully implemented · `[ ] 🟡 partial` = partially implemented 
 - [ ] Scroll Rack
 - [ ] Sea Monster
 - [ ] Searing Touch
-- [ ] Seeker of Skybreak
+- [x] Seeker of Skybreak
 - [ ] Segmented Wurm
 - [ ] Selenia, Dark Angel
 - [ ] Serene Offering

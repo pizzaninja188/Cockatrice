@@ -309,10 +309,7 @@ RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &c
         }
     }
 
-    // CR 605 float courtesy: an UndoManaAbility untaps the source mid-turn, so let that untap reach
-    // the commanding player's clients (the normal guard only releases taps during the untap step).
-    const int forceUntapForPlayerId = ruledCmd.has_undo_mana_ability() ? playerId : -1;
-    const RuledBatchApplyResult batchResult = applyRuledBatch(resp, forceUntapForPlayerId);
+    const RuledBatchApplyResult batchResult = applyRuledBatch(resp);
     if (batchResult.zoneViewApplied && (batchResult.handOrLibraryChanged || batchResult.battlefieldOrderChanged)) {
         game->sendGameStateToPlayers();
     }
@@ -464,8 +461,7 @@ void RuledGameDriver::applyRuledStackResolvedEvent(const ruled::v1::StackResolve
     }
 }
 
-RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ruled::v1::IpcResponse &resp,
-                                                                        int forceUntapForPlayerId)
+RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ruled::v1::IpcResponse &resp)
 {
     RuledBatchApplyResult result;
     if (!resp.has_batch()) {
@@ -499,7 +495,7 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
 
     applyTokenCreations(batch);
     applyPermanentMoves(batch, preBatchOidMaps);
-    applyPhaseStackAndZoneViews(batch, forceUntapForPlayerId, result);
+    applyPhaseStackAndZoneViews(batch, result);
     applyAttachmentRestores(batch);
     applyLifeManaAndCombatEvents(batch);
     return result;
@@ -784,16 +780,24 @@ void RuledGameDriver::applyPermanentMoves(const ruled::v1::RuledEventBatch &batc
 // Tap state propagates from the engine on every batch — declare attackers, mana
 // payment, and untap all use this path (no longer gated on an explicit untap event).
 void RuledGameDriver::applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBatch &batch,
-                                                  int forceUntapForPlayerId,
                                                   RuledBatchApplyResult &result)
 {
     GameEventStorage tapSyncGes;
     bool batchHasUntapPhase = false;
+    // CR 701.20: permanents the engine reported as genuinely becoming untapped in this batch —
+    // an untap effect, the untap step, or the CR 605 mana-ability undo. The binding applies these
+    // regardless of the untap-step guard, so they must be gathered before any zone view is
+    // applied (the event may appear after the zone_view events in the batch).
+    QSet<quint32> engineUntappedOids;
     for (int ei = 0; ei < batch.events_size(); ++ei) {
         const auto &e = batch.events(ei);
         if (e.has_phase_changed() && e.phase_changed().phase_id() == ruled::v1::PHASE_ID_UNTAP) {
             batchHasUntapPhase = true;
-            break;
+        }
+        if (e.has_permanents_untapped()) {
+            for (const auto oid : e.permanents_untapped().object_ids()) {
+                engineUntappedOids.insert(static_cast<quint32>(oid));
+            }
         }
     }
     for (int ei = 0; ei < batch.events_size(); ++ei) {
@@ -903,14 +907,14 @@ void RuledGameDriver::applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBat
         }
         for (const auto &p : e.zone_view().per_player()) {
             // Untap-step "reset" applies only to the active player's view; NAP may stay tapped.
-            // UndoManaAbility (CR 605) also untaps mid-turn, but only for the player who undid it.
-            const bool perPlayerAllowUntap = (batchHasUntapPhase && p.player_id() == game->getActivePlayer()) ||
-                                             p.player_id() == forceUntapForPlayerId;
+            // Every other legitimate mid-turn untap arrives as an explicit PermanentsUntapped oid
+            // (CR 605 mana undo, untap effects), which the binding honors per-object.
+            const bool perPlayerAllowUntap = batchHasUntapPhase && p.player_id() == game->getActivePlayer();
             if (Server_AbstractPlayer *ab = game->getPlayer(p.player_id())) {
                 const RuledPlayerBinding::RuledZoneSyncResult sync =
                     playerBinding(p.player_id())
                         .applyRuledEngineZoneView(static_cast<Server_Player *>(ab), p, &tapSyncGes,
-                                                  perPlayerAllowUntap);
+                                                  perPlayerAllowUntap, &engineUntappedOids);
                 result.handOrLibraryChanged = result.handOrLibraryChanged || sync.handOrLibraryChanged;
                 result.battlefieldOrderChanged = result.battlefieldOrderChanged || sync.battlefieldOrderChanged;
                 result.tapStateEventsQueued = result.tapStateEventsQueued || sync.tapStateChanged;

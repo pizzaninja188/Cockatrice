@@ -114,7 +114,8 @@ RuledPlayerBinding::RuledZoneSyncResult
 RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                                              const ruled::v1::RuledPerPlayerView &v,
                                              GameEventStorage *tapGes,
-                                             bool allowUntapReset)
+                                             bool allowUntapReset,
+                                             const QSet<quint32> *engineUntappedOids)
 {
     RuledZoneSyncResult result;
     const int playerId = player->getPlayerId();
@@ -362,7 +363,14 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                         // reflected in battlefield_tapped. Real untap-step sync is delivered in the
                         // same ruled batch as PhaseChanged(PHASE_ID_UNTAP) (see tricerules
                         // finish_cleanup_roll_new_turn).
-                        if (!allowUntapReset && card->getTapped() && !desiredTapped) {
+                        //
+                        // A permanent named by the batch's PermanentsUntapped event is exempt: the
+                        // engine reported an actual CR 701.20 untap edge for it (untap effect,
+                        // untap step, CR 605 mana undo), so there is no local tap to protect and
+                        // suppressing it would leave the client drawing an untapped permanent
+                        // sideways.
+                        const bool engineUntappedIt = engineUntappedOids && engineUntappedOids->contains(oid);
+                        if (!allowUntapReset && !engineUntappedIt && card->getTapped() && !desiredTapped) {
                             continue;
                         }
                         // Engine tap state is authoritative for ruled games (taps, and untaps

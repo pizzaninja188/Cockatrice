@@ -86,7 +86,12 @@ Also the home of:
   that reads the `ruled_game` proto flag. Never re-inline
   `game->getGameMetaInfo()->proto().ruled_game()`.
 - `resolveHandActionIndex(state, kind, card)` — the single click→engine-hand-slot entry point.
-- `findBattlefieldCardItemByEngineOid` / `findStackCardItemBy…` / `resolveSpellTargetItem`.
+- `findBattlefieldCardItemByEngineOid` / `findStackCardItemBy…` / `classifySpellTargetItem` +
+  `resolveSpellTargetItem`. **A targeting arrow's endpoint kind is classified once and latched**
+  (`RuledClientState::latchTargetKind`, write-once), because CR 608.2b makes a target that changed
+  zones a *different* object. Resolve only within the latched kind — re-classifying each sync lets
+  a dead permanent's oid re-resolve through the graveyard map, and the arrow follows the card to
+  the pile instead of disappearing.
 - `isResolutionPickZoneCard` — **gate every id-keyed resolution-pick query on this.** Candidates in
   a concealed zone carry synthetic sequential ids that collide with real `Server_Card` ids.
 

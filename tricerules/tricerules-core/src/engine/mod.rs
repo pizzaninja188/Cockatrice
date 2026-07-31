@@ -102,6 +102,38 @@ pub struct GameEngine {
     dev_commands_enabled: bool,
 }
 
+/// CR 701.19 / 701.20: set `oid`'s tap status, returning whether it actually changed.
+///
+/// The single funnel for every *becomes tapped* / *becomes untapped* edge — cost payment,
+/// attacking (CR 508.1f), the untap step (CR 502.2), tap/untap effects, and the regeneration
+/// shield's tap (CR 701.15a). "Becomes" is an edge, not a state: a permanent that is already
+/// tapped does not become tapped again, which is exactly the returned bool. A later
+/// `WheneverPermanentBecomesTapped` trigger hangs off that bool here instead of auditing every
+/// mutation site.
+///
+/// Deliberately **not** used by the zone-change reset in `move_object_to_zone`: CR 400.7 makes
+/// that a new object with no tap state, not a permanent becoming untapped.
+///
+/// A no-op (returning `false`) for an unknown object or one already in the requested state.
+///
+/// Every *becomes untapped* edge is also recorded in `GameState::untapped_this_command`, which
+/// `apply_command` drains into the batch's `PermanentsUntapped` event. Servatrice refuses
+/// engine-driven untaps mid-turn (they would stomp a player's manual taps), so without that
+/// explicit edge an untap effect leaves the client drawing the permanent sideways while the
+/// engine considers it untapped.
+fn set_tapped(state: &mut GameState, oid: ObjectId, tapped: bool) -> bool {
+    match state.objects.get_mut(&oid) {
+        Some(o) if o.tapped != tapped => {
+            o.tapped = tapped;
+            if !tapped {
+                state.untapped_this_command.push(oid);
+            }
+            true
+        }
+        _ => false,
+    }
+}
+
 /// Build a fresh [`GameObject`] for `card_id` owned by `owner`, seeded from `face`.
 ///
 /// Callers pass the front face (CR 712.4a: a card outside the battlefield shows its front face,
@@ -255,6 +287,7 @@ impl GameEngine {
             damage_prevention_shields: HashMap::new(),
             prevent_all_combat_damage_this_turn: false,
             undoable_mana_abilities: Vec::new(),
+            untapped_this_command: Vec::new(),
         };
         let mut eng = GameEngine {
             state,
@@ -365,7 +398,10 @@ impl GameEngine {
         if !self.dev_commands_enabled && matches!(cmd.cmd.as_ref(), Some(Cmd::DevCommand(_))) {
             return Err(EngineError::Illegal("dev commands are not enabled"));
         }
-        let result = self.dispatch_command(player, cmd);
+        // `set_tapped` appends to this while the command runs; anything left over from an earlier
+        // command (or from a rejected one, which never drains) is stale by definition.
+        self.state.untapped_this_command.clear();
+        let mut result = self.dispatch_command(player, cmd);
         // Replay determinism: `command_index` seeds shuffles (mulligan/search) and stamps
         // continuous-effect timestamps (CR 613.7). Only a command that is actually applied may
         // advance it — a rejected command must leave it untouched, otherwise replay (which
@@ -373,6 +409,21 @@ impl GameEngine {
         // diverge from live play.
         if result.is_ok() {
             self.state.command_index += 1;
+        }
+        // CR 701.20: report the becomes-untapped edges this command produced, so Servatrice can
+        // apply them without having to guess which mid-turn untaps are legitimate. Drained (not
+        // just read) so the next command starts from an empty log.
+        let untapped = std::mem::take(&mut self.state.untapped_this_command);
+        if let Ok(batch) = result.as_mut() {
+            if !untapped.is_empty() {
+                batch.events.push(RuledEvent {
+                    ev: Some(rv1::ruled_event::Ev::PermanentsUntapped(
+                        rv1::PermanentsUntapped {
+                            object_ids: untapped,
+                        },
+                    )),
+                });
+            }
         }
         result
     }

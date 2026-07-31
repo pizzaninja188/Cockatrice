@@ -1,4 +1,5 @@
 use super::*;
+use crate::engine::set_tapped;
 
 pub(super) fn destroy_all(
     cx: &mut EffectCx<'_>,
@@ -65,6 +66,46 @@ pub(super) fn destroy_all(
             events,
         );
     }
+
+    Ok(EffectOutcome::Continue)
+}
+
+pub(super) fn untap_all(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::UntapAll { players, filter } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let controller = cx.controller;
+    let engine = &mut *cx.engine;
+
+    // CR 701.20: untargeted, so hexproof/shroud are irrelevant and the battlefield is snapshotted
+    // as this resolves. `filter` selects what (creature / any permanent), `players` selects whose
+    // — the filter's `only_controller` cannot: untargeted selection has no activating player for
+    // `battlefield_objects_matching` to compare against.
+    let affected: Vec<_> = battlefield_objects_matching(engine, &filter)
+        .into_iter()
+        .filter(|oid| {
+            engine
+                .characteristics(*oid)
+                .is_some_and(|characteristics| match players {
+                    RelativePlayerSet::Controller => characteristics.controller == controller,
+                    RelativePlayerSet::Opponents => characteristics.controller != controller,
+                    RelativePlayerSet::All => true,
+                })
+        })
+        .collect();
+    let mut untapped = 0;
+    for oid in affected {
+        if set_tapped(&mut engine.state, oid, false) {
+            untapped += 1;
+        }
+    }
+    cx.events.push(ev_log(format!(
+        "{} untaps {untapped} affected permanent(s)",
+        cx.spell_label
+    )));
 
     Ok(EffectOutcome::Continue)
 }

@@ -563,8 +563,8 @@ impl GameEngine {
         // is correct even when a permanent is controlled by someone other than its owner.
         if let Some(idx) = self.state.player_idx(ap) {
             for &oid in &self.state.players[idx].battlefield.clone() {
+                super::set_tapped(&mut self.state, oid, false);
                 if let Some(c) = self.state.objects.get_mut(&oid) {
-                    c.tapped = false;
                     c.summoning_sick = false;
                 }
             }
