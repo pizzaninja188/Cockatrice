@@ -1013,20 +1013,11 @@ impl GameEngine {
                 });
             }
         }
-        // Apply lifelink gains and emit LifeChanged events.
+        // Apply lifelink gains. Each entry is one creature's gain and stays a separate life-gain
+        // event (CR 702.15b): two lifelink creatures dealing damage in this step trigger a
+        // "whenever you gain life" ability twice, so these are deliberately not summed per player.
         for (pid, amount) in lifelink_gains {
-            if let Some(pi) = self.state.player_idx(pid) {
-                self.state.players[pi].life += amount as i32;
-                let new_total = self.state.players[pi].life;
-                events.push(rv1::RuledEvent {
-                    ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
-                        player_id: pid,
-                        new_total,
-                        delta: amount as i32,
-                    })),
-                });
-                events.push(ev_log(format!("P{pid} gains {amount} life (lifelink).")));
-            }
+            super::resolution::life::apply_life_gain(self, events, pid, amount, "lifelink");
         }
         for (att_id, def_id) in combat_dmg_to_player {
             self.fire_triggers(

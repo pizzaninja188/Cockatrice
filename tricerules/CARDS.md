@@ -13831,7 +13831,7 @@ Legend: `[x]` = fully implemented · `[ ] 🟡 partial` = partially implemented 
 - [ ] Aether Adept
 - [ ] Air Servant
 - [ ] Ajani's Mantra
-- [ ] Ajani's Pridemate
+- [x] Ajani's Pridemate
 - [ ] Angelic Arbiter
 - [ ] Arc Runner
 - [x] Armored Cancrix
@@ -21814,7 +21814,7 @@ Legend: `[x]` = fully implemented · `[ ] 🟡 partial` = partially implemented 
 - [ ] Blood Burglar
 - [ ] Blood for Bones
 - [ ] Bloodsoaked Altar
-- [ ] Bloodthirsty Aerialist
+- [x] Bloodthirsty Aerialist
 - [ ] Boneclad Necromancer
 - [ ] Boreal Elemental
 - [ ] Brightwood Tracker

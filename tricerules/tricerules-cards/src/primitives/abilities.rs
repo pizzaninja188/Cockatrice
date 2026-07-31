@@ -77,6 +77,18 @@ pub enum TriggerCondition {
         #[serde(default)]
         exclude_self: bool,
     },
+    /// Whenever a player gains life (CR 118.3). The lifegain-payoff analog of
+    /// [`Self::WheneverPlayerCastsSpell`]: `player` filters whose life gain counts, relative to
+    /// the source permanent's controller. Covers "whenever you gain life" (Ajani's Pridemate,
+    /// Bloodthirsty Aerialist, Marauding Blight-Priest) and opponent-watching payoffs
+    /// (`Opponent`). Fires once per life-gain event regardless of the amount, so a single
+    /// 3-life gain triggers it once.
+    WheneverPlayerGainsLife {
+        /// Whose life gain triggers this, relative to the source permanent's controller.
+        /// Defaults to `Controller` ("whenever you gain life").
+        #[serde(default)]
+        player: CastTriggerPlayer,
+    },
 }
 
 fn any_player_trigger() -> CastTriggerPlayer {

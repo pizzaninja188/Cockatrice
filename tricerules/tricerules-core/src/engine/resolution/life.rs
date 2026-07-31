@@ -1,5 +1,43 @@
 use super::*;
 
+/// CR 118.3: `player` gains `amount` life — emit `LifeChanged`, log it, and fire
+/// [`GameEvent::LifeGained`].
+///
+/// The single funnel for every life *gain* edge (spell effects, drain, exile-for-life, lifelink),
+/// the gain-side analog of `engine::set_tapped`: a "whenever you gain life" trigger hangs off this
+/// one call instead of auditing every mutation site. Life *loss* has no such funnel yet — no
+/// implemented card watches for it.
+///
+/// One call is one life-gain event, so callers must not pre-sum unrelated gains: two lifelink
+/// creatures in the same damage step gain separately and trigger separately. A gain of 0 is not an
+/// event (CR 118.4) — no life change, no log line, no trigger.
+///
+/// `reason` is the parenthetical shown in the game log (a spell label, or "lifelink").
+pub(in crate::engine) fn apply_life_gain(
+    engine: &mut GameEngine,
+    events: &mut Vec<rv1::RuledEvent>,
+    player: PlayerId,
+    amount: u32,
+    reason: &str,
+) {
+    if amount == 0 {
+        return;
+    }
+    let Some(pi) = engine.state.player_idx(player) else {
+        return;
+    };
+    engine.state.players[pi].life += amount as i32;
+    events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+            player_id: player,
+            new_total: engine.state.players[pi].life,
+            delta: amount as i32,
+        })),
+    });
+    events.push(ev_log(format!("P{player} gains {amount} life ({reason}).")));
+    engine.fire_triggers(GameEvent::LifeGained { player }, events);
+}
+
 pub(super) fn gain_life(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -14,18 +52,7 @@ pub(super) fn gain_life(
     let spell_label = cx.spell_label;
 
     let amount = amount.resolve(top.chosen_x);
-    let pi = engine.state.player_idx(controller).unwrap();
-    engine.state.players[pi].life += amount as i32;
-    events.push(rv1::RuledEvent {
-        ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
-            player_id: controller,
-            new_total: engine.state.players[pi].life,
-            delta: amount as i32,
-        })),
-    });
-    events.push(ev_log(format!(
-        "P{controller} gains {amount} life ({spell_label})."
-    )));
+    apply_life_gain(engine, events, controller, amount, spell_label);
 
     Ok(EffectOutcome::Continue)
 }
@@ -110,17 +137,7 @@ pub(super) fn target_player_gains_life(
     if let Some(&tid) = targets.first() {
         if let Some(pi) = engine.state.player_idx(tid as i32) {
             let pid = engine.state.players[pi].id;
-            engine.state.players[pi].life += amount as i32;
-            events.push(rv1::RuledEvent {
-                ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
-                    player_id: pid,
-                    new_total: engine.state.players[pi].life,
-                    delta: amount as i32,
-                })),
-            });
-            events.push(ev_log(format!(
-                "P{pid} gains {amount} life ({spell_label})."
-            )));
+            apply_life_gain(engine, events, pid, amount, spell_label);
         }
     }
 
@@ -194,21 +211,8 @@ pub(super) fn each_opponent_loses_life_you_gain_equal(
             "P{pid} loses {amount} life ({spell_label})."
         )));
     }
-    if total_lost > 0 {
-        if let Some(ci) = engine.state.player_idx(controller) {
-            engine.state.players[ci].life += total_lost as i32;
-            events.push(rv1::RuledEvent {
-                ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
-                    player_id: controller,
-                    new_total: engine.state.players[ci].life,
-                    delta: total_lost as i32,
-                })),
-            });
-            events.push(ev_log(format!(
-                "P{controller} gains {total_lost} life ({spell_label})."
-            )));
-        }
-    }
+    // One event, not one per opponent: the card gains "that much life" as a single amount.
+    apply_life_gain(engine, events, controller, total_lost, spell_label);
 
     Ok(EffectOutcome::Continue)
 }
@@ -241,19 +245,7 @@ pub(super) fn drain_target(
                 "P{pid} loses {amount} life ({spell_label})."
             )));
         }
-        if let Some(ci) = engine.state.player_idx(controller) {
-            engine.state.players[ci].life += amount as i32;
-            events.push(rv1::RuledEvent {
-                ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
-                    player_id: controller,
-                    new_total: engine.state.players[ci].life,
-                    delta: amount as i32,
-                })),
-            });
-            events.push(ev_log(format!(
-                "P{controller} gains {amount} life ({spell_label})."
-            )));
-        }
+        apply_life_gain(engine, events, controller, amount, spell_label);
     }
 
     Ok(EffectOutcome::Continue)

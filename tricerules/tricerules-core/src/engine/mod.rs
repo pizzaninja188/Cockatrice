@@ -83,6 +83,14 @@ enum GameEvent {
         defender_id: PlayerId,
     },
     UpkeepBegin,
+    /// A player gained life (CR 118.3). One event per life-gain *event*, not per point: gaining 3
+    /// life fires this once, while two lifelink creatures dealing damage in the same combat-damage
+    /// step fire it twice. Emitted only by `resolution::life::apply_life_gain`, the single funnel
+    /// for every gain edge. The amount is deliberately not carried — no trigger reads it; a
+    /// "gain that much" payoff adds it with its first card.
+    LifeGained {
+        player: PlayerId,
+    },
     /// Fired when a spell is put on the stack (CR 601.2; triggers on cast, not resolution).
     SpellCast {
         caster: PlayerId,
