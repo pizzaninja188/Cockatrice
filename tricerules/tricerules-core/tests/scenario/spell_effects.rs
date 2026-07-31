@@ -1896,8 +1896,13 @@ fn zombify_cannot_target_an_opponents_graveyard() {
 // ---------------------------------------------------------------------------
 // LoseLife (Thoughtseize)
 
-/// Thoughtseize costs its caster 2 life on resolution (CR 118), and does so even though the
-/// discard half suspends resolution for the caster's choice.
+/// Thoughtseize costs its caster 2 life on resolution (CR 118) in its printed order: *after* the
+/// discard, which suspends resolution for the caster's choice.
+///
+/// This is the regression test for `docs/issues.md` #36 — a suspending effect used to end the
+/// resolution outright, silently dropping every effect after it in the list. Thoughtseize's RON
+/// was reordered to dodge that; it is back in Oracle order, so the `LoseLife` here only happens if
+/// `complete_parked_resolution` really does resume the tail.
 #[test]
 fn thoughtseize_caster_loses_two_life() {
     let decks = Some(vec![
@@ -1933,35 +1938,93 @@ fn thoughtseize_caster_loses_two_life() {
         .apply_command(1, &pass())
         .expect("p1 pass — thoughtseize parks for the discard choice");
 
-    // The life loss is declared before the suspending discard, so it has already been applied
-    // while the engine waits for the choice.
+    // The life loss comes after the suspending discard, so it has *not* happened yet while the
+    // engine waits for the choice.
+    assert!(
+        e.state.pending_resolution.is_some(),
+        "resolution parks for the discard choice"
+    );
     assert_eq!(
-        e.state.players[0].life,
-        life_before - 2,
-        "caster loses 2 life"
+        e.state.players[0].life, life_before,
+        "no life is lost before the choice is answered"
     );
     assert!(
-        life_changes_in(&resolve_batch)
-            .iter()
-            .any(|lc| lc.player_id == 0 && lc.delta == -2),
-        "a LifeChanged(-2) event reaches the clients"
+        life_changes_in(&resolve_batch).is_empty(),
+        "no LifeChanged event yet"
     );
     assert_eq!(
         e.state.players[1].life, opponent_life_before,
         "the target player's life is untouched"
     );
 
-    e.apply_command(0, &submit_resolution_choice(vec![bear_oid]))
+    let resume_batch = e
+        .apply_command(0, &submit_resolution_choice(vec![bear_oid]))
         .expect("P0 submits choice");
 
     assert!(
         e.state.players[1].graveyard.contains(&bear_oid),
         "the chosen card is discarded"
     );
+    // #36: the effect after the suspending one runs on resume.
     assert_eq!(
         e.state.players[0].life,
         life_before - 2,
-        "life loss is not applied twice across the park/resume"
+        "caster loses 2 life once the parked resolution resumes"
+    );
+    assert!(
+        life_changes_in(&resume_batch)
+            .iter()
+            .any(|lc| lc.player_id == 0 && lc.delta == -2),
+        "a LifeChanged(-2) event reaches the clients on the resume batch"
+    );
+    assert_eq!(
+        e.state.players[1].life, opponent_life_before,
+        "the target player's life is still untouched"
+    );
+}
+
+/// #36, the straight-through half: a caster-chooses `DiscardCards` against an *empty* hand does
+/// not park at all, so the life loss must still happen on the same batch. The two paths were
+/// order-of-magnitude inconsistent for the same card before the fix — this one kept its second
+/// effect while the parking path above silently dropped it.
+#[test]
+fn thoughtseize_loses_life_even_when_the_discard_does_not_park() {
+    let decks = Some(vec![
+        deck_with("swamp", &["thoughtseize"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(3011, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Empty P1 hand: nothing to choose from, so the discard resolves without suspending.
+    let cleared: Vec<_> = e.state.players[1].hand.drain(..).collect();
+    e.state.players[1].library.extend(cleared);
+
+    relocate_to_hand(&mut e, 0, "thoughtseize");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            ..Default::default()
+        },
+    );
+    let life_before = e.state.players[0].life;
+
+    let idx = hand_index_for_card(&e, 0, "thoughtseize");
+    e.apply_command(0, &cast_spell(idx, target_player(1)))
+        .expect("cast thoughtseize");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    e.apply_command(1, &pass()).expect("p1 pass — resolves");
+
+    assert!(
+        e.state.pending_resolution.is_none(),
+        "an empty hand offers no choice, so nothing parks"
+    );
+    assert_eq!(
+        e.state.players[0].life,
+        life_before - 2,
+        "caster loses 2 life"
     );
 }
 

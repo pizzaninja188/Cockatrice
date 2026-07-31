@@ -204,6 +204,10 @@ pub(super) fn copy_target_spell(
                         search_destination: SearchDestination::Hand,
                         search_shuffle: false,
                         search_reveal: false,
+                        // The parked item is the *copy* being retargeted, not the effect list this
+                        // runs inside, so there is no tail here to resume. `CopyTargetSpell`
+                        // itself returns `Continue`, and its own list carries on normally.
+                        resume_effect_index: None,
                     });
                     // Copy will be pushed to the stack after target is submitted.
                 } else {

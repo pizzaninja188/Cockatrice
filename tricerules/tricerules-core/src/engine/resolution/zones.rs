@@ -1,3 +1,5 @@
+use super::super::events::ev_log_private;
+use super::candidate_identities;
 use super::*;
 
 pub(super) fn draw(
@@ -278,6 +280,8 @@ pub(super) fn discard_cards(
                         search_destination: SearchDestination::Hand,
                         search_shuffle: false,
                         search_reveal: false,
+                        // Stamped by `run_effect_list` once it sees the `Suspended` below.
+                        resume_effect_index: None,
                     });
                     return Ok(EffectOutcome::Suspended);
                 }
@@ -417,6 +421,8 @@ pub(super) fn target_player_sacrifices(
                     search_destination: SearchDestination::default(),
                     search_shuffle: false,
                     search_reveal: false,
+                    // Stamped by `run_effect_list` once it sees the `Suspended` below.
+                    resume_effect_index: None,
                 });
                 return Ok(EffectOutcome::Suspended);
             }
@@ -508,6 +514,102 @@ pub(super) fn return_from_graveyard(
     Ok(EffectOutcome::Continue)
 }
 
+/// CR 701.18: look at the top N cards of your library, then decide which go to the bottom and in
+/// what order the rest sit on top.
+///
+/// Parks the first of up to two interrupts (see `finish_scry` for the second). The cards stay in
+/// the library throughout — scry reorders a hidden zone, it does not move cards through zones — so
+/// nothing here touches `move_object_to_zone` and no zone-change trigger can see it. Only the
+/// *count* is public; the card names go to the scrying player alone.
+pub(super) fn scry(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::Scry { count } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let engine = &mut *cx.engine;
+    let events = &mut *cx.events;
+    let top = cx.top;
+    let controller = cx.controller;
+    let spell_label = cx.spell_label;
+
+    let Some(idx) = engine.state.player_idx(controller) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    // CR 701.18b: scrying fewer cards than asked for is legal — you look at as many as there are.
+    let candidates: Vec<ObjectId> = engine.state.players[idx]
+        .library
+        .iter()
+        .take(count as usize)
+        .copied()
+        .collect();
+    let n = candidates.len() as u32;
+    if n == 0 {
+        events.push(ev_log(format!(
+            "P{controller} scries {count} with an empty library ({spell_label})."
+        )));
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let (candidate_card_ids, candidate_names) = candidate_identities(engine, &candidates);
+    let prompt = format!(
+        "Scry {n}: click any number of cards to put on the bottom of your library — they go down \
+         in the order you click them, so the last one ends up bottom-most. The rest stay on top."
+    );
+    events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                deciding_player_id: controller,
+                source_object_id: top.id,
+                prompt_text: prompt.clone(),
+                choice_kind: custom::ChoiceKind::LibraryTop as i32,
+                candidate_object_ids: candidates.clone(),
+                candidate_card_ids,
+                candidate_names: candidate_names.clone(),
+                min: 0,
+                max: n,
+                // CR 701.18a puts the bottomed cards down "in any order", and `finish_scry`
+                // seats them in submitted order — so the order is load-bearing here, not
+                // incidental.
+                ordered: true,
+                unique_names: false,
+                candidate_server_card_ids: Vec::new(),
+            },
+        )),
+    });
+    // The count is public knowledge; what was seen is not.
+    events.push(ev_log(format!("P{controller} scries {n} ({spell_label}).")));
+    events.push(ev_log_private(
+        format!("P{controller} looks at {}.", candidate_names.join(", ")),
+        controller,
+    ));
+    engine.state.pending_resolution = Some(PendingResolution {
+        item: top.clone(),
+        custom_key: "__scry".to_string(),
+        step: 0,
+        // The looked-at set: `finish_scry` needs it to work out which cards were *not* sent to
+        // the bottom, since the choice only names the ones that were.
+        scratch: candidates.clone(),
+        deciding_player: controller,
+        candidates,
+        min: 0,
+        max: n,
+        ordered: true,
+        unique_names: false,
+        prompt,
+        choice_kind: custom::ChoiceKind::LibraryTop,
+        copy_source_object_id: 0,
+        search_destination: SearchDestination::default(),
+        search_shuffle: false,
+        search_reveal: false,
+        // Stamped by `run_effect_list` once it sees the `Suspended` below — this is what makes
+        // `[Scry, Draw]` (Preordain, Opt) draw the card after the scry decision.
+        resume_effect_index: None,
+    });
+    Ok(EffectOutcome::Suspended)
+}
+
 pub(super) fn search_library(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -549,27 +651,7 @@ pub(super) fn search_library(
             spell_type_filter_desc(f)
         ),
     };
-    let candidate_card_ids: Vec<String> = candidates
-        .iter()
-        .map(|&oid| {
-            engine
-                .state
-                .objects
-                .get(&oid)
-                .map(|o| o.card_id.clone())
-                .unwrap_or_default()
-        })
-        .collect();
-    let candidate_names: Vec<String> = candidate_card_ids
-        .iter()
-        .map(|cid| {
-            engine
-                .registry
-                .get(cid)
-                .map(|d| d.name.clone())
-                .unwrap_or_else(|| cid.clone())
-        })
-        .collect();
+    let (candidate_card_ids, candidate_names) = candidate_identities(engine, &candidates);
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
@@ -606,6 +688,8 @@ pub(super) fn search_library(
         search_destination: destination,
         search_shuffle: shuffle,
         search_reveal: reveal,
+        // Stamped by `run_effect_list` once it sees the `Suspended` below.
+        resume_effect_index: None,
     });
     // Resolution is now parked; the "resolves." log is emitted by finish_library_search.
     Ok(EffectOutcome::Suspended)

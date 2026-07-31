@@ -445,9 +445,14 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         return;
     }
 
-    if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH &&
+    if ((rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH ||
+         rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP) &&
         rcr.candidate_server_card_ids_size() == rcr.candidate_names_size() && rcr.candidate_names_size() > 0) {
-        // LibrarySearch with server card ids: deck zone-view pick.
+        // LibrarySearch or LibraryTop with server card ids: deck zone-view pick. Both show cards
+        // out of the local library, so they share the popup — only the title differs.
+        // LIBRARY_TOP is CR 701.18 scry, which may arrive twice for one spell: once to pick the
+        // cards going to the bottom (min 0), then, if two or more stay on top, ordered to arrange
+        // them. Click order carries the ordering, exactly as it does for Brainstorm's hand pick.
         // unique_names is always true for Gifts Ungiven step 1.
         PendingChoice pick;
         pick.kind = ChoiceKind::ResolutionPick;
@@ -456,7 +461,8 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         pick.uniqueNames = rcr.unique_names();
         pick.promptText = QString::fromStdString(rcr.prompt_text());
         pick.pickZone = PickZone::Deck;
-        pick.viewTitle = tr("Search your library");
+        pick.viewTitle =
+            rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP ? tr("Scry") : tr("Search your library");
         QVector<int> libScids;
         for (int i = 0; i < rcr.candidate_names_size(); ++i) {
             const quint32 oid = (i < rcr.candidate_object_ids_size()) ? rcr.candidate_object_ids(i) : 0;

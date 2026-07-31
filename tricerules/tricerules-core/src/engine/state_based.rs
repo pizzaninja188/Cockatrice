@@ -391,6 +391,8 @@ impl GameEngine {
                 search_destination: SearchDestination::default(),
                 search_shuffle: false,
                 search_reveal: false,
+                // An SBA, not a spell resolution: `item` is a dummy with no effect list.
+                resume_effect_index: None,
             });
             return Ok(true);
         }

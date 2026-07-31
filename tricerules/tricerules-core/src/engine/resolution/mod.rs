@@ -39,6 +39,11 @@ enum EffectOutcome {
     Suspended,
 }
 
+/// One entry of a resolving stack item's flattened effect list: the primitive, the targets it was
+/// cast with, and the per-target damage split. A modal spell contributes one entry per effect of
+/// each chosen mode, so targets are per-entry rather than per-item.
+type ResolutionEffect = (SpellEffectKind, Vec<ObjectId>, Vec<u32>);
+
 impl GameEngine {
     pub(super) fn resolve_top_of_stack(
         &mut self,
@@ -142,12 +147,60 @@ impl GameEngine {
             }
         }
 
+        // Tier-3 (CR 608): a custom effect owns this spell's resolution. The spell card has
+        // already moved to its zone (graveyard/battlefield above); hand off the algorithm to the
+        // registered `CardEffect`, which either completes now or parks awaiting a player choice.
+        // A copy is excluded: the resumable custom machinery (`begin_custom_resolution`) expects the
+        // spell's backing `GameObject`, which a copy lacks. Copying a tier-3 spell is a documented
+        // limitation (the copy resolves its non-custom effects only, if any).
+        if !is_ability && !top.is_copy {
+            let custom_key = self
+                .registry
+                .get(&card_id)
+                .and_then(|d| d.face(top.face_index))
+                .and_then(|f| f.custom_effect.clone());
+            if let Some(custom_key) = custom_key {
+                return self.begin_custom_resolution(top, custom_key, events);
+            }
+        }
+
+        let (resolution_effects, spell_label) = self.build_resolution_effects(&top);
+
+        // CR 608.2b: targets are checked once, at the start of resolution — not again on resume.
+        let targeted_effects: Vec<_> = resolution_effects
+            .iter()
+            .filter(|(effect, _, _)| spell_effect_kind_needs_target(effect))
+            .collect();
+        let fizzle = !targeted_effects.is_empty()
+            && targeted_effects.iter().all(|(effect, mode_targets, _)| {
+                !effect_has_legal_target_at_resolution(self, effect, mode_targets, controller)
+            });
+        if fizzle {
+            events.push(ev_log(format!("{spell_label} fizzles (no legal targets).")));
+            return Ok(());
+        }
+
+        self.run_effect_list(&top, &spell_label, resolution_effects, 0, events)
+    }
+
+    /// Rebuild a stack item's primitive effect list and display label.
+    ///
+    /// Pure function of the [`StackItem`] plus the registry, which is what lets a parked
+    /// resolution resume its tail: nothing about the list has to be stored across the park, only
+    /// the index to restart from (`PendingResolution::resume_effect_index`).
+    pub(super) fn build_resolution_effects(
+        &self,
+        top: &StackItem,
+    ) -> (Vec<ResolutionEffect>, String) {
+        let is_ability = top.ability_text.is_some();
+        let card_id: &str = &top.card_id;
+
         // Determine effects: for spells use spell_effect (Vec); for abilities wrap the single
         // effect. Triggered and activated abilities are now uniform — both carry a plain
         // `SpellEffectKind` (self-referencing effects use a `Self_` target filter, bound below).
         let (effects, spell_label): (Vec<SpellEffectKind>, String) = if is_ability {
             let ability_index = top.ability_index.unwrap_or(0);
-            let def = self.registry.get(&card_id);
+            let def = self.registry.get(card_id);
             let name = def
                 .map(|d| d.name.clone())
                 .unwrap_or_else(|| "Ability".into());
@@ -167,7 +220,7 @@ impl GameEngine {
             // CR 709/712/715: resolve the cast face's effects and show its name.
             let face = self
                 .registry
-                .get(&card_id)
+                .get(card_id)
                 .and_then(|d| d.face(top.face_index));
             let effects = face.map(|f| f.spell_effect.to_vec()).unwrap_or_default();
             let name = face
@@ -176,28 +229,11 @@ impl GameEngine {
             (effects, name)
         };
 
-        // Tier-3 (CR 608): a custom effect owns this spell's resolution. The spell card has
-        // already moved to its zone (graveyard/battlefield above); hand off the algorithm to the
-        // registered `CardEffect`, which either completes now or parks awaiting a player choice.
-        // A copy is excluded: the resumable custom machinery (`begin_custom_resolution`) expects the
-        // spell's backing `GameObject`, which a copy lacks. Copying a tier-3 spell is a documented
-        // limitation (the copy resolves its non-custom effects only, if any).
-        if !is_ability && !top.is_copy {
-            let custom_key = self
-                .registry
-                .get(&card_id)
-                .and_then(|d| d.face(top.face_index))
-                .and_then(|f| f.custom_effect.clone());
-            if let Some(custom_key) = custom_key {
-                return self.begin_custom_resolution(top, custom_key, events);
-            }
-        }
-
-        let mut resolution_effects: Vec<(SpellEffectKind, Vec<ObjectId>, Vec<u32>)> = Vec::new();
+        let mut resolution_effects: Vec<ResolutionEffect> = Vec::new();
         if !is_ability && !top.chosen_modes.is_empty() {
             if let Some(modal) = self
                 .registry
-                .get(&card_id)
+                .get(card_id)
                 .and_then(|definition| definition.face(top.face_index))
                 .and_then(|face| face.modal_spell.as_ref())
             {
@@ -217,24 +253,31 @@ impl GameEngine {
             resolution_effects.extend(
                 effects
                     .into_iter()
-                    .map(|effect| (effect, targets.clone(), top.target_damage.clone())),
+                    .map(|effect| (effect, top.targets.clone(), top.target_damage.clone())),
             );
         }
 
-        let targeted_effects: Vec<_> = resolution_effects
-            .iter()
-            .filter(|(effect, _, _)| spell_effect_kind_needs_target(effect))
-            .collect();
-        let fizzle = !targeted_effects.is_empty()
-            && targeted_effects.iter().all(|(effect, mode_targets, _)| {
-                !effect_has_legal_target_at_resolution(self, effect, mode_targets, controller)
-            });
-        if fizzle {
-            events.push(ev_log(format!("{spell_label} fizzles (no legal targets).")));
-            return Ok(());
-        }
+        (resolution_effects, spell_label)
+    }
 
-        for (effect, effect_targets, effect_target_damage) in resolution_effects {
+    /// Run a stack item's primitive effects from `start` onwards, then close the resolution.
+    ///
+    /// Entered twice for a spell whose effect suspends: once from `resolve_top_of_stack` at index
+    /// 0, and again from `complete_parked_resolution` at the index stamped below, once the player
+    /// has answered. CR 608.2: the whole list runs, so an effect that parks for a choice must not
+    /// swallow the effects after it (this is what `docs/issues.md` #36 tracked).
+    pub(super) fn run_effect_list(
+        &mut self,
+        top: &StackItem,
+        spell_label: &str,
+        resolution_effects: Vec<ResolutionEffect>,
+        start: usize,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let controller = top.controller;
+        for (index, (effect, effect_targets, effect_target_damage)) in
+            resolution_effects.into_iter().enumerate().skip(start)
+        {
             if spell_effect_kind_needs_target(&effect)
                 && !effect_has_legal_target_at_resolution(
                     self,
@@ -251,9 +294,9 @@ impl GameEngine {
                     events,
                     targets: &effect_targets,
                     target_damage: &effect_target_damage,
-                    top: &top,
+                    top,
                     controller,
-                    spell_label: &spell_label,
+                    spell_label,
                 };
                 match effect {
                     effect @ SpellEffectKind::DamageTarget { .. } => {
@@ -263,6 +306,7 @@ impl GameEngine {
                         damage::damage_targets(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::Draw { .. } => zones::draw(&mut cx, effect)?,
+                    effect @ SpellEffectKind::Scry { .. } => zones::scry(&mut cx, effect)?,
                     effect @ SpellEffectKind::PumpTarget { .. } => {
                         pump_counters::pump_target(&mut cx, effect)?
                     }
@@ -362,12 +406,16 @@ impl GameEngine {
                 }
             };
             if outcome == EffectOutcome::Suspended {
-                // KNOWN GAP: the `finish_*` paths in `custom_resolution.rs` complete the parked
-                // effect and end the resolution, so any effect *after* a suspending one in this
-                // list never runs. Harmless today only because every card either suspends in its
-                // last effect or not at all (Thoughtseize's RON reorders for exactly this
-                // reason). Resuming the tail means parking the remaining effect index alongside
-                // the choice — do that before shipping a card that needs it.
+                // The handler parked a `PendingResolution` for a player choice; stamp where to
+                // pick this list back up so `complete_parked_resolution` runs the tail (CR 608.2)
+                // rather than ending the resolution here. Handlers do not set this themselves —
+                // they have no idea which list they are a member of, or at what index.
+                //
+                // `if let` because `search_library`'s degenerate empty-library branch reports
+                // `Suspended` without parking anything; there is then nothing to stamp.
+                if let Some(pending) = self.state.pending_resolution.as_mut() {
+                    pending.resume_effect_index = Some(index as u32 + 1);
+                }
                 return Ok(());
             }
         }
@@ -490,6 +538,37 @@ impl GameEngine {
             )));
         }
     }
+}
+
+/// The `(card_id, display name)` pair for each of `oids`, in order — the two parallel candidate
+/// arrays a [`rv1::ResolutionChoiceRequired`] carries. Names come from the tricerules registry,
+/// never Oracle.
+pub(crate) fn candidate_identities(
+    engine: &GameEngine,
+    oids: &[ObjectId],
+) -> (Vec<String>, Vec<String>) {
+    let card_ids: Vec<String> = oids
+        .iter()
+        .map(|&oid| {
+            engine
+                .state
+                .objects
+                .get(&oid)
+                .map(|o| o.card_id.clone())
+                .unwrap_or_default()
+        })
+        .collect();
+    let names = card_ids
+        .iter()
+        .map(|cid| {
+            engine
+                .registry
+                .get(cid)
+                .map(|d| d.name.clone())
+                .unwrap_or_else(|| cid.clone())
+        })
+        .collect();
+    (card_ids, names)
 }
 
 pub(super) fn draw_card(

@@ -1,0 +1,12 @@
+(
+  id: "preordain",
+  name: "Preordain",
+  mana_cost: "{U}",
+  types: ["Sorcery"],
+  // "Scry 2, then draw a card." Keeping both scried cards on top prompts a second, ordering
+  // choice (CR 701.18a) before the draw resumes.
+  spell_effect: [
+    Scry(count: 2),
+    Draw(count: 1),
+  ],
+)

@@ -241,6 +241,12 @@ pub struct PendingResolution {
     pub search_shuffle: bool,
     /// For `__search_library` only: whether to publicly log the found card's name (reveal).
     pub search_reveal: bool,
+    /// Index into the resolving spell's rebuilt effect list of the *next* primitive to run once
+    /// this choice is answered (CR 608.2: a suspended effect must not swallow the rest of the
+    /// list). Stamped by `run_effect_list` on whatever the suspending handler parked, so handlers
+    /// themselves always write `None`. Stays `None` for parks that own no primitive effect list:
+    /// tier-3 [`crate::custom::CardEffect`]s, `__copy_targets`, and the `__legend_sba` SBA.
+    pub resume_effect_index: Option<u32>,
 }
 
 #[derive(Debug, Clone)]

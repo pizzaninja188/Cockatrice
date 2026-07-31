@@ -377,6 +377,47 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
                              [](const auto &event) { return event.has_log(); }));
 }
 
+// CR 701.18 scry looks at the top of a hidden zone, so LIBRARY_TOP must redact exactly like
+// LIBRARY_SEARCH: the scrying player sees the cards, everyone else sees only that a choice is
+// happening. Library cards have no Server_Card id, so the decider gets sequential indices.
+TEST_F(RuledBatchTest, LibraryTopChoiceIsPrivateToTheScryingPlayerWithSequentialCardIds)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(1);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_LIBRARY_TOP);
+    choice->set_prompt_text("Scry 2: choose any number of cards to put on the bottom");
+    choice->add_candidate_object_ids(77);
+    choice->add_candidate_object_ids(78);
+    choice->add_candidate_card_ids("island");
+    choice->add_candidate_card_ids("island");
+    choice->add_candidate_names("Island");
+    choice->add_candidate_names("Island");
+
+    const auto forP1 = redactFor(batch, p1);
+    const auto p1ChoiceIt = std::find_if(forP1.events().begin(), forP1.events().end(),
+                                         [](const auto &event) { return event.has_resolution_choice_required(); });
+    ASSERT_NE(p1ChoiceIt, forP1.events().end());
+    const auto &p1Choice = p1ChoiceIt->resolution_choice_required();
+    EXPECT_EQ(p1Choice.candidate_object_ids_size(), 2);
+    EXPECT_EQ(p1Choice.candidate_names_size(), 2);
+    // Duplicate names still get distinct ids, which is why the index scheme exists.
+    ASSERT_EQ(p1Choice.candidate_server_card_ids_size(), 2);
+    EXPECT_EQ(p1Choice.candidate_server_card_ids(0), 0);
+    EXPECT_EQ(p1Choice.candidate_server_card_ids(1), 1);
+
+    const auto forP2 = redactFor(batch, p2);
+    const auto p2ChoiceIt = std::find_if(forP2.events().begin(), forP2.events().end(),
+                                         [](const auto &event) { return event.has_resolution_choice_required(); });
+    ASSERT_NE(p2ChoiceIt, forP2.events().end());
+    const auto &p2Choice = p2ChoiceIt->resolution_choice_required();
+    EXPECT_EQ(p2Choice.candidate_object_ids_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_names_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_card_ids_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_server_card_ids_size(), 0);
+    EXPECT_EQ(p2Choice.prompt_text(), "Opponent is making a resolution choice.");
+}
+
 TEST_F(RuledBatchTest, ZoneViewBuildsOidMapAndPropagatesTapState)
 {
     Server_Card *bear = addCardToTable(p1, "Grizzly Bears");

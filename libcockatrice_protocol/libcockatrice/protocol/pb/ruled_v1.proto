@@ -510,8 +510,8 @@ message ManaPoolUpdated {
 
 // What the candidate object ids of a ResolutionChoiceRequired refer to, so the client can present
 // them correctly and — crucially — so Servatrice knows which ones expose a concealed zone. The
-// three *private* kinds (HAND_CARDS, LIBRARY_SEARCH, OPPONENT_HAND) are redacted from every player
-// but the decider; see isPrivateChoiceKind() next to the relay's redaction pass.
+// four *private* kinds (HAND_CARDS, LIBRARY_SEARCH, OPPONENT_HAND, LIBRARY_TOP) are redacted from
+// every player but the decider; see isPrivateChoiceKind() next to the relay's redaction pass.
 enum ChoiceKind {
   // Cards in the deciding player's own hand (Brainstorm: pick 2 to put back). Private.
   CHOICE_KIND_HAND_CARDS = 0;
@@ -532,6 +532,12 @@ enum ChoiceKind {
   // which is kept and the rest sacrificed. Public; like TARGET_OBJECTS the client uses
   // click-to-select on the battlefield instead of a list dialog.
   CHOICE_KIND_LEGEND_KEEP = 5;
+  // The top N cards of the deciding player's own library, looked at but not moved out of the
+  // library (CR 701.18 scry: Preordain, Opt). Emitted twice per scry when the player keeps more
+  // than one card on top — first to pick the ones going to the bottom (min 0), then ordered to
+  // arrange the rest. Private, and rendered by the client like CHOICE_KIND_LIBRARY_SEARCH: the
+  // relay has no Server_Card ids for library cards and substitutes sequential indices.
+  CHOICE_KIND_LIBRARY_TOP = 6;
 }
 
 // A parked custom resolution (CR 608) requesting input from one player. Reused by every tier-3
