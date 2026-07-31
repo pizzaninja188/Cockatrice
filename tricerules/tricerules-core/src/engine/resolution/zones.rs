@@ -554,7 +554,8 @@ pub(super) fn scry(
 
     let (candidate_card_ids, candidate_names) = candidate_identities(engine, &candidates);
     let prompt = format!(
-        "Scry {n}: choose any number of cards to put on the bottom of your library (the rest stay on top)."
+        "Scry {n}: click any number of cards to put on the bottom of your library — they go down \
+         in the order you click them, so the last one ends up bottom-most. The rest stay on top."
     );
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
@@ -568,7 +569,10 @@ pub(super) fn scry(
                 candidate_names: candidate_names.clone(),
                 min: 0,
                 max: n,
-                ordered: false,
+                // CR 701.18a puts the bottomed cards down "in any order", and `finish_scry`
+                // seats them in submitted order — so the order is load-bearing here, not
+                // incidental.
+                ordered: true,
                 unique_names: false,
                 candidate_server_card_ids: Vec::new(),
             },
@@ -591,7 +595,7 @@ pub(super) fn scry(
         candidates,
         min: 0,
         max: n,
-        ordered: false,
+        ordered: true,
         unique_names: false,
         prompt,
         choice_kind: custom::ChoiceKind::LibraryTop,

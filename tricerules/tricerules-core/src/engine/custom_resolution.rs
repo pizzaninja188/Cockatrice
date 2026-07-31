@@ -441,16 +441,17 @@ impl GameEngine {
 
     /// CR 701.18: apply one step of a scry.
     ///
-    /// Step 0's `chosen` is the set going to the bottom of the library, in the order they end up
-    /// there; the cards left over stay on top. If two or more stay on top the player still has an
-    /// ordering decision to make (CR 701.18a "in any order"), so a second interrupt is parked for
-    /// it — skipped when 0 or 1 card remains, where the "choice" has exactly one answer. Scry 1
-    /// therefore never reaches step 1.
+    /// Step 0's `chosen` is the set going to the bottom of the library; the cards left over stay
+    /// on top. If two or more stay on top the player still has an ordering decision to make
+    /// (CR 701.18a "in any order"), so a second interrupt is parked for it — skipped when 0 or 1
+    /// card remains, where the "choice" has exactly one answer. Scry 1 therefore never reaches
+    /// step 1.
     ///
-    /// Step 1's `chosen` is that ordering, **bottom first** — the *last* entry becomes the next
-    /// card drawn. Same convention as Brainstorm's tier-3 effect (last clicked ends on top), so
-    /// every ordered library-placement choice in the game reads the same way to the player; the
-    /// prompt text says so explicitly, since it is not self-evident from the UI.
+    /// **Both steps place cards one at a time, in submitted order, moving away from the middle of
+    /// the library.** Step 0 pushes each successive card further down, so its *last* entry is
+    /// bottom-most; step 1 pushes each successive card further up, so its *last* entry is the next
+    /// card drawn (matching Brainstorm's put-back). The two prompts spell their direction out,
+    /// since it is not self-evident from the UI.
     ///
     /// Both steps are pure reorders of the library `VecDeque`: scry looks at cards without moving
     /// them between zones, so nothing here goes through `move_object_to_zone` and no zone-change
@@ -468,7 +469,8 @@ impl GameEngine {
 
         if pending.step == 0 {
             // Everything looked at that was not sent to the bottom stays on top, keeping the
-            // library order it already had.
+            // library order it already had. The bottomed cards go down in submitted order
+            // (`push_back` each in turn), so the last one clicked ends up bottom-most.
             let remaining: Vec<ObjectId> = pending
                 .scratch
                 .iter()

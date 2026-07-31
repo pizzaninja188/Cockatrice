@@ -59,7 +59,8 @@ fn opt_bottoming_the_scried_card_draws_the_next_one() {
         (0, 1),
         "scry 1 bottoms zero or one card"
     );
-    assert!(!req.ordered, "the bottom pile needs no ordering for scry 1");
+    // CR 701.18a bottoms "in any order", and the engine seats them in submitted order.
+    assert!(req.ordered, "the bottom pile is ordered");
     assert_eq!(req.candidate_object_ids, vec![scried]);
     assert!(
         !e.state.players[0].hand.contains(&scried),
@@ -133,7 +134,7 @@ fn preordain_bottoming_both_skips_the_ordering_step() {
     assert_eq!(
         &library[library.len() - 2..],
         &[b, a],
-        "both sit at the bottom in the submitted order"
+        "cards go down in submitted order, so the last one clicked is bottom-most"
     );
     assert!(
         e.state.players[0].hand.contains(&third),
