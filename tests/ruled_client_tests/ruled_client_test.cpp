@@ -1214,7 +1214,8 @@ TEST_F(RuledClientTest, LibraryTopChoiceOpensTheScryViewAndSubmitsInClickOrder)
     ASSERT_EQ(host.sentCommands.size(), 1);
     const auto &sub = host.sentCommands[0].submit_resolution_choice();
     ASSERT_EQ(sub.chosen_object_ids_size(), 2);
-    // First clicked goes on top, so the engine reads the list top-first.
+    // Click order reaches the engine verbatim; it reads the list bottom-first, so the last card
+    // clicked here (21) is the one that ends up on top.
     EXPECT_EQ(sub.chosen_object_ids(0), 22u);
     EXPECT_EQ(sub.chosen_object_ids(1), 21u);
     EXPECT_FALSE(state->isResolutionHandPickActive());

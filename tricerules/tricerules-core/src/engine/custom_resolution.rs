@@ -447,9 +447,10 @@ impl GameEngine {
     /// it — skipped when 0 or 1 card remains, where the "choice" has exactly one answer. Scry 1
     /// therefore never reaches step 1.
     ///
-    /// Step 1's `chosen` is that ordering, **top first** — `chosen[0]` becomes the next card
-    /// drawn. (Brainstorm's tier-3 effect takes the opposite convention and reverses; the prompt
-    /// text here spells this one out, because the player sees the difference.)
+    /// Step 1's `chosen` is that ordering, **bottom first** — the *last* entry becomes the next
+    /// card drawn. Same convention as Brainstorm's tier-3 effect (last clicked ends on top), so
+    /// every ordered library-placement choice in the game reads the same way to the player; the
+    /// prompt text says so explicitly, since it is not self-evident from the UI.
     ///
     /// Both steps are pure reorders of the library `VecDeque`: scry looks at cards without moving
     /// them between zones, so nothing here goes through `move_object_to_zone` and no zone-change
@@ -502,12 +503,12 @@ impl GameEngine {
                 return self.park_scry_ordering(pending, remaining, ev);
             }
         } else {
-            // Step 1: `chosen` is every remaining card, top first. Pull them out and re-seat them
-            // in front, back-to-front, so `chosen[0]` ends up as the next draw.
+            // Step 1: `chosen` is every remaining card, bottom first. Pull them out and re-seat
+            // them in front in submitted order, so the *last* one ends up as the next draw.
             self.state.players[idx]
                 .library
                 .retain(|o| !chosen.contains(o));
-            for &oid in chosen.iter().rev() {
+            for &oid in chosen {
                 self.state.players[idx].library.push_front(oid);
             }
             ev.push(ev_log(format!(
@@ -539,7 +540,7 @@ impl GameEngine {
         let (candidate_card_ids, candidate_names) =
             super::resolution::candidate_identities(self, &remaining);
         let prompt = format!(
-            "Scry: click the {n} cards staying on top in order — the first one you click is the \
+            "Scry: click the {n} cards staying on top in order — the last one you click is the \
              next card you draw."
         );
         ev.push(rv1::RuledEvent {

@@ -167,18 +167,19 @@ fn preordain_keeping_both_asks_for_an_order_then_draws_the_new_top() {
         "the draw has not happened yet"
     );
 
-    // Swap them: first clicked ends up on top.
+    // Swap them. The submitted list is bottom-first, so the *last* entry ends up on top —
+    // the same convention as Brainstorm's put-back.
     e.apply_command(0, &submit_resolution_choice(vec![b, a]))
         .expect("submit the order");
 
     assert!(e.state.pending_resolution.is_none());
     assert!(
-        e.state.players[0].hand.contains(&b),
-        "the card put on top is the one drawn"
+        e.state.players[0].hand.contains(&a),
+        "the last card submitted went on top, so it is the one drawn"
     );
     assert_eq!(
-        e.state.players[0].library[0], a,
-        "the other kept card is now the top of the library"
+        e.state.players[0].library[0], b,
+        "the other kept card sits under it, now the top of the library"
     );
 }
 
