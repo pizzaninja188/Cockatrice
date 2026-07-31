@@ -2,18 +2,19 @@ use super::events::ev_log;
 use super::targeting::spell_effect_kind_needs_target;
 use super::*;
 
-/// One triggered ability about to be put on the stack (or parked for target selection) — the
-/// output of a trigger scan, resolved against the registry by [`GameEngine::push_trigger`].
-pub(super) struct TriggerToPush<'a> {
+/// One triggered ability that matched an event and is about to go on the stack (or be parked for
+/// target selection) — the unit a trigger scan yields and [`GameEngine::push_trigger`] consumes.
+///
+/// Identifies the ability by *source permanent + index*, never by a resolved effect: the effect is
+/// looked up from the registry at push and again at resolution, so a trigger surviving on the
+/// stack after its source leaves still knows what it does.
+pub(super) struct CollectedTrigger {
     pub source_id: ObjectId,
-    pub card_id: &'a str,
+    pub card_id: String,
     /// CR 603.3d: the ability's controller — the controller of its source permanent.
     pub controller: PlayerId,
     pub ability_index: usize,
     pub ability_text: String,
-    /// See [`StackItem::trigger_player`]: the player the effects act on when the trigger names
-    /// someone other than its controller. `None` for all but draw-step-style triggers.
-    pub trigger_player: Option<PlayerId>,
 }
 
 impl GameEngine {
@@ -22,29 +23,16 @@ impl GameEngine {
         if let GameEvent::EntersBattlefield { object_id } = &event {
             self.emit_static_abilities_on_enter(*object_id);
         }
-        let triggers = self.collect_triggers(&event);
+        // The beneficiary is a property of the *event* ("that player"), not of the ability that
+        // matched it, which is why it rides alongside the trigger rather than inside it.
         let trigger_player = Self::trigger_player_for(&event);
-        for (source_id, card_id, controller, ability_index, ability_text) in triggers {
-            self.push_trigger(
-                TriggerToPush {
-                    source_id,
-                    card_id: &card_id,
-                    controller,
-                    ability_index,
-                    ability_text,
-                    trigger_player,
-                },
-                events,
-            );
+        for trigger in self.collect_triggers(&event) {
+            self.push_trigger(trigger, trigger_player, events);
         }
     }
 
-    /// Collect `(source_id, card_id, controller, ability_index, ability_text)` for every triggered
-    /// ability whose condition matches `event`. Results are ordered APNAP (CR 603.3b).
-    pub(super) fn collect_triggers(
-        &self,
-        event: &GameEvent,
-    ) -> Vec<(ObjectId, String, PlayerId, usize, String)> {
+    /// Collect every triggered ability whose condition matches `event`, ordered APNAP (CR 603.3b).
+    pub(super) fn collect_triggers(&self, event: &GameEvent) -> Vec<CollectedTrigger> {
         let ap = self.state.active_player_id();
         match event {
             GameEvent::EntersBattlefield { object_id } => {
@@ -387,7 +375,7 @@ impl GameEngine {
         source_id: ObjectId,
         controller: PlayerId,
         filter: impl Fn(&TriggerCondition) -> bool,
-    ) -> Vec<(ObjectId, String, PlayerId, usize, String)> {
+    ) -> Vec<CollectedTrigger> {
         let Some(def) = self.registry.get(card_id) else {
             return vec![];
         };
@@ -402,14 +390,12 @@ impl GameEngine {
             // CR 603.4, first of the two checks: an intervening-"if" clause that is false as the
             // ability would go on the stack means it never triggers at all.
             .filter(|(_, ta)| self.intervening_if_holds(source_id, ta.intervening_if))
-            .map(|(idx, ta)| {
-                (
-                    source_id,
-                    card_id.to_string(),
-                    controller,
-                    idx,
-                    ta.text.clone(),
-                )
+            .map(|(idx, ta)| CollectedTrigger {
+                source_id,
+                card_id: card_id.to_string(),
+                controller,
+                ability_index: idx,
+                ability_text: ta.text.clone(),
             })
             .collect()
     }
@@ -445,20 +431,22 @@ impl GameEngine {
         }
     }
 
+    /// Put one collected trigger on the stack, or park it in `pending_triggers` when its effect
+    /// needs a target. `trigger_player` is the event's beneficiary (see [`Self::trigger_player_for`]).
     pub(super) fn push_trigger(
         &mut self,
-        trigger: TriggerToPush<'_>,
+        trigger: CollectedTrigger,
+        trigger_player: Option<PlayerId>,
         events: &mut Vec<rv1::RuledEvent>,
     ) {
-        let TriggerToPush {
+        let CollectedTrigger {
             source_id,
             card_id,
             controller,
             ability_index,
             ability_text,
-            trigger_player,
         } = trigger;
-        let def = match self.registry.get(card_id) {
+        let def = match self.registry.get(&card_id) {
             Some(d) => d.clone(),
             None => return,
         };
@@ -479,7 +467,7 @@ impl GameEngine {
                 source_permanent_id: source_id,
                 ability_index,
                 ability_text: ability_text.clone(),
-                card_id: card_id.to_string(),
+                card_id,
                 controller,
                 trigger_player,
             });
@@ -502,7 +490,7 @@ impl GameEngine {
             self.state.stack.push(StackItem {
                 id: virtual_id,
                 controller,
-                card_id: card_id.to_string(),
+                card_id,
                 targets: vec![],
                 ability_text: Some(ability_text.clone()),
                 source_permanent_id: Some(source_id),
