@@ -118,6 +118,9 @@ pub(super) fn copy_target_spell(
                     face_index: src.face_index,
                     target_damage: src.target_damage.clone(),
                     chosen_modes: src.chosen_modes.clone(),
+                    // CR 707.2: the copy has the original's characteristics and choices. `None`
+                    // for every spell today, but copying inherits it rather than dropping it.
+                    trigger_player: src.trigger_player,
                 };
                 // CR 707.10c: prompt for new targets on the first copy; push any
                 // additional copies immediately with the original targets.

@@ -15,9 +15,9 @@ use thiserror::Error;
 use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
     AbilityCost, AnthemController, AnthemFilter, CastTriggerPlayer, Color, ContinuousEffectKind,
-    CounterKind, EffectDuration, Keyword, LifeAmount, RelativePlayerSet, SearchDestination,
-    SpellEffectKind, SpellTypeFilter, StaticAbilityDef, TargetFilter, TargetKind, TokenController,
-    TriggerCondition,
+    CounterKind, EffectDuration, InterveningIf, Keyword, LifeAmount, RelativePlayerSet,
+    SearchDestination, SpellEffectKind, SpellTypeFilter, StaticAbilityDef, TargetFilter,
+    TargetKind, TokenController, TriggerCondition,
 };
 use tricerules_cards::{CardRegistry, FaceRef};
 use tricerules_proto::ruled::v1 as rv1;
@@ -83,6 +83,14 @@ enum GameEvent {
         defender_id: PlayerId,
     },
     UpkeepBegin,
+    /// CR 504: a draw step began. Fired *after* the turn-based draw (CR 504.1, which doesn't use
+    /// the stack) so draw-step triggers go on the stack on top of a hand that already contains
+    /// the normal draw (CR 504.2). `player` is the player whose draw step it is — the active
+    /// player — and becomes the trigger's affected player, so "that player draws an additional
+    /// card" (Howling Mine) benefits them rather than the source's controller.
+    DrawStepBegin {
+        player: PlayerId,
+    },
     /// A player gained life (CR 118.3). One event per life-gain *event*, not per point: gaining 3
     /// life fires this once, while two lifelink creatures dealing damage in the same combat-damage
     /// step fire it twice. Emitted only by `resolution::life::apply_life_gain`, the single funnel
