@@ -55,6 +55,26 @@ enum class RuledSessionResetScope : int
     KeepCurrentBatch,
 };
 
+/// Which UI object a targeting arrow's endpoint is, decided once when the target is first drawn
+/// and then fixed for the life of that stack object (CR 608.2b: a target that changes zones is a
+/// new object, so the arrow is stale rather than relocatable). Without the latch, an oid that
+/// lands in the graveyard map after its permanent dies would re-resolve to the graveyard pile and
+/// the arrow would point there instead of disappearing.
+enum class RuledTargetItemKind : int
+{
+    /// Not classified yet — no arrow endpoint has been resolved for this target.
+    Unknown,
+    /// A seat (player-targeting spell, e.g. Lightning Bolt to the face).
+    Player,
+    /// Another object on the stack (Counterspell).
+    Stack,
+    /// A card targeted while in a graveyard (Reanimate). The only kind that legitimately points at
+    /// a graveyard pile, and the only one that must survive a zone view opening or closing.
+    Graveyard,
+    /// A permanent on the battlefield — by far the common case.
+    Battlefield,
+};
+
 /// Engine-authoritative targeting data for one spell, mode, or activated ability.
 struct RuledSpellTargetData
 {
@@ -310,6 +330,38 @@ public:
     bool firstStrikeStepPending = false;
     // Stack spell engine ObjectId -> target object ids (or PlayerId for player-targeted damage).
     QHash<quint32, QVector<quint32>> stackTargetsByStackOid;
+    /// Where a target sat when it was targeted (CR 608.2b). Latched the first time a targeting
+    /// arrow resolves and never revised, because an object that changes zones becomes a new object
+    /// and is no longer the thing that was targeted: an arrow must vanish when its target dies, not
+    /// follow the card into the graveyard. Only a target chosen *in* a graveyard (Reanimate) points
+    /// there. Key is `(stack oid, target oid)` — see `stackTargetKey`.
+    QHash<quint64, RuledTargetItemKind> stackTargetKindByStackAndTargetOid;
+    /// Composite key for `stackTargetKindByStackAndTargetOid`; the same target oid can be aimed at
+    /// by two different stack objects.
+    static constexpr quint64 stackTargetKey(quint32 stackOid, quint32 targetOid)
+    {
+        return (static_cast<quint64>(stackOid) << 32) | targetOid;
+    }
+    /// The latched kind for one target, or `Unknown` if it has never been classified.
+    [[nodiscard]] RuledTargetItemKind latchedTargetKind(quint32 stackOid, quint32 targetOid) const
+    {
+        return stackTargetKindByStackAndTargetOid.value(stackTargetKey(stackOid, targetOid),
+                                                        RuledTargetItemKind::Unknown);
+    }
+    /// Record where a target lived when its arrow was first drawn. Write-once: a second call is
+    /// ignored, which is the invariant that keeps an arrow from following a dead permanent into the
+    /// graveyard. `Unknown` is never stored, so a target whose CardItem does not exist yet stays
+    /// unlatched and can be classified by a later sync.
+    void latchTargetKind(quint32 stackOid, quint32 targetOid, RuledTargetItemKind kind)
+    {
+        if (kind == RuledTargetItemKind::Unknown) {
+            return;
+        }
+        const quint64 key = stackTargetKey(stackOid, targetOid);
+        if (!stackTargetKindByStackAndTargetOid.contains(key)) {
+            stackTargetKindByStackAndTargetOid.insert(key, kind);
+        }
+    }
     // Stack ability engine ObjectId -> ability annotation text (empty string for spells).
     QHash<quint32, QString> stackAnnotationByOid;
     // Maps trigger stack OID → source permanent OID, for drawing the ability arrow from the source.

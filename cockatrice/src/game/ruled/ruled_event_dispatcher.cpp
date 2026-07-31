@@ -250,6 +250,7 @@ void RuledEventDispatcher::applyPhaseChanged(const ruled::v1::PhaseChanged &pc, 
     // Reaching a new phase guarantees the previous stack emptied.
     state->stackOidOrder.clear();
     state->stackTargetsByStackOid.clear();
+    state->stackTargetKindByStackAndTargetOid.clear();
     ctx.stackTrackingDirty = true;
     if (host->currentActivePlayerId() != static_cast<int>(pc.active_player_id())) {
         host->setActivePlayerId(static_cast<int>(pc.active_player_id()));
@@ -306,6 +307,17 @@ void RuledEventDispatcher::applyStackPushed(const ruled::v1::StackPushed &sp, Ba
         tlist.append(static_cast<quint32>(sp.targets(ti).object_id()));
     }
     state->stackTargetsByStackOid.insert(sp.object_id(), tlist);
+    // CR 608.2b: latch every target that sits in a graveyard *now*, while the choice is still fresh.
+    // This is the only kind the dispatcher can identify without the UI, and it is the one that has
+    // to be right immediately: `emitGraveyardTargetsNeeded` runs at the end of this batch, before
+    // the deferred arrow sync classifies the rest. Doing it here rather than there also means a
+    // permanent that later dies can never be mistaken for a graveyard target — by then the latch
+    // already says Battlefield.
+    for (quint32 targetOid : tlist) {
+        if (state->graveyardOidToPlayerId.contains(targetOid)) {
+            state->latchTargetKind(sp.object_id(), targetOid, RuledTargetItemKind::Graveyard);
+        }
+    }
     // Overlay the annotation on the stack card: an ability's text, an X value for an X spell
     // ("X = N", CR 107.3), or the cast face of a multi-face spell (e.g. "Fire" / "Ice").
     if (!sp.ability_annotation().empty()) {
@@ -354,6 +366,9 @@ void RuledEventDispatcher::applyStackResolved(const ruled::v1::StackResolved &sr
     const QVector<quint32> spellTargets = state->stackTargetsByStackOid.value(rid);
     state->stackOidOrder.removeOne(rid);
     state->stackTargetsByStackOid.remove(rid);
+    for (quint32 t : spellTargets) {
+        state->stackTargetKindByStackAndTargetOid.remove(RuledClientState::stackTargetKey(rid, t));
+    }
     state->stackAnnotationByOid.remove(rid);
     state->stackSourceOidByStackOid.remove(rid);
     host->removeSyntheticStackCard(rid);

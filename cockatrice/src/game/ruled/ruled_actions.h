@@ -26,6 +26,9 @@ class ArrowTarget;
 class CardItem;
 class Player;
 class RuledClientState;
+/// Defined in ruled_client_state.h; forward-declared (fixed underlying type) to keep this header
+/// free of that include.
+enum class RuledTargetItemKind : int;
 /// Defined in ruled_client_state.h; declared opaquely here so this header stays proto-free.
 namespace ruled::v1
 {
@@ -89,9 +92,17 @@ void sendRuledCommandExpectingAck(const AbstractGame *game,
 /// the card in the pile (which sits at the pile's own position, so an arrow to it points at the
 /// graveyard rather than at an invisible card). Null when the oid is not in any graveyard.
 [[nodiscard]] CardItem *findGraveyardCardItemByEngineOid(AbstractGame *game, quint32 engineOid);
-/// Arrow endpoint for a spell/ability target: a player seat, a stack item, a graveyard card, or a
-/// permanent.
-[[nodiscard]] ArrowTarget *resolveSpellTargetItem(AbstractGame *game, RuledClientState *state, quint32 targetOid);
+/// Where `targetOid` currently lives, in the priority order a target is chosen: seat, stack,
+/// graveyard, battlefield. Called once per target, when its arrow is first drawn; the answer is
+/// latched in `RuledClientState::stackTargetKindByStackAndTargetOid` because a later zone change
+/// makes the target a different object (CR 608.2b), not a moved one.
+[[nodiscard]] RuledTargetItemKind classifySpellTargetItem(AbstractGame *game,
+                                                          RuledClientState *state,
+                                                          quint32 targetOid);
+/// Arrow endpoint for a spell/ability target, resolved *only* within `kind`. Null when the target
+/// is no longer there — which is the signal to drop the arrow rather than re-point it.
+[[nodiscard]] ArrowTarget *
+resolveSpellTargetItem(AbstractGame *game, RuledClientState *state, quint32 targetOid, RuledTargetItemKind kind);
 
 // ---------------------------------------------------------------------------------------
 // Clicked hand card → engine hand slot.

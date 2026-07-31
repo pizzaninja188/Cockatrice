@@ -912,7 +912,19 @@ void GameEventHandler::syncRuledSpellTargetingArrows()
 
         const QVector<quint32> targets = it.value();
         for (int ti = 0; ti < targets.size(); ++ti) {
-            ArrowTarget *tgt = RuledActions::resolveSpellTargetItem(game, ruledState, targets.at(ti));
+            const quint32 targetOid = targets.at(ti);
+            // CR 608.2b: a target is the object that was targeted, so where it lived at that moment
+            // is latched on first resolution. Re-classifying every sync would let a permanent that
+            // has since died re-resolve into the graveyard map, and the arrow would follow it to
+            // the pile instead of disappearing.
+            RuledTargetItemKind kind = ruledState->latchedTargetKind(stackOid, targetOid);
+            if (kind == RuledTargetItemKind::Unknown) {
+                // Nothing latched yet. A classification of Unknown means the target's CardItem does
+                // not exist yet; latchTargetKind ignores it, so a later sync can try again.
+                kind = RuledActions::classifySpellTargetItem(game, ruledState, targetOid);
+                ruledState->latchTargetKind(stackOid, targetOid, kind);
+            }
+            ArrowTarget *tgt = RuledActions::resolveSpellTargetItem(game, ruledState, targetOid, kind);
             if (!tgt || tgt == startCard) {
                 continue;
             }

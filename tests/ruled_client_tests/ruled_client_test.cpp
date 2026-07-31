@@ -547,6 +547,63 @@ TEST_F(RuledClientTest, StackPushAndResolveKeepLifoOrder)
     EXPECT_EQ(host.removedSyntheticCards, QVector<quint32>({11}));
 }
 
+// CR 608.2b: a target that changes zones becomes a new object, so the arrow endpoint recorded when
+// the target was chosen is never revised. Without the write-once latch, an oid that enters the
+// graveyard map after its permanent dies re-resolves to the graveyard pile and the arrow points
+// there instead of disappearing.
+TEST_F(RuledClientTest, TargetKindIsLatchedOnceAndNotRevisedWhenTheTargetDies)
+{
+    ruled::v1::RuledEventBatch push;
+    auto *ability = push.add_events()->mutable_stack_pushed();
+    ability->set_object_id(11);
+    ability->mutable_targets()->Add()->set_object_id(100);
+    apply(push);
+
+    EXPECT_EQ(state->latchedTargetKind(11, 100), RuledTargetItemKind::Unknown);
+    state->latchTargetKind(11, 100, RuledTargetItemKind::Battlefield);
+    EXPECT_EQ(state->latchedTargetKind(11, 100), RuledTargetItemKind::Battlefield);
+
+    // The permanent dies and its oid now also appears in the graveyard map. A re-classification
+    // must not overwrite the original answer.
+    state->latchTargetKind(11, 100, RuledTargetItemKind::Graveyard);
+    EXPECT_EQ(state->latchedTargetKind(11, 100), RuledTargetItemKind::Battlefield);
+}
+
+// An unresolvable target (its CardItem does not exist yet) leaves the entry unlatched so a later
+// sync can classify it, rather than freezing Unknown and never drawing the arrow.
+TEST_F(RuledClientTest, UnknownTargetKindIsNotLatched)
+{
+    state->latchTargetKind(11, 100, RuledTargetItemKind::Unknown);
+    EXPECT_TRUE(state->stackTargetKindByStackAndTargetOid.isEmpty());
+
+    state->latchTargetKind(11, 100, RuledTargetItemKind::Graveyard);
+    EXPECT_EQ(state->latchedTargetKind(11, 100), RuledTargetItemKind::Graveyard);
+}
+
+// The latch is keyed per (stack object, target), so two spells aimed at the same object are
+// independent — and resolving one must not strip the other's endpoint.
+TEST_F(RuledClientTest, TargetKindLatchIsClearedWhenItsStackObjectResolves)
+{
+    ruled::v1::RuledEventBatch push;
+    auto *first = push.add_events()->mutable_stack_pushed();
+    first->set_object_id(11);
+    first->mutable_targets()->Add()->set_object_id(100);
+    auto *second = push.add_events()->mutable_stack_pushed();
+    second->set_object_id(12);
+    second->mutable_targets()->Add()->set_object_id(100);
+    apply(push);
+
+    state->latchTargetKind(11, 100, RuledTargetItemKind::Battlefield);
+    state->latchTargetKind(12, 100, RuledTargetItemKind::Battlefield);
+
+    ruled::v1::RuledEventBatch resolve;
+    resolve.add_events()->mutable_stack_resolved()->set_object_id(11);
+    apply(resolve);
+
+    EXPECT_EQ(state->latchedTargetKind(11, 100), RuledTargetItemKind::Unknown);
+    EXPECT_EQ(state->latchedTargetKind(12, 100), RuledTargetItemKind::Battlefield);
+}
+
 TEST_F(RuledClientTest, CounteredSpellLeavesTheStackWithItsCounterspell)
 {
     ruled::v1::RuledEventBatch push;
@@ -700,6 +757,52 @@ TEST_F(RuledClientTest, GraveyardStaysRequestedWhileTheSpellIsOnTheStack)
     apply(resolved);
     EXPECT_TRUE(spy.last().at(0).value<QList<int>>().isEmpty())
         << "once the spell leaves the stack the view may close";
+}
+
+// A target chosen in a graveyard is latched as such the moment it is put on the stack, without
+// waiting for the (deferred) arrow sync — `emitGraveyardTargetsNeeded` runs first and needs the
+// answer already.
+TEST_F(RuledClientTest, GraveyardTargetIsLatchedWhenTheSpellIsPushed)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *ge = batch.add_events()->mutable_graveyard_object_map()->add_entries();
+    ge->set_player_id(kOpponent);
+    ge->set_engine_object_id(700);
+    ge->set_server_card_id(21);
+    auto *sp = batch.add_events()->mutable_stack_pushed();
+    sp->set_object_id(800);
+    sp->add_targets()->set_object_id(700);
+    apply(batch);
+
+    EXPECT_EQ(state->latchedTargetKind(800, 700), RuledTargetItemKind::Graveyard);
+}
+
+// The regression this pairs with: an ability targeting a *permanent* must never open a graveyard
+// view, even when that permanent dies while the ability is still on the stack and its oid joins the
+// graveyard map. Only targets chosen in a graveyard count.
+TEST_F(RuledClientTest, ADyingTargetDoesNotRequestAGraveyardView)
+{
+    // The ability goes on the stack while its target is a permanent — nothing in any graveyard yet.
+    ruled::v1::RuledEventBatch push;
+    auto *sp = push.add_events()->mutable_stack_pushed();
+    sp->set_object_id(800);
+    sp->add_targets()->set_object_id(100);
+    apply(push);
+    EXPECT_EQ(state->latchedTargetKind(800, 100), RuledTargetItemKind::Unknown);
+
+    QSignalSpy spy(state, &RuledClientState::graveyardTargetsNeeded);
+
+    // The target is destroyed in response: its oid now appears in a graveyard map.
+    ruled::v1::RuledEventBatch died;
+    auto *ge = died.add_events()->mutable_graveyard_object_map()->add_entries();
+    ge->set_player_id(kOpponent);
+    ge->set_engine_object_id(100);
+    ge->set_server_card_id(21);
+    apply(died);
+
+    ASSERT_GE(spy.count(), 1);
+    EXPECT_TRUE(spy.last().at(0).value<QList<int>>().isEmpty())
+        << "an ability that targeted a permanent must not pop graveyard views when it dies";
 }
 
 TEST_F(RuledClientTest, TriggerNeedsTargetOnlyPendsForItsController)

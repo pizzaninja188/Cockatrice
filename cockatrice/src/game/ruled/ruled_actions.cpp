@@ -306,43 +306,90 @@ CardItem *findGraveyardCardItemByEngineOid(AbstractGame *game, quint32 engineOid
     return game->getCard(playerId, QString::fromLatin1(ZoneNames::GRAVE), serverCardId);
 }
 
-ArrowTarget *resolveSpellTargetItem(AbstractGame *game, RuledClientState *state, quint32 targetOid)
+namespace
+{
+/// The stack half of target resolution: the object's own stack CardItem, or — for a Counterspell
+/// target already dropped from the stack order in the same batch as StackResolved — the physical
+/// card still sitting in a stack zone.
+ArrowTarget *stackTargetItem(AbstractGame *game, RuledClientState *state, quint32 targetOid)
+{
+    if (state->getStackOidOrder().contains(targetOid)) {
+        if (CardItem *onStack = findStackCardItemByEngineOid(game, targetOid)) {
+            return onStack;
+        }
+    }
+    const int sidProbe = state->cardIdForEngineOid(targetOid);
+    if (sidProbe < 0) {
+        return nullptr;
+    }
+    CardItem *stk = rawStackCardByServerId(game, sidProbe);
+    if (!stk || !stk->getZone() ||
+        stk->getZone()->getName().compare(QStringLiteral("stack"), Qt::CaseInsensitive) != 0) {
+        return nullptr;
+    }
+    if (TabGame *tab = game->getTab()) {
+        if (CardItem *vis = tab->findVisibleStackSpellCardItem(sidProbe)) {
+            return vis;
+        }
+    }
+    return stk;
+}
+
+/// Seat graphics target for `targetOid` read as a Cockatrice seat id, or null if no such seat.
+/// Engine object ids never collide with seat ids, which is what makes the read unambiguous.
+ArrowTarget *playerTargetItem(AbstractGame *game, quint32 targetOid)
+{
+    PlayerManager *pm = game->getPlayerManager();
+    const int seatId = static_cast<int>(targetOid);
+    if (!pm->getPlayers().contains(seatId)) {
+        return nullptr;
+    }
+    Player *asPlayer = pm->getPlayer(seatId);
+    return asPlayer ? asPlayer->getGraphicsItem()->getPlayerTarget() : nullptr;
+}
+} // namespace
+
+RuledTargetItemKind classifySpellTargetItem(AbstractGame *game, RuledClientState *state, quint32 targetOid)
+{
+    if (!game || !state) {
+        return RuledTargetItemKind::Unknown;
+    }
+    if (playerTargetItem(game, targetOid)) {
+        return RuledTargetItemKind::Player;
+    }
+    if (stackTargetItem(game, state, targetOid)) {
+        return RuledTargetItemKind::Stack;
+    }
+    // Graveyard before battlefield: a card targeted in a graveyard (Reanimate) is not on the
+    // battlefield, so the two can never both match at the moment of classification.
+    if (findGraveyardCardItemByEngineOid(game, targetOid)) {
+        return RuledTargetItemKind::Graveyard;
+    }
+    if (findBattlefieldCardItemByEngineOid(game, targetOid)) {
+        return RuledTargetItemKind::Battlefield;
+    }
+    return RuledTargetItemKind::Unknown;
+}
+
+ArrowTarget *
+resolveSpellTargetItem(AbstractGame *game, RuledClientState *state, quint32 targetOid, RuledTargetItemKind kind)
 {
     if (!game || !state) {
         return nullptr;
     }
-    PlayerManager *pm = game->getPlayerManager();
-    // Only Cockatrice seat ids count as player targets (engine object ids never collide with seats).
-    const int seatId = static_cast<int>(targetOid);
-    if (pm->getPlayers().contains(seatId)) {
-        if (Player *asPlayer = pm->getPlayer(seatId)) {
-            return asPlayer->getGraphicsItem()->getPlayerTarget();
-        }
+    switch (kind) {
+        case RuledTargetItemKind::Player:
+            return playerTargetItem(game, targetOid);
+        case RuledTargetItemKind::Stack:
+            return stackTargetItem(game, state, targetOid);
+        case RuledTargetItemKind::Graveyard:
+            return findGraveyardCardItemByEngineOid(game, targetOid);
+        case RuledTargetItemKind::Battlefield:
+            return findBattlefieldCardItemByEngineOid(game, targetOid);
+        case RuledTargetItemKind::Unknown:
+            break;
     }
-    if (state->getStackOidOrder().contains(targetOid)) {
-        return findStackCardItemByEngineOid(game, targetOid);
-    }
-    // Counterspell target: the countered spell's oid may already be removed from the stack order in
-    // the same batch as StackResolved, while StackPushed.targets still reference it — resolve via
-    // the id map plus the physical stack zone.
-    const int sidProbe = state->cardIdForEngineOid(targetOid);
-    if (sidProbe >= 0) {
-        if (CardItem *stk = rawStackCardByServerId(game, sidProbe)) {
-            if (stk->getZone() &&
-                stk->getZone()->getName().compare(QStringLiteral("stack"), Qt::CaseInsensitive) == 0) {
-                if (TabGame *tab = game->getTab()) {
-                    if (CardItem *vis = tab->findVisibleStackSpellCardItem(sidProbe)) {
-                        return vis;
-                    }
-                }
-                return stk;
-            }
-        }
-    }
-    if (CardItem *grave = findGraveyardCardItemByEngineOid(game, targetOid)) {
-        return grave;
-    }
-    return findBattlefieldCardItemByEngineOid(game, targetOid);
+    return nullptr;
 }
 
 // ---------------------------------------------------------------------------------------
