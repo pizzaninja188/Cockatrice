@@ -451,6 +451,13 @@ pub struct GameState {
     /// last. Cleared by any consequential action (see [`UndoableManaAbility`]); empty whenever no
     /// fresh float is undoable.
     pub undoable_mana_abilities: Vec<UndoableManaAbility>,
+    /// Permanents that *became untapped* (CR 701.20) during the command currently being applied.
+    /// An edge log, not rules state: [`crate::engine::set_tapped`] appends here only when it
+    /// actually flips a permanent from tapped to untapped, and `apply_command` drains it into the
+    /// response batch's `PermanentsUntapped` event. Nothing in the rules ever reads it, so it is
+    /// deliberately excluded from snapshots — a reconnecting client learns tap state from the
+    /// zone view instead.
+    pub untapped_this_command: Vec<ObjectId>,
 }
 
 impl GameState {

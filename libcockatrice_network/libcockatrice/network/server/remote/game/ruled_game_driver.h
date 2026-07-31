@@ -148,10 +148,7 @@ private:
     void handleRuledEngineConnectionLost();
     void applyRuledStartupBatch(const ruled::v1::IpcResponse &resp,
                                 const QList<QPair<int, QStringList>> &deckByPlayer);
-    // `forceUntapForPlayerId` (default -1 = none) lets engine untaps outside the untap step reach
-    // clients for that player's permanents — used for UndoManaAbility (CR 605 float courtesy), which
-    // legitimately untaps a mana source mid-turn. Without it the normal guard keeps the visual tapped.
-    RuledBatchApplyResult applyRuledBatch(const ruled::v1::IpcResponse &resp, int forceUntapForPlayerId = -1);
+    RuledBatchApplyResult applyRuledBatch(const ruled::v1::IpcResponse &resp);
     // applyRuledBatch passes, in call order (order dependencies are load-bearing — see the
     // comment in applyRuledBatch; never merge or reorder these):
     /// Index every CardCatalog event in `batch` into the name/id lookups. Returns true if the
@@ -165,9 +162,7 @@ private:
     void applyTokenCreations(const ruled::v1::RuledEventBatch &batch);
     void applyPermanentMoves(const ruled::v1::RuledEventBatch &batch,
                              const QHash<int, QHash<quint32, int>> &preBatchOidMaps);
-    void applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBatch &batch,
-                                     int forceUntapForPlayerId,
-                                     RuledBatchApplyResult &result);
+    void applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBatch &batch, RuledBatchApplyResult &result);
     void applyAttachmentRestores(const ruled::v1::RuledEventBatch &batch);
     void applyLifeManaAndCombatEvents(const ruled::v1::RuledEventBatch &batch);
     void applyRuledStackResolvedEvent(const ruled::v1::StackResolved &stackResolved);

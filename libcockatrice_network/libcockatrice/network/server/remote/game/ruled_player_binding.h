@@ -74,10 +74,14 @@ struct RuledPlayerBinding
         serverCardIdToEngineOid.insert(serverCardId, engineOid);
     }
 
+    /// `engineUntappedOids` (may be null) carries the batch's `PermanentsUntapped` object ids —
+    /// permanents the engine genuinely untapped (CR 701.20). Those are applied to the client even
+    /// when `allowUntapReset` is false, which is what makes an untap *effect* visible mid-turn.
     RuledZoneSyncResult applyRuledEngineZoneView(Server_Player *player,
                                                  const ruled::v1::RuledPerPlayerView &v,
                                                  GameEventStorage *tapGes = nullptr,
-                                                 bool allowUntapReset = true);
+                                                 bool allowUntapReset = true,
+                                                 const QSet<quint32> *engineUntappedOids = nullptr);
     // CR 111: mint a physical token Server_Card on the player's table from an engine
     // TokenCreated identity (tokens have no deck card / Oracle entry) and bind it to `engineOid`
     // so the following zone-view sync matches the engine battlefield slot to it. The token is

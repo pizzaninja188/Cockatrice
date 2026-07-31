@@ -68,6 +68,72 @@ fn untap_target_may_target_an_already_untapped_creature_and_does_nothing() {
     assert!(!is_tapped(&e, bear), "still untapped, no crash, no-op");
 }
 
+/// Object ids reported by every `PermanentsUntapped` event in `batch`.
+fn untapped_oids(batch: &RuledEventBatch) -> Vec<u32> {
+    batch
+        .events
+        .iter()
+        .filter_map(|e| match e.ev.as_ref() {
+            Some(Ev::PermanentsUntapped(u)) => Some(u.object_ids.clone()),
+            _ => None,
+        })
+        .flatten()
+        .collect()
+}
+
+/// `resolve_entire_stack_two_player`, keeping every batch the passes produced.
+fn resolve_stack_collecting_batches(e: &mut GameEngine) -> Vec<RuledEventBatch> {
+    let mut batches = Vec::new();
+    while !e.state.stack.is_empty() {
+        let first = e.state.priority_player_id();
+        let second = if first == e.state.players[0].id {
+            e.state.players[1].id
+        } else {
+            e.state.players[0].id
+        };
+        batches.push(e.apply_command(first, &pass()).expect("first pass"));
+        batches.push(e.apply_command(second, &pass()).expect("second pass"));
+    }
+    batches
+}
+
+#[test]
+fn untap_effect_reports_the_becomes_untapped_edge_to_servatrice() {
+    // Servatrice refuses engine-driven untaps mid-turn (they would stomp a player's manual taps),
+    // so an untap effect is invisible on the client unless the engine names the object it untapped.
+    let (mut e, seeker, bear) = seeker_engine(9105, true);
+
+    let activation = e
+        .apply_command(0, &activate_ability(seeker, 0, target(bear)))
+        .expect("activate");
+    assert!(
+        untapped_oids(&activation).is_empty(),
+        "paying the {{T}} cost taps; nothing became untapped yet"
+    );
+
+    let resolution = resolve_stack_collecting_batches(&mut e);
+    assert!(
+        resolution.iter().any(|b| untapped_oids(b) == vec![bear]),
+        "the resolving ability must report the bear as newly untapped"
+    );
+}
+
+#[test]
+fn a_no_op_untap_reports_no_edge() {
+    // "Becomes untapped" is an edge, not a state (the same distinction a future
+    // WheneverPermanentBecomesUntapped trigger depends on): an already-untapped target is a legal
+    // target that produces no edge, so the relay is never asked to push a redundant untap.
+    let (mut e, seeker, bear) = seeker_engine(9106, false);
+
+    e.apply_command(0, &activate_ability(seeker, 0, target(bear)))
+        .expect("activate");
+    let resolution = resolve_stack_collecting_batches(&mut e);
+    assert!(
+        resolution.iter().all(|b| untapped_oids(b).is_empty()),
+        "an untapped target produced no becomes-untapped edge"
+    );
+}
+
 #[test]
 fn untap_target_rejects_a_target_outside_its_filter() {
     // The ability reads "untap target creature", so a land is not a legal target.

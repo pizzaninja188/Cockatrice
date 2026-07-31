@@ -464,7 +464,24 @@ message RuledEvent {
     // backing Server_Card. Server-only: no client ever receives it, which is what keeps
     // conjuring into a hand from leaking the card name to the opponent.
     DevCardConjured dev_card_conjured = 29 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+    // Permanents that became untapped during this batch (CR 701.20). Authorizes the relay to
+    // apply the engine's untapped state for exactly these objects.
+    PermanentsUntapped permanents_untapped = 30 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   }
+}
+
+// Permanents that *became untapped* (CR 701.20) while this batch's command was applied — the
+// edge, not the state: a permanent that was already untapped is never listed. Emitted by every
+// untap path the engine has (the untap step, untap effects such as Seeker of Skybreak and
+// Vitalize, and the CR 605 mana-ability undo).
+//
+// Servatrice needs the edge because the engine's zone view alone is not enough: a ruled player
+// holding priority may still tap their own permanents manually through the legacy SetCardAttr
+// path, so the relay refuses to push engine untaps onto the client mid-turn rather than stomp
+// those. This event names the objects the engine genuinely untapped, which the relay honors
+// unconditionally.
+message PermanentsUntapped {
+  repeated uint32 object_ids = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // A dev command minted a card from outside the game (see DevPutCardInZone). Servatrice creates
