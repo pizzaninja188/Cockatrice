@@ -275,6 +275,7 @@ impl GameEngine {
             seed,
             players,
             objects,
+            last_known_tapped: HashMap::new(),
             stack: Vec::new(),
             priority_idx: if skip_opening_sequence {
                 0

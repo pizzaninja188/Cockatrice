@@ -410,13 +410,21 @@ impl GameEngine {
     ) -> bool {
         match clause {
             None => true,
-            // "if {this} is untapped" (Howling Mine). A source that has left the battlefield is
-            // not untapped-in-play, so the clause fails rather than defaulting to true.
-            Some(InterveningIf::SourceUntapped) => self
-                .state
-                .objects
-                .get(&source_id)
-                .is_some_and(|o| o.zone == Zone::Battlefield && !o.tapped),
+            Some(InterveningIf::SourceUntapped) => match self.state.objects.get(&source_id) {
+                // "if {this} is untapped" (Howling Mine), read live while it is still in play.
+                Some(o) if o.zone == Zone::Battlefield => !o.tapped,
+                // CR 608.2h / 113.7a: the source has left the battlefield since it triggered, so
+                // the check uses its *last known* tap status — bounced or destroyed while untapped,
+                // the ability still resolves (Howling Mine ruling, 2004-10-04). Reading the live
+                // object would be wrong twice over: CR 400.7 resets `tapped` on the way out, so a
+                // permanent that left tapped would read as untapped.
+                _ => !self
+                    .state
+                    .last_known_tapped
+                    .get(&source_id)
+                    .copied()
+                    .unwrap_or(false),
+            },
         }
     }
 

@@ -713,10 +713,14 @@ pub(crate) fn move_object_to_zone(
         if let Some(o) = state.objects.get_mut(&oid) {
             o.damage = 0;
             o.deathtouch_damage = false;
+            // CR 608.2h: snapshot before clearing — an ability still on the stack that asks about
+            // this permanent's tap status gets its last known information, not the reset value.
+            let was_tapped = o.tapped;
             o.tapped = false;
             o.counters.clear();
             o.attached_to = None;
             o.regeneration_shields = 0;
+            state.last_known_tapped.insert(oid, was_tapped);
         }
     }
 

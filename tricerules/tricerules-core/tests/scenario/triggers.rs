@@ -964,3 +964,83 @@ fn draw_step_trigger_can_deck_the_drawing_player() {
     assert!(e.state.players[1].library.is_empty());
     assert!(e.state.players[1].has_lost, "decked out on the extra draw");
 }
+
+/// CR 608.2h / 113.7a (Howling Mine ruling, 2004-10-04: "if Howling Mine leaves the battlefield
+/// before it resolves, then the last known tap or untap state of the card is used for
+/// resolution"). Bouncing the *untapped* Mine in response does not stop the extra draw — the
+/// intervening-"if" is re-checked against last known information, not against a vanished object.
+#[test]
+fn howling_mine_bounced_while_untapped_still_draws() {
+    let decks = Some(vec![
+        deck_with("plains", &[]),
+        deck_with("island", &["boomerang"]),
+    ]);
+    let mut e = GameEngine::new(9307, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let mine = inject_permanent_on_battlefield(&mut e, 0, "howling_mine");
+
+    end_active_turn(&mut e, 0);
+    ensure_in_hand(&mut e, 1, "boomerang");
+    let before = (
+        e.state.players[0].library.len(),
+        e.state.players[1].library.len(),
+    );
+    pass_both_players(&mut e); // upkeep -> draw step
+    assert_eq!(e.state.stack.len(), 1, "the Mine's trigger is on the stack");
+
+    grant_pool(&mut e, 1);
+    let idx = hand_index_for_card(&e, 1, "boomerang");
+    e.apply_command(1, &cast_spell(idx, targets_with_damage(vec![(mine, 0)])))
+        .expect("bounce the Mine in response");
+    resolve_entire_stack_two_player(&mut e);
+
+    assert_eq!(
+        e.state.objects.get(&mine).expect("mine object").zone,
+        tricerules_core::Zone::Hand,
+        "the Mine really left the battlefield"
+    );
+    assert_eq!(
+        drawn_by(&e, 1, before),
+        2,
+        "turn-based draw plus the extra one: LKI says the Mine was untapped"
+    );
+}
+
+/// The other half of the same rule, and the reason live state can't be read: CR 400.7 clears
+/// `tapped` on the way out, so a Mine that was tapped when it left would *look* untapped. Last
+/// known information says tapped, so the ability still does nothing.
+#[test]
+fn howling_mine_bounced_while_tapped_does_nothing() {
+    let decks = Some(vec![
+        deck_with("plains", &[]),
+        deck_with("island", &["boomerang"]),
+    ]);
+    let mut e = GameEngine::new(9308, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let mine = inject_permanent_on_battlefield(&mut e, 0, "howling_mine");
+
+    end_active_turn(&mut e, 0);
+    ensure_in_hand(&mut e, 1, "boomerang");
+    let before = (
+        e.state.players[0].library.len(),
+        e.state.players[1].library.len(),
+    );
+    pass_both_players(&mut e); // upkeep -> draw step; it triggered while untapped
+
+    e.state.objects.get_mut(&mine).expect("mine").tapped = true;
+    grant_pool(&mut e, 1);
+    let idx = hand_index_for_card(&e, 1, "boomerang");
+    e.apply_command(1, &cast_spell(idx, targets_with_damage(vec![(mine, 0)])))
+        .expect("bounce the tapped Mine in response");
+    resolve_entire_stack_two_player(&mut e);
+
+    assert!(
+        !e.state.objects.get(&mine).expect("mine object").tapped,
+        "CR 400.7 reset the tap status the LKI check must not read"
+    );
+    assert_eq!(
+        drawn_by(&e, 1, before),
+        1,
+        "turn-based draw only: LKI says the Mine was tapped"
+    );
+}

@@ -419,6 +419,13 @@ pub struct GameState {
     pub seed: u64,
     pub players: Vec<PlayerState>,
     pub objects: HashMap<ObjectId, GameObject>,
+    /// CR 608.2h / 113.7a last known information: the tap status each object had as it left the
+    /// battlefield, recorded in `move_object_to_zone` just before CR 400.7 resets it. A spell or
+    /// ability still on the stack that asks about a permanent which has since left uses this
+    /// rather than the reset value — Howling Mine's intervening-"if" is the first consumer
+    /// (bounced while untapped, the ability still resolves). Keyed by object, so a later LKI need
+    /// (P/T of a creature that died mid-resolution) joins it here rather than snapshotting ad hoc.
+    pub last_known_tapped: HashMap<ObjectId, bool>,
     pub stack: Vec<StackItem>,
     /// Index into players for who holds priority
     pub priority_idx: usize,
