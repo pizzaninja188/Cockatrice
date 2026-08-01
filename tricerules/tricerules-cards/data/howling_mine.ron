@@ -1,0 +1,16 @@
+// Howling Mine — CR 504.2 draw-step trigger with a CR 603.4 intervening-"if" clause.
+// The additional card goes to the player whose draw step it is, not to the Mine's controller.
+(
+    id: "howling_mine",
+    name: "Howling Mine",
+    mana_cost: "{2}",
+    types: ["Artifact"],
+    triggered_abilities: [
+        (
+            trigger: AtBeginningOfDrawStep(player: AnyPlayer),
+            intervening_if: Some(SourceUntapped),
+            effect: Draw(count: 1),
+            text: "At the beginning of each player's draw step, if this artifact is untapped, that player draws an additional card.",
+        ),
+    ],
+)

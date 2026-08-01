@@ -92,6 +92,28 @@ Before committing **any** new `SpellEffectKind`, `TriggerCondition`, `AbilityCos
 ```
 https://api.scryfall.com/cards/named?exact=<Card+Name>
 ```
+**Scryfall answers a plain agent fetch with HTTP 403** — it needs a `User-Agent`. On Windows:
+```powershell
+$h = @{ 'User-Agent' = 'CockatriceFork/1.0'; 'Accept' = 'application/json' }
+$c = Invoke-RestMethod -Uri "https://api.scryfall.com/cards/named?exact=Howling%20Mine" -Headers $h
+$r = Invoke-RestMethod -Uri $c.rulings_uri -Headers $h          # ← Gatherer rulings
+$r.data | ForEach-Object { "[$($_.published_at)] $($_.comment)" }
+```
+```bash
+curl -sH 'User-Agent: CockatriceFork/1.0' 'https://api.scryfall.com/cards/named?exact=Howling+Mine'
+```
+**Fetch `rulings_uri` too, not just the card.** The card object carries only printed data; the
+rulings carry the interactions, and skipping them is the easy miss. A real example: Howling Mine's
+"if this artifact is untapped" reads as a plain CR 603.4 intervening-"if", and that reading is
+correct — but its rulings also say *"if Howling Mine leaves the battlefield before it resolves,
+then the last known tap or untap state of the card is used"* (CR 608.2h), which is a whole extra
+code path (`GameState::last_known_tapped`) that the card text alone never suggests.
+
+For a CR rule number or verbatim citation, use the **official Comprehensive Rules text file** —
+scrape the date-stamped `.txt` link off `https://magic.wizards.com/en/rules` and grep it (the
+filename changes with each update, e.g. `MagicCompRules 20260619.txt`). Don't cite from memory;
+rule numbers are easy to misremember.
+
 If the fetch fails or the name is ambiguous, **surface that before writing any RON/Rust** — don't fall back to memory. Use the response for:
 - **`mana_cost`** — copy the Scryfall brace string **verbatim** into RON (`mana_cost: "{1}{R}"`, `""` for lands). Parsed by `ManaCost`/`ManaSymbol` (`tricerules-cards/src/mana.rs`); `AbilityCost::Mana`/`TapAndMana` use the same syntax. Supported pips: `W U B R G C X` + generic integers. Hybrid/Phyrexian are supported; snow is representable but **rejected at registry load**. `{X}` is supported: the value is chosen at cast time and paid as that much generic mana (CR 107.3b). Never hand-write the old flat `"1R"` form.
 - **`power`/`toughness`** — exact values, never guessed.

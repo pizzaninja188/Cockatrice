@@ -373,6 +373,7 @@ impl GameEngine {
                 chosen_x: 0,
                 target_damage: vec![],
                 chosen_modes: vec![],
+                trigger_player: None,
             };
             self.state.pending_resolution = Some(PendingResolution {
                 item: dummy_item,

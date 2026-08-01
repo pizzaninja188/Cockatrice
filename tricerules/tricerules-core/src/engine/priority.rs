@@ -202,6 +202,9 @@ impl GameEngine {
                     draw_card(&mut self.state.players[idx], &mut self.state.objects)?;
                 }
                 self.state.passes_since_stack_change = 0;
+                // CR 504.2: draw-step triggers go on the stack only after the turn-based draw
+                // above. Unreachable when the active player just decked out — that path returns.
+                self.fire_triggers(GameEvent::DrawStepBegin { player: ap }, ev);
                 ev.push(ev_priority_changed(self));
             }
             Draw => {

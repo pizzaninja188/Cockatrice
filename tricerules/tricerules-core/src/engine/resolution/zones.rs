@@ -12,12 +12,14 @@ pub(super) fn draw(
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let top = cx.top;
-    let controller = cx.controller;
+    // "That player draws…" (Howling Mine) resolves against the trigger's affected player; for a
+    // spell or an ordinary ability this *is* the controller.
+    let drawer = cx.affected_player;
     let spell_label = cx.spell_label;
 
     // Blue Sun's Zenith / Braingeyser: `count` may be the cast-time X.
     let count = count.resolve(top.chosen_x);
-    let idx = engine.state.player_idx(controller).unwrap();
+    let idx = engine.state.player_idx(drawer).unwrap();
     // CR 120.3 / 104.3c: drawing from an empty library does NOT fail the spell —
     // draw as many as possible, then the player loses as a state-based action
     // (swept in by `sweep_life`). Aborting resolution here would corrupt state
@@ -34,12 +36,12 @@ pub(super) fn draw(
     }
     let noun = if drawn == 1 { "card" } else { "cards" };
     events.push(ev_log(format!(
-        "P{controller} draws {drawn} {noun} ({spell_label})."
+        "P{drawer} draws {drawn} {noun} ({spell_label})."
     )));
     if decked_out {
         engine.state.players[idx].has_lost = true;
         events.push(ev_log(format!(
-            "P{controller} tried to draw from an empty library and loses (CR 104.3c)."
+            "P{drawer} tried to draw from an empty library and loses (CR 104.3c)."
         )));
     }
 

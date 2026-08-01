@@ -31,6 +31,22 @@ pub enum TriggerCondition {
     WheneverSelfDealsDamageToOpponent,
     /// At the beginning of this permanent's controller's upkeep.
     AtBeginningOfControllerUpkeep,
+    /// CR 504.2: at the beginning of a draw step. `player` filters whose draw step qualifies,
+    /// relative to the source's controller — `AnyPlayer` = "at the beginning of each player's
+    /// draw step" (Howling Mine, Kami of the Crescent Moon, Rites of Flourishing), `Controller`
+    /// = "at the beginning of your draw step" (Sylvan Library, Phyrexian Arena's draw-step
+    /// analogues), `Opponent` for the opponents-only reading.
+    ///
+    /// The player whose draw step it is becomes the trigger's *affected* player
+    /// ([`crate::TriggeredAbilityDef`] effects resolve against it via
+    /// `StackItem::trigger_player`), which is what makes "**that player** draws" work when the
+    /// source's controller is somebody else.
+    AtBeginningOfDrawStep {
+        /// Whose draw step fires this, relative to the source permanent's controller.
+        /// Defaults to `AnyPlayer` (the Howling Mine "each player's draw step" reading).
+        #[serde(default = "any_player_trigger")]
+        player: CastTriggerPlayer,
+    },
     /// Whenever a player casts a spell (optionally filtered by type). Parameters control
     /// whose casts qualify and which spell types count. Covers enchantress triggers
     /// (Argothian Enchantress), prowess-style draw/damage (Talrand, Young Pyromancer,
@@ -132,6 +148,19 @@ pub enum SpellTypeFilter {
     Noncreature,
 }
 
+/// CR 603.4 intervening-"if" clause — the `if …` between the trigger event and the effect
+/// ("at the beginning of each player's draw step, **if this artifact is untapped**, …"). Unlike
+/// an ordinary condition it is checked *twice*: when the ability would go on the stack, and
+/// again as it resolves; failing either check means the ability does nothing.
+///
+/// This is the general CR 603.4 slot on [`TriggeredAbilityDef`] — a new condition is a variant
+/// here, never a per-card bool on the def.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum InterveningIf {
+    /// "if {this} is untapped" — Howling Mine.
+    SourceUntapped,
+}
+
 /// One triggered ability on a permanent (RON data tier). The effect is a plain
 /// [`SpellEffectKind`] — the same effect type spells and activated abilities use. A
 /// self-referencing effect (e.g. an upkeep self-pump) uses a `Self_` target filter rather
@@ -142,6 +171,10 @@ pub struct TriggeredAbilityDef {
     pub effect: SpellEffectKind,
     /// Oracle-style ability text shown as annotation on the stack card.
     pub text: String,
+    /// CR 603.4: optional intervening-"if" clause, checked both when the trigger would be put
+    /// on the stack and again on resolution. `None` for the overwhelming majority of triggers.
+    #[serde(default)]
+    pub intervening_if: Option<InterveningIf>,
 }
 
 // ---------------------------------------------------------------------------

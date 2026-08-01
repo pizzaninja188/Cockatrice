@@ -200,6 +200,9 @@ pub struct PendingTrigger {
     pub ability_text: String,
     pub card_id: String,
     pub controller: PlayerId,
+    /// Mirror of [`StackItem::trigger_player`], carried across target selection so a targeted
+    /// draw-step-style trigger keeps its beneficiary when it finally reaches the stack.
+    pub trigger_player: Option<PlayerId>,
 }
 
 /// A tier-3 custom resolution (CR 608) parked mid-way, waiting on a player choice. Mirrors
@@ -289,6 +292,13 @@ pub struct StackItem {
     pub target_damage: Vec<u32>,
     /// Atomic modal choices in printed order. Empty for nonmodal spells and abilities.
     pub chosen_modes: Vec<ChosenSpellMode>,
+    /// The player a triggered ability's effects act on when the trigger names someone other than
+    /// its controller — "at the beginning of each player's draw step, **that player** draws an
+    /// additional card" (Howling Mine, Kami of the Crescent Moon). `None` (spells, activated
+    /// abilities, and every other trigger) means the effects act on [`Self::controller`].
+    /// Controllership itself is unaffected: the Mine's controller still controls the ability and
+    /// decides its stack ordering.
+    pub trigger_player: Option<PlayerId>,
 }
 
 /// Pre-game: choose first player, then London-style mulligans (redraw to 7, then put N on bottom).
@@ -409,6 +419,13 @@ pub struct GameState {
     pub seed: u64,
     pub players: Vec<PlayerState>,
     pub objects: HashMap<ObjectId, GameObject>,
+    /// CR 608.2h / 113.7a last known information: the tap status each object had as it left the
+    /// battlefield, recorded in `move_object_to_zone` just before CR 400.7 resets it. A spell or
+    /// ability still on the stack that asks about a permanent which has since left uses this
+    /// rather than the reset value — Howling Mine's intervening-"if" is the first consumer
+    /// (bounced while untapped, the ability still resolves). Keyed by object, so a later LKI need
+    /// (P/T of a creature that died mid-resolution) joins it here rather than snapshotting ad hoc.
+    pub last_known_tapped: HashMap<ObjectId, bool>,
     pub stack: Vec<StackItem>,
     /// Index into players for who holds priority
     pub priority_idx: usize,

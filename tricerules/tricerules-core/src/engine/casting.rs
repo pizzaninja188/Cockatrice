@@ -388,6 +388,8 @@ impl GameEngine {
             face_index,
             target_damage,
             chosen_modes,
+            // A spell's effects always act on its controller.
+            trigger_player: None,
         });
         if let Some(o) = self.state.objects.get_mut(&oid) {
             o.zone = Zone::Stack;
@@ -561,6 +563,8 @@ impl GameEngine {
             face_index: 0,
             target_damage: vec![],
             chosen_modes: vec![],
+            // An activated ability's effects act on the player who activated it.
+            trigger_player: None,
         });
         self.state.passes_since_stack_change = 0;
         self.state.priority_idx = idx;

@@ -32,6 +32,12 @@ struct EffectCx<'a> {
     target_damage: &'a [u32],
     top: &'a StackItem,
     controller: PlayerId,
+    /// The player an untargeted, player-scoped effect acts on. Equals `controller` for spells,
+    /// activated abilities, and every trigger that doesn't name another player; differs only when
+    /// a triggered ability says "**that player** …" ([`StackItem::trigger_player`] — Howling Mine).
+    /// Effects that act on the *controller* by rule (Brainstorm's draw, a self-pump) keep using
+    /// `controller`.
+    affected_player: PlayerId,
     spell_label: &'a str,
 }
 
@@ -168,6 +174,25 @@ impl GameEngine {
 
         let (resolution_effects, spell_label) = self.build_resolution_effects(&top);
 
+        // CR 603.4, second of the two checks: a triggered ability with an intervening-"if" clause
+        // does nothing if the clause is false as it resolves, even though it was true when the
+        // ability triggered (Howling Mine tapped in response to its own trigger).
+        if top.is_triggered {
+            let clause = self
+                .registry
+                .get(&card_id)
+                .and_then(|d| d.face(top.face_index))
+                .and_then(|f| f.triggered_abilities.get(top.ability_index.unwrap_or(0)))
+                .and_then(|ta| ta.intervening_if);
+            let source_id = top.source_permanent_id.unwrap_or(top.id);
+            if !self.intervening_if_holds(source_id, clause) {
+                events.push(ev_log(format!(
+                    "{spell_label} does nothing (its \"if\" condition is no longer true, CR 603.4)."
+                )));
+                return Ok(());
+            }
+        }
+
         // CR 608.2b: targets are checked once, at the start of resolution — not again on resume.
         let targeted_effects: Vec<_> = resolution_effects
             .iter()
@@ -298,6 +323,7 @@ impl GameEngine {
                     target_damage: &effect_target_damage,
                     top,
                     controller,
+                    affected_player: top.trigger_player.unwrap_or(controller),
                     spell_label,
                 };
                 match effect {
@@ -687,10 +713,14 @@ pub(crate) fn move_object_to_zone(
         if let Some(o) = state.objects.get_mut(&oid) {
             o.damage = 0;
             o.deathtouch_damage = false;
+            // CR 608.2h: snapshot before clearing — an ability still on the stack that asks about
+            // this permanent's tap status gets its last known information, not the reset value.
+            let was_tapped = o.tapped;
             o.tapped = false;
             o.counters.clear();
             o.attached_to = None;
             o.regeneration_shields = 0;
+            state.last_known_tapped.insert(oid, was_tapped);
         }
     }
 

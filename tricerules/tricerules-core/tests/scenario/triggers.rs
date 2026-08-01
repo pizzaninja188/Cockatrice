@@ -780,3 +780,267 @@ fn opponents_pridemate_does_not_grow_on_your_life_gain() {
         "opponent's payoff is untouched by P0's life gain"
     );
 }
+
+// ===========================================================================
+// "At the beginning of each player's draw step" (CR 504.2) — Howling Mine,
+// Kami of the Crescent Moon. The card goes to the player whose draw step it is
+// (CR 603.7d "that player"), not to the source's controller, and Howling Mine's
+// "if this artifact is untapped" is a CR 603.4 intervening-"if" clause.
+// ===========================================================================
+
+/// Two 20-card decks at Main 1 of P0's turn. Deliberately not `anthem_engine`, whose 7-card
+/// decks are entirely consumed by the opening hand — these tests count *library* movement.
+fn draw_step_engine(seed: u64) -> GameEngine {
+    let decks = Some(vec![deck_with("plains", &[]), deck_with("island", &[])]);
+    let mut e = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    e
+}
+
+/// Advance from Main 1 of the active player's turn through the *next* player's draw step,
+/// resolving whatever the draw step put on the stack. Returns the library sizes
+/// `(P0, P1)` captured immediately before the draw step began.
+fn pass_turn_through_next_draw_step(e: &mut GameEngine, active: i32) -> (usize, usize) {
+    // Called again after a previous draw step, the turn is still in Draw; `end_active_turn`
+    // starts counting from Main 1.
+    if e.state.turn_step == tricerules_core::TurnStep::Draw {
+        pass_both_players(e);
+    }
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main1);
+    // Two draws a turn overshoots the CR 514.1 maximum hand size fast; discard down by hand so
+    // the turn ends without a cleanup prompt (the shared helper discards one card at a time).
+    for player in 0..2 {
+        while e.state.players[player].hand.len() > 5 {
+            let oid = e.state.players[player].hand.pop().expect("nonempty hand");
+            e.state.players[player].graveyard.push(oid);
+            e.state.objects.get_mut(&oid).expect("object").zone = tricerules_core::Zone::Graveyard;
+        }
+    }
+    end_active_turn(e, active);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
+    let before = (
+        e.state.players[0].library.len(),
+        e.state.players[1].library.len(),
+    );
+    pass_both_players(e); // upkeep -> draw step: turn-based draw, then CR 504.2 triggers
+    resolve_entire_stack_two_player(e);
+    before
+}
+
+fn drawn_by(e: &GameEngine, player: usize, before: (usize, usize)) -> usize {
+    let was = if player == 0 { before.0 } else { before.1 };
+    was - e.state.players[player].library.len()
+}
+
+/// P0's untapped Howling Mine draws an extra card for **whoever's** draw step it is — the
+/// opponent's included (`CastTriggerPlayer::AnyPlayer` + the all-players battlefield scan).
+#[test]
+fn howling_mine_draws_an_extra_card_on_each_players_draw_step() {
+    let mut e = draw_step_engine(9301);
+    inject_permanent_on_battlefield(&mut e, 0, "howling_mine");
+
+    // P1's draw step: P1 draws the turn-based card plus the Mine's extra one.
+    let before = pass_turn_through_next_draw_step(&mut e, 0);
+    assert_eq!(e.state.active_player_id(), 1, "P1's turn");
+    assert_eq!(drawn_by(&e, 1, before), 2, "P1 draws 1 + 1 from P0's Mine");
+    assert_eq!(
+        drawn_by(&e, 0, before),
+        0,
+        "the Mine's controller draws nothing"
+    );
+
+    // Back around to P0's draw step: now its controller is the drawing player.
+    let before = pass_turn_through_next_draw_step(&mut e, 1);
+    assert_eq!(e.state.active_player_id(), 0, "P0's turn");
+    assert_eq!(drawn_by(&e, 0, before), 2, "P0 draws 1 + 1");
+    assert_eq!(drawn_by(&e, 1, before), 0);
+}
+
+/// CR 603.4, first check: a tapped Howling Mine never triggers at all — no stack object,
+/// so nothing for either player to respond to.
+#[test]
+fn tapped_howling_mine_never_triggers() {
+    let mut e = draw_step_engine(9302);
+    let mine = inject_permanent_on_battlefield(&mut e, 0, "howling_mine");
+    e.state.objects.get_mut(&mine).expect("mine").tapped = true;
+
+    end_active_turn(&mut e, 0);
+    let before = (
+        e.state.players[0].library.len(),
+        e.state.players[1].library.len(),
+    );
+    pass_both_players(&mut e); // upkeep -> draw step
+
+    assert!(
+        e.state.stack.is_empty(),
+        "tapped Mine puts no trigger on the stack"
+    );
+    assert_eq!(drawn_by(&e, 1, before), 1, "only the turn-based draw");
+}
+
+/// CR 603.4, second check: the clause is re-evaluated on resolution. Tapping the Mine while its
+/// own trigger is on the stack makes the ability do nothing.
+#[test]
+fn howling_mine_tapped_in_response_does_nothing() {
+    let mut e = draw_step_engine(9303);
+    let mine = inject_permanent_on_battlefield(&mut e, 0, "howling_mine");
+
+    end_active_turn(&mut e, 0);
+    let before = (
+        e.state.players[0].library.len(),
+        e.state.players[1].library.len(),
+    );
+    pass_both_players(&mut e); // upkeep -> draw step
+    assert_eq!(e.state.stack.len(), 1, "the Mine's trigger is on the stack");
+
+    e.state.objects.get_mut(&mine).expect("mine").tapped = true;
+    resolve_entire_stack_two_player(&mut e);
+
+    assert_eq!(
+        drawn_by(&e, 1, before),
+        1,
+        "turn-based draw only; the trigger fizzled"
+    );
+}
+
+/// CR 504.1/504.2: the turn-based draw is not on the stack and happens *first* — by the time the
+/// trigger is waiting for priority the normal card has already been drawn.
+#[test]
+fn turn_based_draw_precedes_the_draw_step_trigger() {
+    let mut e = draw_step_engine(9304);
+    inject_permanent_on_battlefield(&mut e, 0, "howling_mine");
+
+    end_active_turn(&mut e, 0);
+    let before = (
+        e.state.players[0].library.len(),
+        e.state.players[1].library.len(),
+    );
+    pass_both_players(&mut e); // upkeep -> draw step
+
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Draw);
+    assert_eq!(
+        drawn_by(&e, 1, before),
+        1,
+        "turn-based draw already resolved"
+    );
+    assert_eq!(
+        e.state.stack.len(),
+        1,
+        "the extra draw is still a stack object"
+    );
+
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(drawn_by(&e, 1, before), 2);
+}
+
+/// The same trigger without an intervening-"if", on a creature: Kami of the Crescent Moon draws
+/// for its *opponent* on their draw step, which only works because the beneficiary is the
+/// trigger's player and not the ability's controller.
+#[test]
+fn kami_of_the_crescent_moon_draws_for_the_opponent() {
+    let mut e = draw_step_engine(9305);
+    inject_creature_on_battlefield(&mut e, 0, "kami_of_the_crescent_moon");
+
+    let before = pass_turn_through_next_draw_step(&mut e, 0);
+    assert_eq!(drawn_by(&e, 1, before), 2, "P1 draws 1 + 1 from P0's Kami");
+    assert_eq!(drawn_by(&e, 0, before), 0);
+}
+
+/// CR 104.3c/120.3: the extra draw from an empty library does not fail the ability — the player
+/// loses instead, and resolution completes cleanly.
+#[test]
+fn draw_step_trigger_can_deck_the_drawing_player() {
+    let mut e = draw_step_engine(9306);
+    inject_permanent_on_battlefield(&mut e, 0, "howling_mine");
+
+    end_active_turn(&mut e, 0);
+    // Exactly one card left: the turn-based draw takes it, the Mine's extra draw finds nothing.
+    while e.state.players[1].library.len() > 1 {
+        e.state.players[1].library.pop_back();
+    }
+    pass_both_players(&mut e); // upkeep -> draw step
+    resolve_entire_stack_two_player(&mut e);
+
+    assert!(e.state.players[1].library.is_empty());
+    assert!(e.state.players[1].has_lost, "decked out on the extra draw");
+}
+
+/// CR 608.2h / 113.7a (Howling Mine ruling, 2004-10-04: "if Howling Mine leaves the battlefield
+/// before it resolves, then the last known tap or untap state of the card is used for
+/// resolution"). Bouncing the *untapped* Mine in response does not stop the extra draw — the
+/// intervening-"if" is re-checked against last known information, not against a vanished object.
+#[test]
+fn howling_mine_bounced_while_untapped_still_draws() {
+    let decks = Some(vec![
+        deck_with("plains", &[]),
+        deck_with("island", &["boomerang"]),
+    ]);
+    let mut e = GameEngine::new(9307, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let mine = inject_permanent_on_battlefield(&mut e, 0, "howling_mine");
+
+    end_active_turn(&mut e, 0);
+    ensure_in_hand(&mut e, 1, "boomerang");
+    let before = (
+        e.state.players[0].library.len(),
+        e.state.players[1].library.len(),
+    );
+    pass_both_players(&mut e); // upkeep -> draw step
+    assert_eq!(e.state.stack.len(), 1, "the Mine's trigger is on the stack");
+
+    grant_pool(&mut e, 1);
+    let idx = hand_index_for_card(&e, 1, "boomerang");
+    e.apply_command(1, &cast_spell(idx, targets_with_damage(vec![(mine, 0)])))
+        .expect("bounce the Mine in response");
+    resolve_entire_stack_two_player(&mut e);
+
+    assert_eq!(
+        e.state.objects.get(&mine).expect("mine object").zone,
+        tricerules_core::Zone::Hand,
+        "the Mine really left the battlefield"
+    );
+    assert_eq!(
+        drawn_by(&e, 1, before),
+        2,
+        "turn-based draw plus the extra one: LKI says the Mine was untapped"
+    );
+}
+
+/// The other half of the same rule, and the reason live state can't be read: CR 400.7 clears
+/// `tapped` on the way out, so a Mine that was tapped when it left would *look* untapped. Last
+/// known information says tapped, so the ability still does nothing.
+#[test]
+fn howling_mine_bounced_while_tapped_does_nothing() {
+    let decks = Some(vec![
+        deck_with("plains", &[]),
+        deck_with("island", &["boomerang"]),
+    ]);
+    let mut e = GameEngine::new(9308, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let mine = inject_permanent_on_battlefield(&mut e, 0, "howling_mine");
+
+    end_active_turn(&mut e, 0);
+    ensure_in_hand(&mut e, 1, "boomerang");
+    let before = (
+        e.state.players[0].library.len(),
+        e.state.players[1].library.len(),
+    );
+    pass_both_players(&mut e); // upkeep -> draw step; it triggered while untapped
+
+    e.state.objects.get_mut(&mine).expect("mine").tapped = true;
+    grant_pool(&mut e, 1);
+    let idx = hand_index_for_card(&e, 1, "boomerang");
+    e.apply_command(1, &cast_spell(idx, targets_with_damage(vec![(mine, 0)])))
+        .expect("bounce the tapped Mine in response");
+    resolve_entire_stack_two_player(&mut e);
+
+    assert!(
+        !e.state.objects.get(&mine).expect("mine object").tapped,
+        "CR 400.7 reset the tap status the LKI check must not read"
+    );
+    assert_eq!(
+        drawn_by(&e, 1, before),
+        1,
+        "turn-based draw only: LKI says the Mine was tapped"
+    );
+}

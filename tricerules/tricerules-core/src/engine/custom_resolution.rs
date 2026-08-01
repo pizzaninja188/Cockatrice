@@ -54,6 +54,7 @@ impl GameEngine {
         let source_id = pending.source_permanent_id;
         let ability_index = pending.ability_index;
         let controller = pending.controller;
+        let trigger_player = pending.trigger_player;
 
         let trefs = vec![target_object_id];
         let tgt_line = format_spell_targets_log(&self.state, self.registry, &trefs);
@@ -72,6 +73,7 @@ impl GameEngine {
             face_index: 0,
             target_damage: vec![],
             chosen_modes: vec![],
+            trigger_player,
         });
         self.state.passes_since_stack_change = 0;
 
