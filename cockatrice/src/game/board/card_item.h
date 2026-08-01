@@ -152,6 +152,9 @@ public:
                                                 const QStringList &engineKeywords);
 
     bool animationEvent();
+    /// Restart the tap animation from `startAngle` degrees, sweeping toward whatever `tapped`
+    /// currently says (0 or 90). Used to resume an animation that a zone rebuild interrupted.
+    void triggerTapAnimationFrom(int startAngle);
     CardDragItem *createDragItem(int _id, const QPointF &_pos, const QPointF &_scenePos, bool forceFaceDown);
     void deleteDragItem();
     void drawArrow(const QColor &arrowColor);

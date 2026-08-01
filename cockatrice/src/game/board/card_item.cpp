@@ -957,6 +957,15 @@ bool CardItem::animationEvent()
     return animationIncomplete;
 }
 
+void CardItem::triggerTapAnimationFrom(int startAngle)
+{
+    if (!SettingsCache::instance().getTapAnimation() || !scene()) {
+        return;
+    }
+    tapAngle = startAngle;
+    static_cast<GameScene *>(scene())->registerAnimationItem(this);
+}
+
 QVariant CardItem::itemChange(GraphicsItemChange change, const QVariant &value)
 {
     if ((change == ItemSelectedHasChanged) && owner != nullptr) {
