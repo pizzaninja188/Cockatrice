@@ -8,6 +8,7 @@
 #include "../board/card_list.h"
 #include "../board/counter_general.h"
 #include "../game_scene.h"
+#include "../replay.h"
 #include "../zones/hand_zone.h"
 #include "../zones/pile_zone.h"
 #include "../zones/stack_zone.h"
@@ -130,6 +131,30 @@ void Player::processPlayerInfo(const ServerInfo_Player &info)
     clearCounters();
     clearArrows();
 
+    // A game-state snapshot destroys and rebuilds every table CardItem, which drops any in-flight
+    // tap animation: the old item is unregistered from the scene by CardItem::deleteLater, and the
+    // fresh one settles instantly via processCardInfo's non-animating setTapped. In ruled mode this
+    // resync lands within a millisecond of the tap or untap that triggered it, so the animation
+    // never got a single 10 ms frame — the card appeared to snap.
+    //
+    // Record each table card's live rotation here and hand it back to its replacement below. Server
+    // card ids are stable across the clear/rebuild, so they are the join key. This is direction- and
+    // mode-agnostic: it resumes a tap sweep and an untap sweep alike, in ruled and freeform games.
+    //
+    // Replays are excluded. Scrubbing backwards deliberately suppresses tap animation
+    // (ReplayTimelineWidget::processNewEvents sets SKIP_TAP_ANIMATION), but that flag reaches
+    // PlayerActions::setCardAttrHelper only — Event_GameStateChanged carries no options, so
+    // resuming here would animate exactly the snaps a skip wants instant.
+    QHash<int, int> tableTapAngleBeforeRebuild;
+    const bool isReplay = qobject_cast<Replay *>(game) != nullptr;
+    if (CardZoneLogic *tableZone = !isReplay ? zones.value(QLatin1String(ZoneNames::TABLE), nullptr) : nullptr) {
+        for (CardItem *c : tableZone->getCards()) {
+            if (c) {
+                tableTapAngleBeforeRebuild.insert(c->getId(), c->getTapAngle());
+            }
+        }
+    }
+
     // In ruled mode the stack and graveyard zones are authoritative from Event_MoveCard events
     // and the engine's synthetic ability system. Clearing and repopulating them from the
     // game-state snapshot (sent on hand/battlefield-order changes) causes visual duplicates:
@@ -227,6 +252,27 @@ void Player::processPlayerInfo(const ServerInfo_Player &info)
         }
 
         zone->reorganizeCards();
+    }
+
+    // Resume any tap animation the rebuild above interrupted. The replacement item has already
+    // settled at its final angle (0 or 90); if the card was drawn at a different angle a moment ago,
+    // rewind it there and let the scene animate the rest of the sweep.
+    if (!tableTapAngleBeforeRebuild.isEmpty()) {
+        if (CardZoneLogic *tableZone = zones.value(QLatin1String(ZoneNames::TABLE), nullptr)) {
+            for (CardItem *c : tableZone->getCards()) {
+                if (!c) {
+                    continue;
+                }
+                const auto previous = tableTapAngleBeforeRebuild.constFind(c->getId());
+                if (previous == tableTapAngleBeforeRebuild.constEnd()) {
+                    continue; // a permanent that entered the battlefield with this snapshot
+                }
+                const int settledAngle = c->getTapped() ? 90 : 0;
+                if (*previous != settledAngle) {
+                    c->triggerTapAnimationFrom(*previous);
+                }
+            }
+        }
     }
 
     const int counterListSize = info.counter_list_size();

@@ -105,6 +105,13 @@ public:
     {
         return tapped;
     }
+    /// Current visual rotation in degrees (0 = untapped, 90 = tapped). Mid-animation this sits
+    /// between the two, which is what lets a caller carry an in-flight tap animation across a
+    /// destroy/rebuild of the item — see Player::processPlayerInfo.
+    int getTapAngle() const
+    {
+        return tapAngle;
+    }
     void setTapped(bool _tapped, bool canAnimate = false);
     bool getFaceDown() const
     {

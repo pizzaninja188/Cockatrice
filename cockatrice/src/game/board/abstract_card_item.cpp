@@ -275,7 +275,9 @@ void AbstractCardItem::setTapped(bool _tapped, bool canAnimate)
         return;
 
     tapped = _tapped;
-    if (SettingsCache::instance().getTapAnimation() && canAnimate)
+    // An item that is not in a scene yet has nothing to drive the animation timer, so fall through
+    // to the instant branch rather than dereferencing a null scene().
+    if (SettingsCache::instance().getTapAnimation() && canAnimate && scene())
         static_cast<GameScene *>(scene())->registerAnimationItem(this);
     else {
         tapAngle = tapped ? 90 : 0;
