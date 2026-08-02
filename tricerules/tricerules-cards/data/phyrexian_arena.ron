@@ -1,0 +1,17 @@
+// Phyrexian Arena — the Controller-scoped half of the CR 503.1a upkeep trigger: it fires only on
+// its controller's upkeep, which is what proves the all-battlefields scan does not over-fire.
+// CR 608.2: the two clauses resolve in written order — draw first, then lose the life. Both are
+// existing primitives; only the ability effect *list* makes the card expressible.
+(
+  id: "phyrexian_arena",
+  name: "Phyrexian Arena",
+  mana_cost: "{1}{B}{B}",
+  types: ["Enchantment"],
+  triggered_abilities: [
+    (
+      trigger: AtBeginningOfUpkeep(player: Controller),
+      effect: [Draw(count: 1), LoseLife(amount: Fixed(1))],
+      text: "At the beginning of your upkeep, you draw a card and you lose 1 life.",
+    ),
+  ],
+)

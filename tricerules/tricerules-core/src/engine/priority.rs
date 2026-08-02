@@ -585,6 +585,14 @@ impl GameEngine {
         self.state.passes_since_stack_change = 0;
         self.apply_sbas(&mut ev)?;
         ev.push(ev_log(format!("Turn {}: P{}", self.state.turn, ap)));
+        // CR 503.1a: abilities that triggered at the beginning of the upkeep go on the stack
+        // *before* the active player gets priority — hence before `ev_priority_changed`.
+        //
+        // This is the only place a normal turn roll passes through the upkeep: the step machine
+        // walks Untap -> Upkeep inline above rather than giving anyone priority in the untap step
+        // (CR 502.1, which has no priority). The `Untap` arm of `adv_on_empty_stack` fires the
+        // same event for the paths that do stop there, and is unreachable from here.
+        self.fire_triggers(GameEvent::UpkeepBegin { player: ap }, &mut ev);
         ev.push(ev_priority_changed(self));
         Ok(finish_with_events(self, ev))
     }

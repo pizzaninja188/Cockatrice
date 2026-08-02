@@ -1051,6 +1051,219 @@ fn howling_mine_bounced_while_tapped_does_nothing() {
     );
 }
 
+// ===========================================================================
+// "At the beginning of ... upkeep" (CR 503.1a) — Sulfuric Vortex (each player),
+// Phyrexian Arena (your upkeep). Every player's battlefield is scanned in APNAP
+// order (CR 603.3b), so a NONACTIVE player's permanent triggers on the active
+// player's upkeep — the bug docs/FINDINGS.md logged against this arm, which
+// scanned only the active player's battlefield.
+// ===========================================================================
+
+/// Same two 20-card decks the draw-step block uses; named for the block it serves.
+fn upkeep_engine(seed: u64) -> GameEngine {
+    draw_step_engine(seed)
+}
+
+/// From Main 1 of `active`'s turn to the *next* player's upkeep, stopping with whatever the
+/// upkeep put on the stack still unresolved so a test can inspect it.
+///
+/// Deliberately not `pass_turn_through_next_draw_step`: that helper passes straight through the
+/// upkeep, which with an upkeep trigger in play would resolve the trigger instead of advancing
+/// to the draw step.
+fn pass_turn_to_next_upkeep(e: &mut GameEngine, active: i32) {
+    // Called again after a previous upkeep, the turn is still in Upkeep (or Draw, if the caller
+    // advanced); `end_active_turn` counts from Main 1, so walk there first.
+    while e.state.turn_step != tricerules_core::TurnStep::Main1 {
+        pass_both_players(e);
+    }
+    // Keep hands under the CR 514.1 maximum so the turn ends without a cleanup prompt.
+    for player in 0..2 {
+        while e.state.players[player].hand.len() > 5 {
+            let oid = e.state.players[player].hand.pop().expect("nonempty hand");
+            e.state.players[player].graveyard.push(oid);
+            e.state.objects.get_mut(&oid).expect("object").zone = tricerules_core::Zone::Graveyard;
+        }
+    }
+    end_active_turn(e, active);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
+}
+
+fn life(e: &GameEngine, player: usize) -> i32 {
+    e.state.players[player].life
+}
+
+/// **The regression test for the APNAP scan.** P0 controls the Vortex; on P1's upkeep the trigger
+/// must be on the stack even though P0 is the *nonactive* player. The old arm scanned only the
+/// active player's battlefield, so it produced nothing here at all.
+#[test]
+fn sulfuric_vortex_triggers_on_the_nonactive_controllers_upkeep() {
+    let mut e = upkeep_engine(4401);
+    inject_permanent_on_battlefield(&mut e, 0, "sulfuric_vortex");
+
+    pass_turn_to_next_upkeep(&mut e, 0); // -> P1's turn, P1's upkeep
+
+    assert_eq!(e.state.stack.len(), 1, "one upkeep trigger on the stack");
+    assert_eq!(
+        e.state.stack[0].controller, 0,
+        "the trigger belongs to the Vortex's controller (CR 603.3a), not the active player"
+    );
+
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(life(&e, 1), 18, "2 damage to the player whose upkeep it is");
+    assert_eq!(life(&e, 0), 20, "the Vortex's controller is untouched");
+}
+
+/// `AnyPlayer` in both directions, and proof that `who: AffectedPlayer` resolves to the upkeep's
+/// player rather than the source's controller: P0's own upkeep hits P0.
+#[test]
+fn sulfuric_vortex_damages_that_player_on_every_upkeep() {
+    let mut e = upkeep_engine(4402);
+    inject_permanent_on_battlefield(&mut e, 0, "sulfuric_vortex");
+
+    pass_turn_to_next_upkeep(&mut e, 0); // P1's upkeep
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!((life(&e, 0), life(&e, 1)), (20, 18));
+
+    pass_turn_to_next_upkeep(&mut e, 1); // back around to P0's upkeep
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(
+        (life(&e, 0), life(&e, 1)),
+        (18, 18),
+        "the Vortex's own controller takes it on their upkeep too"
+    );
+}
+
+/// CR 603.3b / 101.4: with a Vortex on each side, both triggers are on the stack and the *active*
+/// player's went on first — so the nonactive player's resolves first (LIFO).
+#[test]
+fn apnap_puts_the_active_players_upkeep_trigger_on_the_stack_first() {
+    let mut e = upkeep_engine(4403);
+    inject_permanent_on_battlefield(&mut e, 0, "sulfuric_vortex");
+    inject_permanent_on_battlefield(&mut e, 1, "sulfuric_vortex");
+
+    pass_turn_to_next_upkeep(&mut e, 0); // P1's upkeep; P1 is active
+
+    assert_eq!(e.state.stack.len(), 2, "both Vortexes trigger");
+    assert_eq!(
+        e.state.stack[0].controller, 1,
+        "active player's trigger goes on the stack first (CR 603.3b)"
+    );
+    assert_eq!(
+        e.state.stack[1].controller, 0,
+        "then the nonactive player's"
+    );
+
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(life(&e, 1), 16, "both triggers hit the upkeep's player");
+    assert_eq!(life(&e, 0), 20);
+}
+
+/// **The scope test.** A `Controller`-scoped upkeep trigger must not fire on the opponent's
+/// upkeep. The widened scan now *sees* P0's Arena during P1's upkeep; the filter is what rejects
+/// it. Catches a wrong serde default or an inverted `Controller`/`Opponent` comparison.
+#[test]
+fn phyrexian_arena_does_not_trigger_on_the_opponents_upkeep() {
+    let mut e = upkeep_engine(4404);
+    inject_permanent_on_battlefield(&mut e, 0, "phyrexian_arena");
+
+    pass_turn_to_next_upkeep(&mut e, 0); // P1's upkeep
+    let hand_before = e.state.players[0].hand.len();
+
+    assert!(
+        e.state.stack.is_empty(),
+        "an \"at the beginning of your upkeep\" trigger sits out the opponent's upkeep"
+    );
+    assert_eq!((life(&e, 0), life(&e, 1)), (20, 20));
+    assert_eq!(e.state.players[0].hand.len(), hand_before);
+}
+
+/// **The multi-effect test** (CR 608.2): one trigger, two effects, resolved in written order —
+/// draw the card, then lose the life. Only expressible since abilities took an effect list.
+#[test]
+fn phyrexian_arena_draws_then_loses_life_on_its_controllers_upkeep() {
+    let mut e = upkeep_engine(4405);
+    inject_permanent_on_battlefield(&mut e, 0, "phyrexian_arena");
+
+    pass_turn_to_next_upkeep(&mut e, 0); // P1's upkeep — Arena is silent
+    assert!(e.state.stack.is_empty());
+    pass_turn_to_next_upkeep(&mut e, 1); // P0's upkeep — Arena fires
+
+    assert_eq!(e.state.stack.len(), 1);
+    assert_eq!(e.state.stack[0].controller, 0);
+
+    let hand_before = e.state.players[0].hand.len();
+    let library_before = e.state.players[0].library.len();
+    resolve_entire_stack_two_player(&mut e);
+
+    assert_eq!(
+        e.state.players[0].hand.len(),
+        hand_before + 1,
+        "drew a card from the first effect"
+    );
+    assert_eq!(e.state.players[0].library.len(), library_before - 1);
+    assert_eq!(life(&e, 0), 19, "and lost 1 life from the second");
+    assert_eq!(life(&e, 1), 20, "the opponent is untouched");
+}
+
+/// CR 500.2 / 503.1a: the upkeep trigger resolves *within* the upkeep step — the step does not
+/// end until the stack is empty and both players pass. Guards against anyone "simplifying" the
+/// step machine by draining the upkeep stack implicitly.
+#[test]
+fn upkeep_trigger_resolves_before_the_draw_step() {
+    let mut e = upkeep_engine(4406);
+    inject_permanent_on_battlefield(&mut e, 0, "sulfuric_vortex");
+
+    pass_turn_to_next_upkeep(&mut e, 0);
+    resolve_entire_stack_two_player(&mut e);
+
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::Upkeep,
+        "still in upkeep after the trigger resolves"
+    );
+    pass_both_players(&mut e);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Draw);
+}
+
+/// Illegal path: playing a land is a sorcery-speed action, so it is rejected while the upkeep
+/// trigger is still on the stack.
+#[test]
+fn upkeep_trigger_on_the_stack_blocks_sorcery_speed_actions() {
+    let mut e = upkeep_engine(4407);
+    inject_permanent_on_battlefield(&mut e, 0, "sulfuric_vortex");
+
+    pass_turn_to_next_upkeep(&mut e, 0); // P1's upkeep, trigger on the stack
+    assert_eq!(e.state.stack.len(), 1);
+
+    let land_slot = e.state.players[1]
+        .hand
+        .iter()
+        .position(|oid| e.state.objects[oid].card_id == "island")
+        .expect("P1 holds an island");
+    let err = e.apply_command(1, &play_land(land_slot));
+    assert!(
+        err.is_err(),
+        "no land drops while a trigger is on the upkeep stack"
+    );
+}
+
+/// CR 704.5a: the upkeep damage goes through the real life/SBA path, so it can end the game.
+#[test]
+fn sulfuric_vortex_upkeep_damage_can_kill() {
+    let mut e = upkeep_engine(4408);
+    inject_permanent_on_battlefield(&mut e, 0, "sulfuric_vortex");
+    e.state.players[1].life = 2;
+
+    pass_turn_to_next_upkeep(&mut e, 0); // P1's upkeep
+    resolve_entire_stack_two_player(&mut e);
+
+    assert!(
+        e.state.players[1].has_lost,
+        "0 or less life loses (CR 704.5a)"
+    );
+    assert_eq!(e.state.winner, Some(0));
+}
+
 // ---------------------------------------------------------------------------
 // Death triggers: controller (not owner), sacrifice costs, and simultaneity.
 // These cover CR 603.3a / 603.6 behaviours that regressed once each.
