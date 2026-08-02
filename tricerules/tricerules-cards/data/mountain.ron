@@ -3,6 +3,7 @@
   name: "Mountain",
   mana_cost: "",
   types: ["Land", "Mountain"],
+  supertypes: ["Basic"],
   activated_abilities: [
     (
       cost: Tap,

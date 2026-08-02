@@ -3,6 +3,7 @@
   name: "Island",
   mana_cost: "",
   types: ["Land", "Island"],
+  supertypes: ["Basic"],
   activated_abilities: [
     (
       cost: Tap,

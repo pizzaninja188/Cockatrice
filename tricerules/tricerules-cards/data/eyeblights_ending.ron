@@ -1,8 +1,9 @@
 (
   id: "eyeblights_ending",
   name: "Eyeblight's Ending",
-  mana_cost: "{1}{B}",
-  types: ["Sorcery"],
-  spell_effect: [DestroyTarget()],
-  partial: "destroys any target creature; the 'non-Elf' targeting restriction is not enforced",
+  mana_cost: "{2}{B}",
+  // Oracle type line: "Kindred Instant — Elf". Kindred is a card type (CR 205.1a), not a
+  // supertype — the supertype list is Basic/Legendary/Snow/World/Ongoing/Host.
+  types: ["Kindred", "Instant", "Elf"],
+  spell_effect: [DestroyTarget(target: (kind: Creature, excluded_subtypes: ["Elf"]))],
 )

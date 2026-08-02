@@ -3,6 +3,7 @@
   name: "Plains",
   mana_cost: "",
   types: ["Land", "Plains"],
+  supertypes: ["Basic"],
   activated_abilities: [
     (
       cost: Tap,

@@ -107,6 +107,14 @@ pub struct TargetFilter {
     /// Skeletons, Cudgel Troll) without a new variant.
     #[serde(default)]
     pub only_controller: bool,
+    /// Optional OR-combined permanent type restriction. For example, Icy Manipulator uses
+    /// `[Artifact, Creature, Land]`; an empty list means no additional type restriction.
+    #[serde(default)]
+    pub permanent_types: Vec<super::PermanentTypeFilter>,
+    /// Subtypes that disqualify the target (for example, Eyeblight's Ending's "non-Elf"
+    /// restriction). Empty means no excluded subtypes.
+    #[serde(default)]
+    pub excluded_subtypes: Vec<String>,
 }
 
 impl TargetFilter {

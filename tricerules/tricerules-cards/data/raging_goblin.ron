@@ -2,7 +2,7 @@
   id: "raging_goblin",
   name: "Raging Goblin",
   mana_cost: "{R}",
-  types: ["Creature", "Goblin"],
+  types: ["Creature", "Goblin", "Berserker"],
   power: 1,
   toughness: 1,
   keywords: [Haste],

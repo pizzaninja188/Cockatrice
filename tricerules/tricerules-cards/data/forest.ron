@@ -3,6 +3,7 @@
   name: "Forest",
   mana_cost: "",
   types: ["Land", "Forest"],
+  supertypes: ["Basic"],
   activated_abilities: [
     (
       cost: Tap,

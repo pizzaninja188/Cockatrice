@@ -4,4 +4,5 @@
   mana_cost: "{2/R}{2/R}{2/R}",
   types: ["Instant"],
   spell_effect: [DamageTarget(amount: 4, target: (kind: AnyTarget))],
+  partial: "planeswalkers and battles are not modeled as damage targets",
 )

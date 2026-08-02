@@ -1,6 +1,8 @@
 use super::combat::is_attacking_or_blocking;
 use super::*;
-use tricerules_cards::primitives::{GraveyardCardType, GraveyardFilter, GraveyardOwner};
+use tricerules_cards::primitives::{
+    GraveyardCardType, GraveyardFilter, GraveyardOwner, PermanentTypeFilter,
+};
 
 /// Player or creature permanent on the battlefield (matches cast validation for `bolt`).
 fn damage_spell_target_legal(engine: &GameEngine, tid: ObjectId) -> bool {
@@ -192,6 +194,30 @@ fn target_filter_legal(
     // Characteristic filters — only apply to non-player targets.
     if !filter.is_player() {
         if !object_targetable_by(engine, tid, caster) {
+            return false;
+        }
+        if !filter.permanent_types.is_empty() {
+            let Some(value) = engine.characteristics(tid) else {
+                return false;
+            };
+            let matches_type = filter.permanent_types.iter().any(|kind| match kind {
+                PermanentTypeFilter::Creature => value.is_creature(),
+                PermanentTypeFilter::Artifact => value.is_artifact(),
+                PermanentTypeFilter::Enchantment => value.has_type("Enchantment"),
+                PermanentTypeFilter::Land => value.has_type("Land"),
+            });
+            if !matches_type {
+                return false;
+            }
+        }
+        if !filter.excluded_subtypes.is_empty()
+            && engine.characteristics(tid).is_some_and(|value| {
+                filter
+                    .excluded_subtypes
+                    .iter()
+                    .any(|subtype| value.has_type(subtype))
+            })
+        {
             return false;
         }
         if filter.not_artifact

@@ -995,3 +995,107 @@ fn royal_assassin_cannot_target_untapped_creature() {
     assert!(!e.state.objects.get(&assassin).expect("assassin").tapped);
     assert!(e.state.stack.is_empty());
 }
+
+/// Oracle: "Tap target artifact, creature, or land." An Aura on the battlefield is a permanent but
+/// not one of those three types, so it is not a legal target — the filter used to be a bare
+/// "any permanent" and accepted enchantments.
+#[test]
+fn icy_manipulator_cannot_target_an_enchantment() {
+    let decks = Some(vec![
+        deck_with("island", &["icy_manipulator", "holy_strength"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(2811, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let icy = relocate_to_battlefield(&mut e, 0, "icy_manipulator", false);
+    // An Aura attached to a creature: a permanent, but not artifact/creature/land.
+    let bears = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let aura = inject_permanent_on_battlefield(&mut e, 0, "holy_strength");
+    e.state.objects.get_mut(&aura).expect("aura").attached_to = Some(bears);
+
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            c: 4,
+            ..Default::default()
+        },
+    );
+    let err = e.apply_command(
+        0,
+        &activate_ability(
+            icy,
+            0,
+            vec![TargetRef {
+                object_id: aura,
+                damage_amount: 0,
+            }],
+        ),
+    );
+    assert!(err.is_err(), "an enchantment is not artifact/creature/land");
+
+    // The same ability still accepts a creature.
+    e.apply_command(
+        0,
+        &activate_ability(
+            icy,
+            0,
+            vec![TargetRef {
+                object_id: bears,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("a creature is a legal Icy Manipulator target");
+}
+
+/// Oracle: "Destroy target non-Elf creature." The excluded-subtype restriction is enforced at
+/// target selection, so an Elf cannot be chosen at all (CR 601.2c).
+#[test]
+fn eyeblights_ending_cannot_target_an_elf() {
+    let decks = Some(vec![
+        deck_with("swamp", &["eyeblights_ending"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(2812, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let elf = inject_creature_on_battlefield(&mut e, 1, "cylian_elf");
+    let bears = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    ensure_in_hand(&mut e, 0, "eyeblights_ending");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+
+    let idx = hand_index_for_card(&e, 0, "eyeblights_ending");
+    let err = e.apply_command(
+        0,
+        &cast_spell(
+            idx,
+            vec![TargetRef {
+                object_id: elf,
+                damage_amount: 0,
+            }],
+        ),
+    );
+    assert!(err.is_err(), "an Elf is not a legal target");
+
+    e.apply_command(
+        0,
+        &cast_spell(
+            idx,
+            vec![TargetRef {
+                object_id: bears,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("a non-Elf creature is a legal target");
+}

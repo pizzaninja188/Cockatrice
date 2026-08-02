@@ -12,4 +12,5 @@
       text: "{T}: This creature deals 1 damage to any target.",
     ),
   ],
+  partial: "planeswalkers and battles are not modeled as damage targets",
 )
