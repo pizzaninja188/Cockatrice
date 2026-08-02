@@ -2,7 +2,7 @@ use super::combat::priority_locked_for_combat_declaration;
 use super::events::{ev_log, ev_priority_changed, format_spell_targets_log};
 use super::legal_actions::fill_legal;
 use super::resolution::{permanent_moved_event, sacrifice_permanent};
-use super::targeting::{validate_effect_targets, validate_spell_targets};
+use super::targeting::{validate_ability_targets, validate_spell_targets};
 use super::*;
 
 #[derive(Debug, Clone)]
@@ -577,13 +577,11 @@ impl GameEngine {
             .clone();
 
         // CR 702.6a: equip abilities have "Activate only as a sorcery" built in.
-        if matches!(ability.effect, SpellEffectKind::Equip { .. })
-            && !super::priority::sorcery_speed_available(&self.state, player)
-        {
+        if ability.is_equip() && !super::priority::sorcery_speed_available(&self.state, player) {
             return Err(EngineError::Illegal("equip only at sorcery speed"));
         }
 
-        if matches!(ability.effect, SpellEffectKind::ProduceMana { .. }) {
+        if ability.mana_options().is_some() {
             return self.resolve_mana_ability(
                 player,
                 idx,
@@ -598,7 +596,9 @@ impl GameEngine {
 
         self.state.undoable_mana_abilities.clear();
 
-        validate_effect_targets(self, player, &ability.effect, targets)?;
+        // CR 608.2: an ability's effect list validates exactly like a spell's — same shape,
+        // same multi-target handling — so it goes through the list-level entry point.
+        validate_ability_targets(self, player, &ability.effect, targets)?;
 
         let source_zone_change = self
             .state
@@ -801,7 +801,7 @@ impl GameEngine {
         let Some(object) = self.state.objects.get(&permanent_id) else {
             return false;
         };
-        if matches!(ability.effect, SpellEffectKind::Equip { .. })
+        if ability.is_equip()
             && !super::priority::sorcery_speed_available(&self.state, object.controller)
         {
             return false;
@@ -866,7 +866,7 @@ impl GameEngine {
         if !targets.is_empty() {
             return Err(EngineError::Illegal("mana ability takes no targets"));
         }
-        let SpellEffectKind::ProduceMana { options } = &ability.effect else {
+        let Some(options) = ability.mana_options() else {
             return Err(EngineError::Illegal("not a mana ability"));
         };
         let amount = options

@@ -65,9 +65,8 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                     continue;
                 };
                 for (ai, ability) in face.activated_abilities.iter().enumerate() {
-                    if spell_effect_kind_needs_target(&ability.effect) {
-                        let targets =
-                            compute_spell_targets(eng, p.id, std::slice::from_ref(&ability.effect));
+                    if ability.effect.iter().any(spell_effect_kind_needs_target) {
+                        let targets = compute_spell_targets(eng, p.id, &ability.effect);
                         let key = (poid as u64) << 32 | ai as u64;
                         valid_targets_by_ability.insert(key, targets);
                     }
@@ -86,13 +85,13 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
         // so the parked trigger is the only thing its controller can be choosing targets for.
         if let Some(pt) = eng.state.pending_triggers.front() {
             if pt.controller == p.id {
-                if let Some(effect) = eng
+                if let Some(effects) = eng
                     .registry
                     .get(&pt.card_id)
                     .and_then(|def| def.primary_face().triggered_abilities.get(pt.ability_index))
                     .map(|ta| &ta.effect)
                 {
-                    let targets = compute_spell_targets(eng, p.id, std::slice::from_ref(effect));
+                    let targets = compute_spell_targets(eng, p.id, effects);
                     let key = (pt.source_permanent_id as u64) << 32 | pt.ability_index as u64;
                     valid_targets_by_ability.insert(key, targets);
                 }

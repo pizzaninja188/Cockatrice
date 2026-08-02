@@ -15,7 +15,7 @@
             activated_abilities: [
                 (
                     cost: Tap,
-                    effect: ProduceMana(options: [(r: 1)]),
+                    effect: [ProduceMana(options: [(r: 1)])],
                     text: "{T}: Add {R}.",
                 ),
             ],
@@ -29,7 +29,7 @@
             activated_abilities: [
                 (
                     cost: Tap,
-                    effect: ProduceMana(options: [(g: 1)]),
+                    effect: [ProduceMana(options: [(g: 1)])],
                     text: "{T}: Add {G}.",
                 ),
             ],

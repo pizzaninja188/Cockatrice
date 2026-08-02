@@ -9,7 +9,7 @@
   triggered_abilities: [
     (
       trigger: WheneverSelfDealsDamageToOpponent,
-      effect: Draw(count: 1),
+      effect: [Draw(count: 1)],
       text: "Whenever this creature deals damage to an opponent, draw a card.",
     ),
   ],

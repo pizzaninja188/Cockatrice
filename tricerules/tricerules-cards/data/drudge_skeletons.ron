@@ -8,7 +8,7 @@
   activated_abilities: [
     (
       cost: Mana("{B}"),
-      effect: Regenerate(target: (kind: Self_)),
+      effect: [Regenerate(target: (kind: Self_))],
       text: "{B}: Regenerate Drudge Skeletons.",
     ),
   ],

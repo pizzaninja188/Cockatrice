@@ -6,7 +6,7 @@
   activated_abilities: [
     (
       cost: Tap,
-      effect: ProduceMana(options: [(g: 1), (u: 1)]),
+      effect: [ProduceMana(options: [(g: 1), (u: 1)])],
       text: "{T}: Add {G} or {U}.",
     ),
   ],

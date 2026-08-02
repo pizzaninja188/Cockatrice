@@ -10,7 +10,7 @@
   triggered_abilities: [
     (
       trigger: WhenSelfDies,
-      effect: EachOpponentLosesLifeYouGainEqual(amount: 5),
+      effect: [EachOpponentLosesLifeYouGainEqual(amount: 5)],
       text: "When Kokusho dies, each opponent loses 5 life. You gain life equal to the life lost this way.",
     ),
   ],

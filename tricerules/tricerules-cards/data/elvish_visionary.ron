@@ -8,7 +8,7 @@
   triggered_abilities: [
     (
       trigger: WhenSelfEntersBattlefield,
-      effect: Draw(count: 1),
+      effect: [Draw(count: 1)],
       text: "When this creature enters, draw a card.",
     ),
   ],

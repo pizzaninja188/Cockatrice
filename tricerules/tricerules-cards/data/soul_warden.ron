@@ -12,7 +12,7 @@
         permanent_type: Some(Creature),
         exclude_self: true,
       ),
-      effect: GainLife(amount: 1),
+      effect: [GainLife(amount: 1)],
       text: "Whenever another creature enters, you gain 1 life.",
     ),
   ],

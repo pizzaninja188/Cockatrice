@@ -506,13 +506,12 @@ impl GameEngine {
         };
         let trigger_def = def.primary_face().triggered_abilities.get(ability_index);
         let needs_target = trigger_def
-            .map(|ta| spell_effect_kind_needs_target(&ta.effect))
+            .map(|ta| ta.effect.iter().any(spell_effect_kind_needs_target))
             .unwrap_or(false);
         let may = trigger_def.map(|ta| ta.may).unwrap_or(false);
         let has_legal_target = if needs_target {
             trigger_def.is_some_and(|ta| {
-                let targets =
-                    compute_spell_targets(self, controller, std::slice::from_ref(&ta.effect));
+                let targets = compute_spell_targets(self, controller, &ta.effect);
                 !targets.valid_permanent_ids.is_empty()
                     || !targets.valid_stack_ids.is_empty()
                     || !targets.valid_graveyard_ids.is_empty()

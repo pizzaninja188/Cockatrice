@@ -12,7 +12,7 @@
     triggered_abilities: [
         (
             trigger: AtBeginningOfDrawStep(player: AnyPlayer),
-            effect: Draw(count: 1),
+            effect: [Draw(count: 1)],
             text: "At the beginning of each player's draw step, that player draws an additional card.",
         ),
     ],

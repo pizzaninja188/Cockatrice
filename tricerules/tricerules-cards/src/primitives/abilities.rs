@@ -1,15 +1,38 @@
 //! Activated, triggered, and static ability definitions.
 
 use super::{AbilityCost, Color, Keyword, SpellEffectKind};
+use crate::ManaAmount;
 use serde::{Deserialize, Serialize};
 
 /// One activated ability on a permanent (RON data tier). Cost + effect compose freely.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ActivatedAbilityDef {
     pub cost: AbilityCost,
-    pub effect: SpellEffectKind,
+    /// CR 608.2: the ability's effects, resolved in the order written — the same shape and the
+    /// same semantics as a spell's `spell_effect`. A single-effect ability is a one-element list.
+    pub effect: Vec<SpellEffectKind>,
     /// Oracle-style ability text shown as annotation on the stack card.
     pub text: String,
+}
+
+impl ActivatedAbilityDef {
+    /// CR 605.1a: a mana ability produces mana, doesn't target, and isn't a loyalty ability.
+    /// Modelled as "the ability's *sole* effect is `ProduceMana`" — an ability that produced
+    /// mana alongside another effect would not use the fast no-stack path, and deliberately
+    /// answers `false` here rather than being silently mis-resolved.
+    pub fn mana_options(&self) -> Option<&Vec<ManaAmount>> {
+        match self.effect.as_slice() {
+            [SpellEffectKind::ProduceMana { options }] => Some(options),
+            _ => None,
+        }
+    }
+
+    /// CR 702.6a: equip has "Activate only as a sorcery" built in.
+    pub fn is_equip(&self) -> bool {
+        self.effect
+            .iter()
+            .any(|e| matches!(e, SpellEffectKind::Equip { .. }))
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -161,14 +184,17 @@ pub enum InterveningIf {
     SourceUntapped,
 }
 
-/// One triggered ability on a permanent (RON data tier). The effect is a plain
-/// [`SpellEffectKind`] — the same effect type spells and activated abilities use. A
+/// One triggered ability on a permanent (RON data tier). The effects are plain
+/// [`SpellEffectKind`]s — the same effect type spells and activated abilities use. A
 /// self-referencing effect (e.g. an upkeep self-pump) uses a `Self_` target filter rather
 /// than a dedicated variant.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TriggeredAbilityDef {
     pub trigger: TriggerCondition,
-    pub effect: SpellEffectKind,
+    /// CR 608.2: the ability's effects, resolved in the order written — the same shape and the
+    /// same semantics as a spell's `spell_effect`. Phyrexian Arena's "you draw a card and you
+    /// lose 1 life" is `[Draw(count: 1), LoseLife(amount: Fixed(1))]`.
+    pub effect: Vec<SpellEffectKind>,
     /// Oracle-style ability text shown as annotation on the stack card.
     pub text: String,
     /// CR 603.5: true when the triggered ability says "you may" and its controller may decline

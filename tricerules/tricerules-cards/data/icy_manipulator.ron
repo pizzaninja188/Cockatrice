@@ -6,10 +6,10 @@
   activated_abilities: [
     (
       cost: TapAndMana("{1}"),
-      effect: TapTarget(target: (
+      effect: [TapTarget(target: (
         kind: AnyPermanent,
         permanent_types: [Artifact, Creature, Land],
-      )),
+      ))],
       text: "{1}, {T}: Tap target artifact, creature, or land.",
     ),
   ],

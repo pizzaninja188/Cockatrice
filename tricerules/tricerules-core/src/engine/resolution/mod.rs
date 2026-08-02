@@ -239,9 +239,9 @@ impl GameEngine {
         let is_ability = top.ability_text.is_some();
         let card_id: &str = &top.card_id;
 
-        // Determine effects: for spells use spell_effect (Vec); for abilities wrap the single
-        // effect. Triggered and activated abilities are now uniform — both carry a plain
-        // `SpellEffectKind` (self-referencing effects use a `Self_` target filter, bound below).
+        // Determine effects. Spells, triggered abilities and activated abilities are uniform:
+        // every one of them carries a `Vec<SpellEffectKind>` resolved in written order (CR 608.2).
+        // Self-referencing effects use a `Self_` target filter, bound below.
         let (effects, spell_label): (Vec<SpellEffectKind>, String) = if is_ability {
             let ability_index = top.ability_index.unwrap_or(0);
             let def = self.registry.get(card_id);
@@ -259,7 +259,10 @@ impl GameEngine {
                 face.and_then(|f| f.activated_abilities.get(ability_index))
                     .map(|a| a.effect.clone())
             };
-            (vec![abilities.unwrap_or(SpellEffectKind::None)], name)
+            (
+                abilities.unwrap_or_else(|| vec![SpellEffectKind::None]),
+                name,
+            )
         } else {
             // CR 709/712/715: resolve the cast face's effects and show its name.
             let face = self

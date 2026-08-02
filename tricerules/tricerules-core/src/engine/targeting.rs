@@ -615,6 +615,36 @@ pub(super) fn validate_effect_targets(
     Ok(())
 }
 
+/// Target validation for an activated or triggered ability's effect list (CR 608.2).
+///
+/// Deliberately **not** `validate_spell_targets`: that one delegates to
+/// [`spell_target_legality_error`], which covers only the effects a *spell* can carry — it has no
+/// arm for `Equip` or `AuraAttach`, so routing abilities through it silently drops equip's
+/// "target creature you control" check. This walks [`validate_effect_targets`], the exhaustive
+/// per-effect validator, so a one-effect ability behaves exactly as it did before effect lists.
+pub(super) fn validate_ability_targets(
+    engine: &GameEngine,
+    caster: PlayerId,
+    effects: &[SpellEffectKind],
+    targets: &[rv1::TargetRef],
+) -> Result<(), EngineError> {
+    let mut any_targeting = false;
+    for effect in effects {
+        if !spell_effect_kind_needs_target(effect) {
+            continue;
+        }
+        any_targeting = true;
+        validate_effect_targets(engine, caster, effect, targets)?;
+    }
+    // Every effect is untargeted (Phyrexian Arena's `[Draw, LoseLife]`), so a client that sent
+    // targets anyway is wrong — same rejection the untargeted arms of `validate_effect_targets`
+    // would have produced when the ability held a single effect.
+    if !any_targeting && !targets.is_empty() {
+        return Err(EngineError::Illegal("this effect takes no targets"));
+    }
+    Ok(())
+}
+
 pub(super) fn validate_spell_targets(
     engine: &GameEngine,
     caster: PlayerId,

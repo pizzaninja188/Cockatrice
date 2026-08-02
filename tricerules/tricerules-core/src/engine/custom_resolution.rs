@@ -6,7 +6,7 @@ use super::legal_actions::fill_legal;
 use super::resolution::{
     permanent_moved_event, sacrifice_permanent, seat_resolved_spell_last_in_graveyard,
 };
-use super::targeting::{validate_effect_targets, validate_spell_targets};
+use super::targeting::{validate_ability_targets, validate_spell_targets};
 use super::*;
 
 impl GameEngine {
@@ -84,7 +84,7 @@ impl GameEngine {
                     .get(pending.ability_index)
                 {
                     Some(ability) => {
-                        validate_effect_targets(self, player, &ability.effect, target_ref)
+                        validate_ability_targets(self, player, &ability.effect, target_ref)
                             .map(|()| name)
                     }
                     None => Ok(name),

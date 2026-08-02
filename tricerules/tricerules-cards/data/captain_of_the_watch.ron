@@ -9,7 +9,7 @@
   triggered_abilities: [
     (
       trigger: WhenSelfEntersBattlefield,
-      effect: CreateTokens(token: "soldier_w_1_1", count: 3),
+      effect: [CreateTokens(token: "soldier_w_1_1", count: 3)],
       text: "When this creature enters, create three 1/1 white Soldier creature tokens.",
     ),
   ],

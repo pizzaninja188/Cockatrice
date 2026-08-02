@@ -159,14 +159,16 @@ impl GameEngine {
                                             | AbilityCost::TapAndMana(cost) => cost.to_string(),
                                             _ => String::new(),
                                         };
-                                        let mana_produced = match &ability.effect {
-                                            SpellEffectKind::ProduceMana { options } => options
-                                                .iter()
-                                                .map(mana_amount_symbols)
-                                                .collect::<Vec<_>>()
-                                                .join("/"),
-                                            _ => String::new(),
-                                        };
+                                        let mana_produced = ability
+                                            .mana_options()
+                                            .map(|options| {
+                                                options
+                                                    .iter()
+                                                    .map(mana_amount_symbols)
+                                                    .collect::<Vec<_>>()
+                                                    .join("/")
+                                            })
+                                            .unwrap_or_default();
                                         let cost_label = match &ability.cost {
                                             AbilityCost::Tap => "{T}".to_string(),
                                             AbilityCost::Mana(cost) => cost.to_string(),

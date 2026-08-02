@@ -176,28 +176,37 @@ impl CardRegistry {
                                 .into(),
                     });
                 }
-                for aa in &face.activated_abilities {
-                    aa.effect
-                        .validate(EffectContext::Ability)
-                        .map_err(|reason| RegistryError::InvalidCard {
+                // An ability's effect list gets the same two checks a spell's does: each effect
+                // against its context, then the list as a whole (CR 608.2 — the effects resolve
+                // together, so a cross-effect requirement like `LoseLife(TargetManaValue)` must
+                // find its object-targeting sibling inside this one ability).
+                for effects in face
+                    .activated_abilities
+                    .iter()
+                    .map(|a| &a.effect)
+                    .chain(face.triggered_abilities.iter().map(|t| &t.effect))
+                {
+                    for effect in effects {
+                        effect.validate(EffectContext::Ability).map_err(|reason| {
+                            RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason,
+                            }
+                        })?;
+                    }
+                    SpellEffectKind::validate_list(effects).map_err(|reason| {
+                        RegistryError::InvalidCard {
                             id: card.id.clone(),
                             reason,
-                        })?;
-                }
-                for ta in &face.triggered_abilities {
-                    ta.effect
-                        .validate(EffectContext::Ability)
-                        .map_err(|reason| RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason,
-                        })?;
+                        }
+                    })?;
                 }
                 // Every CreateTokens effect must name a loaded token (an uncreatable id is a bug).
                 let all_effects = face
                     .spell_effect
                     .iter()
-                    .chain(face.activated_abilities.iter().map(|a| &a.effect))
-                    .chain(face.triggered_abilities.iter().map(|t| &t.effect));
+                    .chain(face.activated_abilities.iter().flat_map(|a| &a.effect))
+                    .chain(face.triggered_abilities.iter().flat_map(|t| &t.effect));
                 for effect in all_effects {
                     if let SpellEffectKind::CreateTokens { token, .. } = effect {
                         if !reg.tokens.contains_key(token) {
@@ -457,13 +466,79 @@ mod tests {
             triggered_abilities: [
                 (
                     trigger: WhenSelfEntersBattlefield,
-                    effect: TargetPlayerGainsLife(amount: 3, target: (kind: Creature)),
+                    effect: [TargetPlayerGainsLife(amount: 3, target: (kind: Creature))],
                     text: "bad",
                 ),
             ],
         )"#;
         let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
         assert!(matches!(err, RegistryError::InvalidCard { ref id, .. } if id == "bad_trigger"));
+    }
+
+    /// CR 608.2: an ability may carry several effects, resolved in written order — the same
+    /// shape as a spell's `spell_effect`. Both ability kinds accept a list, and the per-effect
+    /// context validation still runs on every element (the `Self_`-in-a-spell rejection below
+    /// proves the per-element half).
+    #[test]
+    fn abilities_accept_multiple_effects() {
+        let card = r#"(
+            id: "multi_effect",
+            name: "Multi Effect",
+            mana_cost: "{B}",
+            types: ["Enchantment"],
+            activated_abilities: [
+                (
+                    cost: Mana("{1}"),
+                    effect: [Draw(count: 1), LoseLife(amount: Fixed(1))],
+                    text: "{1}: Draw a card and lose 1 life.",
+                ),
+            ],
+            triggered_abilities: [
+                (
+                    trigger: WhenSelfEntersBattlefield,
+                    effect: [GainLife(amount: 2), Draw(count: 1)],
+                    text: "When this enters, gain 2 life and draw a card.",
+                ),
+            ],
+        )"#;
+        let reg = CardRegistry::from_chunks(&[card]).expect("multi-effect abilities load");
+        let def = reg.get("multi_effect").expect("card present");
+        let face = def.primary_face();
+        assert_eq!(face.activated_abilities[0].effect.len(), 2);
+        assert_eq!(face.triggered_abilities[0].effect.len(), 2);
+        // Order is the authored order — the engine resolves the list front to back.
+        assert!(matches!(
+            face.triggered_abilities[0].effect[0],
+            SpellEffectKind::GainLife { .. }
+        ));
+    }
+
+    /// A many-effect ability is *not* a mana ability (CR 605.1a) even if one of its effects
+    /// produces mana: the fast no-stack path is reserved for the sole-effect case.
+    #[test]
+    fn mana_options_requires_produce_mana_to_be_the_only_effect() {
+        let card = r#"(
+            id: "impure_mana",
+            name: "Impure Mana",
+            mana_cost: "{1}",
+            types: ["Artifact"],
+            activated_abilities: [
+                (
+                    cost: Tap,
+                    effect: [ProduceMana(options: [(c: 1)]), LoseLife(amount: Fixed(1))],
+                    text: "{T}: Add {C}. You lose 1 life.",
+                ),
+                (
+                    cost: Tap,
+                    effect: [ProduceMana(options: [(c: 1)])],
+                    text: "{T}: Add {C}.",
+                ),
+            ],
+        )"#;
+        let reg = CardRegistry::from_chunks(&[card]).expect("card loads");
+        let face = reg.get("impure_mana").unwrap().primary_face();
+        assert!(face.activated_abilities[0].mana_options().is_none());
+        assert!(face.activated_abilities[1].mana_options().is_some());
     }
 
     /// A self-pump trigger (the replacement for the old `TriggeredEffect::PumpSelf`) loads,
@@ -480,7 +555,7 @@ mod tests {
             triggered_abilities: [
                 (
                     trigger: AtBeginningOfControllerUpkeep,
-                    effect: PumpTarget(power: 1, toughness: 1, target: (kind: Self_)),
+                    effect: [PumpTarget(power: 1, toughness: 1, target: (kind: Self_))],
                     text: "At the beginning of your upkeep, this gets +1/+1.",
                 ),
             ],
