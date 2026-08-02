@@ -439,8 +439,13 @@ pub(super) fn validate_effect_targets(
                 return Err(EngineError::Illegal("illegal target for damage effect"));
             }
         }
-        SpellEffectKind::DamageTargets { target: filter, max_targets, .. } => {
-            if targets.is_empty() {
+        SpellEffectKind::DamageTargets {
+            target: filter,
+            max_targets,
+            division,
+            ..
+        } => {
+            if targets.is_empty() && !matches!(division, DamageDivision::EvenAtResolution) {
                 return Err(EngineError::Illegal("requires at least one target"));
             }
             if let Some(max) = max_targets {
@@ -794,11 +799,13 @@ pub(super) fn compute_spell_targets(
     let mut fixed_damage: u32 = 0;
     let mut is_damage_targets = false;
     let mut extra_mana_per_target: u32 = 0;
+    let mut damage_division = rv1::DamageDivision::ChooseAtCast;
     for effect in effects {
         if let SpellEffectKind::DamageTargets {
             amount,
             max_targets: mt,
             extra_mana_per_target: empt,
+            division,
             ..
         } = effect
         {
@@ -808,6 +815,12 @@ pub(super) fn compute_spell_targets(
             // (the client will use the player's chosen x_value instead).
             fixed_damage = amount.resolve(0);
             extra_mana_per_target = *empt;
+            // Fireball divides on resolution, so the client must not prompt for a split it would
+            // only discard (CR 601.2d applies to "divided as you choose", not "divided evenly").
+            damage_division = match division {
+                DamageDivision::ChooseAtCast => rv1::DamageDivision::ChooseAtCast,
+                DamageDivision::EvenAtResolution => rv1::DamageDivision::EvenAtResolution,
+            };
         }
     }
 
@@ -821,5 +834,6 @@ pub(super) fn compute_spell_targets(
         fixed_damage,
         is_damage_targets,
         extra_mana_per_target,
+        damage_division: damage_division as i32,
     }
 }

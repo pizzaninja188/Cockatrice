@@ -1,6 +1,6 @@
-// Oracle: Fireball deals X damage divided as you choose among any number of targets.
+// Oracle: Fireball deals X damage divided evenly, rounded down, among any number of targets.
 // It costs {1} more to cast for each target beyond the first.
-// CR 601.2d / 601.2f: dividing X among targets; surcharge applies at cast time.
+// CR 601.2f / 608.2d: the surcharge is paid at cast time; division happens on resolution.
 (
   id: "fireball",
   name: "Fireball",
@@ -9,6 +9,8 @@
   spell_effect: [DamageTargets(
     amount: "X",
     target: (kind: AnyTarget),
+    division: EvenAtResolution,
     extra_mana_per_target: 1,
   )],
+  partial: "planeswalkers and battles are not modeled as damage targets",
 )

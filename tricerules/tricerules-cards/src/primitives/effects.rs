@@ -81,6 +81,16 @@ impl<'de> Deserialize<'de> for Amount {
     }
 }
 
+/// How a multi-target damage effect assigns its damage. This is shared by Fire (choose the
+/// allocation while casting) and Fireball (divide evenly as it resolves), rather than baking a
+/// card-specific branch into the engine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum DamageDivision {
+    #[default]
+    ChooseAtCast,
+    EvenAtResolution,
+}
+
 /// How much life a [`SpellEffectKind::LoseLife`] costs.
 ///
 /// Kept separate from [`Amount`] on purpose: `Amount::resolve(x)` answers from the cast-time X
@@ -149,6 +159,8 @@ pub enum SpellEffectKind {
     DamageTargets {
         amount: Amount,
         target: TargetFilter,
+        #[serde(default)]
+        division: DamageDivision,
         #[serde(default)]
         extra_mana_per_target: u32,
         #[serde(default)]

@@ -290,19 +290,27 @@ impl GameEngine {
                 for effect in &mode.effects {
                     if let SpellEffectKind::DamageTargets {
                         amount,
+                        division,
                         extra_mana_per_target,
                         ..
                     } = effect
                     {
-                        let allocated: u32 = selection
-                            .targets
-                            .iter()
-                            .map(|target| target.damage_amount)
-                            .sum();
-                        if allocated != amount.resolve(chosen_x) {
-                            return Err(EngineError::Illegal(
-                                "damage amounts must sum to the total damage (X)",
-                            ));
+                        if matches!(division, DamageDivision::ChooseAtCast) {
+                            let allocated: u32 = selection
+                                .targets
+                                .iter()
+                                .map(|target| target.damage_amount)
+                                .sum();
+                            if allocated != amount.resolve(chosen_x)
+                                || selection
+                                    .targets
+                                    .iter()
+                                    .any(|target| target.damage_amount == 0)
+                            {
+                                return Err(EngineError::Illegal(
+                                    "damage allocations must be positive and sum to the total damage",
+                                ));
+                            }
                         }
                         if selection.targets.len() > 1 {
                             extra_generic +=
@@ -337,15 +345,21 @@ impl GameEngine {
             for effect in &face_effects {
                 if let SpellEffectKind::DamageTargets {
                     amount,
+                    division,
                     extra_mana_per_target,
                     ..
                 } = effect
                 {
-                    let allocated: u32 = targets.iter().map(|target| target.damage_amount).sum();
-                    if allocated != amount.resolve(chosen_x) {
-                        return Err(EngineError::Illegal(
-                            "damage amounts must sum to the total damage (X)",
-                        ));
+                    if matches!(division, DamageDivision::ChooseAtCast) {
+                        let allocated: u32 =
+                            targets.iter().map(|target| target.damage_amount).sum();
+                        if allocated != amount.resolve(chosen_x)
+                            || targets.iter().any(|target| target.damage_amount == 0)
+                        {
+                            return Err(EngineError::Illegal(
+                                "damage allocations must be positive and sum to the total damage",
+                            ));
+                        }
                     }
                     if targets.len() > 1 {
                         extra_generic += *extra_mana_per_target * (targets.len() as u32 - 1);
@@ -373,10 +387,21 @@ impl GameEngine {
             .iter()
             .any(|e| matches!(e, SpellEffectKind::DamageTargets { .. }))
         {
-            public_targets
+            face_effects
                 .iter()
-                .map(|target| target.damage_amount)
-                .collect()
+                .find_map(|effect| match effect {
+                    SpellEffectKind::DamageTargets {
+                        division: DamageDivision::ChooseAtCast,
+                        ..
+                    } => Some(
+                        public_targets
+                            .iter()
+                            .map(|target| target.damage_amount)
+                            .collect(),
+                    ),
+                    _ => None,
+                })
+                .unwrap_or_default()
         } else {
             vec![]
         };

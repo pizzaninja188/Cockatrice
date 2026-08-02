@@ -63,7 +63,13 @@ pub(super) fn damage_targets(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::DamageTargets { target: filter, .. } = effect else {
+    let SpellEffectKind::DamageTargets {
+        target: filter,
+        amount,
+        division,
+        ..
+    } = effect
+    else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let engine = &mut *cx.engine;
@@ -72,10 +78,35 @@ pub(super) fn damage_targets(
     let controller = cx.controller;
     let spell_label = cx.spell_label;
 
-    // CR 608.2b: skip targets that became illegal at resolution; apply damage
-    // to each remaining legal target using its allocated amount.
+    // CR 608.2b: skip targets that became illegal at resolution. Fireball's even division is
+    // calculated only after that filtering; Fire's choose-at-cast allocation remains attached to
+    // each target independently.
+    let even_damage = if matches!(division, DamageDivision::EvenAtResolution) {
+        let legal_count = targets
+            .iter()
+            .filter(|&&tid| {
+                super::targeting::target_filter_legal_at_resolution(
+                    engine, &filter, tid, controller,
+                )
+            })
+            .count() as u32;
+        if legal_count == 0 {
+            0
+        } else {
+            amount
+                .resolve(cx.top.chosen_x)
+                .checked_div(legal_count)
+                .unwrap_or(0)
+        }
+    } else {
+        0
+    };
     for (i, &tid) in targets.iter().enumerate() {
-        let damage_amount = cx.target_damage.get(i).copied().unwrap_or(0);
+        let damage_amount = if matches!(division, DamageDivision::EvenAtResolution) {
+            even_damage
+        } else {
+            cx.target_damage.get(i).copied().unwrap_or(0)
+        };
         if damage_amount == 0 {
             continue;
         }

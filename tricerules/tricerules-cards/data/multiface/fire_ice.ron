@@ -14,6 +14,7 @@
             spell_effect: [DamageTargets(
                 amount: 2,
                 target: (kind: AnyTarget),
+                division: ChooseAtCast,
                 extra_mana_per_target: 0,
                 max_targets: Some(2),
             )],
@@ -26,4 +27,5 @@
             spell_effect: [TapTarget(target: (kind: AnyPermanent)), Draw(count: 1)],
         ),
     ],
+    partial: "Fire cannot target planeswalkers or battles because those object types are not modeled",
 )

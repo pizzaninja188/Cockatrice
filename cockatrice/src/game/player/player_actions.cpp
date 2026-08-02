@@ -1283,12 +1283,15 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
     if (pendingRuledSpellCast.activeModePosition >= 0) {
         const auto &targetData = selectedModes.at(pendingRuledSpellCast.activeModePosition).targets;
         pendingRuledSpellCast.isDamageTargets = targetData.isDamageTargets;
+        pendingRuledSpellCast.damageDividedEvenly = targetData.damageDividedEvenly;
         pendingRuledSpellCast.maxTargets = targetData.maxTargets;
         pendingRuledSpellCast.fixedDamage = targetData.fixedDamage;
         pendingRuledSpellCast.extraManaPerTarget = targetData.extraManaPerTarget;
     } else {
         pendingRuledSpellCast.isDamageTargets =
             geh->spellIsDamageTargets(ruledHandIndex, faceIndex);
+        pendingRuledSpellCast.damageDividedEvenly =
+            geh->spellTargetData(ruledHandIndex, faceIndex).damageDividedEvenly;
         pendingRuledSpellCast.maxTargets =
             geh->spellMaxTargets(ruledHandIndex, faceIndex);
         pendingRuledSpellCast.fixedDamage =
@@ -1491,7 +1494,10 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
     // allocation — matching Fire's fixed 2-target cap, so Fireball no longer needs a re-click.
     const int effMax = effectiveDamageTargetsMax();
     const int chosen = pendingRuledSpellCast.selectedTargetOids.size();
-    if (pendingRuledSpellCast.isDamageTargets && chosen < effMax) {
+    // effMax == 0 means "no cap" — reachable only for evenly-divided damage, where no per-target
+    // minimum bounds the count. There is nothing to auto-advance on, so the player confirms
+    // explicitly (click the spell again, or the Confirm Targets button).
+    if (pendingRuledSpellCast.isDamageTargets && (effMax <= 0 || chosen < effMax)) {
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
             tr("Target %1%2 chosen for %3. Click another target, or click %3 again to confirm.")
                 .arg(chosen)
@@ -1625,7 +1631,10 @@ bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
     // allocation — matching Fire's fixed 2-target cap, so Fireball no longer needs a re-click.
     const int effMax = effectiveDamageTargetsMax();
     const int chosen = pendingRuledSpellCast.selectedTargetOids.size();
-    if (pendingRuledSpellCast.isDamageTargets && chosen < effMax) {
+    // effMax == 0 means "no cap" — reachable only for evenly-divided damage, where no per-target
+    // minimum bounds the count. There is nothing to auto-advance on, so the player confirms
+    // explicitly (click the spell again, or the Confirm Targets button).
+    if (pendingRuledSpellCast.isDamageTargets && (effMax <= 0 || chosen < effMax)) {
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
             tr("Target %1%2 chosen for %3. Click another target, or click %3 again to confirm.")
                 .arg(chosen)
@@ -1650,9 +1659,14 @@ int PlayerActions::effectiveDamageTargetsMax() const
     if (!pendingRuledSpellCast.isDamageTargets) {
         return pendingRuledSpellCast.maxTargets;
     }
+    // "Divided evenly" has no per-target minimum — Fireball may legally target more creatures
+    // than X (they simply each take 0). Only the engine's own cap applies, if any.
+    if (pendingRuledSpellCast.damageDividedEvenly) {
+        return pendingRuledSpellCast.maxTargets;
+    }
     const int total = pendingDamageTargetsTotal();
-    // CR 601.2d: at least 1 damage per target caps the count at the total damage. Fireball's
-    // engine max_targets is 0 (unlimited) so the total is the only cap; Fire caps at min(2, total).
+    // CR 601.2d: at least 1 damage per target caps the count at the total damage. Fire caps at
+    // min(2, total).
     if (pendingRuledSpellCast.maxTargets > 0) {
         return qMin(pendingRuledSpellCast.maxTargets, total);
     }
@@ -1720,14 +1734,22 @@ bool PlayerActions::finalizeTargetSelectionAndContinue()
             ? pendingRuledSpellCast.fixedDamage
             : pendingRuledSpellCast.xValue;
         const int numTargets = pendingRuledSpellCast.selectedTargetOids.size();
-        if (numTargets > total) {
+        // "Divided evenly, rounded down" involves no choice, so there is nothing to allocate: the
+        // engine divides on resolution among the targets still legal then and ignores whatever
+        // damage_amount we send. Targeting more creatures than the total is legal here — they each
+        // simply take 0 — so neither the min-1-per-target rejection nor the interactive allocation
+        // below applies. Send explicit zeros so the wire value matches what the engine will use.
+        if (pendingRuledSpellCast.damageDividedEvenly) {
+            pendingRuledSpellCast.selectedTargetDamages.clear();
+            for (int i = 0; i < numTargets; ++i)
+                pendingRuledSpellCast.selectedTargetDamages.append(0);
+        } else if (numTargets > total) {
             player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
                 tr("Cannot assign at least 1 damage to each target (%1 targets, %2 total). Cast cancelled.")
                     .arg(numTargets).arg(total));
             clearPendingRuledSpellCast();
             return true;
-        }
-        if (numTargets == 1) {
+        } else if (numTargets == 1) {
             pendingRuledSpellCast.selectedTargetDamages.clear();
             pendingRuledSpellCast.selectedTargetDamages.append(static_cast<quint32>(total));
             // Single target: skip interactive allocation, fall through to mana payment.

@@ -61,6 +61,9 @@ struct PendingRuledSpellCast
     };
 
     int handIndex = -1;
+    /// Fireball's "divided evenly, rounded down": the engine splits the damage on resolution, so
+    /// there is no allocation to collect, no one-damage-per-target cap, and zero targets is legal.
+    bool damageDividedEvenly = false;
     int faceIndex = 0;
     QString cardName;
     QMap<QChar, int> remainingCost;

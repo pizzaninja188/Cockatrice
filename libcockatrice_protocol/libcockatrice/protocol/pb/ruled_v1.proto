@@ -328,6 +328,20 @@ message SpellTargets {
   // (targets - 1) * this to the generic mana it collects so the local prompt matches the
   // engine's real cost (the engine independently recomputes this — this is display parity only).
   uint32 extra_mana_per_target = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // DamageTargets spells only: how the damage is split among the chosen targets.
+  DamageDivision damage_division = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+// How a DamageTargets spell assigns its damage among the targets that were chosen.
+enum DamageDivision {
+  // CR 601.2d: the caster chooses the split as the spell is cast, at least 1 per target, summing
+  // to the total (Fire). The client must collect a per-target damage_amount on each TargetRef.
+  DAMAGE_DIVISION_CHOOSE_AT_CAST = 0;
+  // Fireball: "divided evenly, rounded down". There is no choice to make, so the division happens
+  // on resolution among the targets that are *still* legal then, and the per-target damage_amount
+  // on TargetRef is ignored. The client must not prompt for an allocation, must not require one
+  // damage per target, and may offer a zero-target cast.
+  DAMAGE_DIVISION_EVEN_AT_RESOLUTION = 1;
 }
 
 // Authoritative legal data for one printed mode of a modal spell.
