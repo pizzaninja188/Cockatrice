@@ -149,6 +149,27 @@ pub enum SpellEffectKind {
         amount: Amount,
         target: TargetFilter,
     },
+    /// CR 120.3a: deal `amount` damage to a player, chosen by `who`. **Untargeted** — "that
+    /// player" and "you" name a player without targeting it (CR 115.1), so this is deliberately
+    /// absent from `spell_effect_kind_needs_target` and from [`Self::target_filters`], exactly
+    /// like the neighbouring [`Self::LoseLife`].
+    ///
+    /// Damage, not life loss, and the distinction is load-bearing: a prevention shield consumes
+    /// it (CR 615.1) and a future "whenever a source deals damage" trigger can observe it, while
+    /// `TargetPlayerLosesLife` would be invisible to both — and would additionally target.
+    ///
+    /// Cards: Sulfuric Vortex and Tangle Wire (`AffectedPlayer`, "that player"), Serendib Efreet
+    /// and Juzám Djinn (`Controller`, "to you"), Underworld Dreams, Ebony Owl Netsuke.
+    ///
+    /// `Amount` rather than a bare `u32` follows [`Self::DamageTarget`] — `DamageAll`'s `u32` is
+    /// the known-narrow one (it cannot express Earthquake). Note that `StackItem::chosen_x` is 0
+    /// for triggered abilities, so `Amount::X` here resolves to 0 until an X-costed activated
+    /// ability or spell uses this effect.
+    DamagePlayer {
+        amount: Amount,
+        #[serde(default)]
+        who: PlayerRecipient,
+    },
     /// Divide `amount` damage among any number of targets (CR 601.2d). Costs
     /// `extra_mana_per_target` additional generic mana per target beyond the first (Fireball = 1,
     /// Fire = 0). `max_targets` caps the count (Fire = `Some(2)`; `None` = unlimited).
@@ -518,6 +539,27 @@ pub enum RelativePlayerSet {
     Controller,
     Opponents,
     All,
+}
+
+/// Which player an **untargeted** effect affects.
+///
+/// Sibling of [`RelativePlayerSet`] and [`TokenController`], and kept out of `TargetFilter` for
+/// the same reason they are: naming a player is not targeting it (CR 115.1), and borrowing
+/// targeting vocabulary for effects that do not target is what forced `TargetKind::Self_` to
+/// carry a "not targeting in the CR sense" disclaimer. Sulfuric Vortex never says "target".
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum PlayerRecipient {
+    /// "you" — the spell or ability's controller. Serendib Efreet, Juzám Djinn.
+    #[default]
+    Controller,
+    /// "that player" — the player the resolving item is *about*: a trigger's
+    /// `StackItem::trigger_player` (whose upkeep/draw step it is), falling back to the controller
+    /// when the item names nobody. Sulfuric Vortex, Underworld Dreams, Ebony Owl Netsuke.
+    AffectedPlayer,
+    /// "each opponent" — every other player still in the game. Pestilence-style drains.
+    EachOpponent,
+    /// "each player" — everyone still in the game, controller included. Earthquake's player half.
+    EachPlayer,
 }
 
 impl SpellEffectKind {

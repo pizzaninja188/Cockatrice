@@ -353,6 +353,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::DamageTargets { .. } => {
                         damage::damage_targets(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::DamagePlayer { .. } => {
+                        damage::damage_player(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::Draw { .. } => zones::draw(&mut cx, effect)?,
                     effect @ SpellEffectKind::Scry { .. } => zones::scry(&mut cx, effect)?,
                     effect @ SpellEffectKind::PumpTarget { .. } => {

@@ -1,5 +1,38 @@
 use super::*;
 
+/// CR 120.3a: `source_label` deals `amount` damage to `player`, after prevention (CR 615.1).
+///
+/// The single funnel for non-combat damage dealt to a player. `damage_target`'s player branch and
+/// the untargeted [`SpellEffectKind::DamagePlayer`] share it, so a future "whenever a source deals
+/// damage to a player" trigger — or infect (CR 120.3b) — hangs off one call site.
+///
+/// `LifeChanged` is emitted even when prevention reduced the damage to 0. That mirrors what the
+/// inlined version did; clients repaint an unchanged total, which is harmless.
+pub(super) fn apply_damage_to_player(
+    engine: &mut GameEngine,
+    events: &mut Vec<rv1::RuledEvent>,
+    player: PlayerId,
+    amount: u32,
+    source_label: &str,
+) {
+    let Some(pi) = engine.state.player_idx(player) else {
+        return;
+    };
+    engine.state.players[pi].life -= amount as i32;
+    events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+            player_id: engine.state.players[pi].id,
+            new_total: engine.state.players[pi].life,
+            delta: -(amount as i32),
+        })),
+    });
+    if amount > 0 {
+        events.push(ev_log(format!(
+            "{source_label} deals {amount} damage to P{player}"
+        )));
+    }
+}
+
 pub(super) fn damage_target(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -16,7 +49,9 @@ pub(super) fn damage_target(
     // CR 107.3: `amount` may be the cast-time X (Fireball) or a literal (Bolt).
     let amount = amount.resolve(top.chosen_x);
     if let Some(&tid) = targets.first() {
-        // CR 614.1a: consume prevention shield before recording damage.
+        // CR 615.1: consume prevention shield before recording damage. A player target is keyed
+        // by its player id widened to an ObjectId, the same convention `TargetRef::object_id`
+        // uses, so one call covers both branches below.
         let amount = apply_prevention_shield(
             &mut engine.state.damage_prevention_shields,
             tid,
@@ -25,19 +60,7 @@ pub(super) fn damage_target(
         );
         if let Some(pi) = engine.state.player_idx(tid as i32) {
             let pid = engine.state.players[pi].id;
-            engine.state.players[pi].life -= amount as i32;
-            events.push(rv1::RuledEvent {
-                ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
-                    player_id: engine.state.players[pi].id,
-                    new_total: engine.state.players[pi].life,
-                    delta: -(amount as i32),
-                })),
-            });
-            if amount > 0 {
-                events.push(ev_log(format!(
-                    "{spell_label} deals {amount} damage to P{pid}"
-                )));
-            }
+            apply_damage_to_player(engine, events, pid, amount, spell_label);
         } else {
             let tgt = object_display_name(&engine.state, engine.registry, tid);
             let is_creature = engine
@@ -155,5 +178,53 @@ pub(super) fn damage_targets(
         }
     }
 
+    Ok(EffectOutcome::Continue)
+}
+
+/// CR 120.3a + CR 115.1: untargeted damage to a named player (Sulfuric Vortex, Serendib Efreet).
+///
+/// Deliberately *not* folded into [`damage_targets`]: that one gates both its branches on a
+/// per-target `damage_amount == 0` check and logs unconditionally, so sharing a body would
+/// change its behaviour.
+pub(super) fn damage_player(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::DamagePlayer { amount, who } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let amount = amount.resolve(cx.top.chosen_x);
+    // CR 101.4: APNAP for the multi-player recipients, so the log and the life-loss order are
+    // reproducible in a replay.
+    let recipients: Vec<PlayerId> = match who {
+        PlayerRecipient::Controller => vec![cx.controller],
+        PlayerRecipient::AffectedPlayer => vec![cx.affected_player],
+        PlayerRecipient::EachOpponent => cx
+            .engine
+            .state
+            .players
+            .iter()
+            .filter(|p| p.id != cx.controller && !p.has_lost)
+            .map(|p| p.id)
+            .collect(),
+        PlayerRecipient::EachPlayer => cx
+            .engine
+            .state
+            .players
+            .iter()
+            .filter(|p| !p.has_lost)
+            .map(|p| p.id)
+            .collect(),
+    };
+    for player in recipients {
+        // CR 615.1: each recipient's own prevention shield applies to their share.
+        let dealt = apply_prevention_shield(
+            &mut cx.engine.state.damage_prevention_shields,
+            player as ObjectId,
+            amount,
+            cx.events,
+        );
+        apply_damage_to_player(cx.engine, cx.events, player, dealt, cx.spell_label);
+    }
     Ok(EffectOutcome::Continue)
 }

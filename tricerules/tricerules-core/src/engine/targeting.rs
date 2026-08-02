@@ -601,6 +601,8 @@ pub(super) fn validate_effect_targets(
         | SpellEffectKind::PreventAllCombatDamageTurn
         // CR 605.1a: a mana ability is untargeted by definition.
         | SpellEffectKind::ProduceMana { .. }
+        // CR 115.1: "deals N damage to that player / to you" names a player, it does not target.
+        | SpellEffectKind::DamagePlayer { .. }
         // CR 701.18: library search is untargeted; the library card is chosen via a pending
         // interrupt, not a target declared at cast time. Scry is the same shape — the cards it
         // acts on are the top of the controller's own library, decided at resolution.
