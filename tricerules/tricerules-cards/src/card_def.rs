@@ -72,6 +72,9 @@ pub struct CardFace {
     /// Scryfall brace syntax, copied verbatim from this face's `card_faces[i].mana_cost`.
     #[serde(default)]
     pub mana_cost: ManaCost,
+    /// CR 702.34: optional cost to cast this face from its owner's graveyard.
+    #[serde(default)]
+    pub flashback_cost: Option<ManaCost>,
     /// Card types followed by subtypes (e.g. `["Creature", "Bear"]`). Single source of truth for
     /// the type flags below — see [`CardFace::derive_type_flags`].
     #[serde(default)]
@@ -228,6 +231,9 @@ pub struct RawCardDefinition {
     /// Scryfall brace syntax, copied verbatim (e.g. `"{1}{R}"`, `""` for lands). See [`ManaCost`].
     #[serde(default)]
     pub mana_cost: ManaCost,
+    /// CR 702.34: optional cost to cast this face from its owner's graveyard.
+    #[serde(default)]
+    pub flashback_cost: Option<ManaCost>,
     #[serde(default)]
     pub types: Vec<String>,
     #[serde(default)]
@@ -276,6 +282,7 @@ impl RawCardDefinition {
             vec![CardFace {
                 name: self.name.clone(),
                 mana_cost: self.mana_cost,
+                flashback_cost: self.flashback_cost,
                 types: self.types,
                 supertypes: self.supertypes,
                 power: self.power,

@@ -41,6 +41,10 @@ struct RuledPlayerBinding
     // Parallel to engineOidToServerCardId but scoped to the graveyard zone.
     // Updated from RuledPerPlayerView::graveyard_object_ids each zone-view sync.
     QHash<quint32, int> graveyardEngineOidToServerCardId;
+    // Engine graveyard object ids in the engine's own order (oldest first). Kept alongside the
+    // hash above because a command that names a graveyard *slot* (a flashback cast) has only the
+    // index, and the physical pile runs the other way — see the ordering note in the .cpp.
+    QVector<quint32> graveyardEngineOidsOldestFirst;
 
     bool isEngineOidSummoningSick(quint32 engineOid) const
     {
@@ -60,6 +64,10 @@ struct RuledPlayerBinding
     }
     Server_Card *findCardByEngineOid(const Server_Player *player, quint32 engineOid) const;
     Server_Card *findGraveyardCardByEngineOid(const Server_Player *player, quint32 engineOid) const;
+    /// Resolve an *engine* graveyard index (as carried by CastSpell.hand_card_index on a flashback
+    /// cast) to the physical card. Never index the pile with an engine index directly: the two
+    /// zones run in opposite directions.
+    Server_Card *findGraveyardCardByEngineIndex(const Server_Player *player, int engineIndex) const;
 
     /// Bind `engineOid` to `serverCardId` outside a zone-view sync.
     ///

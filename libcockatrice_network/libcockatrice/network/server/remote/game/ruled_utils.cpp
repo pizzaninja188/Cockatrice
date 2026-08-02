@@ -20,19 +20,24 @@ bool ruledAllowsCrossPlayerMove(const Server_Game *game,
     }
     const QString from = startZone->getName();
     const QString to = targetZone->getName();
-
-    // 1. Casting: the caster's hand -> the single canonical shared stack zone, which belongs to
-    //    the lowest player id so every client sees one merged stack.
-    if (from == ZoneNames::HAND && to == ZoneNames::STACK) {
+    // 1. Anything into or out of a stack zone. Casting and resolving are the two halves of the
+    //    same thing, and both are engine-decided: the relay only ever issues these while mirroring
+    //    a RuledEventBatch the engine already validated.
+    //
+    //    Deliberately the invariant rather than a list of (from, to) pairs. The old list had to
+    //    grow for every castable-from zone and every resolves-to zone, and a missing entry broke
+    //    only the seat that does *not* own the canonical stack — so it passed review, passed tests
+    //    and passed play on the host. Flashback (GRAVE -> STACK) shipped exactly that way; foretell
+    //    and adventure (EXILE -> STACK) would have been next.
+    //
+    //    This does not widen what a client can reach. `cmdMoveCard` already requires write
+    //    permission on the start zone and that the sender is party to the move, so no private zone
+    //    becomes reachable; the most a rogue client gains is parking its own card on the shared
+    //    stack visually, which the engine never sees and the next stack event contradicts.
+    if (from == ZoneNames::STACK || to == ZoneNames::STACK) {
         return true;
     }
-    // 2. Resolving: the shared stack -> the caster's own public, coordinate-less zones. Without
-    //    this a non-active player's instant could not reach their graveyard in a 1v1.
-    if (from == ZoneNames::STACK && targetZone->getType() == ServerInfo_Zone::PublicZone &&
-        !targetZone->hasCoords() && (to == ZoneNames::GRAVE || to == ZoneNames::EXILE)) {
-        return true;
-    }
-    // 3. Leaving the battlefield: a permanent controlled by someone who does not own it goes to
+    // 2. Leaving the battlefield: a permanent controlled by someone who does not own it goes to
     //    its OWNER's zone (CR 400.3). The reverse trip (into the controller's TABLE) needs no
     //    exemption — upstream already allows cross-player moves into a public zone with coords.
     if (from == ZoneNames::TABLE) {

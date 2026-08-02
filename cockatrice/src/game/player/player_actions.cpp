@@ -594,6 +594,7 @@ bool PlayerActions::completePendingRuledSpellCast()
     ruled::v1::RuledCommand ruledCommand;
     auto *cast = ruledCommand.mutable_cast_spell();
     cast->set_hand_card_index(pendingRuledSpellCast.handIndex);
+    cast->set_flashback(pendingRuledSpellCast.fromGraveyard);
     cast->set_x_value(static_cast<quint32>(pendingRuledSpellCast.xValue));
     // CR 709/712/715: which face of a multi-face card to cast (0 for single-face cards).
     cast->set_face_index(static_cast<quint32>(pendingRuledSpellCast.faceIndex));
@@ -1161,19 +1162,38 @@ bool PlayerActions::sendRuledCleanupDiscardBatchIfComplete()
 
 bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
 {
-    const int handIndex = card && card->getZone() ? card->getZone()->getCards().indexOf(card) : -1;
+    const int zoneIndex = card && card->getZone() ? card->getZone()->getCards().indexOf(card) : -1;
     if (!card || !RuledActions::isRuledGame(player->getGame())) {
         return false;
     }
-    if (card->getZone()->getName() != ZoneNames::HAND) {
+    const bool fromGraveyard = card->getZone()->getName() == ZoneNames::GRAVE &&
+                               card->getZone()->getPlayer() == player;
+    if (card->getZone()->getName() != ZoneNames::HAND && !fromGraveyard) {
         return false;
     }
     if (card->getCardInfo().getCardType().contains("Land", Qt::CaseInsensitive)) {
         return false;
     }
 
-    if (handIndex < 0) {
+    if (zoneIndex < 0) {
         return false;
+    }
+
+    RuledClientState *const geh = player->getGame()->getGameEventHandler()->ruled();
+    if (fromGraveyard) {
+        if (!geh || !geh->isGraveyardActionLegal(zoneIndex)) {
+            return false;
+        }
+        const QVector<RuledFaceOption> options = geh->graveyardActionFaceOptions(zoneIndex);
+        if (options.size() != 1) {
+            return false; // A future multi-face flashback card gets a side-picker before use.
+        }
+        const auto &option = options.first();
+        const QString cost = geh->flashbackCost(zoneIndex, option.faceIndex);
+        if (cost.isEmpty()) {
+            return false;
+        }
+        return beginRuledSpellCast(card, zoneIndex, option.faceIndex, option.faceName, cost, true);
     }
 
     // CR 709/712/715: a multi-face card carries an Oracle "A // B" name; each half is cast
@@ -1183,7 +1203,6 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
         return tryRuledSpellCastFaceMenu(card);
     }
 
-    RuledClientState *const geh = player->getGame()->getGameEventHandler()->ruled();
     const int ruledHandIndex =
         RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_CAST_SPELL, card);
     if (ruledHandIndex < 0) {
@@ -1196,14 +1215,17 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
                                         int ruledHandIndex,
                                         int faceIndex,
                                         const QString &castName,
-                                        const QString &castCost)
+                                        const QString &castCost,
+                                        bool fromGraveyard)
 {
     RuledClientState *const geh = player->getGame()->getGameEventHandler()->ruled();
-    if (!geh->isHandActionLegal(ruled::v1::HAND_ACTION_CAST_SPELL, ruledHandIndex)) {
+    if (fromGraveyard ? !geh->isGraveyardActionLegal(ruledHandIndex)
+                      : !geh->isHandActionLegal(ruled::v1::HAND_ACTION_CAST_SPELL, ruledHandIndex)) {
         return false;
     }
     if (pendingRuledSpellCast.valid && pendingRuledSpellCast.waitingForTarget &&
-        pendingRuledSpellCast.handIndex == ruledHandIndex && pendingRuledSpellCast.faceIndex == faceIndex) {
+        pendingRuledSpellCast.handIndex == ruledHandIndex && pendingRuledSpellCast.faceIndex == faceIndex &&
+        pendingRuledSpellCast.fromGraveyard == fromGraveyard) {
         // For multi-target spells, clicking the spell again while 1+ targets are chosen confirms
         // the selection (instead of canceling); clicking with 0 targets cancels as before.
         if (pendingRuledSpellCast.isDamageTargets && !pendingRuledSpellCast.selectedTargetOids.isEmpty()) {
@@ -1216,12 +1238,16 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
     const auto actionIt = geh->handActions.constFind(ruled::v1::HAND_ACTION_CAST_SPELL);
     const int castKey = RuledClientState::spellTargetKey(ruledHandIndex, faceIndex);
     QVector<PendingRuledSpellCast::SelectedMode> selectedModes;
-    if (actionIt != geh->handActions.constEnd() && actionIt->modalOptionsByCastKey.contains(castKey)) {
-        const auto &modeOptions = actionIt->modalOptionsByCastKey.value(castKey);
+    const RuledHandActionSet *actionSet = fromGraveyard ? &geh->graveyardActions : nullptr;
+    if (!fromGraveyard && actionIt != geh->handActions.constEnd()) {
+        actionSet = &actionIt.value();
+    }
+    if (actionSet && actionSet->modalOptionsByCastKey.contains(castKey)) {
+        const auto &modeOptions = actionSet->modalOptionsByCastKey.value(castKey);
         const auto selected = RuledPendingCast::chooseModes(
             player->getGame()->getTab(), castName, modeOptions,
-            actionIt->modalMinModesByCastKey.value(castKey),
-            actionIt->modalMaxModesByCastKey.value(castKey));
+            actionSet->modalMinModesByCastKey.value(castKey),
+            actionSet->modalMaxModesByCastKey.value(castKey));
         if (!selected.has_value()) {
             return true;
         }
@@ -1247,6 +1273,7 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
     clearPendingRuledSpellCast();
     pendingRuledSpellCast.valid = true;
     pendingRuledSpellCast.handIndex = ruledHandIndex;
+    pendingRuledSpellCast.fromGraveyard = fromGraveyard;
     pendingRuledSpellCast.faceIndex = faceIndex;
     pendingRuledSpellCast.selectedTargetOids.clear();
     pendingRuledSpellCast.xValue = 0;
@@ -1279,7 +1306,8 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
     }
     pendingRuledSpellCast.waitingForTarget = pendingRuledSpellCast.activeModePosition >= 0 ||
         (selectedModes.isEmpty() &&
-         geh->handActionNeedsTarget(ruled::v1::HAND_ACTION_CAST_SPELL, ruledHandIndex));
+         (fromGraveyard ? geh->graveyardActionNeedsTarget(ruledHandIndex)
+                        : geh->handActionNeedsTarget(ruled::v1::HAND_ACTION_CAST_SPELL, ruledHandIndex)));
     if (pendingRuledSpellCast.activeModePosition >= 0) {
         const auto &targetData = selectedModes.at(pendingRuledSpellCast.activeModePosition).targets;
         pendingRuledSpellCast.isDamageTargets = targetData.isDamageTargets;
@@ -1289,15 +1317,15 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
         pendingRuledSpellCast.extraManaPerTarget = targetData.extraManaPerTarget;
     } else {
         pendingRuledSpellCast.isDamageTargets =
-            geh->spellIsDamageTargets(ruledHandIndex, faceIndex);
+            geh->spellIsDamageTargets(ruledHandIndex, faceIndex, fromGraveyard);
         pendingRuledSpellCast.damageDividedEvenly =
-            geh->spellTargetData(ruledHandIndex, faceIndex).damageDividedEvenly;
+            geh->spellTargetData(ruledHandIndex, faceIndex, fromGraveyard).damageDividedEvenly;
         pendingRuledSpellCast.maxTargets =
-            geh->spellMaxTargets(ruledHandIndex, faceIndex);
+            geh->spellMaxTargets(ruledHandIndex, faceIndex, fromGraveyard);
         pendingRuledSpellCast.fixedDamage =
-            geh->spellFixedDamage(ruledHandIndex, faceIndex);
+            geh->spellFixedDamage(ruledHandIndex, faceIndex, fromGraveyard);
         pendingRuledSpellCast.extraManaPerTarget =
-            geh->spellExtraManaPerTarget(ruledHandIndex, faceIndex);
+            geh->spellExtraManaPerTarget(ruledHandIndex, faceIndex, fromGraveyard);
     }
     emit landTapUndoAvailableChanged(false);
     emit ruledSpellCastPendingChanged(true);
@@ -1464,10 +1492,12 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
                            : isOnGraveyard ? modalTarget->validGraveyardIds.contains(targetOid)
                                            : modalTarget->validStackIds.contains(targetOid))
         : (isOnBattlefield
-               ? handler->isValidSpellTarget(slot, face, targetOid)
+               ? handler->isValidSpellTarget(slot, face, targetOid, pendingRuledSpellCast.fromGraveyard)
                : isOnGraveyard
-                   ? handler->isValidSpellGraveyardTarget(slot, face, targetOid)
-                   : handler->isValidSpellStackTarget(slot, face, targetOid));
+                   ? handler->isValidSpellGraveyardTarget(slot, face, targetOid,
+                                                          pendingRuledSpellCast.fromGraveyard)
+                   : handler->isValidSpellStackTarget(slot, face, targetOid,
+                                                       pendingRuledSpellCast.fromGraveyard));
     if (!valid) {
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
             tr("That is not a legal target for %1.").arg(pendingRuledSpellCast.cardName));
@@ -1552,8 +1582,8 @@ bool PlayerActions::isAwaitingRuledPlayerTargetSelection() const
             pendingRuledSpellCast.selectedModes.at(pendingRuledSpellCast.activeModePosition).targets;
         return targets.canTargetSelf || targets.canTargetOpponent;
     }
-    return handler->canSpellTargetSelf(slot, face) ||
-           handler->canSpellTargetOpponent(slot, face);
+    return handler->canSpellTargetSelf(slot, face, pendingRuledSpellCast.fromGraveyard) ||
+           handler->canSpellTargetOpponent(slot, face, pendingRuledSpellCast.fromGraveyard);
 }
 
 bool PlayerActions::isAwaitingRuledAbilityOrTriggerPlayerTarget() const
@@ -1595,11 +1625,11 @@ bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
         : nullptr;
     const bool canTargetSelf = modalTarget
         ? modalTarget->canTargetSelf
-        : handler->canSpellTargetSelf(slot, face);
+        : handler->canSpellTargetSelf(slot, face, pendingRuledSpellCast.fromGraveyard);
     const bool canTargetOpponent =
         modalTarget
             ? modalTarget->canTargetOpponent
-            : handler->canSpellTargetOpponent(slot, face);
+            : handler->canSpellTargetOpponent(slot, face, pendingRuledSpellCast.fromGraveyard);
     if (isSelf && !canTargetSelf) {
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
             tr("%1 must target an opponent.").arg(pendingRuledSpellCast.cardName));

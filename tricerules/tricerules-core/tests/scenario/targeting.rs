@@ -573,6 +573,96 @@ fn bump_in_the_night_rejects_self_target() {
 }
 
 #[test]
+fn bump_in_the_night_can_be_cast_from_graveyard_with_flashback() {
+    let decks = Some(vec![
+        vec![
+            "swamp".into(),
+            "bump_in_the_night".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+        ],
+        forest_only_deck(),
+    ]);
+    let mut e = GameEngine::new(2625, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let bump_oid = e.state.players[0]
+        .hand
+        .iter()
+        .copied()
+        .find(|oid| {
+            e.state
+                .objects
+                .get(oid)
+                .is_some_and(|o| o.card_id == "bump_in_the_night")
+        })
+        .expect("bump in hand");
+    e.state.players[0].hand.retain(|&oid| oid != bump_oid);
+    e.state.players[0].graveyard.push(bump_oid);
+    e.state
+        .objects
+        .get_mut(&bump_oid)
+        .expect("bump object")
+        .zone = tricerules_core::Zone::Graveyard;
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            r: 1,
+            c: 5,
+            ..Default::default()
+        },
+    );
+    let graveyard_idx = e.state.players[0]
+        .graveyard
+        .iter()
+        .position(|&oid| oid == bump_oid)
+        .expect("bump graveyard index");
+    let target = target_player(1);
+    let cast = e
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::CastSpell(CastSpell {
+                    hand_card_index: graveyard_idx as u32,
+                    targets: target,
+                    flashback: true,
+                    ..Default::default()
+                })),
+            },
+        )
+        .expect("flashback cast");
+    // CR 702.34: the stack card is labelled, because nothing on the face distinguishes a flashback
+    // cast from a normal one — and this one is exiled rather than buried when it leaves the stack.
+    let annotation = cast
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(Ev::StackPushed(pushed)) => Some(pushed.ability_annotation.clone()),
+            _ => None,
+        })
+        .expect("spell pushed to the stack");
+    assert_eq!(annotation, "Flashback");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    let batch = e.apply_command(1, &pass()).expect("p1 pass");
+
+    assert_eq!(e.state.players[1].life, 17);
+    assert!(e.state.players[0].exile.contains(&bump_oid));
+    assert!(!e.state.players[0].graveyard.contains(&bump_oid));
+    assert!(batch.events.iter().any(|event| {
+        matches!(
+            event.ev,
+            Some(Ev::StackResolved(ref resolved))
+                if resolved.destination
+                    == tricerules_proto::ruled::v1::StackResolveDestination::Exile as i32
+        )
+    }));
+}
+
+#[test]
 fn swords_to_plowshares_fizzles_if_target_dies_before_resolution() {
     let decks = Some(vec![
         vec![

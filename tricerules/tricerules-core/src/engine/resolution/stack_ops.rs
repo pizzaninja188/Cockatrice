@@ -28,13 +28,22 @@ pub(super) fn counter_target_spell(
             // missing object and corrupt the already-popped stack.
             if !st.is_copy {
                 let owner = engine.state.objects.get(&st.id).map(|o| o.owner);
-                move_object_to_zone(&mut engine.state, st.id, Zone::Graveyard, None)?;
+                let destination = if st.flashback {
+                    Zone::Exile
+                } else {
+                    Zone::Graveyard
+                };
+                move_object_to_zone(&mut engine.state, st.id, destination, None)?;
                 if let Some(owner) = owner {
                     events.push(permanent_moved_event(
                         &engine.state,
                         st.id,
                         owner,
-                        rv1::permanent_moved::Destination::Graveyard,
+                        if st.flashback {
+                            rv1::permanent_moved::Destination::Exile
+                        } else {
+                            rv1::permanent_moved::Destination::Graveyard
+                        },
                     ));
                 }
             }
@@ -122,6 +131,7 @@ pub(super) fn copy_target_spell(
                     // CR 707.2: the copy has the original's characteristics and choices. `None`
                     // for every spell today, but copying inherits it rather than dropping it.
                     trigger_player: src.trigger_player,
+                    flashback: false,
                 };
                 // CR 707.10c: prompt for new targets on the first copy; push any
                 // additional copies immediately with the original targets.

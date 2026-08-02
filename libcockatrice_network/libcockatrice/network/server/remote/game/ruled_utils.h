@@ -23,11 +23,14 @@ class Server_CardZone;
 /// `Server_AbstractPlayer::moveCard` controller-change guard must let it through.
 ///
 /// Upstream only permits a cross-player move into a public zone *with* coordinates (the table),
-/// which is how freeform models giving control. Ruled mode needs three more shapes, all of them
+/// which is how freeform models giving control. Ruled mode needs two more shapes, both of them
 /// engine-decided rather than client-requested:
-///   1. HAND -> the single canonical shared STACK zone (every cast by the non-owning seat);
-///   2. that shared STACK -> the caster's graveyard/exile, where instants and sorceries resolve;
-///   3. TABLE -> the *owner's* zones, when a permanent someone else controls leaves the
+///   1. anything into or out of a STACK zone. Stated as the invariant rather
+///      than as a list of zone pairs on purpose: a spell can be cast from the hand, from a
+///      graveyard (flashback), and later from exile (foretell, adventure), and can resolve to a
+///      graveyard, exile, the battlefield or back to a hand. Enumerating those pairs meant every
+///      new one was a silent breakage on the non-owning seat only — flashback shipped that way.
+///   2. TABLE -> the *owner's* zones, when a permanent someone else controls leaves the
 ///      battlefield and goes home (CR 400.3) — reanimation's return trip.
 ///
 /// Always false outside a ruled game: freeform's trust model is upstream's business.

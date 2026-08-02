@@ -278,9 +278,28 @@ RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &c
                 // Resolution uses ruledStackObjectIdToCasterPlayerId to send the card to the
                 // correct destination zone regardless of which physical zone it sat in.
                 Server_CardZone *stackZone = ruledCanonicalStackZone(game);
+                // CR 702.34: a flashback cast comes from the caster's graveyard, and
+                // hand_card_index indexes that zone instead. Sourcing it from the hand would move
+                // an unrelated hand card to the stack — and that card, not the flashback spell,
+                // would then be the one exiled on resolution.
+                //
+                // The index cannot be used against the physical graveyard pile directly: the
+                // engine's graveyard is oldest-first while the Cockatrice pile is newest-first, so
+                // the binding resolves the engine slot to the real card.
+                const bool fromGraveyard = ruledCmd.cast_spell().flashback();
+                Server_CardZone *sourceZone =
+                    fromGraveyard ? cmdPlayer->getZones().value(ZoneNames::GRAVE) : handZone;
                 const int handIndex = static_cast<int>(ruledCmd.cast_spell().hand_card_index());
-                if (handZone && stackZone && handIndex >= 0 && handIndex < handZone->getCards().size()) {
-                    Server_Card *card = handZone->getCards().at(handIndex);
+                Server_Card *card = nullptr;
+                if (fromGraveyard) {
+                    if (auto *serverPlayer = dynamic_cast<Server_Player *>(cmdPlayer)) {
+                        card = playerBinding(serverPlayer->getPlayerId())
+                                   .findGraveyardCardByEngineIndex(serverPlayer, handIndex);
+                    }
+                } else if (handZone && handIndex >= 0 && handIndex < handZone->getCards().size()) {
+                    card = handZone->getCards().at(handIndex);
+                }
+                if (sourceZone && stackZone && card) {
                     PendingRuledCastVisual pending;
                     pending.cardName = card ? card->getName() : QString();
                     pending.serverCardId = card ? card->getId() : -1;
@@ -299,8 +318,8 @@ RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &c
                     CardToMove cardToMove;
                     cardToMove.set_card_id(card->getId());
                     GameEventStorage moveGes;
-                    if (cmdPlayer->moveCard(moveGes, handZone, QList<const CardToMove *>() << &cardToMove, stackZone,
-                                            -1, 0, true) == Response::RespOk) {
+                    if (cmdPlayer->moveCard(moveGes, sourceZone, QList<const CardToMove *>() << &cardToMove,
+                                            stackZone, -1, 0, true) == Response::RespOk) {
                         moveGes.sendToGame(game);
                     }
                 }
@@ -368,11 +387,13 @@ void RuledGameDriver::applyRuledStackResolvedEvent(const ruled::v1::StackResolve
         // go to the battlefield).
         const ruled::v1::StackResolveDestination dest = stackResolved.destination();
         if (dest != ruled::v1::STACK_RESOLVE_DESTINATION_BATTLEFIELD &&
-            dest != ruled::v1::STACK_RESOLVE_DESTINATION_GRAVEYARD) {
+            dest != ruled::v1::STACK_RESOLVE_DESTINATION_GRAVEYARD &&
+            dest != ruled::v1::STACK_RESOLVE_DESTINATION_EXILE) {
             qWarning() << "Ruled: StackResolved for object" << stackResolved.object_id()
                        << "has no destination; defaulting to graveyard";
         }
         const bool goesToBattlefield = (dest == ruled::v1::STACK_RESOLVE_DESTINATION_BATTLEFIELD);
+        const bool goesToExile = (dest == ruled::v1::STACK_RESOLVE_DESTINATION_EXILE);
         const quint32 resolvedOidLocal = static_cast<quint32>(stackResolved.object_id());
         const int casterPid = ruledStackObjectIdToCasterPlayerId.value(resolvedOidLocal, -1);
         Server_AbstractPlayer *destPlayer = ab;
@@ -382,7 +403,9 @@ void RuledGameDriver::applyRuledStackResolvedEvent(const ruled::v1::StackResolve
             }
         }
         Server_CardZone *targetZone =
-            destPlayer->getZones().value(goesToBattlefield ? ZoneNames::TABLE : ZoneNames::GRAVE);
+            destPlayer->getZones().value(goesToBattlefield ? ZoneNames::TABLE
+                                                            : (goesToExile ? ZoneNames::EXILE
+                                                                           : ZoneNames::GRAVE));
         if (!targetZone) {
             return false;
         }
@@ -401,9 +424,9 @@ void RuledGameDriver::applyRuledStackResolvedEvent(const ruled::v1::StackResolve
                 }
             }
         }
-        // Battlefield: -1 means "find a free grid column". Graveyard is a pile that renders its
-        // front card, so a resolved spell goes to position 0 (matching the freeform client, which
-        // sends x=0 for stack->graveyard) rather than being appended behind everything already there.
+        // Battlefield: -1 means "find a free grid column". Graveyard and exile are piles that
+        // render their front card, so a resolved spell goes to position 0 rather than being
+        // appended behind everything already there.
         const int targetX = goesToBattlefield ? -1 : 0;
         if (ab->moveCard(moveGes, stackZone, QList<const CardToMove *>() << &cardToMove, targetZone, targetX, targetY,
                          true) == Response::RespOk) {

@@ -133,6 +133,7 @@ impl GameEngine {
             target_damage: vec![],
             chosen_modes: vec![],
             trigger_player,
+            flashback: false,
         });
         self.state.passes_since_stack_change = 0;
 

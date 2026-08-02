@@ -217,6 +217,9 @@ message CastSpell {
   // distinct and the engine resolves selected modes in printed order regardless of submission
   // order.
   repeated SelectedSpellMode selected_modes = 6;
+  // CR 702.34: cast this spell from its owner's graveyard for its flashback cost. When true,
+  // hand_card_index is interpreted as an index in the caster's graveyard.
+  bool flashback = 7;
 }
 
 // A payment decision for one flexible mana pip (CR 107.4d–f). Currently only Phyrexian pips
@@ -376,6 +379,18 @@ message LegalHandAction {
   repeated LegalSpellMode modes = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
+// CR 702.34: a spell the player may cast from their own graveyard using flashback.
+message LegalGraveyardAction {
+  uint32 graveyard_index = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  string card_name = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 face_index = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool needs_target = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 min_modes = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 max_modes = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated LegalSpellMode modes = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  string cost = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
 message LegalActions {
   // Display-only prompt feed. Gameplay consumes hand_actions, never these strings.
   repeated string labels = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
@@ -404,6 +419,10 @@ message LegalActions {
   // disable the confirm-blockers control until every id is staged as a blocker (mirrors set_blockers).
   repeated uint32 required_blocker_ids = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated LegalHandAction hand_actions = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated LegalGraveyardAction graveyard_actions = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Valid targets for flashback casts. Key = (graveyard slot << 8) | face index.
+  map<uint32, SpellTargets> valid_targets_by_graveyard_index = 10
+      [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // Servatrice-injected each ruled broadcast: engine hand slot index -> Server_Card.id for that player,
@@ -764,6 +783,7 @@ enum StackResolveDestination {
   STACK_RESOLVE_DESTINATION_UNSPECIFIED = 0; // legacy: server may infer from Oracle text
   STACK_RESOLVE_DESTINATION_GRAVEYARD = 1;
   STACK_RESOLVE_DESTINATION_BATTLEFIELD = 2;
+  STACK_RESOLVE_DESTINATION_EXILE = 3; // CR 702.34: a spell cast with flashback
 }
 
 message StackResolved {

@@ -149,6 +149,8 @@ bool RuledEventDispatcher::processPayload(const std::string &payload)
 void RuledEventDispatcher::resetPerBatchLegalActions()
 {
     state->clearHandActions();
+    state->graveyardActions = {};
+    state->flashbackCostsByCastKey.clear();
     state->openingBottomSelectedIndices.clear();
     state->openingPickSeatIds.clear();
     state->openingUiKind = RuledOpeningUiKind::None;
@@ -831,12 +833,29 @@ void RuledEventDispatcher::applyLifeChanged(const ruled::v1::LifeChanged &lc, Ba
 void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &actions, BatchContext &ctx)
 {
     state->handActions = copyHandActions(actions);
+    for (const auto &action : actions.graveyard_actions()) {
+        const int graveyardIndex = static_cast<int>(action.graveyard_index());
+        const int faceIndex = static_cast<int>(action.face_index());
+        const int castKey = RuledClientState::spellTargetKey(graveyardIndex, faceIndex);
+        state->graveyardActions.handIndices.insert(graveyardIndex);
+        const QString cardName = QString::fromStdString(action.card_name());
+        state->graveyardActions.indicesByCardName.insert(cardName, graveyardIndex);
+        state->graveyardActions.faceOptionsByIndex[graveyardIndex].append({faceIndex, cardName});
+        if (action.needs_target()) {
+            state->graveyardActions.needsTargetIndices.insert(graveyardIndex);
+        }
+        state->flashbackCostsByCastKey.insert(castKey, QString::fromStdString(action.cost()));
+    }
 
     state->validTargetsByHandSlot.clear();
     for (const auto &entry : actions.valid_targets_by_hand_slot()) {
         // Key is the engine's composite (hand slot << 8 | face index); stored verbatim and
         // matched by RuledClientState::spellTargetKey().
         state->validTargetsByHandSlot.insert(static_cast<int>(entry.first), parseSpellTargets(entry.second));
+    }
+    state->validTargetsByGraveyardIndex.clear();
+    for (const auto &entry : actions.valid_targets_by_graveyard_index()) {
+        state->validTargetsByGraveyardIndex.insert(static_cast<int>(entry.first), parseSpellTargets(entry.second));
     }
     state->validTargetsByAbility.clear();
     for (const auto &entry : actions.valid_targets_by_ability()) {

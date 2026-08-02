@@ -2,6 +2,7 @@
   id: "bump_in_the_night",
   name: "Bump in the Night",
   mana_cost: "{B}",
+  flashback_cost: Some("{5}{R}"),
   types: ["Sorcery"],
   spell_effect: [TargetPlayerLosesLife(amount: 3, target: (kind: OpponentPlayer))],
 )

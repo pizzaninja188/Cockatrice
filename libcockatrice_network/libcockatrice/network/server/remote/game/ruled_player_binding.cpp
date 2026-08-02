@@ -467,11 +467,13 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
     Server_CardZone *graveZone = zones.value(ZoneNames::GRAVE);
     if (graveZone && v.graveyard_object_ids_size() == graveZone->getCards().size()) {
         graveyardEngineOidToServerCardId.clear();
+        graveyardEngineOidsOldestFirst.clear();
         const int graveyardSize = v.graveyard_object_ids_size();
         for (int i = 0; i < graveyardSize; ++i) {
             const quint32 oid = static_cast<quint32>(v.graveyard_object_ids(i));
             Server_Card *card = graveZone->getCards().at(graveyardSize - 1 - i);
             graveyardEngineOidToServerCardId.insert(oid, card->getId());
+            graveyardEngineOidsOldestFirst.append(oid);
         }
     }
 
@@ -494,6 +496,14 @@ Server_Card *RuledPlayerBinding::findCardByEngineOid(const Server_Player *player
         }
     }
     return nullptr;
+}
+
+Server_Card *RuledPlayerBinding::findGraveyardCardByEngineIndex(const Server_Player *player, int engineIndex) const
+{
+    if (engineIndex < 0 || engineIndex >= graveyardEngineOidsOldestFirst.size()) {
+        return nullptr;
+    }
+    return findGraveyardCardByEngineOid(player, graveyardEngineOidsOldestFirst.at(engineIndex));
 }
 
 Server_Card *RuledPlayerBinding::findGraveyardCardByEngineOid(const Server_Player *player, quint32 engineOid) const

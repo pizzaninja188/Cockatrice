@@ -9,7 +9,9 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
     for p in &eng.state.players {
         let labels = legal_labels(eng, p.id);
         let hand_actions = legal_hand_actions(eng, p.id);
+        let graveyard_actions = legal_graveyard_actions(eng, p.id);
         let mut valid_targets_by_hand_slot = BTreeMap::new();
+        let mut valid_targets_by_graveyard_index = BTreeMap::new();
         let mut valid_targets_by_ability = BTreeMap::new();
 
         if let Some(idx) = eng.state.player_idx(p.id) {
@@ -28,6 +30,25 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                     let t = compute_spell_targets(eng, p.id, &face.spell_effect);
                     let key = (slot as u32) << 8 | face_index as u32;
                     valid_targets_by_hand_slot.insert(key, t);
+                }
+            }
+            for (slot, &oid) in eng.state.players[idx].graveyard.iter().enumerate() {
+                let Some(obj) = eng.state.objects.get(&oid) else {
+                    continue;
+                };
+                let Some(def) = eng.registry.get(&obj.card_id) else {
+                    continue;
+                };
+                for (face_index, face) in def.faces_iter().enumerate() {
+                    if face.flashback_cost.is_none()
+                        || face.is_land
+                        || !face.spell_effect.iter().any(spell_effect_kind_needs_target)
+                    {
+                        continue;
+                    }
+                    let t = compute_spell_targets(eng, p.id, &face.spell_effect);
+                    let key = (slot as u32) << 8 | face_index as u32;
+                    valid_targets_by_graveyard_index.insert(key, t);
                 }
             }
 
@@ -117,6 +138,8 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 required_attacker_ids,
                 required_blocker_ids,
                 hand_actions,
+                graveyard_actions,
+                valid_targets_by_graveyard_index,
             },
         );
     }
@@ -287,6 +310,92 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                 }
                 actions.push(action);
             }
+        }
+    }
+    actions
+}
+
+fn legal_graveyard_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalGraveyardAction> {
+    if eng.state.opening.is_some()
+        || eng.state.pending_resolution.is_some()
+        || eng.state.pending_triggers.front().is_some()
+        || eng.state.turn_step == TurnStep::Cleanup
+        || eng.state.priority_player_id() != pid
+        || priority_locked_for_combat_declaration(&eng.state)
+        || eng.state.combat.as_ref().is_some_and(|combat| {
+            combat.blockers_declared
+                && combat.damage_assignment_needed
+                && combat.assign_combat_damage_phase
+        })
+    {
+        return Vec::new();
+    }
+    let Some(player_index) = eng.state.player_idx(pid) else {
+        return Vec::new();
+    };
+    let instant_ok = instant_timing_step_allowed(eng.state.turn_step);
+    let sorcery_ok = sorcery_speed_available(&eng.state, pid);
+    let mut actions = Vec::new();
+    for (graveyard_index, &oid) in eng.state.players[player_index].graveyard.iter().enumerate() {
+        let Some(card_id) = eng.state.objects.get(&oid).map(|object| &object.card_id) else {
+            continue;
+        };
+        let Some(definition) = eng.registry.get(card_id) else {
+            continue;
+        };
+        for (face_index, face) in definition.faces_iter().enumerate() {
+            if face.flashback_cost.is_none() || face.is_land {
+                continue;
+            }
+            let cast_ok = if castable_at_instant_speed(&face) {
+                instant_ok
+            } else {
+                sorcery_ok
+            };
+            if !cast_ok {
+                continue;
+            }
+            let mut action = rv1::LegalGraveyardAction {
+                graveyard_index: graveyard_index as u32,
+                card_name: face.name.clone(),
+                face_index: face_index as u32,
+                needs_target: face.spell_effect.iter().any(spell_effect_kind_needs_target),
+                min_modes: 0,
+                max_modes: 0,
+                modes: vec![],
+                cost: face
+                    .flashback_cost
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .unwrap_or_default(),
+            };
+            if let Some(modal) = &face.modal_spell {
+                action.min_modes = modal.min_modes;
+                action.max_modes = modal.max_modes;
+                action.modes = modal
+                    .modes
+                    .iter()
+                    .enumerate()
+                    .map(|(mode_index, mode)| {
+                        let needs_target = mode.effects.iter().any(spell_effect_kind_needs_target);
+                        let targets = compute_spell_targets(eng, pid, &mode.effects);
+                        let selectable = !needs_target || spell_targets_have_candidate(&targets);
+                        rv1::LegalSpellMode {
+                            mode_index: mode_index as u32,
+                            label: mode.label.clone(),
+                            selectable,
+                            needs_target,
+                            targets: Some(targets),
+                        }
+                    })
+                    .collect();
+                if action.modes.iter().filter(|mode| mode.selectable).count()
+                    < modal.min_modes as usize
+                {
+                    continue;
+                }
+            }
+            actions.push(action);
         }
     }
     actions

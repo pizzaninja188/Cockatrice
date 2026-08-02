@@ -193,6 +193,7 @@ impl GameEngine {
         command: &rv1::CastSpell,
     ) -> Result<RuledEventBatch, EngineError> {
         let hand_idx = command.hand_card_index as usize;
+        let flashback = command.flashback;
         let targets = command.targets.as_slice();
         let x_value = command.x_value;
         let flex_payments = command.flex_payments.as_slice();
@@ -208,10 +209,17 @@ impl GameEngine {
             .state
             .player_idx(player)
             .ok_or(EngineError::UnknownPlayer(player))?;
-        let oid = *self.state.players[idx]
-            .hand
-            .get(hand_idx)
-            .ok_or(EngineError::Illegal("bad hand index"))?;
+        let oid = if flashback {
+            *self.state.players[idx]
+                .graveyard
+                .get(hand_idx)
+                .ok_or(EngineError::Illegal("bad graveyard index"))?
+        } else {
+            *self.state.players[idx]
+                .hand
+                .get(hand_idx)
+                .ok_or(EngineError::Illegal("bad hand index"))?
+        };
         let card_id = self.state.objects.get(&oid).unwrap().card_id.clone();
         let def = self
             .registry
@@ -225,7 +233,13 @@ impl GameEngine {
         }
         let face_is_sorcery = face.is_sorcery;
         let face_instant_speed = castable_at_instant_speed(&face);
-        let face_mana = face.mana_cost.clone();
+        let face_mana = if flashback {
+            face.flashback_cost
+                .clone()
+                .ok_or(EngineError::Illegal("card has no flashback cost"))?
+        } else {
+            face.mana_cost.clone()
+        };
         let face_name = face.name.to_string();
         let is_multiface = def.is_multiface();
         let face_effects: Vec<SpellEffectKind> = face.spell_effect.to_vec();
@@ -377,7 +391,11 @@ impl GameEngine {
             flex_payments,
         )?;
 
-        self.state.players[idx].hand.retain(|&x| x != oid);
+        if flashback {
+            self.state.players[idx].graveyard.retain(|&x| x != oid);
+        } else {
+            self.state.players[idx].hand.retain(|&x| x != oid);
+        }
         let trefs: Vec<ObjectId> = public_targets
             .iter()
             .map(|target| target.object_id)
@@ -424,6 +442,7 @@ impl GameEngine {
             chosen_modes,
             // A spell's effects always act on its controller.
             trigger_player: None,
+            flashback,
         });
         super::resolution::move_object_to_zone(&mut self.state, oid, Zone::Stack, None)?;
 
@@ -454,6 +473,18 @@ impl GameEngine {
         };
         if !chosen_mode_labels.is_empty() {
             stack_annotation = chosen_mode_labels.join("\n");
+        }
+        // CR 702.34: nothing on the card face says a spell was cast for its flashback cost, and it
+        // is exiled instead of going to its owner's graveyard when it leaves the stack — so the
+        // annotation is the only warning an opponent gets while it is still resolvable. Prepended
+        // rather than appended: it changes what the spell *is*, so it reads before the X value or
+        // the chosen modes.
+        if flashback {
+            stack_annotation = if stack_annotation.is_empty() {
+                "Flashback".to_string()
+            } else {
+                format!("Flashback\n{stack_annotation}")
+            };
         }
         if life_paid > 0 {
             batch.events.push(rv1::RuledEvent {
@@ -613,6 +644,7 @@ impl GameEngine {
             chosen_modes: vec![],
             // An activated ability's effects act on the player who activated it.
             trigger_player: None,
+            flashback: false,
         });
         self.state.passes_since_stack_change = 0;
         self.state.priority_idx = idx;

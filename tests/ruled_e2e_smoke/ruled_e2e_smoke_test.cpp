@@ -64,10 +64,12 @@
 #include <libcockatrice/protocol/pb/event_game_state_changed.pb.h>
 #include <libcockatrice/protocol/pb/event_list_games.pb.h>
 #include <libcockatrice/protocol/pb/event_list_rooms.pb.h>
+#include <libcockatrice/protocol/pb/event_move_card.pb.h>
 #include <libcockatrice/protocol/pb/event_notify_user.pb.h>
 #include <libcockatrice/protocol/pb/event_ruled_payload.pb.h>
 #include <libcockatrice/protocol/pb/game_commands.pb.h>
 #include <libcockatrice/protocol/pb/game_event.pb.h>
+#include <libcockatrice/utility/zone_names.h>
 #include <libcockatrice/protocol/pb/game_event_container.pb.h>
 #include <libcockatrice/protocol/pb/response.pb.h>
 #include <libcockatrice/protocol/pb/room_commands.pb.h>
@@ -215,6 +217,16 @@ public:
     bool borosCharmCast = false;
     bool giantCast = false;
     bool brainstormCast = false;
+    // Flashback (CR 702.34) exercises the one relay path nothing else covers: the physical
+    // card is sourced from the GRAVE pile rather than the hand. Tracked through the freeform
+    // Event_MoveCard stream, because the ruled batch looks identical whether or not the relay
+    // actually moved the right card — that is exactly how a wrong-card bug got shipped.
+    bool devFlashbackConjureSent = false;
+    bool devFlashbackMoveSent = false;
+    bool devFlashbackManaSent = false;
+    bool flashbackCast = false;
+    bool sawFlashbackGraveToStack = false;
+    bool sawFlashbackStackToExile = false;
     bool attackersSentThisCombat = false;
     bool blockersSentThisCombat = false;
     bool devConjureSent = false;
@@ -420,6 +432,35 @@ public:
                 const auto &gsc = ev.GetExtension(Event_GameStateChanged::ext);
                 if (gsc.has_game_started()) {
                     gameStarted = gsc.game_started();
+                }
+            }
+            if (ev.HasExtension(Event_MoveCard::ext)) {
+                const auto &mc = ev.GetExtension(Event_MoveCard::ext);
+                const QString from = QString::fromStdString(mc.start_zone());
+                const QString to = QString::fromStdString(mc.target_zone());
+                const QString name = QString::fromStdString(mc.card_name());
+                // ZoneNames, not literals: Cockatrice's exile zone is spelled "rfg".
+                const QLatin1String grave(ZoneNames::GRAVE);
+                const QLatin1String stack(ZoneNames::STACK);
+                const QLatin1String exile(ZoneNames::EXILE);
+                if (name == QLatin1String("Bump in the Night")) {
+                    // Scope to THIS seat's card. Every client sees both seats' moves, so an
+                    // unscoped flag would be satisfied by the other seat's successful flashback
+                    // and hide a rejected one — which is the whole failure being tested for.
+                    // Casting leaves this seat's graveyard; resolving lands in this seat's exile.
+                    if (from == grave && to == stack && mc.start_player_id() == myId) {
+                        sawFlashbackGraveToStack = true;
+                        log(QStringLiteral("flashback: '%1' grave -> stack (mine)").arg(name));
+                    }
+                    if (from == stack && to == exile && mc.target_player_id() == myId) {
+                        sawFlashbackStackToExile = true;
+                        log(QStringLiteral("flashback: '%1' stack -> exile (mine)").arg(name));
+                    }
+                } else if (from == grave || to == exile) {
+                    // Any *other* card taking the flashback path is the wrong-card bug.
+                    ADD_FAILURE() << "unexpected card on the flashback path: "
+                                  << name.toStdString() << " " << from.toStdString() << " -> "
+                                  << to.toStdString();
                 }
             }
             if (ev.HasExtension(Event_RuledPayload::ext)) {
@@ -749,6 +790,77 @@ public:
     }
 
     /// Runs the role policy against the current view; sends at most one command per state version.
+    /// Conjure Bump in the Night, bury it, and cast it from the graveyard for its flashback cost.
+    /// Returns true when it sent a command (the caller should yield).
+    ///
+    /// Run by BOTH seats on purpose. Every spell is routed to the single canonical stack zone,
+    /// which belongs to the *lowest player id*, so only the other seat's cast is a cross-player
+    /// move — the case Server_AbstractPlayer::moveCard rejects unless ruledAllowsCrossPlayerMove
+    /// whitelists it. Which client holds the low id depends on join order, so pinning the flashback
+    /// to one role silently tests the easy half; that is exactly how a broken grave -> stack move
+    /// shipped green.
+    bool tryFlashbackSequence()
+    {
+        // Flashback: conjure Bump in the Night, push it to the graveyard, then cast it from
+        // there. `put` can only reach hand/battlefield, so the graveyard needs the move.
+        if (!devFlashbackConjureSent) {
+            devFlashbackConjureSent = true;
+            ruled::v1::RuledCommand cmd;
+            auto *dev = cmd.mutable_dev_command();
+            dev->set_target_player_id(myId);
+            auto *put = dev->mutable_put_card_in_zone();
+            put->set_card_name("Bump in the Night");
+            put->set_zone(ruled::v1::DEV_ZONE_HAND);
+            sendRuled(cmd, QStringLiteral("dev: conjure Bump in the Night into hand"));
+            return true;
+        }
+        if (!devFlashbackMoveSent) {
+            devFlashbackMoveSent = true;
+            ruled::v1::RuledCommand cmd;
+            auto *dev = cmd.mutable_dev_command();
+            dev->set_target_player_id(myId);
+            auto *move = dev->mutable_move_card();
+            move->set_card_name("Bump in the Night");
+            move->set_zone(ruled::v1::DEV_ZONE_GRAVEYARD);
+            sendRuled(cmd, QStringLiteral("dev: move Bump in the Night to the graveyard"));
+            return true;
+        }
+        // Fund the flashback cost ({5}{R}) outright. The block below spends it on the very
+        // next action, so it never reaches the affordability checks the rest of the script
+        // makes — and the test stays a ~1s smoke run instead of waiting on land drops.
+        if (devFlashbackMoveSent && !devFlashbackManaSent) {
+            devFlashbackManaSent = true;
+            ruled::v1::RuledCommand cmd;
+            auto *dev = cmd.mutable_dev_command();
+            dev->set_target_player_id(myId);
+            dev->mutable_add_mana()->set_r(1);
+            dev->mutable_add_mana()->set_c(5);
+            sendRuled(cmd, QStringLiteral("dev: add {5}{R} for the flashback cast"));
+            return true;
+        }
+        if (!flashbackCast && devFlashbackManaSent) {
+            for (const auto &ga : latestLegal.graveyard_actions()) {
+                if (QString::fromStdString(ga.card_name()) != QLatin1String("Bump in the Night")) {
+                    continue;
+                }
+                if (myPool.r < 1 || myPool.total() < 6) {
+                    break; // wait for the dev mana below to land
+                }
+                ruled::v1::RuledCommand cmd;
+                auto *cast = cmd.mutable_cast_spell();
+                cast->set_hand_card_index(ga.graveyard_index());
+                cast->set_flashback(true);
+                cast->add_targets()->set_object_id(static_cast<quint32>(oppId));
+                flashbackCast = true;
+                sendRuled(cmd, QStringLiteral("flashback Bump in the Night (gy idx %1) at player %2")
+                                   .arg(ga.graveyard_index())
+                                   .arg(oppId));
+                return true;
+            }
+        }
+        return false;
+    }
+
     void act()
     {
         if (myId < 0 || !gameStarted || stateVersion == 0 || lastActedVersion == stateVersion) {
@@ -862,6 +974,9 @@ public:
             (phase == ruled::v1::PHASE_ID_MAIN1 || phase == ruled::v1::PHASE_ID_MAIN2) && activePlayer == myId;
 
         if (role == Role::Aggressor && inMain && stackDepth == 0) {
+            if (tryFlashbackSequence()) {
+                return;
+            }
             // --- Dev commands (roadmap backlog dev-loop piece 2) ---------------------------
             // The only cross-language check that a C++-built DevCommand decodes and applies in
             // Rust; the behaviour itself is covered by the engine's scenario suite. Serra Angel
@@ -972,6 +1087,9 @@ public:
         }
 
         if (role == Role::Hoarder && inMain && stackDepth == 0) {
+            if (tryFlashbackSequence()) {
+                return;
+            }
             if (const auto *land = countOwn(QStringLiteral("island"), false) < 1
                                        ? handAction(ruled::v1::HAND_ACTION_PLAY_LAND, QStringLiteral("Island"))
                                        : nullptr) {
@@ -1220,7 +1338,8 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
                p1.sawBorosCharmPushWithMode && p1.sawBorosCharmLifeLoss &&
                p1.sawAttackersDeclared && p1.sawCombatLifeLoss && p2.sawBrainstormChoice &&
                p2.submittedBrainstormChoice && p2.sawBrainstormResolved && p2.sentCleanupDiscard &&
-               p1.sawDevConjuredPermanent && p1.sawDevMana &&  p2.handSizeByPlayer.count(p2.myId) &&
+               p1.sawDevConjuredPermanent && p1.sawDevMana && p1.sawFlashbackGraveToStack && p1.sawFlashbackStackToExile &&
+               p2.sawFlashbackGraveToStack && p2.sawFlashbackStackToExile && p2.handSizeByPlayer.count(p2.myId) &&
                p2.handSizeByPlayer[p2.myId] <= 7;
     };
     QElapsedTimer deadline;
@@ -1254,6 +1373,18 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     EXPECT_TRUE(p1.sawCombatLifeLoss) << "combat damage never changed a life total";
     EXPECT_TRUE(p2.sawBrainstormChoice) << "Brainstorm's tier-3 resolution choice never arrived";
     EXPECT_TRUE(p2.sawBrainstormResolved) << "Brainstorm never finished resolving after the choice";
+    EXPECT_TRUE(p1.flashbackCast) << "seat 1 never sent its flashback cast";
+    EXPECT_TRUE(p2.flashbackCast) << "seat 2 never sent its flashback cast";
+    // One of these two seats does not own the canonical stack, so its cast crosses players.
+    EXPECT_TRUE(p1.sawFlashbackGraveToStack)
+        << "seat 1's flashback card never physically moved graveyard -> stack";
+    EXPECT_TRUE(p2.sawFlashbackGraveToStack)
+        << "seat 2's flashback card never physically moved graveyard -> stack (cross-player move "
+           "rejected? see ruledAllowsCrossPlayerMove)";
+    EXPECT_TRUE(p1.sawFlashbackStackToExile)
+        << "seat 1's flashback card never physically moved stack -> exile (CR 702.34a)";
+    EXPECT_TRUE(p2.sawFlashbackStackToExile)
+        << "seat 2's flashback card never physically moved stack -> exile (CR 702.34a)";
     EXPECT_TRUE(p2.sawCleanupDiscardActions && p2.sentCleanupDiscard) << "cleanup discard never happened";
     ASSERT_TRUE(p2.handSizeByPlayer.count(p2.myId));
     EXPECT_LE(p2.handSizeByPlayer[p2.myId], 7) << "hand size not enforced after cleanup discard";

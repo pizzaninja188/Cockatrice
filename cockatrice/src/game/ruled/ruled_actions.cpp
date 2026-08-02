@@ -619,15 +619,24 @@ bool isSingleClickPlayLegal(const CardItem *card)
     if (!card || !card->getOwner() || !card->getZone()) {
         return false;
     }
-    if (card->getZone()->getName() != ZoneNames::HAND) {
+    // CR 702.34: a flashback card is cast from its owner's own graveyard, so a graveyard card the
+    // engine offered a graveyard action for is single-click castable exactly like a hand card.
+    const bool inHand = card->getZone()->getName() == ZoneNames::HAND;
+    const bool inOwnGraveyard =
+        card->getZone()->getName() == ZoneNames::GRAVE && card->getZone()->getPlayer() == card->getOwner();
+    if (!inHand && !inOwnGraveyard) {
         return false;
     }
     RuledClientState *state = stateForCard(card);
     if (!state) {
         return false;
     }
-    if (card->getZone()->getCards().indexOf(const_cast<CardItem *>(card)) < 0) {
+    const int zoneIndex = card->getZone()->getCards().indexOf(const_cast<CardItem *>(card));
+    if (zoneIndex < 0) {
         return false;
+    }
+    if (inOwnGraveyard) {
+        return state->isGraveyardActionLegal(zoneIndex);
     }
     const bool isLand = card->getCardInfo().getCardType().contains("Land", Qt::CaseInsensitive);
     const RuledHandActionKind kind =

@@ -101,9 +101,15 @@ impl GameEngine {
                         .map(|o| o.zone == Zone::Battlefield)
                         .unwrap_or(false)
                 });
-            let resolves_to_battlefield = resolves_to_battlefield_raw && aura_target_valid;
+            // CR 702.34a: a spell cast with flashback is exiled instead of being put into its
+            // owner's graveyard as it leaves the stack, regardless of whether it would normally
+            // be a permanent spell.
+            let resolves_to_battlefield =
+                !top.flashback && resolves_to_battlefield_raw && aura_target_valid;
             let destination = if resolves_to_battlefield {
                 rv1::StackResolveDestination::Battlefield as i32
+            } else if top.flashback {
+                rv1::StackResolveDestination::Exile as i32
             } else {
                 rv1::StackResolveDestination::Graveyard as i32
             };
@@ -118,6 +124,8 @@ impl GameEngine {
                 top.id,
                 if resolves_to_battlefield {
                     Zone::Battlefield
+                } else if top.flashback {
+                    Zone::Exile
                 } else {
                     Zone::Graveyard
                 },
