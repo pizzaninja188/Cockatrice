@@ -38,6 +38,10 @@ public:
         CleanupDiscard,
         /// Tier-3 resolution pick over cards in a zone (Brainstorm, Gifts Ungiven, …).
         ResolutionPick,
+        /// CR 603.3b: ordering this player's simultaneous triggers. The picking happens in the
+        /// dedicated ordering window, so this mode only supplies the prompt line and suppresses
+        /// the priority/combat buttons the engine is refusing anyway.
+        TriggerOrder,
         OpeningChooseFirst,
         OpeningMulligan,
         OpeningBottom,

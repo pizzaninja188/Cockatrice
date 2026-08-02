@@ -406,6 +406,8 @@ void TabGame::connectToGameEventHandler()
                 this, &TabGame::onRuledLibrarySearchPickStarted);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::revealedPickChanged,
                 this, &TabGame::onRuledRevealedPickChanged);
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::triggerOrderUiChanged,
+                this, &TabGame::onRuledTriggerOrderUiChanged);
         connect(game->getGameState(), &GameState::activePhaseChanged, gamePromptWidget, &GamePromptWidget::setActivePhase);
         connect(game->getGameEventHandler(), &GameEventHandler::logActivePlayer, gamePromptWidget, [this](Player *player) {
             if (player) {
@@ -636,7 +638,16 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
     using ChoiceKind = RuledClientState::ChoiceKind;
     using OpeningKind = RuledClientState::RuledOpeningUiKind;
     const OpeningKind opening = h->getOpeningUiKind();
-    if (h->isResolutionHandPickActive()) {
+    if (h->hasPendingTriggerOrder()) {
+        // Above the resolution pick, mirroring the engine's own blocking_choice() precedence: a
+        // parked resolution defers staged triggers, so the two are never outstanding together.
+        state.mode = PromptMode::TriggerOrder;
+        state.required = static_cast<int>(h->triggerOrderCandidates().size());
+        state.selected = 0;
+        state.text = tr("Click the trigger to put on the stack next (%1 left) — what you pick first "
+                        "resolves last.")
+                         .arg(state.required);
+    } else if (h->isResolutionHandPickActive()) {
         state.mode = PromptMode::ResolutionPick;
         state.required = h->resolutionHandPickRequired();
         state.selected = h->resolutionHandPickSelected();
@@ -2294,6 +2305,81 @@ void TabGame::onRuledLibrarySearchPickStarted(QStringList candidateNames, QVecto
         qDeleteAll(librarySearchCards);
         librarySearchCards.clear();
     });
+}
+
+void TabGame::onRuledTriggerOrderUiChanged(bool active, QVector<RuledTriggerOrderCandidate> candidates)
+{
+    const bool keepOpen = active && !candidates.isEmpty() && game && scene;
+    // Closing is the only case that destroys the widget. While the block is still being ordered the
+    // popup is refilled in place, so it keeps whatever position and size the player gave it instead
+    // of snapping back to the default corner between every pick.
+    if (!keepOpen) {
+        if (triggerOrderView) {
+            triggerOrderView->close();
+            triggerOrderView = nullptr;
+        }
+        qDeleteAll(triggerOrderCards);
+        triggerOrderCards.clear();
+        refreshRuledPromptState();
+        return;
+    }
+    const int localId = game->getPlayerManager()->getLocalPlayerId();
+    Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+    if (!localPlayer) {
+        refreshRuledPromptState();
+        return;
+    }
+    // The deck zone is a scaffold only — the cards shown come from cardList below.
+    CardZoneLogic *deckZone = localPlayer->getZones().value(ZoneNames::DECK);
+    if (!deckZone) {
+        refreshRuledPromptState();
+        return;
+    }
+    // One synthetic card per waiting trigger: the source's Oracle name gives the image, and the
+    // ability text rides in `annotation`, which CardItem already paints over the card. Ids are the
+    // candidate's index, matching the map the dispatcher built.
+    // The previous set's ServerInfo_Cards are only safe to drop once the zone has stopped
+    // referencing them, so they are replaced together with the zone's contents below.
+    QList<ServerInfo_Card *> previousCards = triggerOrderCards;
+    triggerOrderCards.clear();
+
+    // One synthetic card per waiting trigger: the source's Oracle name gives the image, and the
+    // ability text rides in `annotation`, which CardItem paints over the card. Ids are the
+    // candidate's index, matching the map the dispatcher built.
+    QList<const ServerInfo_Card *> cardList;
+    for (int i = 0; i < candidates.size(); ++i) {
+        auto *sic = new ServerInfo_Card;
+        sic->set_name(candidates.at(i).cardName.toStdString());
+        sic->set_id(i);
+        sic->set_face_down(false);
+        sic->set_annotation(candidates.at(i).abilityText.toStdString());
+        triggerOrderCards.append(sic);
+        cardList.append(sic);
+    }
+
+    if (triggerOrderView) {
+        // Refill the existing popup: same widget, same geometry, new cards.
+        triggerOrderView->getZone()->getLogic()->clearContents();
+        triggerOrderView->getZone()->initializeCards(cardList);
+    } else {
+        // Not closeable: the engine is hard-blocked on this pick (CR 603.3b), so a dismissable
+        // popup would strand the game with no way back to it.
+        triggerOrderView = new ZoneViewWidget(localPlayer, deckZone, -1, true, false, cardList,
+                                              false, false, true, false);
+        scene->addItem(triggerOrderView);
+        // Deliberately offset from the stack window's default corner (stackWindowPos): the two are
+        // open at the same time during ordering, and stacking them exactly would hide the stack the
+        // player is trying to read while deciding.
+        triggerOrderView->setPos(stackWindowPos + QPointF(60, 220));
+        connect(triggerOrderView, &ZoneViewWidget::closePressed, this, [this](ZoneViewWidget *) {
+            triggerOrderView = nullptr;
+            qDeleteAll(triggerOrderCards);
+            triggerOrderCards.clear();
+        });
+    }
+    triggerOrderView->setWindowTitle(tr("Put a trigger on the stack (%1 left)").arg(candidates.size()));
+    qDeleteAll(previousCards);
+    refreshRuledPromptState();
 }
 
 void TabGame::onRuledRevealedPickChanged(bool started, QStringList cardNames,

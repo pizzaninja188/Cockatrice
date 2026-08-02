@@ -198,7 +198,7 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
             })
             .collect();
     }
-    if eng.state.pending_resolution.is_some() || eng.state.pending_triggers.front().is_some() {
+    if eng.state.blocking_choice().is_some() {
         return Vec::new();
     }
     if eng.state.combat.as_ref().is_some_and(|combat| {
@@ -316,8 +316,7 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
 
 fn legal_graveyard_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalGraveyardAction> {
     if eng.state.opening.is_some()
-        || eng.state.pending_resolution.is_some()
-        || eng.state.pending_triggers.front().is_some()
+        || eng.state.blocking_choice().is_some()
         || eng.state.turn_step == TurnStep::Cleanup
         || eng.state.priority_player_id() != pid
         || priority_locked_for_combat_declaration(&eng.state)
@@ -450,6 +449,18 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
             vec![format!("Resolve: {}", pr.prompt)]
         } else {
             vec!["Waiting: opponent making a resolution choice".into()]
+        };
+    }
+    // CR 603.3b, ahead of the target prompt below: the order is fixed before any of the block is
+    // placed, so a player never sees both at once.
+    if let Some(pto) = &eng.state.pending_trigger_order {
+        return if pto.deciding_player == pid {
+            vec![format!(
+                "Order {} simultaneous triggers",
+                pto.candidates.len()
+            )]
+        } else {
+            vec!["Waiting: opponent ordering triggers".into()]
         };
     }
     if let Some(pt) = eng.state.pending_triggers.front() {

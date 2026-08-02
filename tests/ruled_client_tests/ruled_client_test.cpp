@@ -1201,6 +1201,175 @@ TEST_F(RuledClientTest, ZoneViewParsesDamageAndPipeDelimitedAbilities)
 }
 
 // ---------------------------------------------------------------------------------------
+// Simultaneous trigger ordering (CR 603.3b)
+// ---------------------------------------------------------------------------------------
+
+namespace
+{
+/// A two-candidate ordering prompt addressed to `decidingPlayer`.
+ruled::v1::RuledEventBatch triggerOrderBatch(int decidingPlayer)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *tor = batch.add_events()->mutable_trigger_order_required();
+    tor->set_deciding_player_id(decidingPlayer);
+    auto *first = tor->add_candidates();
+    first->set_trigger_object_id(501);
+    first->set_source_permanent_id(41);
+    first->set_ability_index(0);
+    first->set_source_card_name("Blood Artist");
+    first->set_ability_text("Target player loses 1 life and you gain 1 life.");
+    auto *second = tor->add_candidates();
+    second->set_trigger_object_id(502);
+    second->set_source_permanent_id(42);
+    second->set_ability_index(0);
+    second->set_source_card_name("Blood Artist");
+    second->set_ability_text("Target player loses 1 life and you gain 1 life.");
+    return batch;
+}
+} // namespace
+
+TEST_F(RuledClientTest, TriggerOrderRequiredOpensTheOrderingChoiceForTheDecider)
+{
+    apply(triggerOrderBatch(kLocalPlayer));
+
+    ASSERT_TRUE(state->hasPendingTriggerOrder());
+    const auto candidates = state->triggerOrderCandidates();
+    ASSERT_EQ(candidates.size(), 2);
+    EXPECT_EQ(candidates[0].oid, 501u);
+    EXPECT_EQ(candidates[0].sourceOid, 41u);
+    EXPECT_EQ(candidates[0].cardName, QStringLiteral("Blood Artist"));
+    // The ability text is what the popup annotates each card image with.
+    EXPECT_FALSE(candidates[0].abilityText.isEmpty());
+}
+
+TEST_F(RuledClientTest, TriggerOrderRequiredIsNotPromptedForTheOpponent)
+{
+    apply(triggerOrderBatch(kLocalPlayer + 1));
+
+    EXPECT_FALSE(state->hasPendingTriggerOrder());
+    EXPECT_TRUE(state->triggerOrderCandidates().isEmpty());
+}
+
+TEST_F(RuledClientTest, TriggerOrderPopupCardsMapToTheirTriggers)
+{
+    apply(triggerOrderBatch(kLocalPlayer));
+
+    // The popup identifies cards by index; those are the only ids that count as candidates.
+    EXPECT_TRUE(state->isTriggerOrderPickCard(0));
+    EXPECT_TRUE(state->isTriggerOrderPickCard(1));
+    EXPECT_FALSE(state->isTriggerOrderPickCard(2));
+    EXPECT_FALSE(state->isTriggerOrderPickCard(501));
+}
+
+TEST_F(RuledClientTest, ClickingAnOrderingCardPlacesThatTriggerImmediately)
+{
+    apply(triggerOrderBatch(kLocalPlayer));
+
+    host.sentCommands.clear();
+    state->pickTriggerOrderCard(1); // the second candidate
+
+    // One click is one placement: no confirm step, and the oid is the clicked card's trigger.
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    EXPECT_EQ(host.sentCommands[0].submit_trigger_order().trigger_object_id(), 502u);
+    // Cleared straight away — the engine replies with either a target prompt or a shorter
+    // ordering prompt, and a lingering popup would invite a click it is about to refuse.
+    EXPECT_FALSE(state->hasPendingTriggerOrder());
+}
+
+TEST_F(RuledClientTest, ClickingANonCandidateCardSendsNothing)
+{
+    apply(triggerOrderBatch(kLocalPlayer));
+
+    host.sentCommands.clear();
+    state->pickTriggerOrderCard(7);
+
+    EXPECT_TRUE(host.sentCommands.empty());
+    EXPECT_TRUE(state->hasPendingTriggerOrder());
+}
+
+TEST_F(RuledClientTest, PlacingOneTriggerAndReofferingTheRestStaysActiveInOneBatch)
+{
+    apply(triggerOrderBatch(kLocalPlayer));
+    ASSERT_TRUE(state->hasPendingTriggerOrder());
+
+    // The engine's reply to a pick is one batch that both puts the chosen trigger on the stack and
+    // re-offers the rest. It must net out to "still ordering" — if the StackPushed clear won, the
+    // popup would be torn down and rebuilt, losing its position mid-choice.
+    ruled::v1::RuledEventBatch reply;
+    auto *sp = reply.add_events()->mutable_stack_pushed();
+    sp->set_object_id(501);
+    sp->set_description("Blood Artist");
+    sp->set_is_triggered(true);
+    auto *tor = reply.add_events()->mutable_trigger_order_required();
+    tor->set_deciding_player_id(kLocalPlayer);
+    auto *remaining = tor->add_candidates();
+    remaining->set_trigger_object_id(502);
+    remaining->set_source_card_name("Blood Artist");
+    remaining->set_ability_text("Target player loses 1 life and you gain 1 life.");
+    apply(reply);
+
+    ASSERT_TRUE(state->hasPendingTriggerOrder());
+    ASSERT_EQ(state->triggerOrderCandidates().size(), 1);
+    EXPECT_EQ(state->triggerOrderCandidates()[0].oid, 502u);
+}
+
+TEST_F(RuledClientTest, ARepeatedPromptReplacesTheCandidatesWithWhatIsLeft)
+{
+    // The engine re-sends the prompt after each pick with one fewer candidate; the popup is
+    // rebuilt from whatever the latest prompt carries.
+    apply(triggerOrderBatch(kLocalPlayer));
+    ASSERT_EQ(state->triggerOrderCandidates().size(), 2);
+
+    ruled::v1::RuledEventBatch second;
+    auto *tor = second.add_events()->mutable_trigger_order_required();
+    tor->set_deciding_player_id(kLocalPlayer);
+    auto *only = tor->add_candidates();
+    only->set_trigger_object_id(502);
+    only->set_source_card_name("Blood Artist");
+    only->set_ability_text("Target player loses 1 life and you gain 1 life.");
+    apply(second);
+
+    ASSERT_EQ(state->triggerOrderCandidates().size(), 1);
+    EXPECT_EQ(state->triggerOrderCandidates()[0].oid, 502u);
+    EXPECT_TRUE(state->isTriggerOrderPickCard(0));
+    EXPECT_FALSE(state->isTriggerOrderPickCard(1));
+}
+
+TEST_F(RuledClientTest, StackPushedForACandidateClearsTheTriggerOrderState)
+{
+    apply(triggerOrderBatch(kLocalPlayer));
+    ASSERT_TRUE(state->hasPendingTriggerOrder());
+
+    // The engine reserved 501 for this trigger, so seeing it on the stack proves the prompt was
+    // answered — covers reconnects and resynced batches, where no local submit happened.
+    ruled::v1::RuledEventBatch pushed;
+    auto *sp = pushed.add_events()->mutable_stack_pushed();
+    sp->set_object_id(501);
+    sp->set_description("Blood Artist");
+    sp->set_is_triggered(true);
+    apply(pushed);
+
+    EXPECT_FALSE(state->hasPendingTriggerOrder());
+}
+
+TEST_F(RuledClientTest, TriggerOrderReplacesAnyStalePendingChoice)
+{
+    // One pending choice at a time: an ordering prompt must tear down whatever was parked before.
+    ruled::v1::RuledEventBatch tnt;
+    auto *needs = tnt.add_events()->mutable_trigger_needs_target();
+    needs->set_controller_player_id(kLocalPlayer);
+    needs->set_source_permanent_id(41);
+    needs->set_ability_text("Target player loses 1 life.");
+    apply(tnt);
+    ASSERT_TRUE(state->hasPendingTriggerTarget());
+
+    apply(triggerOrderBatch(kLocalPlayer));
+
+    EXPECT_TRUE(state->hasPendingTriggerOrder());
+    EXPECT_FALSE(state->hasPendingTriggerTarget());
+}
+
+// ---------------------------------------------------------------------------------------
 // Tier-3 resolution choices (CR 608)
 // ---------------------------------------------------------------------------------------
 

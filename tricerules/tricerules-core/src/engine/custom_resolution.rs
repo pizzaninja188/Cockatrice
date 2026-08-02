@@ -37,30 +37,7 @@ impl GameEngine {
                 "P{player} declines optional trigger: {}",
                 pending.ability_text
             )));
-            if let Some(next) = self.state.pending_triggers.front() {
-                let next_name = self
-                    .registry
-                    .get(&next.card_id)
-                    .map(|d| d.name.clone())
-                    .unwrap_or_else(|| next.card_id.clone());
-                batch.events.push(rv1::RuledEvent {
-                    ev: Some(rv1::ruled_event::Ev::TriggerNeedsTarget(
-                        rv1::TriggerNeedsTarget {
-                            source_permanent_id: next.source_permanent_id,
-                            ability_index: next.ability_index as u32,
-                            ability_text: next.ability_text.clone(),
-                            controller_player_id: next.controller,
-                            may_decline: next.may,
-                        },
-                    )),
-                });
-                batch.events.push(ev_log(format!(
-                    "Triggered: {next_name} — choose a target for: {}",
-                    next.ability_text
-                )));
-            } else {
-                batch.events.push(ev_priority_changed(self));
-            }
+            self.resume_trigger_placement(&mut batch);
             fill_legal(&mut batch, self);
             return Ok(batch);
         }
@@ -99,8 +76,9 @@ impl GameEngine {
             }
         };
 
-        let virtual_id = self.state.next_object_id;
-        self.state.next_object_id += 1;
+        // Reserved when the trigger was collected, so the id the client saw in
+        // `TriggerOrderRequired` is the id it now sees on the stack.
+        let virtual_id = pending.object_id;
 
         let ability_text = pending.ability_text.clone();
         let card_id = pending.card_id.clone();
@@ -159,28 +137,74 @@ impl GameEngine {
             })),
         });
 
-        if let Some(next) = self.state.pending_triggers.front() {
-            let next_name = self
-                .registry
-                .get(&next.card_id)
-                .map(|d| d.name.clone())
-                .unwrap_or_else(|| next.card_id.clone());
-            batch.events.push(rv1::RuledEvent {
-                ev: Some(rv1::ruled_event::Ev::TriggerNeedsTarget(
-                    rv1::TriggerNeedsTarget {
-                        source_permanent_id: next.source_permanent_id,
-                        ability_index: next.ability_index as u32,
-                        ability_text: next.ability_text.clone(),
-                        controller_player_id: next.controller,
-                        may_decline: next.may,
-                    },
-                )),
-            });
-            batch.events.push(ev_log(format!(
-                "Triggered: {next_name} — choose a target for: {}",
-                next.ability_text
-            )));
-        } else {
+        self.resume_trigger_placement(&mut batch);
+        fill_legal(&mut batch, self);
+        Ok(batch)
+    }
+
+    /// Continue placing staged triggers after one of them stopped the drain, and hand priority back
+    /// when nothing is left to decide.
+    ///
+    /// Answering a trigger's target (or declining it) is the only thing that was blocking
+    /// [`Self::flush_staged_triggers`], so it resumes here and either places the rest of the
+    /// simultaneous group, parks the next target choice, or raises the next player's ordering
+    /// prompt. The three call sites used to hand-roll "emit TriggerNeedsTarget for the new front,
+    /// else priority" — that duplicate is gone now that at most one target is ever parked.
+    pub(super) fn resume_trigger_placement(&mut self, batch: &mut RuledEventBatch) {
+        self.flush_staged_triggers(&mut batch.events);
+        if self.state.blocking_choice().is_none() {
+            batch.events.push(ev_priority_changed(self));
+        }
+    }
+
+    /// CR 603.3b: put the named trigger on the stack next.
+    ///
+    /// One pick, not a permutation. CR 603.3d chooses an ability's targets *as it is put on the
+    /// stack*, so placing this one may immediately park a target choice; the remaining candidates
+    /// stay in `pending_trigger_order` and the next prompt only goes out once that target is
+    /// answered. [`Self::flush_staged_triggers`] owns all of that sequencing — this function just
+    /// moves one trigger from the candidate set into the placement path.
+    ///
+    /// What you pick first is placed first and therefore resolves last (CR 405.5).
+    pub(super) fn submit_trigger_order(
+        &mut self,
+        player: PlayerId,
+        trigger_object_id: u32,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let pending = self
+            .state
+            .pending_trigger_order
+            .as_mut()
+            .ok_or(EngineError::Illegal("no simultaneous triggers to order"))?;
+
+        // Unlike `choose_trigger_target` this validates *before* mutating, so there is nothing to
+        // restore on a rejection — a refused pick leaves the prompt exactly as it was, which it
+        // must, since nothing but this command can clear it.
+        if pending.deciding_player != player {
+            return Err(EngineError::Illegal("not your triggers to order"));
+        }
+        let Some(index) = pending
+            .candidates
+            .iter()
+            .position(|candidate| candidate.object_id == trigger_object_id)
+        else {
+            return Err(EngineError::Illegal(
+                "that trigger is not one of the ones waiting to be ordered",
+            ));
+        };
+
+        let staged = pending.candidates.remove(index);
+        // The candidate set changed, so the next drain must re-announce what is left.
+        pending.prompt_emitted = false;
+        let card_name = staged.card_name.clone();
+
+        let mut batch = RuledEventBatch::default();
+        batch.events.push(ev_log(format!(
+            "P{player} puts {card_name} on the stack next"
+        )));
+        self.push_trigger(staged, &mut batch.events);
+        self.flush_staged_triggers(&mut batch.events);
+        if self.state.blocking_choice().is_none() {
             batch.events.push(ev_priority_changed(self));
         }
         fill_legal(&mut batch, self);

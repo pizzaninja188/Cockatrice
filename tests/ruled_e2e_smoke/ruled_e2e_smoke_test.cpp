@@ -210,6 +210,9 @@ public:
     };
     Pool myPool;
     std::optional<ruled::v1::ResolutionChoiceRequired> pendingChoice;
+    // CR 603.3b: the engine blocks on this until it is answered, so the bot must handle it or the
+    // whole game deadlocks — every simultaneous multi-trigger board reaches it.
+    std::optional<ruled::v1::TriggerOrderRequired> pendingTriggerOrder;
 
     // Policy progress flags
     bool didMulligan = false;
@@ -540,6 +543,12 @@ public:
                     sawAttackersDeclared = true;
                     log(QStringLiteral("attackers declared: %1 creature(s)")
                             .arg(ev.attackers_declared().attacker_object_ids_size()));
+                }
+            } else if (ev.has_trigger_order_required()) {
+                const auto &tor = ev.trigger_order_required();
+                if (tor.deciding_player_id() == myId && tor.candidates_size() > 0) {
+                    pendingTriggerOrder = tor;
+                    log(QStringLiteral("trigger order required: %1 candidates").arg(tor.candidates_size()));
                 }
             } else if (ev.has_resolution_choice_required()) {
                 const auto &rcr = ev.resolution_choice_required();
@@ -891,6 +900,21 @@ public:
             cmd.mutable_put_opening_hand_on_bottom()->set_hand_card_index(bottom->hand_index());
             sentBottom = true;
             sendRuled(cmd, QStringLiteral("bottom hand idx %1").arg(bottom->hand_index()));
+            return;
+        }
+
+        // --- Simultaneous trigger ordering (CR 603.3b) ---
+        // Ahead of the resolution choice, matching the engine's own precedence. Answered in the
+        // offered APNAP order: the bot has no preference, it just has to unblock the game.
+        if (pendingTriggerOrder) {
+            // One pick per prompt: the engine re-asks with what is left (or places the last one
+            // itself), so the bot just takes whichever it was offered first.
+            ruled::v1::RuledCommand cmd;
+            const auto &first = pendingTriggerOrder->candidates(0);
+            cmd.mutable_submit_trigger_order()->set_trigger_object_id(first.trigger_object_id());
+            const QString name = QString::fromStdString(first.source_card_name());
+            pendingTriggerOrder.reset();
+            sendRuled(cmd, QStringLiteral("put %1's trigger on the stack next").arg(name));
             return;
         }
 

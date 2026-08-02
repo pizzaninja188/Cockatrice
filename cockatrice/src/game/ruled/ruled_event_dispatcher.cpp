@@ -185,6 +185,9 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
         if (e.has_trigger_needs_target()) {
             applyTriggerNeedsTarget(e.trigger_needs_target(), ctx);
         }
+        if (e.has_trigger_order_required()) {
+            applyTriggerOrderRequired(e.trigger_order_required(), ctx);
+        }
         if (e.has_resolution_choice_required()) {
             applyResolutionChoiceRequired(e.resolution_choice_required(), ctx);
         }
@@ -305,6 +308,15 @@ void RuledEventDispatcher::applyPhaseChanged(const ruled::v1::PhaseChanged &pc, 
 void RuledEventDispatcher::applyStackPushed(const ruled::v1::StackPushed &sp, BatchContext &ctx)
 {
     state->stackOidOrder.prepend(sp.object_id());
+    // CR 603.3b: a candidate reaching the stack means the ordering prompt has been answered. The
+    // deciding client already cleared it in submitTriggerOrder(); this covers every other path to
+    // the same fact (a resynced batch, a reconnect) and closes opponents' "waiting" state.
+    if (state->triggerOrderCandidateOids.remove(sp.object_id())) {
+        state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::TriggerOrder);
+        // Only a *possible* close: a later event in this same batch may raise the next prompt, so
+        // the decision is deferred to finishBatch, which reads the settled state.
+        ctx.triggerOrderDirty = true;
+    }
     QVector<quint32> tlist;
     tlist.reserve(sp.targets_size());
     for (int ti = 0; ti < sp.targets_size(); ++ti) {
@@ -418,6 +430,52 @@ void RuledEventDispatcher::applyTriggerNeedsTarget(const ruled::v1::TriggerNeeds
         state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::TriggerTarget);
     }
     emit state->triggerNeedsTarget(abilityText);
+}
+
+void RuledEventDispatcher::applyTriggerOrderRequired(const ruled::v1::TriggerOrderRequired &tor, BatchContext &ctx)
+{
+    using PendingChoice = RuledClientState::RuledPendingChoice;
+    using ChoiceKind = RuledClientState::ChoiceKind;
+
+    // Recorded on every client: which abilities triggered is public, so an opponent can be told
+    // what is being decided even though only the decider can answer.
+    QVector<RuledTriggerOrderCandidate> candidates;
+    candidates.reserve(tor.candidates_size());
+    for (const auto &c : tor.candidates()) {
+        RuledTriggerOrderCandidate candidate;
+        candidate.oid = c.trigger_object_id();
+        candidate.sourceOid = c.source_permanent_id();
+        candidate.cardName = QString::fromStdString(c.source_card_name());
+        candidate.abilityText = QString::fromStdString(c.ability_text());
+        candidates.append(candidate);
+    }
+    state->triggerOrderCandidateOids.clear();
+    for (const auto &candidate : candidates) {
+        state->triggerOrderCandidateOids.insert(candidate.oid);
+    }
+
+    const bool isDecider = static_cast<int>(tor.deciding_player_id()) == host->localPlayerId();
+    if (isDecider) {
+        PendingChoice choice;
+        choice.kind = ChoiceKind::TriggerOrder;
+        choice.promptText =
+            QStringLiteral("Choose which of %1 triggers goes on the stack next.").arg(candidates.size());
+        choice.orderCandidates = candidates;
+        // Index ids: the popup is a ZoneViewWidget over synthetic cards, which identifies a card by
+        // an int, so each candidate gets its position and maps back to its trigger oid.
+        for (int i = 0; i < candidates.size(); ++i) {
+            choice.orderCardIdToOid.insert(i, candidates[i].oid);
+        }
+        state->setPendingChoice(std::move(choice));
+        ctx.promptFeed += QStringLiteral("Click the triggered ability to put on the stack next "
+                                         "(%1 left) — what you pick first resolves last.\n")
+                              .arg(candidates.size());
+    } else {
+        state->clearPendingChoiceOfKind(ChoiceKind::TriggerOrder);
+        ctx.promptFeed += QStringLiteral("Waiting: opponent is ordering %1 simultaneous triggers.\n")
+                              .arg(candidates.size());
+    }
+    ctx.triggerOrderDirty = true;
 }
 
 void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::ResolutionChoiceRequired &rcr,
@@ -954,6 +1012,12 @@ void RuledEventDispatcher::finishBatch(BatchContext &ctx)
     }
     if (ctx.combatStateDirty) {
         emit state->combatStateChanged();
+    }
+    // One emit per batch from the settled state (CR 603.3b). A batch that places the picked trigger
+    // and immediately offers the rest nets out to "still ordering, here is what's left", so the
+    // popup is updated rather than closed and reopened.
+    if (ctx.triggerOrderDirty) {
+        emit state->triggerOrderUiChanged(state->hasPendingTriggerOrder(), state->triggerOrderCandidates());
     }
     // Which graveyards need to be open: a pending trigger's targets (Gravedigger ETB) unioned
     // with any pending cast's. `validTargetsByAbility` and the graveyard OID map are both

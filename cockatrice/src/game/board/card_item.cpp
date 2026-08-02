@@ -858,6 +858,14 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
                 AbstractCardItem::mouseReleaseEvent(event);
                 return;
             }
+            // CR 603.3b: clicking a card in the trigger-ordering popup puts that ability on the
+            // stack. The popup is built on the deck zone as a scaffold, same as the picks above.
+            if (stationaryLeft && owner->getPlayerInfo()->getLocal() && actions && zone &&
+                zone->getName() == ZoneNames::DECK && actions->tryRuledTriggerOrderCard(this)) {
+                update();
+                AbstractCardItem::mouseReleaseEvent(event);
+                return;
+            }
             if (stationaryLeft && owner->getPlayerInfo()->getLocal() && actions && zone &&
                 zone->getName() == ZoneNames::HAND && actions->tryRuledOpeningBottomCard(this)) {
                 update();

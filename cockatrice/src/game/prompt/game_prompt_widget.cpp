@@ -262,6 +262,9 @@ GamePromptWidget::PromptMode GamePromptWidget::effectiveMode() const
     // mid-cast targeting state, which outranks a parked click-a-permanent choice.
     switch (promptState.mode) {
         case PromptMode::ResolutionPick:
+        // The engine is hard-blocked on the ordering answer, so a leftover mid-cast targeting
+        // state cannot legitimately coexist with it — this takes over.
+        case PromptMode::TriggerOrder:
         case PromptMode::OpeningChooseFirst:
         case PromptMode::OpeningMulligan:
         case PromptMode::OpeningBottom:
@@ -324,6 +327,7 @@ void GamePromptWidget::applyPromptStateText()
             return;
         case PromptMode::ClickChoice:
         case PromptMode::ResolutionPick:
+        case PromptMode::TriggerOrder:
             // Engine-authored: the caller passed the prompt the engine wrote.
             setPromptText(promptState.text);
             return;

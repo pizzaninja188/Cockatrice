@@ -405,6 +405,35 @@ pub(super) fn ev_log_hidden_from(text: String, player_id: i32) -> RuledEvent {
     }
 }
 
+/// CR 603.3b: ask `deciding_player` for the order their simultaneous triggers go on the stack.
+///
+/// Self-describing by design — the candidates are not on the stack yet, so a client cannot resolve
+/// them to anything it already holds. `source_card_name` is carried rather than looked up because a
+/// dies trigger's source may have left the battlefield in the very event that triggered it
+/// (CR 603.6/603.10).
+pub(super) fn ev_trigger_order_required(
+    deciding_player: PlayerId,
+    candidates: &[StagedTrigger],
+) -> RuledEvent {
+    RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::TriggerOrderRequired(
+            rv1::TriggerOrderRequired {
+                deciding_player_id: deciding_player,
+                candidates: candidates
+                    .iter()
+                    .map(|staged| rv1::TriggerOrderCandidate {
+                        trigger_object_id: staged.object_id,
+                        source_permanent_id: staged.source_permanent_id,
+                        ability_index: staged.ability_index as u32,
+                        source_card_name: staged.card_name.clone(),
+                        ability_text: staged.ability_text.clone(),
+                    })
+                    .collect(),
+            },
+        )),
+    }
+}
+
 pub(super) fn ev_phase(eng: &GameEngine, phase: rv1::PhaseId) -> RuledEvent {
     RuledEvent {
         ev: Some(rv1::ruled_event::Ev::PhaseChanged(rv1::PhaseChanged {

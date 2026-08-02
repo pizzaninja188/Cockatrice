@@ -622,10 +622,25 @@ fn two_blood_artists_both_trigger_on_one_death() {
 
     e.apply_command(0, &pass()).expect("SBA pass");
 
+    // CR 603.3b: one player controls both triggers, so they choose the order before either is put
+    // on the stack. Targets (CR 603.3d) are only asked for afterwards, one trigger at a time as
+    // each is placed — which is why `pending_triggers` never holds more than one.
+    let pending = e
+        .state
+        .pending_trigger_order
+        .as_ref()
+        .expect("both Blood Artists trigger, so their controller orders them");
+    assert_eq!(pending.deciding_player, 0);
+    assert_eq!(pending.candidates.len(), 2);
+    assert!(
+        e.state.pending_triggers.is_empty(),
+        "no target is asked for until the order is fixed"
+    );
+    assert!(answer_trigger_order_in_engine_order(&mut e));
     assert_eq!(
         e.state.pending_triggers.len(),
-        2,
-        "both Blood Artists must queue a drain trigger on one creature death"
+        1,
+        "the first ordered trigger is placed and parks for its target"
     );
 
     let p1_id = e.state.players[1].id;
@@ -1158,6 +1173,405 @@ fn apnap_puts_the_active_players_upkeep_trigger_on_the_stack_first() {
     assert_eq!(life(&e, 0), 20);
 }
 
+// ===========================================================================
+// CR 603.3b: a player orders their OWN simultaneous triggers. Cross-player order stays APNAP and
+// is never prompted. The submitted order is placement order, so the first one chosen resolves
+// last (CR 405.5, the stack is LIFO).
+// ===========================================================================
+
+/// Two upkeep triggers under one controller: the engine stops and asks, and nothing reaches the
+/// stack until it is answered.
+#[test]
+fn simultaneous_triggers_from_one_controller_raise_an_ordering_prompt() {
+    let mut e = upkeep_engine(4450);
+    inject_permanent_on_battlefield(&mut e, 0, "sulfuric_vortex");
+    inject_permanent_on_battlefield(&mut e, 0, "phyrexian_arena");
+
+    pass_turn_to_next_upkeep(&mut e, 0); // P1's upkeep
+    pass_turn_to_next_upkeep(&mut e, 1); // P0's upkeep — both of P0's permanents trigger
+
+    let pending = e
+        .state
+        .pending_trigger_order
+        .as_ref()
+        .expect("two triggers under one controller must be ordered");
+    assert_eq!(pending.deciding_player, 0);
+    assert_eq!(pending.candidates.len(), 2);
+    assert!(
+        e.state.stack.is_empty(),
+        "nothing is placed until the order is chosen"
+    );
+}
+
+/// **The semantics test.** The trigger picked first is put on the stack first, so it resolves
+/// *last*. Asserted both ways round to prove the engine follows the pick rather than any order of
+/// its own.
+#[test]
+fn first_picked_trigger_is_placed_first_and_resolves_last() {
+    for pick_second_first in [false, true] {
+        let mut e = upkeep_engine(4451);
+        inject_permanent_on_battlefield(&mut e, 0, "sulfuric_vortex");
+        inject_permanent_on_battlefield(&mut e, 0, "phyrexian_arena");
+        pass_turn_to_next_upkeep(&mut e, 0); // P1's upkeep
+        pass_turn_to_next_upkeep(&mut e, 1); // P0's upkeep
+
+        let offered: Vec<u32> = e
+            .state
+            .pending_trigger_order
+            .as_ref()
+            .expect("ordering prompt")
+            .candidates
+            .iter()
+            .map(|c| c.object_id)
+            .collect();
+        let first = offered[usize::from(pick_second_first)];
+        let second = offered[usize::from(!pick_second_first)];
+
+        e.apply_command(0, &submit_trigger_order(first))
+            .expect("pick the first trigger");
+        // With one candidate left there is nothing to choose, so the engine places it itself
+        // rather than asking a question with one answer.
+        assert!(
+            e.state.pending_trigger_order.is_none(),
+            "the last trigger needs no prompt"
+        );
+
+        assert_eq!(e.state.stack.len(), 2, "both triggers are now on the stack");
+        assert_eq!(
+            (e.state.stack[0].id, e.state.stack[1].id),
+            (first, second),
+            "stack bottom-to-top follows the pick order (pick_second_first={pick_second_first})"
+        );
+
+        // One resolution round takes the TOP of the stack — the trigger placed second.
+        pass_both_players(&mut e);
+        assert_eq!(e.state.stack.len(), 1);
+        assert_eq!(
+            e.state.stack[0].id, first,
+            "the first-picked trigger is still waiting, i.e. it resolves last"
+        );
+    }
+}
+
+/// With three triggers the prompt comes back after each pick, carrying only what is left — the
+/// property the card-image popup relies on to shrink as the player works through the block.
+#[test]
+fn the_ordering_prompt_reoffers_only_the_remaining_triggers() {
+    let mut e = upkeep_engine(4458);
+    inject_permanent_on_battlefield(&mut e, 0, "sulfuric_vortex");
+    inject_permanent_on_battlefield(&mut e, 0, "sulfuric_vortex");
+    inject_permanent_on_battlefield(&mut e, 0, "phyrexian_arena");
+    pass_turn_to_next_upkeep(&mut e, 0); // P1's upkeep
+    pass_turn_to_next_upkeep(&mut e, 1); // P0's upkeep
+
+    let offered: Vec<u32> = e
+        .state
+        .pending_trigger_order
+        .as_ref()
+        .expect("ordering prompt")
+        .candidates
+        .iter()
+        .map(|c| c.object_id)
+        .collect();
+    assert_eq!(offered.len(), 3);
+
+    e.apply_command(0, &submit_trigger_order(offered[1]))
+        .expect("pick the middle trigger");
+    let remaining: Vec<u32> = e
+        .state
+        .pending_trigger_order
+        .as_ref()
+        .expect("still two to choose between")
+        .candidates
+        .iter()
+        .map(|c| c.object_id)
+        .collect();
+    assert_eq!(
+        remaining,
+        vec![offered[0], offered[2]],
+        "the picked trigger is gone and the rest keep their order"
+    );
+
+    e.apply_command(0, &submit_trigger_order(offered[2]))
+        .expect("pick another");
+    assert!(
+        e.state.pending_trigger_order.is_none(),
+        "one left is placed without asking"
+    );
+    assert_eq!(
+        (
+            e.state.stack[0].id,
+            e.state.stack[1].id,
+            e.state.stack[2].id
+        ),
+        (offered[1], offered[2], offered[0]),
+        "the stack follows the pick order, with the auto-placed last one on top"
+    );
+}
+
+/// Cross-player order is not the player's to choose: with one trigger each, nobody is prompted and
+/// APNAP decides. This is the same board as
+/// `apnap_puts_the_active_players_upkeep_trigger_on_the_stack_first`, stated from the prompt's side.
+#[test]
+fn one_trigger_each_is_never_prompted() {
+    let mut e = upkeep_engine(4452);
+    inject_permanent_on_battlefield(&mut e, 0, "sulfuric_vortex");
+    inject_permanent_on_battlefield(&mut e, 1, "sulfuric_vortex");
+
+    pass_turn_to_next_upkeep(&mut e, 0); // P1's upkeep
+
+    assert!(
+        e.state.pending_trigger_order.is_none(),
+        "a lone trigger per player leaves nothing to choose"
+    );
+    assert_eq!(e.state.stack.len(), 2);
+}
+
+/// Only the player holding two triggers is asked; the opponent's single trigger still lands behind
+/// the whole active-player block (CR 603.3b APNAP).
+#[test]
+fn only_the_multi_trigger_controller_is_prompted_and_apnap_still_holds() {
+    let mut e = upkeep_engine(4453);
+    // P1 is the active player below, and holds two Vortexes; P0 holds one.
+    inject_permanent_on_battlefield(&mut e, 1, "sulfuric_vortex");
+    inject_permanent_on_battlefield(&mut e, 1, "sulfuric_vortex");
+    inject_permanent_on_battlefield(&mut e, 0, "sulfuric_vortex");
+
+    pass_turn_to_next_upkeep(&mut e, 0); // P1's upkeep
+
+    let pending = e
+        .state
+        .pending_trigger_order
+        .as_ref()
+        .expect("the active player orders their own two");
+    assert_eq!(pending.deciding_player, 1);
+    assert_eq!(
+        pending.candidates.len(),
+        2,
+        "only P1's own block is offered"
+    );
+
+    assert!(answer_trigger_order_in_engine_order(&mut e));
+    assert!(
+        e.state.pending_trigger_order.is_none(),
+        "P0 holds only one trigger, so no second prompt"
+    );
+    assert_eq!(e.state.stack.len(), 3);
+    assert_eq!(
+        (
+            e.state.stack[0].controller,
+            e.state.stack[1].controller,
+            e.state.stack[2].controller
+        ),
+        (1, 1, 0),
+        "the active player's whole block is placed before the nonactive player's"
+    );
+}
+
+/// An outstanding ordering prompt blocks every other command — the point of CR 603.3b is that the
+/// triggers are on the stack before anyone gets priority.
+#[test]
+fn an_outstanding_trigger_order_blocks_every_other_command() {
+    let mut e = upkeep_engine(4454);
+    inject_permanent_on_battlefield(&mut e, 0, "sulfuric_vortex");
+    inject_permanent_on_battlefield(&mut e, 0, "phyrexian_arena");
+    pass_turn_to_next_upkeep(&mut e, 0); // P1's upkeep
+    pass_turn_to_next_upkeep(&mut e, 1); // P0's upkeep
+    assert!(e.state.pending_trigger_order.is_some());
+
+    assert!(e.apply_command(0, &pass()).is_err(), "cannot pass priority");
+    assert!(
+        e.apply_command(1, &pass()).is_err(),
+        "nor can the opponent act"
+    );
+    assert!(
+        e.apply_command(0, &cast_spell(0, vec![])).is_err(),
+        "cannot cast"
+    );
+    assert!(
+        e.apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::DeclareAttackers(DeclareAttackers {
+                    creature_ids: vec![],
+                })),
+            },
+        )
+        .is_err(),
+        "cannot declare attackers"
+    );
+    assert!(
+        e.state.pending_trigger_order.is_some(),
+        "every refusal leaves the prompt outstanding"
+    );
+}
+
+/// Every bad pick is refused *and* leaves the prompt intact — destroying it would deadlock the
+/// game, since nothing else can clear it.
+#[test]
+fn illegal_trigger_order_picks_are_rejected_and_leave_the_prompt_intact() {
+    let mut e = upkeep_engine(4455);
+    inject_permanent_on_battlefield(&mut e, 0, "sulfuric_vortex");
+    inject_permanent_on_battlefield(&mut e, 0, "phyrexian_arena");
+    pass_turn_to_next_upkeep(&mut e, 0); // P1's upkeep
+    pass_turn_to_next_upkeep(&mut e, 1); // P0's upkeep
+
+    let ids: Vec<u32> = e
+        .state
+        .pending_trigger_order
+        .as_ref()
+        .expect("ordering prompt")
+        .candidates
+        .iter()
+        .map(|c| c.object_id)
+        .collect();
+
+    // An id that was never offered, and one that is a real object but not a waiting trigger.
+    for (why, oid) in [("unknown id", 999_999), ("zero", 0)] {
+        assert!(
+            e.apply_command(0, &submit_trigger_order(oid)).is_err(),
+            "{why} must be rejected"
+        );
+        assert!(
+            e.state.pending_trigger_order.is_some(),
+            "{why} must leave the prompt outstanding"
+        );
+    }
+
+    // Wrong player, with an otherwise perfectly valid pick.
+    assert!(
+        e.apply_command(1, &submit_trigger_order(ids[0])).is_err(),
+        "the opponent cannot order someone else's triggers"
+    );
+    assert!(e.state.pending_trigger_order.is_some());
+
+    // And the valid pick still works afterwards.
+    e.apply_command(0, &submit_trigger_order(ids[0]))
+        .expect("valid pick after the rejections");
+    assert!(e.state.pending_trigger_order.is_none());
+    assert_eq!(e.state.stack.len(), 2);
+
+    // Nothing is waiting now, so a further pick has no prompt to answer.
+    assert!(
+        e.apply_command(0, &submit_trigger_order(ids[1])).is_err(),
+        "no outstanding prompt means nothing to pick"
+    );
+}
+
+/// No auto-skip: two copies of the *same* ability still raise the prompt. MTGO asks here too, and
+/// "the order can't matter" is a judgement the engine has no business making — a trigger's effect
+/// can depend on the board a previous one changed.
+#[test]
+fn identical_triggers_still_raise_the_prompt() {
+    let mut e = upkeep_engine(4456);
+    inject_permanent_on_battlefield(&mut e, 0, "sulfuric_vortex");
+    inject_permanent_on_battlefield(&mut e, 0, "sulfuric_vortex");
+
+    pass_turn_to_next_upkeep(&mut e, 0); // P1's upkeep (both Vortexes already trigger here)
+    pass_turn_to_next_upkeep(&mut e, 1); // P0's upkeep
+
+    let pending = e
+        .state
+        .pending_trigger_order
+        .as_ref()
+        .expect("two identical triggers are still ordered");
+    assert_eq!(pending.candidates.len(), 2);
+    assert_eq!(
+        pending.candidates[0].ability_text, pending.candidates[1].ability_text,
+        "the two candidates really are the same ability"
+    );
+    assert_ne!(
+        pending.candidates[0].object_id, pending.candidates[1].object_id,
+        "but they are distinguishable, so an order can be submitted"
+    );
+}
+
+/// **The interleaving test.** Picking and targeting alternate: choose a trigger, target *that*
+/// trigger, then choose the next (CR 603.3b then 603.3d — a target is chosen as its ability is put
+/// on the stack, not for the whole block afterwards).
+#[test]
+fn each_picked_trigger_is_targeted_before_the_next_is_chosen() {
+    let decks = Some(vec![
+        deck_with("swamp", &["blood_artist", "blood_artist"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(4457, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    relocate_to_battlefield(&mut e, 0, "blood_artist", false);
+    relocate_to_battlefield(&mut e, 0, "blood_artist", false);
+    let bears_oid = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    e.state.objects.get_mut(&bears_oid).expect("bears").damage = 2;
+    e.apply_command(0, &pass()).expect("SBA pass");
+
+    let ids: Vec<u32> = e
+        .state
+        .pending_trigger_order
+        .as_ref()
+        .expect("both Blood Artists must be ordered first")
+        .candidates
+        .iter()
+        .map(|c| c.object_id)
+        .collect();
+    assert!(
+        e.state.pending_triggers.is_empty(),
+        "no target prompt before the order is fixed"
+    );
+
+    // Pick the second one offered, to prove placement follows the pick rather than APNAP order.
+    let chosen = [ids[1], ids[0]];
+    let p1_id = e.state.players[1].id;
+
+    e.apply_command(0, &submit_trigger_order(chosen[0]))
+        .expect("pick the first trigger");
+    assert_eq!(
+        e.state.pending_triggers.len(),
+        1,
+        "picking a targeted trigger immediately asks for *its* target"
+    );
+    assert_eq!(e.state.pending_triggers[0].object_id, chosen[0]);
+    // And that target choice outranks the ordering prompt, so the next pick is refused until it
+    // is answered — which is exactly what lets the UI target right after choosing.
+    assert!(
+        e.apply_command(0, &submit_trigger_order(chosen[1]))
+            .is_err(),
+        "the picked trigger must be targeted before the next one is chosen"
+    );
+
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                target_object_id: p1_id as u32,
+                decline: false,
+            })),
+        },
+    )
+    .expect("target the first trigger");
+
+    // One candidate left, so it is placed without a further prompt and parks its own target.
+    assert!(e.state.pending_trigger_order.is_none());
+    assert_eq!(e.state.pending_triggers.len(), 1);
+    assert_eq!(e.state.pending_triggers[0].object_id, chosen[1]);
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                target_object_id: p1_id as u32,
+                decline: false,
+            })),
+        },
+    )
+    .expect("target the second trigger");
+
+    assert_eq!(e.state.stack.len(), 2);
+    assert_eq!(
+        (e.state.stack[0].id, e.state.stack[1].id),
+        (chosen[0], chosen[1]),
+        "the reserved ids survive target selection onto the stack"
+    );
+}
+
 /// **The scope test.** A `Controller`-scoped upkeep trigger must not fire on the opponent's
 /// upkeep. The widened scan now *sees* P0's Arena during P1's upkeep; the filter is what rejects
 /// it. Catches a wrong serde default or an inverted `Controller`/`Opponent` comparison.
@@ -1369,12 +1783,20 @@ fn blood_artist_dying_in_a_wipe_still_sees_the_other_deaths() {
     pass_both_players(&mut e);
 
     // Blood Artist itself + both Grizzly Bears all died in the same event, so its ability
-    // triggers three times (it is not "another creature" — exclude_self is false).
+    // triggers three times (it is not "another creature" — exclude_self is false). All three are
+    // controlled by P0, so they surface as one CR 603.3b ordering prompt rather than three queued
+    // target prompts.
+    let pending = e
+        .state
+        .pending_trigger_order
+        .as_ref()
+        .expect("three simultaneous triggers under one controller must be ordered");
     assert_eq!(
-        e.state.pending_triggers.len(),
+        pending.candidates.len(),
         3,
         "Blood Artist sees its own death and both Bears dying simultaneously"
     );
+    assert!(pending.candidates.iter().all(|c| c.controller == 0));
 }
 
 /// The Bottle Gnomes softlock: a trigger queued while paying an activation cost must be emitted

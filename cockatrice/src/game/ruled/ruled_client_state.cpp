@@ -445,6 +445,33 @@ void RuledClientState::submitResolutionHandPick()
 }
 
 // ---------------------------------------------------------------------------------------
+// Simultaneous trigger ordering (CR 603.3b)
+// ---------------------------------------------------------------------------------------
+
+void RuledClientState::pickTriggerOrderCard(int serverCardId)
+{
+    if (!isTriggerOrderPickCard(serverCardId)) {
+        return;
+    }
+    submitTriggerOrder(pendingChoice->orderCardIdToOid.value(serverCardId));
+}
+
+void RuledClientState::submitTriggerOrder(quint32 triggerOid)
+{
+    if (!hasPendingTriggerOrder()) {
+        return;
+    }
+    ruled::v1::RuledCommand cmd;
+    cmd.mutable_submit_trigger_order()->set_trigger_object_id(triggerOid);
+    // The choice is cleared so a second click during the round trip sends nothing the engine is
+    // about to refuse — but deliberately *without* announcing a UI change. The popup stays up,
+    // showing the old cards for the moment it takes the reply to arrive, and the batch's single
+    // triggerOrderUiChanged then either refreshes it with what remains or closes it.
+    clearPendingChoice();
+    host->sendRuledCommand(cmd);
+}
+
+// ---------------------------------------------------------------------------------------
 // Turn / phase roles
 // ---------------------------------------------------------------------------------------
 
@@ -1024,6 +1051,7 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     // Stack tracking — the host removes the synthetic ability CardItems from their zones (which
     // calls back into unregisterSyntheticStackCard) before invoking this.
     stackOidOrder.clear();
+    triggerOrderCandidateOids.clear();
     stackTargetsByStackOid.clear();
     stackTargetKindByStackAndTargetOid.clear();
     stackAnnotationByOid.clear();

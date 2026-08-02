@@ -239,6 +239,35 @@ TEST_F(GamePromptWidgetTest, ResolutionPickShowsConfirmEnabledOnlyWhenSatisfied)
     EXPECT_FALSE(btn("passPriorityButton")->isHidden());
 }
 
+TEST_F(GamePromptWidgetTest, TriggerOrderTakesOverFromTargetingAndShowsTheCallerText)
+{
+    widget->setLocalPlayerHasPriority(true);
+    // CR 603.3b: the engine is hard-blocked on the answer, so a stale mid-cast targeting state
+    // must not outrank the ordering prompt.
+    widget->setSpellCastPending(true);
+    widget->setRuledPromptState(
+        {PromptMode::TriggerOrder, 2, 0, "Click the trigger to put on the stack next (2 left).", {}});
+    EXPECT_EQ(widget->effectiveMode(), PromptMode::TriggerOrder);
+    EXPECT_TRUE(label("promptLabel")->text().contains(QStringLiteral("put on the stack next")));
+
+    widget->setSpellCastPending(false);
+    EXPECT_EQ(widget->effectiveMode(), PromptMode::TriggerOrder);
+}
+
+TEST_F(GamePromptWidgetTest, TriggerOrderHidesPriorityAndCombatButtons)
+{
+    widget->setLocalPlayerHasPriority(true);
+    widget->setRuledPromptState({PromptMode::TriggerOrder, 2, 0, "Click the trigger to put on the stack next.", {}});
+    // Picking happens by clicking a card in the ordering popup — this mode owns no button.
+    EXPECT_TRUE(btn("passPriorityButton")->isHidden());
+    EXPECT_TRUE(btn("resolutionHandPickConfirmButton")->isHidden());
+    EXPECT_TRUE(btn("declineTriggerButton")->isHidden());
+
+    widget->setRuledPromptState({});
+    EXPECT_EQ(widget->effectiveMode(), PromptMode::Normal);
+    EXPECT_FALSE(btn("passPriorityButton")->isHidden());
+}
+
 TEST_F(GamePromptWidgetTest, OpeningBottomDoneAppearsOnlyOnAnExactSelection)
 {
     widget->setLocalPlayerHasPriority(true);

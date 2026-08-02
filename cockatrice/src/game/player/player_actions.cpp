@@ -1096,6 +1096,24 @@ bool PlayerActions::tryRuledResolutionHandPickCard(CardItem *card)
     return true;
 }
 
+bool PlayerActions::tryRuledTriggerOrderCard(CardItem *card)
+{
+    if (!card || !RuledActions::isRuledGame(player->getGame())) {
+        return false;
+    }
+    if (!player->getPlayerInfo()->getLocal()) {
+        return false;
+    }
+    RuledClientState *handler = player->getGame()->getGameEventHandler()->ruled();
+    if (!handler || !handler->isTriggerOrderPickCard(card->getId())) {
+        return false;
+    }
+    // One click is one placement (CR 603.3b): no toggle, no confirm. The engine answers with this
+    // trigger's target prompt or a shorter ordering prompt.
+    handler->pickTriggerOrderCard(card->getId());
+    return true;
+}
+
 bool PlayerActions::tryToggleRuledCleanupDiscard(CardItem *card)
 {
     if (!card || !RuledActions::isRuledGame(player->getGame())) {

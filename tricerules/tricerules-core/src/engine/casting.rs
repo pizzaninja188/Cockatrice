@@ -262,10 +262,25 @@ impl GameEngine {
                 "cannot cast until attack or block declaration is complete",
             ));
         }
-        if !self.state.pending_triggers.is_empty() {
-            return Err(EngineError::Illegal(
-                "must choose trigger target before casting",
-            ));
+        // As in `pass_priority`: `dispatch_command`'s blocking gate normally catches these first;
+        // this is the local refusal with a message that names casting.
+        match self.state.blocking_choice() {
+            Some(BlockingChoice::TriggerTarget) => {
+                return Err(EngineError::Illegal(
+                    "must choose trigger target before casting",
+                ));
+            }
+            Some(BlockingChoice::TriggerOrder) => {
+                return Err(EngineError::Illegal(
+                    "must order simultaneous triggers before casting",
+                ));
+            }
+            Some(BlockingChoice::Resolution) => {
+                return Err(EngineError::Illegal(
+                    "must submit resolution choice before casting",
+                ));
+            }
+            None => {}
         }
         let has_x = face_mana.has_x();
         if x_value != 0 && !has_x {

@@ -91,6 +91,10 @@ void ZoneViewZone::initializeCards(const QList<const ServerInfo_Card *> &cardLis
             CardRef cardRef = {QString::fromStdString(card->name()), QString::fromStdString(card->provider_id())};
             auto copy = new CardItem(getLogic()->getPlayer(), this, cardRef, card->id());
             copy->setFaceDown(card->face_down());
+            // The caller-supplied ServerInfo_Card carries an annotation, and dropping it here was
+            // silently discarding text the popup was asked to show (ruled trigger ordering labels
+            // each candidate with its ability text). Empty for every other caller, so a no-op there.
+            copy->setAnnotation(QString::fromStdString(card->annotation()));
 
             getLogic()->addCard(copy, false, i);
         }

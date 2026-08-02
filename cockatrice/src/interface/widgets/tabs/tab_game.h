@@ -13,6 +13,8 @@
 #include "../game/log/message_log_widget.h"
 // For GamePromptWidget::PromptMode on refreshRuledPromptState() — ruled prompt panel (fork).
 #include "../game/prompt/game_prompt_widget.h"
+// For RuledTriggerOrderCandidate on the CR 603.3b ordering signal (fork).
+#include "../game/ruled/ruled_client_state.h"
 #include "../game/player/player.h"
 #include "../interface/widgets/menus/tearoff_menu.h"
 #include "../interface/widgets/replay/replay_manager.h"
@@ -109,6 +111,11 @@ private:
     QPointer<ZoneViewWidget> revealedPickView;
     // ServerInfo_Card storage for the revealed-cards popup (owned by this instance).
     QList<ServerInfo_Card *> revealedPickCards;
+    // CR 603.3b: card-image popup for picking which trigger goes on the stack next. Alive only
+    // while this client is the deciding player, and rebuilt after each pick with what remains.
+    QPointer<ZoneViewWidget> triggerOrderView;
+    // ServerInfo_Card storage for that popup (owned by this instance).
+    QList<ServerInfo_Card *> triggerOrderCards;
     QPointF stackWindowPos = QPointF(340, 80);
     QSizeF stackWindowSize;
     QAction *playersSeparator;
@@ -222,6 +229,9 @@ private slots:
     /// Creates or closes the revealed-cards popup for RevealedCards pick (Gifts Ungiven step 2).
     void onRuledRevealedPickChanged(bool started, QStringList cardNames, QVector<int> serverCardIds,
                                     int min, int max);
+    /// CR 603.3b: opens or closes the simultaneous-trigger ordering window. Only the deciding
+    /// player is sent `active = true`, so at most one client shows it.
+    void onRuledTriggerOrderUiChanged(bool active, QVector<RuledTriggerOrderCandidate> candidates);
 
 protected slots:
     void closeEvent(QCloseEvent *event) override;

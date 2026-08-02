@@ -74,15 +74,25 @@ impl GameEngine {
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("not your priority"));
         }
-        if !self.state.pending_triggers.is_empty() {
-            return Err(EngineError::Illegal(
-                "must choose trigger target before passing priority",
-            ));
-        }
-        if self.state.pending_resolution.is_some() {
-            return Err(EngineError::Illegal(
-                "must submit resolution choice before passing priority",
-            ));
+        // `dispatch_command`'s blocking gate already rejects these before they reach here; kept as
+        // the local, better-worded refusal for the internal callers that bypass dispatch.
+        match self.state.blocking_choice() {
+            Some(BlockingChoice::TriggerTarget) => {
+                return Err(EngineError::Illegal(
+                    "must choose trigger target before passing priority",
+                ));
+            }
+            Some(BlockingChoice::TriggerOrder) => {
+                return Err(EngineError::Illegal(
+                    "must order simultaneous triggers before passing priority",
+                ));
+            }
+            Some(BlockingChoice::Resolution) => {
+                return Err(EngineError::Illegal(
+                    "must submit resolution choice before passing priority",
+                ));
+            }
+            None => {}
         }
         if self.state.stack.is_empty()
             && self.state.turn_step == TurnStep::Cleanup
@@ -593,7 +603,14 @@ impl GameEngine {
         // (CR 502.1, which has no priority). The `Untap` arm of `adv_on_empty_stack` fires the
         // same event for the paths that do stop there, and is unreachable from here.
         self.fire_triggers(GameEvent::UpkeepBegin { player: ap }, &mut ev);
-        ev.push(ev_priority_changed(self));
+        // The second of the two flush points: this path returns before `dispatch_command`'s tail,
+        // so without it the first upkeep's triggers would sit staged until the next command.
+        // Priority is withheld while an ordering or target choice is outstanding — CR 603.3b/603.3d
+        // both resolve before any player receives priority.
+        self.flush_staged_triggers(&mut ev);
+        if self.state.blocking_choice().is_none() {
+            ev.push(ev_priority_changed(self));
+        }
         Ok(finish_with_events(self, ev))
     }
 

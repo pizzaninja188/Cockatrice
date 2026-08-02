@@ -72,6 +72,9 @@ message RuledCommand {
     // Debug-only cheat command. The engine rejects it outright unless the session was started
     // with dev commands enabled; see DevCommand.
     DevCommand dev_command = 22;
+    // Answer an outstanding TriggerOrderRequired: the order this player's simultaneous triggered
+    // abilities are put on the stack (CR 603.3b).
+    SubmitTriggerOrder submit_trigger_order = 23;
   }
 }
 
@@ -173,6 +176,19 @@ message DevAddMana {
 // request was `ordered`). The engine validates them against the parked request's candidates.
 message SubmitResolutionChoice {
   repeated uint32 chosen_object_ids = 1;
+}
+
+// A player's answer to a TriggerOrderRequired (CR 603.3b): put THIS trigger on the stack next.
+//
+// One at a time, not a permutation, because CR 603.3d chooses each ability's targets *as it is put
+// on the stack* — so the engine places this one (prompting for its target if it needs one) and only
+// then asks which of the remaining triggers goes next. The last trigger of a block is placed
+// automatically; there is no choice left to make.
+//
+// Placement order, not resolution order: what you pick first is put on the stack first and
+// therefore resolves LAST (the stack is last-in-first-out, CR 405.5).
+message SubmitTriggerOrder {
+  uint32 trigger_object_id = 1;
 }
 
 // Per-blocker damage from one attacker during assign combat damage.
@@ -500,7 +516,44 @@ message RuledEvent {
     // Permanents that became untapped during this batch (CR 701.20). Authorizes the relay to
     // apply the engine's untapped state for exactly these objects.
     PermanentsUntapped permanents_untapped = 30 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    // Two or more triggered abilities controlled by one player triggered simultaneously, and that
+    // player chooses the order they go on the stack (CR 603.3b). Cross-player order is APNAP-fixed
+    // and never prompted, so one event covers exactly one player's own block; the next player's
+    // block (if any) raises its own event once this one is answered.
+    TriggerOrderRequired trigger_order_required = 31 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   }
+}
+
+// One triggered ability that has fired and is waiting to be put on the stack. It is not on the
+// stack yet and has no physical card, so it is self-describing rather than an id the client can
+// look up: `trigger_object_id` is an engine ObjectId reserved when the trigger was collected, which
+// becomes this trigger's StackPushed.object_id once it is placed. That is the handle
+// SubmitTriggerOrder echoes back, and seeing it in StackPushed is how a client knows the prompt is
+// finished.
+message TriggerOrderCandidate {
+  uint32 trigger_object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // The source permanent. Usually still on the battlefield, so the client can show its CardItem —
+  // but NOT guaranteed: a dies trigger's source left in the same event (CR 603.6/603.10).
+  uint32 source_permanent_id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 ability_index = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Oracle display name of the source — the same value StackPushed.description carries — so a
+  // trigger whose source has already left the battlefield still renders.
+  string source_card_name = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  string ability_text = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+}
+
+// A player must choose which of their simultaneous triggered abilities goes on the stack next
+// (CR 603.3b). Public in full: which abilities triggered is public information — only the *choice*
+// belongs to deciding_player_id, and no candidate here exposes a concealed zone. Opponents use it
+// for a "waiting" indicator.
+//
+// Re-emitted after each placement with the triggers that are still unplaced, so `candidates` is
+// always the *remaining* set and always has at least 2 entries (with one left there is no choice,
+// and the engine places it itself).
+message TriggerOrderRequired {
+  int32 deciding_player_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // In engine (APNAP-stable) order.
+  repeated TriggerOrderCandidate candidates = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // Permanents that *became untapped* (CR 701.20) while this batch's command was applied — the

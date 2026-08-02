@@ -9,7 +9,7 @@ pub(crate) use tricerules_proto::ruled::v1::{
     DamagePair, DeclareAttackers, DeclareBlockers, DiscardToHandSize, FlexPipPayment, PassPriority,
     PlayLand, PreviewDeclareAttackers, PreviewDeclareBlockers, PrimitiveYieldStructured,
     ResolutionChoiceRequired, RuledCommand, RuledEventBatch, SelectedSpellMode,
-    SubmitResolutionChoice, TargetRef, TransformPermanent, UndoManaAbility,
+    SubmitResolutionChoice, SubmitTriggerOrder, TargetRef, TransformPermanent, UndoManaAbility,
 };
 
 pub(crate) fn pass() -> RuledCommand {
@@ -358,7 +358,42 @@ pub(crate) fn priority_changes_in(
         .collect()
 }
 
+/// Answer an outstanding CR 603.3b ordering prompt by accepting the engine's own APNAP order.
+///
+/// Most scenarios don't care about trigger order — they just need the game to keep moving — so the
+/// pass helpers call this first. Tests that *are* about ordering pick their own trigger instead and
+/// never reach here. Returns whether any prompt was answered.
+///
+/// Loops because the prompt is per-pick, not per-block: answering one re-raises it for the rest
+/// (until one is left, which the engine places itself). Stops at a parked target choice, since that
+/// blocks the next pick and only the caller knows what to target.
+pub(crate) fn answer_trigger_order_in_engine_order(e: &mut GameEngine) -> bool {
+    let mut answered = false;
+    while let Some(pending) = e.state.pending_trigger_order.as_ref() {
+        if !e.state.pending_triggers.is_empty() {
+            break;
+        }
+        let player = pending.deciding_player;
+        let first = pending.candidates[0].object_id;
+        e.apply_command(player, &submit_trigger_order(first))
+            .expect("submit trigger order");
+        answered = true;
+    }
+    answered
+}
+
+pub(crate) fn submit_trigger_order(trigger_object_id: u32) -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::SubmitTriggerOrder(SubmitTriggerOrder {
+            trigger_object_id,
+        })),
+    }
+}
+
 pub(crate) fn pass_both_players(e: &mut GameEngine) {
+    // A pending ordering prompt blocks every command, `pass` included — clear it the boring way so
+    // scenarios about something else don't have to know this mechanic exists.
+    answer_trigger_order_in_engine_order(e);
     let first = e.state.priority_player_id();
     let second = if first == e.state.players[0].id {
         e.state.players[1].id

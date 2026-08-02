@@ -2,8 +2,9 @@
 
 use crate::custom::{self, ResolutionChoice, ResolutionCtx, ResolutionStep};
 use crate::state::{
-    AffectedScope, ChosenSpellMode, CombatState, ContinuousEffect, GameObject, GameState, ObjectId,
-    OpeningSequence, PendingResolution, PendingTrigger, PlayerId, PlayerState, StackItem, TurnStep,
+    AffectedScope, BlockingChoice, ChosenSpellMode, CombatState, ContinuousEffect, GameObject,
+    GameState, ObjectId, OpeningSequence, PendingResolution, PendingTrigger, PendingTriggerOrder,
+    PlayerId, PlayerState, StackItem, StagedTrigger, StagedTriggerGroup, TurnStep,
     UndoableManaAbility, Zone,
 };
 use prost::Message;
@@ -308,6 +309,8 @@ impl GameEngine {
             opening,
             starting_player_idx: 0,
             pending_triggers: VecDeque::new(),
+            staged_trigger_groups: VecDeque::new(),
+            pending_trigger_order: None,
             pending_resolution: None,
             continuous_effects: Vec::new(),
             damage_prevention_shields: HashMap::new(),
@@ -471,6 +474,14 @@ impl GameEngine {
                 });
             }
         }
+        // CR 603.3b: staged triggers are placed before the command returns, unless a player choice
+        // is legitimately holding them. Anything left staged means a path fired triggers without
+        // reaching a flush point, which would silently swallow them — fail loudly in debug instead
+        // of shipping a game that quietly drops abilities.
+        debug_assert!(
+            self.state.staged_trigger_groups.is_empty() || self.state.blocking_choice().is_some(),
+            "triggers left staged with nothing blocking them"
+        );
         result
     }
 
@@ -494,26 +505,41 @@ impl GameEngine {
         // misleading, and the parked-resolution guard is an allowlist that would silently widen
         // if a future command joined it.
         if matches!(cmd.cmd.as_ref(), Some(Cmd::DevCommand(_)))
-            && (self.state.opening.is_some() || self.state.pending_resolution.is_some())
+            && (self.state.opening.is_some() || self.state.blocking_choice().is_some())
         {
             return Err(EngineError::Illegal(
-                "dev command not allowed during opening or a parked resolution",
+                "dev command not allowed during opening or an outstanding choice",
             ));
         }
         if self.state.opening.is_some() {
             return self.apply_opening_command(player, cmd);
         }
-        // A parked tier-3 custom resolution (CR 608) blocks every action but answering it
-        // (or conceding), the same way a pending trigger gates the game.
-        if self.state.pending_resolution.is_some()
-            && !matches!(
-                cmd.cmd.as_ref(),
-                Some(Cmd::SubmitResolutionChoice(_)) | Some(Cmd::Concede(_))
-            )
-        {
-            return Err(EngineError::Illegal(
-                "resolve the pending choice before acting",
-            ));
+        // An outstanding player decision blocks every action but the one that answers it (or
+        // conceding, CR 104.3a). All three are decisions the rules require *before* any player
+        // receives priority, so letting anything else through would act against a wrong or
+        // half-built stack — a player could cast, attack or discard while their own triggers were
+        // still off the stack.
+        if let Some(blocking) = self.state.blocking_choice() {
+            let answered = match blocking {
+                BlockingChoice::Resolution => {
+                    matches!(cmd.cmd.as_ref(), Some(Cmd::SubmitResolutionChoice(_)))
+                }
+                BlockingChoice::TriggerOrder => {
+                    matches!(cmd.cmd.as_ref(), Some(Cmd::SubmitTriggerOrder(_)))
+                }
+                BlockingChoice::TriggerTarget => {
+                    matches!(cmd.cmd.as_ref(), Some(Cmd::ChooseTriggerTarget(_)))
+                }
+            };
+            if !answered {
+                return Err(EngineError::Illegal(match blocking {
+                    BlockingChoice::Resolution => "resolve the pending choice before acting",
+                    BlockingChoice::TriggerOrder => {
+                        "order your simultaneous triggers before acting"
+                    }
+                    BlockingChoice::TriggerTarget => "choose the trigger's target before acting",
+                }));
+            }
         }
         // CR 605 float-undo courtesy: a mana ability stays undoable only across further mana-ability
         // activations (or another undo). Every other command makes the float consequential, so drop
@@ -595,6 +621,9 @@ impl GameEngine {
             Some(Cmd::SubmitResolutionChoice(s)) => {
                 self.submit_resolution_choice(player, &s.chosen_object_ids)
             }
+            Some(Cmd::SubmitTriggerOrder(s)) => {
+                self.submit_trigger_order(player, s.trigger_object_id)
+            }
             Some(Cmd::PlayLand(pl)) => {
                 self.play_land(player, pl.hand_card_index as usize, pl.face_index as usize)
             }
@@ -622,6 +651,11 @@ impl GameEngine {
         if self.state.pending_resolution.is_none() {
             let mut d = vec![];
             self.apply_sbas(&mut d)?;
+            // CR 704.3 then 603.3b: state-based actions are performed first, and only then are
+            // waiting triggers put on the stack — including the ones those SBAs just fired. Before
+            // `ev_zone_view_sync` so a trigger's StackPushed still precedes the zone view, exactly
+            // as it did when triggers were pushed at collection time.
+            self.flush_staged_triggers(&mut d);
             b.events.extend(d);
         }
         b.events.push(self.ev_zone_view_sync());

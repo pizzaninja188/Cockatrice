@@ -129,6 +129,8 @@ public:
     bool tryToggleRuledCleanupDiscard(CardItem *card);
     bool tryRuledOpeningBottomCard(CardItem *card);
     bool tryRuledResolutionHandPickCard(CardItem *card);
+    /// CR 603.3b: click a card in the trigger-ordering popup to put that ability on the stack next.
+    bool tryRuledTriggerOrderCard(CardItem *card);
     bool sendRuledCleanupDiscardBatchIfComplete();
 
     [[nodiscard]] bool isInSpellDamageAllocationMode() const;

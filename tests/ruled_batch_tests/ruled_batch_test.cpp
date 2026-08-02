@@ -421,6 +421,65 @@ TEST_F(RuledBatchTest, LibraryTopChoiceIsPrivateToTheScryingPlayerWithSequential
     EXPECT_EQ(p2Choice.prompt_text(), "Opponent is making a resolution choice.");
 }
 
+// CR 603.3b: which abilities triggered is public information, so unlike a resolution choice this
+// event survives redaction intact for everyone. Only the *choice* belongs to the deciding player,
+// and that is enforced by the engine rejecting a SubmitTriggerOrder from anyone else.
+TEST_F(RuledBatchTest, TriggerOrderRequiredSurvivesRedactionForEveryParticipant)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *order = batch.add_events()->mutable_trigger_order_required();
+    order->set_deciding_player_id(1);
+    auto *first = order->add_candidates();
+    first->set_trigger_object_id(501);
+    first->set_source_permanent_id(41);
+    first->set_source_card_name("Blood Artist");
+    first->set_ability_text("Target player loses 1 life and you gain 1 life.");
+    auto *second = order->add_candidates();
+    second->set_trigger_object_id(502);
+    second->set_source_permanent_id(42);
+    second->set_source_card_name("Blood Artist");
+    second->set_ability_text("Target player loses 1 life and you gain 1 life.");
+
+    for (auto *participant : {p1, p2}) {
+        const auto redacted = redactFor(batch, participant);
+        const auto it = std::find_if(redacted.events().begin(), redacted.events().end(),
+                                     [](const auto &event) { return event.has_trigger_order_required(); });
+        ASSERT_NE(it, redacted.events().end()) << "the event must not be dropped for either seat";
+        const auto &kept = it->trigger_order_required();
+        EXPECT_EQ(kept.deciding_player_id(), 1);
+        ASSERT_EQ(kept.candidates_size(), 2);
+        EXPECT_EQ(kept.candidates(0).trigger_object_id(), 501u);
+        EXPECT_EQ(kept.candidates(0).source_permanent_id(), 41u);
+        EXPECT_EQ(kept.candidates(0).source_card_name(), "Blood Artist");
+        EXPECT_FALSE(kept.candidates(1).ability_text().empty());
+    }
+}
+
+// The relay needs no code for this event: nothing physical moves, so applying a batch containing
+// only it must be a clean no-op. If a future change gives it card semantics, this fails first.
+TEST_F(RuledBatchTest, TriggerOrderRequiredMovesNoPhysicalCards)
+{
+    Server_Card *bear = addCardToTable(p1, "Grizzly Bears");
+    const int tableCountBefore = p1->getZones().value(ZoneNames::TABLE)->getCards().size();
+
+    ruled::v1::IpcResponse resp;
+    auto *order = resp.mutable_batch()->add_events()->mutable_trigger_order_required();
+    order->set_deciding_player_id(1);
+    auto *candidate = order->add_candidates();
+    candidate->set_trigger_object_id(501);
+    candidate->set_source_permanent_id(41);
+    candidate->set_source_card_name("Blood Artist");
+    candidate->set_ability_text("Target player loses 1 life and you gain 1 life.");
+    const auto outcome = callBatchApply(resp);
+
+    EXPECT_EQ(p1->getZones().value(ZoneNames::TABLE)->getCards().size(), tableCountBefore);
+    EXPECT_FALSE(bear->getTapped());
+    EXPECT_FALSE(outcome.zoneViewApplied);
+    EXPECT_FALSE(outcome.handOrLibraryChanged);
+    EXPECT_FALSE(outcome.tapStateEventsQueued);
+    EXPECT_FALSE(outcome.phaseChanged);
+}
+
 TEST_F(RuledBatchTest, ZoneViewBuildsOidMapAndPropagatesTapState)
 {
     Server_Card *bear = addCardToTable(p1, "Grizzly Bears");

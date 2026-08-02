@@ -94,6 +94,21 @@ struct RuledSpellTargetData
     bool damageDividedEvenly = false;
 };
 
+/// CR 603.3b: one of the simultaneous triggered abilities a player is being asked to order.
+///
+/// Not a card and not on the stack yet, so there is nothing in the client to look it up in — the
+/// engine sends it self-describing. `oid` is the id the engine reserved for it, which is what the
+/// answer echoes back and what arrives later as `StackPushed.object_id`. `sourceOid` usually still
+/// resolves to a battlefield CardItem, but must not be relied on: a dies trigger's source left the
+/// battlefield in the same event that triggered it.
+struct RuledTriggerOrderCandidate
+{
+    quint32 oid = 0;
+    quint32 sourceOid = 0;
+    QString cardName;
+    QString abilityText;
+};
+
 struct RuledModalSpellOption
 {
     int modeIndex = -1;
@@ -190,6 +205,9 @@ public:
             LegendKeep,
             /// Tier-3 mid-resolution pick over cards in a zone (Brainstorm, Gifts Ungiven, …).
             ResolutionPick,
+            /// CR 603.3b: the order this player's simultaneous triggers go on the stack.
+            /// Answered with SubmitTriggerOrder; rendered in its own window, not on the board.
+            TriggerOrder,
         };
 
         Kind kind = Kind::TriggerTarget;
@@ -219,6 +237,15 @@ public:
         // For Deck / Revealed picks: oracle card names parallel to serverCardIdToOid keys,
         // used to populate the deck zone view prompt and the revealed-cards popup.
         QStringList candidateNames;
+
+        // --- TriggerOrder payload -----------------------------------------------------
+        /// The still-unplaced triggers, in the engine's APNAP order as offered. Re-sent (shorter)
+        /// after every pick, so this is always the remaining set.
+        QVector<RuledTriggerOrderCandidate> orderCandidates;
+        /// Synthetic card id used by the ordering popup -> that candidate's trigger oid. The popup
+        /// is built on the ZoneViewWidget scaffold, whose cards are identified by an int id, so the
+        /// candidates are given index ids and mapped back here.
+        QHash<int, quint32> orderCardIdToOid;
     };
 
     /// Engine-authoritative targeting data, refreshed from LegalActions each RuledEventBatch.
@@ -336,6 +363,11 @@ public:
     // -----------------------------------------------------------------------------------
     // Rule-engine stack object ids in push order: front = most recently pushed = resolves first (LIFO).
     QList<quint32> stackOidOrder;
+    /// Oids offered by the most recent CR 603.3b ordering prompt. The engine reserves a trigger's
+    /// stack oid before the prompt, so seeing one of these arrive in StackPushed is proof the
+    /// prompt has been answered — the safety net that closes the window if the answer came from
+    /// somewhere other than this client's Confirm button (a reconnect, or a resynced batch).
+    QSet<quint32> triggerOrderCandidateOids;
     // CR 510.4: true while the engine reports a pending first-strike damage substep — i.e.
     // any attacker or blocker has First Strike / Double Strike and the substep hasn't resolved.
     // Sourced from `RuledPerPlayerView.first_strike_step_pending` on each zone-view sync.
@@ -907,6 +939,36 @@ public:
     void submitResolutionHandPick();
 
     // -----------------------------------------------------------------------------------
+    // Simultaneous trigger ordering (CR 603.3b).
+    // -----------------------------------------------------------------------------------
+    /// True only on the deciding player's client; opponents get the "waiting" text instead.
+    [[nodiscard]] bool hasPendingTriggerOrder() const
+    {
+        return hasPendingChoiceOfKind(ChoiceKind::TriggerOrder);
+    }
+    [[nodiscard]] QVector<RuledTriggerOrderCandidate> triggerOrderCandidates() const
+    {
+        return hasPendingTriggerOrder() ? pendingChoice->orderCandidates
+                                        : QVector<RuledTriggerOrderCandidate>{};
+    }
+    [[nodiscard]] QString triggerOrderPromptText() const
+    {
+        return pendingChoicePromptText(ChoiceKind::TriggerOrder);
+    }
+    /// Whether this popup card is one of the waiting triggers. Gates the click the same way
+    /// `isResolutionPickZoneCard` gates a resolution pick: candidate ids are only meaningful
+    /// inside the ordering popup, so an ungated lookup would claim unrelated cards.
+    [[nodiscard]] bool isTriggerOrderPickCard(int serverCardId) const
+    {
+        return hasPendingTriggerOrder() && pendingChoice->orderCardIdToOid.contains(serverCardId);
+    }
+    /// Put the clicked trigger on the stack next. There is no confirm step and no multi-select:
+    /// one click is one placement, and the engine answers with either that trigger's target prompt
+    /// or a fresh, shorter ordering prompt (CR 603.3b/603.3d).
+    void pickTriggerOrderCard(int serverCardId);
+    void submitTriggerOrder(quint32 triggerOid);
+
+    // -----------------------------------------------------------------------------------
     // Opening sequence (choose first / mulligan / bottom).
     // -----------------------------------------------------------------------------------
     [[nodiscard]] RuledOpeningUiKind getOpeningUiKind() const
@@ -1016,6 +1078,10 @@ signals:
     /// Emitted when resolution hand-pick mode starts, progresses (card toggled), or ends.
     /// required >= 0 means the mode is active; required == -1 (selected == -1) means cleared.
     void resolutionHandPickUiChanged(int required, int selected);
+    /// CR 603.3b ordering prompt opened or closed. `active` is true only for the deciding player,
+    /// so TabGame can show the ordering window on exactly one client; `candidates` is empty when
+    /// clearing.
+    void triggerOrderUiChanged(bool active, QVector<RuledTriggerOrderCandidate> candidates);
     /// Emitted when a LibrarySearch (Gifts Ungiven step 1) pick starts so the receiving
     /// tab_game can auto-open the local player's deck zone view populated with the candidates.
     void librarySearchPickStarted(QStringList candidateNames, QVector<int> serverCardIds);

@@ -191,10 +191,80 @@ impl ManaPool {
     }
 }
 
+/// A triggered ability that has fired but has not been put on the stack yet — the unit staged
+/// between trigger collection and [`StackItem`].
+///
+/// `object_id` is reserved at collection time rather than at stack push. That reservation is what
+/// gives an off-stack trigger a stable handle: it is what `TriggerOrderRequired` publishes, what
+/// `SubmitTriggerOrder` echoes back, and it becomes this trigger's `StackItem::id` /
+/// `StackPushed.object_id` once it is finally placed. Allocation follows the deterministic APNAP
+/// collection order, so replays are unaffected.
+#[derive(Debug, Clone)]
+pub struct StagedTrigger {
+    pub object_id: ObjectId,
+    pub source_permanent_id: ObjectId,
+    pub card_id: String,
+    /// Registry display name captured at collection, so a source that has already left the game
+    /// still renders in the ordering prompt (a Blood Artist that died in the same wipe).
+    pub card_name: String,
+    /// CR 603.3d: the ability's controller — the controller of its source permanent.
+    pub controller: PlayerId,
+    pub ability_index: usize,
+    pub ability_text: String,
+    /// The event's beneficiary when the trigger names a player other than its controller
+    /// ("**that player** draws a card"); `None` means the controller.
+    pub trigger_player: Option<PlayerId>,
+    /// CR 603.5: an optional triggered ability may be declined before it is put on the stack.
+    pub may: bool,
+}
+
+/// The triggered abilities from *one* simultaneous event (CR 603.3b), in APNAP order and therefore
+/// contiguous per controller. Drained front-to-back by `flush_staged_triggers`, which is what turns
+/// "contiguous per controller" into "one ordering prompt per player".
+#[derive(Debug, Clone)]
+pub struct StagedTriggerGroup {
+    pub triggers: Vec<StagedTrigger>,
+}
+
+/// CR 603.3b: one player controls two or more triggers from the same event and chooses the order
+/// they are put on the stack. Mirrors [`PendingResolution`] — while present it blocks every command
+/// but the answer, and the answer is itself a logged command, so replay determinism holds.
+///
+/// Drained one trigger at a time rather than answered with a permutation, because CR 603.3d picks
+/// each ability's targets *as it is put on the stack*: the player names the next trigger, the engine
+/// places it and asks for its target, and only then does the next choice come up. `candidates` is
+/// therefore always the *remaining unplaced* triggers of the block, shrinking with each answer.
+#[derive(Debug, Clone)]
+pub struct PendingTriggerOrder {
+    pub deciding_player: PlayerId,
+    /// Still-unplaced triggers of this player's block, in engine (APNAP-stable) order.
+    pub candidates: Vec<StagedTrigger>,
+    /// Whether the client has already been told about the current `candidates` set. The drain is
+    /// re-entered several times per command (once by the handler, once by `dispatch_command`'s
+    /// tail), and without this the same prompt would be emitted twice in one batch.
+    /// Cleared whenever `candidates` changes.
+    pub prompt_emitted: bool,
+}
+
+/// Why the engine is refusing everything but one specific answer. Ordered by precedence in
+/// [`GameState::blocking_choice`]; each variant names the single command that clears it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlockingChoice {
+    /// A tier-3 custom resolution is parked mid-resolution (CR 608).
+    Resolution,
+    /// Simultaneous triggers are staged awaiting their controller's ordering (CR 603.3b).
+    TriggerOrder,
+    /// A trigger is parked awaiting its target before it reaches the stack (CR 603.3d).
+    TriggerTarget,
+}
+
 /// A triggered ability that has fired but is waiting for the controller to choose a target
 /// before being placed on the stack (CR 603.3d). Only one pending trigger at a time.
 #[derive(Debug, Clone)]
 pub struct PendingTrigger {
+    /// The id reserved for this trigger at collection; becomes its `StackItem::id`. See
+    /// [`StagedTrigger::object_id`].
+    pub object_id: ObjectId,
     pub source_permanent_id: ObjectId,
     pub ability_index: usize,
     pub ability_text: String,
@@ -468,6 +538,15 @@ pub struct GameState {
     /// stack (CR 603.3d). Queue supports simultaneous triggers (CR 603.3b APNAP ordering);
     /// processed front-to-back, one target choice at a time.
     pub pending_triggers: VecDeque<PendingTrigger>,
+    /// Triggered abilities collected from simultaneous events but not yet put on the stack. A queue
+    /// of *groups* because several events can fire while one command is applied (a resolution and
+    /// the SBA cascade it causes); CR 603.3b applies per event, so each group is ordered
+    /// independently. Drained by `flush_staged_triggers` at the two points where the engine is
+    /// between actions.
+    pub staged_trigger_groups: VecDeque<StagedTriggerGroup>,
+    /// The outstanding CR 603.3b ordering prompt, or `None`. At most one at a time; while set it
+    /// blocks every command but `SubmitTriggerOrder`.
+    pub pending_trigger_order: Option<PendingTriggerOrder>,
     /// A tier-3 custom resolution paused mid-way awaiting a player choice (CR 608), or `None`.
     /// At most one at a time; while set it blocks priority (like a [`PendingTrigger`]) until the
     /// deciding player submits their choice. See [`PendingResolution`] and the `custom` module.
@@ -510,6 +589,47 @@ impl GameState {
 
     pub fn priority_player_id(&self) -> PlayerId {
         self.players[self.priority_idx].id
+    }
+
+    /// The outstanding player decision the engine is waiting on, if any — the single source of
+    /// "what is the game blocked on".
+    ///
+    /// All three block the same way and for the same reason: each is a choice the rules require
+    /// *before* any player receives priority, so letting another command through would build a
+    /// wrong or half-finished stack. `dispatch_command` rejects everything but the matching answer
+    /// (and `Concede`, CR 104.3a).
+    ///
+    /// Precedence matters, and all three cases are live at once during a multi-trigger ordering:
+    /// a parked resolution outranks everything, because the spell that produced the triggers is
+    /// still resolving (CR 603.3: they wait for the next time a player would receive priority).
+    /// A parked *target* then outranks the ordering prompt: the trigger just chosen is mid-placement
+    /// and CR 603.3d resolves its target before the next one is picked, so `pending_trigger_order`
+    /// legitimately still holds the remaining candidates while a target is outstanding.
+    pub fn blocking_choice(&self) -> Option<BlockingChoice> {
+        if self.pending_resolution.is_some() {
+            return Some(BlockingChoice::Resolution);
+        }
+        if !self.pending_triggers.is_empty() {
+            return Some(BlockingChoice::TriggerTarget);
+        }
+        if self.pending_trigger_order.is_some() {
+            return Some(BlockingChoice::TriggerOrder);
+        }
+        None
+    }
+
+    /// Seat order rotated to start at the active player (CR 101.4 APNAP). Lower rank goes on the
+    /// stack first (CR 603.3b).
+    ///
+    /// The single source of APNAP ranking for triggers. Two call sites previously rolled their own
+    /// `(controller != active) as u8` key, which is a *boolean*: with three or more seats it does
+    /// not separate the nonactive players from each other, so their triggers interleaved.
+    pub fn apnap_rank(&self, player: PlayerId) -> usize {
+        let seats = self.players.len();
+        let Some(idx) = self.player_idx(player) else {
+            return seats;
+        };
+        (idx + seats - self.active_player_idx) % seats
     }
 
     /// The defending player in 1v1 (opponent of active) — for multi-player use first NAP; M2: two players

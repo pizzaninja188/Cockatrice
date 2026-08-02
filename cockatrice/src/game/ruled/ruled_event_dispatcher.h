@@ -38,6 +38,7 @@ class RuledEventBatch;
 class StackPushed;
 class StackResolved;
 class TriggerNeedsTarget;
+class TriggerOrderRequired;
 class ZoneViewSync;
 } // namespace ruled::v1
 
@@ -67,6 +68,11 @@ private:
         bool combatStateDirty = false;
         bool battlefieldMapDirty = false;
         bool stackTrackingDirty = false;
+        /// CR 603.3b: the ordering prompt changed somewhere in this batch. Emitted once at the end
+        /// from the final state rather than per event, because a single batch both places the
+        /// trigger just picked (which ends the old prompt) and raises the next one — emitting on
+        /// each would tear the popup down and rebuild it, losing its position mid-choice.
+        bool triggerOrderDirty = false;
     };
 
     /// Legal actions and the opening-UI kind are rebuilt from scratch every batch; clear them
@@ -77,6 +83,7 @@ private:
     void applyStackPushed(const ruled::v1::StackPushed &sp, BatchContext &ctx);
     void applyStackResolved(const ruled::v1::StackResolved &sr, BatchContext &ctx);
     void applyTriggerNeedsTarget(const ruled::v1::TriggerNeedsTarget &tnt, BatchContext &ctx);
+    void applyTriggerOrderRequired(const ruled::v1::TriggerOrderRequired &tor, BatchContext &ctx);
     void applyResolutionChoiceRequired(const ruled::v1::ResolutionChoiceRequired &rcr, BatchContext &ctx);
     void applyBattlefieldObjectMap(const ruled::v1::BattlefieldObjectMap &map, BatchContext &ctx);
     void applyHandSlotMap(const ruled::v1::HandSlotMap &map);
