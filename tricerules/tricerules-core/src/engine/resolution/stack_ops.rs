@@ -88,10 +88,12 @@ pub(super) fn copy_target_spell(
                 .and_then(|d| d.face(src.face_index))
                 .map(|f| f.spell_effect.to_vec())
                 .unwrap_or_default();
-            // Modal copies retain their complete per-mode target groups atomically. The existing
-            // single-target retarget prompt cannot represent multiple groups, so CR 707.10c
-            // retargeting remains available only for nonmodal copies for now.
-            let needs_target_choice = !src.targets.is_empty() && src.chosen_modes.is_empty();
+            let target_count = if src.chosen_modes.is_empty() {
+                src.targets.len()
+            } else {
+                src.chosen_modes.iter().map(|mode| mode.targets.len()).sum()
+            };
+            let needs_target_choice = target_count > 0;
             let chosen_mode_indices: Vec<u32> = src
                 .chosen_modes
                 .iter()
@@ -136,16 +138,38 @@ pub(super) fn copy_target_spell(
                 // CR 707.10c: prompt for new targets on the first copy; push any
                 // additional copies immediately with the original targets.
                 if needs_target_choice && copy_num == 0 {
-                    let sp = compute_spell_targets(engine, controller, &src_effects);
-                    let mut candidates: Vec<ObjectId> = sp.valid_permanent_ids.clone();
-                    candidates.extend(sp.valid_stack_ids.iter().copied());
-                    for p in &engine.state.players {
-                        if (sp.can_target_self && p.id == controller)
-                            || (sp.can_target_opponent && p.id != controller)
-                        {
-                            candidates.push(p.id as ObjectId);
+                    let mut candidates = Vec::new();
+                    let candidate_effect_groups: Vec<Vec<SpellEffectKind>> =
+                        if src.chosen_modes.is_empty() {
+                            vec![src_effects.clone()]
+                        } else {
+                            src.chosen_modes
+                                .iter()
+                                .filter_map(|chosen| {
+                                    engine
+                                        .registry
+                                        .get(&src.card_id)
+                                        .and_then(|definition| definition.face(src.face_index))
+                                        .and_then(|face| face.modal_spell.as_ref())
+                                        .and_then(|modal| modal.modes.get(chosen.mode_index))
+                                        .map(|mode| mode.effects.clone())
+                                })
+                                .collect()
+                        };
+                    for effects in candidate_effect_groups {
+                        let sp = compute_spell_targets(engine, controller, &effects);
+                        candidates.extend(sp.valid_permanent_ids);
+                        candidates.extend(sp.valid_stack_ids);
+                        for p in &engine.state.players {
+                            if (sp.can_target_self && p.id == controller)
+                                || (sp.can_target_opponent && p.id != controller)
+                            {
+                                candidates.push(p.id as ObjectId);
+                            }
                         }
                     }
+                    candidates.sort_unstable();
+                    candidates.dedup();
                     // CR 707.10c: may keep original targets even if now illegal.
                     for &ot in &src.targets {
                         if !candidates.contains(&ot) {
@@ -192,8 +216,8 @@ pub(super) fn copy_target_spell(
                                 candidate_object_ids: candidates.clone(),
                                 candidate_card_ids,
                                 candidate_names,
-                                min: 1,
-                                max: 1,
+                                min: target_count as u32,
+                                max: target_count as u32,
                                 ordered: false,
                                 unique_names: false,
                                 candidate_server_card_ids: Vec::new(),

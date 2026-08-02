@@ -1316,3 +1316,145 @@ fn twincast_copy_controller_chooses_new_target() {
         "real bolt in P0's graveyard"
     );
 }
+
+/// Set up a Lightning Bolt aimed at `bolt_target` with a Twincast copy of it awaiting the
+/// CR 707.10c target choice, and return the engine plus the bolt's original target id.
+fn twincast_awaiting_copy_target(seed: u64) -> (GameEngine, u32, u32) {
+    let decks = Some(vec![
+        deck_with("mountain", &["lightning_bolt"]),
+        deck_with("island", &["twincast"]),
+    ]);
+    let mut e = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let original_target = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let other_creature = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+
+    ensure_in_hand(&mut e, 0, "lightning_bolt");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+    let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(
+        0,
+        &cast_spell(
+            bolt_idx,
+            vec![TargetRef {
+                object_id: original_target,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("p0 bolts its own Bears");
+    let bolt_oid = e.state.stack.last().expect("bolt on stack").id;
+    e.apply_command(0, &pass()).expect("p0 pass");
+
+    ensure_in_hand(&mut e, 1, "twincast");
+    give_mana(
+        &mut e,
+        1,
+        ManaGift {
+            u: 2,
+            ..Default::default()
+        },
+    );
+    let twincast_idx = hand_index_for_card(&e, 1, "twincast");
+    e.apply_command(
+        1,
+        &cast_spell(
+            twincast_idx,
+            vec![TargetRef {
+                object_id: bolt_oid,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("p1 casts Twincast at the bolt");
+    e.apply_command(1, &pass()).expect("p1 pass");
+    e.apply_command(0, &pass())
+        .expect("p0 pass resolves twincast");
+    assert!(
+        e.state.pending_resolution.is_some(),
+        "the copy must be awaiting its target choice"
+    );
+    (e, original_target, other_creature)
+}
+
+/// Remove a permanent from the battlefield behind the engine's back, so a target that was legal
+/// when the copy prompt was raised is illegal by the time the choice is submitted.
+fn yank_from_battlefield(e: &mut GameEngine, player: usize, oid: u32) {
+    e.state.players[player].battlefield.retain(|&x| x != oid);
+    e.state.objects.get_mut(&oid).expect("object").zone = tricerules_core::Zone::Graveyard;
+    e.state.players[player].graveyard.push(oid);
+}
+
+/// CR 707.10c: "the controller of the copy may leave any of the targets unchanged, even if those
+/// targets would be illegal." Keeping the original target must be accepted, not rejected — which
+/// is also why `copy_target_spell` offers it as a candidate in the first place.
+#[test]
+fn twincast_copy_may_keep_an_original_target_that_is_now_illegal() {
+    let (mut e, original_target, _) = twincast_awaiting_copy_target(1451);
+    yank_from_battlefield(&mut e, 0, original_target);
+
+    let batch = e
+        .apply_command(1, &submit_resolution_choice(vec![original_target]))
+        .expect("keeping the original target is legal even though it left the battlefield");
+
+    let copy_push = batch
+        .events
+        .iter()
+        .find_map(|ev| match &ev.ev {
+            Some(Ev::StackPushed(s)) if s.is_copy => Some(s),
+            _ => None,
+        })
+        .expect("the copy reaches the stack");
+    assert_eq!(
+        copy_push.targets,
+        vec![TargetRef {
+            object_id: original_target,
+            damage_amount: 0
+        }],
+        "the copy keeps the original target"
+    );
+    assert!(
+        e.state.pending_resolution.is_none(),
+        "the pending choice is consumed once the copy is pushed"
+    );
+}
+
+/// A *changed* target must be legal (CR 707.10c). Rejecting it must leave the pending choice in
+/// place so the player can pick again — dropping it stranded the copy and hung the client on a
+/// prompt the engine had forgotten.
+#[test]
+fn twincast_copy_rejects_an_illegal_new_target_without_losing_the_choice() {
+    let (mut e, _, other_creature) = twincast_awaiting_copy_target(1452);
+    yank_from_battlefield(&mut e, 1, other_creature);
+
+    let err = e.apply_command(1, &submit_resolution_choice(vec![other_creature]));
+    assert!(
+        err.is_err(),
+        "a newly chosen target must be legal at the time it is chosen"
+    );
+    assert!(
+        e.state.pending_resolution.is_some(),
+        "the copy target choice must survive a rejected submission"
+    );
+
+    // The player can still complete the choice, and the copy resolves normally.
+    let p0_life = e.state.players[0].life;
+    e.apply_command(1, &submit_resolution_choice(vec![0]))
+        .expect("retry with a legal target succeeds");
+    while !e.state.stack.is_empty() {
+        pass_both_players(&mut e);
+    }
+    assert_eq!(
+        e.state.players[0].life,
+        p0_life - 3,
+        "the retried copy resolves for 3 damage"
+    );
+}

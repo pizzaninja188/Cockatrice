@@ -184,7 +184,15 @@ fn copied_modal_spell_retains_modes_and_mode_targets() {
         ),
     )
     .unwrap();
-    resolve_entire_stack_two_player(&mut e);
+    while !e.state.stack.is_empty() {
+        if e.state.pending_resolution.is_some() {
+            let deciding_player = e.state.pending_resolution.as_ref().unwrap().deciding_player;
+            e.apply_command(deciding_player, &submit_resolution_choice(vec![1]))
+                .unwrap();
+        } else {
+            pass_both_players(&mut e);
+        }
+    }
 
     // The retained copy and original both use damage mode targeting P1.
     assert_eq!(e.state.players[1].life, 12);

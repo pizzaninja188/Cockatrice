@@ -6,7 +6,7 @@ use super::legal_actions::fill_legal;
 use super::resolution::{
     permanent_moved_event, sacrifice_permanent, seat_resolved_spell_last_in_graveyard,
 };
-use super::targeting::validate_effect_targets;
+use super::targeting::{validate_effect_targets, validate_spell_targets};
 use super::*;
 
 impl GameEngine {
@@ -334,6 +334,94 @@ impl GameEngine {
         Ok(finish_with_events(self, ev))
     }
 
+    /// CR 707.10c: check the targets chosen for a copy without mutating anything, so a rejection
+    /// can leave the pending choice intact for the player to try again.
+    ///
+    /// Returns one target vector per chosen mode (empty for a nonmodal copy), so the caller
+    /// re-slices nothing and the mode boundaries are computed exactly once.
+    fn validated_copy_targets(
+        &self,
+        pending: &PendingResolution,
+        chosen: &[u32],
+    ) -> Result<Vec<Vec<ObjectId>>, EngineError> {
+        let item = &pending.item;
+        let controller = item.controller;
+        let face = self
+            .registry
+            .get(&item.card_id)
+            .and_then(|definition| definition.face(item.face_index));
+
+        if item.chosen_modes.is_empty() {
+            let effects = face.map(|f| f.spell_effect.to_vec()).unwrap_or_default();
+            self.validate_copy_target_group(
+                controller,
+                &effects,
+                chosen,
+                &item.targets,
+                &item.target_damage,
+            )?;
+            return Ok(vec![]);
+        }
+
+        let modal = face
+            .and_then(|f| f.modal_spell.as_ref())
+            .ok_or(EngineError::Illegal(
+                "copied modal spell has no mode definition",
+            ))?;
+        let mut per_mode = Vec::with_capacity(item.chosen_modes.len());
+        let mut offset = 0;
+        for chosen_mode in &item.chosen_modes {
+            let end = offset + chosen_mode.targets.len();
+            let mode_targets = chosen
+                .get(offset..end)
+                .ok_or(EngineError::Illegal("wrong number of copied modal targets"))?;
+            let mode = modal
+                .modes
+                .get(chosen_mode.mode_index)
+                .ok_or(EngineError::Illegal("copied modal mode no longer exists"))?;
+            self.validate_copy_target_group(
+                controller,
+                &mode.effects,
+                mode_targets,
+                &chosen_mode.targets,
+                &chosen_mode.target_damage,
+            )?;
+            per_mode.push(mode_targets.to_vec());
+            offset = end;
+        }
+        if offset != chosen.len() {
+            return Err(EngineError::Illegal("wrong number of copied modal targets"));
+        }
+        Ok(per_mode)
+    }
+
+    /// CR 707.10c: a target the copy's controller left *unchanged* stays legal even if it would
+    /// not be legal to choose now — which is exactly why [`copy_target_spell`] offers the
+    /// original targets as candidates. Only a target that was actually changed has to be legal.
+    ///
+    /// Count, candidate membership and global uniqueness are already enforced by
+    /// [`GameEngine::submit_resolution_choice`], so this validates legality per target.
+    fn validate_copy_target_group(
+        &self,
+        controller: PlayerId,
+        effects: &[SpellEffectKind],
+        chosen: &[ObjectId],
+        original: &[ObjectId],
+        target_damage: &[u32],
+    ) -> Result<(), EngineError> {
+        for (index, &object_id) in chosen.iter().enumerate() {
+            if original.get(index) == Some(&object_id) {
+                continue;
+            }
+            let target_ref = rv1::TargetRef {
+                object_id,
+                damage_amount: target_damage.get(index).copied().unwrap_or(0),
+            };
+            validate_spell_targets(self, controller, effects, std::slice::from_ref(&target_ref))?;
+        }
+        Ok(())
+    }
+
     /// CR 707.10c: the copy's controller has chosen new targets for the copy. Push the copy to
     /// the stack with the chosen targets and hand priority back to the active player.
     fn finish_copy_target_choice(
@@ -347,7 +435,22 @@ impl GameEngine {
         let controller = pending.item.controller;
         let copy_source_object_id = pending.copy_source_object_id;
 
+        // Validate before consuming `pending`: this choice was already taken out of
+        // `state.pending_resolution`, so any early return has to put it back or the copy is lost
+        // and the client waits forever on a prompt the engine has forgotten.
+        let per_mode_targets = match self.validated_copy_targets(&pending, chosen) {
+            Ok(targets) => targets,
+            Err(e) => {
+                self.state.pending_resolution = Some(pending);
+                return Err(e);
+            }
+        };
+
+        // Everything below this point is infallible.
         let mut copy_item = pending.item;
+        for (chosen_mode, mode_targets) in copy_item.chosen_modes.iter_mut().zip(per_mode_targets) {
+            chosen_mode.targets = mode_targets;
+        }
         copy_item.targets = chosen.to_vec();
 
         let copied_name = self
