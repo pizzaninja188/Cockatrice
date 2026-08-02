@@ -1,0 +1,17 @@
+(
+  id: "avacynian_priest",
+  name: "Avacynian Priest",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Human", "Cleric"],
+  power: 1,
+  toughness: 2,
+  activated_abilities: [
+    (
+      cost: TapAndMana("{1}"),
+      // excluded_subtypes enforces the non-Human restriction (CR 205.3) — the Priest is itself
+      // a Human, so it can never tap its own kind.
+      effect: TapTarget(target: (kind: Creature, excluded_subtypes: ["Human"])),
+      text: "{1}, {T}: Tap target non-Human creature.",
+    ),
+  ],
+)

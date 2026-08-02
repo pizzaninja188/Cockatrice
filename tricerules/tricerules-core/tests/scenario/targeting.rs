@@ -1189,3 +1189,63 @@ fn eyeblights_ending_cannot_target_an_elf() {
     )
     .expect("a non-Elf creature is a legal target");
 }
+
+/// The same excluded-subtype filter reached through an activated ability rather than a spell:
+/// Avacynian Priest ("{1}, {T}: Tap target non-Human creature") cannot tap a fellow Human.
+#[test]
+fn avacynian_priest_taps_only_non_humans() {
+    let decks = Some(vec![deck_with("plains", &[]), deck_with("forest", &[])]);
+    let mut e = GameEngine::new(2813, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let priest = inject_creature_on_battlefield(&mut e, 0, "avacynian_priest");
+    let human = inject_creature_on_battlefield(&mut e, 1, "fencing_ace");
+    let bears = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            c: 1,
+            ..Default::default()
+        },
+    );
+
+    assert!(
+        e.apply_command(
+            0,
+            &activate_ability(
+                priest,
+                0,
+                vec![TargetRef {
+                    object_id: human,
+                    damage_amount: 0
+                }]
+            )
+        )
+        .is_err(),
+        "a Human creature is not a legal target"
+    );
+    // The rejected activation paid nothing: the Priest is still untapped and can try again.
+    assert!(
+        !e.state.objects.get(&priest).expect("priest").tapped,
+        "an illegal activation does not pay the tap cost"
+    );
+
+    e.apply_command(
+        0,
+        &activate_ability(
+            priest,
+            0,
+            vec![TargetRef {
+                object_id: bears,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("a non-Human creature is a legal target");
+    pass_both_players(&mut e);
+    assert!(
+        e.state.objects.get(&bears).expect("bears").tapped,
+        "the non-Human creature is tapped"
+    );
+}

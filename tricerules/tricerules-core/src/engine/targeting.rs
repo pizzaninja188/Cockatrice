@@ -135,6 +135,15 @@ pub(super) fn object_matches_mass_filter(
     if filter.not_artifact && characteristics.is_artifact() {
         return false;
     }
+    // CR 205.3, as in `target_filter_legal` — a mass effect scoped to "non-[Subtype]" permanents
+    // must skip the excluded subtypes just like a targeted one.
+    if filter
+        .excluded_subtypes
+        .iter()
+        .any(|subtype| characteristics.has_type(subtype))
+    {
+        return false;
+    }
     if let Some(tapped_req) = filter.tapped {
         if o.tapped != tapped_req {
             return false;
