@@ -5,6 +5,7 @@
 
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/reflection.h>
+#include <libcockatrice/utility/ruled_debug.h>
 #include <libcockatrice/utility/zone_names.h>
 #include <vector>
 
@@ -20,6 +21,10 @@ bool ruledAllowsCrossPlayerMove(const Server_Game *game,
     }
     const QString from = startZone->getName();
     const QString to = targetZone->getName();
+    // Whether a ruled move is same-player depends on which seat owns the canonical stack, i.e. on
+    // join order — so a path can be exercised constantly on one seat and never on the other.
+    RULED_TRACE("relay") << "crossPlayerMove: " << from << " -> " << to;
+
     // 1. Anything into or out of a stack zone. Casting and resolving are the two halves of the
     //    same thing, and both are engine-decided: the relay only ever issues these while mirroring
     //    a RuledEventBatch the engine already validated.

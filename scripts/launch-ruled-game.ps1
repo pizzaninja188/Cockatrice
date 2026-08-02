@@ -72,6 +72,7 @@ param(
     [string]$GameName,
     [int]$Seed = 0,
     [switch]$Dev,
+    [switch]$Trace,
     [switch]$Freeform,
     [switch]$NoServers,
     [switch]$Stop
@@ -82,6 +83,20 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $buildDir = Join-Path $repoRoot "build\windows-ninja-all"
 $pidFile = Join-Path $buildDir "ruled-dev-game.pids"
+# Each process gets its own file here: the Cockatrice logger always writes "qdebug.txt" into the
+# process working directory and truncates it, so two clients sharing a cwd would clobber each other.
+$debugLogDir = Join-Path $buildDir "ruled-debug-logs"
+
+# Cross-layer tracing (RULED_TRACE / libcockatrice/utility/ruled_debug.h). Set before anything
+# starts so every child process inherits it, and one run yields relay and client traces that
+# interleave. Named -Trace because CmdletBinding already reserves -Debug.
+if ($Trace) {
+    $env:COCKATRICE_RULED_DEBUG = "1"
+    New-Item -ItemType Directory -Force $debugLogDir | Out-Null
+    Write-Host "Ruled tracing enabled - logs under $debugLogDir" -ForegroundColor DarkGray
+} else {
+    Remove-Item Env:\COCKATRICE_RULED_DEBUG -ErrorAction SilentlyContinue
+}
 
 function Get-RequiredPath {
     param([string]$Path, [string]$What, [string]$Hint)
@@ -209,7 +224,9 @@ if (-not $NoServers) {
             Write-Host "  warning: reused sidecar was started without TRICERULES_DEV_COMMANDS; dev commands will be refused. Run -Stop first." -ForegroundColor Yellow
         }
     } else {
-        $sidecar = Start-Process -FilePath $sidecarExe -PassThru -WorkingDirectory $repoRoot
+        $sidecarArgs = @{ FilePath = $sidecarExe; PassThru = $true; WorkingDirectory = $repoRoot }
+        if ($Trace) { $sidecarArgs.RedirectStandardError = Join-Path $debugLogDir "tricerules-server.log" }
+        $sidecar = Start-Process @sidecarArgs
         Register-LaunchedProcess -Process $sidecar -Label "tricerules-server"
         Wait-ForPort -Port $rulesPort -What "tricerules-server"
     }
@@ -226,8 +243,12 @@ if (-not $NoServers) {
         Remove-Item Env:\COCKATRICE_RULED_SEED -ErrorAction SilentlyContinue
     }
 
-    $servatrice = Start-Process -FilePath $servatriceExe -PassThru -WorkingDirectory $repoRoot `
-        -ArgumentList "--config", "`"$configPath`""
+    $servatriceArgs = @{
+        FilePath = $servatriceExe; PassThru = $true; WorkingDirectory = $repoRoot
+        ArgumentList = @("--config", "`"$configPath`"")
+    }
+    if ($Trace) { $servatriceArgs.RedirectStandardError = Join-Path $debugLogDir "servatrice.log" }
+    $servatrice = Start-Process @servatriceArgs
     Register-LaunchedProcess -Process $servatrice -Label "servatrice"
     Wait-ForPort -Port $serverPort -What "servatrice"
 } else {
@@ -246,16 +267,29 @@ Write-Host "Starting clients..." -ForegroundColor Cyan
 # decides whether the commands it sends are honoured.
 $devArgs = if ($Dev) { @("--dev-console") } else { @() }
 
-$hostClient = Start-Process -FilePath $cockatriceExe -PassThru -ArgumentList (@(
-    "-c", "p1:pass@127.0.0.1:$serverPort", "--autopilot", "host", "--autopilot-deck", "`"$deckAPath`"") + $devArgs)
+# --debug-output makes the client mirror its log to "qdebug.txt" in its working directory. A GUI
+# process on Windows has no visible stderr, so without this the client half of the trace is lost.
+# Each seat gets its own cwd because that filename is fixed and opened truncating.
+$traceArgs = if ($Trace) { @("--debug-output") } else { @() }
+$p1Cwd = $repoRoot
+$p2Cwd = $repoRoot
+if ($Trace) {
+    $p1Cwd = Join-Path $debugLogDir "p1"
+    $p2Cwd = Join-Path $debugLogDir "p2"
+    New-Item -ItemType Directory -Force $p1Cwd | Out-Null
+    New-Item -ItemType Directory -Force $p2Cwd | Out-Null
+}
+
+$hostClient = Start-Process -FilePath $cockatriceExe -PassThru -WorkingDirectory $p1Cwd -ArgumentList (@(
+    "-c", "p1:pass@127.0.0.1:$serverPort", "--autopilot", "host", "--autopilot-deck", "`"$deckAPath`"") + $devArgs + $traceArgs)
 Register-LaunchedProcess -Process $hostClient -Label "cockatrice p1 (host)"
 
 # The joining seat retries on every game-list update, so it is allowed to lose this race; the
 # stagger just keeps the log readable.
 Start-Sleep -Milliseconds 750
 
-$joinClient = Start-Process -FilePath $cockatriceExe -PassThru -ArgumentList (@(
-    "-c", "p2:pass@127.0.0.1:$serverPort", "--autopilot", "join", "--autopilot-deck", "`"$deckBPath`"") + $devArgs)
+$joinClient = Start-Process -FilePath $cockatriceExe -PassThru -WorkingDirectory $p2Cwd -ArgumentList (@(
+    "-c", "p2:pass@127.0.0.1:$serverPort", "--autopilot", "join", "--autopilot-deck", "`"$deckBPath`"") + $devArgs + $traceArgs)
 Register-LaunchedProcess -Process $joinClient -Label "cockatrice p2 (join)"
 
 Write-Host ""

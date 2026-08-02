@@ -1,4 +1,5 @@
 #include "player_event_handler.h"
+#include <libcockatrice/utility/ruled_debug.h>
 
 #include "../ruled/ruled_actions.h"
 #include "../../interface/widgets/tabs/tab_game.h"
@@ -303,6 +304,13 @@ void PlayerEventHandler::eventMoveCard(const Event_MoveCard &event, const GameEv
     } else {
         targetZone = startZone;
     }
+    RULED_TRACE("client") << "moveCard: '" << QString::fromStdString(event.card_name()) << "' "
+                          << startZoneString << " -> " << QString::fromStdString(event.target_zone())
+                          << " cardId=" << event.card_id() << " newCardId=" << event.new_card_id()
+                          << " startZoneResolved=" << (startZone != nullptr)
+                          << " targetZoneResolved=" << (targetZone != nullptr)
+                          << " x=" << event.x() << " (a zone that fails to resolve drops the move"
+                             " silently — that is what an empty-looking stack means)";
     if (!startZone || !targetZone) {
         return;
     }

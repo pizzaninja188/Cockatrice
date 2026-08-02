@@ -3,6 +3,7 @@
 // interface plus the `friend class RuledGameDriver` grant (participants, currentReplay).
 
 #include "ruled_game_driver.h"
+#include <libcockatrice/utility/ruled_debug.h>
 
 #include "../server_abstractuserinterface.h"
 #include "ruled_utils.h"
@@ -52,6 +53,46 @@ Server_CardZone *ruledCanonicalStackZone(Server_Game *game)
         }
     }
     return canonicalStackOwner ? canonicalStackOwner->getZones().value(ZoneNames::STACK) : nullptr;
+}
+
+/// Mirror a rules-engine decision onto the physical Cockatrice zones, reporting a refusal.
+///
+/// The engine has already advanced its own state by the time the relay mirrors it, so a refused
+/// move leaves the rules and the presentation permanently disagreeing — and the stack, unlike the
+/// battlefield and hand, has no zone-view reconciliation to heal it. The only symptom is a card
+/// that visually never arrived, which is indistinguishable from a rendering bug from the outside.
+/// Every one of these must be loud: this exact silence is what made a rejected flashback move look
+/// like an empty stack window for three rounds of debugging.
+///
+/// Returns true when the move was applied.
+bool ruledApplyMove(Server_AbstractPlayer *mover,
+                    GameEventStorage &ges,
+                    Server_CardZone *from,
+                    Server_CardZone *to,
+                    const CardToMove &cardToMove,
+                    int x,
+                    int y,
+                    const char *what)
+{
+    if (!mover || !from || !to) {
+        qWarning() << "Ruled:" << what << "could not move card" << cardToMove.card_id()
+                   << "- missing player or zone (from" << (from ? from->getName() : QStringLiteral("<null>")) << "to"
+                   << (to ? to->getName() : QStringLiteral("<null>")) << ")";
+        return false;
+    }
+    const Response::ResponseCode result =
+        mover->moveCard(ges, from, QList<const CardToMove *>() << &cardToMove, to, x, y, true);
+    RULED_TRACE("relay") << what << ": moveCard " << from->getName() << " -> " << to->getName()
+                         << " cardId=" << cardToMove.card_id() << " result=" << static_cast<int>(result)
+                         << " (1 = RespOk, 11 = RespContextError)";
+    if (result != Response::RespOk) {
+        qWarning() << "Ruled:" << what << "move rejected with code" << static_cast<int>(result) << "moving card"
+                   << cardToMove.card_id() << "from" << from->getName() << "(player" << from->getPlayer()->getPlayerId()
+                   << ") to" << to->getName() << "(player" << to->getPlayer()->getPlayerId()
+                   << ") - the engine and the physical zones are now out of sync";
+        return false;
+    }
+    return true;
 }
 
 /// Bind `StackPushed` to the cockatrice `Server_Card` that actually sits on the shared stack.
@@ -267,8 +308,8 @@ RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &c
                     GameEventStorage moveGes;
                     // Cockatrice table uses 3 rows; lands belong on the bottom row (grid y = 2).
                     static constexpr int RULED_LAND_GRID_Y = 2;
-                    if (cmdPlayer->moveCard(moveGes, handZone, QList<const CardToMove *>() << &cardToMove, tableZone,
-                                            -1, RULED_LAND_GRID_Y, true) == Response::RespOk) {
+                    if (ruledApplyMove(cmdPlayer, moveGes, handZone, tableZone, cardToMove, -1,
+                                       RULED_LAND_GRID_Y, "playLand")) {
                         moveGes.sendToGame(game);
                     }
                 }
@@ -299,6 +340,11 @@ RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &c
                 } else if (handZone && handIndex >= 0 && handIndex < handZone->getCards().size()) {
                     card = handZone->getCards().at(handIndex);
                 }
+                RULED_TRACE("relay") << "cast: flashback=" << fromGraveyard << " index=" << handIndex
+                                     << " sourceZone=" << (sourceZone ? sourceZone->getName() : QStringLiteral("<null>"))
+                                     << " sourceZoneSize=" << (sourceZone ? sourceZone->getCards().size() : -1)
+                                     << " resolvedCard=" << (card ? card->getName() : QStringLiteral("<none>"))
+                                     << " serverCardId=" << (card ? card->getId() : -1);
                 if (sourceZone && stackZone && card) {
                     PendingRuledCastVisual pending;
                     pending.cardName = card ? card->getName() : QString();
@@ -318,8 +364,7 @@ RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &c
                     CardToMove cardToMove;
                     cardToMove.set_card_id(card->getId());
                     GameEventStorage moveGes;
-                    if (cmdPlayer->moveCard(moveGes, sourceZone, QList<const CardToMove *>() << &cardToMove,
-                                            stackZone, -1, 0, true) == Response::RespOk) {
+                    if (ruledApplyMove(cmdPlayer, moveGes, sourceZone, stackZone, cardToMove, -1, 0, "cast")) {
                         moveGes.sendToGame(game);
                     }
                 }
@@ -428,8 +473,7 @@ void RuledGameDriver::applyRuledStackResolvedEvent(const ruled::v1::StackResolve
         // render their front card, so a resolved spell goes to position 0 rather than being
         // appended behind everything already there.
         const int targetX = goesToBattlefield ? -1 : 0;
-        if (ab->moveCard(moveGes, stackZone, QList<const CardToMove *>() << &cardToMove, targetZone, targetX, targetY,
-                         true) == Response::RespOk) {
+        if (ruledApplyMove(ab, moveGes, stackZone, targetZone, cardToMove, targetX, targetY, "stackResolved")) {
             moveGes.sendToGame(game);
             return true;
         }
@@ -439,6 +483,10 @@ void RuledGameDriver::applyRuledStackResolvedEvent(const ruled::v1::StackResolve
     // Multiplayer: each player has their own Cockatrice stack zone. Prefer the physical card that was mapped when
     // this object was pushed (cast_spell → stack_pushed); never pop "first non-empty stack in player iteration order".
     const auto mappedIdIt = ruledStackObjectIdToServerCardId.constFind(resolvedOid);
+    RULED_TRACE("relay") << "stackResolved: oid=" << resolvedOid << " engineDescription='" << engineStackDescription
+                         << "' mappedServerCardId="
+                         << (mappedIdIt != ruledStackObjectIdToServerCardId.constEnd() ? mappedIdIt.value() : -1)
+                         << " (-1 = no cast mapping, will fall back to name match)";
     if (mappedIdIt != ruledStackObjectIdToServerCardId.constEnd()) {
         const int serverCardId = mappedIdIt.value();
         for (Server_AbstractPlayer *ab : game->getPlayers().values()) {
@@ -780,8 +828,7 @@ void RuledGameDriver::applyPermanentMoves(const ruled::v1::RuledEventBatch &batc
         // controlled by someone else the card sits on the *controller's* table, and moveCard
         // builds its event from startzone->getPlayer().
         Server_AbstractPlayer *mover = startZone->getPlayer() ? startZone->getPlayer() : owner;
-        if (mover->moveCard(permanentMoveGes, startZone, QList<const CardToMove *>() << &cardToMove, targetZone, destX,
-                            0, true) == Response::RespOk) {
+        if (ruledApplyMove(mover, permanentMoveGes, startZone, targetZone, cardToMove, destX, 0, "permanentMoved")) {
             permanentMoveGesHasEvents = true;
             // A cross-player move reissues Server_Card::id from the destination player's space
             // (server_abstract_player.cpp), and the engine oid is absent from the destination
@@ -920,6 +967,13 @@ void RuledGameDriver::applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBat
                     if (phys) {
                         ruledStackObjectIdToServerCardId.insert(pushedOid, phys->getId());
                     }
+                    RULED_TRACE("relay") << "stackPushed: oid=" << pushedOid
+                                         << " cardId=" << QString::fromStdString(sp.card_id())
+                                         << " name='" << pushedName << "'"
+                                         << " stackZoneSize=" << (spellZone ? spellZone->getCards().size() : -1)
+                                         << " physicalCardOnStack=" << (phys ? phys->getId() : -1)
+                                         << " boundServerCardId="
+                                         << ruledStackObjectIdToServerCardId.value(pushedOid, -1);
                 }
             }
             if (e.has_stack_resolved()) {

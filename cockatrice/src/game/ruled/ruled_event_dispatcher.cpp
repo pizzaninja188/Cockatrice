@@ -1,4 +1,5 @@
 #include "ruled_event_dispatcher.h"
+#include <libcockatrice/utility/ruled_debug.h>
 
 #include "ruled_client_host.h"
 #include "ruled_client_state.h"
@@ -310,6 +311,14 @@ void RuledEventDispatcher::applyStackPushed(const ruled::v1::StackPushed &sp, Ba
         tlist.append(static_cast<quint32>(sp.targets(ti).object_id()));
     }
     state->stackTargetsByStackOid.insert(sp.object_id(), tlist);
+    RULED_TRACE("client") << "stackPushed: oid=" << sp.object_id()
+                          << " cardId=" << QString::fromStdString(sp.card_id())
+                          << " isCopy=" << sp.is_copy() << " isTriggered=" << sp.is_triggered()
+                          << " annotation='" << QString::fromStdString(sp.ability_annotation()) << "'"
+                          << " description='" << QString::fromStdString(sp.description()) << "'"
+                          << " -> syntheticCard=" << (sp.card_id().empty() || sp.is_copy())
+                          << " (a spell with a card_id expects a REAL CardItem the relay moved onto"
+                             " the stack zone; if the stack looks empty, that move is what to check)";
     // CR 608.2b: latch every target that sits in a graveyard *now*, while the choice is still fresh.
     // This is the only kind the dispatcher can identify without the UI, and it is the one that has
     // to be right immediately: `emitGraveyardTargetsNeeded` runs at the end of this batch, before
@@ -378,6 +387,11 @@ void RuledEventDispatcher::applyStackResolved(const ruled::v1::StackResolved &sr
     }
     state->stackAnnotationByOid.remove(rid);
     state->stackSourceOidByStackOid.remove(rid);
+    RULED_TRACE("client") << "stackResolved: oid=" << rid << " destination=" << static_cast<int>(sr.destination())
+                          << " (1=graveyard 2=battlefield 3=exile) stackOidOrderRemaining="
+                          << state->stackOidOrder.size()
+                          << " — the physical card is moved by the RELAY, not here; this line only"
+                             " confirms the client saw the resolve";
     host->removeSyntheticStackCard(rid);
     for (quint32 t : spellTargets) {
         state->stackOidOrder.removeOne(t);
