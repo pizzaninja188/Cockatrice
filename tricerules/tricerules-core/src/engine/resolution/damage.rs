@@ -86,6 +86,15 @@ pub(super) fn damage_targets(
             )));
             continue;
         }
+        let damage_amount = apply_prevention_shield(
+            &mut engine.state.damage_prevention_shields,
+            tid,
+            damage_amount,
+            events,
+        );
+        if damage_amount == 0 {
+            continue;
+        }
         if let Some(pi) = engine.state.player_idx(tid as i32) {
             let pid = engine.state.players[pi].id;
             engine.state.players[pi].life -= damage_amount as i32;

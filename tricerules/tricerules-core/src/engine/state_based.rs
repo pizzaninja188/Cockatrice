@@ -65,6 +65,7 @@ impl GameEngine {
         out: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
         let mut changed = false;
+        let mut dies = Vec::new();
         // CR 122.3: counter annihilation (+1/+1 and -1/-1 pairs cancel).
         for o in self.state.objects.values_mut() {
             if o.zone != Zone::Battlefield {
@@ -118,6 +119,7 @@ impl GameEngine {
         // Toughness-0: bypass regeneration (CR 704.5f — not a "destroy" trigger).
         for id in to_destroy_t0 {
             let owner = self.state.objects.get(&id).map(|o| o.owner);
+            let controller = self.state.objects.get(&id).map(|o| o.controller);
             let card_id_for_trigger = self.state.objects.get(&id).map(|o| o.card_id.clone());
             let was_creature = self
                 .characteristics(id)
@@ -132,22 +134,15 @@ impl GameEngine {
                         rv1::permanent_moved::Destination::Graveyard,
                     ));
                 }
-                if let (Some(cid), Some(ctrl)) = (card_id_for_trigger, owner) {
-                    self.fire_triggers(
-                        GameEvent::Dies {
-                            object_id: id,
-                            card_id: cid,
-                            controller: ctrl,
-                            was_creature,
-                        },
-                        out,
-                    );
+                if let (Some(cid), Some(ctrl)) = (card_id_for_trigger, controller) {
+                    dies.push((id, cid, ctrl, was_creature));
                 }
             }
         }
         // Lethal-damage destroy: CR 701.15 regeneration shields apply before destruction.
         for id in to_destroy_lethal {
             let owner = self.state.objects.get(&id).map(|o| o.owner);
+            let controller = self.state.objects.get(&id).map(|o| o.controller);
             let card_id_for_trigger = self.state.objects.get(&id).map(|o| o.card_id.clone());
             let was_creature = self
                 .characteristics(id)
@@ -166,18 +161,14 @@ impl GameEngine {
                         rv1::permanent_moved::Destination::Graveyard,
                     ));
                 }
-                if let (Some(cid), Some(ctrl)) = (card_id_for_trigger, owner) {
-                    self.fire_triggers(
-                        GameEvent::Dies {
-                            object_id: id,
-                            card_id: cid,
-                            controller: ctrl,
-                            was_creature,
-                        },
-                        out,
-                    );
+                if let (Some(cid), Some(ctrl)) = (card_id_for_trigger, controller) {
+                    dies.push((id, cid, ctrl, was_creature));
                 }
             }
+        }
+
+        if !dies.is_empty() {
+            self.fire_dies_batch(&dies, out);
         }
 
         // CR 704.5p: equipment falls off if the attached creature is no longer on the battlefield.
@@ -257,6 +248,7 @@ impl GameEngine {
             .collect();
         for id in orphaned_auras {
             let owner = self.state.objects.get(&id).map(|o| o.owner);
+            let controller = self.state.objects.get(&id).map(|o| o.controller);
             let card_id_for_trigger = self.state.objects.get(&id).map(|o| o.card_id.clone());
             let was_creature = self
                 .characteristics(id)
@@ -271,7 +263,7 @@ impl GameEngine {
                         rv1::permanent_moved::Destination::Graveyard,
                     ));
                 }
-                if let (Some(cid), Some(ctrl)) = (card_id_for_trigger, owner) {
+                if let (Some(cid), Some(ctrl)) = (card_id_for_trigger, controller) {
                     self.fire_triggers(
                         GameEvent::Dies {
                             object_id: id,
@@ -366,6 +358,7 @@ impl GameEngine {
                 targets: vec![],
                 ability_text: None,
                 source_permanent_id: None,
+                source_zone_change: 0,
                 ability_index: None,
                 is_triggered: false,
                 is_copy: false,

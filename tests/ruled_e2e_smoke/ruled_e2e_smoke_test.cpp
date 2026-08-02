@@ -1220,7 +1220,7 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
                p1.sawBorosCharmPushWithMode && p1.sawBorosCharmLifeLoss &&
                p1.sawAttackersDeclared && p1.sawCombatLifeLoss && p2.sawBrainstormChoice &&
                p2.submittedBrainstormChoice && p2.sawBrainstormResolved && p2.sentCleanupDiscard &&
-               p1.sawDevConjuredPermanent && p1.sawDevMana && p2.handSizeByPlayer.count(p2.myId) &&
+               p1.sawDevConjuredPermanent && p1.sawDevMana &&  p2.handSizeByPlayer.count(p2.myId) &&
                p2.handSizeByPlayer[p2.myId] <= 7;
     };
     QElapsedTimer deadline;

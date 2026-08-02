@@ -25,6 +25,7 @@ pub(super) fn destroy_target(
         } else {
             events.push(ev_log(format!("{spell_label} destroys {tgt}")));
             let owner = engine.state.objects.get(&tid).map(|o| o.owner);
+            let controller = engine.state.objects.get(&tid).map(|o| o.controller);
             let card_id_t = engine.state.objects.get(&tid).map(|o| o.card_id.clone());
             let was_creature = engine
                 .characteristics(tid)
@@ -38,7 +39,7 @@ pub(super) fn destroy_target(
                     rv1::permanent_moved::Destination::Graveyard,
                 ));
             }
-            if let (Some(cid), Some(ctrl)) = (card_id_t, owner) {
+            if let (Some(cid), Some(ctrl)) = (card_id_t, controller) {
                 engine.fire_triggers(
                     GameEvent::Dies {
                         object_id: tid,
@@ -174,6 +175,12 @@ pub(super) fn equip(
             return Ok(EffectOutcome::Continue);
         }
     };
+    if !engine.source_is_current_object(top) {
+        events.push(ev_log(format!(
+            "{spell_label}: equip source is no longer the same object."
+        )));
+        return Ok(EffectOutcome::Continue);
+    }
     if let Some(&target_id) = targets.first() {
         let valid = engine
             .state
@@ -277,6 +284,7 @@ pub(super) fn regenerate(
 
     let tid = if matches!(target.kind, TargetKind::Self_) {
         top.source_permanent_id
+            .filter(|_| engine.source_is_current_object(top))
     } else {
         targets.first().copied()
     };

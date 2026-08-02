@@ -185,7 +185,16 @@ impl GameEngine {
                 .and_then(|f| f.triggered_abilities.get(top.ability_index.unwrap_or(0)))
                 .and_then(|ta| ta.intervening_if);
             let source_id = top.source_permanent_id.unwrap_or(top.id);
-            if !self.intervening_if_holds(source_id, clause) {
+            let holds = if top.source_permanent_id.is_some() {
+                self.intervening_if_holds_at_generation(
+                    source_id,
+                    clause,
+                    Some(top.source_zone_change),
+                )
+            } else {
+                self.intervening_if_holds(source_id, clause)
+            };
+            if !holds {
                 events.push(ev_log(format!(
                     "{spell_label} does nothing (its \"if\" condition is no longer true, CR 603.4)."
                 )));
@@ -691,6 +700,10 @@ pub(crate) fn move_object_to_zone(
         .get(&oid)
         .map(|o| o.owner)
         .ok_or(EngineError::Illegal("no object"))?;
+    let old_zone = state.objects.get(&oid).map(|o| o.zone);
+    if old_zone != Some(z) {
+        *state.zone_change_generation.entry(oid).or_insert(0) += 1;
+    }
 
     // CR 400.7: a zone change creates a new game object. Remove any Single-target continuous
     // effects on this object so they don't apply if the same ObjectId is reused later.
@@ -698,7 +711,7 @@ pub(crate) fn move_object_to_zone(
     // source of (anthems) — a static ability stops applying the moment its source leaves (LTB).
     // One-shot `UntilEndOfTurn` effects (Giant Growth, firebreathing) are deliberately NOT drained
     // here: once created they are independent of their source (CR 611.2g) and only end at cleanup.
-    let leaving_battlefield = state.objects.get(&oid).map(|o| o.zone) == Some(Zone::Battlefield);
+    let leaving_battlefield = old_zone == Some(Zone::Battlefield);
     if leaving_battlefield && z != Zone::Battlefield {
         state.continuous_effects.retain(|e| {
             let single_on_this = matches!(&e.affected, AffectedScope::Single(id) if *id == oid);
@@ -720,6 +733,15 @@ pub(crate) fn move_object_to_zone(
             o.counters.clear();
             o.attached_to = None;
             o.regeneration_shields = 0;
+            let generation = state
+                .zone_change_generation
+                .get(&oid)
+                .copied()
+                .unwrap_or(0)
+                .saturating_sub(1);
+            state
+                .last_known_tapped_by_generation
+                .insert((oid, generation), was_tapped);
             state.last_known_tapped.insert(oid, was_tapped);
         }
     }

@@ -661,3 +661,93 @@ fn two_explorations_allow_three_lands_per_turn() {
     e.apply_command(0, &play_land(f4))
         .expect_err("fourth land must be rejected with two Explorations");
 }
+
+/// CR 302.6 is a *creature* rule: summoning sickness only restricts attacking and {T} abilities of
+/// creatures. A noncreature artifact that resolved this turn may use its tap ability immediately.
+/// Regression: entering the battlefield sets `summoning_sick` on every permanent, and the tap
+/// check used to consult that flag without asking whether the permanent was a creature, which
+/// froze Jayemdae Tome and Icy Manipulator on the turn they resolved.
+#[test]
+fn noncreature_artifact_can_tap_the_turn_it_resolves() {
+    let decks = Some(vec![
+        deck_with("island", &["jayemdae_tome"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(1710, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    ensure_in_hand(&mut e, 0, "jayemdae_tome");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            c: 4,
+            ..Default::default()
+        },
+    );
+    let tome_idx = hand_index_for_card(&e, 0, "jayemdae_tome");
+    e.apply_command(0, &cast_spell(tome_idx, vec![]))
+        .expect("cast Jayemdae Tome");
+    resolve_entire_stack_two_player(&mut e);
+
+    let tome = battlefield_object_for_card(&e, 0, "jayemdae_tome");
+    assert!(
+        e.state.objects.get(&tome).expect("tome").summoning_sick,
+        "the flag is still set — it is the tap *check* that must ignore it for noncreatures"
+    );
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            c: 4,
+            ..Default::default()
+        },
+    );
+    e.apply_command(0, &activate_ability(tome, 0, vec![]))
+        .expect("a noncreature artifact may tap the turn it enters");
+    assert!(
+        e.state.objects.get(&tome).expect("tome").tapped,
+        "the tome paid its tap cost"
+    );
+}
+
+/// The client greys its activation menu from `AbilityInfo.activatable`. A tap ability whose cost
+/// cannot be paid must report false, or the menu opens and collects mana for a command the engine
+/// then rejects — and a noncreature artifact must still report true the turn it resolves.
+#[test]
+fn tap_ability_activatability_tracks_the_tap_cost() {
+    let decks = Some(vec![
+        deck_with("island", &["jayemdae_tome", "grizzly_bears"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(1711, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    ensure_in_hand(&mut e, 0, "jayemdae_tome");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            c: 4,
+            ..Default::default()
+        },
+    );
+    let tome_idx = hand_index_for_card(&e, 0, "jayemdae_tome");
+    e.apply_command(0, &cast_spell(tome_idx, vec![]))
+        .expect("cast Jayemdae Tome");
+    resolve_entire_stack_two_player(&mut e);
+    let tome = battlefield_object_for_card(&e, 0, "jayemdae_tome");
+
+    assert_eq!(
+        zone_view_ability_flags(&e, 0, tome),
+        vec![true],
+        "a noncreature artifact's tap ability is available the turn it resolves (CR 302.6)"
+    );
+
+    e.state.objects.get_mut(&tome).expect("tome").tapped = true;
+    assert_eq!(
+        zone_view_ability_flags(&e, 0, tome),
+        vec![false],
+        "an already-tapped permanent cannot pay a tap cost"
+    );
+}

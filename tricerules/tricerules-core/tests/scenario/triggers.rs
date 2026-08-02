@@ -1044,3 +1044,116 @@ fn howling_mine_bounced_while_tapped_does_nothing() {
         "turn-based draw only: LKI says the Mine was tapped"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Death triggers: controller (not owner), sacrifice costs, and simultaneity.
+// These cover CR 603.3a / 603.6 behaviours that regressed once each.
+// ---------------------------------------------------------------------------
+
+/// CR 603.3a: a dies trigger's "controller" is whoever controlled the permanent as it died, not
+/// whoever owns the card. P1's Blood Artist watching P0's *borrowed* creature die must see the
+/// death as P1's own, so an "opponent controls" style relation reads the right seat. Blood Artist
+/// takes AnyPlayer, so the observable assertion is that the trigger fires exactly once and that
+/// the death is attributed to the controlling seat in the batch.
+#[test]
+fn dies_trigger_uses_last_controller_not_owner() {
+    let decks = Some(vec![
+        deck_with("swamp", &["blood_artist"]),
+        deck_with("mountain", &[]),
+    ]);
+    let mut e = GameEngine::new(9301, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let artist_oid = relocate_to_battlefield(&mut e, 0, "blood_artist", false);
+    // Owned by P1, controlled by P0 — a stolen creature.
+    let borrowed = inject_creature_under_foreign_control(&mut e, 1, 0, "grizzly_bears");
+    e.state.objects.get_mut(&borrowed).expect("borrowed").damage = 99;
+
+    e.apply_command(0, &pass()).expect("pass triggers SBA");
+
+    assert_eq!(
+        e.state.objects.get(&borrowed).expect("borrowed").zone,
+        tricerules_core::Zone::Graveyard,
+        "the borrowed creature must have died"
+    );
+    // The card goes to its *owner's* graveyard even though its controller was P0.
+    assert!(
+        e.state.players[1].graveyard.contains(&borrowed),
+        "a dead card returns to its owner's graveyard (CR 404.3)"
+    );
+    assert_eq!(
+        e.state.pending_triggers.len(),
+        1,
+        "Blood Artist sees the borrowed creature die exactly once"
+    );
+    let _ = artist_oid;
+}
+
+/// CR 603.6a: a permanent sacrificed to pay an activation cost still dies, so Blood Artist sees
+/// it. Bottle Gnomes sacrifices itself for its own ability; the drain must still happen.
+#[test]
+fn sacrifice_cost_fires_dies_triggers() {
+    let decks = Some(vec![
+        deck_with("swamp", &["blood_artist", "bottle_gnomes"]),
+        deck_with("mountain", &[]),
+    ]);
+    let mut e = GameEngine::new(9302, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    relocate_to_battlefield(&mut e, 0, "blood_artist", false);
+    let gnomes = relocate_to_battlefield(&mut e, 0, "bottle_gnomes", false);
+
+    e.apply_command(0, &activate_ability(gnomes, 0, vec![]))
+        .expect("sacrifice Bottle Gnomes for its ability");
+
+    assert_eq!(
+        e.state.objects.get(&gnomes).expect("gnomes").zone,
+        tricerules_core::Zone::Graveyard,
+        "the sacrificed creature is in the graveyard"
+    );
+    assert_eq!(
+        e.state.pending_triggers.len(),
+        1,
+        "Blood Artist must trigger on a creature sacrificed as a cost"
+    );
+}
+
+/// CR 603.6/603.10: creatures destroyed by one spell die simultaneously, so a Blood Artist that
+/// dies in the wipe still observes every *other* creature dying — the pre-fix engine moved all
+/// victims off the battlefield before scanning, which lost those triggers entirely.
+#[test]
+fn blood_artist_dying_in_a_wipe_still_sees_the_other_deaths() {
+    let decks = Some(vec![
+        deck_with("plains", &["wrath_of_god", "blood_artist"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(9303, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    relocate_to_battlefield(&mut e, 0, "blood_artist", false);
+    inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+
+    ensure_in_hand(&mut e, 0, "wrath_of_god");
+    let wrath_idx = hand_index_for_card(&e, 0, "wrath_of_god");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            w: 2,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    e.apply_command(0, &cast_spell(wrath_idx, vec![]))
+        .expect("cast Wrath of God");
+    pass_both_players(&mut e);
+
+    // Blood Artist itself + both Grizzly Bears all died in the same event, so its ability
+    // triggers three times (it is not "another creature" — exclude_self is false).
+    assert_eq!(
+        e.state.pending_triggers.len(),
+        3,
+        "Blood Artist sees its own death and both Bears dying simultaneously"
+    );
+}

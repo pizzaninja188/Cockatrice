@@ -114,7 +114,7 @@ fn go_for_the_throat_destroys_target_creature() {
         0,
         ManaGift {
             b: 1,
-            c: 1,
+            c: 3,
             ..Default::default()
         },
     );
@@ -443,7 +443,7 @@ fn blood_tithe_drains_each_opponent_and_gains_controller_equal_life() {
         0,
         ManaGift {
             b: 1,
-            c: 2,
+            c: 3,
             ..Default::default()
         },
     );
@@ -491,7 +491,7 @@ fn eyeblights_ending_destroys_target_creature() {
         0,
         ManaGift {
             b: 1,
-            c: 1,
+            c: 3,
             ..Default::default()
         },
     );
@@ -2268,4 +2268,130 @@ fn diabolic_edict_targeting_self_is_legal() {
         .expect("P0 sacrifices own bear");
 
     assert!(!e.state.players[0].battlefield.contains(&bear_id));
+}
+
+/// CR 615: a prevention shield applies to *any* damage from any source, not only to single-target
+/// spell damage. Pyroclasm's `DamageAll` used to write straight into `o.damage` and walk past the
+/// shield entirely.
+#[test]
+fn healing_salve_shield_absorbs_mass_damage() {
+    let decks = Some(vec![
+        deck_with("plains", &["healing_salve", "pyroclasm"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(2661, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    // Two 2/2s; only the shielded one survives Pyroclasm's 2 damage.
+    let shielded = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let unshielded = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+
+    ensure_in_hand(&mut e, 0, "healing_salve");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            w: 1,
+            ..Default::default()
+        },
+    );
+    let salve_idx = hand_index_for_card(&e, 0, "healing_salve");
+    e.apply_command(
+        0,
+        &cast_modal_spell(
+            salve_idx,
+            vec![(
+                1,
+                vec![TargetRef {
+                    object_id: shielded,
+                    damage_amount: 0,
+                }],
+            )],
+        ),
+    )
+    .expect("cast salve on our own creature");
+    pass_both_players(&mut e);
+
+    ensure_in_hand(&mut e, 0, "pyroclasm");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let pyro_idx = hand_index_for_card(&e, 0, "pyroclasm");
+    e.apply_command(0, &cast_spell(pyro_idx, vec![]))
+        .expect("cast Pyroclasm");
+    pass_both_players(&mut e);
+
+    assert_eq!(
+        e.state.objects.get(&shielded).expect("shielded").zone,
+        tricerules_core::Zone::Battlefield,
+        "the 3-point shield absorbs all 2 of Pyroclasm's damage"
+    );
+    assert_eq!(
+        e.state.objects.get(&unshielded).expect("unshielded").zone,
+        tricerules_core::Zone::Graveyard,
+        "the unshielded 2/2 still dies"
+    );
+}
+
+/// The same shield must apply to multi-target damage (Fire's two-way split), which took the same
+/// unprotected write path as mass damage.
+#[test]
+fn healing_salve_shield_absorbs_multi_target_damage() {
+    let decks = Some(vec![
+        deck_with("plains", &["healing_salve", "fire_ice"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(2662, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    ensure_in_hand(&mut e, 0, "healing_salve");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            w: 1,
+            ..Default::default()
+        },
+    );
+    let salve_idx = hand_index_for_card(&e, 0, "healing_salve");
+    e.apply_command(0, &cast_modal_spell(salve_idx, vec![(1, target_player(1))]))
+        .expect("shield P1");
+    pass_both_players(&mut e);
+    let p1_life = e.state.players[1].life;
+    let p0_life = e.state.players[0].life;
+
+    // Fire: 1 damage to P1 (shielded) and 1 to P0 (not shielded).
+    ensure_in_hand(&mut e, 0, "fire_ice");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let fire_idx = hand_index_for_card(&e, 0, "fire_ice");
+    e.apply_command(
+        0,
+        &cast_spell_face(fire_idx, targets_with_damage(vec![(1, 1), (0, 1)]), 0),
+    )
+    .expect("cast Fire split 1/1");
+    pass_both_players(&mut e);
+
+    assert_eq!(
+        e.state.players[1].life, p1_life,
+        "P1's shield absorbs its share of Fire's damage"
+    );
+    assert_eq!(
+        e.state.players[0].life,
+        p0_life - 1,
+        "the unshielded half still lands"
+    );
 }

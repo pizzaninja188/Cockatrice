@@ -269,6 +269,10 @@ pub struct StackItem {
     pub ability_text: Option<String>,
     /// For activated/triggered abilities: the permanent that sourced this ability (stays in its zone).
     pub source_permanent_id: Option<ObjectId>,
+    /// Generation of the source permanent when this ability was put on the stack (CR 400.7).
+    /// A matching ObjectId after a leave-and-return is a different object and must not receive
+    /// the old ability's self-bound effect.
+    pub source_zone_change: u64,
     /// Index into the card's `activated_abilities` or `triggered_abilities` list. `None` for spells.
     pub ability_index: Option<usize>,
     /// `true` = this is a triggered ability; `false` = activated ability or spell.
@@ -426,6 +430,13 @@ pub struct GameState {
     /// (bounced while untapped, the ability still resolves). Keyed by object, so a later LKI need
     /// (P/T of a creature that died mid-resolution) joins it here rather than snapshotting ad hoc.
     pub last_known_tapped: HashMap<ObjectId, bool>,
+    /// Last-known tap status keyed by the source object's generation, so an older trigger is not
+    /// confused by a later leave-and-return cycle using the same relay ObjectId.
+    pub last_known_tapped_by_generation: HashMap<(ObjectId, u64), bool>,
+    /// Monotonic per-object generation incremented on every zone change. ObjectIds remain stable
+    /// for relay compatibility, while this generation preserves CR 400.7 identity semantics for
+    /// effects that resolve after a source leaves and returns.
+    pub zone_change_generation: HashMap<ObjectId, u64>,
     pub stack: Vec<StackItem>,
     /// Index into players for who holds priority
     pub priority_idx: usize,

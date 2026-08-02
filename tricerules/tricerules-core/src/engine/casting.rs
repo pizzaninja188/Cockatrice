@@ -5,6 +5,14 @@ use super::resolution::{permanent_moved_event, sacrifice_permanent};
 use super::targeting::{validate_effect_targets, validate_spell_targets};
 use super::*;
 
+#[derive(Debug, Clone)]
+struct SacrificeSnapshot {
+    object_id: ObjectId,
+    card_id: String,
+    controller: PlayerId,
+    was_creature: bool,
+}
+
 /// CR 702.8b: true if the card face is castable at instant speed (is an instant, or has flash).
 pub(super) fn castable_at_instant_speed(face: &tricerules_cards::FaceRef<'_>) -> bool {
     face.is_instant || face.keywords.contains(&tricerules_cards::Keyword::Flash)
@@ -381,6 +389,7 @@ impl GameEngine {
             targets: trefs,
             ability_text: None,
             source_permanent_id: None,
+            source_zone_change: 0,
             ability_index: None,
             is_triggered: false,
             is_copy: false,
@@ -391,9 +400,7 @@ impl GameEngine {
             // A spell's effects always act on its controller.
             trigger_player: None,
         });
-        if let Some(o) = self.state.objects.get_mut(&oid) {
-            o.zone = Zone::Stack;
-        }
+        super::resolution::move_object_to_zone(&mut self.state, oid, Zone::Stack, None)?;
 
         self.state.passes_since_stack_change = 0;
         self.state.priority_idx = idx;
@@ -512,6 +519,13 @@ impl GameEngine {
             .ok_or(EngineError::Illegal("no such activated ability"))?
             .clone();
 
+        // CR 702.6a: equip abilities have "Activate only as a sorcery" built in.
+        if matches!(ability.effect, SpellEffectKind::Equip { .. })
+            && !super::priority::sorcery_speed_available(&self.state, player)
+        {
+            return Err(EngineError::Illegal("equip only at sorcery speed"));
+        }
+
         if matches!(ability.effect, SpellEffectKind::ProduceMana { .. }) {
             return self.resolve_mana_ability(
                 player,
@@ -529,6 +543,13 @@ impl GameEngine {
 
         validate_effect_targets(self, player, &ability.effect, targets)?;
 
+        let source_zone_change = self
+            .state
+            .zone_change_generation
+            .get(&permanent_id)
+            .copied()
+            .unwrap_or(0);
+        let sacrificed = self.sacrifice_snapshot(permanent_id, &ability.cost);
         let (sacrifice_ev, life_paid) = self.pay_ability_cost(
             player,
             idx,
@@ -556,6 +577,7 @@ impl GameEngine {
             targets: trefs.clone(),
             ability_text: Some(ability_text.clone()),
             source_permanent_id: Some(permanent_id),
+            source_zone_change,
             ability_index: Some(ability_index),
             is_triggered: false,
             is_copy: false,
@@ -602,6 +624,11 @@ impl GameEngine {
                 chosen_mode_labels: vec![],
             })),
         });
+        // CR 603.3b: a trigger that fired while the cost was being paid goes on the stack *above*
+        // the ability it paid for, so its events must follow that ability's StackPushed. Emitting
+        // the trigger prompt first also made the client discard it, because an activated ability
+        // reaching the stack is its signal that a pending trigger target was just answered.
+        self.fire_sacrifice_cost_dies(sacrificed, &mut batch.events);
         batch.events.push(ev_priority_changed(self));
         fill_legal(&mut batch, self);
         Ok(batch)
@@ -652,6 +679,82 @@ impl GameEngine {
         }
     }
 
+    /// Snapshot a permanent about to be sacrificed as an activation cost. Taken *before* the cost
+    /// is paid, because CR 603.6 reads the dying object's last-known information and the object is
+    /// already in the graveyard (controller reset, characteristics gone) by the time it fires.
+    /// `None` for any cost that is not [`AbilityCost::Sacrifice`].
+    fn sacrifice_snapshot(
+        &self,
+        permanent_id: ObjectId,
+        cost: &AbilityCost,
+    ) -> Option<SacrificeSnapshot> {
+        if !matches!(cost, AbilityCost::Sacrifice) {
+            return None;
+        }
+        let object = self.state.objects.get(&permanent_id)?;
+        Some(SacrificeSnapshot {
+            object_id: permanent_id,
+            card_id: object.card_id.clone(),
+            controller: object.controller,
+            was_creature: self
+                .characteristics(permanent_id)
+                .is_some_and(|value| value.is_creature()),
+        })
+    }
+
+    /// CR 603.6a: a permanent sacrificed to pay an activation cost still dies, so leaves-the-
+    /// battlefield abilities (Blood Artist, Bottle Gnomes' own controller triggers) see it. The
+    /// triggers go on the stack *above* the ability whose cost they paid, so this runs after the
+    /// ability has been pushed.
+    fn fire_sacrifice_cost_dies(
+        &mut self,
+        snapshot: Option<SacrificeSnapshot>,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) {
+        let Some(snapshot) = snapshot else {
+            return;
+        };
+        self.fire_triggers(
+            GameEvent::Dies {
+                object_id: snapshot.object_id,
+                card_id: snapshot.card_id,
+                controller: snapshot.controller,
+                was_creature: snapshot.was_creature,
+            },
+            events,
+        );
+    }
+
+    /// Whether `ability` on `permanent_id` could be activated right now, so the client can grey it
+    /// out instead of opening a menu and collecting mana for an activation the engine will reject.
+    ///
+    /// Deliberately ignores mana: the client floats mana *after* choosing the ability, so an
+    /// unaffordable ability is still a legal thing to start. What it does mirror is every gate in
+    /// [`GameEngine::activate_ability`] that no amount of mana can satisfy — the tap cost
+    /// (CR 302.6 summoning sickness, already tapped) and equip's sorcery-speed restriction
+    /// (CR 702.6a). Priority and seat ownership stay client-side; they are not properties of the
+    /// permanent, and this value is broadcast to every player.
+    pub(super) fn ability_activatable(
+        &self,
+        permanent_id: ObjectId,
+        ability: &tricerules_cards::ActivatedAbilityDef,
+    ) -> bool {
+        let Some(object) = self.state.objects.get(&permanent_id) else {
+            return false;
+        };
+        if matches!(ability.effect, SpellEffectKind::Equip { .. })
+            && !super::priority::sorcery_speed_available(&self.state, object.controller)
+        {
+            return false;
+        }
+        if matches!(ability.cost, AbilityCost::Tap | AbilityCost::TapAndMana(_))
+            && self.check_tappable(permanent_id, &object.card_id).is_err()
+        {
+            return false;
+        }
+        true
+    }
+
     pub(super) fn check_tappable(
         &self,
         permanent_id: ObjectId,
@@ -668,7 +771,10 @@ impl GameEngine {
         if o.tapped {
             return Err(EngineError::Illegal("permanent is already tapped"));
         }
-        if o.summoning_sick && !has_haste {
+        let is_creature = self
+            .characteristics(permanent_id)
+            .is_some_and(|value| value.is_creature());
+        if is_creature && o.summoning_sick && !has_haste {
             return Err(EngineError::Illegal(
                 "cannot use tap ability due to summoning sickness",
             ));
@@ -708,6 +814,7 @@ impl GameEngine {
             .get(mana_option_index as usize)
             .ok_or(EngineError::Illegal("invalid mana option"))?;
 
+        let sacrificed = self.sacrifice_snapshot(permanent_id, &ability.cost);
         let (sacrifice_ev, life_paid) = self.pay_ability_cost(
             player,
             idx,
@@ -761,6 +868,9 @@ impl GameEngine {
                 "P{player} pays {life_paid} life (Phyrexian mana)."
             )));
         }
+        // A mana ability does not use the stack (CR 605.3a), so a permanent sacrificed to pay for
+        // one dies immediately rather than under a pushed ability.
+        self.fire_sacrifice_cost_dies(sacrificed, &mut batch.events);
         Ok(batch)
     }
 

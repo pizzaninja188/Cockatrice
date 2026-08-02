@@ -90,7 +90,8 @@ pub(super) fn exile_target_gain_life_equal_to_power(
         // CR 608: read effective power at resolution before the object leaves.
         let power = engine.effective_power(tid).unwrap_or(0);
         let owner = engine.state.objects.get(&tid).map(|o| o.owner);
-        let target_controller = owner.unwrap_or(controller);
+        let target_controller = engine.state.objects.get(&tid).map(|o| o.controller);
+        let target_controller = target_controller.unwrap_or(controller);
         move_object_to_zone(&mut engine.state, tid, Zone::Exile, None)?;
         events.push(ev_log(format!("{spell_label} exiles {tgt}")));
         if let Some(owner_id) = owner {

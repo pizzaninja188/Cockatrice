@@ -919,26 +919,39 @@ impl GameEngine {
                         (blk, pw, has_ll, has_dt, controller, participates)
                     })
                     .collect();
-                let total_blocker_power: u32 = blocker_info
-                    .iter()
-                    .filter(|(_, _, _, _, _, p)| *p)
-                    .map(|(_, pw, _, _, _, _)| pw)
-                    .sum();
-                // CR 702.2b: if any participating blocker has deathtouch and dealt damage,
-                // mark the attacker.
-                let any_blocker_deathtouch_hit = blocker_info
-                    .iter()
-                    .any(|(_, pw, _, has_dt, _, p)| *p && *has_dt && *pw > 0);
-                // CR 614.1a: apply prevention shield before recording multi-blocker total.
-                let dmg_to_att = apply_prevention_shield(
-                    &mut self.state.damage_prevention_shields,
-                    att,
-                    total_blocker_power,
-                    events,
-                );
+                // Damage is dealt simultaneously, but prevention and lifelink are applied per
+                // source.  Tracking each blocker separately is important when a prevention shield
+                // prevents only part of the combined damage (CR 615.1, 702.15b).
+                let mut total_blocker_damage = 0;
+                let mut any_blocker_deathtouch_hit = false;
+                let mut blocker_damage_dealt = Vec::new();
+                for (
+                    _,
+                    blocker_power,
+                    has_lifelink,
+                    has_deathtouch,
+                    blocker_controller,
+                    participates,
+                ) in &blocker_info
+                {
+                    if !*participates || *blocker_power == 0 {
+                        continue;
+                    }
+                    let dealt = apply_prevention_shield(
+                        &mut self.state.damage_prevention_shields,
+                        att,
+                        *blocker_power,
+                        events,
+                    );
+                    total_blocker_damage += dealt;
+                    if *has_deathtouch && dealt > 0 {
+                        any_blocker_deathtouch_hit = true;
+                    }
+                    blocker_damage_dealt.push((*has_lifelink, *blocker_controller, dealt));
+                }
                 if let Some(af) = self.state.objects.get_mut(&att) {
-                    af.damage += dmg_to_att;
-                    if any_blocker_deathtouch_hit && dmg_to_att > 0 {
+                    af.damage += total_blocker_damage;
+                    if any_blocker_deathtouch_hit {
                         af.deathtouch_damage = true;
                     }
                 }
@@ -992,11 +1005,11 @@ impl GameEngine {
                         lifelink_gains.push((att_controller, total_att_lifelink));
                     }
                 }
-                // CR 702.15b: each participating blocker with lifelink gains life = damage it dealt
-                // to the attacker (which may have been shielded — use dmg_to_att proportionally).
-                for (_, blk_pw, blk_has_ll, _, blk_controller, blk_participates) in blocker_info {
-                    if blk_participates && blk_has_ll && blk_pw > 0 {
-                        lifelink_gains.push((blk_controller, blk_pw));
+                // CR 702.15b: each participating blocker with lifelink gains life equal to the
+                // damage it actually dealt, after prevention.
+                for (has_lifelink, blocker_controller, dealt) in blocker_damage_dealt {
+                    if has_lifelink && dealt > 0 {
+                        lifelink_gains.push((blocker_controller, dealt));
                     }
                 }
             }

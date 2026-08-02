@@ -1973,3 +1973,74 @@ fn legal_actions_surface_required_blocker_to_defender() {
         "active player has no required blockers"
     );
 }
+
+/// CR 615.1 / 702.15b: combat damage is dealt simultaneously, but prevention is applied per
+/// *source* and lifelink counts the damage that source actually dealt. With a 3-point shield on
+/// the attacker and two 2-power blockers, the shield fully absorbs the first blocker's damage —
+/// so a lifelink blocker whose damage was entirely prevented gains its controller nothing.
+/// The pre-fix engine summed blocker power, applied one shield to the total, and then credited
+/// lifelink with each blocker's full printed power regardless of what was prevented.
+#[test]
+fn prevented_lifelink_blocker_damage_gains_no_life() {
+    let decks = Some(vec![
+        std::iter::repeat_n("grizzly_bears".to_string(), 10).collect::<Vec<_>>(),
+        {
+            let mut d: Vec<String> = std::iter::repeat_n("child_of_night".to_string(), 5).collect();
+            d.extend(std::iter::repeat_n("grizzly_bears".to_string(), 5));
+            d
+        },
+    ]);
+    let mut e = GameEngine::new(9401, &[0, 1], 20, decks, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    ensure_in_hand(&mut e, 0, "grizzly_bears");
+    ensure_in_hand(&mut e, 1, "child_of_night");
+    ensure_in_hand(&mut e, 1, "grizzly_bears");
+
+    let attacker = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    // Child of Night (2/1 lifelink) is declared first, so it is the first source the shield sees.
+    let lifelinker = put_creature_on_battlefield(&mut e, 1, "child_of_night");
+    let plain_blocker = put_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+
+    // A 3-point prevention shield on the attacker: enough to absorb all of the lifelinker's 2
+    // damage and 1 of the other blocker's.
+    e.state.damage_prevention_shields.insert(attacker, 3);
+
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("declare attacker");
+    e.apply_command(0, &pass()).expect("active pass");
+    e.apply_command(1, &pass()).expect("defender pass");
+    e.apply_command(
+        1,
+        &declare_blockers(vec![
+            BlockPair {
+                attacker_id: attacker,
+                blocker_id: lifelinker,
+            },
+            BlockPair {
+                attacker_id: attacker,
+                blocker_id: plain_blocker,
+            },
+        ]),
+    )
+    .expect("declare two blockers");
+    e.apply_command(0, &pass())
+        .expect("active pass declare blockers");
+    e.apply_command(1, &pass()).expect("defender pass");
+
+    let p1_life = e.state.players[1].life;
+    e.apply_command(
+        0,
+        &assign_combat_damage_cmd(attacker, vec![(lifelinker, 1), (plain_blocker, 1)]),
+    )
+    .expect("assign 1+1");
+
+    assert_eq!(
+        e.state.players[1].life, p1_life,
+        "all of the lifelink blocker's damage was prevented, so it gains no life"
+    );
+    assert_eq!(
+        e.state.objects.get(&attacker).expect("attacker").damage,
+        1,
+        "the 3-point shield leaves only 1 of the 4 combined blocker damage"
+    );
+}

@@ -373,3 +373,100 @@ fn vulshok_morningstar_adds_power_and_toughness() {
         "+2 toughness from Morningstar"
     );
 }
+
+/// CR 702.6a: "Equip only as a sorcery" is built into the keyword. Activating it while the stack
+/// is not empty — or on the opponent's turn — is illegal, even with the mana available.
+#[test]
+fn equip_is_rejected_at_instant_speed() {
+    let decks = Some(vec![
+        equipment_deck("bonesplitter"),
+        equipment_deck("grizzly_bears"),
+    ]);
+    let mut e = GameEngine::new(5099, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let splitter = cast_and_resolve_equipment(
+        &mut e,
+        0,
+        "bonesplitter",
+        ManaGift {
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let bears = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            c: 5,
+            ..Default::default()
+        },
+    );
+
+    // Hand priority to P1 and advance into P1's turn, where P0 has no sorcery-speed window.
+    end_active_turn(&mut e, 0);
+    let err = e.apply_command(
+        0,
+        &activate_ability(
+            splitter,
+            0,
+            vec![TargetRef {
+                object_id: bears,
+                damage_amount: 0,
+            }],
+        ),
+    );
+    assert!(
+        err.is_err(),
+        "equip must be rejected outside a sorcery-speed window"
+    );
+    assert!(
+        e.state
+            .objects
+            .get(&splitter)
+            .expect("bonesplitter")
+            .attached_to
+            .is_none(),
+        "the rejected equip must not have attached anything"
+    );
+}
+
+/// The client greys the ability menu from `AbilityInfo.activatable`, so the engine must report
+/// equip as unavailable outside a sorcery-speed window — otherwise the menu opens, collects mana,
+/// and the engine rejects the command it produced.
+#[test]
+fn equip_is_reported_unactivatable_at_instant_speed() {
+    let decks = Some(vec![
+        equipment_deck("bonesplitter"),
+        equipment_deck("grizzly_bears"),
+    ]);
+    let mut e = GameEngine::new(5098, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let splitter = cast_and_resolve_equipment(
+        &mut e,
+        0,
+        "bonesplitter",
+        ManaGift {
+            c: 1,
+            ..Default::default()
+        },
+    );
+
+    let activatable_now = |e: &GameEngine| -> bool {
+        zone_view_ability_flags(e, 0, splitter)
+            .first()
+            .copied()
+            .expect("bonesplitter has an equip ability")
+    };
+    assert!(
+        activatable_now(&e),
+        "equip is available in our own main phase with an empty stack"
+    );
+
+    end_active_turn(&mut e, 0);
+    assert!(
+        !activatable_now(&e),
+        "equip must report as unavailable on the opponent's turn (CR 702.6a)"
+    );
+}

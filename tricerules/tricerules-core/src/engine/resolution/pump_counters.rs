@@ -22,6 +22,7 @@ pub(super) fn pump_target(
     // every other filter uses the player's selected target.
     let tid = if matches!(target.kind, TargetKind::Self_) {
         top.source_permanent_id
+            .filter(|_| engine.source_is_current_object(top))
     } else {
         targets.first().copied()
     };
@@ -221,6 +222,7 @@ pub(super) fn put_counters(
     // uses the chosen target. Counters go on a permanent on the battlefield.
     let tid = if matches!(target.kind, TargetKind::Self_) {
         top.source_permanent_id
+            .filter(|_| engine.source_is_current_object(top))
     } else {
         targets.first().copied()
     };

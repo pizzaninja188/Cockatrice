@@ -180,6 +180,7 @@ impl GameEngine {
                                             mana_cost,
                                             mana_produced,
                                             cost_label,
+                                            activatable: self.ability_activatable(oid, ability),
                                         }
                                     })
                                     .collect()

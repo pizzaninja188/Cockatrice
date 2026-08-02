@@ -37,6 +37,7 @@ pub(super) fn destroy_all(
             continue;
         }
         let owner = engine.state.objects.get(&tid).map(|o| o.owner);
+        let controller = engine.state.objects.get(&tid).map(|o| o.controller);
         let card_id_t = engine.state.objects.get(&tid).map(|o| o.card_id.clone());
         let was_creature = engine
             .characteristics(tid)
@@ -51,21 +52,11 @@ pub(super) fn destroy_all(
                 rv1::permanent_moved::Destination::Graveyard,
             ));
         }
-        if let (Some(cid), Some(ctrl)) = (card_id_t, owner) {
+        if let (Some(cid), Some(ctrl)) = (card_id_t, controller) {
             destroyed.push((tid, cid, ctrl, was_creature));
         }
     }
-    for (tid, cid, ctrl, was_creature) in destroyed {
-        engine.fire_triggers(
-            GameEvent::Dies {
-                object_id: tid,
-                card_id: cid,
-                controller: ctrl,
-                was_creature,
-            },
-            events,
-        );
-    }
+    engine.fire_dies_batch(&destroyed, events);
 
     Ok(EffectOutcome::Continue)
 }
@@ -127,11 +118,20 @@ pub(super) fn damage_all(
     let affected = battlefield_objects_matching(engine, &kind);
     for tid in &affected {
         let tgt = object_display_name(&engine.state, engine.registry, *tid);
+        let dealt = apply_prevention_shield(
+            &mut engine.state.damage_prevention_shields,
+            *tid,
+            amount,
+            events,
+        );
+        if dealt == 0 {
+            continue;
+        }
         if let Some(o) = engine.state.objects.get_mut(tid) {
-            o.damage += amount;
+            o.damage += dealt;
         }
         events.push(ev_log(format!(
-            "{spell_label} deals {amount} damage to {tgt}"
+            "{spell_label} deals {dealt} damage to {tgt}"
         )));
     }
 

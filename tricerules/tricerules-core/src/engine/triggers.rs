@@ -23,11 +23,96 @@ impl GameEngine {
         if let GameEvent::EntersBattlefield { object_id } = &event {
             self.emit_static_abilities_on_enter(*object_id);
         }
+        // Every death goes through the simultaneous-death path, so a single death and a board
+        // wipe share one implementation of who observes it (CR 603.6/603.10). Keeping a second
+        // copy here is how the two drifted apart before.
+        if let GameEvent::Dies {
+            object_id,
+            card_id,
+            controller,
+            was_creature,
+        } = event
+        {
+            self.fire_dies_batch(&[(object_id, card_id, controller, was_creature)], events);
+            return;
+        }
         // The beneficiary is a property of the *event* ("that player"), not of the ability that
         // matched it, which is why it rides alongside the trigger rather than inside it.
         let trigger_player = Self::trigger_player_for(&event);
         for trigger in self.collect_triggers(&event) {
             self.push_trigger(trigger, trigger_player, events);
+        }
+    }
+
+    /// Emit a simultaneous group of creature deaths using the battlefield snapshot immediately
+    /// before the group left. This is required for CR 603.6/603.10: a Blood Artist that dies in a
+    /// wipe still observes every other creature dying in that same event, and all those triggers
+    /// are ordered together under APNAP rather than one event at a time after the battlefield has
+    /// already been cleared.
+    pub(super) fn fire_dies_batch(
+        &mut self,
+        destroyed: &[(ObjectId, String, PlayerId, bool)],
+        events: &mut Vec<rv1::RuledEvent>,
+    ) {
+        let mut sources: Vec<(ObjectId, String, PlayerId)> = Vec::new();
+        for player in &self.state.players {
+            for &source_id in &player.battlefield {
+                if let Some(object) = self.state.objects.get(&source_id) {
+                    sources.push((source_id, object.card_id.clone(), object.controller));
+                }
+            }
+        }
+        // The destroyed objects are no longer in the battlefield index, but their last-known
+        // triggered abilities still participate in the simultaneous event.
+        sources.extend(
+            destroyed
+                .iter()
+                .map(|(id, card_id, controller, _)| (*id, card_id.clone(), *controller)),
+        );
+
+        let mut triggers = Vec::new();
+        for (dying_id, dying_card_id, dying_controller, was_creature) in destroyed {
+            triggers.extend(self.matching_triggered_abilities(
+                dying_card_id,
+                *dying_id,
+                *dying_controller,
+                |tc| *tc == TriggerCondition::WhenSelfDies,
+            ));
+            if !was_creature {
+                continue;
+            }
+            for (source_id, source_card, source_controller) in &sources {
+                triggers.extend(self.matching_triggered_abilities(
+                    source_card,
+                    *source_id,
+                    *source_controller,
+                    |tc| {
+                        let TriggerCondition::WheneverCreatureDies {
+                            controller,
+                            exclude_self,
+                        } = tc
+                        else {
+                            return false;
+                        };
+                        if *exclude_self && *source_id == *dying_id {
+                            return false;
+                        }
+                        match controller {
+                            CastTriggerPlayer::Controller => {
+                                *dying_controller == *source_controller
+                            }
+                            CastTriggerPlayer::Opponent => *dying_controller != *source_controller,
+                            CastTriggerPlayer::AnyPlayer => true,
+                        }
+                    },
+                ));
+            }
+        }
+
+        let active = self.state.active_player_id();
+        triggers.sort_by_key(|trigger| (trigger.controller != active) as u8);
+        for trigger in triggers {
+            self.push_trigger(trigger, None, events);
         }
     }
 
@@ -113,76 +198,9 @@ impl GameEngine {
                 }
                 out
             }
-            GameEvent::Dies {
-                object_id: dying_id,
-                card_id: dying_card_id,
-                controller: dying_controller,
-                was_creature,
-            } => {
-                let mut out = self.matching_triggered_abilities(
-                    dying_card_id,
-                    *dying_id,
-                    *dying_controller,
-                    |tc| *tc == TriggerCondition::WhenSelfDies,
-                );
-                // Observer triggers: check all battlefield permanents for WheneverCreatureDies.
-                let ap = self.state.active_player_id();
-                let mut ordered: Vec<usize> = (0..self.state.players.len()).collect();
-                ordered.sort_by_key(|&i| (self.state.players[i].id != ap) as u8);
-                let mut sources: Vec<(ObjectId, String, PlayerId)> = Vec::new();
-                for pi in ordered {
-                    for &sid in &self.state.players[pi].battlefield {
-                        if let Some(o) = self.state.objects.get(&sid) {
-                            sources.push((sid, o.card_id.clone(), o.controller));
-                        }
-                    }
-                }
-                if *was_creature {
-                    // Check the dying creature itself for WheneverCreatureDies (exclude_self: false).
-                    // It has already left the battlefield, so it won't appear in `sources`, but its
-                    // card definition is still in the registry — same path as WhenSelfDies.
-                    out.extend(self.matching_triggered_abilities(
-                        dying_card_id,
-                        *dying_id,
-                        *dying_controller,
-                        |tc| {
-                            matches!(
-                                tc,
-                                TriggerCondition::WheneverCreatureDies {
-                                    exclude_self: false,
-                                    ..
-                                }
-                            )
-                        },
-                    ));
-                    // Check all remaining battlefield permanents (observer triggers).
-                    for (src_id, src_card, src_ctrl) in sources {
-                        out.extend(self.matching_triggered_abilities(
-                            &src_card,
-                            src_id,
-                            src_ctrl,
-                            |tc| {
-                                let TriggerCondition::WheneverCreatureDies {
-                                    controller,
-                                    exclude_self,
-                                } = tc
-                                else {
-                                    return false;
-                                };
-                                if *exclude_self && src_id == *dying_id {
-                                    return false;
-                                }
-                                match controller {
-                                    CastTriggerPlayer::Controller => *dying_controller == src_ctrl,
-                                    CastTriggerPlayer::Opponent => *dying_controller != src_ctrl,
-                                    CastTriggerPlayer::AnyPlayer => true,
-                                }
-                            },
-                        ));
-                    }
-                }
-                out
-            }
+            // Deaths never reach here: `fire_triggers` routes them to `fire_dies_batch`, which is
+            // the only place that knows how to treat a group of deaths as simultaneous.
+            GameEvent::Dies { .. } => vec![],
             GameEvent::Attacks { attacker_ids } => {
                 let mut sorted = attacker_ids.clone();
                 // CR 603.3b APNAP: the active player's triggers go on the stack first. A trigger
@@ -408,22 +426,50 @@ impl GameEngine {
         source_id: ObjectId,
         clause: Option<InterveningIf>,
     ) -> bool {
+        self.intervening_if_holds_at_generation(source_id, clause, None)
+    }
+
+    pub(super) fn intervening_if_holds_at_generation(
+        &self,
+        source_id: ObjectId,
+        clause: Option<InterveningIf>,
+        source_generation: Option<u64>,
+    ) -> bool {
         match clause {
             None => true,
             Some(InterveningIf::SourceUntapped) => match self.state.objects.get(&source_id) {
-                // "if {this} is untapped" (Howling Mine), read live while it is still in play.
-                Some(o) if o.zone == Zone::Battlefield => !o.tapped,
+                Some(o)
+                    if o.zone == Zone::Battlefield
+                        && source_generation.is_none_or(|generation| {
+                            self.state
+                                .zone_change_generation
+                                .get(&source_id)
+                                .copied()
+                                .unwrap_or(0)
+                                == generation
+                        }) =>
+                {
+                    // "if {this} is untapped" (Howling Mine), read live while the same object
+                    // is still in play.
+                    !o.tapped
+                }
                 // CR 608.2h / 113.7a: the source has left the battlefield since it triggered, so
                 // the check uses its *last known* tap status — bounced or destroyed while untapped,
                 // the ability still resolves (Howling Mine ruling, 2004-10-04). Reading the live
                 // object would be wrong twice over: CR 400.7 resets `tapped` on the way out, so a
                 // permanent that left tapped would read as untapped.
-                _ => !self
-                    .state
-                    .last_known_tapped
-                    .get(&source_id)
-                    .copied()
-                    .unwrap_or(false),
+                _ => {
+                    let lki = source_generation
+                        .and_then(|generation| {
+                            self.state
+                                .last_known_tapped_by_generation
+                                .get(&(source_id, generation))
+                                .copied()
+                        })
+                        .or_else(|| self.state.last_known_tapped.get(&source_id).copied())
+                        .unwrap_or(false);
+                    !lki
+                }
             },
         }
     }
@@ -502,6 +548,12 @@ impl GameEngine {
                 targets: vec![],
                 ability_text: Some(ability_text.clone()),
                 source_permanent_id: Some(source_id),
+                source_zone_change: self
+                    .state
+                    .zone_change_generation
+                    .get(&source_id)
+                    .copied()
+                    .unwrap_or(0),
                 ability_index: Some(ability_index),
                 is_triggered: true,
                 is_copy: false,

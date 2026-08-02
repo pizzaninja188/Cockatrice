@@ -663,6 +663,7 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
     state->engineOidToActivatedAbilityTexts.clear();
     state->engineOidToActivatedAbilityManaCosts.clear();
     state->engineOidToActivatedAbilityManaProduced.clear();
+    state->engineOidToActivatedAbilityActivatable.clear();
     bool anyFirstStrikePending = false;
     for (const auto &p : view.per_player()) {
         if (p.first_strike_step_pending()) {
@@ -681,17 +682,20 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
             QStringList manaCosts;
             QStringList manaProduced;
             QStringList costLabels;
+            QVector<bool> activatable;
             for (const auto &ability : battlefieldObject.activated_abilities()) {
                 texts.append(QString::fromStdString(ability.text()));
                 manaCosts.append(QString::fromStdString(ability.mana_cost()));
                 manaProduced.append(QString::fromStdString(ability.mana_produced()));
                 costLabels.append(QString::fromStdString(ability.cost_label()));
+                activatable.append(ability.activatable());
             }
             if (!texts.isEmpty()) {
                 state->engineOidToActivatedAbilityTexts.insert(oid, texts);
                 state->engineOidToActivatedAbilityManaCosts.insert(oid, manaCosts);
                 state->engineOidToActivatedAbilityManaProduced.insert(oid, manaProduced);
                 state->engineOidToActivatedAbilityCostLabels.insert(oid, costLabels);
+                state->engineOidToActivatedAbilityActivatable.insert(oid, activatable);
             }
             state->engineOidBattlefieldPower.insert(oid, static_cast<int>(battlefieldObject.power()));
             state->engineOidBattlefieldToughness.insert(oid, static_cast<int>(battlefieldObject.toughness()));

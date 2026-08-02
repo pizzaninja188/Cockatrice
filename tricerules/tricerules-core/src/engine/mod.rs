@@ -276,6 +276,8 @@ impl GameEngine {
             players,
             objects,
             last_known_tapped: HashMap::new(),
+            last_known_tapped_by_generation: HashMap::new(),
+            zone_change_generation: HashMap::new(),
             stack: Vec::new(),
             priority_idx: if skip_opening_sequence {
                 0
@@ -332,6 +334,26 @@ impl GameEngine {
     /// so the gate cannot be flipped from the wire.
     pub fn enable_dev_commands(&mut self) {
         self.dev_commands_enabled = true;
+    }
+
+    /// CR 400.7: determine whether a stack item's source is still the same game object. The
+    /// relay-facing ObjectId remains stable across zones, so the generation is the identity
+    /// discriminator used by source-bound effects.
+    pub(super) fn source_is_current_object(&self, item: &StackItem) -> bool {
+        let Some(source_id) = item.source_permanent_id else {
+            return true;
+        };
+        self.state
+            .objects
+            .get(&source_id)
+            .is_some_and(|object| object.zone == Zone::Battlefield)
+            && self
+                .state
+                .zone_change_generation
+                .get(&source_id)
+                .copied()
+                .unwrap_or(0)
+                == item.source_zone_change
     }
 
     /// CR 712.8 / 710: flip the active face of a Transform or Flip layout permanent.

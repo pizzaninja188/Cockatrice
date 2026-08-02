@@ -66,6 +66,12 @@ impl GameEngine {
             targets: trefs,
             ability_text: Some(ability_text.clone()),
             source_permanent_id: Some(source_id),
+            source_zone_change: self
+                .state
+                .zone_change_generation
+                .get(&source_id)
+                .copied()
+                .unwrap_or(0),
             ability_index: Some(ability_index),
             is_triggered: true,
             is_copy: false,
@@ -353,7 +359,12 @@ impl GameEngine {
             .get(&oid)
             .map(|o| o.card_id.clone())
             .unwrap_or_default();
-        let controller = owner;
+        let controller = self
+            .state
+            .objects
+            .get(&oid)
+            .map(|o| o.controller)
+            .ok_or(EngineError::Illegal("sacrificed object missing"))?;
         let was_creature = self
             .characteristics(oid)
             .is_some_and(|value| value.is_creature());
@@ -401,6 +412,7 @@ impl GameEngine {
                 continue;
             }
             let owner = self.state.objects.get(&oid).map(|o| o.owner);
+            let controller = self.state.objects.get(&oid).map(|o| o.controller);
             let card_id = self.state.objects.get(&oid).map(|o| o.card_id.clone());
             let was_creature = self
                 .characteristics(oid)
@@ -414,7 +426,7 @@ impl GameEngine {
                         rv1::permanent_moved::Destination::Graveyard,
                     ));
                 }
-                if let (Some(cid), Some(ctrl)) = (card_id, owner) {
+                if let (Some(cid), Some(ctrl)) = (card_id, controller) {
                     self.fire_triggers(
                         GameEvent::Dies {
                             object_id: oid,

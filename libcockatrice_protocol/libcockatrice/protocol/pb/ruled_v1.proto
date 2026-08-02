@@ -760,6 +760,12 @@ message AbilityInfo {
   string mana_cost = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   string mana_produced = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   string cost_label = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // False when this ability cannot be activated right now for a reason no amount of mana fixes:
+  // its tap cost is unavailable (already tapped, or CR 302.6 summoning sickness), or it is an
+  // equip ability outside a sorcery-speed window (CR 702.6a). The client must not offer it —
+  // otherwise it opens the activation menu and collects mana for a command the engine rejects.
+  // Mana affordability is deliberately NOT folded in: mana is floated after the ability is chosen.
+  bool activatable = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message BattlefieldObject {

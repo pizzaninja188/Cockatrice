@@ -1287,10 +1287,14 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
         pendingRuledSpellCast.fixedDamage = targetData.fixedDamage;
         pendingRuledSpellCast.extraManaPerTarget = targetData.extraManaPerTarget;
     } else {
-        pendingRuledSpellCast.isDamageTargets = geh->spellIsDamageTargets(ruledHandIndex, faceIndex);
-        pendingRuledSpellCast.maxTargets = geh->spellMaxTargets(ruledHandIndex, faceIndex);
-        pendingRuledSpellCast.fixedDamage = geh->spellFixedDamage(ruledHandIndex, faceIndex);
-        pendingRuledSpellCast.extraManaPerTarget = geh->spellExtraManaPerTarget(ruledHandIndex, faceIndex);
+        pendingRuledSpellCast.isDamageTargets =
+            geh->spellIsDamageTargets(ruledHandIndex, faceIndex);
+        pendingRuledSpellCast.maxTargets =
+            geh->spellMaxTargets(ruledHandIndex, faceIndex);
+        pendingRuledSpellCast.fixedDamage =
+            geh->spellFixedDamage(ruledHandIndex, faceIndex);
+        pendingRuledSpellCast.extraManaPerTarget =
+            geh->spellExtraManaPerTarget(ruledHandIndex, faceIndex);
     }
     emit landTapUndoAvailableChanged(false);
     emit ruledSpellCastPendingChanged(true);
@@ -1456,9 +1460,11 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
         ? (isOnBattlefield ? modalTarget->validPermanentIds.contains(targetOid)
                            : isOnGraveyard ? modalTarget->validGraveyardIds.contains(targetOid)
                                            : modalTarget->validStackIds.contains(targetOid))
-        : (isOnBattlefield ? handler->isValidSpellTarget(slot, face, targetOid)
-                           : isOnGraveyard ? handler->isValidSpellGraveyardTarget(slot, face, targetOid)
-                                           : handler->isValidSpellStackTarget(slot, face, targetOid));
+        : (isOnBattlefield
+               ? handler->isValidSpellTarget(slot, face, targetOid)
+               : isOnGraveyard
+                   ? handler->isValidSpellGraveyardTarget(slot, face, targetOid)
+                   : handler->isValidSpellStackTarget(slot, face, targetOid));
     if (!valid) {
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
             tr("That is not a legal target for %1.").arg(pendingRuledSpellCast.cardName));
@@ -1540,7 +1546,8 @@ bool PlayerActions::isAwaitingRuledPlayerTargetSelection() const
             pendingRuledSpellCast.selectedModes.at(pendingRuledSpellCast.activeModePosition).targets;
         return targets.canTargetSelf || targets.canTargetOpponent;
     }
-    return handler->canSpellTargetSelf(slot, face) || handler->canSpellTargetOpponent(slot, face);
+    return handler->canSpellTargetSelf(slot, face) ||
+           handler->canSpellTargetOpponent(slot, face);
 }
 
 bool PlayerActions::isAwaitingRuledAbilityOrTriggerPlayerTarget() const
@@ -1580,9 +1587,13 @@ bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
     const auto *modalTarget = pendingRuledSpellCast.activeModePosition >= 0
         ? &pendingRuledSpellCast.selectedModes.at(pendingRuledSpellCast.activeModePosition).targets
         : nullptr;
-    const bool canTargetSelf = modalTarget ? modalTarget->canTargetSelf : handler->canSpellTargetSelf(slot, face);
+    const bool canTargetSelf = modalTarget
+        ? modalTarget->canTargetSelf
+        : handler->canSpellTargetSelf(slot, face);
     const bool canTargetOpponent =
-        modalTarget ? modalTarget->canTargetOpponent : handler->canSpellTargetOpponent(slot, face);
+        modalTarget
+            ? modalTarget->canTargetOpponent
+            : handler->canSpellTargetOpponent(slot, face);
     if (isSelf && !canTargetSelf) {
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
             tr("%1 must target an opponent.").arg(pendingRuledSpellCast.cardName));
@@ -3916,7 +3927,9 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     //     so the player can choose which color to produce.
     const QStringList manaProduced = handler->activatedAbilityManaProducedForOid(oid);
     const QStringList costLabels = handler->activatedAbilityCostLabelsForOid(oid);
-    if (abilityTexts.size() == 1 && !manaProduced.value(0).isEmpty()) {
+    // A tapped (or summoning-sick) mana source has nothing to offer: skip the fast path rather
+    // than firing an activation the engine will reject.
+    if (abilityTexts.size() == 1 && !manaProduced.value(0).isEmpty() && handler->abilityActivatable(oid, 0)) {
         const QStringList colorOptions = manaProduced.value(0).split(QChar('/'));
         if (colorOptions.size() > 1) {
             // Dual land: show a compact color-picker on both left and right click.
@@ -3976,7 +3989,10 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
             ? abilityTexts[i]
             : tr("%1: %2").arg(costLabel, abilityTexts[i]);
         menuLabels.append(label);
-        menu.addAction(label);
+        QAction *action = menu.addAction(label);
+        // Disable rather than omit: the indices below are ability indices, and the player still
+        // wants to see that the ability exists and why it is unavailable right now.
+        action->setEnabled(handler->abilityActivatable(oid, i));
     }
     QAction *chosen = menu.exec(QCursor::pos());
     if (!chosen) {

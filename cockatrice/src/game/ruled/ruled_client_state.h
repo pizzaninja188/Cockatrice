@@ -22,6 +22,7 @@
 #ifndef COCKATRICE_RULED_CLIENT_STATE_H
 #define COCKATRICE_RULED_CLIENT_STATE_H
 
+#include <algorithm>
 #include <QHash>
 #include <QList>
 #include <QMultiHash>
@@ -384,6 +385,11 @@ public:
     // Display strings like "{T}", "{4}", "{T}, {4}", "Sacrifice this". Used to prefix ability text
     // in the context menu so the player sees the full "cost: text" Oracle format.
     QHash<quint32, QStringList> engineOidToActivatedAbilityCostLabels;
+    /// Per ability index: whether the engine will currently accept this activation. False for a
+    /// tap cost that cannot be paid (tapped, or CR 302.6 summoning sickness) and for equip
+    /// outside a sorcery-speed window (CR 702.6a). The menu greys these out instead of
+    /// collecting mana for a command the engine rejects.
+    QHash<quint32, QVector<bool>> engineOidToActivatedAbilityActivatable;
 
     // -----------------------------------------------------------------------------------
     // Pending player choices.
@@ -516,6 +522,10 @@ public:
     // -----------------------------------------------------------------------------------
     // Spell / ability targeting queries.
     // -----------------------------------------------------------------------------------
+    [[nodiscard]] SpellTargetData spellTargetData(int slot, int faceIndex) const
+    {
+        return validTargetsByHandSlot.value(spellTargetKey(slot, faceIndex));
+    }
     [[nodiscard]] bool isValidSpellTarget(int handSlot, int faceIndex, quint32 oid) const
     {
         const auto it = validTargetsByHandSlot.constFind(spellTargetKey(handSlot, faceIndex));
@@ -594,6 +604,14 @@ public:
     [[nodiscard]] QStringList activatedAbilityCostLabelsForOid(quint32 oid) const
     {
         return engineOidToActivatedAbilityCostLabels.value(oid);
+    }
+    /// Whether the engine will currently accept activating `abilityIndex` on this permanent.
+    /// Defaults to true for an ability the engine never described, so an unknown ability is
+    /// still offered rather than silently disabled.
+    [[nodiscard]] bool abilityActivatable(quint32 oid, int abilityIndex) const
+    {
+        const QVector<bool> flags = engineOidToActivatedAbilityActivatable.value(oid);
+        return abilityIndex < 0 || abilityIndex >= flags.size() || flags.at(abilityIndex);
     }
 
     // -----------------------------------------------------------------------------------

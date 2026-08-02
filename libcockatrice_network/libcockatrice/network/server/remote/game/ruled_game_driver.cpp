@@ -37,7 +37,6 @@ QString normalizeRuledCardName(const QString &name)
     return name.trimmed().toLower().replace(QLatin1Char('_'), QLatin1Char(' '));
 }
 
-/// Ruled mode routes every cast onto the lowest player-id stack zone (see `processRuledPayload`).
 Server_CardZone *ruledCanonicalStackZone(Server_Game *game)
 {
     if (!game) {
@@ -893,10 +892,10 @@ void RuledGameDriver::applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBat
                 // All spells now go into the canonical zone so always look there.
                 {
                     Server_CardZone *spellZone = ruledCanonicalStackZone(game);
-                    if (spellZone) {
-                        if (Server_Card *phys = ruledPhysicalSpellOnCanonicalStack(spellZone, normalizedPushedName)) {
-                            ruledStackObjectIdToServerCardId.insert(pushedOid, phys->getId());
-                        }
+                    Server_Card *phys =
+                        spellZone ? ruledPhysicalSpellOnCanonicalStack(spellZone, normalizedPushedName) : nullptr;
+                    if (phys) {
+                        ruledStackObjectIdToServerCardId.insert(pushedOid, phys->getId());
                     }
                 }
             }
