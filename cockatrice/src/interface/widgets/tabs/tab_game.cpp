@@ -500,6 +500,8 @@ void TabGame::connectToGameEventHandler()
             localPlayer->getPlayerActions()->cancelPendingRuledSpellCast();
             localPlayer->getPlayerActions()->cancelPendingActivatedAbility();
         });
+        connect(gamePromptWidget, &GamePromptWidget::declineTriggerRequested,
+                game->getGameEventHandler()->ruled(), &RuledClientState::declinePendingTrigger);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::stackHasItemsChanged, gamePromptWidget,
                 &GamePromptWidget::setRuledStackHasItems);
         gamePromptWidget->setRuledStackHasItems(game->getGameEventHandler()->ruled()->hasStackItems());
@@ -675,6 +677,7 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
                      tr("\nClick the permanent to keep on the battlefield.");
     } else if (h->hasPendingTriggerTarget()) {
         state.mode = PromptMode::ClickChoice;
+        state.canDecline = h->pendingTriggerMayDecline();
         state.text = tr("Choose a target for “%1”.").arg(h->pendingTriggerText());
     } else if (h->engineOpeningPhaseActive()) {
         // Opening phase with nothing for us to do — say who we are waiting for. Runs

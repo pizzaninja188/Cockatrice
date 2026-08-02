@@ -283,6 +283,7 @@ fn targeted_trigger_resolves_after_target_chosen() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 target_object_id: bears_oid,
+                decline: false,
             })),
         },
     )
@@ -466,6 +467,7 @@ fn blood_artist_triggers_on_opponent_creature_dying() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 target_object_id: p1_id as u32,
+                decline: false,
             })),
         },
     )
@@ -533,6 +535,7 @@ fn blood_artist_triggers_on_own_death() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 target_object_id: p1_id as u32,
+                decline: false,
             })),
         },
     )
@@ -586,6 +589,7 @@ fn blood_artist_triggers_on_own_creature_dying() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 target_object_id: p1_id as u32,
+                decline: false,
             })),
         },
     )
@@ -631,6 +635,7 @@ fn two_blood_artists_both_trigger_on_one_death() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 target_object_id: p1_id as u32,
+                decline: false,
             })),
         },
     )
@@ -641,6 +646,7 @@ fn two_blood_artists_both_trigger_on_one_death() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 target_object_id: p1_id as u32,
+                decline: false,
             })),
         },
     )
@@ -1155,5 +1161,223 @@ fn blood_artist_dying_in_a_wipe_still_sees_the_other_deaths() {
         e.state.pending_triggers.len(),
         3,
         "Blood Artist sees its own death and both Bears dying simultaneously"
+    );
+}
+
+/// The Bottle Gnomes softlock: a trigger queued while paying an activation cost must be emitted
+/// *after* the ability's own StackPushed. The client treats an ability arriving on the stack as
+/// "the pending trigger target was just answered", so emitting the prompt first made it discard
+/// the prompt and strand the player with a trigger the engine was still waiting on.
+#[test]
+fn sacrifice_cost_trigger_prompt_follows_the_ability_on_the_stack() {
+    let decks = Some(vec![
+        deck_with("swamp", &["blood_artist", "bottle_gnomes"]),
+        deck_with("mountain", &[]),
+    ]);
+    let mut e = GameEngine::new(9304, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    relocate_to_battlefield(&mut e, 0, "blood_artist", false);
+    let gnomes = relocate_to_battlefield(&mut e, 0, "bottle_gnomes", false);
+
+    let batch = e
+        .apply_command(0, &activate_ability(gnomes, 0, vec![]))
+        .expect("sacrifice Bottle Gnomes");
+
+    let order: Vec<&str> = batch
+        .events
+        .iter()
+        .filter_map(|ev| match &ev.ev {
+            Some(Ev::StackPushed(_)) => Some("ability"),
+            Some(Ev::TriggerNeedsTarget(_)) => Some("prompt"),
+            _ => None,
+        })
+        .collect();
+    let ability_pos = order.iter().position(|&x| x == "ability");
+    let prompt_pos = order.iter().position(|&x| x == "prompt");
+    assert!(
+        ability_pos.is_some() && prompt_pos.is_some(),
+        "batch must contain both the ability and the trigger prompt: {order:?}"
+    );
+    assert!(
+        ability_pos.unwrap() < prompt_pos.unwrap(),
+        "the ability must reach the stack before its cost's death trigger prompts: {order:?}"
+    );
+}
+
+/// An *activated* ability must not be marked `is_triggered`: that flag is the client's only way to
+/// tell the two apart (both have an empty card_id), and it uses it to decide whether a pending
+/// trigger-target prompt has been answered.
+#[test]
+fn stack_pushed_distinguishes_triggered_from_activated_abilities() {
+    let decks = Some(vec![
+        deck_with("swamp", &["blood_artist", "bottle_gnomes"]),
+        deck_with("mountain", &[]),
+    ]);
+    let mut e = GameEngine::new(9305, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    relocate_to_battlefield(&mut e, 0, "blood_artist", false);
+    let gnomes = relocate_to_battlefield(&mut e, 0, "bottle_gnomes", false);
+
+    let batch = e
+        .apply_command(0, &activate_ability(gnomes, 0, vec![]))
+        .expect("sacrifice Bottle Gnomes");
+    let pushed: Vec<bool> = batch
+        .events
+        .iter()
+        .filter_map(|ev| match &ev.ev {
+            Some(Ev::StackPushed(s)) => Some(s.is_triggered),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        pushed,
+        vec![false],
+        "the activated ability is not a trigger"
+    );
+
+    // Answering the trigger puts the triggered ability on the stack, flagged.
+    let p1_id = e.state.players[1].id;
+    let batch = e
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                    target_object_id: p1_id as u32,
+                    decline: false,
+                })),
+            },
+        )
+        .expect("choose drain target");
+    let pushed: Vec<bool> = batch
+        .events
+        .iter()
+        .filter_map(|ev| match &ev.ev {
+            Some(Ev::StackPushed(s)) => Some(s.is_triggered),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(pushed, vec![true], "Blood Artist's ability is a trigger");
+}
+
+/// A rejected trigger target must leave the trigger pending. It was popped off the queue before
+/// validation, so a rejection destroyed it while the client still displayed its prompt — and the
+/// follow-up Decline then failed with "no pending trigger", leaving the player with a prompt
+/// nothing could answer. Reachable by answering the wrong prompt when two triggers are queued.
+#[test]
+fn rejected_trigger_target_leaves_the_trigger_pending() {
+    let decks = Some(vec![
+        deck_with("swamp", &["gravedigger"]),
+        deck_with("mountain", &[]),
+    ]);
+    let mut e = GameEngine::new(9306, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let bears = inject_graveyard_card(&mut e, 0, "grizzly_bears");
+    ensure_in_hand(&mut e, 0, "gravedigger");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "gravedigger");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast Gravedigger");
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(
+        e.state.pending_triggers.len(),
+        1,
+        "Gravedigger's ETB trigger is awaiting a target"
+    );
+
+    // A permanent on the battlefield is not a creature *card in a graveyard*.
+    let on_battlefield = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let err = e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                target_object_id: on_battlefield,
+                decline: false,
+            })),
+        },
+    );
+    assert!(err.is_err(), "a battlefield permanent is an illegal target");
+    assert_eq!(
+        e.state.pending_triggers.len(),
+        1,
+        "the rejected choice must leave the trigger pending, not consume it"
+    );
+
+    // Both ways out of the prompt still work after a rejection.
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                target_object_id: 0,
+                decline: true,
+            })),
+        },
+    )
+    .expect("declining an optional trigger still works after a rejected target");
+    assert!(e.state.pending_triggers.is_empty());
+    assert!(
+        e.state.players[0].graveyard.contains(&bears),
+        "declining leaves the card in the graveyard"
+    );
+}
+
+/// The same prompt must still be answerable normally after a rejection (the retry path).
+#[test]
+fn trigger_target_can_be_retried_after_a_rejection() {
+    let decks = Some(vec![
+        deck_with("swamp", &["gravedigger"]),
+        deck_with("mountain", &[]),
+    ]);
+    let mut e = GameEngine::new(9307, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let bears = inject_graveyard_card(&mut e, 0, "grizzly_bears");
+    ensure_in_hand(&mut e, 0, "gravedigger");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "gravedigger");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast Gravedigger");
+    resolve_entire_stack_two_player(&mut e);
+
+    let on_battlefield = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let _ = e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                target_object_id: on_battlefield,
+                decline: false,
+            })),
+        },
+    );
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                target_object_id: bears,
+                decline: false,
+            })),
+        },
+    )
+    .expect("retrying with a legal target works");
+    pass_both_players(&mut e);
+    assert!(
+        e.state.players[0].hand.contains(&bears),
+        "the retried trigger returned the card to hand"
     );
 }

@@ -583,7 +583,7 @@ impl GameEngine {
             ),
             Some(Cmd::UndoManaAbility(_)) => self.undo_mana_ability(player),
             Some(Cmd::ChooseTriggerTarget(ctt)) => {
-                self.choose_trigger_target(player, ctt.target_object_id)
+                self.choose_trigger_target(player, ctt.target_object_id, ctt.decline)
             }
             Some(Cmd::SubmitResolutionChoice(s)) => {
                 self.submit_resolution_choice(player, &s.chosen_object_ids)

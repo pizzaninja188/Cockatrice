@@ -171,6 +171,10 @@ pub struct TriggeredAbilityDef {
     pub effect: SpellEffectKind,
     /// Oracle-style ability text shown as annotation on the stack card.
     pub text: String,
+    /// CR 603.5: true when the triggered ability says "you may" and its controller may decline
+    /// it while choosing targets.
+    #[serde(default)]
+    pub may: bool,
     /// CR 603.4: optional intervening-"if" clause, checked both when the trigger would be put
     /// on the stack and again on resolution. `None` for the overwhelming majority of triggers.
     #[serde(default)]

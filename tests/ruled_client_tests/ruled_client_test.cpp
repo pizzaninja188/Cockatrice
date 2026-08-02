@@ -639,7 +639,9 @@ TEST_F(RuledClientTest, AbilityOnStackGetsASyntheticCardAndClearsThePendingTrigg
     sp->set_object_id(900);
     sp->set_description("Gravedigger ETB");
     sp->set_ability_annotation("Return target creature card...");
-    // No card_id => an ability, which has no physical CardItem.
+    // No card_id => an ability, which has no physical CardItem. is_triggered distinguishes a
+    // *triggered* ability (this one) from an activated one; only the former retires the prompt.
+    sp->set_is_triggered(true);
     apply(push);
 
     EXPECT_FALSE(state->hasPendingTriggerTarget());
@@ -649,6 +651,30 @@ TEST_F(RuledClientTest, AbilityOnStackGetsASyntheticCardAndClearsThePendingTrigg
     EXPECT_EQ(host.createdSyntheticCards[0].name, QStringLiteral("Gravedigger ETB"));
     EXPECT_EQ(host.createdSyntheticCards[0].controllerPlayerId, kLocalPlayer);
     EXPECT_EQ(state->stackAnnotation(900), QStringLiteral("Return target creature card..."));
+}
+
+// Paying a sacrifice cost (Bottle Gnomes) queues a dies trigger, and the activated ability that
+// consumed the cost reaches the stack in the same batch. Both an activated and a triggered ability
+// are card_id-less, so without is_triggered the activated one wiped the prompt for the trigger it
+// had just caused — the player was left with a choice the engine was still blocking on.
+TEST_F(RuledClientTest, ActivatedAbilityOnStackKeepsThePendingTriggerPrompt)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *sp = batch.add_events()->mutable_stack_pushed();
+    sp->set_object_id(900);
+    sp->set_description("Bottle Gnomes");
+    sp->set_ability_annotation("Sacrifice this creature: You gain 3 life.");
+    sp->set_is_triggered(false); // an *activated* ability
+    auto *tnt = batch.add_events()->mutable_trigger_needs_target();
+    tnt->set_source_permanent_id(100);
+    tnt->set_ability_index(0);
+    tnt->set_ability_text("Whenever this creature or another creature dies, target player loses 1 life...");
+    tnt->set_controller_player_id(kLocalPlayer);
+    apply(batch);
+
+    EXPECT_TRUE(state->hasPendingTriggerTarget())
+        << "an activated ability must not retire the trigger prompt it caused";
+    EXPECT_EQ(state->pendingTriggerSource(), 100u);
 }
 
 // Gravedigger ETB: a pending trigger whose only legal targets sit in a graveyard makes the tab
@@ -683,12 +709,13 @@ TEST_F(RuledClientTest, PendingTriggerWithGraveyardTargetsAsksForTheGraveyardVie
     EXPECT_EQ(spy.last().at(0).value<QList<int>>(), QList<int>{kLocalPlayer});
 
     // Once the ability itself is on the stack the target has been chosen, so the view may close.
-    // An ability push is card_id-less and annotated — that is what retires the pending trigger.
+    // A *triggered* ability push (card_id-less, annotated, is_triggered) retires the prompt.
     const int beforePush = spy.count();
     ruled::v1::RuledEventBatch push;
     auto *sp = push.add_events()->mutable_stack_pushed();
     sp->set_object_id(900);
     sp->set_ability_annotation("Return target creature card...");
+    sp->set_is_triggered(true);
     apply(push);
     EXPECT_FALSE(state->hasPendingTriggerTarget());
     ASSERT_GT(spy.count(), beforePush);

@@ -194,6 +194,7 @@ public:
 
         Kind kind = Kind::TriggerTarget;
         QString promptText;
+        bool mayDecline = false;
         /// Click-to-select candidates on the battlefield (CopyTarget, LegendKeep).
         QVector<quint32> candidateOids;
 
@@ -807,6 +808,12 @@ public:
     {
         return hasPendingChoiceOfKind(ChoiceKind::TriggerTarget);
     }
+    [[nodiscard]] bool pendingTriggerMayDecline() const
+    {
+        return hasPendingTriggerTarget() && pendingChoice->mayDecline;
+    }
+    /// Decline an optional triggered ability (CR 603.5).
+    void declinePendingTrigger();
     [[nodiscard]] QString pendingTriggerText() const
     {
         return pendingChoicePromptText(ChoiceKind::TriggerTarget);

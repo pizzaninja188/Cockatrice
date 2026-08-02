@@ -332,6 +332,17 @@ void RuledClientState::submitPendingChoiceObject(quint32 oid)
     sendResolutionChoice({oid});
 }
 
+void RuledClientState::declinePendingTrigger()
+{
+    if (!pendingTriggerMayDecline()) {
+        return;
+    }
+    ruled::v1::RuledCommand command;
+    command.mutable_choose_trigger_target()->set_decline(true);
+    clearPendingChoiceOfKind(ChoiceKind::TriggerTarget);
+    host->sendRuledCommand(command);
+}
+
 // ---------------------------------------------------------------------------------------
 // Tier-3 resolution pick
 // ---------------------------------------------------------------------------------------

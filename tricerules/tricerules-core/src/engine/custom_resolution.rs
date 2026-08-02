@@ -14,6 +14,7 @@ impl GameEngine {
         &mut self,
         player: PlayerId,
         target_object_id: u32,
+        decline: bool,
     ) -> Result<RuledEventBatch, EngineError> {
         let pending = self
             .state
@@ -26,30 +27,82 @@ impl GameEngine {
             return Err(EngineError::Illegal("not your trigger to target"));
         }
 
-        let def = self
-            .registry
-            .get(&pending.card_id)
-            .ok_or_else(|| EngineError::MissingCard(pending.card_id.clone()))?;
+        if decline {
+            if !pending.may {
+                self.state.pending_triggers.push_front(pending);
+                return Err(EngineError::Illegal("trigger is not optional"));
+            }
+            let mut batch = RuledEventBatch::default();
+            batch.events.push(ev_log(format!(
+                "P{player} declines optional trigger: {}",
+                pending.ability_text
+            )));
+            if let Some(next) = self.state.pending_triggers.front() {
+                let next_name = self
+                    .registry
+                    .get(&next.card_id)
+                    .map(|d| d.name.clone())
+                    .unwrap_or_else(|| next.card_id.clone());
+                batch.events.push(rv1::RuledEvent {
+                    ev: Some(rv1::ruled_event::Ev::TriggerNeedsTarget(
+                        rv1::TriggerNeedsTarget {
+                            source_permanent_id: next.source_permanent_id,
+                            ability_index: next.ability_index as u32,
+                            ability_text: next.ability_text.clone(),
+                            controller_player_id: next.controller,
+                            may_decline: next.may,
+                        },
+                    )),
+                });
+                batch.events.push(ev_log(format!(
+                    "Triggered: {next_name} — choose a target for: {}",
+                    next.ability_text
+                )));
+            } else {
+                batch.events.push(ev_priority_changed(self));
+            }
+            fill_legal(&mut batch, self);
+            return Ok(batch);
+        }
 
-        let effect = def
-            .primary_face()
-            .triggered_abilities
-            .get(pending.ability_index)
-            .map(|a| &a.effect);
-
+        // Validate before consuming `pending`: it has already been popped off the queue, so any
+        // early return has to put it back. Otherwise a rejected target (clicking the wrong
+        // permanent, or answering the wrong trigger when two are queued) silently destroys the
+        // trigger while the client is still showing its prompt — and Decline then fails too,
+        // because the engine no longer believes anything is pending.
         let target_ref = &[rv1::TargetRef {
             object_id: target_object_id,
             damage_amount: 0,
         }];
-        if let Some(kind) = effect {
-            validate_effect_targets(self, player, kind, target_ref)?;
-        }
+        let validated: Result<String, EngineError> = match self.registry.get(&pending.card_id) {
+            None => Err(EngineError::MissingCard(pending.card_id.clone())),
+            Some(def) => {
+                let name = def.name.clone();
+                match def
+                    .primary_face()
+                    .triggered_abilities
+                    .get(pending.ability_index)
+                {
+                    Some(ability) => {
+                        validate_effect_targets(self, player, &ability.effect, target_ref)
+                            .map(|()| name)
+                    }
+                    None => Ok(name),
+                }
+            }
+        };
+        let card_name = match validated {
+            Ok(name) => name,
+            Err(e) => {
+                self.state.pending_triggers.push_front(pending);
+                return Err(e);
+            }
+        };
 
         let virtual_id = self.state.next_object_id;
         self.state.next_object_id += 1;
 
         let ability_text = pending.ability_text.clone();
-        let card_name = def.name.clone();
         let card_id = pending.card_id.clone();
         let source_id = pending.source_permanent_id;
         let ability_index = pending.ability_index;
@@ -98,6 +151,7 @@ impl GameEngine {
                 ability_annotation: ability_text,
                 card_id: String::new(),
                 is_copy: false,
+                is_triggered: true,
                 copy_source_object_id: 0,
                 chosen_mode_indices: vec![],
                 chosen_mode_labels: vec![],
@@ -117,6 +171,7 @@ impl GameEngine {
                         ability_index: next.ability_index as u32,
                         ability_text: next.ability_text.clone(),
                         controller_player_id: next.controller,
+                        may_decline: next.may,
                     },
                 )),
             });
@@ -320,6 +375,7 @@ impl GameEngine {
                     ability_annotation: "(copy)".to_string(),
                     card_id: card_id.clone(),
                     is_copy: true,
+                    is_triggered: false,
                     copy_source_object_id,
                     chosen_mode_indices: vec![],
                     chosen_mode_labels: vec![],

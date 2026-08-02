@@ -327,9 +327,13 @@ void RuledEventDispatcher::applyStackPushed(const ruled::v1::StackPushed &sp, Ba
         // stack and need a synthetic one. A normal spell (non-empty card_id, not a copy) already
         // has a real card.
         if (sp.card_id().empty()) {
-            // A triggered ability was just placed on the stack — the pending trigger target has
-            // been chosen and is no longer pending.
-            state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::TriggerTarget);
+            // A *triggered* ability reaching the stack means its target was chosen and is no
+            // longer pending. An activated ability also has an empty card_id, and must not clear
+            // the prompt: paying a sacrifice cost queues a dies trigger whose prompt would then be
+            // wiped by the very ability that caused it, stranding the player with no way to answer.
+            if (sp.is_triggered()) {
+                state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::TriggerTarget);
+            }
             // Record the source permanent so the targeting arrow starts from it.
             if (state->lastTriggerSourceOid != 0) {
                 state->stackSourceOidByStackOid.insert(sp.object_id(), state->lastTriggerSourceOid);
@@ -391,6 +395,7 @@ void RuledEventDispatcher::applyTriggerNeedsTarget(const ruled::v1::TriggerNeeds
         RuledClientState::RuledPendingChoice choice;
         choice.kind = RuledClientState::ChoiceKind::TriggerTarget;
         choice.promptText = abilityText;
+        choice.mayDecline = tnt.may_decline();
         state->setPendingChoice(std::move(choice));
         ctx.promptFeed += QStringLiteral("Choose a target for “%1”.\n").arg(abilityText);
     } else {

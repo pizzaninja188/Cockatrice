@@ -713,6 +713,11 @@ message StackPushed {
   // Engine card id of the pushed spell (e.g. "lightning_bolt"); empty for abilities,
   // which have no physical card on the stack. Resolve to an Oracle name via CardCatalog.
   string card_id = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // True when this stack item is a *triggered* ability rather than an activated one. Both have an
+  // empty card_id, so the client cannot tell them apart otherwise — and it must, because a
+  // triggered ability arriving on the stack is what tells it a pending trigger-target prompt has
+  // been answered. An activated ability (Bottle Gnomes' sacrifice) must not clear that prompt.
+  bool is_triggered = 10 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // CR 707.10: true when this stack item is a *copy* of a spell (Twincast/Fork), not a cast
   // object. Like an ability it has no physical card on the shared stack; the client shows it via
   // card_id + the "(copy)" ability_annotation and expects no permanent/graveyard card on resolve.
@@ -742,6 +747,8 @@ message ActivateAbility {
 
 message ChooseTriggerTarget {
   uint32 target_object_id = 1; // ObjectId of the chosen target (permanent) or PlayerId (player)
+  // CR 603.5: decline an optional triggered ability. When true, target_object_id is ignored.
+  bool decline = 2;
 }
 
 message TriggerNeedsTarget {
@@ -749,6 +756,7 @@ message TriggerNeedsTarget {
   uint32 ability_index = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   string ability_text = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];     // Oracle text of the triggered ability (shown in prompt widget)
   int32 controller_player_id = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC]; // PlayerId of the player who controls the trigger
+  bool may_decline = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC]; // CR 603.5: "you may"
 }
 
 // Where the resolved spell object ends up (Servatrice maps this to TABLE vs GRAVE).

@@ -231,6 +231,7 @@ pub(super) fn copy_target_spell(
                             ability_annotation: "(copy)".to_string(),
                             card_id: src.card_id.clone(),
                             is_copy: true,
+                            is_triggered: false,
                             copy_source_object_id: src.id,
                             chosen_mode_indices: chosen_mode_indices.clone(),
                             chosen_mode_labels: chosen_mode_labels.clone(),

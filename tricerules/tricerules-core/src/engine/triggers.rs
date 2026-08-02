@@ -1,5 +1,5 @@
 use super::events::ev_log;
-use super::targeting::spell_effect_kind_needs_target;
+use super::targeting::{compute_spell_targets, spell_effect_kind_needs_target};
 use super::*;
 
 /// One triggered ability that matched an event and is about to go on the stack (or be parked for
@@ -504,18 +504,30 @@ impl GameEngine {
             Some(d) => d.clone(),
             None => return,
         };
-        let needs_target = def
-            .primary_face()
-            .triggered_abilities
-            .get(ability_index)
+        let trigger_def = def.primary_face().triggered_abilities.get(ability_index);
+        let needs_target = trigger_def
             .map(|ta| spell_effect_kind_needs_target(&ta.effect))
             .unwrap_or(false);
+        let may = trigger_def.map(|ta| ta.may).unwrap_or(false);
+        let has_legal_target = if needs_target {
+            trigger_def.is_some_and(|ta| {
+                let targets =
+                    compute_spell_targets(self, controller, std::slice::from_ref(&ta.effect));
+                !targets.valid_permanent_ids.is_empty()
+                    || !targets.valid_stack_ids.is_empty()
+                    || !targets.valid_graveyard_ids.is_empty()
+                    || targets.can_target_self
+                    || targets.can_target_opponent
+            })
+        } else {
+            true
+        };
 
         let card_name = def.name.clone();
         let virtual_id = self.state.next_object_id;
         self.state.next_object_id += 1;
 
-        if needs_target {
+        if needs_target && (has_legal_target || may) {
             let was_empty = self.state.pending_triggers.is_empty();
             self.state.pending_triggers.push_back(PendingTrigger {
                 source_permanent_id: source_id,
@@ -524,6 +536,7 @@ impl GameEngine {
                 card_id,
                 controller,
                 trigger_player,
+                may,
             });
             if was_empty {
                 events.push(rv1::RuledEvent {
@@ -533,6 +546,7 @@ impl GameEngine {
                             ability_index: ability_index as u32,
                             ability_text: ability_text.clone(),
                             controller_player_id: controller,
+                            may_decline: may,
                         },
                     )),
                 });
@@ -540,6 +554,9 @@ impl GameEngine {
                     "Triggered: {card_name} — choose a target for: {ability_text}"
                 )));
             }
+        } else if needs_target {
+            // CR 603.3d: a targeted trigger with no legal target is removed from the stack. An
+            // optional trigger remains pending so its controller can explicitly decline it.
         } else {
             self.state.stack.push(StackItem {
                 id: virtual_id,
@@ -572,6 +589,7 @@ impl GameEngine {
                     ability_annotation: ability_text.clone(),
                     card_id: String::new(),
                     is_copy: false,
+                    is_triggered: true,
                     copy_source_object_id: 0,
                     chosen_mode_indices: vec![],
                     chosen_mode_labels: vec![],

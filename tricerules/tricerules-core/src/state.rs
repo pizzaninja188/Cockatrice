@@ -200,6 +200,8 @@ pub struct PendingTrigger {
     pub ability_text: String,
     pub card_id: String,
     pub controller: PlayerId,
+    /// CR 603.5: an optional triggered ability may be declined before it is put on the stack.
+    pub may: bool,
     /// Mirror of [`StackItem::trigger_player`], carried across target selection so a targeted
     /// draw-step-style trigger keeps its beneficiary when it finally reaches the stack.
     pub trigger_player: Option<PlayerId>,

@@ -1408,6 +1408,7 @@ fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
             .pending_triggers
             .front()
             .expect("pending trigger queued");
+        assert!(pt.may, "Gravedigger's trigger should be optional");
         let key = (pt.source_permanent_id as u64) << 32 | pt.ability_index as u64;
         let p0 = batch.legal_by_player.get(&0).expect("p0 legal actions");
         let targets = p0
@@ -1433,6 +1434,7 @@ fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 target_object_id: bears_oid,
+                decline: false,
             })),
         },
     )
