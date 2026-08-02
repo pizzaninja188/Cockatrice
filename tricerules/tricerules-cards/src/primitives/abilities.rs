@@ -52,8 +52,25 @@ pub enum TriggerCondition {
     WheneverSelfDealsCombatDamageToPlayer,
     /// Whenever this creature deals damage to an opponent, combat or non-combat (e.g. Thieving Magpie).
     WheneverSelfDealsDamageToOpponent,
-    /// At the beginning of this permanent's controller's upkeep.
-    AtBeginningOfControllerUpkeep,
+    /// CR 503.1a: at the beginning of an upkeep step. `player` filters whose upkeep qualifies,
+    /// relative to the source's controller — `Controller` = "at the beginning of your upkeep"
+    /// (Phyrexian Arena, Serendib Efreet, Bitterblossom), `AnyPlayer` = "at the beginning of
+    /// each player's upkeep" (Sulfuric Vortex, Tangle Wire), `Opponent` for "each opponent's
+    /// upkeep" (Ebony Owl Netsuke).
+    ///
+    /// The player whose upkeep it is becomes the trigger's *affected* player (via
+    /// `StackItem::trigger_player`), which is what makes "**that player**" work when the
+    /// source's controller is somebody else. Note the corollary, shared with
+    /// [`Self::AtBeginningOfDrawStep`]: for an `Opponent`-scoped trigger whose effect is meant
+    /// to benefit the *controller*, `affected_player` is the wrong player — such a card needs an
+    /// explicit recipient on the effect. No shipped card hits it.
+    AtBeginningOfUpkeep {
+        /// Whose upkeep fires this, relative to the source permanent's controller. Defaults to
+        /// `Controller` — the printed template on the overwhelming majority of upkeep triggers,
+        /// and the meaning of the unit variant this replaced.
+        #[serde(default)]
+        player: CastTriggerPlayer,
+    },
     /// CR 504.2: at the beginning of a draw step. `player` filters whose draw step qualifies,
     /// relative to the source's controller — `AnyPlayer` = "at the beginning of each player's
     /// draw step" (Howling Mine, Kami of the Crescent Moon, Rites of Flourishing), `Controller`

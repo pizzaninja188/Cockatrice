@@ -554,7 +554,7 @@ mod tests {
             toughness: 1,
             triggered_abilities: [
                 (
-                    trigger: AtBeginningOfControllerUpkeep,
+                    trigger: AtBeginningOfUpkeep(player: Controller),
                     effect: [PumpTarget(power: 1, toughness: 1, target: (kind: Self_))],
                     text: "At the beginning of your upkeep, this gets +1/+1.",
                 ),

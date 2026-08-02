@@ -82,7 +82,14 @@ enum GameEvent {
         attacker_id: ObjectId,
         defender_id: PlayerId,
     },
-    UpkeepBegin,
+    /// CR 503.1a: an upkeep step began. Fired before the active player gets priority, so every
+    /// ability that triggered at the beginning of the upkeep is already on the stack when they
+    /// get it. `player` is the player whose upkeep it is — always the active player (CR 500.1) —
+    /// and becomes the trigger's affected player, so "this enchantment deals 2 damage to **that
+    /// player**" (Sulfuric Vortex) hits them and not the source's controller.
+    UpkeepBegin {
+        player: PlayerId,
+    },
     /// CR 504: a draw step began. Fired *after* the turn-based draw (CR 504.1, which doesn't use
     /// the stack) so draw-step triggers go on the stack on top of a hand that already contains
     /// the normal draw (CR 504.2). `player` is the player whose draw step it is — the active

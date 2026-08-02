@@ -169,7 +169,7 @@ impl GameEngine {
                 }
                 self.state.passes_since_stack_change = 0;
                 ev.push(ev_phase(self, rv1::PhaseId::Upkeep));
-                self.fire_triggers(GameEvent::UpkeepBegin, ev);
+                self.fire_triggers(GameEvent::UpkeepBegin { player: ap }, ev);
                 ev.push(ev_priority_changed(self));
             }
             Upkeep => {

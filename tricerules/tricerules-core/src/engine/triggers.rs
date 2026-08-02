@@ -54,14 +54,7 @@ impl GameEngine {
         destroyed: &[(ObjectId, String, PlayerId, bool)],
         events: &mut Vec<rv1::RuledEvent>,
     ) {
-        let mut sources: Vec<(ObjectId, String, PlayerId)> = Vec::new();
-        for player in &self.state.players {
-            for &source_id in &player.battlefield {
-                if let Some(object) = self.state.objects.get(&source_id) {
-                    sources.push((source_id, object.card_id.clone(), object.controller));
-                }
-            }
-        }
+        let mut sources = self.battlefield_sources_apnap();
         // The destroyed objects are no longer in the battlefield index, but their last-known
         // triggered abilities still participate in the simultaneous event.
         sources.extend(
@@ -116,6 +109,29 @@ impl GameEngine {
         }
     }
 
+    /// Every permanent on every battlefield as `(object_id, card_id, controller)`, in APNAP order
+    /// (CR 603.3b / 101.4): the active player's permanents first, then each nonactive player's.
+    /// Triggers collected in this order go on the stack in the order the rules require.
+    ///
+    /// The single source of this ordering. Five event arms need it, and the one that rolled its
+    /// own — `UpkeepBegin` — scanned only the active player's battlefield, so a nonactive
+    /// player's upkeep trigger never fired at all (CR 603.2: *every* permanent observes the
+    /// event). `sort_by_key` is stable, so each player's battlefield keeps its own order.
+    fn battlefield_sources_apnap(&self) -> Vec<(ObjectId, String, PlayerId)> {
+        let ap = self.state.active_player_id();
+        let mut ordered: Vec<usize> = (0..self.state.players.len()).collect();
+        ordered.sort_by_key(|&i| (self.state.players[i].id != ap) as u8);
+        let mut sources = Vec::new();
+        for pi in ordered {
+            for &source_id in &self.state.players[pi].battlefield {
+                if let Some(object) = self.state.objects.get(&source_id) {
+                    sources.push((source_id, object.card_id.clone(), object.controller));
+                }
+            }
+        }
+        sources
+    }
+
     /// Collect every triggered ability whose condition matches `event`, ordered APNAP (CR 603.3b).
     pub(super) fn collect_triggers(&self, event: &GameEvent) -> Vec<CollectedTrigger> {
         let ap = self.state.active_player_id();
@@ -139,17 +155,7 @@ impl GameEngine {
                     |tc| *tc == TriggerCondition::WhenSelfEntersBattlefield,
                 ));
 
-                let mut ordered: Vec<usize> = (0..self.state.players.len()).collect();
-                ordered.sort_by_key(|&i| (self.state.players[i].id != ap) as u8);
-                let mut sources: Vec<(ObjectId, String, PlayerId)> = Vec::new();
-                for pi in ordered {
-                    for &sid in &self.state.players[pi].battlefield {
-                        if let Some(o) = self.state.objects.get(&sid) {
-                            sources.push((sid, o.card_id.clone(), o.controller));
-                        }
-                    }
-                }
-                for (src_id, src_card, src_ctrl) in sources {
+                for (src_id, src_card, src_ctrl) in self.battlefield_sources_apnap() {
                     out.extend(self.matching_triggered_abilities(
                         &src_card,
                         src_id,
@@ -243,38 +249,35 @@ impl GameEngine {
                     _ => false,
                 })
             }
-            GameEvent::UpkeepBegin => {
-                let ap_idx = self.state.player_idx(ap).unwrap_or(0);
-                let bf: Vec<ObjectId> = self.state.players[ap_idx].battlefield.clone();
-                bf.iter()
-                    .flat_map(|&oid| {
-                        let Some(obj) = self.state.objects.get(&oid) else {
-                            return vec![];
-                        };
-                        let card_id = obj.card_id.clone();
-                        let controller = obj.controller;
-                        self.matching_triggered_abilities(&card_id, oid, controller, |tc| {
-                            *tc == TriggerCondition::AtBeginningOfControllerUpkeep
+            GameEvent::UpkeepBegin { player: upkeep } => {
+                // CR 603.2: every player's permanents watch, not just the active player's — a
+                // Sulfuric Vortex under a nonactive player's control still triggers on the
+                // active player's upkeep. Walked in APNAP order (CR 603.3b); all of them land on
+                // the stack before the active player gets priority (CR 503.1a).
+                self.battlefield_sources_apnap()
+                    .into_iter()
+                    .flat_map(|(oid, card_id, source_controller)| {
+                        self.matching_triggered_abilities(&card_id, oid, source_controller, |tc| {
+                            let TriggerCondition::AtBeginningOfUpkeep {
+                                player: player_filter,
+                            } = tc
+                            else {
+                                return false;
+                            };
+                            match player_filter {
+                                CastTriggerPlayer::Controller => *upkeep == source_controller,
+                                CastTriggerPlayer::Opponent => *upkeep != source_controller,
+                                CastTriggerPlayer::AnyPlayer => true,
+                            }
                         })
                     })
                     .collect()
             }
             GameEvent::DrawStepBegin { player: drawing } => {
                 // Every player's permanents watch (CR 603.2) — Howling Mine triggers on the
-                // opponent's draw step too — walked in APNAP order (CR 603.3b), as for
-                // `LifeGained`. Deliberately *not* modelled on the `UpkeepBegin` arm above, which
-                // scans only the active player's battlefield (see `docs/FINDINGS.md`).
-                let mut ordered: Vec<usize> = (0..self.state.players.len()).collect();
-                ordered.sort_by_key(|&i| (self.state.players[i].id != ap) as u8);
-                let mut sources: Vec<(ObjectId, String, PlayerId)> = Vec::new();
-                for pi in ordered {
-                    for &sid in &self.state.players[pi].battlefield {
-                        if let Some(o) = self.state.objects.get(&sid) {
-                            sources.push((sid, o.card_id.clone(), o.controller));
-                        }
-                    }
-                }
-                sources
+                // opponent's draw step too — walked in APNAP order (CR 603.3b) via
+                // `battlefield_sources_apnap`, as for `LifeGained` and `UpkeepBegin`.
+                self.battlefield_sources_apnap()
                     .into_iter()
                     .flat_map(|(oid, card_id, source_controller)| {
                         self.matching_triggered_abilities(&card_id, oid, source_controller, |tc| {
@@ -296,17 +299,7 @@ impl GameEngine {
             GameEvent::LifeGained { player: gaining } => {
                 // Every player's permanents watch, in APNAP order (CR 603.3b) — the amount is
                 // irrelevant, one gain event fires each matching ability once.
-                let mut ordered: Vec<usize> = (0..self.state.players.len()).collect();
-                ordered.sort_by_key(|&i| (self.state.players[i].id != ap) as u8);
-                let mut sources: Vec<(ObjectId, String, PlayerId)> = Vec::new();
-                for pi in ordered {
-                    for &sid in &self.state.players[pi].battlefield {
-                        if let Some(o) = self.state.objects.get(&sid) {
-                            sources.push((sid, o.card_id.clone(), o.controller));
-                        }
-                    }
-                }
-                sources
+                self.battlefield_sources_apnap()
                     .into_iter()
                     .flat_map(|(oid, card_id, source_controller)| {
                         self.matching_triggered_abilities(&card_id, oid, source_controller, |tc| {
@@ -341,17 +334,7 @@ impl GameEngine {
                 let is_creature = cast_face.is_some_and(|f| f.is_creature);
                 let is_artifact = cast_face.is_some_and(|f| f.is_artifact);
 
-                let mut ordered: Vec<usize> = (0..self.state.players.len()).collect();
-                ordered.sort_by_key(|&i| (self.state.players[i].id != ap) as u8);
-                let mut sources: Vec<(ObjectId, String, PlayerId)> = Vec::new();
-                for pi in ordered {
-                    for &sid in &self.state.players[pi].battlefield {
-                        if let Some(o) = self.state.objects.get(&sid) {
-                            sources.push((sid, o.card_id.clone(), o.controller));
-                        }
-                    }
-                }
-                sources
+                self.battlefield_sources_apnap()
                     .into_iter()
                     .flat_map(|(oid, card_id, source_controller)| {
                         self.matching_triggered_abilities(&card_id, oid, source_controller, |tc| {
@@ -480,7 +463,9 @@ impl GameEngine {
     /// beneficiary survives the trip through the stack and any responses.
     fn trigger_player_for(event: &GameEvent) -> Option<PlayerId> {
         match event {
-            GameEvent::DrawStepBegin { player } => Some(*player),
+            GameEvent::UpkeepBegin { player } | GameEvent::DrawStepBegin { player } => {
+                Some(*player)
+            }
             _ => None,
         }
     }
