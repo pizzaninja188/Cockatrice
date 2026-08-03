@@ -6,6 +6,24 @@
 
 ## Applied Fixes
 
+### 2026-08-03
+
+- **Sidecar connections had no idle guard and left Nagle on** (`tricerules-server/src/main.rs`):
+  `read_proto` is now wrapped in a `TRICERULES_IDLE_TIMEOUT_SECS` timeout (default **1800 s**, `0`
+  disables), so a peer that dies *without closing its socket* — a remote/partitioned Servatrice, or
+  a hung one; a local crash already closes its sockets and hits EOF — no longer parks the task on
+  `read_exact` forever holding a live `GameEngine`. The audit's suggested 30 s was rejected: the
+  relay keeps **one connection per ruled game**, idle between commands for as long as players take
+  to act, so a short timeout would drop live games. An idle drop returns `Ok` and logs its own line
+  rather than surfacing as `connection error:`. Also sets `TCP_NODELAY` on accept and collapses
+  `write_proto`'s two `write_all` calls into one `encode_frame` buffer, plus a Ctrl+C/SIGTERM
+  shutdown arm on the accept loop with an `Arc<AtomicUsize>` live-session count (the `signal` tokio
+  feature was already enabled and unused; `time` was added). Coverage: env-policy and framing unit
+  tests, and three real-loopback-socket tests (silent peer dropped, disabled timeout keeps it,
+  request/response round trip through the new framing). Full `cargo test`, Clippy with warnings
+  denied, `cargo fmt --check`, and all 18 C++ tests including `ruled_e2e_smoke_test` exit 0; the
+  drop was also confirmed against the real binary at a 3 s timeout.
+
 ### 2026-08-02
 
 - **Noncombat damage now records deathtouch from its source** (`tricerules-core/src/engine/`):
@@ -47,10 +65,6 @@
 - **Hard-coded 2-player assumption is pervasive** (`tricerules-core/src/state.rs:325,515-523`, `engine/mod.rs:210-212`): `defending_player_id_1v1()` returns `None` for anything but exactly 2 players and has ~10 call sites across `combat.rs`/`priority.rs`/`legal_actions.rs`; `OpeningSequence.mulligans_taken` is `[u32; 2]`; `GameEngine::new` rejects any player count != 2. Partially mitigated since the audit — `defending_player_id_1v1` carries a doc comment and `new` returns a clear `Illegal("M2: exactly 2 players")` rather than panicking — but the `[u32; 2]` array and the unaudited call sites remain the work item for any multiplayer expansion.
 
 - **`ev_zone_view_sync` serializes the entire game state on every single `apply_command` return** (`tricerules-core/src/engine/mod.rs:620`): every priority pass, mana tap, and phase transition serializes all players' libraries (as comma-joined card-id strings), hands, and battlefields. For two 60-card decks, a typical turn produces 5–15 commands, each emitting ~200 strings into the zone-view. Correct-by-construction (authoritative snapshot) but O(deck size × commands per turn). Consider a delta-only zone view (emit only changed zones, or `ZoneDelta` events) for high-volume paths.
-
-- **`tricerules-server` has no per-connection timeout or idle guard** (`tricerules-server/src/main.rs:77-83`, `handle_connection:86-90`): each accepted connection spawns a `tokio::task` that loops indefinitely on `read_proto`. If Servatrice crashes mid-game without sending `SessionEnd`, the task leaks and holds an open `GameEngine` session in memory. Fix: wrap `read_proto` in `tokio::time::timeout` (e.g. 30 s) and exit the task on idle-timeout, or add a SIGTERM handler that drains all sessions on shutdown.
-
-- **`tricerules-server` does not set `TCP_NODELAY` on the accepted socket** (`tricerules-server/src/main.rs:78`, `write_proto:223-232`): `write_proto` issues two separate `write_all` calls — a 4-byte length prefix and the payload. With Nagle enabled (the tokio `TcpStream` default) the length segment may be held briefly until the next write. Sub-millisecond on loopback, but it compounds per round-trip on any deployment where the sidecar and Servatrice are on different hosts. Fix: `sock.set_nodelay(true)?` after `listener.accept().await?`, or merge length+payload into one `write_all`.
 
 - **`ResolutionCtx::put_on_top_of_library` emits no intermediate event for Hand → Library moves** (`tricerules-core/src/custom/mod.rs:167-191`): the zone move is correct and Servatrice learns the final state via `zone_view`, but the pattern is asymmetric — `move_to_zone` emits `PermanentMoved` for graveyard/exile and nothing for hand/library. If replay animation or an intermediate reveal is ever added, this gap becomes a bug.
 

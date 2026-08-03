@@ -4,6 +4,9 @@
 use prost::Message;
 use std::collections::BTreeSet;
 use std::env;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tricerules_cards::CardRegistry;
@@ -27,6 +30,27 @@ fn dev_commands_allowed(env_value: Option<&str>) -> bool {
 /// dev mode from upstream: enabling cheats takes access to the machine running the engine.
 fn dev_commands_enabled_for_session(requested: bool, env_value: Option<&str>) -> bool {
     requested && dev_commands_allowed(env_value)
+}
+
+/// Default idle timeout: 30 minutes without a single byte from the peer.
+///
+/// Deliberately far above human turn time. Servatrice keeps **one connection per ruled game**, open
+/// for the whole game and idle between commands for as long as players take to act, so a short
+/// timeout would drop live games. This guard exists to bound a *half-open* connection — a peer that
+/// died without closing its socket — not to police slow play.
+const DEFAULT_IDLE_TIMEOUT_SECS: u64 = 1800;
+
+/// `TRICERULES_IDLE_TIMEOUT_SECS`: how long a connection may go without the peer sending anything
+/// before this sidecar drops it and frees the session. `0` disables the guard; an unparseable value
+/// falls back to the default rather than failing the process.
+///
+/// Split from the env read so the policy is testable without mutating process environment
+/// (same reason as `dev_commands_allowed`).
+fn idle_timeout_from_env(env_value: Option<&str>) -> Option<Duration> {
+    let secs = env_value
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .unwrap_or(DEFAULT_IDLE_TIMEOUT_SECS);
+    (secs > 0).then(|| Duration::from_secs(secs))
 }
 
 /// Failure response shared by ValidateDeck and SessionStart name resolution:
@@ -65,19 +89,80 @@ fn validate_deck_response(card_names: &[String]) -> IpcResponse {
     }
 }
 
+/// Decrements the live-session count on every exit path of a connection task (EOF, error,
+/// idle timeout), so the shutdown log cannot drift from reality.
+struct SessionGuard(Arc<AtomicUsize>);
+
+impl Drop for SessionGuard {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
+/// Resolves when the process is asked to terminate: Ctrl+C everywhere, plus SIGTERM on unix
+/// (how a container or service manager stops us).
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+        let mut term = match signal(SignalKind::terminate()) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("tricerules: cannot install SIGTERM handler ({e}), Ctrl+C only");
+                let _ = tokio::signal::ctrl_c().await;
+                return;
+            }
+        };
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {}
+            _ = term.recv() => {}
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let port: u16 = env::var("TRICERULES_PORT")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(17381);
+    let idle_timeout =
+        idle_timeout_from_env(env::var("TRICERULES_IDLE_TIMEOUT_SECS").ok().as_deref());
     let addr = format!("127.0.0.1:{port}");
     let listener = TcpListener::bind(&addr).await?;
-    eprintln!("tricerules-server listening on {addr}");
+    match idle_timeout {
+        Some(d) => eprintln!(
+            "tricerules-server listening on {addr} (idle timeout {}s)",
+            d.as_secs()
+        ),
+        None => eprintln!("tricerules-server listening on {addr} (idle timeout disabled)"),
+    }
+    let live_sessions = Arc::new(AtomicUsize::new(0));
     loop {
-        let (sock, _) = listener.accept().await?;
+        let (sock, _) = tokio::select! {
+            accepted = listener.accept() => accepted?,
+            _ = shutdown_signal() => {
+                eprintln!(
+                    "tricerules: shutdown signal, {} live session(s), exiting",
+                    live_sessions.load(Ordering::Relaxed)
+                );
+                return Ok(());
+            }
+        };
+        // Framing is one write per message, but the relay is strictly request/response: never let
+        // Nagle hold a response waiting for a follow-up that only arrives after the peer replies.
+        if let Err(e) = sock.set_nodelay(true) {
+            eprintln!("tricerules: could not set TCP_NODELAY ({e}), continuing");
+        }
+        live_sessions.fetch_add(1, Ordering::Relaxed);
+        let guard = SessionGuard(Arc::clone(&live_sessions));
         tokio::spawn(async move {
-            if let Err(e) = handle_connection(sock).await {
+            let _guard = guard;
+            if let Err(e) = handle_connection(sock, idle_timeout).await {
                 eprintln!("connection error: {e}");
             }
         });
@@ -86,10 +171,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
 async fn handle_connection(
     mut sock: TcpStream,
+    idle_timeout: Option<Duration>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut engine: Option<GameEngine> = None;
+    let mut game_id: u64 = 0;
     loop {
-        let env = read_proto::<IpcEnvelope>(&mut sock).await?;
+        let env = match read_envelope(&mut sock, idle_timeout).await? {
+            Some(env) => env,
+            // Idle drop is expected housekeeping, not an error: returning Ok here keeps it out of
+            // the `connection error:` log, and dropping the frame frees `engine` with its session.
+            None => {
+                eprintln!(
+                    "tricerules: connection idle for {}s, dropping session (game {})",
+                    idle_timeout.map(|d| d.as_secs()).unwrap_or(0),
+                    if engine.is_some() {
+                        game_id.to_string()
+                    } else {
+                        "none".to_string()
+                    }
+                );
+                return Ok(());
+            }
+        };
         let resp = match env.msg {
             Some(Msg::SessionStart(s)) => {
                 // Server-side only (never broadcast to clients): the seed here plus the logged
@@ -105,6 +208,7 @@ async fn handle_connection(
                         s.servatrice_build.as_str()
                     }
                 );
+                game_id = s.game_id;
                 let pids: Vec<PlayerId> = s.player_ids;
                 match resolve_deck_names(&pids, &s.player_decks) {
                     Err(missing) => missing_cards_response(missing),
@@ -203,6 +307,24 @@ fn resolve_deck_names(
     }
 }
 
+/// Reads one envelope, bounded by the idle timeout. `Ok(None)` means the peer sent nothing for the
+/// whole window — a half-open connection whose session must be released, not a protocol error.
+///
+/// The timeout covers the *whole* frame, so a peer that sends a length prefix and then stalls is
+/// dropped too.
+async fn read_envelope(
+    sock: &mut TcpStream,
+    idle_timeout: Option<Duration>,
+) -> Result<Option<IpcEnvelope>, Box<dyn std::error::Error + Send + Sync>> {
+    match idle_timeout {
+        Some(d) => match tokio::time::timeout(d, read_proto::<IpcEnvelope>(sock)).await {
+            Ok(res) => res.map(Some),
+            Err(_elapsed) => Ok(None),
+        },
+        None => read_proto::<IpcEnvelope>(sock).await.map(Some),
+    }
+}
+
 async fn read_proto<M: Message + Default>(
     sock: &mut TcpStream,
 ) -> Result<M, Box<dyn std::error::Error + Send + Sync>> {
@@ -220,14 +342,23 @@ async fn read_proto<M: Message + Default>(
     Ok(M::decode(&buf[..])?)
 }
 
+/// One wire frame: u32 BE length prefix followed by the encoded payload, in a single buffer.
+/// Kept whole so the framing is testable without a socket, and so `write_proto` issues exactly one
+/// `write_all` — two writes let Nagle hold the length prefix back from the payload.
+fn encode_frame<M: Message>(msg: &M) -> Vec<u8> {
+    let payload_len = msg.encoded_len();
+    let mut frame = Vec::with_capacity(4 + payload_len);
+    frame.extend_from_slice(&(payload_len as u32).to_be_bytes());
+    msg.encode(&mut frame)
+        .expect("Vec grows on demand, so encoding into it cannot run out of space");
+    frame
+}
+
 async fn write_proto<M: Message>(
     sock: &mut TcpStream,
     msg: &M,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let buf = msg.encode_to_vec();
-    let len = (buf.len() as u32).to_be_bytes();
-    sock.write_all(&len).await?;
-    sock.write_all(&buf).await?;
+    sock.write_all(&encode_frame(msg)).await?;
     Ok(())
 }
 
@@ -335,6 +466,134 @@ mod tests {
             "a dev sidecar still only enables sessions that asked"
         );
         assert!(!dev_commands_enabled_for_session(false, None));
+    }
+
+    /// The default must stay far above human turn time: one connection serves a whole ruled game
+    /// and is idle between commands while players think.
+    #[test]
+    fn idle_timeout_defaults_to_half_an_hour_and_is_configurable() {
+        assert_eq!(
+            idle_timeout_from_env(None),
+            Some(Duration::from_secs(DEFAULT_IDLE_TIMEOUT_SECS))
+        );
+        assert_eq!(
+            idle_timeout_from_env(Some(" 45 ")),
+            Some(Duration::from_secs(45))
+        );
+    }
+
+    #[test]
+    fn idle_timeout_zero_disables_the_guard_and_garbage_falls_back_to_the_default() {
+        assert_eq!(idle_timeout_from_env(Some("0")), None);
+        for value in ["", "never", "-1", "30s"] {
+            assert_eq!(
+                idle_timeout_from_env(Some(value)),
+                Some(Duration::from_secs(DEFAULT_IDLE_TIMEOUT_SECS)),
+                "{value:?} must not break the process, just fall back"
+            );
+        }
+    }
+
+    #[test]
+    fn encode_frame_prefixes_the_payload_with_its_big_endian_length() {
+        let resp = validate_deck_response(&names(&["Mountain"]));
+        let payload = resp.encode_to_vec();
+        let frame = encode_frame(&resp);
+
+        assert_eq!(frame.len(), 4 + payload.len());
+        assert_eq!(frame[..4], (payload.len() as u32).to_be_bytes());
+        assert_eq!(frame[4..], payload[..]);
+    }
+
+    #[test]
+    fn encode_frame_of_an_empty_message_is_a_zero_length_prefix() {
+        let frame = encode_frame(&IpcEnvelope { msg: None });
+        assert_eq!(frame, vec![0, 0, 0, 0]);
+    }
+
+    /// Drives a real `handle_connection` over loopback and hands back the client end.
+    async fn connect_to_handler(
+        idle_timeout: Option<Duration>,
+    ) -> (TcpStream, tokio::task::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let addr = listener.local_addr().expect("local addr");
+        let server = tokio::spawn(async move {
+            let (sock, _) = listener.accept().await.expect("accept");
+            handle_connection(sock, idle_timeout)
+                .await
+                .expect("an idle drop is Ok, not an error");
+        });
+        let client = TcpStream::connect(addr).await.expect("connect");
+        (client, server)
+    }
+
+    /// The guard's whole point: a peer that goes silent without closing its socket must not park
+    /// the task on `read_exact` forever holding a live `GameEngine`.
+    #[tokio::test]
+    async fn silent_peer_is_dropped_once_the_idle_timeout_elapses() {
+        let (mut client, server) = connect_to_handler(Some(Duration::from_millis(50))).await;
+
+        // Send nothing at all; the server side must close on its own.
+        let mut buf = [0u8; 1];
+        let read = tokio::time::timeout(Duration::from_secs(5), client.read(&mut buf))
+            .await
+            .expect("server must close the connection, not hang");
+        assert_eq!(read.expect("clean EOF"), 0, "server closed its end");
+
+        tokio::time::timeout(Duration::from_secs(5), server)
+            .await
+            .expect("handler task must finish")
+            .expect("handler task must not panic");
+    }
+
+    #[tokio::test]
+    async fn a_disabled_idle_timeout_leaves_a_silent_peer_connected() {
+        let (mut client, server) = connect_to_handler(None).await;
+
+        let mut buf = [0u8; 1];
+        let read = tokio::time::timeout(Duration::from_millis(200), client.read(&mut buf)).await;
+        assert!(read.is_err(), "no timeout configured means no idle drop");
+
+        server.abort();
+    }
+
+    /// Round-trips a request through the rewritten single-`write_all` framing.
+    #[tokio::test]
+    async fn a_request_is_answered_over_the_wire_with_a_length_prefixed_frame() {
+        let (mut client, server) = connect_to_handler(Some(Duration::from_secs(5))).await;
+
+        let env = IpcEnvelope {
+            msg: Some(Msg::ValidateDeck(
+                tricerules_proto::ruled::v1::ValidateDeck {
+                    card_names: names(&["Mountain", "Black Lotus"]),
+                },
+            )),
+        };
+        client
+            .write_all(&encode_frame(&env))
+            .await
+            .expect("write request");
+
+        let mut lenbuf = [0u8; 4];
+        client.read_exact(&mut lenbuf).await.expect("length prefix");
+        let mut payload = vec![0u8; u32::from_be_bytes(lenbuf) as usize];
+        client.read_exact(&mut payload).await.expect("payload");
+        let resp = IpcResponse::decode(&payload[..]).expect("decode response");
+
+        assert!(!resp.ok);
+        assert_eq!(resp.missing_card_names, vec!["Black Lotus"]);
+
+        // SessionEnd ends the loop cleanly, so the handler returns rather than idling out.
+        client
+            .write_all(&encode_frame(&IpcEnvelope {
+                msg: Some(Msg::SessionEnd(tricerules_proto::ruled::v1::SessionEnd {})),
+            }))
+            .await
+            .expect("write session end");
+        tokio::time::timeout(Duration::from_secs(5), server)
+            .await
+            .expect("handler task must finish")
+            .expect("handler task must not panic");
     }
 
     #[test]
