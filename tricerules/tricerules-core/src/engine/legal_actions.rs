@@ -475,7 +475,9 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
             if pid == eng.state.active_player_id() {
                 let mut out = Vec::new();
                 for (&att, blks) in &c.blockers {
-                    if blks.len() > 1 && !c.damage_assignments.contains_key(&att) {
+                    if eng.attacker_needs_explicit_damage_assignment(att, blks.len())
+                        && !c.damage_assignments.contains_key(&att)
+                    {
                         let name = object_display_name(&eng.state, eng.registry, att);
                         out.push(format!("Assign combat damage for {name}"));
                     }

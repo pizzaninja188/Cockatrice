@@ -4,6 +4,18 @@ use super::resolution::apply_prevention_shield;
 use super::*;
 
 impl GameEngine {
+    /// Returns whether an attacker needs an explicit combat-damage assignment: either it has
+    /// multiple blockers, or it has one blocker and trample can carry excess damage to the player.
+    pub(super) fn attacker_needs_explicit_damage_assignment(
+        &self,
+        attacker_id: ObjectId,
+        blocker_count: usize,
+    ) -> bool {
+        blocker_count > 1
+            || (blocker_count == 1
+                && self.effective_has_keyword(attacker_id, tricerules_cards::Keyword::Trample))
+    }
+
     /// Returns false if `blocker_id` is not permitted to block `attacker_id` due to
     /// keyword evasion abilities. Checks all active blocking restrictions in order.
     pub(super) fn can_block(&self, attacker_id: ObjectId, blocker_id: ObjectId) -> bool {
@@ -453,9 +465,7 @@ impl GameEngine {
         // CR 702.19: trample attackers with 1+ blockers also require explicit damage assignment
         // (to split damage between blockers and the defending player).
         let damage_assignment_needed = attacker_to_blockers.iter().any(|(atk_id, blks)| {
-            let has_trample =
-                self.effective_has_keyword(*atk_id, tricerules_cards::Keyword::Trample);
-            blks.len() > 1 || (blks.len() == 1 && has_trample)
+            self.attacker_needs_explicit_damage_assignment(*atk_id, blks.len())
         });
         if let Some(c) = self.state.combat.as_mut() {
             c.blockers = attacker_to_blockers;
@@ -625,9 +635,7 @@ impl GameEngine {
             .blockers
             .iter()
             .filter_map(|(atk_id, blks)| {
-                let has_trample =
-                    self.effective_has_keyword(*atk_id, tricerules_cards::Keyword::Trample);
-                if blks.len() > 1 || (blks.len() == 1 && has_trample) {
+                if self.attacker_needs_explicit_damage_assignment(*atk_id, blks.len()) {
                     Some(*atk_id)
                 } else {
                     None

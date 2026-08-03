@@ -856,11 +856,30 @@ pub(crate) fn setup_trample_single_blocker_assign_phase() -> (GameEngine, u32, u
     // Pass priority in declare-blockers to open assign-combat-damage phase.
     e.apply_command(0, &pass())
         .expect("active pass declare blockers");
-    e.apply_command(1, &pass())
+    let batch = e
+        .apply_command(1, &pass())
         .expect("defender pass → assign phase");
     assert!(
         e.state.combat.as_ref().unwrap().assign_combat_damage_phase,
         "assign_combat_damage_phase must be open"
+    );
+    let active_legal = batch
+        .legal_by_player
+        .get(&0)
+        .expect("legal actions for active player");
+    assert_eq!(
+        active_legal.labels,
+        vec!["Assign combat damage for Colossal Dreadmaw".to_string()],
+        "single-blocked trample attacker must have an assignment prompt"
+    );
+    let defending_legal = batch
+        .legal_by_player
+        .get(&1)
+        .expect("legal actions for defending player");
+    assert_eq!(
+        defending_legal.labels,
+        vec!["Waiting: opponent assigning combat damage".to_string()],
+        "defending player must retain the waiting prompt"
     );
     (e, attacker, blocker)
 }

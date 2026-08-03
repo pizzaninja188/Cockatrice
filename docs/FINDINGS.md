@@ -6,6 +6,10 @@
 
 ## Applied Fixes
 
+### 2026-08-02
+
+- **Trample attacker with one blocker omitted its damage-assignment label** (`tricerules-core/src/engine/combat.rs`, `engine/legal_actions.rs`): Fixed by centralizing the explicit-assignment predicate used for multiply-blocked attackers and single-blocked attackers with trample, then using it for combat state, assignment completion, and `LegalActions.labels`. The Colossal Dreadmaw versus Grizzly Bears scenario now verifies the active player's named assignment prompt and the defender's waiting prompt. Focused scenario test, full `cargo test`, Clippy with warnings denied, and `cargo fmt --check` all exit 0.
+
 ### 2026-06-25
 
 - **`ruledEngineConnectionLost` never reset between back-to-back ruled games** (`libcockatrice_network/.../server_game.cpp:519-524`): Fixed by adding `ruledEngineConnectionLost = false` to the per-game-start reset block in `doStartGameIfReady`. Without this reset, if game 1 lost the sidecar connection, `handleRuledEngineConnectionLost()` would return early for game 2 (guard on line 2138), sending no notification and never dropping `rulesRelay`. Every subsequent ruled command in game 2 would then time out against the dead relay instead of failing fast. Build: 14/14 C++ tests pass. Committed `03f4225a` and pushed.
@@ -29,8 +33,6 @@
 - **Neither spell-damage path sets `deathtouch_damage`** (`tricerules-core/src/engine/resolution/mass.rs:103-137` `damage_all`, `resolution/damage.rs:3-59` `damage_target`, `damage.rs:62+` `damage_targets`): only combat damage sets the flag (`combat.rs:871,890,955,976`), which the lethal-damage SBA reads (`state_based.rs:115`). No implemented card exercises this — no spell or ability source currently has Deathtouch — but any Deathtouch source dealing non-combat damage (a Deathtouch creature's activated ping ability, e.g.) would miss the CR 702.2b / 704.5h death check. *(Corrected from the June note, which claimed `DamageTarget` set the flag and only `DamageAll` missed it — neither does.)*
 
 ### Reusability / Scalability
-
-- **`legal_labels` omits the damage-assignment label for a trample attacker with exactly one blocker** (`tricerules-core/src/engine/legal_actions.rs:464-472`): the label is generated only when `blks.len() > 1`, but `damage_assignment_needed` is set when `blks.len() > 1 || (blks.len() == 1 && has_trample)` (`combat.rs:455-459`). In the trample-with-one-blocker case the active player sees no label for a prompt that *is* required, while the opponent still sees "Waiting: opponent assigning combat damage". Fix: mirror the `combat.rs:458` condition at `legal_actions.rs:467`. *(The June notes logged this twice — under both Bugs and Reusability — merged here.)*
 
 - **`compute_spell_targets` iterates `state.objects.values()` (HashMap — non-deterministic order)** (`tricerules-core/src/engine/targeting.rs:761-785`; `objects` is a `HashMap` per `state.rs:430`): `valid_permanent_ids`, `valid_stack_ids` and `valid_graveyard_ids` in `SpellTargets` may therefore vary in order across executions. Fix: collect from `state.players[*].battlefield` / `.graveyard` in APNAP player order, matching the deterministic pattern the same file's player loop (lines 787-803) and the trigger scans already use.
 
