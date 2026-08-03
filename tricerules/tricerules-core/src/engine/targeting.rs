@@ -801,18 +801,31 @@ pub(super) fn compute_spell_targets(
     let mut can_target_self = false;
     let mut can_target_opponent = false;
 
-    for obj in engine.state.objects.values() {
-        let legal = effects
+    let candidate_is_legal = |object_id| {
+        effects
             .iter()
             .filter(|e| spell_effect_kind_needs_target(e))
-            .all(|e| spell_target_legality_error(engine, e, obj.id, caster).is_ok());
-        if legal {
-            match obj.zone {
-                Zone::Battlefield => valid_permanent_ids.push(obj.id),
-                Zone::Stack => valid_stack_ids.push(obj.id),
-                Zone::Graveyard => valid_graveyard_ids.push(obj.id),
-                _ => {}
+            .all(|e| spell_target_legality_error(engine, e, object_id, caster).is_ok())
+    };
+
+    for offset in 0..engine.state.players.len() {
+        let player_idx = (engine.state.active_player_idx + offset) % engine.state.players.len();
+        let player = &engine.state.players[player_idx];
+        for &object_id in &player.battlefield {
+            if candidate_is_legal(object_id) {
+                valid_permanent_ids.push(object_id);
             }
+        }
+        for &object_id in &player.graveyard {
+            if candidate_is_legal(object_id) {
+                valid_graveyard_ids.push(object_id);
+            }
+        }
+    }
+
+    for item in &engine.state.stack {
+        if candidate_is_legal(item.id) {
+            valid_stack_ids.push(item.id);
         }
     }
 

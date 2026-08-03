@@ -1249,3 +1249,137 @@ fn avacynian_priest_taps_only_non_humans() {
         "the non-Human creature is tapped"
     );
 }
+
+#[test]
+fn published_zone_targets_follow_apnap_and_zone_order() {
+    let decks = Some(vec![
+        deck_with("swamp", &["lightning_bolt", "reanimate"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(2814, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let p0_battlefield = [
+        inject_creature_on_battlefield(&mut e, 0, "grizzly_bears"),
+        inject_creature_on_battlefield(&mut e, 0, "savannah_lions"),
+    ];
+    let p1_battlefield = [
+        inject_creature_on_battlefield(&mut e, 1, "cylian_elf"),
+        inject_creature_on_battlefield(&mut e, 1, "fencing_ace"),
+    ];
+    let p0_graveyard = [
+        inject_graveyard_card(&mut e, 0, "grizzly_bears"),
+        inject_graveyard_card(&mut e, 0, "savannah_lions"),
+    ];
+    let p1_graveyard = [
+        inject_graveyard_card(&mut e, 1, "cylian_elf"),
+        inject_graveyard_card(&mut e, 1, "fencing_ace"),
+    ];
+
+    let bolt = relocate_to_hand(&mut e, 0, "lightning_bolt");
+    let reanimate = relocate_to_hand(&mut e, 0, "reanimate");
+    let bolt_slot = e.state.players[0]
+        .hand
+        .iter()
+        .position(|&oid| oid == bolt)
+        .expect("Lightning Bolt in hand") as u32;
+    let reanimate_slot = e.state.players[0]
+        .hand
+        .iter()
+        .position(|&oid| oid == reanimate)
+        .expect("Reanimate in hand") as u32;
+
+    let assert_targets =
+        |engine: &GameEngine, expected_battlefield: Vec<u32>, expected_graveyard: Vec<u32>| {
+            let batch = engine.initial_response_batch();
+            let legal = batch.legal_by_player.get(&0).expect("legal actions for P0");
+            assert_eq!(
+                legal.valid_targets_by_hand_slot[&(bolt_slot << 8)].valid_permanent_ids,
+                expected_battlefield,
+                "battlefield targets must be grouped APNAP and retain battlefield order"
+            );
+            assert_eq!(
+                legal.valid_targets_by_hand_slot[&(reanimate_slot << 8)].valid_graveyard_ids,
+                expected_graveyard,
+                "graveyard targets must be grouped APNAP and retain graveyard order"
+            );
+        };
+
+    assert_targets(
+        &e,
+        p0_battlefield.into_iter().chain(p1_battlefield).collect(),
+        p0_graveyard.into_iter().chain(p1_graveyard).collect(),
+    );
+
+    e.state.active_player_idx = 1;
+    assert_targets(
+        &e,
+        p1_battlefield.into_iter().chain(p0_battlefield).collect(),
+        p1_graveyard.into_iter().chain(p0_graveyard).collect(),
+    );
+}
+
+#[test]
+fn published_stack_targets_include_copies_in_bottom_to_top_order() {
+    let decks = Some(vec![
+        deck_with("island", &["lightning_bolt", "counterspell"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(2815, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let counterspell = relocate_to_hand(&mut e, 0, "counterspell");
+    ensure_in_hand(&mut e, 0, "lightning_bolt");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+    let bolt_slot = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(
+        0,
+        &cast_spell(
+            bolt_slot,
+            vec![TargetRef {
+                object_id: 1,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast Lightning Bolt");
+
+    let physical_spell = e.state.stack.last().expect("Bolt on stack").clone();
+    let copy_id = e.state.next_object_id;
+    e.state.next_object_id += 1;
+    let mut copied_spell = physical_spell.clone();
+    copied_spell.id = copy_id;
+    copied_spell.is_copy = true;
+    e.state.stack.push(copied_spell);
+
+    let ability_id = e.state.next_object_id;
+    e.state.next_object_id += 1;
+    let mut ability = physical_spell.clone();
+    ability.id = ability_id;
+    ability.ability_text = Some("Triggered ability".to_string());
+    ability.is_triggered = true;
+    e.state.stack.push(ability);
+
+    let counterspell_slot = e.state.players[0]
+        .hand
+        .iter()
+        .position(|&oid| oid == counterspell)
+        .expect("Counterspell in hand") as u32;
+    let batch = e.initial_response_batch();
+    let legal = batch.legal_by_player.get(&0).expect("legal actions for P0");
+    let targets = &legal.valid_targets_by_hand_slot[&(counterspell_slot << 8)];
+    assert_eq!(
+        targets.valid_stack_ids,
+        vec![physical_spell.id, copy_id],
+        "spell targets must include copies bottom-to-top and exclude abilities"
+    );
+    assert!(!e.state.objects.contains_key(&copy_id));
+    assert!(!targets.valid_stack_ids.contains(&ability_id));
+}
