@@ -3,11 +3,12 @@
     One command from nothing to two clients sitting in a started ruled game.
 
 .DESCRIPTION
-    Starts the tricerules sidecar, servatrice, and two Cockatrice clients, then lets each client's
-    autopilot (--autopilot, see cockatrice/src/game/ruled/ruled_autopilot.cpp) do the pre-game
-    ceremony: join the lobby room, create/join the game, load a deck, ready up. Both seats are
-    ready within a couple of seconds of the windows appearing, so manual verification starts at
-    the opening hand instead of ten clicks later.
+    Builds the project, starts the tricerules sidecar, servatrice, and two Cockatrice clients,
+    then lets each client's autopilot (--autopilot, see
+    cockatrice/src/game/ruled/ruled_autopilot.cpp) do the pre-game ceremony: join the lobby room,
+    create/join the game, load a deck, ready up. Both seats are ready within a couple of seconds
+    of the windows appearing, so manual verification starts at the opening hand instead of ten
+    clicks later.
 
     Processes it starts are recorded, so -Stop tears the whole set down again. Run that before
     rebuilding: a live servatrice or tricerules-server holds its .exe and the link step fails.
@@ -180,13 +181,24 @@ if (Test-Path -LiteralPath $pidFile) {
     Stop-LaunchedProcesses
 }
 
+# Build only after stopping a previous run: live executables cannot be replaced by the Windows
+# linker. Keep -Stop teardown-only so it remains usable even when the tree cannot build.
+Write-Host "Building Cockatrice..." -ForegroundColor Cyan
+$buildScript = Join-Path $PSScriptRoot "build-ninja.ps1"
+$buildProcess = Start-Process -FilePath "powershell.exe" -ArgumentList @(
+    "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$buildScript`""
+) -NoNewWindow -PassThru -Wait
+if ($buildProcess.ExitCode -ne 0) {
+    throw "Build failed with exit code $($buildProcess.ExitCode); nothing was launched."
+}
+
 if (-not $DeckA) { $DeckA = Join-Path $PSScriptRoot "decks\dev-red.cod" }
 if (-not $DeckB) { $DeckB = Join-Path $PSScriptRoot "decks\dev-blue.cod" }
 if (-not $GameName) {
     if ($Freeform) { $GameName = "Freeform dev game" } else { $GameName = "Ruled dev game" }
 }
 
-$buildHint = "Build it first: ./scripts/build-ninja.ps1"
+$buildHint = "The automatic build completed, but the expected artifact was not produced."
 $cockatriceExe = Get-RequiredPath (Join-Path $buildDir "cockatrice\cockatrice.exe") "Cockatrice" $buildHint
 $deckAPath = Get-RequiredPath $DeckA "Deck A" "Pass -DeckA <file>, or use the decks in scripts/decks/."
 $deckBPath = Get-RequiredPath $DeckB "Deck B" "Pass -DeckB <file>, or use the decks in scripts/decks/."
