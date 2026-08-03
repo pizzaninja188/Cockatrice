@@ -30,7 +30,7 @@ pub(super) fn destroy_target(
             let was_creature = engine
                 .characteristics(tid)
                 .is_some_and(|value| value.is_creature());
-            destroy_permanent(&mut engine.state, tid)?;
+            destroy_permanent(&mut engine.state, engine.registry, tid)?;
             if let Some(owner_id) = owner {
                 events.push(permanent_moved_event(
                     &engine.state,

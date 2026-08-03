@@ -1,4 +1,6 @@
 use crate::helpers::*;
+use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration, Keyword};
+use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 
 #[test]
 fn cast_divination_draws_two_cards() {
@@ -2413,5 +2415,247 @@ fn healing_salve_shield_absorbs_multi_target_damage() {
         e.state.players[0].life,
         p0_life - 1,
         "the unshielded half still lands"
+    );
+}
+
+fn setup_noncombat_deathtouch_scenario(
+    grant_deathtouch: bool,
+    prevention: u32,
+) -> (GameEngine, u32, u32) {
+    let mut engine = GameEngine::new(7022, &[0, 1], 20, None, true).expect("new engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let source = inject_creature_on_battlefield(&mut engine, 0, "prodigal_sorcerer");
+    let target = inject_creature_with_stats(&mut engine, 1, "hill_giant", 3, 3);
+    if grant_deathtouch {
+        engine.state.continuous_effects.push(ContinuousEffect {
+            source_id: None,
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Deathtouch),
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: engine.state.command_index,
+        });
+    }
+    if prevention > 0 {
+        engine
+            .state
+            .damage_prevention_shields
+            .insert(target, prevention);
+    }
+    (engine, source, target)
+}
+
+#[test]
+fn activated_noncombat_damage_from_deathtouch_source_kills_larger_creature() {
+    let (mut engine, source, target) = setup_noncombat_deathtouch_scenario(true, 0);
+    engine
+        .apply_command(
+            0,
+            &activate_ability(
+                source,
+                0,
+                vec![TargetRef {
+                    object_id: target,
+                    damage_amount: 0,
+                }],
+            ),
+        )
+        .expect("activate deathtouch pinger");
+    pass_both_players(&mut engine);
+
+    assert_eq!(
+        engine.state.objects.get(&target).expect("target").zone,
+        Zone::Graveyard,
+        "one noncombat damage from a deathtouch source is lethal"
+    );
+}
+
+#[test]
+fn activated_noncombat_damage_without_deathtouch_is_not_lethal() {
+    let (mut engine, source, target) = setup_noncombat_deathtouch_scenario(false, 0);
+    engine
+        .apply_command(
+            0,
+            &activate_ability(
+                source,
+                0,
+                vec![TargetRef {
+                    object_id: target,
+                    damage_amount: 0,
+                }],
+            ),
+        )
+        .expect("activate ordinary pinger");
+    pass_both_players(&mut engine);
+
+    let target_object = engine.state.objects.get(&target).expect("target");
+    assert_eq!(target_object.zone, Zone::Battlefield);
+    assert_eq!(target_object.damage, 1);
+}
+
+#[test]
+fn fully_prevented_deathtouch_damage_marks_neither_damage_nor_history() {
+    let (mut engine, source, target) = setup_noncombat_deathtouch_scenario(true, 1);
+    engine
+        .apply_command(
+            0,
+            &activate_ability(
+                source,
+                0,
+                vec![TargetRef {
+                    object_id: target,
+                    damage_amount: 0,
+                }],
+            ),
+        )
+        .expect("activate shielded deathtouch pinger");
+    pass_both_players(&mut engine);
+
+    let target_object = engine.state.objects.get(&target).expect("target");
+    assert_eq!(target_object.zone, Zone::Battlefield);
+    assert_eq!(target_object.damage, 0);
+    assert!(!target_object.deathtouch_damage);
+}
+
+/// Bladebrand's granted deathtouch applies to noncombat damage from the creature, and its draw
+/// happens only after the targeted keyword-grant instruction resolves successfully.
+#[test]
+fn bladebrand_turns_prodigal_sorcerer_damage_lethal_and_draws_a_card() {
+    let decks = Some(vec![
+        deck_with("swamp", &["bladebrand"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut engine = GameEngine::new(7023, &[0, 1], 20, decks, true).expect("new engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let source = inject_creature_on_battlefield(&mut engine, 0, "prodigal_sorcerer");
+    let target = inject_creature_with_stats(&mut engine, 1, "hill_giant", 3, 3);
+
+    ensure_in_hand(&mut engine, 0, "bladebrand");
+    let library_before = engine.state.players[0].library.len();
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            b: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let bladebrand = hand_index_for_card(&engine, 0, "bladebrand");
+    engine
+        .apply_command(
+            0,
+            &cast_spell(
+                bladebrand,
+                vec![TargetRef {
+                    object_id: source,
+                    damage_amount: 0,
+                }],
+            ),
+        )
+        .expect("cast Bladebrand targeting Prodigal Sorcerer");
+    pass_both_players(&mut engine);
+
+    assert!(engine.effective_has_keyword(source, Keyword::Deathtouch));
+    assert_eq!(
+        engine.state.players[0].library.len(),
+        library_before - 1,
+        "Bladebrand draws one card"
+    );
+
+    engine
+        .apply_command(
+            0,
+            &activate_ability(
+                source,
+                0,
+                vec![TargetRef {
+                    object_id: target,
+                    damage_amount: 0,
+                }],
+            ),
+        )
+        .expect("activate deathtouch Prodigal Sorcerer");
+    pass_both_players(&mut engine);
+
+    assert_eq!(
+        engine.state.objects.get(&target).expect("target").zone,
+        Zone::Graveyard,
+        "Bladebrand makes the Sorcerer's one noncombat damage lethal"
+    );
+}
+
+/// Bladebrand's Oracle ruling: if its creature target is illegal as it resolves, none of the
+/// spell resolves, including the draw.
+#[test]
+fn bladebrand_does_not_draw_when_its_target_leaves_before_resolution() {
+    let decks = Some(vec![
+        deck_with("swamp", &["bladebrand"]),
+        deck_with("island", &["unsummon"]),
+    ]);
+    let mut engine = GameEngine::new(7024, &[0, 1], 20, decks, true).expect("new engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let source = inject_creature_on_battlefield(&mut engine, 0, "prodigal_sorcerer");
+
+    ensure_in_hand(&mut engine, 0, "bladebrand");
+    ensure_in_hand(&mut engine, 1, "unsummon");
+    let library_before = engine.state.players[0].library.len();
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            b: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let bladebrand = hand_index_for_card(&engine, 0, "bladebrand");
+    engine
+        .apply_command(
+            0,
+            &cast_spell(
+                bladebrand,
+                vec![TargetRef {
+                    object_id: source,
+                    damage_amount: 0,
+                }],
+            ),
+        )
+        .expect("cast Bladebrand");
+    engine
+        .apply_command(0, &pass())
+        .expect("pass priority to opponent");
+
+    give_mana(
+        &mut engine,
+        1,
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    let unsummon = hand_index_for_card(&engine, 1, "unsummon");
+    engine
+        .apply_command(
+            1,
+            &cast_spell(
+                unsummon,
+                vec![TargetRef {
+                    object_id: source,
+                    damage_amount: 0,
+                }],
+            ),
+        )
+        .expect("cast Unsummon in response");
+    resolve_entire_stack_two_player(&mut engine);
+
+    assert_eq!(
+        engine.state.objects.get(&source).expect("source").zone,
+        Zone::Hand,
+        "Unsummon removes Bladebrand's only target"
+    );
+    assert_eq!(
+        engine.state.players[0].library.len(),
+        library_before,
+        "a fizzled Bladebrand does not draw"
     );
 }

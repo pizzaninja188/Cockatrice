@@ -283,6 +283,7 @@ impl GameEngine {
             objects,
             last_known_tapped: HashMap::new(),
             last_known_tapped_by_generation: HashMap::new(),
+            last_known_keywords_by_generation: HashMap::new(),
             zone_change_generation: HashMap::new(),
             stack: Vec::new(),
             priority_idx: if skip_opening_sequence {

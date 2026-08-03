@@ -53,6 +53,42 @@ enum EffectOutcome {
 type ResolutionEffect = (SpellEffectKind, Vec<ObjectId>, Vec<u32>);
 
 impl GameEngine {
+    /// Whether the resolving spell or ability's damage source has `keyword` now, or had it as
+    /// last known information before leaving the battlefield. Kept generic so all future
+    /// source-characteristic damage results (lifelink, infect, wither) share this identity path.
+    fn resolving_source_has_keyword(&self, top: &StackItem, keyword: Keyword) -> bool {
+        let Some(source_id) = top.source_permanent_id else {
+            // A spell (and a copy of one) uses the characteristics of the selected face on the
+            // stack. Copies have no backing GameObject, so the card definition is authoritative.
+            return self
+                .registry
+                .get(&top.card_id)
+                .and_then(|definition| definition.face(top.face_index))
+                .is_some_and(|face| face.keywords.contains(&keyword));
+        };
+
+        let current_generation = self
+            .state
+            .zone_change_generation
+            .get(&source_id)
+            .copied()
+            .unwrap_or(0);
+        let source_is_same_battlefield_object = current_generation == top.source_zone_change
+            && self
+                .state
+                .objects
+                .get(&source_id)
+                .is_some_and(|object| object.zone == Zone::Battlefield);
+        if source_is_same_battlefield_object {
+            return self.effective_has_keyword(source_id, keyword);
+        }
+
+        self.state
+            .last_known_keywords_by_generation
+            .get(&(source_id, top.source_zone_change))
+            .is_some_and(|keywords| keywords.contains(&keyword))
+    }
+
     pub(super) fn resolve_top_of_stack(
         &mut self,
         events: &mut Vec<rv1::RuledEvent>,
@@ -121,6 +157,7 @@ impl GameEngine {
             });
             move_object_to_zone(
                 &mut self.state,
+                self.registry,
                 top.id,
                 if resolves_to_battlefield {
                     Zone::Battlefield
@@ -705,6 +742,7 @@ pub(super) fn resolve_anthem_scope(
 /// It is ignored for non-battlefield zones — those belong to the owner (CR 400.3).
 pub(crate) fn move_object_to_zone(
     state: &mut GameState,
+    registry: &'static CardRegistry,
     oid: ObjectId,
     z: Zone,
     controller: Option<PlayerId>,
@@ -715,6 +753,12 @@ pub(crate) fn move_object_to_zone(
         .map(|o| o.owner)
         .ok_or(EngineError::Illegal("no object"))?;
     let old_zone = state.objects.get(&oid).map(|o| o.zone);
+    let leaving_battlefield = old_zone == Some(Zone::Battlefield) && z != Zone::Battlefield;
+    let prior_generation = state.zone_change_generation.get(&oid).copied().unwrap_or(0);
+    let last_known_keywords = leaving_battlefield
+        .then(|| super::characteristics::characteristics_from(state, registry, oid))
+        .flatten()
+        .map(|characteristics| characteristics.keywords);
     if old_zone != Some(z) {
         *state.zone_change_generation.entry(oid).or_insert(0) += 1;
     }
@@ -725,8 +769,7 @@ pub(crate) fn move_object_to_zone(
     // source of (anthems) — a static ability stops applying the moment its source leaves (LTB).
     // One-shot `UntilEndOfTurn` effects (Giant Growth, firebreathing) are deliberately NOT drained
     // here: once created they are independent of their source (CR 611.2g) and only end at cleanup.
-    let leaving_battlefield = old_zone == Some(Zone::Battlefield);
-    if leaving_battlefield && z != Zone::Battlefield {
+    if leaving_battlefield {
         state.continuous_effects.retain(|e| {
             let single_on_this = matches!(&e.affected, AffectedScope::Single(id) if *id == oid);
             let static_from_this =
@@ -757,6 +800,11 @@ pub(crate) fn move_object_to_zone(
                 .last_known_tapped_by_generation
                 .insert((oid, generation), was_tapped);
             state.last_known_tapped.insert(oid, was_tapped);
+        }
+        if let Some(keywords) = last_known_keywords {
+            state
+                .last_known_keywords_by_generation
+                .insert((oid, prior_generation), keywords);
         }
     }
 
@@ -811,15 +859,23 @@ pub(crate) fn move_object_to_zone(
     Ok(())
 }
 
-pub(super) fn destroy_permanent(state: &mut GameState, oid: ObjectId) -> Result<(), EngineError> {
-    move_object_to_zone(state, oid, Zone::Graveyard, None)
+pub(super) fn destroy_permanent(
+    state: &mut GameState,
+    registry: &'static CardRegistry,
+    oid: ObjectId,
+) -> Result<(), EngineError> {
+    move_object_to_zone(state, registry, oid, Zone::Graveyard, None)
 }
 
 /// Sacrifice a permanent (CR 701.17). Unlike destroy, sacrifice bypasses indestructible and
 /// regeneration — it is always a cost, never a triggered or replacement effect that can be
 /// redirected.
-pub(super) fn sacrifice_permanent(state: &mut GameState, oid: ObjectId) -> Result<(), EngineError> {
-    move_object_to_zone(state, oid, Zone::Graveyard, None)
+pub(super) fn sacrifice_permanent(
+    state: &mut GameState,
+    registry: &'static CardRegistry,
+    oid: ObjectId,
+) -> Result<(), EngineError> {
+    move_object_to_zone(state, registry, oid, Zone::Graveyard, None)
 }
 
 /// CR 608.2m: "As the final part of an instant or sorcery spell's resolution, the spell is put
@@ -979,4 +1035,211 @@ pub(super) fn apply_prevention_shield(
         events.push(ev_log(format!("{prevented} damage prevented (shield).")));
     }
     amount - prevented
+}
+
+#[cfg(test)]
+mod source_keyword_tests {
+    use super::*;
+
+    fn ability_item(source: ObjectId, generation: u64) -> StackItem {
+        StackItem {
+            id: source + 1,
+            controller: 0,
+            card_id: "prodigal_sorcerer".to_string(),
+            targets: vec![],
+            ability_text: Some("ping".to_string()),
+            source_permanent_id: Some(source),
+            source_zone_change: generation,
+            ability_index: Some(0),
+            is_triggered: false,
+            is_copy: false,
+            face_index: 0,
+            flashback: false,
+            chosen_x: 0,
+            target_damage: vec![],
+            chosen_modes: vec![],
+            trigger_player: None,
+        }
+    }
+
+    fn deathtouch_spell_item(chosen_x: u32) -> StackItem {
+        StackItem {
+            id: u32::MAX,
+            controller: 0,
+            card_id: "pharikas_chosen".to_string(),
+            targets: vec![],
+            ability_text: None,
+            source_permanent_id: None,
+            source_zone_change: 0,
+            ability_index: None,
+            is_triggered: false,
+            is_copy: false,
+            face_index: 0,
+            flashback: false,
+            chosen_x,
+            target_damage: vec![],
+            chosen_modes: vec![],
+            trigger_player: None,
+        }
+    }
+
+    fn add_three_toughness_creature(engine: &mut GameEngine, controller: PlayerId) -> ObjectId {
+        let id = engine.state.next_object_id;
+        engine.state.next_object_id += 1;
+        engine.state.objects.insert(
+            id,
+            GameObject {
+                id,
+                owner: controller,
+                controller,
+                card_id: "hill_giant".to_string(),
+                zone: Zone::Battlefield,
+                tapped: false,
+                summoning_sick: false,
+                power: None,
+                toughness: None,
+                damage: 0,
+                deathtouch_damage: false,
+                counters: BTreeMap::new(),
+                attached_to: None,
+                regeneration_shields: 0,
+                must_attack_if_able: false,
+                must_block_if_able: false,
+                face_up_index: 0,
+            },
+        );
+        let player_index = engine.state.player_idx(controller).unwrap();
+        engine.state.players[player_index].battlefield.push(id);
+        id
+    }
+
+    #[test]
+    fn source_keyword_lki_is_generation_scoped_across_leave_and_return() {
+        let mut engine = GameEngine::new_with_default_decks(7022, &[0, 1], 20).expect("new engine");
+        let source = engine.state.next_object_id;
+        engine.state.next_object_id += 2;
+        engine.state.objects.insert(
+            source,
+            GameObject {
+                id: source,
+                owner: 0,
+                controller: 0,
+                card_id: "prodigal_sorcerer".to_string(),
+                zone: Zone::Battlefield,
+                tapped: false,
+                summoning_sick: false,
+                power: None,
+                toughness: None,
+                damage: 0,
+                deathtouch_damage: false,
+                counters: BTreeMap::new(),
+                attached_to: None,
+                regeneration_shields: 0,
+                must_attack_if_able: false,
+                must_block_if_able: false,
+                face_up_index: 0,
+            },
+        );
+        engine.state.players[0].battlefield.push(source);
+        engine.state.continuous_effects.push(ContinuousEffect {
+            source_id: None,
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Deathtouch),
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 0,
+        });
+        let original_ability = ability_item(source, 0);
+        assert!(engine.resolving_source_has_keyword(&original_ability, Keyword::Deathtouch));
+
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        assert!(engine.resolving_source_has_keyword(&original_ability, Keyword::Deathtouch));
+
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            Some(0),
+        )
+        .unwrap();
+        assert!(!engine.effective_has_keyword(source, Keyword::Deathtouch));
+        assert!(engine.resolving_source_has_keyword(&original_ability, Keyword::Deathtouch));
+        assert!(!engine.resolving_source_has_keyword(&ability_item(source, 2), Keyword::Deathtouch));
+    }
+
+    #[test]
+    fn divided_damage_marks_every_damaged_creature_from_deathtouch_source() {
+        let mut engine = GameEngine::new_with_default_decks(7023, &[0, 1], 20).expect("new engine");
+        let first = add_three_toughness_creature(&mut engine, 0);
+        let second = add_three_toughness_creature(&mut engine, 1);
+        let targets = vec![first, second];
+        let top = deathtouch_spell_item(2);
+        let effect = engine
+            .registry
+            .get("fireball")
+            .unwrap()
+            .primary_face()
+            .spell_effect[0]
+            .clone();
+        let mut events = vec![];
+        let mut cx = EffectCx {
+            engine: &mut engine,
+            events: &mut events,
+            targets: &targets,
+            target_damage: &[],
+            top: &top,
+            controller: 0,
+            affected_player: 0,
+            spell_label: "deathtouch source",
+        };
+
+        damage::damage_targets(&mut cx, effect).unwrap();
+
+        for target in targets {
+            let object = engine.state.objects.get(&target).unwrap();
+            assert_eq!(object.damage, 1);
+            assert!(object.deathtouch_damage);
+        }
+    }
+
+    #[test]
+    fn mass_damage_marks_every_damaged_creature_from_deathtouch_source() {
+        let mut engine = GameEngine::new_with_default_decks(7024, &[0, 1], 20).expect("new engine");
+        let first = add_three_toughness_creature(&mut engine, 0);
+        let second = add_three_toughness_creature(&mut engine, 1);
+        let top = deathtouch_spell_item(0);
+        let effect = engine
+            .registry
+            .get("pyroclasm")
+            .unwrap()
+            .primary_face()
+            .spell_effect[0]
+            .clone();
+        let mut events = vec![];
+        let mut cx = EffectCx {
+            engine: &mut engine,
+            events: &mut events,
+            targets: &[],
+            target_damage: &[],
+            top: &top,
+            controller: 0,
+            affected_player: 0,
+            spell_label: "deathtouch source",
+        };
+
+        mass::damage_all(&mut cx, effect).unwrap();
+
+        for target in [first, second] {
+            let object = engine.state.objects.get(&target).unwrap();
+            assert_eq!(object.damage, 2);
+            assert!(object.deathtouch_damage);
+        }
+    }
 }

@@ -42,7 +42,7 @@ pub(super) fn destroy_all(
         let was_creature = engine
             .characteristics(tid)
             .is_some_and(|value| value.is_creature());
-        destroy_permanent(&mut engine.state, tid)?;
+        destroy_permanent(&mut engine.state, engine.registry, tid)?;
         events.push(ev_log(format!("{spell_label} destroys {tgt}")));
         if let Some(owner_id) = owner {
             events.push(permanent_moved_event(
@@ -108,6 +108,9 @@ pub(super) fn damage_all(
     let SpellEffectKind::DamageAll { amount, kind } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    let source_has_deathtouch = cx
+        .engine
+        .resolving_source_has_keyword(cx.top, Keyword::Deathtouch);
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let spell_label = cx.spell_label;
@@ -117,22 +120,14 @@ pub(super) fn damage_all(
     // (CR 704.5g), which run immediately after this spell resolves.
     let affected = battlefield_objects_matching(engine, &kind);
     for tid in &affected {
-        let tgt = object_display_name(&engine.state, engine.registry, *tid);
-        let dealt = apply_prevention_shield(
-            &mut engine.state.damage_prevention_shields,
+        super::damage::apply_damage_to_permanent(
+            engine,
+            events,
             *tid,
             amount,
-            events,
+            source_has_deathtouch,
+            spell_label,
         );
-        if dealt == 0 {
-            continue;
-        }
-        if let Some(o) = engine.state.objects.get_mut(tid) {
-            o.damage += dealt;
-        }
-        events.push(ev_log(format!(
-            "{spell_label} deals {dealt} damage to {tgt}"
-        )));
     }
 
     Ok(EffectOutcome::Continue)

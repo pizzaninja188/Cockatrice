@@ -519,7 +519,7 @@ impl GameEngine {
                 .get(&self.state.objects.get(&oid).unwrap().card_id)
                 .map(|d| d.name.clone())
                 .unwrap_or_else(|| "card".into());
-            move_object_to_zone(&mut self.state, oid, Zone::Graveyard, None)?;
+            move_object_to_zone(&mut self.state, self.registry, oid, Zone::Graveyard, None)?;
             ev.push(ev_log(format!("P{player} discards {card_name} (cleanup)")));
             ev.push(permanent_moved_event(
                 &self.state,

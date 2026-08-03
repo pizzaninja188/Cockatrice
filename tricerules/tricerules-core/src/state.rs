@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use tricerules_cards::primitives::{
-    Color, ContinuousEffectKind, CounterKind, EffectDuration, ManaAmount, SearchDestination,
+    Color, ContinuousEffectKind, CounterKind, EffectDuration, Keyword, ManaAmount,
+    SearchDestination,
 };
 use tricerules_proto::ruled::v1::ChoiceKind;
 
@@ -508,6 +509,10 @@ pub struct GameState {
     /// Last-known tap status keyed by the source object's generation, so an older trigger is not
     /// confused by a later leave-and-return cycle using the same relay ObjectId.
     pub last_known_tapped_by_generation: HashMap<(ObjectId, u64), bool>,
+    /// Last-known derived keywords keyed by source object and generation. Resolution uses this
+    /// after an ability's source leaves or returns, so the new object cannot retroactively change
+    /// whether damage from the old source had deathtouch (CR 702.2e).
+    pub last_known_keywords_by_generation: HashMap<(ObjectId, u64), Vec<Keyword>>,
     /// Monotonic per-object generation incremented on every zone change. ObjectIds remain stable
     /// for relay compatibility, while this generation preserves CR 400.7 identity semantics for
     /// effects that resolve after a source leaves and returns.

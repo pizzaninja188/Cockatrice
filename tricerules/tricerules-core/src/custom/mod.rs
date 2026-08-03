@@ -221,7 +221,7 @@ impl<'a> ResolutionCtx<'a> {
         // resets the CR 400.7 new-object state, and drains the source's continuous effects. Both
         // of today's callers move library/hand cards, so those extra branches are inert here —
         // but a second copy of this logic is exactly how the owner-only-retain bug spreads.
-        if crate::engine::move_object_to_zone(self.state, oid, zone, None).is_err() {
+        if crate::engine::move_object_to_zone(self.state, self.registry, oid, zone, None).is_err() {
             return;
         }
         let dest = match zone {

@@ -8,6 +8,14 @@
 
 ### 2026-08-02
 
+- **Noncombat damage now records deathtouch from its source** (`tricerules-core/src/engine/`):
+  Centralized permanent damage for `DamageTarget`, `DamageTargets`, and `DamageAll`, added
+  generation-scoped last-known keyword snapshots for abilities whose sources leave and return,
+  and expired deathtouch history after each state-based-action check. Regression coverage includes
+  activated, divided, mass, fully prevented, leave-and-return, and indestructible-survivor cases.
+  Focused scenarios and unit tests, full `cargo test`, Clippy with warnings denied, and
+  `cargo fmt --check` all exit 0.
+
 - **Game-over commands now emit a complete terminal batch** (`tricerules-core/src/engine/`): Fixed
   the dead `EngineError::GameOver` path by appending the winner log to the successful command batch,
   preserving resolution/state events and clearing all legal actions once a winner is set.
@@ -33,10 +41,6 @@
   Writing those tests surfaced a **deeper bug the audit missed**: `finish_cleanup_roll_new_turn` (`engine/priority.rs`) walks Untap → Upkeep *inline* when a turn rolls and never fired `UpkeepBegin` at all. The `adv_on_empty_stack` `Untap` arm that does fire it is unreachable on a normal roll, because CR 502.1 gives nobody priority in the untap step. Upkeep triggers therefore never fired in normal play — which is exactly why the scan bug was invisible, and why "no shipped card uses the variant" was doing more work than it looked. The event now fires at that transition, before `ev_priority_changed` per CR 503.1a.
 
 ## Pending Findings
-
-### Bugs
-
-- **Neither spell-damage path sets `deathtouch_damage`** (`tricerules-core/src/engine/resolution/mass.rs:103-137` `damage_all`, `resolution/damage.rs:3-59` `damage_target`, `damage.rs:62+` `damage_targets`): only combat damage sets the flag (`combat.rs:871,890,955,976`), which the lethal-damage SBA reads (`state_based.rs:115`). No implemented card exercises this — no spell or ability source currently has Deathtouch — but any Deathtouch source dealing non-combat damage (a Deathtouch creature's activated ping ability, e.g.) would miss the CR 702.2b / 704.5h death check. *(Corrected from the June note, which claimed `DamageTarget` set the flag and only `DamageAll` missed it — neither does.)*
 
 ### Reusability / Scalability
 

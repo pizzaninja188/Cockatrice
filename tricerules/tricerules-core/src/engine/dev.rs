@@ -114,7 +114,7 @@ impl GameEngine {
         // `move <seat> bf <card>` relocates a card the seat owns onto the battlefield, so the
         // seat is both owner and controller here. Passed explicitly rather than defaulted so the
         // dev path stays correct if a "give control" verb is ever added.
-        move_object_to_zone(&mut self.state, oid, zone, Some(target))?;
+        move_object_to_zone(&mut self.state, self.registry, oid, zone, Some(target))?;
         ev.push(permanent_moved_event(
             &self.state,
             oid,

@@ -10,13 +10,17 @@ pub(crate) fn shuffle_player_library(state: &mut GameState, player_idx: usize, m
     state.players[player_idx].library = v.into_iter().collect();
 }
 
-fn mulligan_redraw(state: &mut GameState, player: PlayerId) -> Result<(), EngineError> {
+fn mulligan_redraw(
+    state: &mut GameState,
+    registry: &'static CardRegistry,
+    player: PlayerId,
+) -> Result<(), EngineError> {
     let idx = state
         .player_idx(player)
         .ok_or(EngineError::UnknownPlayer(player))?;
     let hand: Vec<ObjectId> = state.players[idx].hand.drain(..).collect();
     for oid in hand {
-        move_object_to_zone(state, oid, Zone::Library, None)?;
+        move_object_to_zone(state, registry, oid, Zone::Library, None)?;
     }
     shuffle_player_library(
         state,
@@ -133,7 +137,7 @@ impl GameEngine {
                         op.mulligans_taken[idx] += 1;
                         op.mulligans_taken[idx]
                     };
-                    mulligan_redraw(&mut self.state, player)?;
+                    mulligan_redraw(&mut self.state, self.registry, player)?;
                     if prev >= MAX_HAND_SIZE as u32 {
                         // Mulliganed to 0 effective cards — auto-keep; go straight to bottom phase.
                         {
@@ -185,7 +189,7 @@ impl GameEngine {
                     .hand
                     .get(hi)
                     .ok_or(EngineError::Illegal("bad hand index"))?;
-                move_object_to_zone(&mut self.state, oid, Zone::Library, None)?;
+                move_object_to_zone(&mut self.state, self.registry, oid, Zone::Library, None)?;
                 let rem_after = rem_before - 1;
                 events.push(permanent_moved_event(
                     &self.state,

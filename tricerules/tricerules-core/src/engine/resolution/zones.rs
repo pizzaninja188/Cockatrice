@@ -60,7 +60,7 @@ pub(super) fn exile_target(
     if let Some(&tid) = targets.first() {
         let tgt = object_display_name(&engine.state, engine.registry, tid);
         let owner = engine.state.objects.get(&tid).map(|o| o.owner);
-        move_object_to_zone(&mut engine.state, tid, Zone::Exile, None)?;
+        move_object_to_zone(&mut engine.state, engine.registry, tid, Zone::Exile, None)?;
         events.push(ev_log(format!("{spell_label} exiles {tgt}")));
         if let Some(owner_id) = owner {
             events.push(permanent_moved_event(
@@ -92,7 +92,7 @@ pub(super) fn exile_target_gain_life_equal_to_power(
         let owner = engine.state.objects.get(&tid).map(|o| o.owner);
         let target_controller = engine.state.objects.get(&tid).map(|o| o.controller);
         let target_controller = target_controller.unwrap_or(controller);
-        move_object_to_zone(&mut engine.state, tid, Zone::Exile, None)?;
+        move_object_to_zone(&mut engine.state, engine.registry, tid, Zone::Exile, None)?;
         events.push(ev_log(format!("{spell_label} exiles {tgt}")));
         if let Some(owner_id) = owner {
             events.push(permanent_moved_event(
@@ -127,7 +127,7 @@ pub(super) fn return_target_to_hand(
         let owner = engine.state.objects.get(&tid).map(|o| o.owner);
         // Transient battlefield state (damage, counters, tap) is reset centrally
         // by move_object_to_zone on leaving the battlefield (CR 400.7 / 121.2).
-        move_object_to_zone(&mut engine.state, tid, Zone::Hand, None)?;
+        move_object_to_zone(&mut engine.state, engine.registry, tid, Zone::Hand, None)?;
         events.push(ev_log(format!(
             "{spell_label} returns {tgt} to its owner's hand"
         )));
@@ -187,7 +187,13 @@ pub(super) fn discard_cards(
                         shuffled.into_iter().take(discard_count).collect();
                     for oid in &to_discard {
                         let card_name = object_display_name(&engine.state, engine.registry, *oid);
-                        move_object_to_zone(&mut engine.state, *oid, Zone::Graveyard, None)?;
+                        move_object_to_zone(
+                            &mut engine.state,
+                            engine.registry,
+                            *oid,
+                            Zone::Graveyard,
+                            None,
+                        )?;
                         events.push(permanent_moved_event(
                             &engine.state,
                             *oid,
@@ -480,7 +486,13 @@ pub(super) fn return_from_graveyard(
             // for `GraveyardOwner::Controller` cards (Zombify), load-bearing for `AnyPlayer`
             // reanimation out of an opponent's graveyard.
             let enters_under = (dest_zone == Zone::Battlefield).then_some(controller);
-            move_object_to_zone(&mut engine.state, tid, dest_zone, enters_under)?;
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                tid,
+                dest_zone,
+                enters_under,
+            )?;
             let dest_name = match destination {
                 GraveyardDestination::Hand => "hand",
                 GraveyardDestination::Battlefield => "battlefield",

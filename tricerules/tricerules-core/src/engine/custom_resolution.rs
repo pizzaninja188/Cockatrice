@@ -553,7 +553,7 @@ impl GameEngine {
             .characteristics(oid)
             .is_some_and(|value| value.is_creature());
 
-        sacrifice_permanent(&mut self.state, oid)?;
+        sacrifice_permanent(&mut self.state, self.registry, oid)?;
 
         let mut ev = vec![
             permanent_moved_event(
@@ -601,7 +601,7 @@ impl GameEngine {
             let was_creature = self
                 .characteristics(oid)
                 .is_some_and(|value| value.is_creature());
-            if sacrifice_permanent(&mut self.state, oid).is_ok() {
+            if sacrifice_permanent(&mut self.state, self.registry, oid).is_ok() {
                 if let Some(owner_id) = owner {
                     ev.push(permanent_moved_event(
                         &self.state,
@@ -1030,7 +1030,7 @@ impl GameEngine {
                 .map(|o| o.owner)
                 .ok_or(EngineError::Illegal("chosen card object not found"))?;
             let discard_name = object_display_name(&self.state, self.registry, oid);
-            move_object_to_zone(&mut self.state, oid, Zone::Graveyard, None)?;
+            move_object_to_zone(&mut self.state, self.registry, oid, Zone::Graveyard, None)?;
             ev.push(permanent_moved_event(
                 &self.state,
                 oid,

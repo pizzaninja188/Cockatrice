@@ -61,9 +61,21 @@ impl Characteristics {
     }
 }
 
-impl GameEngine {
-    /// Compute the rules-visible characteristics of `oid` through the ordered layer pipeline.
-    pub fn characteristics(&self, oid: ObjectId) -> Option<Characteristics> {
+struct CharacteristicsEvaluator<'a> {
+    state: &'a GameState,
+    registry: &'static CardRegistry,
+}
+
+pub(super) fn characteristics_from(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    oid: ObjectId,
+) -> Option<Characteristics> {
+    CharacteristicsEvaluator { state, registry }.characteristics(oid)
+}
+
+impl CharacteristicsEvaluator<'_> {
+    fn characteristics(&self, oid: ObjectId) -> Option<Characteristics> {
         let object = self.state.objects.get(&oid)?;
         let definition = self.registry.get(&object.card_id)?;
         let face = definition.face(object.face_up_index)?;
@@ -114,17 +126,6 @@ impl GameEngine {
     ///    `continuous_effects` changes. Until then the `debug_assert` in `apply_sbas` holds the
     ///    two in sync.
     fn apply_layer_2_control(&self, _result: &mut Characteristics) {}
-
-    /// CR 110.2 controller of `oid`, through the layer pipeline.
-    ///
-    /// Prefer this over reading `GameObject::owner` anywhere the question is "whose permanent is
-    /// this?" — owner and controller coincide only until a permanent changes hands. Hot loops that
-    /// run per-permanent per-event may read the `controller` field directly instead (it is the
-    /// layer-2 base value, identical while no continuous control effect exists) rather than paying
-    /// for an unmemoized characteristics computation.
-    pub(super) fn controller_of(&self, oid: ObjectId) -> Option<PlayerId> {
-        self.characteristics(oid).map(|c| c.controller)
-    }
 
     fn apply_layer_3_text(&self, _result: &mut Characteristics) {}
 
@@ -237,6 +238,24 @@ impl GameEngine {
 
         result.power = power.map(|value| value.max(0) as u32);
         result.toughness = toughness.map(|value| value.max(0) as u32);
+    }
+}
+
+impl GameEngine {
+    /// Compute the rules-visible characteristics of `oid` through the ordered layer pipeline.
+    pub fn characteristics(&self, oid: ObjectId) -> Option<Characteristics> {
+        characteristics_from(&self.state, self.registry, oid)
+    }
+
+    /// CR 110.2 controller of `oid`, through the layer pipeline.
+    ///
+    /// Prefer this over reading `GameObject::owner` anywhere the question is "whose permanent is
+    /// this?" — owner and controller coincide only until a permanent changes hands. Hot loops that
+    /// run per-permanent per-event may read the `controller` field directly instead (it is the
+    /// layer-2 base value, identical while no continuous control effect exists) rather than paying
+    /// for an unmemoized characteristics computation.
+    pub(super) fn controller_of(&self, oid: ObjectId) -> Option<PlayerId> {
+        self.characteristics(oid).map(|c| c.controller)
     }
 
     /// Compatibility query retained for scenario helpers and callers that only need power.

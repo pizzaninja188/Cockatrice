@@ -33,7 +33,7 @@ pub(super) fn counter_target_spell(
                 } else {
                     Zone::Graveyard
                 };
-                move_object_to_zone(&mut engine.state, st.id, destination, None)?;
+                move_object_to_zone(&mut engine.state, engine.registry, st.id, destination, None)?;
                 if let Some(owner) = owner {
                     events.push(permanent_moved_event(
                         &engine.state,

@@ -33,6 +33,45 @@ pub(super) fn apply_damage_to_player(
     }
 }
 
+/// The single funnel for non-combat damage dealt to a creature. Prevention is applied before
+/// either marked damage or the CR 702.2b deathtouch history bit is recorded.
+pub(super) fn apply_damage_to_permanent(
+    engine: &mut GameEngine,
+    events: &mut Vec<rv1::RuledEvent>,
+    target: ObjectId,
+    amount: u32,
+    source_has_deathtouch: bool,
+    source_label: &str,
+) -> u32 {
+    let dealt = apply_prevention_shield(
+        &mut engine.state.damage_prevention_shields,
+        target,
+        amount,
+        events,
+    );
+    if dealt == 0 {
+        return 0;
+    }
+
+    let is_creature = engine
+        .characteristics(target)
+        .is_some_and(|value| value.is_creature());
+    let target_label = object_display_name(&engine.state, engine.registry, target);
+    if let Some(object) = engine.state.objects.get_mut(&target) {
+        if object.zone == Zone::Battlefield && is_creature {
+            object.damage += dealt;
+            if source_has_deathtouch {
+                object.deathtouch_damage = true;
+            }
+            events.push(ev_log(format!(
+                "{source_label} deals {dealt} damage to {target_label}"
+            )));
+            return dealt;
+        }
+    }
+    0
+}
+
 pub(super) fn damage_target(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -40,6 +79,9 @@ pub(super) fn damage_target(
     let SpellEffectKind::DamageTarget { amount, .. } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    let source_has_deathtouch = cx
+        .engine
+        .resolving_source_has_keyword(cx.top, Keyword::Deathtouch);
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let targets = cx.targets;
@@ -52,30 +94,24 @@ pub(super) fn damage_target(
         // CR 615.1: consume prevention shield before recording damage. A player target is keyed
         // by its player id widened to an ObjectId, the same convention `TargetRef::object_id`
         // uses, so one call covers both branches below.
-        let amount = apply_prevention_shield(
-            &mut engine.state.damage_prevention_shields,
-            tid,
-            amount,
-            events,
-        );
         if let Some(pi) = engine.state.player_idx(tid as i32) {
+            let amount = apply_prevention_shield(
+                &mut engine.state.damage_prevention_shields,
+                tid,
+                amount,
+                events,
+            );
             let pid = engine.state.players[pi].id;
             apply_damage_to_player(engine, events, pid, amount, spell_label);
         } else {
-            let tgt = object_display_name(&engine.state, engine.registry, tid);
-            let is_creature = engine
-                .characteristics(tid)
-                .is_some_and(|value| value.is_creature());
-            if let Some(t) = engine.state.objects.get_mut(&tid) {
-                if t.zone == Zone::Battlefield && is_creature {
-                    t.damage += amount;
-                    if amount > 0 {
-                        events.push(ev_log(format!(
-                            "{spell_label} deals {amount} damage to {tgt}"
-                        )));
-                    }
-                }
-            }
+            apply_damage_to_permanent(
+                engine,
+                events,
+                tid,
+                amount,
+                source_has_deathtouch,
+                spell_label,
+            );
         }
     }
 
@@ -95,6 +131,9 @@ pub(super) fn damage_targets(
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    let source_has_deathtouch = cx
+        .engine
+        .resolving_source_has_keyword(cx.top, Keyword::Deathtouch);
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let targets = cx.targets;
@@ -140,41 +179,24 @@ pub(super) fn damage_targets(
             )));
             continue;
         }
-        let damage_amount = apply_prevention_shield(
-            &mut engine.state.damage_prevention_shields,
-            tid,
-            damage_amount,
-            events,
-        );
-        if damage_amount == 0 {
-            continue;
-        }
         if let Some(pi) = engine.state.player_idx(tid as i32) {
+            let damage_amount = apply_prevention_shield(
+                &mut engine.state.damage_prevention_shields,
+                tid,
+                damage_amount,
+                events,
+            );
             let pid = engine.state.players[pi].id;
-            engine.state.players[pi].life -= damage_amount as i32;
-            events.push(rv1::RuledEvent {
-                ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
-                    player_id: pid,
-                    new_total: engine.state.players[pi].life,
-                    delta: -(damage_amount as i32),
-                })),
-            });
-            events.push(ev_log(format!(
-                "{spell_label} deals {damage_amount} damage to P{pid}"
-            )));
+            apply_damage_to_player(engine, events, pid, damage_amount, spell_label);
         } else {
-            let tgt = object_display_name(&engine.state, engine.registry, tid);
-            let is_creature = engine
-                .characteristics(tid)
-                .is_some_and(|value| value.is_creature());
-            if let Some(t) = engine.state.objects.get_mut(&tid) {
-                if t.zone == Zone::Battlefield && is_creature {
-                    t.damage += damage_amount;
-                    events.push(ev_log(format!(
-                        "{spell_label} deals {damage_amount} damage to {tgt}"
-                    )));
-                }
-            }
+            apply_damage_to_permanent(
+                engine,
+                events,
+                tid,
+                damage_amount,
+                source_has_deathtouch,
+                spell_label,
+            );
         }
     }
 

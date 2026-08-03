@@ -117,6 +117,16 @@ impl GameEngine {
             }
         }
         // Toughness-0: bypass regeneration (CR 704.5f — not a "destroy" trigger).
+        // CR 702.2b / 704.5h look only for deathtouch damage dealt since the previous SBA
+        // check. Preserve the decisions collected above, then expire the history bit on every
+        // battlefield object before this pass performs its actions. In particular, an
+        // indestructible creature must not die during a later check merely because it lost
+        // indestructible after surviving old deathtouch damage.
+        for object in self.state.objects.values_mut() {
+            if object.zone == Zone::Battlefield {
+                object.deathtouch_damage = false;
+            }
+        }
         for id in to_destroy_t0 {
             let owner = self.state.objects.get(&id).map(|o| o.owner);
             let controller = self.state.objects.get(&id).map(|o| o.controller);
@@ -124,7 +134,7 @@ impl GameEngine {
             let was_creature = self
                 .characteristics(id)
                 .is_some_and(|value| value.is_creature());
-            if destroy_permanent(&mut self.state, id).is_ok() {
+            if destroy_permanent(&mut self.state, self.registry, id).is_ok() {
                 changed = true;
                 if let Some(owner_id) = owner {
                     out.push(permanent_moved_event(
@@ -151,7 +161,7 @@ impl GameEngine {
                 changed = true;
                 let name = card_id_for_trigger.as_deref().unwrap_or("creature");
                 out.push(super::events::ev_log(format!("{name} regenerates.")));
-            } else if destroy_permanent(&mut self.state, id).is_ok() {
+            } else if destroy_permanent(&mut self.state, self.registry, id).is_ok() {
                 changed = true;
                 if let Some(owner_id) = owner {
                     out.push(permanent_moved_event(
@@ -253,7 +263,7 @@ impl GameEngine {
             let was_creature = self
                 .characteristics(id)
                 .is_some_and(|value| value.is_creature());
-            if destroy_permanent(&mut self.state, id).is_ok() {
+            if destroy_permanent(&mut self.state, self.registry, id).is_ok() {
                 changed = true;
                 if let Some(owner_id) = owner {
                     out.push(permanent_moved_event(
@@ -459,7 +469,7 @@ mod sba_tests {
             .continuous_effects
             .push(anthem(src, 1, EffectDuration::WhileSourceOnBattlefield));
         assert_eq!(e.effective_toughness(other), Some(2)); // base 1 + anthem +1
-        move_object_to_zone(&mut e.state, src, Zone::Graveyard, None).unwrap();
+        move_object_to_zone(&mut e.state, e.registry, src, Zone::Graveyard, None).unwrap();
         assert_eq!(e.effective_toughness(other), Some(1)); // anthem gone
         assert!(e.state.continuous_effects.is_empty());
     }
@@ -481,7 +491,7 @@ mod sba_tests {
             duration: EffectDuration::UntilEndOfTurn,
             timestamp: 0,
         });
-        move_object_to_zone(&mut e.state, src, Zone::Graveyard, None).unwrap();
+        move_object_to_zone(&mut e.state, e.registry, src, Zone::Graveyard, None).unwrap();
         assert_eq!(e.effective_toughness(target), Some(3)); // still buffed
     }
 
@@ -513,6 +523,37 @@ mod sba_tests {
             e.state.objects.get(&dependent).map(|o| o.zone),
             Some(Zone::Graveyard),
             "dependent must die on the SBA re-check once the anthem drains (CR 704.4)"
+        );
+    }
+
+    #[test]
+    fn surviving_deathtouch_history_expires_after_each_sba_check() {
+        let mut e = engine();
+        let target = add_creature(&mut e, 0, 3, 1);
+        e.state.objects.get_mut(&target).unwrap().deathtouch_damage = true;
+        e.state.continuous_effects.push(ContinuousEffect {
+            source_id: None,
+            affected: AffectedScope::Single(target),
+            kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Indestructible),
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 0,
+        });
+
+        let mut out = vec![];
+        e.apply_sbas(&mut out).unwrap();
+        assert_eq!(
+            e.state.objects.get(&target).map(|object| object.zone),
+            Some(Zone::Battlefield),
+            "indestructible prevents the deathtouch destruction"
+        );
+        assert!(!e.state.objects.get(&target).unwrap().deathtouch_damage);
+
+        e.state.continuous_effects.clear();
+        e.apply_sbas(&mut out).unwrap();
+        assert_eq!(
+            e.state.objects.get(&target).map(|object| object.zone),
+            Some(Zone::Battlefield),
+            "losing indestructible later must not revive stale deathtouch history"
         );
     }
 }

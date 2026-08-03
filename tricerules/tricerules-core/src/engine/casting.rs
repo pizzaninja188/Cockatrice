@@ -459,7 +459,13 @@ impl GameEngine {
             trigger_player: None,
             flashback,
         });
-        super::resolution::move_object_to_zone(&mut self.state, oid, Zone::Stack, None)?;
+        super::resolution::move_object_to_zone(
+            &mut self.state,
+            self.registry,
+            oid,
+            Zone::Stack,
+            None,
+        )?;
 
         self.state.passes_since_stack_change = 0;
         self.state.priority_idx = idx;
@@ -739,7 +745,7 @@ impl GameEngine {
                     .get(&permanent_id)
                     .map(|o| o.owner)
                     .unwrap_or(player);
-                sacrifice_permanent(&mut self.state, permanent_id)?;
+                sacrifice_permanent(&mut self.state, self.registry, permanent_id)?;
                 Ok((
                     Some(permanent_moved_event(
                         &self.state,
