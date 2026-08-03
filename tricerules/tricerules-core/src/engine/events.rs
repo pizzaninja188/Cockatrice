@@ -29,18 +29,6 @@ impl GameEngine {
         batch
     }
 
-    pub fn game_over_batch_winner(&self, w: PlayerId) -> RuledEventBatch {
-        let mut b = RuledEventBatch::default();
-        b.events.push(rv1::RuledEvent {
-            ev: Some(rv1::ruled_event::Ev::Log(rv1::LogMessage {
-                text: format!("Game over. Winner: {w}"),
-                visible_to_player_id: None,
-                hidden_from_player_id: None,
-            })),
-        });
-        b
-    }
-
     /// Engine-owned card identity for the session: the union of all deck card ids mapped
     /// to Oracle names plus the mechanical info Servatrice needs without querying Oracle.
     /// Server-only — Servatrice strips it from client broadcasts (it enumerates decks).
@@ -275,6 +263,10 @@ impl GameEngine {
             })),
         }
     }
+}
+
+pub(super) fn ev_game_over(winner: PlayerId) -> RuledEvent {
+    ev_log(format!("Game over. Winner: {winner}"))
 }
 
 /// Render a color set as Cockatrice's lowercase WUBRG color string (e.g. `[White, Blue]` → "wu",

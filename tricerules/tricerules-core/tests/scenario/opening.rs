@@ -201,6 +201,8 @@ fn opening_mulligan_to_zero_cannot_mulligan_further() {
 
 #[test]
 fn concede_is_legal_during_opening_sequence() {
+    use prost::Message;
+
     // CR 104.3a: a player may concede at any time. Regression: during the choose-first / mulligan
     // opening sequence every non-opening command (including Concede) was rejected, so a player
     // could not bail out before the first turn.
@@ -209,11 +211,37 @@ fn concede_is_legal_during_opening_sequence() {
         e.state.opening.is_some(),
         "engine is still in the opening/mulligan sequence"
     );
-    e.apply_command(0, &concede())
-        .expect("a player may concede during the opening sequence");
+    let command_index_before = e.state.command_index;
+    let response = e.player_command_ipc(0, &concede().encode_to_vec());
+    assert!(response.ok, "a player may concede during opening");
     assert_eq!(
         e.state.winner,
         Some(1),
         "the opponent wins once the other player concedes"
+    );
+    assert_eq!(e.state.command_index, command_index_before + 1);
+
+    let batch = response.batch.expect("successful concession batch");
+    let logs: Vec<_> = batch
+        .events
+        .iter()
+        .filter_map(|event| match &event.ev {
+            Some(Ev::Log(log)) => Some(log.text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(logs, ["P0 conceded", "Game over. Winner: 1"]);
+    assert!(
+        batch.legal_by_player.is_empty(),
+        "a terminal batch must clear every legal action"
+    );
+
+    let rejected = e.player_command_ipc(1, &pass().encode_to_vec());
+    assert!(!rejected.ok, "commands after game over are rejected");
+    assert_eq!(rejected.error, "illegal command: game over");
+    assert_eq!(
+        e.state.command_index,
+        command_index_before + 1,
+        "a rejected post-game command is not replayed"
     );
 }

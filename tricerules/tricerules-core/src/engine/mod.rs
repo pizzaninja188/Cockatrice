@@ -59,8 +59,6 @@ pub enum EngineError {
     Illegal(&'static str),
     #[error("missing card data {0}")]
     MissingCard(String),
-    #[error("player {0} won")]
-    GameOver(PlayerId),
 }
 
 /// Internal game events emitted at state-change sites to drive the unified trigger-collection pass
@@ -658,6 +656,9 @@ impl GameEngine {
             self.flush_staged_triggers(&mut d);
             b.events.extend(d);
         }
+        if let Some(winner) = self.state.winner {
+            b.events.push(events::ev_game_over(winner));
+        }
         b.events.push(self.ev_zone_view_sync());
         // CR 106: emit each player's authoritative mana pool so the relay/clients mirror it onto
         // their mana-pool counters. An absolute snapshot per batch covers production (mana
@@ -679,13 +680,6 @@ impl GameEngine {
                     ok: true,
                     error: String::new(),
                     batch: Some(batch),
-                    missing_card_names: vec![],
-                    ..Default::default()
-                },
-                Err(EngineError::GameOver(w)) => IpcResponse {
-                    ok: true,
-                    error: String::new(),
-                    batch: Some(self.game_over_batch_winner(w)),
                     missing_card_names: vec![],
                     ..Default::default()
                 },

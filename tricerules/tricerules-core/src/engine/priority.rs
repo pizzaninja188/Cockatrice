@@ -1,4 +1,4 @@
-use super::events::{ev_log, ev_phase, ev_priority_changed, finish_with_events};
+use super::events::{ev_game_over, ev_log, ev_phase, ev_priority_changed, finish_with_events};
 use super::legal_actions::fill_legal;
 use super::resolution::{draw_card, move_object_to_zone, permanent_moved_event};
 use super::*;
@@ -63,6 +63,9 @@ impl GameEngine {
         }
         let mut batch = RuledEventBatch::default();
         batch.events.push(ev_log(format!("P{player} conceded")));
+        if let Some(winner) = self.state.winner {
+            batch.events.push(ev_game_over(winner));
+        }
         fill_legal(&mut batch, self);
         Ok(batch)
     }

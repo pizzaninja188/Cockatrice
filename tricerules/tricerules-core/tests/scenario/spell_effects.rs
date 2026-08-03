@@ -1514,7 +1514,8 @@ fn draw_spell_decking_out_loses_without_erroring() {
 
     // Resolving must succeed even though the library runs dry partway through the draw.
     e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass())
+    let terminal_batch = e
+        .apply_command(1, &pass())
         .expect("p1 pass resolves divination (must not error)");
 
     assert!(e.state.players[0].library.is_empty(), "library drawn dry");
@@ -1523,6 +1524,23 @@ fn draw_spell_decking_out_loses_without_erroring() {
         "P0 attempted to draw from an empty library and loses (CR 104.3c)"
     );
     assert_eq!(e.state.winner, Some(1), "P1 wins once P0 decks out");
+    assert!(
+        terminal_batch
+            .events
+            .iter()
+            .any(|event| matches!(&event.ev, Some(Ev::StackResolved(_)))),
+        "the terminal command keeps its resolution events"
+    );
+    assert!(
+        terminal_batch.events.iter().any(
+            |event| matches!(&event.ev, Some(Ev::Log(log)) if log.text == "Game over. Winner: 1")
+        ),
+        "the terminal command names the winner"
+    );
+    assert!(
+        terminal_batch.legal_by_player.is_empty(),
+        "a terminal batch must clear every legal action"
+    );
 }
 
 // ── DiscardCards tests ─────────────────────────────────────────────────────────

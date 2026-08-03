@@ -8,6 +8,12 @@
 
 ### 2026-08-02
 
+- **Game-over commands now emit a complete terminal batch** (`tricerules-core/src/engine/`): Fixed
+  the dead `EngineError::GameOver` path by appending the winner log to the successful command batch,
+  preserving resolution/state events and clearing all legal actions once a winner is set.
+  Concession, empty-library loss, and lethal life loss scenarios now verify the terminal response;
+  focused scenarios, full `cargo test`, Clippy with warnings denied, and `cargo fmt --check` all exit 0.
+
 - **Trample attacker with one blocker omitted its damage-assignment label** (`tricerules-core/src/engine/combat.rs`, `engine/legal_actions.rs`): Fixed by centralizing the explicit-assignment predicate used for multiply-blocked attackers and single-blocked attackers with trample, then using it for combat state, assignment completion, and `LegalActions.labels`. The Colossal Dreadmaw versus Grizzly Bears scenario now verifies the active player's named assignment prompt and the defender's waiting prompt. Focused scenario test, full `cargo test`, Clippy with warnings denied, and `cargo fmt --check` all exit 0.
 
 ### 2026-06-25
@@ -27,8 +33,6 @@
 ## Pending Findings
 
 ### Bugs
-
-- **`EngineError::GameOver` is dead code; game-over events are never emitted via the intended path** (`tricerules-core/src/engine/mod.rs:62,644-651`, `priority.rs:31-46,49-67`): Both `sweep_life` (called from `dispatch_command` at `mod.rs:611`) and `concede_batch` set `state.winner` and return `Ok(batch)` — neither ever returns `Err(EngineError::GameOver(...))`. The `GameOver` arm in `player_command_ipc` is therefore unreachable and `game_over_batch_winner` (`events.rs:32`) is never called, so clients receive no dedicated game-winner event; they only see the concede log line, and the next command fails with `Illegal("game over")` (`mod.rs:422`). Fix: after `sweep_life()` in `dispatch_command`, check `state.winner.is_some()` and either return `Err(GameOver(w))` or push the winner event into the batch directly.
 
 - **Neither spell-damage path sets `deathtouch_damage`** (`tricerules-core/src/engine/resolution/mass.rs:103-137` `damage_all`, `resolution/damage.rs:3-59` `damage_target`, `damage.rs:62+` `damage_targets`): only combat damage sets the flag (`combat.rs:871,890,955,976`), which the lethal-damage SBA reads (`state_based.rs:115`). No implemented card exercises this — no spell or ability source currently has Deathtouch — but any Deathtouch source dealing non-combat damage (a Deathtouch creature's activated ping ability, e.g.) would miss the CR 702.2b / 704.5h death check. *(Corrected from the June note, which claimed `DamageTarget` set the flag and only `DamageAll` missed it — neither does.)*
 

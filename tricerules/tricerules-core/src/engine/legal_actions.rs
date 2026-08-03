@@ -6,6 +6,10 @@ use super::targeting::{compute_spell_targets, spell_effect_kind_needs_target};
 use super::*;
 
 pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
+    if eng.state.winner.is_some() {
+        batch.legal_by_player.clear();
+        return;
+    }
     for p in &eng.state.players {
         let labels = legal_labels(eng, p.id);
         let hand_actions = legal_hand_actions(eng, p.id);

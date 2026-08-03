@@ -1669,13 +1669,28 @@ fn sulfuric_vortex_upkeep_damage_can_kill() {
     e.state.players[1].life = 2;
 
     pass_turn_to_next_upkeep(&mut e, 0); // P1's upkeep
-    resolve_entire_stack_two_player(&mut e);
+    let first = e.state.priority_player_id();
+    let second = if first == 0 { 1 } else { 0 };
+    e.apply_command(first, &pass()).expect("first player pass");
+    let terminal_batch = e
+        .apply_command(second, &pass())
+        .expect("second player pass resolves lethal upkeep trigger");
 
     assert!(
         e.state.players[1].has_lost,
         "0 or less life loses (CR 704.5a)"
     );
     assert_eq!(e.state.winner, Some(0));
+    assert!(
+        terminal_batch.events.iter().any(
+            |event| matches!(&event.ev, Some(Ev::Log(log)) if log.text == "Game over. Winner: 0")
+        ),
+        "lethal life loss names the winner"
+    );
+    assert!(
+        terminal_batch.legal_by_player.is_empty(),
+        "lethal life loss clears every legal action"
+    );
 }
 
 // ---------------------------------------------------------------------------
