@@ -1319,6 +1319,163 @@ fn published_zone_targets_follow_apnap_and_zone_order() {
     );
 }
 
+/// Issue #42. Oracle: "Target creature gains deathtouch until end of turn." `GrantKeywordsTarget`
+/// was missing from the spell-side validator, so its catch-all advertised every object — graveyard
+/// cards, players and stack spells included (CR 115.1: only battlefield creatures are legal here).
+#[test]
+fn bladebrand_target_tables_exclude_objects_outside_the_battlefield() {
+    let decks = Some(vec![
+        deck_with("swamp", &["bladebrand", "lightning_bolt"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(2816, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let bears = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    let buried = inject_graveyard_card(&mut e, 0, "grizzly_bears");
+    let bladebrand = relocate_to_hand(&mut e, 0, "bladebrand");
+    ensure_in_hand(&mut e, 0, "lightning_bolt");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            r: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+
+    // A spell on the stack, so `valid_stack_ids` has something it could wrongly offer.
+    let bolt_slot = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(
+        0,
+        &cast_spell(
+            bolt_slot,
+            vec![TargetRef {
+                object_id: 1,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast Lightning Bolt at P1");
+    let bolt_on_stack = e.state.stack.last().expect("Bolt on stack").id;
+
+    let bladebrand_slot = e.state.players[0]
+        .hand
+        .iter()
+        .position(|&oid| oid == bladebrand)
+        .expect("Bladebrand in hand") as u32;
+    let batch = e.initial_response_batch();
+    let legal = batch.legal_by_player.get(&0).expect("legal actions for P0");
+    let targets = &legal.valid_targets_by_hand_slot[&(bladebrand_slot << 8)];
+
+    assert_eq!(
+        targets.valid_permanent_ids,
+        vec![bears],
+        "the battlefield creature is the only legal target"
+    );
+    assert!(
+        targets.valid_graveyard_ids.is_empty(),
+        "a graveyard card is not a creature on the battlefield: {:?}",
+        targets.valid_graveyard_ids
+    );
+    assert!(
+        targets.valid_stack_ids.is_empty(),
+        "a spell on the stack cannot gain deathtouch: {:?}",
+        targets.valid_stack_ids
+    );
+    assert!(!targets.can_target_self, "a player is not a creature");
+    assert!(!targets.can_target_opponent, "a player is not a creature");
+
+    // The ids exist — the tables exclude them on legality, not because they are absent.
+    assert!(e.state.objects.contains_key(&buried));
+    assert!(e.state.stack.iter().any(|s| s.id == bolt_on_stack));
+}
+
+/// The same defect from the command side: casting must reject an illegal target outright (CR
+/// 601.2c) rather than letting the spell resolve and fizzle after the mana is spent (CR 608.2b).
+#[test]
+fn bladebrand_rejects_cast_targets_outside_the_battlefield() {
+    let decks = Some(vec![
+        deck_with("swamp", &["bladebrand", "lightning_bolt"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(2817, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let bears = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    let buried = inject_graveyard_card(&mut e, 0, "grizzly_bears");
+    ensure_in_hand(&mut e, 0, "bladebrand");
+    ensure_in_hand(&mut e, 0, "lightning_bolt");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            r: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+
+    let bolt_slot = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(
+        0,
+        &cast_spell(
+            bolt_slot,
+            vec![TargetRef {
+                object_id: 1,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast Lightning Bolt at P1");
+    let bolt_on_stack = e.state.stack.last().expect("Bolt on stack").id;
+
+    for (label, object_id) in [
+        ("a graveyard card", buried),
+        ("a player", 1u32),
+        ("a spell on the stack", bolt_on_stack),
+    ] {
+        let idx = hand_index_for_card(&e, 0, "bladebrand");
+        let result = e.apply_command(
+            0,
+            &cast_spell(
+                idx,
+                vec![TargetRef {
+                    object_id,
+                    damage_amount: 0,
+                }],
+            ),
+        );
+        assert!(
+            result.is_err(),
+            "{label} must not be a legal Bladebrand target"
+        );
+        assert!(
+            e.state.players[0]
+                .hand
+                .iter()
+                .any(|&oid| e.state.objects[&oid].card_id == "bladebrand"),
+            "the rejected cast must leave Bladebrand in hand ({label})"
+        );
+    }
+
+    let idx = hand_index_for_card(&e, 0, "bladebrand");
+    e.apply_command(
+        0,
+        &cast_spell(
+            idx,
+            vec![TargetRef {
+                object_id: bears,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("a battlefield creature is still a legal target");
+}
+
 #[test]
 fn published_stack_targets_include_copies_in_bottom_to_top_order() {
     let decks = Some(vec![

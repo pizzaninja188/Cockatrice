@@ -79,6 +79,7 @@ fn default_creature_filter() -> TargetFilter {
 /// - `(kind: Creature, not_artifact: true)` — non-artifact creature
 /// - `(kind: Creature, tapped: true)` — tapped creature (for future use)
 /// - `(kind: Creature, not_color: Black)` — nonblack creature (Doom Blade, Terror)
+/// - `(kind: Creature, is_color: Green)` — green creature (Perish, Virtue's Ruin)
 /// - `(kind: Creature, attacking_or_blocking: true)` — Divine Verdict, Hunt Down
 /// - `(kind: Creature, only_controller: true)` — "target creature you control" (Equip,
 ///   Regenerate, many activated abilities). Enforced at targeting time; the controller
@@ -101,6 +102,11 @@ pub struct TargetFilter {
     /// Doom Blade ("nonblack creature"), Terror ("nonblack" — paired with `not_artifact`).
     #[serde(default)]
     pub not_color: Option<Color>,
+    /// CR 105/202.2: if `Some`, the object must BE of this color — the inclusive mirror of
+    /// `not_color`. Perish ("all green creatures") and Virtue's Ruin ("all white creatures") on
+    /// the untargeted side; Hydroblast / Pyroblast ("target red permanent") on the targeted side.
+    #[serde(default)]
+    pub is_color: Option<Color>,
     /// "target creature you control" restriction (CR 702.6a / 701.15 regenerate / various
     /// activated abilities). The target must be owned/controlled by the activating player.
     /// Covers Equipment equip (Bonesplitter, Vulshok Morningstar) and Regenerate (Drudge

@@ -109,6 +109,68 @@ fn boros_charm_keyword_modes_apply_to_the_correct_snapshot() {
     assert!(e.effective_has_keyword(opponent, Keyword::DoubleStrike));
 }
 
+/// Issue #42 through the modal path: mode 2 ("Target creature gains double strike until end of
+/// turn") is a `GrantKeywordsTarget`, so it must reject non-battlefield targets at cast time and
+/// must not advertise them in the mode's own target group (CR 115.1).
+#[test]
+fn boros_charm_double_strike_mode_rejects_targets_outside_the_battlefield() {
+    let mut e = GameEngine::new(19010, &[0, 1], 20, modal_decks("boros_charm"), true).unwrap();
+    advance_to_main1_from_game_start(&mut e);
+    let creature = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    let buried = inject_graveyard_card(&mut e, 0, "grizzly_bears");
+    fund_boros(&mut e);
+
+    let index = hand_index_for_card(&e, 0, "boros_charm");
+    let batch = e.initial_response_batch();
+    let legal = batch.legal_by_player.get(&0).expect("legal actions for P0");
+    let action = legal
+        .hand_actions
+        .iter()
+        .find(|a| a.hand_index == index as u32)
+        .expect("Boros Charm hand action");
+    let double_strike = action
+        .modes
+        .iter()
+        .find(|m| m.mode_index == 2)
+        .expect("double strike mode");
+    let targets = double_strike.targets.as_ref().expect("mode target group");
+    assert_eq!(targets.valid_permanent_ids, vec![creature]);
+    assert!(targets.valid_graveyard_ids.is_empty());
+    assert!(!targets.can_target_self && !targets.can_target_opponent);
+
+    for (label, object_id) in [("a graveyard card", buried), ("a player", 1u32)] {
+        let result = e.apply_command(
+            0,
+            &cast_modal_spell(
+                index,
+                vec![(
+                    2,
+                    vec![TargetRef {
+                        object_id,
+                        damage_amount: 0,
+                    }],
+                )],
+            ),
+        );
+        assert!(result.is_err(), "{label} must not be a legal mode-2 target");
+    }
+
+    e.apply_command(
+        0,
+        &cast_modal_spell(
+            index,
+            vec![(
+                2,
+                vec![TargetRef {
+                    object_id: creature,
+                    damage_amount: 0,
+                }],
+            )],
+        ),
+    )
+    .expect("a battlefield creature is still a legal mode-2 target");
+}
+
 #[test]
 fn modal_cast_rejects_bad_counts_duplicates_and_legacy_targets() {
     for (seed, command) in [
