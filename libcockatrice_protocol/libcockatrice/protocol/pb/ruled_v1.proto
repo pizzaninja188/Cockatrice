@@ -915,6 +915,13 @@ message RuledPerPlayerView {
   repeated uint32 graveyard_object_ids = 31 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // Drives the distinct first-strike damage prompt within CR 510.4 combat damage processing.
   bool first_strike_step_pending = 32 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // This player's hand and library are identical to their previous view in this session, so
+  // `hand_cards` and `library_card_ids` above are omitted and the receiver keeps what it has.
+  // Same absent-means-unchanged contract as HandSlotMap. Never set on the first view of a
+  // session (the startup sync needs a full snapshot to seed the physical zones), and decided
+  // per player: a draw re-sends the drawing player in full while the other stays omitted.
+  // Server-only, like the two concealed fields it describes.
+  bool private_zones_unchanged = 33 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
 }
 
 message ZoneViewSync {

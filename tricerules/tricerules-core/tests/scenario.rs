@@ -59,3 +59,5 @@ mod tutor_search;
 mod untap;
 #[path = "scenario/x_multi_target.rs"]
 mod x_multi_target;
+#[path = "scenario/zone_view.rs"]
+mod zone_view;

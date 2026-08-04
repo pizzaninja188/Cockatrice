@@ -18,7 +18,8 @@
 #include <libcockatrice/protocol/pb/event_set_card_attr.pb.h>
 #include <libcockatrice/utility/zone_names.h>
 
-namespace {
+namespace
+{
 QString stripRuledDamageLine(const QString &ann)
 {
     if (ann.isEmpty()) {
@@ -134,96 +135,111 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
     // zone views only arrive in ruled games.
     Server_Game *game = player->getGame();
     const auto trId = [game](Server_Card *c) { return game->ruled()->ruledCardIdForName(c->getName()); };
-    QList<Server_Card *> pool;
-    for (Server_Card *c : deckZone->getCards()) {
-        pool.append(c);
-    }
-    for (Server_Card *c : handZone->getCards()) {
-        pool.append(c);
-    }
-    QStringList libWants;
-    for (const std::string &id : v.library_card_ids()) {
-        if (!id.empty()) {
-            libWants.append(QString::fromStdString(id));
+    // The engine omits hand + library while they are unchanged, so the reconcile below — which
+    // rebuilds a ~60-card pool and matches every engine card id against it — runs only on a batch
+    // that actually moved a card into or out of one of those zones. The battlefield and graveyard
+    // sections after it are unconditional: those are re-sent in full every view and the engine
+    // ObjectId map is rebuilt from them.
+    if (v.private_zones_unchanged()) {
+        if (!privateZonesSynced) {
+            qWarning() << "applyRuledEngineZoneView: player" << playerId
+                       << "reports unchanged hand/library before any full sync — physical zones were "
+                          "never seeded and will stay stale until the engine reports a change";
         }
-    }
-    if (v.hand_cards_size() + libWants.size() != pool.size()) {
-        qWarning() << "applyRuledEngineZoneView: count mismatch hand" << v.hand_cards_size() << "lib"
-                   << libWants.size() << "pool" << pool.size() << "library_card_ids"
-                   << v.library_card_ids_size();
-        return result;
-    }
-    QList<Server_Card *> handList;
-    for (int i = 0; i < v.hand_cards_size(); ++i) {
-        const QString want = QString::fromStdString(v.hand_cards(i).card_id());
-        int found = -1;
-        for (int j = 0; j < pool.size(); ++j) {
-            if (trId(pool[j]) == want) {
-                found = j;
-                break;
+    } else {
+        QList<Server_Card *> pool;
+        for (Server_Card *c : deckZone->getCards()) {
+            pool.append(c);
+        }
+        for (Server_Card *c : handZone->getCards()) {
+            pool.append(c);
+        }
+        QStringList libWants;
+        for (const std::string &id : v.library_card_ids()) {
+            if (!id.empty()) {
+                libWants.append(QString::fromStdString(id));
             }
         }
-        if (found < 0) {
-            qWarning() << "applyRuledEngineZoneView: missing" << want << "player" << playerId;
+        if (v.hand_cards_size() + libWants.size() != pool.size()) {
+            qWarning() << "applyRuledEngineZoneView: count mismatch hand" << v.hand_cards_size() << "lib"
+                       << libWants.size() << "pool" << pool.size() << "library_card_ids" << v.library_card_ids_size();
             return result;
         }
-        handList.append(pool.takeAt(found));
-    }
-    QList<Server_Card *> libList;
-    for (const QString &want : libWants) {
-        int found = -1;
-        for (int j = 0; j < pool.size(); ++j) {
-            if (trId(pool[j]) == want) {
-                found = j;
-                break;
+        QList<Server_Card *> handList;
+        for (int i = 0; i < v.hand_cards_size(); ++i) {
+            const QString want = QString::fromStdString(v.hand_cards(i).card_id());
+            int found = -1;
+            for (int j = 0; j < pool.size(); ++j) {
+                if (trId(pool[j]) == want) {
+                    found = j;
+                    break;
+                }
             }
+            if (found < 0) {
+                qWarning() << "applyRuledEngineZoneView: missing" << want << "player" << playerId;
+                return result;
+            }
+            handList.append(pool.takeAt(found));
         }
-        if (found < 0) {
-            qWarning() << "applyRuledEngineZoneView: missing lib" << want;
+        QList<Server_Card *> libList;
+        for (const QString &want : libWants) {
+            int found = -1;
+            for (int j = 0; j < pool.size(); ++j) {
+                if (trId(pool[j]) == want) {
+                    found = j;
+                    break;
+                }
+            }
+            if (found < 0) {
+                qWarning() << "applyRuledEngineZoneView: missing lib" << want;
+                return result;
+            }
+            libList.append(pool.takeAt(found));
+        }
+        if (!pool.isEmpty()) {
             return result;
         }
-        libList.append(pool.takeAt(found));
-    }
-    if (!pool.isEmpty()) {
-        return result;
-    }
 
-    const QList<Server_Card *> currentHand = handZone->getCards();
-    const QList<Server_Card *> currentDeck = deckZone->getCards();
-    bool handMatches = (currentHand.size() == handList.size());
-    if (handMatches) {
-        for (int i = 0; i < currentHand.size(); ++i) {
-            if (currentHand[i] != handList[i]) {
-                handMatches = false;
-                break;
+        const QList<Server_Card *> currentHand = handZone->getCards();
+        const QList<Server_Card *> currentDeck = deckZone->getCards();
+        bool handMatches = (currentHand.size() == handList.size());
+        if (handMatches) {
+            for (int i = 0; i < currentHand.size(); ++i) {
+                if (currentHand[i] != handList[i]) {
+                    handMatches = false;
+                    break;
+                }
             }
         }
-    }
-    bool deckMatches = (currentDeck.size() == libList.size());
-    if (deckMatches) {
-        for (int i = 0; i < currentDeck.size(); ++i) {
-            if (currentDeck[i] != libList[i]) {
-                deckMatches = false;
-                break;
+        bool deckMatches = (currentDeck.size() == libList.size());
+        if (deckMatches) {
+            for (int i = 0; i < currentDeck.size(); ++i) {
+                if (currentDeck[i] != libList[i]) {
+                    deckMatches = false;
+                    break;
+                }
             }
         }
-    }
 
-    if (!handMatches || !deckMatches) {
-        for (Server_Card *c : currentDeck) {
-            deckZone->removeCard(c);
-        }
-        for (Server_Card *c : currentHand) {
-            handZone->removeCard(c);
-        }
+        if (!handMatches || !deckMatches) {
+            for (Server_Card *c : currentDeck) {
+                deckZone->removeCard(c);
+            }
+            for (Server_Card *c : currentHand) {
+                handZone->removeCard(c);
+            }
 
-        for (Server_Card *c : handList) {
-            handZone->insertCard(c, -1, 0);
+            for (Server_Card *c : handList) {
+                handZone->insertCard(c, -1, 0);
+            }
+            for (Server_Card *c : libList) {
+                deckZone->insertCard(c, -1, 0);
+            }
+            result.handOrLibraryChanged = true;
         }
-        for (Server_Card *c : libList) {
-            deckZone->insertCard(c, -1, 0);
-        }
-        result.handOrLibraryChanged = true;
+        // Every early return above leaves this false, so a failed reconcile keeps warning about
+        // later omissions rather than pretending the zones were seeded.
+        privateZonesSynced = true;
     }
 
     // Build an engine_oid -> Server_Card id map and (when permitted) sync tap state.
@@ -316,8 +332,7 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                     // It is drawn against its parent rather than occupying a grid column, so handing
                     // it a real column here both steals a slot from unattached permanents and gives
                     // the client a stale grid position to render the card at.
-                    const int x =
-                        c->getParentCard() ? -1 : tableZone->getFreeGridColumn(-1, y, c->getName(), y != 2);
+                    const int x = c->getParentCard() ? -1 : tableZone->getFreeGridColumn(-1, y, c->getName(), y != 2);
                     tableZone->insertCard(c, x, y);
                 }
                 result.battlefieldOrderChanged = true;

@@ -588,7 +588,7 @@ impl GameEngine {
         // Servatrice only applies engine untaps during batches that include phase_changed("untap").
         // Emit zone_view in this same batch so battlefield_tapped reaches Cockatrice while
         // batchHasUntapPhase is still true (see Server_Game::applyRuledBatch).
-        ev.push(self.ev_zone_view_sync());
+        ev.push(self.ev_zone_view_sync_tracked());
         self.state.turn_step = TurnStep::Upkeep;
         ev.push(ev_phase(self, rv1::PhaseId::Upkeep));
         self.state.combat = None;

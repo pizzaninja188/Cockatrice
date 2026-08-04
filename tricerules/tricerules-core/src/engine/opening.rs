@@ -155,7 +155,7 @@ impl GameEngine {
                             "P{player} mulligans to {} cards.",
                             7u32.saturating_sub(prev)
                         )));
-                        events.push(self.ev_zone_view_sync());
+                        events.push(self.ev_zone_view_sync_tracked());
                         Self::opening_set_next_actor_after_mulligan(self, idx, &mut events)?;
                         let mut b = RuledEventBatch {
                             events,
@@ -222,7 +222,7 @@ impl GameEngine {
             }
             _ => return Err(EngineError::Illegal("illegal command during opening")),
         }
-        events.push(self.ev_zone_view_sync());
+        events.push(self.ev_zone_view_sync_tracked());
         let mut b = RuledEventBatch {
             events,
             legal_by_player: Default::default(),

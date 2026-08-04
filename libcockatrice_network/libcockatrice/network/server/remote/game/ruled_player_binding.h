@@ -45,6 +45,12 @@ struct RuledPlayerBinding
     // hash above because a command that names a graveyard *slot* (a flashback cast) has only the
     // index, and the physical pile runs the other way — see the ordering note in the .cpp.
     QVector<quint32> graveyardEngineOidsOldestFirst;
+    // Whether a zone view has ever reconciled this player's hand and library. The engine omits
+    // those two zones while they are unchanged (RuledPerPlayerView::private_zones_unchanged), so
+    // an omission is only meaningful once a full snapshot has actually landed here — an
+    // "unchanged" view arriving before that means the physical zones were never seeded and would
+    // now stay stale silently. applyRuledEngineZoneView warns instead.
+    bool privateZonesSynced = false;
 
     bool isEngineOidSummoningSick(quint32 engineOid) const
     {

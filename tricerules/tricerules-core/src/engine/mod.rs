@@ -122,6 +122,27 @@ pub struct GameEngine {
     /// Debug-only: whether this session accepts `DevCommand` (see `engine::dev`). Off unless the
     /// sidecar explicitly enabled it; never settable by a command.
     dev_commands_enabled: bool,
+    /// Last hand/library object-id sequence broadcast per player, backing the zone view's
+    /// `private_zones_unchanged` (see [`GameEngine::ev_zone_view_sync_tracked`]).
+    ///
+    /// Engine-local rather than part of [`GameState`]: it never affects a rules decision, only
+    /// which bytes a batch carries. It stays replay-safe because it is a pure function of the
+    /// applied command sequence — a replay from a fresh engine walks the same commands and so
+    /// omits the same views. Empty here means "nothing broadcast yet", which is what forces the
+    /// first view of a session to be full.
+    private_zone_cache: HashMap<PlayerId, PrivateZoneSnapshot>,
+}
+
+/// A player's concealed-zone contents as last broadcast, compared to decide whether the next
+/// zone view may omit them.
+///
+/// Object ids, not card ids: `GameObject::card_id` is fixed for an object's lifetime (transform
+/// moves `face_up_index`, not `card_id`), so the oid sequence determines the card-id sequence
+/// exactly — and comparing oids does none of the string cloning the omission exists to avoid.
+#[derive(Default, PartialEq, Eq)]
+struct PrivateZoneSnapshot {
+    hand: Vec<ObjectId>,
+    library: Vec<ObjectId>,
 }
 
 /// CR 701.19 / 701.20: set `oid`'s tap status, returning whether it actually changed.
@@ -321,6 +342,7 @@ impl GameEngine {
             state,
             registry,
             dev_commands_enabled: false,
+            private_zone_cache: HashMap::new(),
         };
         let mut e = vec![];
         let _ = eng.apply_sbas(&mut e);
@@ -660,7 +682,7 @@ impl GameEngine {
         if let Some(winner) = self.state.winner {
             b.events.push(events::ev_game_over(winner));
         }
-        b.events.push(self.ev_zone_view_sync());
+        b.events.push(self.ev_zone_view_sync_tracked());
         // CR 106: emit each player's authoritative mana pool so the relay/clients mirror it onto
         // their mana-pool counters. An absolute snapshot per batch covers production (mana
         // abilities), payment (pay_mana), and emptying (clear_all_mana_pools on step/phase change)

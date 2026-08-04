@@ -85,15 +85,73 @@ impl GameEngine {
         }
     }
 
+    /// A zone view with every player's hand and library spelled out in full.
+    ///
+    /// The startup path needs this: Servatrice seeds each player's physical deck and hand from the
+    /// first view it sees, so that one can never be an omission. Every later view goes through
+    /// [`GameEngine::ev_zone_view_sync_tracked`] instead.
     pub(super) fn ev_zone_view_sync(&self) -> RuledEvent {
-        let per_player: Vec<rv1::RuledPerPlayerView> = self
+        let per_player = self
             .state
             .players
             .iter()
-            .map(|p| rv1::RuledPerPlayerView {
-                player_id: p.id,
-                hand_cards: p
-                    .hand
+            .enumerate()
+            .map(|(idx, _)| self.per_player_view(idx, true))
+            .collect();
+        RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ZoneView(rv1::ZoneViewSync {
+                per_player,
+            })),
+        }
+    }
+
+    /// The same zone view, but omitting the concealed zones of any player whose hand and library
+    /// are unchanged since their last broadcast view (`private_zones_unchanged`).
+    ///
+    /// This is the emission path for every batch after startup. Most commands — priority passes,
+    /// mana taps, phase rolls — touch neither zone, and re-sending ~60 library card ids per player
+    /// per batch cost a clone in the engine, a serialization per participant in the relay, and an
+    /// O(n²) card-by-card pool reconcile in Servatrice that concluded "identical" every time.
+    ///
+    /// The decision is per player, so a draw re-sends only the player who drew. Hand and library
+    /// are omitted **jointly**: Servatrice reconciles them against a single pool of physical cards
+    /// (deck zone + hand zone), so half a snapshot is not something it can apply.
+    ///
+    /// A batch may carry two views (the untap-step roll emits one mid-batch); the first updates the
+    /// cache, so the second correctly reports unchanged.
+    pub(super) fn ev_zone_view_sync_tracked(&mut self) -> RuledEvent {
+        let mut per_player = Vec::with_capacity(self.state.players.len());
+        for idx in 0..self.state.players.len() {
+            let p = &self.state.players[idx];
+            let current = PrivateZoneSnapshot {
+                hand: p.hand.to_vec(),
+                library: p.library.iter().copied().collect(),
+            };
+            let unchanged = self.private_zone_cache.get(&p.id) == Some(&current);
+            let mut view = self.per_player_view(idx, !unchanged);
+            if unchanged {
+                view.private_zones_unchanged = true;
+            } else {
+                self.private_zone_cache.insert(view.player_id, current);
+            }
+            per_player.push(view);
+        }
+        RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ZoneView(rv1::ZoneViewSync {
+                per_player,
+            })),
+        }
+    }
+
+    /// One player's zone view. `include_private` fills the server-only hand and library; when
+    /// false the caller is asserting they are unchanged and sets `private_zones_unchanged`.
+    fn per_player_view(&self, idx: usize, include_private: bool) -> rv1::RuledPerPlayerView {
+        let p = &self.state.players[idx];
+        rv1::RuledPerPlayerView {
+            player_id: p.id,
+            private_zones_unchanged: false,
+            hand_cards: if include_private {
+                p.hand
                     .iter()
                     .map(|&oid| {
                         let card_id = self
@@ -107,9 +165,12 @@ impl GameEngine {
                             object_id: oid,
                         }
                     })
-                    .collect(),
-                library_card_ids: p
-                    .library
+                    .collect()
+            } else {
+                Vec::new()
+            },
+            library_card_ids: if include_private {
+                p.library
                     .iter()
                     .map(|&oid| {
                         self.state
@@ -118,149 +179,146 @@ impl GameEngine {
                             .map(|o| o.card_id.clone())
                             .unwrap_or_default()
                     })
-                    .collect::<Vec<_>>(),
-                battlefield_objects: p
-                    .battlefield
-                    .iter()
-                    .map(|&oid| {
-                        let Some(object) = self.state.objects.get(&oid) else {
-                            return rv1::BattlefieldObject {
-                                object_id: oid,
-                                ..Default::default()
-                            };
+                    .collect::<Vec<_>>()
+            } else {
+                Vec::new()
+            },
+            battlefield_objects: p
+                .battlefield
+                .iter()
+                .map(|&oid| {
+                    let Some(object) = self.state.objects.get(&oid) else {
+                        return rv1::BattlefieldObject {
+                            object_id: oid,
+                            ..Default::default()
                         };
-                        let characteristics = self.characteristics(oid);
-                        let is_creature = characteristics
-                            .as_ref()
-                            .is_some_and(Characteristics::is_creature);
-                        let face = self
-                            .registry
-                            .get(&object.card_id)
-                            .and_then(|definition| definition.face(object.face_up_index));
-                        let activated_abilities = face
-                            .map(|face| {
-                                face.activated_abilities
-                                    .iter()
-                                    .map(|ability| {
-                                        let mana_cost = match &ability.cost {
-                                            AbilityCost::Mana(cost)
-                                            | AbilityCost::TapAndMana(cost) => cost.to_string(),
-                                            _ => String::new(),
-                                        };
-                                        let mana_produced = ability
-                                            .mana_options()
-                                            .map(|options| {
-                                                options
-                                                    .iter()
-                                                    .map(mana_amount_symbols)
-                                                    .collect::<Vec<_>>()
-                                                    .join("/")
-                                            })
-                                            .unwrap_or_default();
-                                        let cost_label = match &ability.cost {
-                                            AbilityCost::Tap => "{T}".to_string(),
-                                            AbilityCost::Mana(cost) => cost.to_string(),
-                                            AbilityCost::TapAndMana(cost) => {
-                                                format!("{{T}}, {cost}")
-                                            }
-                                            AbilityCost::Sacrifice => "Sacrifice this".to_string(),
-                                        };
-                                        rv1::AbilityInfo {
-                                            text: ability.text.clone(),
-                                            mana_cost,
-                                            mana_produced,
-                                            cost_label,
-                                            activatable: self.ability_activatable(oid, ability),
+                    };
+                    let characteristics = self.characteristics(oid);
+                    let is_creature = characteristics
+                        .as_ref()
+                        .is_some_and(Characteristics::is_creature);
+                    let face = self
+                        .registry
+                        .get(&object.card_id)
+                        .and_then(|definition| definition.face(object.face_up_index));
+                    let activated_abilities = face
+                        .map(|face| {
+                            face.activated_abilities
+                                .iter()
+                                .map(|ability| {
+                                    let mana_cost = match &ability.cost {
+                                        AbilityCost::Mana(cost) | AbilityCost::TapAndMana(cost) => {
+                                            cost.to_string()
                                         }
-                                    })
-                                    .collect()
-                            })
-                            .unwrap_or_default();
-                        let keywords = [
-                            tricerules_cards::Keyword::Flying,
-                            tricerules_cards::Keyword::Reach,
-                            tricerules_cards::Keyword::Intimidate,
-                            tricerules_cards::Keyword::Vigilance,
-                            tricerules_cards::Keyword::Lifelink,
-                            tricerules_cards::Keyword::Haste,
-                            tricerules_cards::Keyword::Deathtouch,
-                            tricerules_cards::Keyword::Menace,
-                            tricerules_cards::Keyword::Trample,
-                            tricerules_cards::Keyword::FirstStrike,
-                            tricerules_cards::Keyword::DoubleStrike,
-                            tricerules_cards::Keyword::Indestructible,
-                            tricerules_cards::Keyword::Hexproof,
-                            tricerules_cards::Keyword::Shroud,
-                            tricerules_cards::Keyword::Defender,
-                            tricerules_cards::Keyword::Flash,
-                        ]
-                        .into_iter()
-                        .filter(|&keyword| {
+                                        _ => String::new(),
+                                    };
+                                    let mana_produced = ability
+                                        .mana_options()
+                                        .map(|options| {
+                                            options
+                                                .iter()
+                                                .map(mana_amount_symbols)
+                                                .collect::<Vec<_>>()
+                                                .join("/")
+                                        })
+                                        .unwrap_or_default();
+                                    let cost_label = match &ability.cost {
+                                        AbilityCost::Tap => "{T}".to_string(),
+                                        AbilityCost::Mana(cost) => cost.to_string(),
+                                        AbilityCost::TapAndMana(cost) => {
+                                            format!("{{T}}, {cost}")
+                                        }
+                                        AbilityCost::Sacrifice => "Sacrifice this".to_string(),
+                                    };
+                                    rv1::AbilityInfo {
+                                        text: ability.text.clone(),
+                                        mana_cost,
+                                        mana_produced,
+                                        cost_label,
+                                        activatable: self.ability_activatable(oid, ability),
+                                    }
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let keywords = [
+                        tricerules_cards::Keyword::Flying,
+                        tricerules_cards::Keyword::Reach,
+                        tricerules_cards::Keyword::Intimidate,
+                        tricerules_cards::Keyword::Vigilance,
+                        tricerules_cards::Keyword::Lifelink,
+                        tricerules_cards::Keyword::Haste,
+                        tricerules_cards::Keyword::Deathtouch,
+                        tricerules_cards::Keyword::Menace,
+                        tricerules_cards::Keyword::Trample,
+                        tricerules_cards::Keyword::FirstStrike,
+                        tricerules_cards::Keyword::DoubleStrike,
+                        tricerules_cards::Keyword::Indestructible,
+                        tricerules_cards::Keyword::Hexproof,
+                        tricerules_cards::Keyword::Shroud,
+                        tricerules_cards::Keyword::Defender,
+                        tricerules_cards::Keyword::Flash,
+                    ]
+                    .into_iter()
+                    .filter(|&keyword| {
+                        characteristics
+                            .as_ref()
+                            .is_some_and(|value| value.has_keyword(keyword))
+                    })
+                    .map(|keyword| match keyword {
+                        tricerules_cards::Keyword::FirstStrike => "FirstStrike".to_string(),
+                        tricerules_cards::Keyword::DoubleStrike => "DoubleStrike".to_string(),
+                        _ => keyword.as_str().to_string(),
+                    })
+                    .collect();
+                    rv1::BattlefieldObject {
+                        object_id: oid,
+                        card_id: object.card_id.clone(),
+                        tapped: object.tapped,
+                        summoning_sick: object.summoning_sick,
+                        is_creature,
+                        power: if is_creature {
                             characteristics
                                 .as_ref()
-                                .is_some_and(|value| value.has_keyword(keyword))
-                        })
-                        .map(|keyword| match keyword {
-                            tricerules_cards::Keyword::FirstStrike => "FirstStrike".to_string(),
-                            tricerules_cards::Keyword::DoubleStrike => "DoubleStrike".to_string(),
-                            _ => keyword.as_str().to_string(),
-                        })
-                        .collect();
-                        rv1::BattlefieldObject {
-                            object_id: oid,
-                            card_id: object.card_id.clone(),
-                            tapped: object.tapped,
-                            summoning_sick: object.summoning_sick,
-                            is_creature,
-                            power: if is_creature {
-                                characteristics
-                                    .as_ref()
-                                    .and_then(|value| value.power)
-                                    .unwrap_or(0)
-                            } else {
-                                0
-                            },
-                            toughness: if is_creature {
-                                characteristics
-                                    .as_ref()
-                                    .and_then(|value| value.toughness)
-                                    .unwrap_or(0)
-                            } else {
-                                0
-                            },
-                            damage: if is_creature { object.damage } else { 0 },
-                            keywords,
-                            activated_abilities,
-                            counters_annotation: object.counter_annotation(),
-                            attached_to_oid: object.attached_to.unwrap_or(0),
-                            face_up_index: object.face_up_index as u32,
-                            // CR 108.3. The per-player view already says who *controls* this
-                            // permanent (it is listed under its controller); the owner is the
-                            // half the relay needs for the "Owner:" annotation and for routing
-                            // the card home when it leaves the battlefield.
-                            owner_player_id: object.owner,
-                        }
-                    })
-                    .collect(),
-                // CR 510.4: true while combat is set up with at least one attacker or blocker
-                // having FirstStrike/DoubleStrike and the first-strike step has not yet resolved.
-                first_strike_step_pending: self
-                    .state
-                    .combat
-                    .as_ref()
-                    .map(|c| {
-                        !c.first_strike_damage_done
-                            && combat::combat_needs_first_strike_step(self, c)
-                    })
-                    .unwrap_or(false),
-                // Engine ObjectIds for each card in this player's graveyard (in graveyard order).
-                graveyard_object_ids: p.graveyard.clone(),
-            })
-            .collect();
-        RuledEvent {
-            ev: Some(rv1::ruled_event::Ev::ZoneView(rv1::ZoneViewSync {
-                per_player,
-            })),
+                                .and_then(|value| value.power)
+                                .unwrap_or(0)
+                        } else {
+                            0
+                        },
+                        toughness: if is_creature {
+                            characteristics
+                                .as_ref()
+                                .and_then(|value| value.toughness)
+                                .unwrap_or(0)
+                        } else {
+                            0
+                        },
+                        damage: if is_creature { object.damage } else { 0 },
+                        keywords,
+                        activated_abilities,
+                        counters_annotation: object.counter_annotation(),
+                        attached_to_oid: object.attached_to.unwrap_or(0),
+                        face_up_index: object.face_up_index as u32,
+                        // CR 108.3. The per-player view already says who *controls* this
+                        // permanent (it is listed under its controller); the owner is the
+                        // half the relay needs for the "Owner:" annotation and for routing
+                        // the card home when it leaves the battlefield.
+                        owner_player_id: object.owner,
+                    }
+                })
+                .collect(),
+            // CR 510.4: true while combat is set up with at least one attacker or blocker
+            // having FirstStrike/DoubleStrike and the first-strike step has not yet resolved.
+            first_strike_step_pending: self
+                .state
+                .combat
+                .as_ref()
+                .map(|c| {
+                    !c.first_strike_damage_done && combat::combat_needs_first_strike_step(self, c)
+                })
+                .unwrap_or(false),
+            // Engine ObjectIds for each card in this player's graveyard (in graveyard order).
+            graveyard_object_ids: p.graveyard.clone(),
         }
     }
 }
