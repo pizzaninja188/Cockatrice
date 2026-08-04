@@ -216,6 +216,14 @@ fn new_object_from_card(
     }
 }
 
+/// Seat count [`GameEngine::new`] accepts. Everything the engine does with seats — opening order,
+/// APNAP, priority, the defending-player set — is written generically; the one thing that is not is
+/// naming *the* defender during combat, because `DeclareAttackers` carries no per-attacker defender
+/// to choose between them. Widening this constant therefore means a `ruled_v1.proto` change plus
+/// client UI first; the sites to revisit are named on
+/// [`GameState::sole_defending_player_id`](crate::state::GameState::sole_defending_player_id).
+const SUPPORTED_PLAYER_COUNT: usize = 2;
+
 impl GameEngine {
     fn clear_all_mana_pools(&mut self) {
         for p in &mut self.state.players {
@@ -234,7 +242,7 @@ impl GameEngine {
         decks: Option<Vec<Vec<String>>>,
         skip_opening_sequence: bool,
     ) -> Result<Self, EngineError> {
-        if player_ids.len() != 2 {
+        if player_ids.len() != SUPPORTED_PLAYER_COUNT {
             return Err(EngineError::Illegal("M2: exactly 2 players"));
         }
         let registry = CardRegistry::global();
@@ -289,8 +297,8 @@ impl GameEngine {
                 starting_player: None,
                 mulligan_actor: None,
                 bottom: None,
-                mulligans_taken: [0, 0],
-                resolved: [false, false],
+                mulligans_taken: vec![0; player_ids.len()],
+                resolved: vec![false; player_ids.len()],
             })
         };
         let chooser_idx = opening
@@ -594,7 +602,7 @@ impl GameEngine {
             }
             Some(Cmd::DeclareBlockers(b)) => {
                 if self.state.turn_step != TurnStep::DeclareBlockers
-                    || Some(player) != self.state.defending_player_id_1v1()
+                    || !self.state.is_defending_player(player)
                 {
                     return Err(EngineError::Illegal("declare blockers not legal"));
                 }
@@ -612,7 +620,7 @@ impl GameEngine {
                 {
                     self.set_attackers(&[], player)
                 } else if self.state.turn_step == TurnStep::DeclareBlockers
-                    && Some(player) == self.state.defending_player_id_1v1()
+                    && self.state.is_defending_player(player)
                     && self
                         .state
                         .combat

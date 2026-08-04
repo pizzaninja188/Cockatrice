@@ -2044,3 +2044,29 @@ fn prevented_lifelink_blocker_damage_gains_no_life() {
         "the 3-point shield leaves only 1 of the 4 combined blocker damage"
     );
 }
+
+/// Combat damage used to `unwrap()` the defending player; it now returns `EngineError::Illegal`.
+///
+/// The engine cannot be driven into `resolve_combat_damage` with no defender through public
+/// commands — the moment a player is flagged `has_lost`, `sweep_life` names a winner and every
+/// later command is rejected as "game over" — and `resolve_combat_damage` is `pub(super)`, so an
+/// integration test cannot call it directly either. What is testable, and is the exact precondition
+/// the guard handles, is that the lookup yields `None` rather than a bogus seat. The value of the
+/// change is that reaching it costs a rejected command instead of taking down the sidecar task.
+#[test]
+fn no_defending_player_once_the_opponent_has_lost() {
+    let mut e = GameEngine::new(70, &[0, 1], 20, None, true).expect("new");
+    assert_eq!(
+        e.state.sole_defending_player_id(),
+        Some(1),
+        "the opponent of the active player defends"
+    );
+    e.state.players[1].has_lost = true;
+    assert_eq!(
+        e.state.sole_defending_player_id(),
+        None,
+        "a player who has lost is not a defending player"
+    );
+    assert!(!e.state.is_defending_player(1));
+    assert!(e.state.defending_player_ids().is_empty());
+}

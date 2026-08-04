@@ -6,6 +6,48 @@
 
 ## Applied Fixes
 
+### 2026-08-04
+
+- **The engine's 2-player assumptions were fixed-arity data plus ten ambiguous call sites**
+  (`tricerules-core/src/state.rs`, `engine/{mod,opening,combat,priority,legal_actions}.rs`):
+  `OpeningSequence.mulligans_taken`/`resolved` became seat-sized `Vec`s, and the two places
+  `opening.rs` hand-rolled seat order (`1 - mulliganed_idx` and `let order = [start, 1 - start]`,
+  plus `resolved[0] && resolved[1]`) collapsed into one pure `next_unresolved_from(&[bool], start)`
+  — the same "an ordering with two implementations is an ordering that drifts" fix `apnap_rank` and
+  `battlefield_sources_apnap` already got. At two seats the behaviour is identical; at N it is
+  round-robin from the starting player, which is *closer* to CR 103.4 than the alternation it
+  replaced.
+  The real work was the audit. `defending_player_id_1v1` answered three different questions behind
+  one `Option`, so every caller silently inherited the arity-2 assumption. It is gone, replaced by
+  `defending_player_ids()` (every nonactive, non-lost seat in APNAP order), `is_defending_player()`
+  and `sole_defending_player_id()`. **Six of the ten call sites were never arity-2 to begin with**
+  and are now seat-generic: the four "is *this* player defending" guards (`mod.rs` ×2,
+  `priority.rs`, `legal_actions.rs`), `required_attacker_ids`' "is there anyone to attack"
+  (`defending_player_ids().is_empty()`), and the declare-blockers priority handoff (first defender
+  in APNAP order). **Four genuinely need to name *the* defender** — `combat.rs`
+  `defending_player_has_eligible_blockers`, `required_blocker_ids`, `set_blockers`, and combat
+  damage — because `DeclareAttackers` is a bare creature-id list with no per-attacker defender to
+  choose between. Those four now call `sole_defending_player_id`, whose doc comment names them as
+  *the* list to revisit; `SUPPORTED_PLAYER_COUNT` in `engine/mod.rs` points at it and vice versa.
+  Ten scattered greps became one chokepoint and one named constant.
+  Also removed a panic: combat damage was `defending_player_id_1v1().unwrap()` and now returns
+  `EngineError::Illegal("defender missing")` like `set_blockers` already did — a rejected command
+  rather than a dead sidecar task.
+  **The gate deliberately stayed.** `GameEngine::new` still rejects any count but 2. Lifting it
+  needs attack-target selection per attacker in `ruled_v1.proto` plus client UI (CR 506.2's "a
+  player or planeswalker the attacking player chooses"), which is a separate project — shipping a
+  seat-generic core without it would just move the failure later.
+  Coverage: four unit tests in `state.rs` exercising **3 and 4 seats** (wrap-around, all-resolved,
+  APNAP rotation, `has_lost` exclusion) — the only way to prove genericity while the gate stands,
+  and something the arithmetic they replaced could not be tested for at all; a test that
+  `GameEngine::new` rejects 0/1/3/4 players (the gate itself was untested); and a combat test that
+  the defender lookup yields `None` once the opponent has lost. `resolve_combat_damage` with no
+  defender is not reachable through public commands (`sweep_life` names a winner first) and is
+  `pub(super)`, so the test covers the guard's precondition and says so. The existing opening
+  scenarios pass unchanged, which is the 2-seat regression proof. Full `cargo test` (405 scenario +
+  all unit tests), `clippy --all-targets -D warnings` and `cargo fmt --check` exit 0. Rust-only, no
+  `.proto` edit, so no C++ rebuild was required.
+
 ### 2026-08-03
 
 - **Every ruled batch re-serialized both players' hands and libraries** (`ruled_v1.proto`,
@@ -139,8 +181,6 @@
 ## Pending Findings
 
 ### Reusability / Scalability
-
-- **Hard-coded 2-player assumption is pervasive** (`tricerules-core/src/state.rs:325,515-523`, `engine/mod.rs:210-212`): `defending_player_id_1v1()` returns `None` for anything but exactly 2 players and has ~10 call sites across `combat.rs`/`priority.rs`/`legal_actions.rs`; `OpeningSequence.mulligans_taken` is `[u32; 2]`; `GameEngine::new` rejects any player count != 2. Partially mitigated since the audit — `defending_player_id_1v1` carries a doc comment and `new` returns a clear `Illegal("M2: exactly 2 players")` rather than panicking — but the `[u32; 2]` array and the unaudited call sites remain the work item for any multiplayer expansion.
 
 - **`ev_zone_view_sync` still re-sends every player's full battlefield on every `apply_command`
   return** (`tricerules-core/src/engine/events.rs`): the concealed half of this finding is fixed

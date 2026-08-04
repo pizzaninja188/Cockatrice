@@ -392,10 +392,25 @@ pub struct OpeningSequence {
     pub mulligan_actor: Option<PlayerId>,
     /// During bottom step: (player, cards still to place on bottom).
     pub bottom: Option<(PlayerId, u32)>,
-    /// Mulligans already taken this opening (indexed by `players` vec index).
-    pub mulligans_taken: [u32; 2],
-    /// Opening fully finished for each seat (indexed by `players` vec index).
-    pub resolved: [bool; 2],
+    /// Mulligans already taken this opening (indexed by `players` vec index, one entry per seat).
+    pub mulligans_taken: Vec<u32>,
+    /// Opening fully finished for each seat (indexed by `players` vec index, one entry per seat).
+    pub resolved: Vec<bool>,
+}
+
+/// The next seat that has not finished its opening, scanning forward in seat order from `start_idx`
+/// inclusive and wrapping. `None` once every seat is resolved.
+///
+/// The single source of opening-turn order (CR 103.4: each player in turn order decides whether to
+/// mulligan). Both `opening.rs` call sites previously rolled their own — one as `1 - idx`, the other
+/// as a two-element array — and neither generalizes past two seats. Same reason `apnap_rank` and
+/// `battlefield_sources_apnap` exist: an ordering with two implementations is an ordering that
+/// drifts.
+pub fn next_unresolved_from(resolved: &[bool], start_idx: usize) -> Option<usize> {
+    let seats = resolved.len();
+    (0..seats)
+        .map(|offset| (start_idx + offset) % seats)
+        .find(|&idx| !resolved[idx])
 }
 
 /// What set of permanents a continuous effect applies to (CR 613).
@@ -637,13 +652,97 @@ impl GameState {
         (idx + seats - self.active_player_idx) % seats
     }
 
-    /// The defending player in 1v1 (opponent of active) — for multi-player use first NAP; M2: two players
-    pub fn defending_player_id_1v1(&self) -> Option<PlayerId> {
-        if self.players.len() != 2 {
-            return None;
+    /// Every defending player this turn (CR 506.2): each nonactive player still in the game, in
+    /// APNAP order (CR 101.4). Exactly one element in 1v1.
+    pub fn defending_player_ids(&self) -> Vec<PlayerId> {
+        defending_player_ids_of(&self.players, self.active_player_idx)
+    }
+
+    /// Whether `player` is a defending player this turn — the "is this your call?" question, asked
+    /// by every command guard that gates a blocking decision. Seat-count generic.
+    pub fn is_defending_player(&self, player: PlayerId) -> bool {
+        self.defending_player_ids().contains(&player)
+    }
+
+    /// The defending player, but only when there is exactly one.
+    ///
+    /// **This is the engine's single remaining hard 2-player assumption.** Combat commands carry no
+    /// per-attacker defender (`DeclareAttackers` is a bare list of creature ids), so any code that
+    /// needs to name *the* defender cannot work with more than one — it calls this and fails closed.
+    /// Widening the engine past two seats means giving each of these a real defender instead:
+    /// `combat.rs` `defending_player_has_eligible_blockers`, `required_blocker_ids`, `set_blockers`,
+    /// and combat damage assignment. Nothing else in the engine depends on the seat count; see
+    /// `SUPPORTED_PLAYER_COUNT` in `engine/mod.rs`.
+    pub fn sole_defending_player_id(&self) -> Option<PlayerId> {
+        let defenders = self.defending_player_ids();
+        match defenders.len() {
+            1 => Some(defenders[0]),
+            _ => None,
         }
-        let a = self.active_player_idx;
-        let d = 1 - a;
-        Some(self.players[d].id)
+    }
+}
+
+/// Seat-generic body of [`GameState::defending_player_ids`], split out so multi-seat behaviour is
+/// unit-testable without building a whole [`GameState`].
+fn defending_player_ids_of(players: &[PlayerState], active_player_idx: usize) -> Vec<PlayerId> {
+    let seats = players.len();
+    (1..seats)
+        .map(|offset| &players[(active_player_idx + offset) % seats])
+        .filter(|p| !p.has_lost)
+        .map(|p| p.id)
+        .collect()
+}
+
+/// Seat-order unit tests.
+///
+/// These deliberately exercise 3 and 4 seats, which `GameEngine::new` refuses to build (see
+/// `SUPPORTED_PLAYER_COUNT`). Both helpers are seat-generic by construction, and this is the only
+/// place that can prove it while the constructor gate stands — which is the point: the arithmetic
+/// they replaced (`1 - idx`, `[start, 1 - start]`, `resolved[0] && resolved[1]`) could not be
+/// tested at all.
+#[cfg(test)]
+mod seat_order_tests {
+    use super::*;
+
+    fn seats(ids: &[PlayerId]) -> Vec<PlayerState> {
+        ids.iter().map(|&id| PlayerState::new(id, 20)).collect()
+    }
+
+    #[test]
+    fn next_unresolved_scans_forward_and_wraps() {
+        assert_eq!(next_unresolved_from(&[false, false], 0), Some(0));
+        assert_eq!(next_unresolved_from(&[false, false], 1), Some(1));
+        // Wraps past the end back to seat 0.
+        assert_eq!(next_unresolved_from(&[false, true, true], 1), Some(0));
+        // Skips resolved seats in between.
+        assert_eq!(next_unresolved_from(&[true, true, false, true], 1), Some(2));
+        // Starting seat counts itself first.
+        assert_eq!(next_unresolved_from(&[true, false, false], 1), Some(1));
+    }
+
+    #[test]
+    fn next_unresolved_is_none_once_every_seat_is_done() {
+        assert_eq!(next_unresolved_from(&[true, true], 0), None);
+        assert_eq!(next_unresolved_from(&[true, true, true, true], 3), None);
+        assert_eq!(next_unresolved_from(&[], 0), None);
+    }
+
+    #[test]
+    fn defenders_are_every_other_seat_in_apnap_order() {
+        let players = seats(&[5, 6, 7, 8]);
+        assert_eq!(defending_player_ids_of(&players, 0), vec![6, 7, 8]);
+        // Rotating the active player rotates the order, it does not just reverse it.
+        assert_eq!(defending_player_ids_of(&players, 2), vec![8, 5, 6]);
+        assert_eq!(defending_player_ids_of(&seats(&[5, 6]), 1), vec![5]);
+    }
+
+    #[test]
+    fn defenders_exclude_players_who_have_lost() {
+        let mut players = seats(&[5, 6, 7]);
+        players[1].has_lost = true;
+        assert_eq!(defending_player_ids_of(&players, 0), vec![7]);
+        // With every opponent gone there is no defending player at all.
+        players[2].has_lost = true;
+        assert!(defending_player_ids_of(&players, 0).is_empty());
     }
 }

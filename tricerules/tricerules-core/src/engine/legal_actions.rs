@@ -124,12 +124,11 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
         };
         let blocks_open = eng.state.turn_step == TurnStep::DeclareBlockers
             && !combat.map(|c| c.blockers_declared).unwrap_or(false);
-        let required_blocker_ids =
-            if blocks_open && Some(p.id) == eng.state.defending_player_id_1v1() {
-                eng.required_blocker_ids()
-            } else {
-                Vec::new()
-            };
+        let required_blocker_ids = if blocks_open && eng.state.is_defending_player(p.id) {
+            eng.required_blocker_ids()
+        } else {
+            Vec::new()
+        };
 
         batch.legal_by_player.insert(
             p.id,

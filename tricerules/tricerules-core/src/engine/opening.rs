@@ -2,6 +2,7 @@ use super::events::{ev_log, ev_phase, ev_priority_changed};
 use super::legal_actions::fill_legal;
 use super::resolution::{draw_card, move_object_to_zone, permanent_moved_event};
 use super::*;
+use crate::state::next_unresolved_from;
 
 pub(crate) fn shuffle_player_library(state: &mut GameState, player_idx: usize, mix: u64) {
     let mut rng = rand::rngs::StdRng::seed_from_u64(mix);
@@ -239,18 +240,17 @@ impl GameEngine {
         mulliganed_idx: usize,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
-        let other_idx = 1 - mulliganed_idx;
+        let seats = eng.state.players.len();
         let next_idx = {
             let op = eng
                 .state
                 .opening
                 .as_mut()
                 .ok_or(EngineError::Illegal("opening"))?;
-            if op.resolved[other_idx] {
-                mulliganed_idx
-            } else {
-                other_idx
-            }
+            // The next seat that has not kept yet, starting after the one that just mulliganed; if
+            // everyone else has kept, that player decides again.
+            next_unresolved_from(&op.resolved, (mulliganed_idx + 1) % seats)
+                .unwrap_or(mulliganed_idx)
         };
         let pid = eng.state.players[next_idx].id;
         {
@@ -269,7 +269,7 @@ impl GameEngine {
     ) -> Result<(), EngineError> {
         let done = {
             let op = eng.state.opening.as_ref().unwrap();
-            op.resolved[0] && op.resolved[1]
+            op.resolved.iter().all(|&r| r)
         };
         if done {
             let sp = {
@@ -293,17 +293,14 @@ impl GameEngine {
                     .ok_or(EngineError::Illegal("opening not started"))?
             };
             let start = eng.state.player_idx(spid).unwrap();
-            let order = [start, 1 - start];
             let op = eng.state.opening.as_mut().unwrap();
-            for oi in order {
-                if !op.resolved[oi] {
-                    let pid = eng.state.players[oi].id;
-                    op.mulligan_actor = Some(pid);
-                    eng.state.priority_idx = oi;
-                    events.push(ev_phase(eng, rv1::PhaseId::OpeningMulligan));
-                    events.push(ev_priority_changed(eng));
-                    break;
-                }
+            // Turn order from the starting player (CR 103.4).
+            if let Some(oi) = next_unresolved_from(&op.resolved, start) {
+                let pid = eng.state.players[oi].id;
+                op.mulligan_actor = Some(pid);
+                eng.state.priority_idx = oi;
+                events.push(ev_phase(eng, rv1::PhaseId::OpeningMulligan));
+                events.push(ev_priority_changed(eng));
             }
         }
         Ok(())

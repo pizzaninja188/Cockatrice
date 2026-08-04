@@ -313,7 +313,8 @@ impl GameEngine {
                     ev.push(ev_priority_changed(self));
                 } else {
                     self.state.turn_step = DeclareBlockers;
-                    if let Some(d) = self.state.defending_player_id_1v1() {
+                    // CR 509.1 / 101.4: the first defending player in APNAP order acts first.
+                    if let Some(d) = self.state.defending_player_ids().first().copied() {
                         if let Some(di) = self.state.player_idx(d) {
                             self.state.priority_idx = di;
                         }
@@ -643,7 +644,7 @@ impl GameEngine {
                         return Err(EngineError::Illegal("blockers already declared"));
                     }
                 }
-                if Some(player) != self.state.defending_player_id_1v1() {
+                if !self.state.is_defending_player(player) {
                     return Err(EngineError::Illegal("not defending player"));
                 }
                 self.set_blockers(&[])

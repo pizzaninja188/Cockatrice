@@ -93,7 +93,7 @@ impl GameEngine {
 
     pub(super) fn defending_player_has_eligible_blockers(&self) -> bool {
         use tricerules_cards::Keyword;
-        let Some(dp) = self.state.defending_player_id_1v1() else {
+        let Some(dp) = self.state.sole_defending_player_id() else {
             return false;
         };
         let Some(dp_idx) = self.state.player_idx(dp) else {
@@ -155,7 +155,9 @@ impl GameEngine {
     /// enforcement and the client-facing `LegalActions` gate (Juggernaut, Goblin Brigand, Crazed Goblin).
     pub(super) fn required_attacker_ids(&self) -> Vec<ObjectId> {
         use tricerules_cards::Keyword;
-        if self.state.defending_player_id_1v1().is_none() {
+        // "when a defending player exists to attack" — the count does not matter here, only that
+        // there is someone (CR 508.1a).
+        if self.state.defending_player_ids().is_empty() {
             return Vec::new();
         }
         let ap = self.state.active_player_id();
@@ -195,7 +197,7 @@ impl GameEngine {
     /// attacker. Single source of truth shared by `set_blockers` enforcement and the client-facing
     /// `LegalActions` gate. Empty until attackers are declared.
     pub(super) fn required_blocker_ids(&self) -> Vec<ObjectId> {
-        let Some(defending_player) = self.state.defending_player_id_1v1() else {
+        let Some(defending_player) = self.state.sole_defending_player_id() else {
             return Vec::new();
         };
         let attacking: Vec<ObjectId> = self
@@ -387,7 +389,7 @@ impl GameEngine {
     ) -> Result<RuledEventBatch, EngineError> {
         let defending_player = self
             .state
-            .defending_player_id_1v1()
+            .sole_defending_player_id()
             .ok_or(EngineError::Illegal("defender missing"))?;
         // A blocker may appear at most once: CR 509.1a — a creature can only block one attacker.
         let mut seen_blockers = HashSet::new();
@@ -787,7 +789,13 @@ impl GameEngine {
             ));
             return Ok(());
         }
-        let dfd = self.state.defending_player_id_1v1().unwrap();
+        // Combat damage needs to name the player being attacked, so it fails closed rather than
+        // panicking if the defender is gone — an engine error is a rejected command, an unwrap here
+        // would take the sidecar task and the game down with it.
+        let dfd = self
+            .state
+            .sole_defending_player_id()
+            .ok_or(EngineError::Illegal("defender missing"))?;
         let ap = self.state.active_player_id();
         let mut total_life_lost: i32 = 0;
         // (controller_id, amount) pairs — collected during damage assignment, applied after.

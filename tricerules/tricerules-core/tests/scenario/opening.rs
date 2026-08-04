@@ -245,3 +245,24 @@ fn concede_is_legal_during_opening_sequence() {
         "a rejected post-game command is not replayed"
     );
 }
+
+/// The seat-count gate (`SUPPORTED_PLAYER_COUNT` in `engine/mod.rs`) is the engine's one remaining
+/// hard 2-player assumption, kept because `DeclareAttackers` carries no per-attacker defender. It
+/// must reject rather than build a game that would then fail somewhere inside combat.
+#[test]
+fn engine_rejects_any_player_count_but_two() {
+    for player_ids in [vec![], vec![5], vec![5, 6, 7], vec![5, 6, 7, 8]] {
+        let err = GameEngine::new(1, &player_ids, 20, None, true)
+            .err()
+            .unwrap_or_else(|| panic!("{} players must be rejected", player_ids.len()));
+        assert!(
+            format!("{err:?}").contains("exactly 2 players"),
+            "unexpected error for {} players: {err:?}",
+            player_ids.len()
+        );
+    }
+    assert!(
+        GameEngine::new(1, &[5, 6], 20, None, true).is_ok(),
+        "two players is still accepted"
+    );
+}
