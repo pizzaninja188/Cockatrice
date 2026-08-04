@@ -8,6 +8,46 @@
 
 ### 2026-08-03
 
+- **Every ruled batch re-serialized both players' hands and libraries** (`ruled_v1.proto`,
+  `tricerules-core/src/engine/{events,mod,priority,opening}.rs`,
+  `ruled_player_binding.{h,cpp}`, `ruled_game_driver.cpp`): `ev_zone_view_sync` shipped an absolute
+  snapshot of hand, library, battlefield and graveyard on every accepted command — ~120 freshly
+  cloned card-id strings per batch for two 60-card decks, at 5–15 commands per turn, nearly all of
+  them identical to the batch before. `RuledPerPlayerView` gained
+  `private_zones_unchanged` (SERVER_ONLY, like the two fields it describes), and the new
+  `ev_zone_view_sync_tracked` — the emission path for every batch after startup — omits `hand_cards`
+  and `library_card_ids` for any player whose zones match the last view broadcast to them. Same
+  absent-means-unchanged contract as `HandSlotMap` above. The saving is threefold: the engine's
+  clone, the per-participant serialization, and — the big one — Servatrice's
+  `applyRuledEngineZoneView` reconcile, an O(n²) match of every engine card id against a rebuilt
+  ~60-card `Server_Card` pool (each comparison a `ruledCardIdForName` lookup) that concluded
+  "identical" every time.
+  Deliberate scope: **only** the two concealed zones. `battlefield_objects`,
+  `graveyard_object_ids` and `first_strike_step_pending` still ride every view — the client
+  dispatcher, the driver's oid-map rebuild and the e2e fake client all treat a view as a full
+  battlefield replacement, and nothing about that contract changed. Hand and library are omitted
+  **jointly** because the server reconciles them against one pool (deck zone + hand zone) and cannot
+  apply half a snapshot. The decision is **per player**, so a draw re-sends only the player who drew.
+  Change detection compares hand/library *ObjectId* sequences, not card ids: `card_id` is fixed for
+  an object's lifetime, so the oid sequence determines the strings exactly while doing none of the
+  string work the omission exists to avoid. The cache lives on `GameEngine`, not `GameState` — it
+  never affects a rules decision, and being a pure function of the applied command sequence a replay
+  from a fresh engine reproduces the same omission pattern. Two fail-closed guards: the startup path
+  treats an omission on the *first* view (which seeds the physical zones) exactly like the existing
+  library-count mismatch — warn, shuffle, drop the relay — and the binding warns if an omission
+  arrives before any full reconcile ever landed, since the reconcile used to self-heal drift on the
+  next batch and now only runs when the engine reports a real change.
+  Coverage: a new `tricerules-core/tests/scenario/zone_view.rs` whose centerpiece is a mirror
+  receiver implementing the contract (apply present, keep absent) asserted against the engine's own
+  zones after *every* command of a multi-turn walk, plus per-player cases for land drops, draws, the
+  two-view turn-roll batch and dev conjures; on the C++ side, a driver test that an omitted view
+  leaves the physical hand and deck untouched while the oid map and tap state still rebuild
+  (verified to fail with the guard neutralized), and the redaction test extended to assert the new
+  flag is stripped from client copies. Full Rust suite, Clippy with warnings denied, `cargo fmt
+  --check`, a full C++ build and all 18 C++ tests exit 0 — including `ruled_e2e_smoke_test`, which
+  drives a scripted ruled game through real servatrice and sidecar processes and so exercises the
+  omit/reconcile handshake against live `Server_Card` zones.
+
 - **`HandSlotMap` rode along on every ruled batch** (`ruled_game_driver.{h,cpp}`,
   `cockatrice/src/game/ruled/ruled_event_dispatcher.cpp`): `appendServerObjectMaps` now caches the
   last-broadcast map and injects the event only when the mapping actually changed — plus whenever
@@ -102,7 +142,15 @@
 
 - **Hard-coded 2-player assumption is pervasive** (`tricerules-core/src/state.rs:325,515-523`, `engine/mod.rs:210-212`): `defending_player_id_1v1()` returns `None` for anything but exactly 2 players and has ~10 call sites across `combat.rs`/`priority.rs`/`legal_actions.rs`; `OpeningSequence.mulligans_taken` is `[u32; 2]`; `GameEngine::new` rejects any player count != 2. Partially mitigated since the audit — `defending_player_id_1v1` carries a doc comment and `new` returns a clear `Illegal("M2: exactly 2 players")` rather than panicking — but the `[u32; 2]` array and the unaudited call sites remain the work item for any multiplayer expansion.
 
-- **`ev_zone_view_sync` serializes the entire game state on every single `apply_command` return** (`tricerules-core/src/engine/mod.rs:620`): every priority pass, mana tap, and phase transition serializes all players' libraries (as comma-joined card-id strings), hands, and battlefields. For two 60-card decks, a typical turn produces 5–15 commands, each emitting ~200 strings into the zone-view. Correct-by-construction (authoritative snapshot) but O(deck size × commands per turn). Consider a delta-only zone view (emit only changed zones, or `ZoneDelta` events) for high-volume paths.
+- **`ev_zone_view_sync` still re-sends every player's full battlefield on every `apply_command`
+  return** (`tricerules-core/src/engine/events.rs`): the concealed half of this finding is fixed
+  (see *Applied Fixes*, 2026-08-03) — hand and library are now omitted while unchanged. The public
+  half remains: each view recomputes `battlefield_objects` from scratch per permanent
+  (`characteristics()` layer computation, a per-ability `ability_activatable` check, a 16-keyword
+  scan) for every player, every batch. Unlike the concealed zones this one has real client
+  consumers that treat a view as a full replacement (`RuledEventDispatcher::applyZoneView`, the
+  driver's oid-map rebuild, the e2e fake client), so an omission here is a genuine protocol change
+  rather than a server-side-only one, and it needs its own design.
 
 - **`ResolutionCtx::put_on_top_of_library` emits no intermediate event for Hand → Library moves** (`tricerules-core/src/custom/mod.rs:167-191`): the zone move is correct and Servatrice learns the final state via `zone_view`, but the pattern is asymmetric — `move_to_zone` emits `PermanentMoved` for graveyard/exile and nothing for hand/library. If replay animation or an intermediate reveal is ever added, this gap becomes a bug.
 

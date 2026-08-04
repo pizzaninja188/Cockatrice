@@ -342,6 +342,9 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     view->set_player_id(1);
     view->add_hand_cards()->set_card_id("secret_hand_card");
     view->add_library_card_ids("secret_top_card");
+    // The omission marker describes the two concealed fields, so it is concealed with them:
+    // a client learning "this player's hand did not change" is a (small) information leak.
+    view->set_private_zones_unchanged(true);
     auto *publicPermanent = view->add_battlefield_objects();
     publicPermanent->set_object_id(101);
     publicPermanent->set_card_id("grizzly_bears");
@@ -379,6 +382,7 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
         const auto &redactedView = zoneIt->zone_view().per_player(0);
         EXPECT_EQ(redactedView.hand_cards_size(), 0);
         EXPECT_EQ(redactedView.library_card_ids_size(), 0);
+        EXPECT_FALSE(redactedView.private_zones_unchanged());
         ASSERT_EQ(redactedView.battlefield_objects_size(), 1);
         EXPECT_EQ(redactedView.battlefield_objects(0).object_id(), 101u);
     }
@@ -554,6 +558,41 @@ TEST_F(RuledBatchTest, ZoneViewBuildsOidMapAndPropagatesTapState)
     EXPECT_EQ(findCardByEngineOid(p1, 101u), bear);
     EXPECT_EQ(findCardByEngineOid(p1, 102u), wolf);
     EXPECT_EQ(findCardByEngineOid(p1, 999u), nullptr);
+}
+
+// The engine omits hand + library while they are unchanged. Servatrice must then leave the
+// physical zones alone — and, crucially, must not treat the empty concealed fields as a real
+// (and wildly wrong) count, which is what the pre-guard code did: the reconcile bailed on a
+// count mismatch and took the battlefield oid-map rebuild down with it.
+TEST_F(RuledBatchTest, PrivateZonesUnchangedSkipsTheHandAndLibraryReconcile)
+{
+    Server_Card *inHand = addCardToHand(p1, "Hill Giant");
+    Server_Card *bear = addCardToTable(p1, "Grizzly Bears");
+
+    // A full view first: one card in hand, nothing in the library, one permanent.
+    ruled::v1::RuledPerPlayerView full = buildPerPlayerView(p1, {101u}, {false});
+    full.add_hand_cards()->set_card_id("hill_giant");
+    GameEventStorage firstGes;
+    RuledPlayerBinding::RuledZoneSyncResult first = applyZoneView(p1, full, &firstGes);
+    ASSERT_EQ(first.engineOidToServerCardId.value(101u, -1), bear->getId());
+    ASSERT_EQ(p1->getZones().value(ZoneNames::HAND)->getCards().size(), 1);
+
+    // Then an omission: no hand, no library, battlefield still in full.
+    ruled::v1::RuledPerPlayerView omitted = buildPerPlayerView(p1, {101u}, {true});
+    omitted.set_private_zones_unchanged(true);
+    GameEventStorage secondGes;
+    RuledPlayerBinding::RuledZoneSyncResult second = applyZoneView(p1, omitted, &secondGes);
+
+    const QList<Server_Card *> &hand = p1->getZones().value(ZoneNames::HAND)->getCards();
+    ASSERT_EQ(hand.size(), 1);
+    EXPECT_EQ(hand.first(), inHand) << "an omitted view must leave the physical hand untouched";
+    EXPECT_TRUE(p1->getZones().value(ZoneNames::DECK)->getCards().isEmpty());
+    EXPECT_FALSE(second.handOrLibraryChanged);
+    // The rest of the view is unaffected by the omission: the oid map is rebuilt and tap state
+    // still propagates, which is what would have been lost to an early return.
+    EXPECT_EQ(second.engineOidToServerCardId.value(101u, -1), bear->getId());
+    EXPECT_TRUE(second.tapStateChanged);
+    EXPECT_TRUE(bear->getTapped());
 }
 
 TEST_F(RuledBatchTest, ZoneViewDoesNotForceUntapOutsideUntapStep)

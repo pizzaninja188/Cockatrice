@@ -1910,7 +1910,11 @@ void RuledGameDriver::applyRuledStartupBatch(const ruled::v1::IpcResponse &resp,
                 const int mainN = expectedMainboardSizeForStartupSync(game, p.player_id(), deckByPlayer);
                 const int needLib = mainN - p.hand_cards_size();
                 const int libCount = p.library_card_ids_size();
-                if (libCount != needLib) {
+                // The startup view is what seeds each player's physical deck and hand, so the
+                // engine never marks it unchanged (its per-session cache starts empty). Seeing
+                // the flag here means a version-skewed sidecar; treat it exactly like a count
+                // mismatch rather than starting a ruled game on unseeded zones.
+                if (p.private_zones_unchanged() || libCount != needLib) {
                     qWarning() << "Ruled zone sync: player" << p.player_id() << "expected" << needLib
                                << "library card ids, library_card_ids has" << libCount
                                << "entries — is tricerules-server up to date? "
