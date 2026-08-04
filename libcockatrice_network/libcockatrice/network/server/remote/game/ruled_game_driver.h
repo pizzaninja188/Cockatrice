@@ -211,6 +211,14 @@ private:
     QSet<quint32> ruledStackCopyObjectIds;
     // Pending local cast intents waiting to be bound to the next StackPushed.object_id.
     QList<PendingRuledCastVisual> ruledPendingCastVisualQueue;
+    /// Last HandSlotMap injected into a broadcast, plus the participant ids that received it.
+    /// appendServerObjectMaps re-sends the map only when one of the two changed: the client
+    /// treats an absent HandSlotMap as "unchanged" and a present one as a full replacement.
+    /// A changed participant set means someone joined or reconnected with an empty map and
+    /// needs a fresh copy even though no hand moved.
+    ruled::v1::HandSlotMap lastBroadcastHandSlotMap;
+    bool hasLastBroadcastHandSlotMap = false;
+    QSet<int> lastBroadcastHandSlotParticipants;
 };
 
 #endif

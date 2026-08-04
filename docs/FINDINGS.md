@@ -6,6 +6,28 @@
 
 ## Applied Fixes
 
+### 2026-08-03
+
+- **`HandSlotMap` rode along on every ruled batch** (`ruled_game_driver.{h,cpp}`,
+  `cockatrice/src/game/ruled/ruled_event_dispatcher.cpp`): `appendServerObjectMaps` now caches the
+  last-broadcast map and injects the event only when the mapping actually changed — plus whenever
+  the participant set changes (a joiner or reconnector starts with an empty client map) and on
+  `resetForNewGame`. The client contract flipped to match: `resetPerBatchLegalActions` no longer
+  clears `ownedCardToEngineHandSlot` per batch, and `applyHandSlotMap` clears before filling, so an
+  **absent map means unchanged** and a **present map is a full replacement** — the same shape
+  `applyBattlefieldObjectMap` / `applyGraveyardObjectMap` already had. The map therefore disappears
+  from the large majority of batches (priority passes, mana taps, phase rolls), where it was
+  previously re-serialized once for the batch and again per participant during redaction. The
+  audit's suggested `if (hm->entries_size() > 0)` guard was **rejected as inert**: the map is built
+  across *all* players' hands, so it is empty only when every hand is empty, and it says nothing
+  about the batches the finding actually costs — the ones with no hand *change*. Deliberate
+  over-emission kept: the comparison is over the pre-redaction all-players map, so an opponent's
+  hand change re-sends a recipient their unchanged rows (correct, and keeps the cache single-copy).
+  Coverage: a driver-level test asserting emit-on-change/participant-change/new-game, and the client
+  test that asserted the old per-batch-clear contract rewritten as `HandSlotMapPersistsUntilReplaced`.
+  Full build and all 18 C++ tests exit 0, including `ruled_e2e_smoke_test` (real servatrice +
+  sidecar, full scripted ruled game).
+
 ### 2026-08-02
 
 - **Noncombat damage now records deathtouch from its source** (`tricerules-core/src/engine/`):
@@ -57,5 +79,3 @@
 - **`discard_to_hand_size` proto conflates absent vs. zero for `hand_card_index`** (`ruled_v1.proto:193-198`, `priority.rs:472-477`): proto3 defaults `hand_card_index` to `0`, making "not set" indistinguishable from "card 0". The Rust code is correct today because it checks `hand_card_indices.is_empty()` first, but the interface invites a future caller to get it wrong. Suggest `oneof discard_selector { uint32 single_index; repeated uint32 batch_indices; }`.
 
 - **`custom_effect` key uniqueness is never validated** (`tricerules-core/src/custom/mod.rs:288-294`, test at `tricerules-core/tests/scenario/custom_resolution.rs:331`): the existing test asserts every registry `custom_effect` key *resolves* to an impl, but not that each key is claimed by exactly one card id. Two RON cards accidentally sharing `custom_effect: "brainstorm"` would both resolve as Brainstorm with no error. Fix: extend `every_custom_effect_key_has_an_impl` to also assert a 1:1 key↔card-id mapping.
-
-- **`appendServerObjectMaps` unconditionally appends a `HandSlotMap` event to every batch, including batches with no hand change** (`libcockatrice_network/libcockatrice/network/server/remote/game/ruled_game_driver.cpp:1375-1398`): unlike `BattlefieldObjectMap` (guarded by `map->entries_size() > 0` at line 1369) and `GraveyardObjectMap` (line 1418), the `HandSlotMap` event is always injected. For a 60-card game each hand contributes up to 7 entries, serialized on every single ruled command (priority passes, mana taps, …) and again per participant during redaction (`:1520-1531`). Fix: guard with `if (hm->entries_size() > 0)` before the append, matching the two sibling blocks. *(Moved from `server_game.cpp` since the audit — the June path reference is stale.)*

@@ -155,7 +155,6 @@ void RuledEventDispatcher::resetPerBatchLegalActions()
     state->openingBottomSelectedIndices.clear();
     state->openingPickSeatIds.clear();
     state->openingUiKind = RuledOpeningUiKind::None;
-    state->ownedCardToEngineHandSlot.clear();
 }
 
 void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
@@ -710,6 +709,11 @@ void RuledEventDispatcher::applyBattlefieldObjectMap(const ruled::v1::Battlefiel
 
 void RuledEventDispatcher::applyHandSlotMap(const ruled::v1::HandSlotMap &map)
 {
+    // Servatrice sends this map only when hand composition changed, so an absent event means
+    // "unchanged" and the previous slots stay valid; a present one is a full replacement, hence
+    // the clear here rather than per batch (same contract as applyBattlefieldObjectMap /
+    // applyGraveyardObjectMap).
+    state->ownedCardToEngineHandSlot.clear();
     for (int hi = 0; hi < map.entries_size(); ++hi) {
         const auto &ent = map.entries(hi);
         state->ownedCardToEngineHandSlot.insert(
