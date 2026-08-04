@@ -50,6 +50,60 @@ fn brainstorm_draws_three_then_returns_two_in_chosen_order() {
     assert_eq!(count_card_id_in_graveyard(&e, 0, "brainstorm"), 1);
 }
 
+/// Putting cards back on top of the library must emit **no** `PermanentMoved`. That event is
+/// `FIELD_VISIBILITY_PUBLIC` down to its `card_id`, so announcing a hand → library move would
+/// tell the opponent exactly which two cards Brainstorm hid on top — hand and library are hidden
+/// zones (CR 400.2) and reach each player only through the redacted per-player zone view.
+/// The silence is the feature; this test is what stops it being "fixed" into a leak.
+#[test]
+fn brainstorm_put_back_emits_no_public_move_event() {
+    let decks = Some(vec![
+        {
+            let mut d = vec!["brainstorm".to_string()];
+            d.extend(std::iter::repeat_n("island".to_string(), 29));
+            d
+        },
+        vec!["forest".into(); 30],
+    ]);
+    let mut e = GameEngine::new(42, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    ensure_in_hand(&mut e, 0, "brainstorm");
+
+    cast_instant_and_resolve(
+        &mut e,
+        0,
+        "brainstorm",
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+
+    let chosen: Vec<u32> = e.state.players[0].hand.iter().take(2).copied().collect();
+    let card_ids: Vec<String> = chosen
+        .iter()
+        .map(|oid| e.state.objects[oid].card_id.clone())
+        .collect();
+    let batch = e
+        .apply_command(0, &submit_resolution_choice(chosen.clone()))
+        .expect("submit brainstorm choice");
+
+    for moved in permanents_moved_in(&batch) {
+        assert!(
+            !chosen.contains(&moved.object_id),
+            "put-back object {} was announced publicly (destination {:?})",
+            moved.object_id,
+            moved.destination()
+        );
+        assert!(
+            !card_ids.contains(&moved.card_id),
+            "put-back card '{}' was announced publicly (destination {:?})",
+            moved.card_id,
+            moved.destination()
+        );
+    }
+}
+
 #[test]
 fn brainstorm_rejects_card_not_in_hand_without_mutating() {
     let decks = Some(vec![
@@ -324,23 +378,61 @@ fn gifts_ungiven_rejects_same_name_in_search() {
     );
 }
 
-/// Every `custom_effect` key in the card registry must resolve to a registered `CardEffect`
-/// (an unregistered key is uncastable card data). The "one resolution owner" rule is enforced
-/// in the cards crate; this is the core-side half (the lookup must exist).
-#[test]
-fn every_custom_effect_key_has_an_impl() {
+/// Registry `custom_effect` key → the card ids claiming it, for the two directions below.
+fn custom_effect_claims() -> std::collections::BTreeMap<&'static str, Vec<&'static str>> {
     let reg = tricerules_cards::CardRegistry::global();
+    let mut claims: std::collections::BTreeMap<&str, Vec<&str>> = Default::default();
     for def in reg.definitions() {
         for face in def.faces_iter() {
             if let Some(key) = face.custom_effect.as_deref() {
-                assert!(
-                    tricerules_core::custom::lookup(key).is_some(),
-                    "card '{}' has custom_effect '{}' with no registered CardEffect",
-                    def.name,
-                    key
-                );
+                claims.entry(key).or_default().push(def.id.as_str());
             }
         }
+    }
+    claims
+}
+
+/// Every `custom_effect` key in the card registry must resolve to a registered `CardEffect`
+/// (an unregistered key is uncastable card data), and no two cards may claim one key. The "one
+/// resolution owner *per face*" rule is enforced in the cards crate; this is the core-side half:
+/// the impl must exist, and it must belong to exactly one card.
+///
+/// Custom effects are 1:1 with card ids, like RON data cards — two cards wanting one algorithm
+/// is the signal to widen a primitive, not to share an impl. Without this check, two cards
+/// accidentally set to `custom_effect: "brainstorm"` would both silently resolve as Brainstorm.
+/// Two faces of one card sharing a key fails too: the impl cannot tell faces apart either.
+#[test]
+fn every_custom_effect_key_has_exactly_one_card_and_one_impl() {
+    for (key, claimants) in custom_effect_claims() {
+        assert!(
+            tricerules_core::custom::lookup(key).is_some(),
+            "card '{}' has custom_effect '{key}' with no registered CardEffect",
+            claimants[0]
+        );
+        assert_eq!(
+            claimants.len(),
+            1,
+            "custom_effect '{key}' is claimed by {} cards ({}); each key belongs to exactly one \
+             card. If these really share an algorithm, that algorithm is expressible as \
+             (effect_kind, parameters) and belongs in a primitive.",
+            claimants.len(),
+            claimants.join(", ")
+        );
+    }
+}
+
+/// The reverse direction: every registered impl is claimed by a card. A registered key is a file
+/// stem under `src/custom/`, so an orphan means a typo'd filename or a deleted RON — neither of
+/// which the forward check above can see, since it only walks keys the registry already has.
+#[test]
+fn every_registered_impl_is_claimed_by_a_card() {
+    let claims = custom_effect_claims();
+    for key in tricerules_core::custom::keys() {
+        assert!(
+            claims.contains_key(key),
+            "custom effect `{key}` (from `src/custom/{key}.rs`) is claimed by no registry card. \
+             The file stem must equal the card id whose RON sets custom_effect: \"{key}\"."
+        );
     }
 }
 

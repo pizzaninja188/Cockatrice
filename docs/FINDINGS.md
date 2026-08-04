@@ -6,6 +6,63 @@
 
 ## Applied Fixes
 
+### 2026-08-04
+
+- **Custom-effect registration was a hand-written `match`, and one finding's premise was wrong**
+  (`tricerules-core/build.rs` *(new)*, `src/custom/{mod,brainstorm,gifts_ungiven}.rs`,
+  `tests/scenario/custom_resolution.rs`): two pending findings, closed together because they are the
+  same file and the second turned out to argue against itself.
+  **`put_on_top_of_library` emitting no Hand → Library event is correct, not a gap.**
+  `PermanentMoved` is `FIELD_VISIBILITY_PUBLIC` on every field *including `card_id`*
+  (`ruled_v1.proto:950-972`), so announcing a Brainstorm put-back would tell the opponent exactly
+  which two cards were hidden on top of the library. Hand and library are hidden zones (CR 400.2)
+  and reach each player only through the redacted per-player zone view. The silence stayed; what was
+  missing was any statement or test that it is deliberate. The two ad-hoc `match` arms in
+  `move_to_zone` became `public_move_event_destination`, exhaustive over `Zone` with no `_` arm, so
+  a new zone variant must make the decision rather than inherit silence — plus a unit test asserting
+  the rule directly and a scenario test that no `PermanentMoved` in a Brainstorm batch names either
+  put-back oid or card id (verified to fail once the "fix" is applied). One behaviour delta:
+  `Zone::Battlefield` now maps to `DESTINATION_BATTLEFIELD`, matching the engine's own reanimation
+  emission, so "public zone ⇒ event" holds without exception; no custom effect reaches it today.
+  Also corrected `move_to_zone`'s doc comment, which claimed the zone view omits the graveyard — it
+  carries `graveyard_object_ids`, oids without identity, which is the actual reason the event is
+  still needed there.
+  **The key-uniqueness finding was really a registration-scale problem.** `lookup` was a `match` on
+  the key string: the last place in the card pipeline needing a central source edit per card, and
+  unenumerable, which is precisely why the reverse check was unwritable. With hundreds of custom
+  cards ahead, that had to go first. A new `tricerules-core/build.rs` mirrors
+  `tricerules-cards/build.rs` — recursive scan of `src/custom/**/*.rs`, sorted for determinism,
+  skipping `mod.rs` and `support/` — emitting `#[path]` module declarations and an `EFFECT_IMPLS`
+  table that `mod.rs` `include!`s. **Absolute `#[path]` with flat module names is required**: a bare
+  `mod foo;` inside an `include!`d file resolves relative to `OUT_DIR`, not the include site. **The
+  file stem *is* the card id**, so the RON's `custom_effect` stays the only declaration of the
+  binding and adding a card is one new file exporting `EFFECT` — no shared file edited, no key
+  written in Rust. `lookup` is now a `OnceLock<HashMap>` built once, with `keys()` beside it.
+  **The finding's proposed 1:1 mapping was implemented as written, after considering and rejecting
+  an alias mechanism** for functional reprints: no tier-3 candidate has one (Brainstorm, Gifts
+  Ungiven, Fact or Fiction, Intuition, Scroll Rack, Sylvan Library are all one-of-a-kind designs),
+  reprints cluster in *simple* cards, and — decisively — the tier-3 gate admits a card only when no
+  `(effect_kind, parameters)` description exists, so two cards sharing an algorithm *are* that
+  description and belong in a widened primitive. An alias mechanism would have undercut the review
+  rule that keeps `custom/` from becoming a scripting dump. Uniqueness is enforced at two levels
+  instead: two files claiming one id fails the **build**, two RON cards claiming one key fails the
+  suite naming both.
+  Coverage: two unit tests (`keys()`↔`lookup` round trip, the public-zone rule) and three scenario
+  tests (forward resolve + 1:1 uniqueness, reverse orphan check, the no-leak assertion). All were
+  verified to fail when deliberately broken — duplicate stem, typo'd filename, duplicate RON claim,
+  injected library event — and a subdirectory move confirmed the recursive scan. Full `cargo test`
+  (405 scenario + all unit tests), `clippy --all-targets -D warnings` and `cargo fmt --check` exit
+  0. Rust-only, no `.proto` edit, no new dependency, no C++ rebuild.
+  **Known scale ceiling, deliberately not addressed:** at ~1000 effects every engine edit recompiles
+  all of them, since they live in `tricerules-core`. Splitting them into a `tricerules-custom` crate
+  is blocked by a cycle (`ResolutionCtx` wraps core's `GameState`; core's resolution calls `lookup`)
+  and needs a startup-injected registry — a real decision against the "pure function of the command
+  log" determinism story, not a mechanical move. This design does not block it: the build script,
+  the `EFFECT` convention and stem-as-key all move wholesale. Relatedly, tier-3 impls take no RON
+  parameters, so two cards sharing an algorithm but differing in a *number* would need two
+  near-identical files; that argues for a future parameter hook or a widened primitive, not for key
+  aliasing.
+
 ### 2026-08-03
 
 - **Every ruled batch re-serialized both players' hands and libraries** (`ruled_v1.proto`,
@@ -152,8 +209,4 @@
   driver's oid-map rebuild, the e2e fake client), so an omission here is a genuine protocol change
   rather than a server-side-only one, and it needs its own design.
 
-- **`ResolutionCtx::put_on_top_of_library` emits no intermediate event for Hand → Library moves** (`tricerules-core/src/custom/mod.rs:167-191`): the zone move is correct and Servatrice learns the final state via `zone_view`, but the pattern is asymmetric — `move_to_zone` emits `PermanentMoved` for graveyard/exile and nothing for hand/library. If replay animation or an intermediate reveal is ever added, this gap becomes a bug.
-
-- **`discard_to_hand_size` proto conflates absent vs. zero for `hand_card_index`** (`ruled_v1.proto:193-198`, `priority.rs:472-477`): proto3 defaults `hand_card_index` to `0`, making "not set" indistinguishable from "card 0". The Rust code is correct today because it checks `hand_card_indices.is_empty()` first, but the interface invites a future caller to get it wrong. Suggest `oneof discard_selector { uint32 single_index; repeated uint32 batch_indices; }`.
-
-- **`custom_effect` key uniqueness is never validated** (`tricerules-core/src/custom/mod.rs:288-294`, test at `tricerules-core/tests/scenario/custom_resolution.rs:331`): the existing test asserts every registry `custom_effect` key *resolves* to an impl, but not that each key is claimed by exactly one card id. Two RON cards accidentally sharing `custom_effect: "brainstorm"` would both resolve as Brainstorm with no error. Fix: extend `every_custom_effect_key_has_an_impl` to also assert a 1:1 key↔card-id mapping.
+- **`discard_to_hand_size` proto conflates absent vs. zero for `hand_card_index`** (`ruled_v1.proto:209-214`, `priority.rs:486-490`): proto3 defaults `hand_card_index` to `0`, making "not set" indistinguishable from "card 0". The Rust code is correct today because it checks `hand_card_indices.is_empty()` first, but the interface invites a future caller to get it wrong. Suggest `oneof discard_selector { uint32 single_index; repeated uint32 batch_indices; }`.
