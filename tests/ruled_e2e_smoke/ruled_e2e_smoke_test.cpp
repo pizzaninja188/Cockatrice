@@ -1253,7 +1253,9 @@ protected:
         return path;
     }
 
-    ::testing::AssertionResult startServers()
+    /// @param sidecarIdleTimeoutSecs when non-empty, TRICERULES_IDLE_TIMEOUT_SECS for the sidecar,
+    /// so a test can make the engine hang up on an idle game within its own runtime.
+    ::testing::AssertionResult startServers(const QString &sidecarIdleTimeoutSecs = QString())
     {
         const QString sidecarExe = triceRulesExePath();
         const QString servatriceExe = servatriceExePath();
@@ -1284,6 +1286,9 @@ protected:
         // go into the environment both processes inherit.
         env.insert(QStringLiteral("COCKATRICE_RULED_DEV"), QStringLiteral("1"));
         env.insert(QStringLiteral("TRICERULES_DEV_COMMANDS"), QStringLiteral("1"));
+        if (!sidecarIdleTimeoutSecs.isEmpty()) {
+            env.insert(QStringLiteral("TRICERULES_IDLE_TIMEOUT_SECS"), sidecarIdleTimeoutSecs);
+        }
 
         sidecar.setProcessEnvironment(env);
         sidecar.start(sidecarExe, {});
@@ -1430,6 +1435,73 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     if (::testing::Test::HasFailure()) {
         ADD_FAILURE() << "milestones incomplete after " << deadline.elapsed() << " ms; see transcript below";
     }
+}
+
+// When the sidecar hangs up an idle connection it frees the engine session, and no reconnect can
+// rebuild it. Servatrice used to reconnect anyway: the fresh connection answered "no session",
+// which is an ok=false the driver reports as a plain context error — invisible in the client. The
+// game just froze, buttons doing nothing. It must announce the loss instead. Runs a real sidecar
+// with a 1 s idle timeout so the drop happens inside the test.
+TEST_F(RuledE2ESmokeTest, IdleEngineHangupIsAnnouncedRatherThanFreezingTheGame)
+{
+    const auto started = startServers(QStringLiteral("1"));
+    if (!started) {
+        FAIL() << started.message();
+    }
+    {
+        const std::string msg = started.message();
+        if (msg.rfind("SKIP:", 0) == 0) {
+            GTEST_SKIP() << msg.substr(5);
+        }
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("idlep1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("idlep2"), &transcript);
+
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+
+    ASSERT_TRUE(p1.selectDeck(deckXml({{24, QStringLiteral("Mountain")}, {16, QStringLiteral("Hill Giant")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{24, QStringLiteral("Island")},
+                                       {16, QStringLiteral("Merfolk of the Pearl Trident")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000, "ruled game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000, "ruled game start (p2)"));
+
+    const int noticesBefore = p1.notifyCustomCount;
+
+    // Idle past the sidecar's 1 s timeout: pump the client sockets (so the clients stay alive at the
+    // Cockatrice protocol level) but never call act(), so no ruled command reaches the engine.
+    QElapsedTimer idle;
+    idle.start();
+    while (idle.elapsed() < 2500) {
+        p1.pump(25);
+        p2.pump(25);
+    }
+    {
+        QElapsedTimer logWait;
+        logWait.start();
+        while (!sidecarStderr.contains("dropping session") && logWait.elapsed() < 5000) {
+            collectServerLogs();
+            p1.pump(25);
+        }
+    }
+    ASSERT_TRUE(sidecarStderr.contains("dropping session"))
+        << "the sidecar never idled out, so this test proves nothing; sidecar log:\n"
+        << sidecarStderr.constData();
+
+    // The engine is gone. The next command must produce the disconnect notice, not silence.
+    ruled::v1::RuledCommand cmd;
+    cmd.mutable_pass_priority();
+    p1.sendRuled(cmd, QStringLiteral("pass priority after engine hangup"));
+
+    EXPECT_TRUE(p1.pumpUntil([&] { return p1.notifyCustomCount > noticesBefore; }, 20000,
+                             "engine-disconnected popup after idle hangup"));
+    EXPECT_TRUE(p1.lastNotifyContent.contains(QStringLiteral("rules engine"), Qt::CaseInsensitive))
+        << "popup should explain the engine connection was lost, got: " << p1.lastNotifyContent.toStdString();
 }
 
 } // namespace
