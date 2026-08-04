@@ -103,6 +103,69 @@ fn object_targetable_by(engine: &GameEngine, tid: ObjectId, caster: PlayerId) ->
     true
 }
 
+/// Every [`TargetFilter`] characteristic restriction that reads the same whether `oid` was
+/// *targeted* (CR 115) or *selected* by an untargeted mass effect (CR 701.7). The single owner of
+/// these predicates: [`target_filter_legal`] and [`object_matches_mass_filter`] both call it, so a
+/// new filter field lands on both paths or neither.
+///
+/// Deliberately excluded, because they are **not** shared:
+/// - hexproof/shroud ([`object_targetable_by`]) — CR 702.11e, untargeted effects affect those
+///   permanents normally, so only the targeted caller applies it;
+/// - `only_controller` — needs an activating player, which untargeted mass selection does not
+///   have (it is rejected in a mass filter at registry load);
+/// - the [`TargetKind`] mapping — the two paths accept different kinds and check zone differently.
+fn filter_characteristics_match(engine: &GameEngine, filter: &TargetFilter, oid: ObjectId) -> bool {
+    let Some(object) = engine.state.objects.get(&oid) else {
+        return false;
+    };
+    let Some(characteristics) = engine.characteristics(oid) else {
+        return false;
+    };
+    if !filter.permanent_types.is_empty()
+        && !filter.permanent_types.iter().any(|kind| match kind {
+            PermanentTypeFilter::Creature => characteristics.is_creature(),
+            PermanentTypeFilter::Artifact => characteristics.is_artifact(),
+            PermanentTypeFilter::Enchantment => characteristics.has_type("Enchantment"),
+            PermanentTypeFilter::Land => characteristics.has_type("Land"),
+        })
+    {
+        return false;
+    }
+    // CR 205.3: a "non-[Subtype]" restriction (Eyeblight's Ending) skips the excluded subtypes.
+    if filter
+        .excluded_subtypes
+        .iter()
+        .any(|subtype| characteristics.has_type(subtype))
+    {
+        return false;
+    }
+    if filter.not_artifact && characteristics.is_artifact() {
+        return false;
+    }
+    if let Some(tapped_req) = filter.tapped {
+        if object.tapped != tapped_req {
+            return false;
+        }
+    }
+    // CR 105/202.2: "nonblack", "nonwhite", … — reject an object of the excluded color.
+    if let Some(c) = filter.not_color {
+        if characteristics.colors.contains(&c) {
+            return false;
+        }
+    }
+    // CR 105/202.2: the inclusive mirror — "all green creatures" (Perish), "target red permanent".
+    if let Some(c) = filter.is_color {
+        if !characteristics.colors.contains(&c) {
+            return false;
+        }
+    }
+    // CR 508/509: "attacking or blocking creature" — must be in combat right now.
+    if filter.attacking_or_blocking && !is_attacking_or_blocking(&engine.state, oid) {
+        return false;
+    }
+    true
+}
+
 /// Legality of a single target against a [`TargetFilter`].
 /// `caster` is needed only to enforce the opponent-only restriction.
 /// True if `oid` is a battlefield permanent selected by a mass effect's `kind` filter
@@ -132,24 +195,7 @@ pub(super) fn object_matches_mass_filter(
     if !kind_ok {
         return false;
     }
-    if filter.not_artifact && characteristics.is_artifact() {
-        return false;
-    }
-    // CR 205.3, as in `target_filter_legal` — a mass effect scoped to "non-[Subtype]" permanents
-    // must skip the excluded subtypes just like a targeted one.
-    if filter
-        .excluded_subtypes
-        .iter()
-        .any(|subtype| characteristics.has_type(subtype))
-    {
-        return false;
-    }
-    if let Some(tapped_req) = filter.tapped {
-        if o.tapped != tapped_req {
-            return false;
-        }
-    }
-    true
+    filter_characteristics_match(engine, filter, oid)
 }
 
 /// Collect every battlefield permanent matching a mass-effect filter, in deterministic
@@ -200,63 +246,21 @@ fn target_filter_legal(
     if !kind_ok {
         return false;
     }
-    // Characteristic filters — only apply to non-player targets.
-    if !filter.is_player() {
+    // Characteristic filters — only apply to non-player targets. `is_player()` covers the
+    // player-only kinds; `AnyTarget` is decided per target, since the same filter accepts both a
+    // creature and a player (Lightning Bolt) and a player carries no characteristics.
+    let target_is_player = engine.state.player_idx(tid as i32).is_some();
+    if !filter.is_player() && !target_is_player {
+        // CR 702.16/702.18 — targeting only; the untargeted mass path deliberately skips this.
         if !object_targetable_by(engine, tid, caster) {
             return false;
         }
-        if !filter.permanent_types.is_empty() {
-            let Some(value) = engine.characteristics(tid) else {
-                return false;
-            };
-            let matches_type = filter.permanent_types.iter().any(|kind| match kind {
-                PermanentTypeFilter::Creature => value.is_creature(),
-                PermanentTypeFilter::Artifact => value.is_artifact(),
-                PermanentTypeFilter::Enchantment => value.has_type("Enchantment"),
-                PermanentTypeFilter::Land => value.has_type("Land"),
-            });
-            if !matches_type {
-                return false;
-            }
-        }
-        if !filter.excluded_subtypes.is_empty()
-            && engine.characteristics(tid).is_some_and(|value| {
-                filter
-                    .excluded_subtypes
-                    .iter()
-                    .any(|subtype| value.has_type(subtype))
-            })
-        {
-            return false;
-        }
-        if filter.not_artifact
-            && engine
-                .characteristics(tid)
-                .is_some_and(|value| value.is_artifact())
-        {
-            return false;
-        }
-        if let Some(tapped_req) = filter.tapped {
-            match engine.state.objects.get(&tid) {
-                Some(obj) if obj.tapped != tapped_req => return false,
-                None => return false,
-                _ => {}
-            }
-        }
-        // CR 105/202.2: "nonblack", "nonwhite", … — reject a target of the excluded color.
-        if let Some(c) = filter.not_color {
-            match engine.characteristics(tid) {
-                Some(value) if value.colors.contains(&c) => return false,
-                None => return false,
-                Some(_) => {}
-            }
-        }
-        // CR 508/509: "target attacking or blocking creature" — must be in combat right now.
-        if filter.attacking_or_blocking && !is_attacking_or_blocking(&engine.state, tid) {
+        if !filter_characteristics_match(engine, filter, tid) {
             return false;
         }
         // "target creature you control" (equip, regenerate, …) — CR 110.2 control, read through
-        // the layer pipeline, so a permanent you control but do not own qualifies.
+        // the layer pipeline, so a permanent you control but do not own qualifies. Targeting-only:
+        // an untargeted mass effect has no activating player to compare against.
         if filter.only_controller {
             if let Some(value) = engine.characteristics(tid) {
                 if value.controller != caster {
@@ -686,6 +690,12 @@ pub(super) fn validate_spell_targets(
 }
 
 /// Returns `Err` with a specific human-readable message when `tid` is not a legal target for `effect`.
+///
+/// **Fails closed.** Every arm below matches on the effect alone and checks legality in its body,
+/// so the trailing arm means "this effect has no spell-side target validation" rather than "this
+/// target is fine". A targeted primitive added without an arm here is rejected (and trips a
+/// `debug_assert` in tests) instead of silently accepting graveyard cards, players and stack
+/// objects — the CR 115.1 defect that issue #42 recorded for `GrantKeywordsTarget`.
 pub(super) fn spell_target_legality_error(
     engine: &GameEngine,
     effect: &SpellEffectKind,
@@ -701,41 +711,36 @@ pub(super) fn spell_target_legality_error(
         | SpellEffectKind::TapTarget { target: filter }
         | SpellEffectKind::UntapTarget { target: filter }
         | SpellEffectKind::PumpTarget { target: filter, .. }
+        | SpellEffectKind::GrantKeywordsTarget { target: filter, .. }
         | SpellEffectKind::PutCounters { target: filter, .. }
-        | SpellEffectKind::PreventNextDamage { target: filter, .. }
-            if !target_filter_legal(engine, filter, tid, caster) =>
-        {
-            return Err(EngineError::Illegal(
-                "target must be a creature or player on the battlefield",
-            ));
+        | SpellEffectKind::PreventNextDamage { target: filter, .. } => {
+            if !target_filter_legal(engine, filter, tid, caster) {
+                return Err(EngineError::Illegal(
+                    "target must be a creature or player on the battlefield",
+                ));
+            }
         }
         SpellEffectKind::ExileTarget
         | SpellEffectKind::ExileTargetGainLifeEqualToPower
-        | SpellEffectKind::ReturnTargetCreatureToHand
-            if !destroy_spell_target_legal(engine, tid) =>
-        {
-            return Err(EngineError::Illegal(
-                "target must be a creature on the battlefield",
-            ));
+        | SpellEffectKind::ReturnTargetCreatureToHand => {
+            if !destroy_spell_target_legal(engine, tid) {
+                return Err(EngineError::Illegal(
+                    "target must be a creature on the battlefield",
+                ));
+            }
+            if !object_targetable_by(engine, tid, caster) {
+                return Err(EngineError::Illegal("target has hexproof or shroud"));
+            }
         }
-        SpellEffectKind::ExileTarget
-        | SpellEffectKind::ExileTargetGainLifeEqualToPower
-        | SpellEffectKind::ReturnTargetCreatureToHand
-            if !object_targetable_by(engine, tid, caster) =>
-        {
-            return Err(EngineError::Illegal("target has hexproof or shroud"));
-        }
-        SpellEffectKind::ReturnTargetPermanentToHand
-            if !any_battlefield_permanent_target_legal(&engine.state, tid) =>
-        {
-            return Err(EngineError::Illegal(
-                "target must be a permanent on the battlefield",
-            ));
-        }
-        SpellEffectKind::ReturnTargetPermanentToHand
-            if !object_targetable_by(engine, tid, caster) =>
-        {
-            return Err(EngineError::Illegal("target has hexproof or shroud"));
+        SpellEffectKind::ReturnTargetPermanentToHand => {
+            if !any_battlefield_permanent_target_legal(&engine.state, tid) {
+                return Err(EngineError::Illegal(
+                    "target must be a permanent on the battlefield",
+                ));
+            }
+            if !object_targetable_by(engine, tid, caster) {
+                return Err(EngineError::Illegal("target has hexproof or shroud"));
+            }
         }
         SpellEffectKind::TargetPlayerGainsLife { target: filter, .. }
         | SpellEffectKind::TargetPlayerLosesLife { target: filter, .. }
@@ -755,34 +760,49 @@ pub(super) fn spell_target_legality_error(
         // CR 115.2 / 707.10b: counter and copy effects target spells, not abilities. The optional
         // `spell_filter` further restricts the spell type (Essence Scatter, Negate, Twincast).
         SpellEffectKind::CounterTargetSpell { spell_filter }
-            if !stack_spell_target_legal(&engine.state, engine.registry, tid, *spell_filter) =>
-        {
+        | SpellEffectKind::CopyTargetSpell { spell_filter, .. } => {
+            if !stack_spell_target_legal(&engine.state, engine.registry, tid, *spell_filter) {
+                return Err(EngineError::Illegal(
+                    "target must be a spell of the required type on the stack",
+                ));
+            }
+        }
+        SpellEffectKind::AuraAttach { target: filter } => {
+            if !target_filter_legal(engine, filter, tid, caster) {
+                return Err(EngineError::Illegal(
+                    "enchant target must be a valid permanent on the battlefield",
+                ));
+            }
+        }
+        SpellEffectKind::ReturnFromGraveyard { filter, .. } => {
+            if !graveyard_target_legal(engine, filter, tid, caster) {
+                return Err(EngineError::Illegal(
+                    "target must be a matching card in the correct graveyard",
+                ));
+            }
+        }
+        // Ability-only effects (CR 702.6a equip, CR 701.15 regenerate). Registry load already
+        // rejects them in `spell_effect`, so reaching here means a mis-routed call rather than a
+        // bad target — reject rather than fall through to the fail-closed arm's generic message.
+        SpellEffectKind::Equip { .. } | SpellEffectKind::Regenerate { .. } => {
             return Err(EngineError::Illegal(
-                "target must be a spell of the required type on the stack",
+                "this effect is only valid on an activated or triggered ability",
             ));
         }
-        SpellEffectKind::CopyTargetSpell { spell_filter, .. }
-            if !stack_spell_target_legal(&engine.state, engine.registry, tid, *spell_filter) =>
-        {
-            return Err(EngineError::Illegal(
-                "target must be a spell of the required type on the stack",
-            ));
+        // Fail closed. Untargeted effects legitimately land here (`compute_spell_targets` and the
+        // copy-with-new-targets path do not pre-filter as strictly as `validate_spell_targets`),
+        // but an effect that declares it needs a target and has no arm above is a wiring bug.
+        other => {
+            if spell_effect_kind_needs_target(other) {
+                debug_assert!(
+                    false,
+                    "targeted effect {other:?} has no arm in spell_target_legality_error"
+                );
+                return Err(EngineError::Illegal(
+                    "this effect has no spell-side target validation",
+                ));
+            }
         }
-        SpellEffectKind::AuraAttach { target: filter }
-            if !target_filter_legal(engine, filter, tid, caster) =>
-        {
-            return Err(EngineError::Illegal(
-                "enchant target must be a valid permanent on the battlefield",
-            ));
-        }
-        SpellEffectKind::ReturnFromGraveyard { filter, .. }
-            if !graveyard_target_legal(engine, filter, tid, caster) =>
-        {
-            return Err(EngineError::Illegal(
-                "target must be a matching card in the correct graveyard",
-            ));
-        }
-        _ => {}
     }
     Ok(())
 }

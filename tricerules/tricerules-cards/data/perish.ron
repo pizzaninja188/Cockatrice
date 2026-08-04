@@ -1,0 +1,10 @@
+(
+  id: "perish",
+  name: "Perish",
+  mana_cost: "{2}{B}",
+  types: ["Sorcery"],
+  spell_effect: [DestroyAll(
+    kind: (kind: Creature, is_color: Green),
+    prevent_regeneration: true,
+  )],
+)

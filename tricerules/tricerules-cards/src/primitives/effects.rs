@@ -701,14 +701,24 @@ impl SpellEffectKind {
             SpellEffectKind::DestroyAll { kind, .. }
             | SpellEffectKind::DamageAll { kind, .. }
             | SpellEffectKind::UntapAll { filter: kind, .. } => {
-                if matches!(kind.kind, TargetKind::Creature | TargetKind::AnyPermanent) {
-                    Ok(())
-                } else {
-                    Err(format!(
+                if !matches!(kind.kind, TargetKind::Creature | TargetKind::AnyPermanent) {
+                    return Err(format!(
                         "mass effect kind must be Creature or AnyPermanent, got {:?}",
                         kind.kind
-                    ))
+                    ));
                 }
+                // Untargeted mass selection runs through `battlefield_objects_matching`, which has
+                // no activating player to compare a controller against — controller scope belongs
+                // in the effect's own `players` (RelativePlayerSet) or `AnthemFilter`, not here.
+                // Rejecting it beats silently ignoring it.
+                if kind.only_controller {
+                    return Err(
+                        "mass effect filter cannot use only_controller; scope the effect with \
+                         `players` (RelativePlayerSet) instead"
+                            .into(),
+                    );
+                }
+                Ok(())
             }
             SpellEffectKind::GrantKeywordsTarget { target, keywords } => {
                 if target.is_player() {

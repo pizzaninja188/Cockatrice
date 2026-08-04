@@ -1020,6 +1020,174 @@ fn wrath_of_god_destroys_all_creatures_except_indestructible() {
     );
 }
 
+/// Issue #39. Oracle: "Destroy all enchantments." The mass-selection path used to ignore
+/// `permanent_types` entirely, so this filter would have swept every permanent on the battlefield.
+#[test]
+fn tranquility_destroys_only_enchantments() {
+    let decks = Some(vec![
+        deck_with(
+            "forest",
+            &[
+                "tranquility",
+                "glorious_anthem",
+                "grizzly_bears",
+                "bonesplitter",
+            ],
+        ),
+        deck_with("forest", &["exploration"]),
+    ]);
+    let mut e = GameEngine::new(7260, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let anthem = relocate_to_battlefield(&mut e, 0, "glorious_anthem", false);
+    let bears = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
+    let equipment = relocate_to_battlefield(&mut e, 0, "bonesplitter", false);
+    let opposing_enchantment = relocate_to_battlefield(&mut e, 1, "exploration", false);
+    let land = relocate_to_battlefield(&mut e, 0, "forest", false);
+    relocate_to_hand(&mut e, 0, "tranquility");
+
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            g: 1,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "tranquility");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast Tranquility");
+    resolve_entire_stack_two_player(&mut e);
+
+    assert!(
+        e.state.players[0].graveyard.contains(&anthem),
+        "the controller's own enchantment is destroyed too"
+    );
+    assert!(
+        e.state.players[1].graveyard.contains(&opposing_enchantment),
+        "the opponent's enchantment is destroyed"
+    );
+    for (label, oid) in [("creature", bears), ("artifact", equipment), ("land", land)] {
+        assert!(
+            e.state.players[0].battlefield.contains(&oid),
+            "the {label} is not an enchantment and survives"
+        );
+    }
+}
+
+/// Oracle: "Destroy all artifacts. They can't be regenerated." The artifact half of the same
+/// `permanent_types` gap — and an artifact *creature* must go while a plain creature stays.
+#[test]
+fn shatterstorm_destroys_only_artifacts() {
+    let decks = Some(vec![
+        deck_with(
+            "mountain",
+            &[
+                "shatterstorm",
+                "bonesplitter",
+                "bottle_gnomes",
+                "grizzly_bears",
+                "glorious_anthem",
+            ],
+        ),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(7261, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let equipment = relocate_to_battlefield(&mut e, 0, "bonesplitter", false);
+    let artifact_creature = relocate_to_battlefield(&mut e, 0, "bottle_gnomes", false);
+    let bears = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
+    let anthem = relocate_to_battlefield(&mut e, 0, "glorious_anthem", false);
+    relocate_to_hand(&mut e, 0, "shatterstorm");
+
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 2,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "shatterstorm");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast Shatterstorm");
+    resolve_entire_stack_two_player(&mut e);
+
+    assert!(e.state.players[0].graveyard.contains(&equipment));
+    assert!(
+        e.state.players[0].graveyard.contains(&artifact_creature),
+        "an artifact creature is an artifact"
+    );
+    assert!(
+        e.state.players[0].battlefield.contains(&bears),
+        "a nonartifact creature survives"
+    );
+    assert!(
+        e.state.players[0].battlefield.contains(&anthem),
+        "a nonartifact enchantment survives"
+    );
+}
+
+/// Oracle: "Destroy all green creatures. They can't be regenerated." Exercises the new inclusive
+/// `is_color` filter (CR 105/202.2) on the untargeted path, ANDed with `kind: Creature`.
+#[test]
+fn perish_destroys_only_green_creatures() {
+    let decks = Some(vec![
+        deck_with(
+            "swamp",
+            &["perish", "grizzly_bears", "savannah_lions", "bottle_gnomes"],
+        ),
+        deck_with("forest", &["cudgel_troll", "exploration"]),
+    ]);
+    let mut e = GameEngine::new(7262, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let bears = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
+    let lions = relocate_to_battlefield(&mut e, 0, "savannah_lions", false);
+    let gnomes = relocate_to_battlefield(&mut e, 0, "bottle_gnomes", false);
+    let troll = relocate_to_battlefield(&mut e, 1, "cudgel_troll", false);
+    let green_enchantment = relocate_to_battlefield(&mut e, 1, "exploration", false);
+    relocate_to_hand(&mut e, 0, "perish");
+
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "perish");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast Perish");
+    resolve_entire_stack_two_player(&mut e);
+
+    assert!(
+        e.state.players[0].graveyard.contains(&bears),
+        "Grizzly Bears is green"
+    );
+    assert!(
+        e.state.players[1].graveyard.contains(&troll),
+        "Cudgel Troll is green, on either side of the table"
+    );
+    assert!(
+        e.state.players[0].battlefield.contains(&lions),
+        "Savannah Lions is white"
+    );
+    assert!(
+        e.state.players[0].battlefield.contains(&gnomes),
+        "Bottle Gnomes is colorless"
+    );
+    assert!(
+        e.state.players[1].battlefield.contains(&green_enchantment),
+        "a green *non-creature* permanent is outside `kind: Creature`"
+    );
+}
+
 #[test]
 fn pyroclasm_deals_two_damage_to_each_creature() {
     let decks = Some(vec![

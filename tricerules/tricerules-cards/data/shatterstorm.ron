@@ -1,0 +1,10 @@
+(
+  id: "shatterstorm",
+  name: "Shatterstorm",
+  mana_cost: "{2}{R}{R}",
+  types: ["Sorcery"],
+  spell_effect: [DestroyAll(
+    kind: (kind: AnyPermanent, permanent_types: [Artifact]),
+    prevent_regeneration: true,
+  )],
+)

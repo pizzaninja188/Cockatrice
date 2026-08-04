@@ -65,6 +65,41 @@ mod tests {
         }
     }
 
+    /// Issue #39: untargeted mass selection has no activating player, so `only_controller` can
+    /// never be honored there — the effect's own `players` scope is the correct knob. Reject the
+    /// filter at load rather than silently ignoring the field.
+    #[test]
+    fn mass_effect_rejects_only_controller_filter() {
+        let scoped = TargetFilter {
+            kind: TargetKind::Creature,
+            only_controller: true,
+            ..Default::default()
+        };
+        assert!(SpellEffectKind::DestroyAll {
+            kind: scoped.clone(),
+            prevent_regeneration: false,
+        }
+        .validate(EffectContext::Spell)
+        .is_err());
+        assert!(SpellEffectKind::DamageAll {
+            amount: 2,
+            kind: scoped,
+        }
+        .validate(EffectContext::Spell)
+        .is_err());
+
+        // The same effect without the controller restriction still loads.
+        assert!(SpellEffectKind::DestroyAll {
+            kind: TargetFilter {
+                kind: TargetKind::Creature,
+                ..Default::default()
+            },
+            prevent_regeneration: true,
+        }
+        .validate(EffectContext::Spell)
+        .is_ok());
+    }
+
     #[test]
     fn self_target_rejected_in_spell_context_allowed_in_ability() {
         let pump_self = SpellEffectKind::PumpTarget {
