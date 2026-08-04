@@ -206,6 +206,11 @@ void RuledGameDriver::resetForNewGame()
     ruledStackTargetsByObjectId.clear();
     ruledStackCopyObjectIds.clear();
     ruledPendingCastVisualQueue.clear();
+    // Drop the hand-slot change cache: a new game's clients start with an empty map, so the first
+    // broadcast has to carry one even if the hands happen to serialize identically.
+    lastBroadcastHandSlotMap.Clear();
+    hasLastBroadcastHandSlotMap = false;
+    lastBroadcastHandSlotParticipants.clear();
     // Reset the connection-lost flag so that a back-to-back second game can report and
     // handle a fresh engine disconnect correctly. Without this reset, if game 1 lost the
     // engine connection the flag stays true, handleRuledEngineConnectionLost() returns early
@@ -1371,10 +1376,14 @@ void RuledGameDriver::appendServerObjectMaps(ruled::v1::IpcResponse &toSend)
         }
     }
     // zone_view hand/lib fields are cleared before broadcast; publish hand index <-> Server_Card.id separately for
-    // ruled UI intents.
+    // ruled UI intents. Injected only when the mapping actually changed since the last broadcast:
+    // the client keeps the previous map when the event is absent and replaces it wholesale when it
+    // is present, so re-sending an identical map on every priority pass and mana tap is pure waste.
     {
         ruled::v1::RuledEvent handEv;
         auto *hm = handEv.mutable_hand_slot_map();
+        // Player order (QMap by id) and hand index order are both deterministic, which is what lets
+        // the change check below compare serialized bytes instead of diffing entries.
         for (Server_AbstractPlayer *ab : game->getPlayers().values()) {
             if (!ab) {
                 continue;
@@ -1396,7 +1405,21 @@ void RuledGameDriver::appendServerObjectMaps(ruled::v1::IpcResponse &toSend)
                 ent->set_server_card_id(c->getId());
             }
         }
-        *toSend.mutable_batch()->add_events() = handEv;
+        // A joiner or reconnector starts with an empty client-side map, so a changed participant
+        // set forces a re-send even when no hand moved.
+        QSet<int> participantIds;
+        for (auto it = game->getParticipants().constBegin(); it != game->getParticipants().constEnd(); ++it) {
+            participantIds.insert(it.key());
+        }
+        const bool participantsChanged = participantIds != lastBroadcastHandSlotParticipants;
+        const bool mapChanged = !hasLastBroadcastHandSlotMap ||
+                                hm->SerializeAsString() != lastBroadcastHandSlotMap.SerializeAsString();
+        if (participantsChanged || mapChanged) {
+            lastBroadcastHandSlotMap.CopyFrom(*hm);
+            hasLastBroadcastHandSlotMap = true;
+            lastBroadcastHandSlotParticipants = participantIds;
+            *toSend.mutable_batch()->add_events() = handEv;
+        }
     }
     // Graveyard OID map: lets the client map engine OIDs in valid_graveyard_ids to
     // server card ids so graveyard cards can be clicked as spell targets.

@@ -264,7 +264,7 @@ TEST_F(RuledClientTest, HandSlotAndGraveyardMapsAreQueryable)
     EXPECT_EQ(state->graveyardEngineOidForOwnedCard(kOpponent, 11), 0u);
 }
 
-TEST_F(RuledClientTest, HandSlotMapIsRebuiltFromScratchEachBatch)
+TEST_F(RuledClientTest, HandSlotMapPersistsUntilReplaced)
 {
     ruled::v1::RuledEventBatch first;
     auto *he = first.add_events()->mutable_hand_slot_map()->add_entries();
@@ -274,9 +274,20 @@ TEST_F(RuledClientTest, HandSlotMapIsRebuiltFromScratchEachBatch)
     apply(first);
     ASSERT_EQ(state->engineHandSlotForServerCard(kLocalPlayer, 5), 0);
 
-    // A later batch with no hand_slot_map must not leave the stale slot behind.
+    // Servatrice omits the map on batches with no hand change, so an absent map means "unchanged"
+    // and the slot has to survive.
     apply(phaseBatch(ruled::v1::PHASE_ID_MAIN1, kLocalPlayer));
+    EXPECT_EQ(state->engineHandSlotForServerCard(kLocalPlayer, 5), 0);
+
+    // A present map is a full replacement: card 5 left the hand, card 7 took slot 0.
+    ruled::v1::RuledEventBatch second;
+    auto *he2 = second.add_events()->mutable_hand_slot_map()->add_entries();
+    he2->set_player_id(kLocalPlayer);
+    he2->set_server_card_id(7);
+    he2->set_hand_index(0);
+    apply(second);
     EXPECT_EQ(state->engineHandSlotForServerCard(kLocalPlayer, 5), -1);
+    EXPECT_EQ(state->engineHandSlotForServerCard(kLocalPlayer, 7), 0);
 }
 
 // ---------------------------------------------------------------------------------------

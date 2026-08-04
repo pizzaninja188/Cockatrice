@@ -227,6 +227,25 @@ protected:
         return game->ruled()->redactBatchForParticipant(batch, participant);
     }
 
+    // Runs the identity-map injection stage of broadcastRuledResponse on an otherwise empty
+    // response, and reports whether it decided to carry a HandSlotMap this time.
+    bool appendedHandSlotMap()
+    {
+        ruled::v1::IpcResponse resp;
+        game->ruled()->appendServerObjectMaps(resp);
+        return std::any_of(resp.batch().events().begin(), resp.batch().events().end(),
+                           [](const auto &event) { return event.has_hand_slot_map(); });
+    }
+
+    static Server_Card *addCardToHand(Server_Player *p, const QString &name)
+    {
+        Server_CardZone *hand = p->getZones().value(ZoneNames::HAND);
+        const QString id = name.toLower().replace(' ', '_');
+        auto *card = new Server_Card({name, id}, p->newCardId(), 0, 0);
+        hand->insertCard(card, -1, 0);
+        return card;
+    }
+
     static void setupPlayerZonesAndCounters(Server_Player *p)
     {
         auto *deck = new Server_CardZone(p, ZoneNames::DECK, false, ServerInfo_Zone::HiddenZone);
@@ -378,6 +397,37 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
                             [](const auto &event) { return event.has_log() && event.log().text() == "P1 only"; }));
     EXPECT_TRUE(std::none_of(forP2.events().begin(), forP2.events().end(),
                              [](const auto &event) { return event.has_log(); }));
+}
+
+// The HandSlotMap is re-sent only when the mapping changed. It rides on every ruled command
+// (priority passes, mana taps, phase rolls), so re-serializing an identical map — per batch and
+// again per participant during redaction — was pure overhead. The client keeps the last map it
+// received when the event is absent, so skipping it is only correct while nothing moved.
+TEST_F(RuledBatchTest, HandSlotMapIsInjectedOnlyWhenTheHandMappingChanges)
+{
+    // First broadcast of the game is always carried: the clients start with an empty map.
+    EXPECT_TRUE(appendedHandSlotMap());
+    EXPECT_FALSE(appendedHandSlotMap());
+
+    addCardToHand(p1, "Grizzly Bears");
+    EXPECT_TRUE(appendedHandSlotMap());
+    EXPECT_FALSE(appendedHandSlotMap());
+
+    // The other seat's hand is part of the same map, so its changes re-send it too.
+    addCardToHand(p2, "Hill Giant");
+    EXPECT_TRUE(appendedHandSlotMap());
+    EXPECT_FALSE(appendedHandSlotMap());
+
+    // A joining spectator has no map yet, so a changed participant set forces a re-send even
+    // though no hand moved.
+    auto *spectator = new Server_Player(game, 3, userA, true, nullptr);
+    insertParticipant(3, spectator);
+    EXPECT_TRUE(appendedHandSlotMap());
+    EXPECT_FALSE(appendedHandSlotMap());
+
+    // A new game in the same room starts the clients over from empty.
+    game->ruled()->resetForNewGame();
+    EXPECT_TRUE(appendedHandSlotMap());
 }
 
 // CR 701.18 scry looks at the top of a hidden zone, so LIBRARY_TOP must redact exactly like
