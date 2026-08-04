@@ -46,6 +46,10 @@ private:
     quint16 enginePort() const;
 
     QTcpSocket *socket;
+    /// True once sessionStart succeeded on the current socket. The sidecar keys the engine session
+    /// to the connection, so after this a dropped socket is unrecoverable and must not be silently
+    /// reconnected — see connectIfNeeded().
+    bool sessionActive = false;
 };
 
 #endif

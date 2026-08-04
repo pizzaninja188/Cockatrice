@@ -38,6 +38,17 @@ bool RulesRelay::connectIfNeeded()
     if (socket->state() == QAbstractSocket::ConnectedState) {
         return true;
     }
+    // A session lives in the sidecar keyed to *this* connection, so reconnecting cannot bring it
+    // back: the fresh connection has no engine and answers every command "no session" — an ok=false
+    // the caller reports as a plain context error, which the client renders as nothing. That is a
+    // silently frozen game. Fail instead, so the callers run handleRuledEngineConnectionLost() and
+    // players are told the game cannot continue.
+    if (sessionActive) {
+        qWarning() << "RulesRelay: engine connection lost mid-session; not reconnecting (the engine "
+                      "state cannot be recovered)";
+        sessionActive = false;
+        return false;
+    }
     socket->connectToHost(QHostAddress(engineHost()), enginePort());
     if (!socket->waitForConnected(3000)) {
         qWarning() << "RulesRelay: failed to connect to tricerules-server:" << socket->errorString();
@@ -53,6 +64,7 @@ void RulesRelay::disconnectRelay()
         endEnv.mutable_session_end();
         (void)writeFrame(endEnv);
     }
+    sessionActive = false;
     socket->abort();
 }
 
@@ -149,7 +161,12 @@ bool RulesRelay::sessionStart(quint64 gameId, quint64 seed, const QList<int> &pl
     if (!readFrame(frame)) {
         return false;
     }
-    return out.ParseFromArray(frame.constData(), frame.size());
+    if (!out.ParseFromArray(frame.constData(), frame.size())) {
+        return false;
+    }
+    // From here on this connection carries engine state that no reconnect can rebuild.
+    sessionActive = out.ok();
+    return true;
 }
 
 bool RulesRelay::playerCommand(int playerId, const QByteArray &ruledCommandBytes, ruled::v1::IpcResponse &out)
@@ -193,6 +210,7 @@ bool RulesRelay::validateDeck(const QStringList &cardNames, ruled::v1::IpcRespon
 
 bool RulesRelay::sessionEnd()
 {
+    sessionActive = false;
     if (socket->state() != QAbstractSocket::ConnectedState) {
         return true;
     }

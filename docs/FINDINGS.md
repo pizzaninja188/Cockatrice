@@ -9,20 +9,38 @@
 ### 2026-08-03
 
 - **Sidecar connections had no idle guard and left Nagle on** (`tricerules-server/src/main.rs`):
-  `read_proto` is now wrapped in a `TRICERULES_IDLE_TIMEOUT_SECS` timeout (default **1800 s**, `0`
-  disables), so a peer that dies *without closing its socket* — a remote/partitioned Servatrice, or
-  a hung one; a local crash already closes its sockets and hits EOF — no longer parks the task on
-  `read_exact` forever holding a live `GameEngine`. The audit's suggested 30 s was rejected: the
-  relay keeps **one connection per ruled game**, idle between commands for as long as players take
-  to act, so a short timeout would drop live games. An idle drop returns `Ok` and logs its own line
-  rather than surfacing as `connection error:`. Also sets `TCP_NODELAY` on accept and collapses
-  `write_proto`'s two `write_all` calls into one `encode_frame` buffer, plus a Ctrl+C/SIGTERM
-  shutdown arm on the accept loop with an `Arc<AtomicUsize>` live-session count (the `signal` tokio
-  feature was already enabled and unused; `time` was added). Coverage: env-policy and framing unit
-  tests, and three real-loopback-socket tests (silent peer dropped, disabled timeout keeps it,
-  request/response round trip through the new framing). Full `cargo test`, Clippy with warnings
-  denied, `cargo fmt --check`, and all 18 C++ tests including `ruled_e2e_smoke_test` exit 0; the
-  drop was also confirmed against the real binary at a 3 s timeout.
+  `read_proto` is now wrapped in an idle timeout, so a peer that dies *without closing its socket* —
+  a remote/partitioned Servatrice, or a hung one; a local crash already closes its sockets and hits
+  EOF — no longer parks the task on `read_exact` forever holding a live `GameEngine`. The timeout is
+  **split** (`IdleTimeouts`), because dropping a connection that carries a game kills that game for
+  good: **60 s before `SessionStart`** (a connection with no session holds nothing, and Servatrice
+  sends `SessionStart`/`ValidateDeck` within one round trip of connecting — no connection sits open
+  while players pick decks) and **4 h once a session exists**, where no plausible game reaches it.
+  The audit's suggested flat 30 s was rejected: the relay keeps one connection per ruled game, idle
+  between commands for as long as players take to act. `TRICERULES_IDLE_TIMEOUT_SECS` overrides the
+  session leash and caps the pre-session one; `0` disables both. An idle drop returns `Ok` and logs
+  its own line rather than surfacing as `connection error:`. Also sets `TCP_NODELAY` on accept and
+  collapses `write_proto`'s two `write_all` calls into one `encode_frame` buffer, plus a
+  Ctrl+C/SIGTERM shutdown arm on the accept loop with an `Arc<AtomicUsize>` live-session count (the
+  `signal` tokio feature was already enabled and unused; `time` was added). Coverage: env-policy and
+  framing unit tests plus four real-loopback-socket tests (silent peer dropped, disabled timeout
+  keeps it, a started session held to the long leash, request/response round trip through the new
+  framing). Full `cargo test`, Clippy with warnings denied, `cargo fmt --check` and all 18 C++ tests
+  exit 0; the drop was also confirmed against the real binary at a 3 s timeout.
+
+- **A dropped engine connection froze the game silently instead of announcing itself**
+  (`rules_relay.{h,cpp}`): found by manual testing of the idle timeout above, but pre-existing and
+  reachable any time the sidecar restarts or the socket dies mid-game. `RulesRelay::connectIfNeeded`
+  transparently reconnected after the socket dropped; the sidecar keys the engine session to the
+  *connection*, so the fresh one answered every command `ok=false "no session"` — a successful
+  transport, which `RuledGameDriver` reports as a plain `RespContextError` that the client renders
+  as nothing. Players saw buttons doing nothing and no error, and the existing
+  `handleRuledEngineConnectionLost()` notice ("this ruled game can no longer continue… please
+  concede or leave") never fired. `RulesRelay` now tracks `sessionActive` from a successful
+  `sessionStart`, and once set, a dropped socket fails instead of reconnecting — a reconnect cannot
+  rebuild engine state, so pretending it can was the bug. Covered by a new `ruled_e2e_smoke_test`
+  case that runs a real sidecar at a 1 s idle timeout, waits for the hangup, and asserts the popup;
+  verified to fail (no popup, 20 s timeout) with the guard neutralized.
 
 ### 2026-08-02
 

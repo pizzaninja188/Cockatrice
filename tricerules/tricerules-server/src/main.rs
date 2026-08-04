@@ -32,25 +32,59 @@ fn dev_commands_enabled_for_session(requested: bool, env_value: Option<&str>) ->
     requested && dev_commands_allowed(env_value)
 }
 
-/// Default idle timeout: 30 minutes without a single byte from the peer.
+/// Default idle timeout once a session exists: 4 hours without a single byte from the peer.
 ///
 /// Deliberately far above human turn time. Servatrice keeps **one connection per ruled game**, open
-/// for the whole game and idle between commands for as long as players take to act, so a short
-/// timeout would drop live games. This guard exists to bound a *half-open* connection — a peer that
-/// died without closing its socket — not to police slow play.
-const DEFAULT_IDLE_TIMEOUT_SECS: u64 = 1800;
+/// for the whole game and idle between commands for as long as players take to act, and dropping it
+/// kills that game for good — the engine state cannot be recovered. This guard exists to bound a
+/// *half-open* connection (a peer that died without closing its socket), not to police slow play, so
+/// it is set where no plausible game reaches it.
+const DEFAULT_SESSION_IDLE_TIMEOUT_SECS: u64 = 14400;
 
-/// `TRICERULES_IDLE_TIMEOUT_SECS`: how long a connection may go without the peer sending anything
-/// before this sidecar drops it and frees the session. `0` disables the guard; an unparseable value
-/// falls back to the default rather than failing the process.
+/// Default idle timeout before `SessionStart`: 60 seconds.
+///
+/// A connection with no session yet holds no game, so dropping it costs nothing. Servatrice sends
+/// `SessionStart` (or `ValidateDeck`) within one round trip of connecting — no connection sits open
+/// while players pick decks, since `validateDecksForStart` uses a short-lived stack-local relay and
+/// the game's own relay is created and started together — so a minute is already orders of
+/// magnitude of headroom.
+const DEFAULT_PRE_SESSION_IDLE_TIMEOUT_SECS: u64 = 60;
+
+/// How long a connection may go without the peer sending anything, before and after a session
+/// exists. `None` disables the guard.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct IdleTimeouts {
+    pre_session: Option<Duration>,
+    session: Option<Duration>,
+}
+
+impl IdleTimeouts {
+    /// The timeout that applies right now. Splitting the two is the point: a leaked connection that
+    /// never became a game dies in a minute, while a live game gets the long leash.
+    fn for_session(&self, has_session: bool) -> Option<Duration> {
+        if has_session {
+            self.session
+        } else {
+            self.pre_session
+        }
+    }
+}
+
+/// `TRICERULES_IDLE_TIMEOUT_SECS` sets the **session** timeout; the pre-session one is capped at the
+/// smaller of its default and that value, so a small test value shortens both and stays intuitive.
+/// `0` disables both; an unparseable value falls back to the defaults rather than failing the process.
 ///
 /// Split from the env read so the policy is testable without mutating process environment
 /// (same reason as `dev_commands_allowed`).
-fn idle_timeout_from_env(env_value: Option<&str>) -> Option<Duration> {
-    let secs = env_value
+fn idle_timeouts_from_env(env_value: Option<&str>) -> IdleTimeouts {
+    let session_secs = env_value
         .and_then(|s| s.trim().parse::<u64>().ok())
-        .unwrap_or(DEFAULT_IDLE_TIMEOUT_SECS);
-    (secs > 0).then(|| Duration::from_secs(secs))
+        .unwrap_or(DEFAULT_SESSION_IDLE_TIMEOUT_SECS);
+    let pre_session_secs = session_secs.min(DEFAULT_PRE_SESSION_IDLE_TIMEOUT_SECS);
+    IdleTimeouts {
+        pre_session: (pre_session_secs > 0).then(|| Duration::from_secs(pre_session_secs)),
+        session: (session_secs > 0).then(|| Duration::from_secs(session_secs)),
+    }
 }
 
 /// Failure response shared by ValidateDeck and SessionStart name resolution:
@@ -130,17 +164,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(17381);
-    let idle_timeout =
-        idle_timeout_from_env(env::var("TRICERULES_IDLE_TIMEOUT_SECS").ok().as_deref());
+    let idle_timeouts =
+        idle_timeouts_from_env(env::var("TRICERULES_IDLE_TIMEOUT_SECS").ok().as_deref());
     let addr = format!("127.0.0.1:{port}");
     let listener = TcpListener::bind(&addr).await?;
-    match idle_timeout {
-        Some(d) => eprintln!(
-            "tricerules-server listening on {addr} (idle timeout {}s)",
-            d.as_secs()
-        ),
-        None => eprintln!("tricerules-server listening on {addr} (idle timeout disabled)"),
-    }
+    let describe = |t: Option<Duration>| match t {
+        Some(d) => format!("{}s", d.as_secs()),
+        None => "disabled".to_string(),
+    };
+    eprintln!(
+        "tricerules-server listening on {addr} (idle timeout {} pre-session, {} in session)",
+        describe(idle_timeouts.pre_session),
+        describe(idle_timeouts.session)
+    );
     let live_sessions = Arc::new(AtomicUsize::new(0));
     loop {
         let (sock, _) = tokio::select! {
@@ -162,7 +198,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let guard = SessionGuard(Arc::clone(&live_sessions));
         tokio::spawn(async move {
             let _guard = guard;
-            if let Err(e) = handle_connection(sock, idle_timeout).await {
+            if let Err(e) = handle_connection(sock, idle_timeouts).await {
                 eprintln!("connection error: {e}");
             }
         });
@@ -171,11 +207,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
 async fn handle_connection(
     mut sock: TcpStream,
-    idle_timeout: Option<Duration>,
+    idle_timeouts: IdleTimeouts,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut engine: Option<GameEngine> = None;
     let mut game_id: u64 = 0;
     loop {
+        // Re-read per iteration: the applicable timeout lengthens the moment a session exists.
+        let idle_timeout = idle_timeouts.for_session(engine.is_some());
         let env = match read_envelope(&mut sock, idle_timeout).await? {
             Some(env) => env,
             // Idle drop is expected housekeeping, not an error: returning Ok here keeps it out of
@@ -468,27 +506,53 @@ mod tests {
         assert!(!dev_commands_enabled_for_session(false, None));
     }
 
-    /// The default must stay far above human turn time: one connection serves a whole ruled game
-    /// and is idle between commands while players think.
+    /// A connection with a game on it must get a leash no plausible game reaches — dropping it
+    /// kills that game for good — while one that never became a game dies quickly.
     #[test]
-    fn idle_timeout_defaults_to_half_an_hour_and_is_configurable() {
+    fn idle_timeout_defaults_are_short_before_a_session_and_long_during_one() {
+        let t = idle_timeouts_from_env(None);
         assert_eq!(
-            idle_timeout_from_env(None),
-            Some(Duration::from_secs(DEFAULT_IDLE_TIMEOUT_SECS))
+            t.session,
+            Some(Duration::from_secs(DEFAULT_SESSION_IDLE_TIMEOUT_SECS))
         );
         assert_eq!(
-            idle_timeout_from_env(Some(" 45 ")),
-            Some(Duration::from_secs(45))
+            t.pre_session,
+            Some(Duration::from_secs(DEFAULT_PRE_SESSION_IDLE_TIMEOUT_SECS))
+        );
+        assert_eq!(t.for_session(true), t.session);
+        assert_eq!(t.for_session(false), t.pre_session);
+    }
+
+    /// A small override must shorten *both*, or the manual dev-loop test ("set it to 20 and wait")
+    /// would silently keep the 60 s pre-session default.
+    #[test]
+    fn a_configured_timeout_sets_the_session_leash_and_caps_the_pre_session_one() {
+        let short = idle_timeouts_from_env(Some(" 20 "));
+        assert_eq!(short.session, Some(Duration::from_secs(20)));
+        assert_eq!(short.pre_session, Some(Duration::from_secs(20)));
+
+        let long = idle_timeouts_from_env(Some("7200"));
+        assert_eq!(long.session, Some(Duration::from_secs(7200)));
+        assert_eq!(
+            long.pre_session,
+            Some(Duration::from_secs(DEFAULT_PRE_SESSION_IDLE_TIMEOUT_SECS)),
+            "a long session leash must not stretch the pre-session one"
         );
     }
 
     #[test]
-    fn idle_timeout_zero_disables_the_guard_and_garbage_falls_back_to_the_default() {
-        assert_eq!(idle_timeout_from_env(Some("0")), None);
+    fn idle_timeout_zero_disables_both_and_garbage_falls_back_to_the_defaults() {
+        assert_eq!(
+            idle_timeouts_from_env(Some("0")),
+            IdleTimeouts {
+                pre_session: None,
+                session: None
+            }
+        );
         for value in ["", "never", "-1", "30s"] {
             assert_eq!(
-                idle_timeout_from_env(Some(value)),
-                Some(Duration::from_secs(DEFAULT_IDLE_TIMEOUT_SECS)),
+                idle_timeouts_from_env(Some(value)),
+                idle_timeouts_from_env(None),
                 "{value:?} must not break the process, just fall back"
             );
         }
@@ -511,15 +575,23 @@ mod tests {
         assert_eq!(frame, vec![0, 0, 0, 0]);
     }
 
+    /// The same leash before and after a session — the shape most of these tests want.
+    fn uniform_timeout(t: Option<Duration>) -> IdleTimeouts {
+        IdleTimeouts {
+            pre_session: t,
+            session: t,
+        }
+    }
+
     /// Drives a real `handle_connection` over loopback and hands back the client end.
     async fn connect_to_handler(
-        idle_timeout: Option<Duration>,
+        idle_timeouts: IdleTimeouts,
     ) -> (TcpStream, tokio::task::JoinHandle<()>) {
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
         let addr = listener.local_addr().expect("local addr");
         let server = tokio::spawn(async move {
             let (sock, _) = listener.accept().await.expect("accept");
-            handle_connection(sock, idle_timeout)
+            handle_connection(sock, idle_timeouts)
                 .await
                 .expect("an idle drop is Ok, not an error");
         });
@@ -531,7 +603,8 @@ mod tests {
     /// the task on `read_exact` forever holding a live `GameEngine`.
     #[tokio::test]
     async fn silent_peer_is_dropped_once_the_idle_timeout_elapses() {
-        let (mut client, server) = connect_to_handler(Some(Duration::from_millis(50))).await;
+        let (mut client, server) =
+            connect_to_handler(uniform_timeout(Some(Duration::from_millis(50)))).await;
 
         // Send nothing at all; the server side must close on its own.
         let mut buf = [0u8; 1];
@@ -548,7 +621,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_disabled_idle_timeout_leaves_a_silent_peer_connected() {
-        let (mut client, server) = connect_to_handler(None).await;
+        let (mut client, server) = connect_to_handler(uniform_timeout(None)).await;
 
         let mut buf = [0u8; 1];
         let read = tokio::time::timeout(Duration::from_millis(200), client.read(&mut buf)).await;
@@ -560,7 +633,8 @@ mod tests {
     /// Round-trips a request through the rewritten single-`write_all` framing.
     #[tokio::test]
     async fn a_request_is_answered_over_the_wire_with_a_length_prefixed_frame() {
-        let (mut client, server) = connect_to_handler(Some(Duration::from_secs(5))).await;
+        let (mut client, server) =
+            connect_to_handler(uniform_timeout(Some(Duration::from_secs(5)))).await;
 
         let env = IpcEnvelope {
             msg: Some(Msg::ValidateDeck(
@@ -594,6 +668,54 @@ mod tests {
             .await
             .expect("handler task must finish")
             .expect("handler task must not panic");
+    }
+
+    /// Reads one length-prefixed response frame from the client end.
+    async fn read_response(client: &mut TcpStream) -> IpcResponse {
+        let mut lenbuf = [0u8; 4];
+        client.read_exact(&mut lenbuf).await.expect("length prefix");
+        let mut payload = vec![0u8; u32::from_be_bytes(lenbuf) as usize];
+        client.read_exact(&mut payload).await.expect("payload");
+        IpcResponse::decode(&payload[..]).expect("decode response")
+    }
+
+    /// The split is the whole point: once a game exists on the connection, the short pre-session
+    /// leash must no longer apply. Dropping a live session kills that game for good — Servatrice
+    /// cannot restore engine state by reconnecting — so an idle-but-alive game must survive.
+    #[tokio::test]
+    async fn a_started_session_is_held_to_the_long_leash_not_the_pre_session_one() {
+        let (mut client, server) = connect_to_handler(IdleTimeouts {
+            pre_session: Some(Duration::from_millis(50)),
+            session: Some(Duration::from_secs(3600)),
+        })
+        .await;
+
+        client
+            .write_all(&encode_frame(&IpcEnvelope {
+                msg: Some(Msg::SessionStart(
+                    tricerules_proto::ruled::v1::SessionStart {
+                        game_id: 7,
+                        seed: 42,
+                        player_ids: vec![0, 1],
+                        player_decks: vec![], // engine default decks
+                        servatrice_build: "test".to_string(),
+                        dev_commands_enabled: false,
+                    },
+                )),
+            }))
+            .await
+            .expect("write session start");
+        assert!(read_response(&mut client).await.ok, "session must start");
+
+        // Well past the pre-session leash: a live game must not be dropped by it.
+        let mut buf = [0u8; 1];
+        let read = tokio::time::timeout(Duration::from_millis(400), client.read(&mut buf)).await;
+        assert!(
+            read.is_err(),
+            "connection with a live session must outlive the pre-session timeout"
+        );
+
+        server.abort();
     }
 
     #[test]
