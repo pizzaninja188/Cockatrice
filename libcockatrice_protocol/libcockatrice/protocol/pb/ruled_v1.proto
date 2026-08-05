@@ -207,9 +207,11 @@ message AssignCombatDamage {
 }
 
 message DiscardToHandSize {
-  // Single-card discard (cleanup or legacy); use when discarding exactly one card.
-  uint32 hand_card_index = 1;
-  // Batch discard in one command: must list exactly (current hand size − 7) distinct indices.
+  reserved 1;
+  reserved "hand_card_index";
+  // Must list exactly (current hand size minus maximum hand size) distinct indices, including a
+  // one-element list when discarding a single card. A repeated field keeps index 0 distinct from
+  // an absent selection; the removed proto3 scalar could not represent that distinction.
   repeated uint32 hand_card_indices = 2;
 }
 

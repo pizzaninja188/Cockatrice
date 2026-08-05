@@ -338,8 +338,28 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                 result.battlefieldOrderChanged = true;
             }
 
-            engineOidToServerCardId.clear();
-            serverCardIdToEngineOid.clear();
+            // Battlefield and hand share these maps. Preserve the hand half before rebuilding the
+            // battlefield half: when private_zones_unchanged is true the view deliberately carries
+            // no hand rows, so the hand pass below cannot reconstruct mappings that are cleared
+            // here. Losing them makes the next hand -> graveyard PermanentMoved unresolvable and
+            // leaves the physical hand one card larger than the engine hand.
+            QHash<quint32, int> preservedHandOidToServerCardId;
+            QHash<int, quint32> preservedHandServerCardIdToOid;
+            for (Server_Card *handCard : handZone->getCards()) {
+                if (!handCard) {
+                    continue;
+                }
+                const int serverCardId = handCard->getId();
+                const auto oidIt = serverCardIdToEngineOid.constFind(serverCardId);
+                if (oidIt == serverCardIdToEngineOid.constEnd()) {
+                    continue;
+                }
+                preservedHandOidToServerCardId.insert(*oidIt, serverCardId);
+                preservedHandServerCardIdToOid.insert(serverCardId, *oidIt);
+            }
+
+            engineOidToServerCardId = preservedHandOidToServerCardId;
+            serverCardIdToEngineOid = preservedHandServerCardIdToOid;
             engineOidToSummoningSick.clear();
             engineOidToHaste.clear();
             engineOidToTrample.clear();

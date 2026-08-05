@@ -1,4 +1,33 @@
 use crate::helpers::*;
+use prost::Message;
+
+fn engine_in_cleanup_with_excess(seed: u64, excess: usize) -> GameEngine {
+    let mut e = GameEngine::new(seed, &[0, 1], 20, None, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let ap_idx = e.state.player_idx(0).expect("active player");
+    for _ in 0..excess {
+        let oid = e.state.players[ap_idx]
+            .library
+            .pop_front()
+            .expect("library");
+        e.state.players[ap_idx].hand.push(oid);
+        e.state.objects.get_mut(&oid).expect("obj").zone = tricerules_core::Zone::Hand;
+    }
+
+    e.apply_command(0, &primitive_yield())
+        .expect("main1->begin combat");
+    e.apply_command(0, &primitive_yield())
+        .expect("begin combat->end combat");
+    e.apply_command(0, &primitive_yield())
+        .expect("end combat->main2");
+    e.apply_command(0, &primitive_yield())
+        .expect("main2->end step");
+    e.apply_command(0, &primitive_yield())
+        .expect("end step->cleanup");
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Cleanup);
+    assert_eq!(e.state.cleanup_discard_player, Some(0));
+    e
+}
 
 #[test]
 fn primitive_yield_active_skips_double_pass_main1() {
@@ -89,31 +118,9 @@ fn stack_resolution_emits_priority_to_active_player() {
 
 #[test]
 fn cleanup_batch_discard_three_at_once() {
-    let mut e = GameEngine::new(1002, &[0, 1], 20, None, true).expect("new");
-    advance_to_main1_from_game_start(&mut e);
+    let mut e = engine_in_cleanup_with_excess(1002, 3);
     let ap_idx = e.state.player_idx(0).unwrap();
-    for _ in 0..3 {
-        let oid = e.state.players[ap_idx]
-            .library
-            .pop_front()
-            .expect("library");
-        e.state.players[ap_idx].hand.push(oid);
-        e.state.objects.get_mut(&oid).expect("obj").zone = tricerules_core::Zone::Hand;
-    }
     assert_eq!(e.state.players[ap_idx].hand.len(), 10);
-
-    e.apply_command(0, &primitive_yield())
-        .expect("main1->begin combat");
-    // No eligible attackers: BeginCombat auto-skips to EndCombat.
-    e.apply_command(0, &primitive_yield())
-        .expect("begin combat->end combat");
-    e.apply_command(0, &primitive_yield())
-        .expect("end combat->main2");
-    e.apply_command(0, &primitive_yield())
-        .expect("main2->end step");
-    e.apply_command(0, &primitive_yield())
-        .expect("end step->cleanup");
-    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Cleanup);
 
     e.apply_command(0, &discard_cleanup_batch(vec![9, 8, 7]))
         .expect("batch discard top three");
@@ -123,38 +130,46 @@ fn cleanup_batch_discard_three_at_once() {
 
 #[test]
 fn cleanup_step_opens_when_hand_exceeds_max_and_discard_finishes_turn() {
-    let mut e = GameEngine::new(1001, &[0, 1], 20, None, true).expect("new");
-    advance_to_main1_from_game_start(&mut e);
+    let mut e = engine_in_cleanup_with_excess(1001, 1);
     let ap_idx = e.state.player_idx(0).unwrap();
-    let oid = e.state.players[ap_idx]
-        .library
-        .pop_front()
-        .expect("library");
-    e.state.players[ap_idx].hand.push(oid);
-    e.state.objects.get_mut(&oid).expect("obj").zone = tricerules_core::Zone::Hand;
-    assert!(e.state.players[ap_idx].hand.len() > 7);
+    let encoded = discard_cleanup(0).encode_to_vec();
+    let decoded =
+        RuledCommand::decode(encoded.as_slice()).expect("decode singleton cleanup discard");
+    let Some(Cmd::DiscardToHandSize(discard)) = decoded.cmd.as_ref() else {
+        panic!("decoded cleanup command");
+    };
+    assert_eq!(discard.hand_card_indices, vec![0]);
 
-    e.apply_command(0, &primitive_yield())
-        .expect("main1->begin combat");
-    // No eligible attackers: BeginCombat auto-skips to EndCombat.
-    e.apply_command(0, &primitive_yield())
-        .expect("begin combat->end combat");
-    e.apply_command(0, &primitive_yield())
-        .expect("end combat->main2");
-    e.apply_command(0, &primitive_yield())
-        .expect("main2->end step");
-    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::EndStep);
-
-    e.apply_command(0, &primitive_yield())
-        .expect("end step->cleanup");
-    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Cleanup);
-    assert_eq!(e.state.cleanup_discard_player, Some(0));
-
-    e.apply_command(0, &discard_cleanup(0))
-        .expect("discard one");
+    let response = e.player_command_ipc(0, &encoded);
+    assert!(response.ok, "discard one through IPC: {}", response.error);
     assert_eq!(e.state.players[ap_idx].hand.len(), 7);
     assert_eq!(e.state.active_player_id(), 1);
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
+}
+
+#[test]
+fn cleanup_discard_rejects_invalid_index_lists_without_mutating_state() {
+    for (seed, excess, indices, expected_error) in [
+        (1010, 1, vec![], "illegal command: wrong discard count"),
+        (1011, 2, vec![0, 0], "illegal command: wrong discard count"),
+        (1012, 1, vec![0, 1], "illegal command: wrong discard count"),
+        (1013, 1, vec![99], "illegal command: bad hand index"),
+    ] {
+        let mut e = engine_in_cleanup_with_excess(seed, excess);
+        let hand_before = e.state.players[0].hand.clone();
+        let graveyard_before = e.state.players[0].graveyard.clone();
+        let command_index_before = e.state.command_index;
+
+        let err = e
+            .apply_command(0, &discard_cleanup_batch(indices))
+            .expect_err("invalid cleanup selection");
+        assert_eq!(err.to_string(), expected_error);
+        assert_eq!(e.state.players[0].hand, hand_before);
+        assert_eq!(e.state.players[0].graveyard, graveyard_before);
+        assert_eq!(e.state.command_index, command_index_before);
+        assert_eq!(e.state.cleanup_discard_player, Some(0));
+        assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Cleanup);
+    }
 }
 
 #[test]

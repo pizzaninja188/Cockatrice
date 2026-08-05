@@ -1161,12 +1161,8 @@ bool PlayerActions::sendRuledCleanupDiscardBatchIfComplete()
 
     ruled::v1::RuledCommand ruledCommand;
     auto *d = ruledCommand.mutable_discard_to_hand_size();
-    if (need == 1) {
-        d->set_hand_card_index(static_cast<quint32>(idx.first()));
-    } else {
-        for (int i : idx) {
-            d->add_hand_card_indices(static_cast<quint32>(i));
-        }
+    for (int i : idx) {
+        d->add_hand_card_indices(static_cast<quint32>(i));
     }
     std::string payload;
     if (!ruledCommand.SerializeToString(&payload)) {

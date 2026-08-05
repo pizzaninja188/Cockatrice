@@ -483,11 +483,10 @@ impl GameEngine {
             return Err(EngineError::Illegal("hand size not over max"));
         }
         let must_discard = hand_len - MAX_HAND_SIZE;
-        let mut positions: Vec<usize> = if !d.hand_card_indices.is_empty() {
-            d.hand_card_indices.iter().map(|&i| i as usize).collect()
-        } else {
-            vec![d.hand_card_index as usize]
-        };
+        let mut positions: Vec<usize> = d.hand_card_indices.iter().map(|&i| i as usize).collect();
+        if positions.len() != must_discard {
+            return Err(EngineError::Illegal("wrong discard count"));
+        }
         positions.sort_unstable();
         positions.dedup();
         if positions.len() != must_discard {

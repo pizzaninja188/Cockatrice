@@ -52,8 +52,7 @@ pub(crate) fn concede() -> RuledCommand {
 pub(crate) fn discard_cleanup(hand_card_index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::DiscardToHandSize(DiscardToHandSize {
-            hand_card_index,
-            hand_card_indices: vec![],
+            hand_card_indices: vec![hand_card_index],
         })),
     }
 }
@@ -61,7 +60,6 @@ pub(crate) fn discard_cleanup(hand_card_index: u32) -> RuledCommand {
 pub(crate) fn discard_cleanup_batch(indices: Vec<u32>) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::DiscardToHandSize(DiscardToHandSize {
-            hand_card_index: 0,
             hand_card_indices: indices,
         })),
     }

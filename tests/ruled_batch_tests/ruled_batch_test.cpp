@@ -571,10 +571,13 @@ TEST_F(RuledBatchTest, PrivateZonesUnchangedSkipsTheHandAndLibraryReconcile)
 
     // A full view first: one card in hand, nothing in the library, one permanent.
     ruled::v1::RuledPerPlayerView full = buildPerPlayerView(p1, {101u}, {false});
-    full.add_hand_cards()->set_card_id("hill_giant");
+    auto *fullHandCard = full.add_hand_cards();
+    fullHandCard->set_card_id("hill_giant");
+    fullHandCard->set_object_id(201u);
     GameEventStorage firstGes;
     RuledPlayerBinding::RuledZoneSyncResult first = applyZoneView(p1, full, &firstGes);
     ASSERT_EQ(first.engineOidToServerCardId.value(101u, -1), bear->getId());
+    ASSERT_EQ(first.engineOidToServerCardId.value(201u, -1), inHand->getId());
     ASSERT_EQ(p1->getZones().value(ZoneNames::HAND)->getCards().size(), 1);
 
     // Then an omission: no hand, no library, battlefield still in full.
@@ -591,8 +594,37 @@ TEST_F(RuledBatchTest, PrivateZonesUnchangedSkipsTheHandAndLibraryReconcile)
     // The rest of the view is unaffected by the omission: the oid map is rebuilt and tap state
     // still propagates, which is what would have been lost to an early return.
     EXPECT_EQ(second.engineOidToServerCardId.value(101u, -1), bear->getId());
+    EXPECT_EQ(second.engineOidToServerCardId.value(201u, -1), inHand->getId())
+        << "an omitted private-zone view must preserve the hand oid map";
     EXPECT_TRUE(second.tapStateChanged);
     EXPECT_TRUE(bear->getTapped());
+
+    // Cleanup happens after several unchanged priority/phase batches in a manual game. The next
+    // batch names the discarded hand card only by its engine oid; the preserved mapping must let
+    // PermanentMoved move that exact physical card before the full zone view reconciles 0 hand +
+    // 0 library cards against the now-empty physical pool.
+    ruled::v1::IpcResponse discardResp;
+    discardResp.set_ok(true);
+    auto *discardBatch = discardResp.mutable_batch();
+    auto *moved = discardBatch->add_events()->mutable_permanent_moved();
+    moved->set_object_id(201u);
+    moved->set_owner_player_id(1);
+    moved->set_controller_player_id(1);
+    moved->set_card_id("hill_giant");
+    moved->set_destination(ruled::v1::PermanentMoved::DESTINATION_GRAVEYARD);
+    auto *postDiscardZoneView = discardBatch->add_events()->mutable_zone_view();
+    ruled::v1::RuledPerPlayerView postDiscard = buildPerPlayerView(p1, {101u}, {true});
+    postDiscard.add_graveyard_object_ids(201u);
+    *postDiscardZoneView->add_per_player() = postDiscard;
+
+    const BatchOutcome discardOutcome = callBatchApply(discardResp);
+    EXPECT_TRUE(discardOutcome.zoneViewApplied);
+    EXPECT_FALSE(discardOutcome.handOrLibraryChanged)
+        << "PermanentMoved already updated the physical hand before reconciliation";
+    EXPECT_TRUE(p1->getZones().value(ZoneNames::HAND)->getCards().isEmpty());
+    const QList<Server_Card *> &graveyard = p1->getZones().value(ZoneNames::GRAVE)->getCards();
+    ASSERT_EQ(graveyard.size(), 1);
+    EXPECT_EQ(graveyard.first(), inHand) << "cleanup must move the selected physical card";
 }
 
 TEST_F(RuledBatchTest, ZoneViewDoesNotForceUntapOutsideUntapStep)

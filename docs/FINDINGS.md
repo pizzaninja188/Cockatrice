@@ -8,6 +8,36 @@
 
 ### 2026-08-04
 
+- **Cleanup discard encoded "index 0" and "no selector" identically** (`ruled_v1.proto`,
+  `engine/priority.rs`, `player_actions.cpp`): `DiscardToHandSize` had both a proto3 scalar
+  `hand_card_index` and a repeated `hand_card_indices`. Because an unset proto3 scalar reads as
+  zero—and setting it to zero writes no field—a one-card cleanup selecting the first hand slot was
+  indistinguishable on the wire from an empty command. The scalar is removed and its number/name
+  reserved; every cleanup now sends the repeated list, including `[0]` for a singleton. The engine
+  consumes only that list and requires both the submitted count and distinct count to equal the
+  excess hand size. That second check closed a related validation hole found by the new coverage:
+  duplicate `[0, 0]` previously collapsed to `[0]` and could be accepted when one discard was due.
+  The audit's suggested direct `oneof` was not used because protobuf forbids repeated fields inside
+  a `oneof`, and there is no longer a second selector shape to discriminate. This is an intentional
+  clean break: old scalar-form ruled clients and deterministic command logs are unsupported, and
+  legacy index-zero bytes cannot be migrated because they contain no selector information. The
+  general Cockatrice protocol version remains unchanged; ruled deployments continue to require
+  same-tree client/server/sidecar builds.
+  Manual verification then exposed a relay bug hidden by the protobuf-level E2E: battlefield and
+  hand ObjectIds share `RuledPlayerBinding`'s map, and every `private_zones_unchanged` view cleared
+  the whole map to rebuild the battlefield half but had no hand rows with which to restore the hand
+  half. At cleanup, `PermanentMoved` could not resolve the selected engine ObjectId to a physical
+  hand card, so the move was skipped and the following hand/library reconcile rejected an 8-vs-7
+  count mismatch. The UI stayed at eight cards and its next click addressed a drifted hand slot.
+  Battlefield rebuild now preserves mappings belonging to cards still physically in hand; a relay
+  regression covers full hand sync → omitted private-zone view → cleanup move and asserts the
+  exact selected `Server_Card` reaches the graveyard.
+  Coverage also proves `[0]` survives a Prost round trip and the IPC decode path, multi-card cleanup
+  succeeds, and empty/duplicate/wrong-count/out-of-range lists are rejected without changing zones,
+  cleanup state, or `command_index`. Full `cargo test` (408 scenarios plus unit/integration/doc
+  tests), Clippy with warnings denied, `cargo fmt --check`, the full Windows C++ build, and all 18
+  C++ tests exit 0, including `ruled_client_test`, `game_prompt_widget_test`, `ruled_batch_test`, and
+  the real Servatrice + sidecar `ruled_e2e_smoke_test`.
 - **The engine's 2-player assumptions were fixed-arity data plus ten ambiguous call sites**
   (`tricerules-core/src/state.rs`, `engine/{mod,opening,combat,priority,legal_actions}.rs`):
   `OpeningSequence.mulligans_taken`/`resolved` became seat-sized `Vec`s, and the two places
@@ -245,5 +275,3 @@
   consumers that treat a view as a full replacement (`RuledEventDispatcher::applyZoneView`, the
   driver's oid-map rebuild, the e2e fake client), so an omission here is a genuine protocol change
   rather than a server-side-only one, and it needs its own design.
-
-- **`discard_to_hand_size` proto conflates absent vs. zero for `hand_card_index`** (`ruled_v1.proto:209-214`, `priority.rs:486-490`): proto3 defaults `hand_card_index` to `0`, making "not set" indistinguishable from "card 0". The Rust code is correct today because it checks `hand_card_indices.is_empty()` first, but the interface invites a future caller to get it wrong. Suggest `oneof discard_selector { uint32 single_index; repeated uint32 batch_indices; }`.
