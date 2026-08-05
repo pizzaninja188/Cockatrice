@@ -6,7 +6,7 @@
 //! dump into one RON file per qualifying card under `data/generated/<first-letter>/`, which
 //! `build.rs` then embeds automatically.
 //!
-//! Authoring authority is Scryfall (per CLAUDE.md): `mana_cost` is copied **verbatim**,
+//! Authoring authority is Scryfall (per AGENTS.md): `mana_cost` is copied **verbatim**,
 //! `power`/`toughness`/`type_line` are read straight from the dump, never guessed.
 //!
 //! Run from the `tricerules/` directory (see `scripts/gen-cards.sh` / `.ps1`):

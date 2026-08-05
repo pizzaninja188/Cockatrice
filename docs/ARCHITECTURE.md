@@ -3,9 +3,9 @@
 Read this before any cross-component work. It describes how the three processes fit together,
 what each one owns, and the conventions that are impossible to re-derive from a single file.
 
-Companions: **[CLAUDE.md](../CLAUDE.md)** (day-to-day rules for implementing cards and shipping
+Companions: **[AGENTS.md](../AGENTS.md)** (day-to-day rules for implementing cards and shipping
 changes) and **[REFACTOR-ROADMAP.md](REFACTOR-ROADMAP.md)** (structural work, standing design
-rules, the trigger-gated backlog). Where they overlap, they win on their own subject: CLAUDE.md
+rules, the trigger-gated backlog). Where they overlap, they win on their own subject: AGENTS.md
 on workflow, the roadmap on what to restructure, this file on how the pieces relate.
 
 ---
@@ -323,7 +323,7 @@ the one-line `RULED_PAYLOAD` case, and implements `RuledClientHost`.
 
 ## 9. Extension recipes
 
-Each is a checklist of the exact files. Build and test per CLAUDE.md after every one.
+Each is a checklist of the exact files. Build and test per AGENTS.md after every one.
 
 ### Add a data-tier card
 
@@ -387,13 +387,19 @@ Only when the *resolution algorithm itself* is unique — a mid-resolution choic
 or interdependent choices over one revealed set. A reviewer must agree no
 `(effect_kind, parameters)` description exists; prefer widening a primitive every time it is close.
 
-1. `custom_effect: Some("key")` in the RON (mutually exclusive with `spell_effect`).
-2. One impl per file in `tricerules-core/src/custom/`, header comment citing Oracle text + CR.
-   `begin`/`resume` drive the capability-narrowed `ResolutionCtx`; custom code never touches
-   `&mut GameState`.
-3. **No new proto.** Reuse `resolution_choice_required` / `SubmitResolutionChoice`; pick the right
+1. `custom_effect: "<card_id>"` in the RON (mutually exclusive with `spell_effect`). The value
+   must equal the card definition's `id`.
+2. Create `tricerules-core/src/custom/<card_id>.rs` (subdirectories are allowed; `support/` is
+   skipped) and export `pub(crate) static EFFECT: &dyn CardEffect = &YourType;`. The file stem is
+   the lookup key and must match both the RON `custom_effect` and card definition id; `build.rs`
+   registers it automatically, so no shared Rust file is edited. Its generated private module
+   name is prefixed, allowing registry-valid ids that begin with a digit or match a Rust keyword.
+   Keep effects 1:1 with card ids; a shared algorithm belongs in a widened primitive instead.
+3. Cite Oracle text + CR in the implementation's header comment. `begin`/`resume` drive the
+   capability-narrowed `ResolutionCtx`; custom code never touches `&mut GameState`.
+4. **No new proto.** Reuse `resolution_choice_required` / `SubmitResolutionChoice`; pick the right
    existing `ChoiceKind` (and check whether it is private — §5).
-4. Scenario coverage in `tests/scenario/custom_resolution.rs`: happy + illegal.
+5. Scenario coverage in `tests/scenario/custom_resolution.rs`: happy + illegal.
 
 ---
 

@@ -1,7 +1,7 @@
 # Refactoring roadmap — ruled-mode fork at 35k-card scale
 
 Audience: anyone (human or agent) doing **structural** work on this fork. For day-to-day card
-implementation, CLAUDE.md remains the authority; this doc governs refactors and records the
+implementation, AGENTS.md remains the authority; this doc governs refactors and records the
 standing design rules that keep the codebase workable on the way to the full MTG card base
 (~35k cards; ~855 implemented when this was written, 2026-07).
 
@@ -41,7 +41,7 @@ These apply to all work from now on, refactor or not.
    `ruled_utils`, `rules_relay` predates the convention). New client fork files live in
    `cockatrice/src/game/ruled/`. One `grep -rl ruled_` shows exactly what is fork territory.
 3. **Pure code motion first, behavior change second — never both in one PR.** Every landing
-   compiles and tests end-to-end (C++ and Rust), per CLAUDE.md.
+   compiles and tests end-to-end (C++ and Rust), per AGENTS.md.
 4. **Player-set-generic, always.** Multiplayer/Commander is eventually in scope. No primitive,
    proto field, engine helper, or UI flow may assume exactly one opponent: "each opponent" /
    "each player" are player *sets*; turn order is a rotation, not a toggle. Any 2-seat-only
@@ -66,16 +66,16 @@ These apply to all work from now on, refactor or not.
   `engine-and-scenario-module-split-plan.md`, `plan-card-coverage-expansion.md`,
   `plan-copy-effects.md`, `plan-multiface-cards.md`. Delete any whose work fully landed
   (verify against git log — the copy-effects and multiface plans look shipped). Root keeps
-  `README.md` + `CLAUDE.md`.
+  `README.md` + `AGENTS.md` + the `CLAUDE.md` pointer.
 - Leave `doc/carddatabase_v3|v4` and `webclient/` alone — upstream content; deleting them
   creates permanent merge conflicts for zero benefit.
 
 ### Step 2 — Build/test loop speedups (½–1 day, pays off every later step)
 
 > **Done 2026-07-23.** `windows-ninja-all` preset + `scripts/build-ninja.ps1` landed and made
-> canonical in CLAUDE.md (measured vs MSBuild `/m:16`: no-op 0.4 s vs 7.9 s, one-file rebuild
+> canonical in AGENTS.md (measured vs MSBuild `/m:16`: no-op 0.4 s vs 7.9 s, one-file rebuild
 > 7.3 s vs 12.8 s). MSBuild presets kept for CI parity, now with `jobs: 16`. Targeted
-> verification codified in CLAUDE.md. Debug config measured ~11% faster per compile than
+> verification codified in AGENTS.md. Debug config measured ~11% faster per compile than
 > Release on a heavy TU — not worth a second tree; Release stays the iteration config.
 
 Agent turnaround on simple changes is dominated half by navigation (fixed by the extractions)
@@ -84,11 +84,11 @@ and half by the build/test loop, which is independently fixable:
 - **Add a Ninja-based Windows preset** (`windows-ninja-all`: Ninja generator + MSVC toolchain
   via a vcvars environment) alongside the existing MSBuild presets in `CMakePresets.json`.
   Ninja's incremental builds skip MSBuild's per-project solution scanning. Benchmark a no-op
-  build and a one-file rebuild against `windows-msvc-all` before switching CLAUDE.md's
+  build and a one-file rebuild against `windows-msvc-all` before switching AGENTS.md's
   canonical commands; keep the MSBuild preset for CI parity.
 - **Set `jobs` in the build presets** (or document `-j`) —
   `cmake --build --preset windows-msvc-all-release` currently passes no parallelism to MSBuild.
-- **Codify targeted verification in CLAUDE.md**: for single-component changes,
+- **Codify targeted verification in AGENTS.md**: for single-component changes,
   `ctest -R <test-name>` and `cargo test --test scenario <filter>` (plus clippy/fmt) satisfy
   the "relevant tests" rule; the full suite runs before commit, not on every iteration. Note
   which components each change class requires building (Rust-only → no C++ build;
@@ -264,7 +264,7 @@ testing possible at all: today the logic is buried behind the UI; extraction exp
 plain QObjects testable offscreen with no rendering. Write the tests as each piece is
 extracted, using current behavior as the oracle. The widget layer stays covered by the
 `tests/game_prompt/` offscreen pattern. Qt module additions go in
-`cmake/FindQtRuntime.cmake` per CLAUDE.md.
+`cmake/FindQtRuntime.cmake` per AGENTS.md.
 
 Risk: medium-high (signal re-plumbing, lifetimes — parent `RuledClientState` to the handler;
 preserve `clearRuledSessionState` semantics verbatim). Mitigated by the new suite + Step 3
@@ -652,14 +652,14 @@ scenario suite), so medium risk despite the width.
 > passes plus the two broadcast stages, matching the Step 4 follow-up's actual structure, not the
 > provisional "six passes" in the plan below.
 >
-> CLAUDE.md: extraction-never-restructure and the `ruled_` prefix were promoted from a parenthetical
+> AGENTS.md: extraction-never-restructure and the `ruled_` prefix were promoted from a parenthetical
 > inside the roadmap pointer to mandatory-workflow rule 6; an ARCHITECTURE.md pointer heads the
 > Architecture section; the "Ruled prompt UI" section was rewritten for the post–Step-7.3 reality
 > (`PromptMode` / `RuledPromptState` / `TabGame::refreshRuledPromptState()`, correct signal names).
 > Three stale references fixed while there: `stripRuledServerOnlyEventsForBroadcast` (gone since 8b
 > — now the reflection redactor), `Server_Game::ruledCardIdForName` (moved to `RuledGameDriver`),
-> and `primitives.rs` (a module dir since 9b). `AGENTS.md` is a byte-identical copy of `CLAUDE.md`
-> and was re-synced.
+> and `primitives.rs` (a module dir since 9b). `AGENTS.md` is now canonical and `CLAUDE.md` is a
+> pointer to it.
 >
 > **Not done, deliberately:** the opportunistic `oid`/`cardId`/`serverCardId`/`handSlot` renames. The
 > convention is documented in the glossary and applies to new and touched lines; a sweeping rename
@@ -696,7 +696,7 @@ scenario suite), so medium risk despite the width.
     (extraction only) / pristine upstream. Doubles as the merge manual and the agent guardrail.
   - **Extension recipes**: "add a data-tier card / a primitive / a keyword / a UI prompt / a
     tier-3 card" — each a checklist of exact files.
-- **CLAUDE.md**: rewrite the stale "Ruled prompt UI" section (post-extraction reality); add
+- **AGENTS.md**: rewrite the stale "Ruled prompt UI" section (post-extraction reality); add
   the extract-don't-restructure rule, the `ruled_` prefix convention, and a pointer to
   ARCHITECTURE.md.
 - **`cockatrice/src/game/ruled/README.md`** (class responsibilities + signal map) and a header

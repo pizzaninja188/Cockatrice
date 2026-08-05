@@ -2,7 +2,7 @@
 # Downloads the Scryfall "oracle_cards" bulk data file (one representative printing per
 # card) — a single JSON download, no per-card API calls and no rate-limit exposure.
 #
-# Scryfall is the authoritative card-data source per CLAUDE.md. A descriptive User-Agent
+# Scryfall is the authoritative card-data source per AGENTS.md. A descriptive User-Agent
 # is required by their API guidelines.
 #
 # Usage:

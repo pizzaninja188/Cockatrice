@@ -1,4 +1,4 @@
-//! Tier-3 custom card resolution — the card model's escape hatch (see `CLAUDE.md`).
+//! Tier-3 custom card resolution — the card model's escape hatch (see `AGENTS.md`).
 //!
 //! Tiers 1 (RON data) and 2 (generic primitives) describe a card's resolution as
 //! `(effect_kind, parameters)` static data. A handful of cards instead need a *resolution
@@ -40,8 +40,8 @@ use crate::state::{GameObject, GameState, ObjectId, PlayerId, Zone};
 use tricerules_cards::{CardDefinition, CardRegistry};
 use tricerules_proto::ruled::v1 as rv1;
 
-// `pub(crate) mod <card_id>;` per file under `src/custom/`, plus the `EFFECT_IMPLS` table they
-// feed. Generated so adding a custom card edits no shared file — see `build.rs`.
+// One private prefixed module per card-id file under `src/custom/`, plus the `EFFECT_IMPLS` table
+// they feed. Generated so adding a custom card edits no shared file — see `build.rs`.
 include!(concat!(env!("OUT_DIR"), "/custom_effects.rs"));
 
 /// A card-specific resolution algorithm the data tiers cannot express. Implementations are

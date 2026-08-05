@@ -418,6 +418,12 @@ fn every_custom_effect_key_has_exactly_one_card_and_one_impl() {
             claimants.len(),
             claimants.join(", ")
         );
+        assert_eq!(
+            claimants[0], key,
+            "custom_effect '{key}' is claimed by card '{}'; the custom-effect file stem, RON \
+             custom_effect, and claiming card id must all match",
+            claimants[0]
+        );
     }
 }
 
