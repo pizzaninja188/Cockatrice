@@ -186,7 +186,7 @@ impl GameEngine {
                         aura_obj.attached_to = Some(enchanted_oid);
                     }
                 }
-                self.fire_triggers(GameEvent::EntersBattlefield { object_id: top.id }, events);
+                self.fire_triggers(&[GameEvent::EntersBattlefield { object_id: top.id }]);
             } else if is_aura {
                 let aura_name = self
                     .registry
@@ -574,6 +574,7 @@ impl GameEngine {
                 .collect(),
         };
 
+        let mut trigger_events = Vec::new();
         for pid in recipients {
             let Some(pidx) = self.state.player_idx(pid) else {
                 continue;
@@ -621,14 +622,16 @@ impl GameEngine {
                         }),
                     })),
                 });
-                // CR 603.6: a token entering the battlefield triggers ETB watchers.
-                self.fire_triggers(GameEvent::EntersBattlefield { object_id: oid }, events);
+                trigger_events.push(GameEvent::EntersBattlefield { object_id: oid });
             }
             let noun = if count == 1 { "token" } else { "tokens" };
             events.push(ev_log(format!(
                 "P{pid} creates {count} {name} {noun} ({spell_label})."
             )));
         }
+        // CR 603.6: one token-making instruction puts all of its tokens onto the battlefield
+        // simultaneously, so every entrant exists before their ETB triggers are collected.
+        self.fire_triggers(&trigger_events);
     }
 }
 

@@ -533,14 +533,11 @@ impl GameEngine {
                 chosen_mode_labels,
             })),
         });
-        self.fire_triggers(
-            GameEvent::SpellCast {
-                caster: player,
-                card_id: cast_card_id,
-                face_index,
-            },
-            &mut batch.events,
-        );
+        self.fire_triggers(&[GameEvent::SpellCast {
+            caster: player,
+            card_id: cast_card_id,
+            face_index,
+        }]);
         batch.events.push(ev_priority_changed(self));
         fill_legal(&mut batch, self);
         Ok(batch)
@@ -708,7 +705,7 @@ impl GameEngine {
         // the ability it paid for, so its events must follow that ability's StackPushed. Emitting
         // the trigger prompt first also made the client discard it, because an activated ability
         // reaching the stack is its signal that a pending trigger target was just answered.
-        self.fire_sacrifice_cost_dies(sacrificed, &mut batch.events);
+        self.fire_sacrifice_cost_dies(sacrificed);
         batch.events.push(ev_priority_changed(self));
         fill_legal(&mut batch, self);
         Ok(batch)
@@ -786,23 +783,18 @@ impl GameEngine {
     /// battlefield abilities (Blood Artist, Bottle Gnomes' own controller triggers) see it. The
     /// triggers go on the stack *above* the ability whose cost they paid, so this runs after the
     /// ability has been pushed.
-    fn fire_sacrifice_cost_dies(
-        &mut self,
-        snapshot: Option<SacrificeSnapshot>,
-        events: &mut Vec<rv1::RuledEvent>,
-    ) {
+    fn fire_sacrifice_cost_dies(&mut self, snapshot: Option<SacrificeSnapshot>) {
         let Some(snapshot) = snapshot else {
             return;
         };
-        self.fire_triggers(
-            GameEvent::Dies {
+        self.fire_triggers(&[GameEvent::Dies {
+            source: TriggerSourceSnapshot {
                 object_id: snapshot.object_id,
                 card_id: snapshot.card_id,
                 controller: snapshot.controller,
-                was_creature: snapshot.was_creature,
             },
-            events,
-        );
+            was_creature: snapshot.was_creature,
+        }]);
     }
 
     /// Whether `ability` on `permanent_id` could be activated right now, so the client can grey it
@@ -950,7 +942,7 @@ impl GameEngine {
         }
         // A mana ability does not use the stack (CR 605.3a), so a permanent sacrificed to pay for
         // one dies immediately rather than under a pushed ability.
-        self.fire_sacrifice_cost_dies(sacrificed, &mut batch.events);
+        self.fire_sacrifice_cost_dies(sacrificed);
         Ok(batch)
     }
 
@@ -1068,10 +1060,7 @@ impl GameEngine {
         batch
             .events
             .push(ev_log(format!("P{} played {}", player, land_name)));
-        self.fire_triggers(
-            GameEvent::EntersBattlefield { object_id: oid },
-            &mut batch.events,
-        );
+        self.fire_triggers(&[GameEvent::EntersBattlefield { object_id: oid }]);
         fill_legal(&mut batch, self);
         Ok(batch)
     }

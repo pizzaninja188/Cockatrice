@@ -568,15 +568,14 @@ impl GameEngine {
             )),
         ];
 
-        self.fire_triggers(
-            GameEvent::Dies {
+        self.fire_triggers(&[GameEvent::Dies {
+            source: TriggerSourceSnapshot {
                 object_id: oid,
                 card_id,
                 controller,
-                was_creature,
             },
-            &mut ev,
-        );
+            was_creature,
+        }]);
         let _ = self.apply_sbas(&mut ev);
 
         self.complete_parked_resolution(pending.item, pending.resume_effect_index, ev)
@@ -591,6 +590,7 @@ impl GameEngine {
     ) -> Result<RuledEventBatch, EngineError> {
         let keep_id = chosen[0];
         let mut ev = vec![];
+        let mut trigger_events = vec![];
         for &oid in &pending.candidates {
             if oid == keep_id {
                 continue;
@@ -611,18 +611,18 @@ impl GameEngine {
                     ));
                 }
                 if let (Some(cid), Some(ctrl)) = (card_id, controller) {
-                    self.fire_triggers(
-                        GameEvent::Dies {
+                    trigger_events.push(GameEvent::Dies {
+                        source: TriggerSourceSnapshot {
                             object_id: oid,
                             card_id: cid,
                             controller: ctrl,
-                            was_creature,
                         },
-                        &mut ev,
-                    );
+                        was_creature,
+                    });
                 }
             }
         }
+        self.fire_triggers(&trigger_events);
         // Re-run SBAs: triggered abilities may have caused further state changes, and
         // multiple legend conflicts are resolved one at a time.
         if self.state.pending_resolution.is_none() {

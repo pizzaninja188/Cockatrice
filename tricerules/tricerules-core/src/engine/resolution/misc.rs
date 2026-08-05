@@ -40,15 +40,14 @@ pub(super) fn destroy_target(
                 ));
             }
             if let (Some(cid), Some(ctrl)) = (card_id_t, controller) {
-                engine.fire_triggers(
-                    GameEvent::Dies {
+                engine.fire_triggers(&[GameEvent::Dies {
+                    source: TriggerSourceSnapshot {
                         object_id: tid,
                         card_id: cid,
                         controller: ctrl,
-                        was_creature,
                     },
-                    events,
-                );
+                    was_creature,
+                }]);
             }
         }
     }

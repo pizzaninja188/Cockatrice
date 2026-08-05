@@ -20,12 +20,25 @@ pub(in crate::engine) fn apply_life_gain(
     amount: u32,
     reason: &str,
 ) {
-    if amount == 0 {
-        return;
+    if let Some(event) = apply_life_gain_without_triggers(engine, events, player, amount, reason) {
+        engine.fire_triggers(&[event]);
     }
-    let Some(pi) = engine.state.player_idx(player) else {
-        return;
-    };
+}
+
+/// Apply one life-gain event without firing its triggers yet. Simultaneous producers such as a
+/// combat-damage step collect the returned event with their other trigger-driving events and fire
+/// the whole set once.
+pub(in crate::engine) fn apply_life_gain_without_triggers(
+    engine: &mut GameEngine,
+    events: &mut Vec<rv1::RuledEvent>,
+    player: PlayerId,
+    amount: u32,
+    reason: &str,
+) -> Option<GameEvent> {
+    if amount == 0 {
+        return None;
+    }
+    let pi = engine.state.player_idx(player)?;
     engine.state.players[pi].life += amount as i32;
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
@@ -35,7 +48,7 @@ pub(in crate::engine) fn apply_life_gain(
         })),
     });
     events.push(ev_log(format!("P{player} gains {amount} life ({reason}).")));
-    engine.fire_triggers(GameEvent::LifeGained { player }, events);
+    Some(GameEvent::LifeGained { player })
 }
 
 pub(super) fn gain_life(

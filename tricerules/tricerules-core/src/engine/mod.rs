@@ -63,19 +63,24 @@ pub enum EngineError {
 
 /// Internal game events emitted at state-change sites to drive the unified trigger-collection pass
 /// (CR 603.2). Each variant carries the minimum data needed to identify which triggers match.
+#[derive(Clone)]
+struct TriggerSourceSnapshot {
+    object_id: ObjectId,
+    card_id: String,
+    controller: PlayerId,
+}
+
 enum GameEvent {
     EntersBattlefield {
         object_id: ObjectId,
     },
     /// `card_id` and `controller` must be captured before the zone move (object may be gone).
     Dies {
-        object_id: ObjectId,
-        card_id: String,
-        controller: PlayerId,
+        source: TriggerSourceSnapshot,
         was_creature: bool,
     },
     Attacks {
-        attacker_ids: Vec<ObjectId>,
+        attacker_id: ObjectId,
     },
     CombatDamageToPlayer {
         attacker_id: ObjectId,

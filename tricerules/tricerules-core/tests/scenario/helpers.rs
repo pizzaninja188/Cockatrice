@@ -406,7 +406,11 @@ pub(crate) fn pass_both_players(e: &mut GameEngine) {
 /// After each stack resolution the active player receives priority (CR-style);
 /// repeat a full two-player pass cycle until the stack is empty.
 pub(crate) fn resolve_entire_stack_two_player(e: &mut GameEngine) {
-    while !e.state.stack.is_empty() {
+    loop {
+        answer_trigger_order_in_engine_order(e);
+        if e.state.stack.is_empty() {
+            break;
+        }
         pass_both_players(e);
     }
 }

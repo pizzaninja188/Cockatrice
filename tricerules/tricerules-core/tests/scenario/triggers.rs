@@ -178,11 +178,24 @@ fn simultaneous_combat_damage_triggers_both_fire() {
     e.apply_command(1, &pass())
         .expect("nap pass declare blockers -> combat damage");
 
-    // Both Scroll Thieves dealt combat damage to P1, so both triggers must be on the stack.
+    // Both Scroll Thieves dealt combat damage simultaneously, so their controller must order the
+    // two triggers as one CR 603.3b group before either reaches the stack.
+    let pending = e
+        .state
+        .pending_trigger_order
+        .as_ref()
+        .expect("simultaneous combat-damage triggers must be ordered together");
+    assert_eq!(pending.deciding_player, 0);
+    assert_eq!(pending.candidates.len(), 2);
+    assert!(
+        e.state.stack.is_empty(),
+        "neither trigger reaches the stack before its controller orders the group"
+    );
+    answer_trigger_order_in_engine_order(&mut e);
     assert_eq!(
         e.state.stack.len(),
         2,
-        "both Scroll Thief triggers must be on the stack simultaneously"
+        "both ordered triggers reach the stack"
     );
 
     // Resolving both triggers draws 2 cards for P0.
@@ -416,6 +429,55 @@ fn soul_warden_gains_life_when_another_creature_enters() {
     assert_eq!(
         e.state.players[0].life, 21,
         "another creature entering gains Soul Warden's controller 1 life"
+    );
+}
+
+/// CR 603.3b/603.6: permanents created by one token-making event enter simultaneously, so every
+/// watcher observes every entrant and all resulting triggers form one ordering group.
+#[test]
+fn mass_etb_triggers_are_collected_as_one_simultaneous_group() {
+    let decks = Some(vec![
+        deck_with("plains", &["soul_warden", "soul_warden", "raise_the_alarm"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(7401, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    relocate_to_battlefield(&mut e, 0, "soul_warden", false);
+    relocate_to_battlefield(&mut e, 0, "soul_warden", false);
+    ensure_in_hand(&mut e, 0, "raise_the_alarm");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            w: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+
+    let alarm_idx = hand_index_for_card(&e, 0, "raise_the_alarm");
+    e.apply_command(0, &cast_spell(alarm_idx, vec![]))
+        .expect("cast Raise the Alarm");
+    pass_both_players(&mut e);
+
+    let pending = e
+        .state
+        .pending_trigger_order
+        .as_ref()
+        .expect("all mass-ETB triggers must be offered as one group");
+    assert_eq!(pending.deciding_player, 0);
+    assert_eq!(
+        pending.candidates.len(),
+        4,
+        "each Soul Warden observes both simultaneously entering Soldiers"
+    );
+
+    answer_trigger_order_in_engine_order(&mut e);
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(
+        e.state.players[0].life, 24,
+        "the four mass-ETB triggers each gain one life"
     );
 }
 

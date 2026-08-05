@@ -178,7 +178,20 @@ impl GameEngine {
         }
 
         if !dies.is_empty() {
-            self.fire_dies_batch(&dies, out);
+            let trigger_events: Vec<GameEvent> = dies
+                .into_iter()
+                .map(
+                    |(object_id, card_id, controller, was_creature)| GameEvent::Dies {
+                        source: TriggerSourceSnapshot {
+                            object_id,
+                            card_id,
+                            controller,
+                        },
+                        was_creature,
+                    },
+                )
+                .collect();
+            self.fire_triggers(&trigger_events);
         }
 
         // CR 704.5p: equipment falls off if the attached creature is no longer on the battlefield.
@@ -274,15 +287,14 @@ impl GameEngine {
                     ));
                 }
                 if let (Some(cid), Some(ctrl)) = (card_id_for_trigger, controller) {
-                    self.fire_triggers(
-                        GameEvent::Dies {
+                    self.fire_triggers(&[GameEvent::Dies {
+                        source: TriggerSourceSnapshot {
                             object_id: id,
                             card_id: cid,
                             controller: ctrl,
-                            was_creature,
                         },
-                        out,
-                    );
+                        was_creature,
+                    }]);
                 }
             }
         }

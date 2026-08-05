@@ -182,7 +182,7 @@ impl GameEngine {
                 }
                 self.state.passes_since_stack_change = 0;
                 ev.push(ev_phase(self, rv1::PhaseId::Upkeep));
-                self.fire_triggers(GameEvent::UpkeepBegin { player: ap }, ev);
+                self.fire_triggers(&[GameEvent::UpkeepBegin { player: ap }]);
                 ev.push(ev_priority_changed(self));
             }
             Upkeep => {
@@ -217,7 +217,7 @@ impl GameEngine {
                 self.state.passes_since_stack_change = 0;
                 // CR 504.2: draw-step triggers go on the stack only after the turn-based draw
                 // above. Unreachable when the active player just decked out — that path returns.
-                self.fire_triggers(GameEvent::DrawStepBegin { player: ap }, ev);
+                self.fire_triggers(&[GameEvent::DrawStepBegin { player: ap }]);
                 ev.push(ev_priority_changed(self));
             }
             Draw => {
@@ -605,7 +605,7 @@ impl GameEngine {
         // walks Untap -> Upkeep inline above rather than giving anyone priority in the untap step
         // (CR 502.1, which has no priority). The `Untap` arm of `adv_on_empty_stack` fires the
         // same event for the paths that do stop there, and is unreachable from here.
-        self.fire_triggers(GameEvent::UpkeepBegin { player: ap }, &mut ev);
+        self.fire_triggers(&[GameEvent::UpkeepBegin { player: ap }]);
         // The second of the two flush points: this path returns before `dispatch_command`'s tail,
         // so without it the first upkeep's triggers would sit staged until the next command.
         // Priority is withheld while an ordering or target choice is outstanding — CR 603.3b/603.3d

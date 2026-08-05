@@ -56,7 +56,20 @@ pub(super) fn destroy_all(
             destroyed.push((tid, cid, ctrl, was_creature));
         }
     }
-    engine.fire_dies_batch(&destroyed, events);
+    let trigger_events: Vec<GameEvent> = destroyed
+        .into_iter()
+        .map(
+            |(object_id, card_id, controller, was_creature)| GameEvent::Dies {
+                source: TriggerSourceSnapshot {
+                    object_id,
+                    card_id,
+                    controller,
+                },
+                was_creature,
+            },
+        )
+        .collect();
+    engine.fire_triggers(&trigger_events);
 
     Ok(EffectOutcome::Continue)
 }

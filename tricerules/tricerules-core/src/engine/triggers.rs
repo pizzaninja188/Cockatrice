@@ -15,32 +15,44 @@ pub(super) struct CollectedTrigger {
     pub controller: PlayerId,
     pub ability_index: usize,
     pub ability_text: String,
+    /// The event's affected player ("that player"), when distinct from the ability controller.
+    pub trigger_player: Option<PlayerId>,
 }
 
 impl GameEngine {
-    /// Emit a game event and enqueue all matching triggered abilities (CR 603.3b APNAP order).
-    pub(super) fn fire_triggers(&mut self, event: GameEvent, events: &mut Vec<rv1::RuledEvent>) {
-        if let GameEvent::EntersBattlefield { object_id } = &event {
-            self.emit_static_abilities_on_enter(*object_id);
-        }
-        // Every death goes through the simultaneous-death path, so a single death and a board
-        // wipe share one implementation of who observes it (CR 603.6/603.10). Keeping a second
-        // copy here is how the two drifted apart before.
-        if let GameEvent::Dies {
-            object_id,
-            card_id,
-            controller,
-            was_creature,
-        } = event
-        {
-            self.fire_dies_batch(&[(object_id, card_id, controller, was_creature)], events);
+    /// Collect one simultaneous event set and enqueue all matching triggered abilities as one
+    /// CR 603.3b group.
+    pub(super) fn fire_triggers(&mut self, events: &[GameEvent]) {
+        if events.is_empty() {
             return;
         }
-        // The beneficiary is a property of the *event* ("that player"), not of the ability that
-        // matched it, which is why it rides alongside the trigger rather than inside it.
-        let trigger_player = Self::trigger_player_for(&event);
-        let collected = self.collect_triggers(&event);
-        self.stage_triggers(collected, trigger_player);
+
+        // All permanents in a simultaneous ETB set exist before any trigger check. Register every
+        // static ability first so characteristics and trigger conditions see the completed event.
+        for event in events {
+            if let GameEvent::EntersBattlefield { object_id } = event {
+                self.emit_static_abilities_on_enter(*object_id);
+            }
+        }
+
+        let mut sources = self.battlefield_sources_apnap();
+        // Zone-leaving sources are no longer in the battlefield index. Their event-local snapshot
+        // supplies the identity/controller needed for LKI trigger matching (CR 603.6/603.10).
+        sources.extend(events.iter().filter_map(|event| match event {
+            GameEvent::Dies { source, .. } => Some(source.clone()),
+            _ => None,
+        }));
+
+        let mut collected = Vec::new();
+        for event in events {
+            let trigger_player = Self::trigger_player_for(event);
+            let mut event_triggers = self.collect_triggers(event, &sources);
+            for trigger in &mut event_triggers {
+                trigger.trigger_player = trigger_player;
+            }
+            collected.extend(event_triggers);
+        }
+        self.stage_triggers(collected);
     }
 
     /// Turn a collected simultaneous group into a staged group (CR 603.3b), reserving each
@@ -54,11 +66,7 @@ impl GameEngine {
     /// Nothing reaches the stack here. Placement is deferred to [`Self::flush_staged_triggers`],
     /// because this is called from inside resolution and from the SBA fixed point, neither of which
     /// can stop to ask a player a question.
-    pub(super) fn stage_triggers(
-        &mut self,
-        mut collected: Vec<CollectedTrigger>,
-        trigger_player: Option<PlayerId>,
-    ) {
+    pub(super) fn stage_triggers(&mut self, mut collected: Vec<CollectedTrigger>) {
         if collected.is_empty() {
             return;
         }
@@ -86,7 +94,7 @@ impl GameEngine {
                     controller: trigger.controller,
                     ability_index: trigger.ability_index,
                     ability_text: trigger.ability_text,
-                    trigger_player,
+                    trigger_player: trigger.trigger_player,
                     may,
                 }
             })
@@ -179,73 +187,7 @@ impl GameEngine {
         }
     }
 
-    /// Emit a simultaneous group of creature deaths using the battlefield snapshot immediately
-    /// before the group left. This is required for CR 603.6/603.10: a Blood Artist that dies in a
-    /// wipe still observes every other creature dying in that same event, and all those triggers
-    /// are ordered together under APNAP rather than one event at a time after the battlefield has
-    /// already been cleared.
-    pub(super) fn fire_dies_batch(
-        &mut self,
-        destroyed: &[(ObjectId, String, PlayerId, bool)],
-        events: &mut Vec<rv1::RuledEvent>,
-    ) {
-        let mut sources = self.battlefield_sources_apnap();
-        // The destroyed objects are no longer in the battlefield index, but their last-known
-        // triggered abilities still participate in the simultaneous event.
-        sources.extend(
-            destroyed
-                .iter()
-                .map(|(id, card_id, controller, _)| (*id, card_id.clone(), *controller)),
-        );
-
-        let mut triggers = Vec::new();
-        for (dying_id, dying_card_id, dying_controller, was_creature) in destroyed {
-            triggers.extend(self.matching_triggered_abilities(
-                dying_card_id,
-                *dying_id,
-                *dying_controller,
-                |tc| *tc == TriggerCondition::WhenSelfDies,
-            ));
-            if !was_creature {
-                continue;
-            }
-            for (source_id, source_card, source_controller) in &sources {
-                triggers.extend(self.matching_triggered_abilities(
-                    source_card,
-                    *source_id,
-                    *source_controller,
-                    |tc| {
-                        let TriggerCondition::WheneverCreatureDies {
-                            controller,
-                            exclude_self,
-                        } = tc
-                        else {
-                            return false;
-                        };
-                        if *exclude_self && *source_id == *dying_id {
-                            return false;
-                        }
-                        match controller {
-                            CastTriggerPlayer::Controller => {
-                                *dying_controller == *source_controller
-                            }
-                            CastTriggerPlayer::Opponent => *dying_controller != *source_controller,
-                            CastTriggerPlayer::AnyPlayer => true,
-                        }
-                    },
-                ));
-            }
-        }
-
-        // `events` is retained on the signature (and on `fire_triggers`) only so the ~15 call sites
-        // keep their shape: since staging replaced immediate pushing, no trigger event is emitted
-        // until `flush_staged_triggers` runs. Dropping the parameter is part of issue #41's merge
-        // of the two firing paths, not of this change.
-        let _ = events;
-        self.stage_triggers(triggers, None);
-    }
-
-    /// Every permanent on every battlefield as `(object_id, card_id, controller)`, in APNAP order
+    /// Every permanent on every battlefield as a trigger-source snapshot, in APNAP order
     /// (CR 603.3b / 101.4): the active player's permanents first, then each nonactive player's.
     /// Triggers collected in this order go on the stack in the order the rules require.
     ///
@@ -253,14 +195,18 @@ impl GameEngine {
     /// own — `UpkeepBegin` — scanned only the active player's battlefield, so a nonactive
     /// player's upkeep trigger never fired at all (CR 603.2: *every* permanent observes the
     /// event). `sort_by_key` is stable, so each player's battlefield keeps its own order.
-    fn battlefield_sources_apnap(&self) -> Vec<(ObjectId, String, PlayerId)> {
+    fn battlefield_sources_apnap(&self) -> Vec<TriggerSourceSnapshot> {
         let mut ordered: Vec<usize> = (0..self.state.players.len()).collect();
         ordered.sort_by_key(|&i| self.state.apnap_rank(self.state.players[i].id));
         let mut sources = Vec::new();
         for pi in ordered {
             for &source_id in &self.state.players[pi].battlefield {
                 if let Some(object) = self.state.objects.get(&source_id) {
-                    sources.push((source_id, object.card_id.clone(), object.controller));
+                    sources.push(TriggerSourceSnapshot {
+                        object_id: source_id,
+                        card_id: object.card_id.clone(),
+                        controller: object.controller,
+                    });
                 }
             }
         }
@@ -268,7 +214,11 @@ impl GameEngine {
     }
 
     /// Collect every triggered ability whose condition matches `event`, ordered APNAP (CR 603.3b).
-    pub(super) fn collect_triggers(&self, event: &GameEvent) -> Vec<CollectedTrigger> {
+    pub(super) fn collect_triggers(
+        &self,
+        event: &GameEvent,
+        sources: &[TriggerSourceSnapshot],
+    ) -> Vec<CollectedTrigger> {
         match event {
             GameEvent::EntersBattlefield { object_id } => {
                 let Some(obj) = self.state.objects.get(object_id) else {
@@ -289,9 +239,12 @@ impl GameEngine {
                     |tc| *tc == TriggerCondition::WhenSelfEntersBattlefield,
                 ));
 
-                for (src_id, src_card, src_ctrl) in self.battlefield_sources_apnap() {
+                for source in sources {
+                    let src_id = source.object_id;
+                    let src_card = &source.card_id;
+                    let src_ctrl = source.controller;
                     out.extend(self.matching_triggered_abilities(
-                        &src_card,
+                        src_card,
                         src_id,
                         src_ctrl,
                         |tc| {
@@ -338,35 +291,59 @@ impl GameEngine {
                 }
                 out
             }
-            // Deaths never reach here: `fire_triggers` routes them to `fire_dies_batch`, which is
-            // the only place that knows how to treat a group of deaths as simultaneous.
-            GameEvent::Dies { .. } => vec![],
-            GameEvent::Attacks { attacker_ids } => {
-                let mut sorted = attacker_ids.clone();
-                // CR 603.3b APNAP: the active player's triggers go on the stack first. A trigger
-                // belongs to the seat that *controls* its source, not the seat that owns the card.
-                // `stage_triggers` sorts by the same rank, but attacker order within one controller
-                // is decided here, so the two must agree.
-                sorted.sort_by_key(|&oid| {
-                    self.state
-                        .objects
-                        .get(&oid)
-                        .map(|o| self.state.apnap_rank(o.controller))
-                        .unwrap_or(usize::MAX)
-                });
-                sorted
-                    .iter()
-                    .flat_map(|&att| {
-                        let Some(obj) = self.state.objects.get(&att) else {
-                            return vec![];
-                        };
-                        let card_id = obj.card_id.clone();
-                        let controller = obj.controller;
-                        self.matching_triggered_abilities(&card_id, att, controller, |tc| {
-                            *tc == TriggerCondition::WheneverSelfAttacks
-                        })
-                    })
-                    .collect()
+            GameEvent::Dies {
+                source: dying,
+                was_creature,
+            } => {
+                let mut out = self.matching_triggered_abilities(
+                    &dying.card_id,
+                    dying.object_id,
+                    dying.controller,
+                    |tc| *tc == TriggerCondition::WhenSelfDies,
+                );
+                if !was_creature {
+                    return out;
+                }
+                for source in sources {
+                    out.extend(self.matching_triggered_abilities(
+                        &source.card_id,
+                        source.object_id,
+                        source.controller,
+                        |tc| {
+                            let TriggerCondition::WheneverCreatureDies {
+                                controller,
+                                exclude_self,
+                            } = tc
+                            else {
+                                return false;
+                            };
+                            if *exclude_self && source.object_id == dying.object_id {
+                                return false;
+                            }
+                            match controller {
+                                CastTriggerPlayer::Controller => {
+                                    dying.controller == source.controller
+                                }
+                                CastTriggerPlayer::Opponent => {
+                                    dying.controller != source.controller
+                                }
+                                CastTriggerPlayer::AnyPlayer => true,
+                            }
+                        },
+                    ));
+                }
+                out
+            }
+            GameEvent::Attacks { attacker_id } => {
+                let Some(obj) = self.state.objects.get(attacker_id) else {
+                    return vec![];
+                };
+                self.matching_triggered_abilities(
+                    &obj.card_id,
+                    *attacker_id,
+                    obj.controller,
+                    |tc| *tc == TriggerCondition::WheneverSelfAttacks,
+                )
             }
             GameEvent::CombatDamageToPlayer {
                 attacker_id,
@@ -390,22 +367,27 @@ impl GameEngine {
                 // Sulfuric Vortex under a nonactive player's control still triggers on the
                 // active player's upkeep. Walked in APNAP order (CR 603.3b); all of them land on
                 // the stack before the active player gets priority (CR 503.1a).
-                self.battlefield_sources_apnap()
-                    .into_iter()
-                    .flat_map(|(oid, card_id, source_controller)| {
-                        self.matching_triggered_abilities(&card_id, oid, source_controller, |tc| {
-                            let TriggerCondition::AtBeginningOfUpkeep {
-                                player: player_filter,
-                            } = tc
-                            else {
-                                return false;
-                            };
-                            match player_filter {
-                                CastTriggerPlayer::Controller => *upkeep == source_controller,
-                                CastTriggerPlayer::Opponent => *upkeep != source_controller,
-                                CastTriggerPlayer::AnyPlayer => true,
-                            }
-                        })
+                sources
+                    .iter()
+                    .flat_map(|source| {
+                        self.matching_triggered_abilities(
+                            &source.card_id,
+                            source.object_id,
+                            source.controller,
+                            |tc| {
+                                let TriggerCondition::AtBeginningOfUpkeep {
+                                    player: player_filter,
+                                } = tc
+                                else {
+                                    return false;
+                                };
+                                match player_filter {
+                                    CastTriggerPlayer::Controller => *upkeep == source.controller,
+                                    CastTriggerPlayer::Opponent => *upkeep != source.controller,
+                                    CastTriggerPlayer::AnyPlayer => true,
+                                }
+                            },
+                        )
                     })
                     .collect()
             }
@@ -413,44 +395,54 @@ impl GameEngine {
                 // Every player's permanents watch (CR 603.2) — Howling Mine triggers on the
                 // opponent's draw step too — walked in APNAP order (CR 603.3b) via
                 // `battlefield_sources_apnap`, as for `LifeGained` and `UpkeepBegin`.
-                self.battlefield_sources_apnap()
-                    .into_iter()
-                    .flat_map(|(oid, card_id, source_controller)| {
-                        self.matching_triggered_abilities(&card_id, oid, source_controller, |tc| {
-                            let TriggerCondition::AtBeginningOfDrawStep {
-                                player: player_filter,
-                            } = tc
-                            else {
-                                return false;
-                            };
-                            match player_filter {
-                                CastTriggerPlayer::Controller => *drawing == source_controller,
-                                CastTriggerPlayer::Opponent => *drawing != source_controller,
-                                CastTriggerPlayer::AnyPlayer => true,
-                            }
-                        })
+                sources
+                    .iter()
+                    .flat_map(|source| {
+                        self.matching_triggered_abilities(
+                            &source.card_id,
+                            source.object_id,
+                            source.controller,
+                            |tc| {
+                                let TriggerCondition::AtBeginningOfDrawStep {
+                                    player: player_filter,
+                                } = tc
+                                else {
+                                    return false;
+                                };
+                                match player_filter {
+                                    CastTriggerPlayer::Controller => *drawing == source.controller,
+                                    CastTriggerPlayer::Opponent => *drawing != source.controller,
+                                    CastTriggerPlayer::AnyPlayer => true,
+                                }
+                            },
+                        )
                     })
                     .collect()
             }
             GameEvent::LifeGained { player: gaining } => {
                 // Every player's permanents watch, in APNAP order (CR 603.3b) — the amount is
                 // irrelevant, one gain event fires each matching ability once.
-                self.battlefield_sources_apnap()
-                    .into_iter()
-                    .flat_map(|(oid, card_id, source_controller)| {
-                        self.matching_triggered_abilities(&card_id, oid, source_controller, |tc| {
-                            let TriggerCondition::WheneverPlayerGainsLife {
-                                player: player_filter,
-                            } = tc
-                            else {
-                                return false;
-                            };
-                            match player_filter {
-                                CastTriggerPlayer::Controller => *gaining == source_controller,
-                                CastTriggerPlayer::Opponent => *gaining != source_controller,
-                                CastTriggerPlayer::AnyPlayer => true,
-                            }
-                        })
+                sources
+                    .iter()
+                    .flat_map(|source| {
+                        self.matching_triggered_abilities(
+                            &source.card_id,
+                            source.object_id,
+                            source.controller,
+                            |tc| {
+                                let TriggerCondition::WheneverPlayerGainsLife {
+                                    player: player_filter,
+                                } = tc
+                                else {
+                                    return false;
+                                };
+                                match player_filter {
+                                    CastTriggerPlayer::Controller => *gaining == source.controller,
+                                    CastTriggerPlayer::Opponent => *gaining != source.controller,
+                                    CastTriggerPlayer::AnyPlayer => true,
+                                }
+                            },
+                        )
                     })
                     .collect()
             }
@@ -470,36 +462,43 @@ impl GameEngine {
                 let is_creature = cast_face.is_some_and(|f| f.is_creature);
                 let is_artifact = cast_face.is_some_and(|f| f.is_artifact);
 
-                self.battlefield_sources_apnap()
-                    .into_iter()
-                    .flat_map(|(oid, card_id, source_controller)| {
-                        self.matching_triggered_abilities(&card_id, oid, source_controller, |tc| {
-                            let TriggerCondition::WheneverPlayerCastsSpell {
-                                caster: caster_filter,
-                                spell_type,
-                            } = tc
-                            else {
-                                return false;
-                            };
-                            let caster_ok = match caster_filter {
-                                CastTriggerPlayer::Controller => *caster == source_controller,
-                                CastTriggerPlayer::Opponent => *caster != source_controller,
-                                CastTriggerPlayer::AnyPlayer => true,
-                            };
-                            if !caster_ok {
-                                return false;
-                            }
-                            match spell_type {
-                                None => true,
-                                Some(SpellTypeFilter::Enchantment) => is_enchantment,
-                                Some(SpellTypeFilter::Instant) => is_instant,
-                                Some(SpellTypeFilter::Sorcery) => is_sorcery,
-                                Some(SpellTypeFilter::InstantOrSorcery) => is_instant || is_sorcery,
-                                Some(SpellTypeFilter::Creature) => is_creature,
-                                Some(SpellTypeFilter::Artifact) => is_artifact,
-                                Some(SpellTypeFilter::Noncreature) => !is_creature,
-                            }
-                        })
+                sources
+                    .iter()
+                    .flat_map(|source| {
+                        self.matching_triggered_abilities(
+                            &source.card_id,
+                            source.object_id,
+                            source.controller,
+                            |tc| {
+                                let TriggerCondition::WheneverPlayerCastsSpell {
+                                    caster: caster_filter,
+                                    spell_type,
+                                } = tc
+                                else {
+                                    return false;
+                                };
+                                let caster_ok = match caster_filter {
+                                    CastTriggerPlayer::Controller => *caster == source.controller,
+                                    CastTriggerPlayer::Opponent => *caster != source.controller,
+                                    CastTriggerPlayer::AnyPlayer => true,
+                                };
+                                if !caster_ok {
+                                    return false;
+                                }
+                                match spell_type {
+                                    None => true,
+                                    Some(SpellTypeFilter::Enchantment) => is_enchantment,
+                                    Some(SpellTypeFilter::Instant) => is_instant,
+                                    Some(SpellTypeFilter::Sorcery) => is_sorcery,
+                                    Some(SpellTypeFilter::InstantOrSorcery) => {
+                                        is_instant || is_sorcery
+                                    }
+                                    Some(SpellTypeFilter::Creature) => is_creature,
+                                    Some(SpellTypeFilter::Artifact) => is_artifact,
+                                    Some(SpellTypeFilter::Noncreature) => !is_creature,
+                                }
+                            },
+                        )
                     })
                     .collect()
             }
@@ -533,6 +532,7 @@ impl GameEngine {
                 controller,
                 ability_index: idx,
                 ability_text: ta.text.clone(),
+                trigger_player: None,
             })
             .collect()
     }
@@ -724,5 +724,71 @@ impl GameEngine {
             });
             events.push(ev_log(format!("Triggered: {card_name} — {ability_text}")));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn simultaneous_etb_sources_observe_each_other() {
+        let decks = Some(vec![
+            vec![
+                "soul_warden".into(),
+                "soul_warden".into(),
+                "plains".into(),
+                "plains".into(),
+                "plains".into(),
+                "plains".into(),
+                "plains".into(),
+                "plains".into(),
+            ],
+            vec!["forest".into(); 8],
+        ]);
+        let mut engine = GameEngine::new(6036, &[0, 1], 20, decks, true).expect("new engine");
+        let wardens: Vec<ObjectId> = engine
+            .state
+            .objects
+            .values()
+            .filter(|object| object.owner == 0 && object.card_id == "soul_warden")
+            .map(|object| object.id)
+            .collect();
+        assert_eq!(wardens.len(), 2);
+        for &warden in &wardens {
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                warden,
+                Zone::Battlefield,
+                Some(0),
+            )
+            .expect("put Soul Warden onto battlefield");
+        }
+
+        engine.fire_triggers(&[
+            GameEvent::EntersBattlefield {
+                object_id: wardens[0],
+            },
+            GameEvent::EntersBattlefield {
+                object_id: wardens[1],
+            },
+        ]);
+
+        let group = engine
+            .state
+            .staged_trigger_groups
+            .front()
+            .expect("one simultaneous trigger group");
+        assert_eq!(group.triggers.len(), 2);
+        assert_eq!(
+            group
+                .triggers
+                .iter()
+                .map(|trigger| trigger.source_permanent_id)
+                .collect::<BTreeSet<_>>(),
+            wardens.into_iter().collect(),
+            "each entering Soul Warden observes the other"
+        );
     }
 }

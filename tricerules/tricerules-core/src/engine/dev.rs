@@ -169,7 +169,7 @@ impl GameEngine {
         // No SpellCast event is fired: nothing was cast (CR 601), so cast triggers correctly stay
         // silent, matching every real put-onto-the-battlefield effect.
         if zone == Zone::Battlefield {
-            self.fire_triggers(GameEvent::EntersBattlefield { object_id: oid }, ev);
+            self.fire_triggers(&[GameEvent::EntersBattlefield { object_id: oid }]);
         }
     }
 

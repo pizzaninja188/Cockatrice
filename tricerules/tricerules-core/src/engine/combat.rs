@@ -373,12 +373,11 @@ impl GameEngine {
             ap,
             atk_names.join(", ")
         )));
-        self.fire_triggers(
-            GameEvent::Attacks {
-                attacker_ids: attackers_for_event,
-            },
-            &mut b.events,
-        );
+        let trigger_events: Vec<GameEvent> = attackers_for_event
+            .into_iter()
+            .map(|attacker_id| GameEvent::Attacks { attacker_id })
+            .collect();
+        self.fire_triggers(&trigger_events);
         b.events.push(ev_priority_changed(self));
         Ok(b)
     }
@@ -1045,18 +1044,21 @@ impl GameEngine {
         // Apply lifelink gains. Each entry is one creature's gain and stays a separate life-gain
         // event (CR 702.15b): two lifelink creatures dealing damage in this step trigger a
         // "whenever you gain life" ability twice, so these are deliberately not summed per player.
+        let mut trigger_events = Vec::new();
         for (pid, amount) in lifelink_gains {
-            super::resolution::life::apply_life_gain(self, events, pid, amount, "lifelink");
+            if let Some(event) = super::resolution::life::apply_life_gain_without_triggers(
+                self, events, pid, amount, "lifelink",
+            ) {
+                trigger_events.push(event);
+            }
         }
-        for (att_id, def_id) in combat_dmg_to_player {
-            self.fire_triggers(
-                GameEvent::CombatDamageToPlayer {
-                    attacker_id: att_id,
-                    defender_id: def_id,
-                },
-                events,
-            );
-        }
+        trigger_events.extend(combat_dmg_to_player.into_iter().map(
+            |(attacker_id, defender_id)| GameEvent::CombatDamageToPlayer {
+                attacker_id,
+                defender_id,
+            },
+        ));
+        self.fire_triggers(&trigger_events);
         Ok(())
     }
 }

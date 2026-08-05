@@ -509,7 +509,7 @@ pub(super) fn return_from_graveyard(
                 ));
             }
             if dest_zone == Zone::Battlefield {
-                engine.fire_triggers(GameEvent::EntersBattlefield { object_id: tid }, events);
+                engine.fire_triggers(&[GameEvent::EntersBattlefield { object_id: tid }]);
             }
         }
     }
