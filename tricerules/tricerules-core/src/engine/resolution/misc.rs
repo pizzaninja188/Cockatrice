@@ -273,7 +273,7 @@ pub(super) fn regenerate(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::Regenerate { target } = effect else {
+    let SpellEffectKind::Regenerate { subject } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let engine = &mut *cx.engine;
@@ -282,11 +282,11 @@ pub(super) fn regenerate(
     let top = cx.top;
     let spell_label = cx.spell_label;
 
-    let tid = if matches!(target.kind, TargetKind::Self_) {
-        top.source_permanent_id
-            .filter(|_| engine.source_is_current_object(top))
-    } else {
-        targets.first().copied()
+    let tid = match subject {
+        EffectSubject::Source => top
+            .source_permanent_id
+            .filter(|_| engine.source_is_current_object(top)),
+        EffectSubject::Chosen(_) => targets.first().copied(),
     };
     if let Some(tid) = tid {
         let is_creature = engine

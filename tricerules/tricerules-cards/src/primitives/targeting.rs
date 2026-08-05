@@ -17,11 +17,6 @@ pub enum TargetKind {
     OpponentPlayer,
     /// Any permanent on the battlefield (artifact, creature, or land).
     AnyPermanent,
-    /// The source permanent itself. **Not "targeting" in the CR sense** (CR 115): it is
-    /// auto-bound to the ability's source, never a player choice, and ignores hexproof/shroud.
-    /// Legal only inside an activated or triggered ability effect, never in `spell_effect`
-    /// (enforced by [`SpellEffectKind::validate`]). Replaces the old `TriggeredEffect::PumpSelf`.
-    Self_,
 }
 
 /// Which player's graveyard a [`GraveyardFilter`] targets. Defaults to [`Controller`].

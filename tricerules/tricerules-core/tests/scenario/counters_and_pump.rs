@@ -174,7 +174,7 @@ fn giant_growth_pump_expires_after_active_turn_ends() {
 }
 
 /// CR 113/606: Fiery Hellhound's firebreathing (`{R}: this creature gets +1/+0`) is the first
-/// card to drive a `PumpTarget` with `TargetKind::Self_` from an *activated* ability — the effect
+/// card to drive a `PumpTarget` with `EffectSubject::Source` from an *activated* ability — the effect
 /// auto-binds to the source (not a chosen target, CR 115) and is repeatable. Each activation goes
 /// on the stack (non-mana ability), resolves to a layer-7c `UntilEndOfTurn` P/T bump, and the
 /// bumps stack; they all drain at cleanup (CR 514.2 / 611.2g — independent of the source).
@@ -250,6 +250,54 @@ fn fiery_hellhound_self_firebreathing_pumps_and_expires() {
         e.effective_toughness(hound),
         Some(2),
         "toughness back to printed"
+    );
+}
+
+/// A source-bound effect is untargeted: the engine must reject a client that attaches a target
+/// instead of silently accepting targeting vocabulary for the source permanent.
+#[test]
+fn fiery_hellhound_source_pump_rejects_supplied_target() {
+    let decks = Some(vec![
+        {
+            let mut d = vec!["fiery_hellhound".to_string()];
+            d.extend(std::iter::repeat_n("mountain".to_string(), 6));
+            d
+        },
+        vec!["forest".into(); 7],
+    ]);
+    let mut e = GameEngine::new(7312, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let hound = put_creature_on_battlefield(&mut e, 0, "fiery_hellhound");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+
+    let err = e
+        .apply_command(
+            0,
+            &activate_ability(
+                hound,
+                0,
+                vec![TargetRef {
+                    object_id: hound,
+                    damage_amount: 0,
+                }],
+            ),
+        )
+        .expect_err("source-bound pump must reject a supplied target");
+    assert!(matches!(err, tricerules_core::EngineError::Illegal(_)));
+    assert!(
+        e.state.stack.is_empty(),
+        "rejected activation stays off stack"
+    );
+    assert_eq!(
+        e.state.players[0].mana_pool.red, 1,
+        "rejected activation pays no mana"
     );
 }
 

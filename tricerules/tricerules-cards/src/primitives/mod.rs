@@ -101,16 +101,21 @@ mod tests {
     }
 
     #[test]
-    fn self_target_rejected_in_spell_context_allowed_in_ability() {
+    fn source_subject_rejected_in_spell_context_allowed_in_ability() {
         let pump_self = SpellEffectKind::PumpTarget {
             power: 1,
             toughness: 1,
-            target: TargetFilter {
-                kind: TargetKind::Self_,
-                ..Default::default()
-            },
+            subject: EffectSubject::Source,
         };
         assert!(pump_self.validate(EffectContext::Spell).is_err());
         assert!(pump_self.validate(EffectContext::Ability).is_ok());
+    }
+
+    #[test]
+    fn chosen_subject_defaults_to_creature_target() {
+        assert_eq!(
+            EffectSubject::default(),
+            EffectSubject::Chosen(TargetFilter::default_creature())
+        );
     }
 }

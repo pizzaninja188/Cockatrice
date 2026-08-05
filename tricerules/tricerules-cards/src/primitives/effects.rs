@@ -134,13 +134,28 @@ impl CounterKind {
 }
 
 /// Where an effect is being resolved from. Controls validation that depends on context —
-/// e.g. [`TargetKind::Self_`] is only meaningful for an ability bound to a source permanent.
+/// e.g. [`EffectSubject::Source`] is only meaningful for an ability bound to a source permanent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EffectContext {
     /// A spell's `spell_effect` list (no source permanent to self-reference).
     Spell,
     /// An activated or triggered ability bound to a source permanent.
     Ability,
+}
+
+/// The permanent affected by an effect that can either refer to its own source or target a
+/// chosen permanent. `Source` is auto-bound and does not target in the CR 115 sense;
+/// `Chosen` carries the filter for a genuine chosen target.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EffectSubject {
+    Source,
+    Chosen(TargetFilter),
+}
+
+impl Default for EffectSubject {
+    fn default() -> Self {
+        Self::Chosen(TargetFilter::default_creature())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -207,14 +222,13 @@ pub enum SpellEffectKind {
         #[serde(default = "TargetFilter::default_creature")]
         target: TargetFilter,
     },
-    /// Give +power/+toughness until end of turn to a creature matching `target`
-    /// (default: any creature, for Giant Growth). Use `(kind: Self_)` for an ability that
-    /// pumps its own source permanent (e.g. an upkeep self-pump) — auto-bound, untargeted.
+    /// Give +power/+toughness until end of turn to `subject`. The default is a chosen creature
+    /// target (Giant Growth); `Source` auto-binds an ability to its source permanent.
     PumpTarget {
         power: i32,
         toughness: i32,
-        #[serde(default = "TargetFilter::default_creature")]
-        target: TargetFilter,
+        #[serde(default)]
+        subject: EffectSubject,
     },
     /// Tap target permanent matching `target` filter.
     TapTarget {
@@ -375,8 +389,8 @@ pub enum SpellEffectKind {
     /// Legal only as an activated ability effect — never a spell (validated at load). Covers
     /// Cudgel Troll (`{G}: Regenerate`) and Drudge Skeletons (`{B}: Regenerate`).
     Regenerate {
-        #[serde(default = "TargetFilter::default_creature")]
-        target: TargetFilter,
+        #[serde(default)]
+        subject: EffectSubject,
     },
     /// Deal `amount` damage to every battlefield permanent matching `kind` (CR 119). Untargeted.
     /// `Creature` covers Pyroclasm / Pestilence-style sweeps; `AnyPermanent` is reserved for
@@ -398,17 +412,17 @@ pub enum SpellEffectKind {
         #[serde(default)]
         controller: TokenController,
     },
-    /// CR 122/121.6: put `count` counters of `counter` on a creature matching `target`
-    /// (default: any creature). The `counter` kind covers both +1/+1 counter spells
+    /// CR 122/121.6: put `count` counters of `counter` on `subject` (default: a chosen creature
+    /// target). The `counter` kind covers both +1/+1 counter spells
     /// (Battlegrowth, Common Bond) and -1/-1 counter spells (Instill Infection) without a new
-    /// variant. Use `(kind: Self_)` for an ability that puts counters on its own source
+    /// variant. Use `Source` for an ability that puts counters on its own source
     /// (modular/graft/outlast self-buffs). Counter *removal* spells are deferred — counter
     /// removal in MTG is almost always an ability cost (see the plan's `AbilityCost` phase).
     PutCounters {
         counter: CounterKind,
         count: u32,
-        #[serde(default = "TargetFilter::default_creature")]
-        target: TargetFilter,
+        #[serde(default)]
+        subject: EffectSubject,
     },
     /// CR 119 + 119.4: drain `amount` life from a target player and give that much life to the
     /// controller ("target player loses N life and you gain N life"). Covered by Blood Artist,
@@ -545,8 +559,9 @@ pub enum RelativePlayerSet {
 ///
 /// Sibling of [`RelativePlayerSet`] and [`TokenController`], and kept out of `TargetFilter` for
 /// the same reason they are: naming a player is not targeting it (CR 115.1), and borrowing
-/// targeting vocabulary for effects that do not target is what forced `TargetKind::Self_` to
-/// carry a "not targeting in the CR sense" disclaimer. Sulfuric Vortex never says "target".
+/// targeting vocabulary for effects that do not target is what forced source-bound effects to
+/// masquerade as targets before [`EffectSubject`] separated the concepts. Sulfuric Vortex never
+/// says "target".
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum PlayerRecipient {
     /// "you" — the spell or ability's controller. Serendib Efreet, Juzám Djinn.
@@ -571,7 +586,6 @@ impl SpellEffectKind {
             SpellEffectKind::DamageTarget { target, .. }
             | SpellEffectKind::DamageTargets { target, .. }
             | SpellEffectKind::DestroyTarget { target }
-            | SpellEffectKind::PumpTarget { target, .. }
             | SpellEffectKind::GrantKeywordsTarget { target, .. }
             | SpellEffectKind::TapTarget { target }
             | SpellEffectKind::UntapTarget { target }
@@ -580,12 +594,21 @@ impl SpellEffectKind {
             | SpellEffectKind::DrainTarget { target, .. }
             | SpellEffectKind::MillTargetPlayer { target, .. }
             | SpellEffectKind::DiscardCards { target, .. }
-            | SpellEffectKind::PutCounters { target, .. }
             | SpellEffectKind::AuraAttach { target }
             | SpellEffectKind::Equip { target }
-            | SpellEffectKind::Regenerate { target }
             | SpellEffectKind::TargetPlayerSacrifices { target, .. }
             | SpellEffectKind::PreventNextDamage { target, .. } => vec![target],
+            SpellEffectKind::PumpTarget {
+                subject: EffectSubject::Chosen(target),
+                ..
+            }
+            | SpellEffectKind::PutCounters {
+                subject: EffectSubject::Chosen(target),
+                ..
+            }
+            | SpellEffectKind::Regenerate {
+                subject: EffectSubject::Chosen(target),
+            } => vec![target],
             _ => vec![],
         }
     }
@@ -626,19 +649,26 @@ impl SpellEffectKind {
 
     /// Startup validation: reject effect/filter combinations the engine cannot honor.
     /// Returns `Err` with a human-readable reason; called from the card registry loader.
-    /// `context` distinguishes spells from abilities so context-only filters (`Self_`) are
+    /// `context` distinguishes spells from abilities so source-bound subjects are
     /// rejected where they make no sense.
     pub fn validate(&self, context: EffectContext) -> Result<(), String> {
-        // CR 115: a self-referencing ability effect is not "targeting" and only exists where
-        // there is a source permanent — never in a spell's effect list.
-        if context == EffectContext::Spell
-            && self
-                .target_filters()
-                .iter()
-                .any(|f| f.kind == TargetKind::Self_)
-        {
+        // CR 115: a source-bound ability effect is not targeting and only exists where there is
+        // a source permanent — never in a spell's effect list.
+        let source_bound = matches!(
+            self,
+            SpellEffectKind::PumpTarget {
+                subject: EffectSubject::Source,
+                ..
+            } | SpellEffectKind::PutCounters {
+                subject: EffectSubject::Source,
+                ..
+            } | SpellEffectKind::Regenerate {
+                subject: EffectSubject::Source,
+            }
+        );
+        if context == EffectContext::Spell && source_bound {
             return Err(
-                "Self_ target is only valid on an activated or triggered ability, not a spell"
+                "Source subject is only valid on an activated or triggered ability, not a spell"
                     .into(),
             );
         }
@@ -669,7 +699,10 @@ impl SpellEffectKind {
                 }
             }
             // CR 122: counters go on permanents, never players.
-            SpellEffectKind::PutCounters { target, .. } => {
+            SpellEffectKind::PutCounters {
+                subject: EffectSubject::Chosen(target),
+                ..
+            } => {
                 if target.is_player() {
                     Err(format!(
                         "PutCounters cannot target players, got {:?}",
@@ -696,8 +729,8 @@ impl SpellEffectKind {
                 }
                 Ok(())
             }
-            // Mass effects select objects, not players, and never use Self_/AnyTarget (which
-            // include players). Only Creature / AnyPermanent are honored by the engine.
+            // Mass effects select objects, not players, and never use AnyTarget (which includes
+            // players). Only Creature / AnyPermanent are honored by the engine.
             SpellEffectKind::DestroyAll { kind, .. }
             | SpellEffectKind::DamageAll { kind, .. }
             | SpellEffectKind::UntapAll { filter: kind, .. } => {

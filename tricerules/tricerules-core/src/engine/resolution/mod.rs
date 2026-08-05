@@ -278,7 +278,7 @@ impl GameEngine {
 
         // Determine effects. Spells, triggered abilities and activated abilities are uniform:
         // every one of them carries a `Vec<SpellEffectKind>` resolved in written order (CR 608.2).
-        // Self-referencing effects use a `Self_` target filter, bound below.
+        // Self-referencing effects use `EffectSubject::Source` and bind during effect dispatch.
         let (effects, spell_label): (Vec<SpellEffectKind>, String) = if is_ability {
             let ability_index = top.ability_index.unwrap_or(0);
             let def = self.registry.get(card_id);

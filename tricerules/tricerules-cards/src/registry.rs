@@ -80,8 +80,8 @@ impl CardRegistry {
             // Type flags are derived from `types`/`supertypes`, not authored in RON (per face).
             card.derive_type_flags();
             // Validate every face's effects at startup — multi-face cards (CR 709/712/715)
-            // validate each face uniformly. Spell effects have no source permanent, so `Self_`
-            // target filters are rejected here (EffectContext::Spell); activated/triggered
+            // validate each face uniformly. Spell effects have no source permanent, so `Source`
+            // subjects are rejected here (EffectContext::Spell); activated/triggered
             // effects bind to a source (Ability).
             for face in card.faces_iter() {
                 // One resolution owner per face (CR 608): ordinary data, modal data, and a
@@ -477,7 +477,7 @@ mod tests {
 
     /// CR 608.2: an ability may carry several effects, resolved in written order — the same
     /// shape as a spell's `spell_effect`. Both ability kinds accept a list, and the per-effect
-    /// context validation still runs on every element (the `Self_`-in-a-spell rejection below
+    /// context validation still runs on every element (the `Source`-in-a-spell rejection below
     /// proves the per-element half).
     #[test]
     fn abilities_accept_multiple_effects() {
@@ -542,7 +542,7 @@ mod tests {
     }
 
     /// A self-pump trigger (the replacement for the old `TriggeredEffect::PumpSelf`) loads,
-    /// while the same `Self_` filter in a spell's effect list is rejected at load.
+    /// while the same `Source` subject in a spell's effect list is rejected at load.
     #[test]
     fn self_pump_trigger_loads_but_self_in_spell_rejected() {
         let good = r#"(
@@ -555,7 +555,7 @@ mod tests {
             triggered_abilities: [
                 (
                     trigger: AtBeginningOfUpkeep(player: Controller),
-                    effect: [PumpTarget(power: 1, toughness: 1, target: (kind: Self_))],
+                    effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
                     text: "At the beginning of your upkeep, this gets +1/+1.",
                 ),
             ],
@@ -567,7 +567,7 @@ mod tests {
             name: "Self Spell",
             mana_cost: "{G}",
             types: ["Instant"],
-            spell_effect: [PumpTarget(power: 1, toughness: 1, target: (kind: Self_))],
+            spell_effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
         )"#;
         let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
         assert!(matches!(err, RegistryError::InvalidCard { ref id, .. } if id == "self_spell"));

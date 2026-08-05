@@ -189,7 +189,7 @@ pub(super) fn object_matches_mass_filter(
     let kind_ok = match filter.kind {
         TargetKind::Creature => characteristics.is_creature(),
         TargetKind::AnyPermanent => true,
-        // Player / AnyTarget / Self_ kinds are rejected at registry load for mass effects.
+        // Player / AnyTarget kinds are rejected at registry load for mass effects.
         _ => false,
     };
     if !kind_ok {
@@ -239,9 +239,6 @@ fn target_filter_legal(
             player_target_legal(&engine.state, tid) && tid as i32 != caster
         }
         TargetKind::AnyPermanent => any_battlefield_permanent_target_legal(&engine.state, tid),
-        // `Self_` is auto-bound to the ability's source, never a chosen target (CR 115), so it
-        // is never legal to *pick*. The engine binds it directly at resolution.
-        TargetKind::Self_ => false,
     };
     if !kind_ok {
         return false;
@@ -348,13 +345,30 @@ fn effect_target_legal_at_resolution(
             target_filter_legal(engine, target, tid, caster)
         }
         SpellEffectKind::DestroyTarget { target }
-        | SpellEffectKind::PumpTarget { target, .. }
         | SpellEffectKind::GrantKeywordsTarget { target, .. }
-        | SpellEffectKind::PutCounters { target, .. }
-        | SpellEffectKind::Equip { target }
-        | SpellEffectKind::Regenerate { target } => {
-            target_filter_legal(engine, target, tid, caster)
+        | SpellEffectKind::Equip { target } => target_filter_legal(engine, target, tid, caster),
+        SpellEffectKind::PumpTarget {
+            subject: EffectSubject::Chosen(target),
+            ..
         }
+        | SpellEffectKind::PutCounters {
+            subject: EffectSubject::Chosen(target),
+            ..
+        }
+        | SpellEffectKind::Regenerate {
+            subject: EffectSubject::Chosen(target),
+        } => target_filter_legal(engine, target, tid, caster),
+        SpellEffectKind::PumpTarget {
+            subject: EffectSubject::Source,
+            ..
+        }
+        | SpellEffectKind::PutCounters {
+            subject: EffectSubject::Source,
+            ..
+        }
+        | SpellEffectKind::Regenerate {
+            subject: EffectSubject::Source,
+        } => false,
         SpellEffectKind::ExileTarget
         | SpellEffectKind::ExileTargetGainLifeEqualToPower
         | SpellEffectKind::ReturnTargetCreatureToHand => {
@@ -383,15 +397,15 @@ fn effect_target_legal_at_resolution(
 
 pub(super) fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
     match kind {
-        // A `Self_`-filtered pump or counter-placement is auto-bound to its source (CR 115) — it
-        // takes no chosen target and prompts nobody; any other filter requires a selected target.
-        SpellEffectKind::PumpTarget { target, .. }
-        | SpellEffectKind::GrantKeywordsTarget { target, .. }
-        | SpellEffectKind::PutCounters { target, .. }
-        | SpellEffectKind::Regenerate { target } => !matches!(target.kind, TargetKind::Self_),
+        SpellEffectKind::PumpTarget { subject, .. }
+        | SpellEffectKind::PutCounters { subject, .. }
+        | SpellEffectKind::Regenerate { subject } => {
+            matches!(subject, EffectSubject::Chosen(_))
+        }
         SpellEffectKind::DamageTarget { .. }
         | SpellEffectKind::DamageTargets { .. }
         | SpellEffectKind::DestroyTarget { .. }
+        | SpellEffectKind::GrantKeywordsTarget { .. }
         | SpellEffectKind::ExileTarget
         | SpellEffectKind::ExileTargetGainLifeEqualToPower
         | SpellEffectKind::ReturnTargetCreatureToHand
@@ -476,16 +490,15 @@ pub(super) fn validate_effect_targets(
                 }
             }
         }
-        SpellEffectKind::PumpTarget { target: filter, .. }
-        | SpellEffectKind::GrantKeywordsTarget { target: filter, .. }
-        | SpellEffectKind::PutCounters { target: filter, .. }
-        | SpellEffectKind::Regenerate { target: filter } => {
-            // `Self_` pumps / counter placements / regen are auto-bound and take no chosen target.
-            if matches!(filter.kind, TargetKind::Self_) {
+        SpellEffectKind::PumpTarget { subject, .. }
+        | SpellEffectKind::PutCounters { subject, .. }
+        | SpellEffectKind::Regenerate { subject } => match subject {
+            EffectSubject::Source => {
                 if !targets.is_empty() {
                     return Err(EngineError::Illegal("this effect takes no targets"));
                 }
-            } else {
+            }
+            EffectSubject::Chosen(filter) => {
                 if targets.len() != 1 {
                     return Err(EngineError::Illegal("requires exactly one target"));
                 }
@@ -494,6 +507,16 @@ pub(super) fn validate_effect_targets(
                         "target must be a creature on the battlefield",
                     ));
                 }
+            }
+        },
+        SpellEffectKind::GrantKeywordsTarget { target: filter, .. } => {
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal("requires exactly one target"));
+            }
+            if !target_filter_legal(engine, filter, targets[0].object_id, caster) {
+                return Err(EngineError::Illegal(
+                    "target must be a creature on the battlefield",
+                ));
             }
         }
         SpellEffectKind::ExileTarget
@@ -710,15 +733,33 @@ pub(super) fn spell_target_legality_error(
         | SpellEffectKind::DamageTargets { target: filter, .. }
         | SpellEffectKind::TapTarget { target: filter }
         | SpellEffectKind::UntapTarget { target: filter }
-        | SpellEffectKind::PumpTarget { target: filter, .. }
+        | SpellEffectKind::PumpTarget {
+            subject: EffectSubject::Chosen(filter),
+            ..
+        }
         | SpellEffectKind::GrantKeywordsTarget { target: filter, .. }
-        | SpellEffectKind::PutCounters { target: filter, .. }
+        | SpellEffectKind::PutCounters {
+            subject: EffectSubject::Chosen(filter),
+            ..
+        }
         | SpellEffectKind::PreventNextDamage { target: filter, .. } => {
             if !target_filter_legal(engine, filter, tid, caster) {
                 return Err(EngineError::Illegal(
                     "target must be a creature or player on the battlefield",
                 ));
             }
+        }
+        SpellEffectKind::PumpTarget {
+            subject: EffectSubject::Source,
+            ..
+        }
+        | SpellEffectKind::PutCounters {
+            subject: EffectSubject::Source,
+            ..
+        } => {
+            return Err(EngineError::Illegal(
+                "source-bound effects are only valid on activated or triggered abilities",
+            ));
         }
         SpellEffectKind::ExileTarget
         | SpellEffectKind::ExileTargetGainLifeEqualToPower

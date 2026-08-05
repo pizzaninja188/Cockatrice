@@ -203,8 +203,8 @@ pub enum InterveningIf {
 
 /// One triggered ability on a permanent (RON data tier). The effects are plain
 /// [`SpellEffectKind`]s — the same effect type spells and activated abilities use. A
-/// self-referencing effect (e.g. an upkeep self-pump) uses a `Self_` target filter rather
-/// than a dedicated variant.
+/// self-referencing effect (e.g. an upkeep self-pump) uses [`EffectSubject::Source`] rather than
+/// a dedicated effect variant.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TriggeredAbilityDef {
     pub trigger: TriggerCondition,

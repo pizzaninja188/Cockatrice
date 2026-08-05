@@ -8,7 +8,7 @@
   activated_abilities: [
     (
       cost: Mana("{G}"),
-      effect: [Regenerate(target: (kind: Self_))],
+      effect: [Regenerate(subject: Source)],
       text: "{G}: Regenerate Cudgel Troll.",
     ),
   ],

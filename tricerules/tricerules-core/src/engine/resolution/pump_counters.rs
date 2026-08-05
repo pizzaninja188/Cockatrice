@@ -7,7 +7,7 @@ pub(super) fn pump_target(
     let SpellEffectKind::PumpTarget {
         power,
         toughness,
-        target,
+        subject,
     } = effect
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
@@ -18,13 +18,11 @@ pub(super) fn pump_target(
     let top = cx.top;
     let spell_label = cx.spell_label;
 
-    // `Self_` is auto-bound to the source permanent (CR 115 — not a chosen target);
-    // every other filter uses the player's selected target.
-    let tid = if matches!(target.kind, TargetKind::Self_) {
-        top.source_permanent_id
-            .filter(|_| engine.source_is_current_object(top))
-    } else {
-        targets.first().copied()
+    let tid = match subject {
+        EffectSubject::Source => top
+            .source_permanent_id
+            .filter(|_| engine.source_is_current_object(top)),
+        EffectSubject::Chosen(_) => targets.first().copied(),
     };
     if let Some(tid) = tid {
         let is_valid_target = engine
@@ -207,7 +205,7 @@ pub(super) fn put_counters(
     let SpellEffectKind::PutCounters {
         counter,
         count,
-        target,
+        subject,
     } = effect
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
@@ -218,13 +216,11 @@ pub(super) fn put_counters(
     let top = cx.top;
     let spell_label = cx.spell_label;
 
-    // `Self_` is auto-bound to the source permanent (CR 115); any other filter
-    // uses the chosen target. Counters go on a permanent on the battlefield.
-    let tid = if matches!(target.kind, TargetKind::Self_) {
-        top.source_permanent_id
-            .filter(|_| engine.source_is_current_object(top))
-    } else {
-        targets.first().copied()
+    let tid = match subject {
+        EffectSubject::Source => top
+            .source_permanent_id
+            .filter(|_| engine.source_is_current_object(top)),
+        EffectSubject::Chosen(_) => targets.first().copied(),
     };
     if let Some(tid) = tid {
         let is_valid_target = engine
