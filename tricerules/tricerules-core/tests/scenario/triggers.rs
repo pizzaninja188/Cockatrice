@@ -1132,8 +1132,7 @@ fn howling_mine_bounced_while_tapped_does_nothing() {
 // "At the beginning of ... upkeep" (CR 503.1a) — Sulfuric Vortex (each player),
 // Phyrexian Arena (your upkeep). Every player's battlefield is scanned in APNAP
 // order (CR 603.3b), so a NONACTIVE player's permanent triggers on the active
-// player's upkeep — the bug docs/FINDINGS.md logged against this arm, which
-// scanned only the active player's battlefield.
+// player's upkeep. This regresses the old active-player-battlefield-only scan.
 // ===========================================================================
 
 /// Same two 20-card decks the draw-step block uses; named for the block it serves.

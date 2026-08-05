@@ -62,11 +62,10 @@ These apply to all work from now on, refactor or not.
 - Fix the two scenario test files importing `super::helpers` instead of `crate::helpers`
   (`equipment.rs`, `regenerate.rs`).
 - Move the stale root working notes into `docs/` with a one-line status header each:
-  `FINDINGS.md`, `issues.md`, `AUTOMATION_STATUS.md`,
-  `engine-and-scenario-module-split-plan.md`, `plan-card-coverage-expansion.md`,
-  `plan-copy-effects.md`, `plan-multiface-cards.md`. Delete any whose work fully landed
-  (verify against git log — the copy-effects and multiface plans look shipped). Root keeps
-  `README.md` + `AGENTS.md` + the `CLAUDE.md` pointer.
+  `issues.md`, `AUTOMATION_STATUS.md`, `engine-and-scenario-module-split-plan.md`,
+  `plan-card-coverage-expansion.md`, `plan-copy-effects.md`, `plan-multiface-cards.md`.
+  Delete any whose work fully landed (verify against git log — the copy-effects and multiface
+  plans look shipped). Root keeps `README.md` + `AGENTS.md` + the `CLAUDE.md` pointer.
 - Leave `doc/carddatabase_v3|v4` and `webclient/` alone — upstream content; deleting them
   creates permanent merge conflicts for zero benefit.
 
