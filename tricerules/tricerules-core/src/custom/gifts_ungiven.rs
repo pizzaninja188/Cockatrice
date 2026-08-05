@@ -23,6 +23,10 @@ use crate::state::Zone;
 
 pub struct GiftsUngiven;
 
+/// Registration handle. `build.rs` wires this into the effect table by file stem (= card id);
+/// the name `EFFECT` is the convention every file under `src/custom/` follows.
+pub(crate) static EFFECT: &dyn CardEffect = &GiftsUngiven;
+
 impl CardEffect for GiftsUngiven {
     fn begin(&self, ctx: &mut ResolutionCtx) -> ResolutionStep {
         let controller = ctx.controller;

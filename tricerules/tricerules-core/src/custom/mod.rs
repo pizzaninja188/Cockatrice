@@ -13,6 +13,19 @@
 //! that exposes only audited mutators which preserve zone integrity, keeping the engine the
 //! single writer of state.
 //!
+//! ## Adding one
+//! Create `src/custom/<card_id>.rs` — anywhere under that tree, subdirectories are fine — and
+//! export `pub(crate) static EFFECT: &dyn CardEffect = &YourType;`. `build.rs` scans the
+//! directory and registers it; no shared file is edited and the key is declared nowhere in Rust,
+//! because **the file stem is the card id**. The card's RON `custom_effect` stays the single
+//! declaration of the binding. Shared, non-effect helper modules go under `src/custom/support/`,
+//! which the scan skips.
+//!
+//! Effects are **1:1 with card ids**, exactly like RON data cards; two files claiming one id is a
+//! build error. Two cards wanting the same algorithm is the signal to widen a primitive (tier 2),
+//! not to share an impl — a shared algorithm *is* the `(effect_kind, parameters)` description
+//! whose absence is the only reason a card is admitted here.
+//!
 //! ## Resumable resolution
 //! [`CardEffect::begin`] starts resolving and either finishes ([`ResolutionStep::Done`]) or
 //! returns a [`ResolutionInterrupt`] requesting input from a specific player. The engine parks
@@ -20,12 +33,16 @@
 //! choice command calls [`CardEffect::resume`], looping until `Done`. Because every choice is a
 //! logged command, replay (`(seed, command log) → state`) reconstructs the same resolution.
 
+use std::collections::HashMap;
+use std::sync::OnceLock;
+
 use crate::state::{GameObject, GameState, ObjectId, PlayerId, Zone};
 use tricerules_cards::{CardDefinition, CardRegistry};
 use tricerules_proto::ruled::v1 as rv1;
 
-mod brainstorm;
-mod gifts_ungiven;
+// `pub(crate) mod <card_id>;` per file under `src/custom/`, plus the `EFFECT_IMPLS` table they
+// feed. Generated so adding a custom card edits no shared file — see `build.rs`.
+include!(concat!(env!("OUT_DIR"), "/custom_effects.rs"));
 
 /// A card-specific resolution algorithm the data tiers cannot express. Implementations are
 /// unit structs, one per file, registered by card id in [`lookup`].
@@ -164,6 +181,12 @@ impl<'a> ResolutionCtx<'a> {
     /// Put `oids` on top of their owner's library, `oids[0]` ending up on top (CR 120: "in any
     /// order" is the player's chosen order, passed top-first). The cards are pulled from whatever
     /// zone they are in first, so this also serves "move to top of library".
+    ///
+    /// **Emits no event, deliberately** — the library is a hidden zone, so per
+    /// [`public_move_event_destination`] there is nothing a public event may say about it. This is
+    /// the mutator where that matters most: announcing a Brainstorm put-back would tell the
+    /// opponent exactly which cards were hidden on top. Recipients learn the new library through
+    /// the per-player, per-recipient-redacted zone view instead.
     pub fn put_on_top_of_library(&mut self, oids: &[ObjectId]) {
         // Push in reverse so oids[0] is the final front (top) of the library.
         for &oid in oids.iter().rev() {
@@ -205,9 +228,11 @@ impl<'a> ResolutionCtx<'a> {
     }
 
     /// Move `oid` to `zone` (graveyard/hand/exile/…), maintaining zone membership lists. Emits a
-    /// `PermanentMoved` event for graveyard/exile destinations — the per-player zone-view sync
-    /// carries hand/library/battlefield but not graveyard/exile, so the relay needs an explicit
-    /// move there (the same event the mill/discard paths emit).
+    /// `PermanentMoved` event exactly for the public destinations
+    /// ([`public_move_event_destination`]) — the per-player zone-view sync carries hand, library
+    /// and battlefield in full, and the graveyard only as object ids, so the relay needs an
+    /// explicit move to learn *which card* landed in a graveyard or exile (the same event the
+    /// mill/discard paths emit).
     pub fn move_to_zone(&mut self, oid: ObjectId, zone: Zone) {
         let Some(owner) = self.state.objects.get(&oid).map(|o| o.owner) else {
             return;
@@ -224,12 +249,7 @@ impl<'a> ResolutionCtx<'a> {
         if crate::engine::move_object_to_zone(self.state, self.registry, oid, zone, None).is_err() {
             return;
         }
-        let dest = match zone {
-            Zone::Graveyard => Some(rv1::permanent_moved::Destination::Graveyard),
-            Zone::Exile => Some(rv1::permanent_moved::Destination::Exile),
-            _ => None,
-        };
-        if let Some(dest) = dest {
+        if let Some(dest) = public_move_event_destination(zone) {
             self.events.push(crate::engine::permanent_moved_event(
                 self.state, oid, owner, dest,
             ));
@@ -282,13 +302,87 @@ impl<'a> ResolutionCtx<'a> {
     }
 }
 
+/// Whether a move to `zone` may be announced with the fully-public `PermanentMoved` event, and
+/// with which destination.
+///
+/// `PermanentMoved` carries `card_id` at `FIELD_VISIBILITY_PUBLIC` (`ruled_v1.proto`), so it may
+/// only name a destination whose contents are public *by identity*. Hand and library are hidden
+/// zones (CR 400.2): their contents reach each player through the redacted per-player zone view,
+/// and announcing them here would leak — [`ResolutionCtx::put_on_top_of_library`] is the exact
+/// case. The stack is announced by the stack events, not this one.
+///
+/// Exhaustive on purpose: a new [`Zone`] variant must make this decision rather than inherit
+/// silence from a `_` arm.
+fn public_move_event_destination(zone: Zone) -> Option<rv1::permanent_moved::Destination> {
+    use rv1::permanent_moved::Destination;
+    match zone {
+        Zone::Graveyard => Some(Destination::Graveyard),
+        Zone::Exile => Some(Destination::Exile),
+        // No custom effect reaches the battlefield today, but this is the destination the engine's
+        // own reanimation path already emits, so "public zone ⇒ event" holds without an exception.
+        Zone::Battlefield => Some(Destination::Battlefield),
+        Zone::Hand | Zone::Library | Zone::Stack => None,
+    }
+}
+
+/// The registration table as a map, built once. Keys cannot collide: they are file stems, and
+/// `build.rs` fails the build on a duplicate.
+fn by_key() -> &'static HashMap<&'static str, &'static dyn CardEffect> {
+    static BY_KEY: OnceLock<HashMap<&'static str, &'static dyn CardEffect>> = OnceLock::new();
+    BY_KEY.get_or_init(|| EFFECT_IMPLS.iter().copied().collect())
+}
+
 /// Resolve a card's `custom_effect` key to its [`CardEffect`] implementation. Returns `None`
-/// for an unregistered key; the engine treats that as illegal card data (a startup test
-/// asserts every `custom_effect` in the registry resolves here).
+/// for an unregistered key; the engine treats that as illegal card data (a test asserts every
+/// `custom_effect` in the registry resolves here, and [`keys`] the converse).
 pub fn lookup(key: &str) -> Option<&'static dyn CardEffect> {
-    match key {
-        "brainstorm" => Some(&brainstorm::Brainstorm),
-        "gifts_ungiven" => Some(&gifts_ungiven::GiftsUngiven),
-        _ => None,
+    by_key().get(key).copied()
+}
+
+/// Every registered card id. The reverse direction of [`lookup`]: it lets a test assert that no
+/// impl is orphaned — a file stem no registry card claims is a typo'd filename or a deleted RON,
+/// neither of which the forward check can see.
+pub fn keys() -> impl Iterator<Item = &'static str> {
+    EFFECT_IMPLS.iter().map(|(key, _)| *key)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_registered_key_resolves_and_unknown_keys_do_not() {
+        let mut count = 0;
+        for key in keys() {
+            assert!(
+                lookup(key).is_some(),
+                "registered key `{key}` does not resolve"
+            );
+            count += 1;
+        }
+        assert!(count > 0, "build.rs found no custom effect files");
+        assert!(lookup("no_such_card").is_none());
+    }
+
+    /// The redaction rule asserted directly: a public event may never name a hidden zone
+    /// (CR 400.2), because `PermanentMoved.card_id` is broadcast to every player.
+    #[test]
+    fn only_public_zones_get_a_move_event() {
+        use rv1::permanent_moved::Destination;
+        assert_eq!(
+            public_move_event_destination(Zone::Graveyard),
+            Some(Destination::Graveyard)
+        );
+        assert_eq!(
+            public_move_event_destination(Zone::Exile),
+            Some(Destination::Exile)
+        );
+        assert_eq!(
+            public_move_event_destination(Zone::Battlefield),
+            Some(Destination::Battlefield)
+        );
+        assert_eq!(public_move_event_destination(Zone::Hand), None);
+        assert_eq!(public_move_event_destination(Zone::Library), None);
+        assert_eq!(public_move_event_destination(Zone::Stack), None);
     }
 }
