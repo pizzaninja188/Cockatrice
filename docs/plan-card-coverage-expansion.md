@@ -1,22 +1,32 @@
 # Design Plan — Card-coverage primitive expansion
 
-> **Status (2026-07-23):** P1–P2 shipped; P3–P5 remain TODO. Moved from repo root to `docs/`.
+> **Status (verified 2026-08-05):** P1–P3 shipped. P4's attachment substrate and first
+> Aura/Equipment cards shipped. P5 regeneration and combat requirements shipped; parameterized
+> evasion remains TODO. The calibration re-measure remains the next gate.
 
 ## Status
 
-**P1 (static anthems/lords + one-shot mass pump) and P2 (target-filter widening) are
-implemented.** P3–P5 remain **TODO** (P4 to be promoted to its own plan before any code).
 This plan is the prioritized roadmap for widening the data-tier vocabulary so more real cards
-become implementable without new custom Rust.
+become implementable without new custom Rust. Its current state is:
+
+- **P1–P2: shipped.** Static anthems/lords, mass pump, and the first target-filter widening are
+  implemented.
+- **P3: shipped.** `ReturnFromGraveyard` and `SearchLibrary` landed with private-choice routing;
+  graveyard-to-battlefield reanimation followed as an extension.
+- **P4: partial.** Attachment state, attachment SBAs, basic P/T Auras, and Equipment are shipped.
+  Attachment-based restrictions/keyword grants and broader enchant variants remain.
+- **P5: partial.** Regeneration and "attacks/blocks each combat if able" are shipped.
+  Landwalk/conditional unblockable remains the next engine primitive in this phase.
 
 Shipped in P1: `StaticAbilityDef::AnthemPt` + `AnthemFilter` (controller/subtype/color/
 exclude_self), `AffectedScope::CreaturesMatching` (dynamic, registry-evaluated),
 `SpellEffectKind::PumpAll`. Cards: Glorious Anthem, Crusade, Bad Moon, Glorious Charge,
-Inspired Charge; Captain of the Watch's +1/+1 Soldier anthem (vigilance grant still deferred).
+Inspired Charge; Captain of the Watch's Soldier P/T and vigilance anthem.
 Shipped in P2: `TargetFilter.not_color` + `.attacking_or_blocking`, and an optional
 `spell_filter` on `CounterTargetSpell`/`CopyTargetSpell`. Cards: Doom Blade, Divine Verdict,
 Essence Scatter, Negate; Twincast's instant/sorcery restriction now enforced. Next: re-run the
-calibration triage (the re-measure gate below) before P3 / batch generation.
+calibration triage (the re-measure gate below) before further batch generation or another
+structural primitive investment.
 
 ## Motivation
 
@@ -38,43 +48,31 @@ are modest, high-ROI data+engine changes; P4 is a structural project on its own.
 
 ## Current-state grounding
 
-- **P/T computation** (`engine.rs` `effective_power`/`effective_toughness`, ~2060–2094):
-  base (printed) → CR 613.4 layer 7c `ContinuousEffectKind::PtModify` continuous effects
-  filtered by `ContinuousEffect::affects(oid)` → layer 7d counters. This is the only place
-  P/T modification flows through, so any anthem/lord rides this exact seam.
-- **`AffectedScope`** (`state.rs` ~246): currently `Single(ObjectId) | AllCreatures`, with a
-  reserved `// Future: CreaturesControlledBy(PlayerId), CreaturesWithPower(u32), …`. The
-  anthem/lord work is largely *filling in this enum* and teaching `affects` to evaluate it.
-- **`ContinuousEffect::affects(&self, oid)`** (`state.rs` ~266) takes only an `ObjectId` — it
-  has **no `&GameState`**, so it cannot currently test controller or card type. Filtered
-  scopes require threading characteristics into the check (see P1 design).
-- **`EffectDuration::WhileSourceOnBattlefield`** already exists and is drained at LTB
-  (`engine.rs` ~5236, `move_object_to_zone`); `UntilEndOfTurn` is drained at cleanup
-  (~2099). The duration model for static anthems is therefore already in place — only the
-  *source* of such an effect (a static ability) is missing.
-- **`ContinuousEffectKind`** (`primitives.rs` ~657) is `PtModify { delta_power,
-  delta_toughness }` only, with reserved `// Future: Layer6AddKeyword(Keyword),
-  Layer7bSetPt { power, toughness }`.
-- **Card data model** (`card_def.rs`): a card has `keywords`, `activated_abilities`,
-  `triggered_abilities`, `spell_effect`/`custom_effect` — **no `static_abilities`**. Static
-  abilities (CR 604) are not modeled at all today.
-- **`TargetFilter`** (`primitives.rs` ~231) is exactly `{ kind, not_artifact, tapped }`.
-- **`Zone`** (`state.rs` ~30): `Hand, Battlefield, Graveyard, Exile, …`. The
-  `ReturnTargetCreatureToHand` / `ReturnTargetPermanentToHand` effects are hard-wired
-  battlefield→hand bounce with no source-zone parameter.
-- **`AbilityCost`** (`primitives.rs` ~508): `Tap | Mana | TapAndMana | Sacrifice`.
+- Derived characteristics flow through `GameEngine::characteristics` and explicit CR 613 layer
+  slots in `engine/characteristics.rs`. Layer 6 keyword grants and layer 7c/7d modifiers/counters
+  are active; the same pipeline evaluates filtered continuous-effect scopes.
+- Runtime card characteristics are faces-only. `StaticAbilityDef`, `AffectedScope`, widened
+  `TargetFilter`, and multi-effect activated/triggered abilities live under
+  `tricerules-cards/src/primitives/`.
+- `ReturnFromGraveyard` and `SearchLibrary` are resolved in `engine/resolution/zones.rs`; private
+  library candidates reuse the generic resolution-choice protocol and relay redaction.
+- `GameObject.attached_to`, Aura/Equipment primitives, attachment SBAs, regeneration shields,
+  and attack/block requirement flags are all active engine state. Parameterized landwalk-style
+  evasion is still absent; `Keyword` remains parameterless and `combat::can_block` handles the
+  existing blocking keywords.
 
 ---
 
 ## P1 — Static anthems & lords (filtered continuous P/T)  ⭐ highest leverage
 
+> **Shipped.** The design below is retained as implementation history.
+
 **Cards (the "name two" bar, easily cleared):** Glorious Anthem, Lord of Atlantis, Bad Moon,
-Goblin Chieftain, Captain of the Watch (currently a partial), Crusade. Plus the one-shot
+Goblin Chieftain, Captain of the Watch, Crusade. Plus the one-shot
 sibling below covers Glorious Charge, Overrun, Rally the Peasants.
 
-**Gap.** No way to express "creatures you control [of type X] get +N/+N" as a *static* effect,
-nor "creatures you control get +N/+N until end of turn" as a *mass one-shot*. `PumpTarget` is
-single-target.
+**Historical gap.** The engine could not express static filtered P/T effects or mass one-shot
+pumps; `PumpTarget` was single-target.
 
 **Design.**
 1. **Data:** add `static_abilities: Vec<StaticAbilityDef>` to `CardDefinition`/`CardFace`
@@ -107,33 +105,29 @@ anthem is buffed (scope is dynamic, not a snapshot); anthem source dying drains 
 same SBA pass re-checks lethality (the cascade `3120efd8` built); `exclude_self` lord doesn't
 buff itself; PumpAll expires at cleanup. `conformance.rs`: each new card resolves.
 
-**Out of scope for P1:** keyword-granting anthems ("creatures you control have trample") — that
-is the reserved `ContinuousEffectKind::Layer6AddKeyword`; add with the first card that needs it
-(Goblin Chieftain's haple-grant, Overrun's trample). Power/toughness *setting* (layer 7b),
-characteristic-defining P/T ("*/* equal to…").
+**Later extensions:** `AnthemKeyword` and the layer-6 keyword-grant effects subsequently shipped;
+Captain of the Watch exercises the static form. Power/toughness *setting* (layer 7b) and
+characteristic-defining P/T ("*/* equal to…") remain outside this phase.
 
 ---
 
 ## P2 — Target-filter widening
 
+> **Shipped.** The initial color, combat-state, controller, permanent-type, and spell-type
+> restrictions landed. Add further predicates only when two real cards justify them.
+
 **Cards:** Divine Verdict & Hunt Down ("attacking or blocking"), Essence Scatter & Negate
 ("creature spell" / "noncreature spell"), Doom Blade ("nonblack"), Beast Within
 (any-permanent). High frequency across removal, counters, and combat tricks.
 
-**Gap.** `TargetFilter` is only `{ kind, not_artifact, tapped }`, so any restriction beyond
-those forces a skip (or an unfaithful "loosening" partial that broadens the card).
+**Historical gap.** `TargetFilter` originally carried only `{ kind, not_artifact, tapped }`, so
+other restrictions forced a skip or an unfaithful broadening.
 
-**Design.** Extend `TargetFilter` with additive, AND-combined optional fields, each gated by
-"name two cards":
-- `controller: Option<ControllerConstraint>` — `Yours | Opponents` (Fog Bank tricks, "creature
-  you control").
-- `attacking_or_blocking: bool` (Divine Verdict, Falter-style).
-- `color: Option<Color>` / `not_color: Option<Color>` (Doom Blade, Terror, Pacifism color
-  restrictions) — reuses the existing `Color` enum and the mana-derived color query.
-- `card_type` for permanent filters and a **spell-type filter for `CounterTargetSpell`**
-  (currently unparameterized): `counters: Option<SpellTypeFilter>` reusing the existing
-  `SpellTypeFilter` (Essence Scatter = Creature, Negate = Noncreature). This finally lets
-  Twincast/Counterspell-class cards drop their "restriction unenforced" partial.
+**Shipped design.** `TargetFilter` uses additive, AND-combined fields including
+`attacking_or_blocking`, color inclusion/exclusion, controller restriction, type/subtype
+constraints, and other reusable predicates. `CounterTargetSpell` and `CopyTargetSpell` carry a
+shared optional `SpellTypeFilter`, covering Essence Scatter, Negate, and Twincast without
+card-name branching.
 
 All new fields default to "no constraint", so the entire existing corpus is untouched. The
 engine's generic legality/targeting paths already enumerate target-bearing effects via
@@ -151,12 +145,17 @@ its first two cards.
 
 ## P3 — Zone-sourced return / search effects
 
+> **Shipped.** `ReturnFromGraveyard` supports graveyard-to-hand and graveyard-to-battlefield
+> destinations; `SearchLibrary` uses the private `LibrarySearch` resolution choice. Implemented
+> cards include Disentomb, Raise Dead, Gravedigger, Demonic Tutor, Mystical Tutor, Reanimate, and
+> Zombify.
+
 **Cards:** Disentomb, Raise Dead, Gravedigger (graveyard→hand); Demonic Tutor, Diabolic Tutor
 (library search→hand). Reanimation (graveyard→battlefield) is a natural extension but interacts
 with ETB and is lower priority.
 
-**Gap.** `ReturnTargetCreatureToHand` is hard-wired battlefield→hand bounce; there is no
-graveyard-sourced return and no library search-to-hand.
+**Historical gap.** Battlefield bounce could not express graveyard-sourced return or library
+search-to-hand.
 
 **Design.**
 - Add a `source_zone: Zone` (default `Battlefield`) to the return effects, OR a dedicated
@@ -173,21 +172,28 @@ graveyard-sourced return and no library search-to-hand.
 noncreature for a creature-only filter); search resolves, moves the chosen card, shuffles, and
 the candidate list is redacted from the opponent. `conformance.rs`: new cards resolve.
 
-**Out of scope:** graveyard→battlefield reanimation (ETB interaction — its own mini-phase),
-search with reveal-to-all, fetch-lands (need the land-drop/`ProduceMana` interplay).
+**Still out of scope:** search with reveal-to-all and fetch lands. Reanimation was implemented
+after this phase with controller-aware battlefield entry and ETB handling.
 
 ---
 
 ## P4 — Auras & Equipment (attachment)  — largest count, structural
 
+> **Partially shipped.** `GameObject.attached_to`, Aura/Equipment targeting and resolution,
+> attachment SBAs, relay/client attachment presentation, `AuraPtModify`, and `EquippedBonus` are
+> implemented. Holy Strength, Unholy Strength, Bonesplitter, and Vulshok Morningstar exercise the
+> substrate. Pacifism-class restrictions, attached keyword grants, and broader enchant variants
+> remain and should receive a focused follow-up plan before implementation.
+
 **Cards:** Pacifism, Holy Strength, Oakenform (Auras); Bonesplitter, Short Sword, any Equipment.
 By raw count this is likely the single biggest gap, but it is a **structural engine project**,
 not a primitive widening — sequence it after P1–P3.
 
-**Gap.** No attachment state at all: an object cannot be "attached to" another, and there is no
-SBA for an Aura falling off / an Equipment's controller.
+**Historical gap.** The engine had no attachment state or attachment SBAs. The shipped substrate
+closed that structural gap; the remaining work is expanding what attached continuous effects can
+express.
 
-**Design (sketch — promote to its own plan before building).**
+**Shipped substrate and remaining shape.**
 - `GameObject.attached_to: Option<ObjectId>` and the inverse "attachments of X".
 - Auras: cast targets a permanent (CR 303.4); on resolution the Aura enters the battlefield
   **attached** (not the normal ETB-to-open-battlefield path). SBA (CR 704.5n/m): an Aura
@@ -202,10 +208,9 @@ SBA for an Aura falling off / an Equipment's controller.
   control (CR 301.5); detaches when the creature leaves. Effects are the same attached
   continuous effects as Auras.
 
-**Tests.** Aura attaches and buffs/restricts the host; host leaving sends the Aura to the
-graveyard via SBA; Equipment re-attaches between creatures and survives the first creature
-dying; illegal aura target rejected. Full scenario + conformance coverage (this is a structural
-change → same bar as engine work).
+**Tests.** Existing scenario coverage pins Aura attachment/P/T modification, illegal Aura targets,
+host-leaves attachment SBAs, and Equipment reattachment/survival. A future restriction or keyword
+grant must add its own happy and illegal cases plus conformance coverage.
 
 **Out of scope (initially):** fortifications, Auras with triggered abilities, "enchant
 player/land", reconfigure, modular.
@@ -214,28 +219,31 @@ player/land", reconfigure, modular.
 
 ## P5 — Regenerate + minor drawback / evasion keywords
 
+> **Partially shipped.** Regeneration shields and their destroy/SBA interactions are implemented
+> with Cudgel Troll and Drudge Skeletons. Attack/block requirements are engine-authoritative;
+> Juggernaut, Crazed Goblin, and Goblin Brigand exercise must-attack. Parameterized landwalk or
+> conditional unblockable remains TODO.
+
 **Cards:** Cudgel Troll, Drudge Skeletons (regenerate); Juggernaut, Berserkers of Blood Ridge
 ("attacks each combat if able"); landwalk creatures; "can't be blocked except by …".
 
 **Gap.** A scattering of low-frequency keyword/ability mechanics that individually block one
 card each but collectively tax older sets.
 
-**Design.** Each is small and independent — implement opportunistically, two cards minimum each:
-- **Regenerate** (CR 701.15): a regeneration *shield* state on a permanent set by an ability
-  (`AbilityCost` + new `SpellEffectKind::RegenerateSelf`/`RegenerateTarget`); the destroy SBA
-  consumes a shield instead of destroying (tap, remove from combat, heal). Touches the destroy
-  path — scenario coverage required.
-- **"Attacks/blocks each combat if able"** — a creature flag consulted in the
-  declare-attackers/blockers legality (reject a combat that omits a must-attack creature able
-  to attack). Drawback keyword → a new `Keyword` variant or a `combat_requirement` field.
-- **Landwalk / conditional unblockable** — parameterized evasion (CR 702.x). These need
+**Design status.** The items are independent and require two real cards minimum each:
+- **Regenerate: shipped.** `SpellEffectKind::Regenerate`, regeneration-shield state, destroy
+  replacement, tap/remove-from-combat/heal behavior, cleanup expiry, and "can't be regenerated"
+  bypasses are covered by focused scenarios.
+- **"Attacks/blocks each combat if able": shipped.** Face-level requirement flags feed combat
+  declaration legality and the authoritative required attacker/blocker sets.
+- **Landwalk / conditional unblockable: TODO.** These need
   characteristic matching against the defending player's permanents; model as a small
   `Evasion` enum on the creature, consulted in block legality. The card-model doc currently
   defers parameterized keywords to custom Rust — revisit: a bounded `Evasion` enum is data-tier.
 
-**Tests.** Regenerate: a regenerated creature survives lethal damage once per shield and dies on
-the second; must-attack creature forces a legal attack; landwalk creature is unblockable vs the
-matching land type. `conformance.rs`: new cards resolve.
+**Remaining tests.** Landwalk/conditional evasion must prove both sides of the condition, illegal
+block rejection, and declare-blockers auto-skip when no legal blocker exists. Add conformance
+coverage for the first cards.
 
 **Out of scope:** protection (CR 702.16 — multi-axis: damage/enchant/block/target, its own
 plan), banding, phasing.
@@ -244,15 +252,14 @@ plan), banding, phasing.
 
 ## Sequencing & re-measure gate
 
-1. **P1 + P2** land first (modest data+engine changes, highest ROI).
-2. **Re-run the calibration triage** (150–200 unimplemented modern-core cards, bucket skips by
-   mechanic) and recompute the hit rate. If P1+P2 move it from ~14% into the worthwhile range,
-   greenlight batch generation (per the existing low-risk batch agent prompt) for the
-   P1/P2-unblocked band.
-3. **P3** next if zone-sourced effects show up as a large remaining bucket.
-4. **P4 (attachment)** is promoted to its own design plan before any code; it is the structural
-   investment, and P1's continuous-effect plumbing is its prerequisite.
-5. **P5** opportunistically, never as a batch.
+1. **Re-run the calibration triage** (150–200 unimplemented modern-core cards), bucket skips by
+   mechanic, and recompute the full/partial hit rate against the now-shipped P1–P5 substrate.
+2. If the hit rate is worthwhile, generate or author the newly unblocked data-tier band and run
+   the registry/conformance/checklist gates.
+3. Implement P5 landwalk/conditional evasion opportunistically when the sample supports it; keep
+   the representation player-set-generic and require two real cards.
+4. Promote the remaining P4 restriction/keyword-grant work to a focused plan before expanding
+   attachments further.
 
 ## MTG applicability
 
@@ -267,6 +274,7 @@ carries happy + illegal scenario coverage, same standard as existing engine chan
 
 ## Related plans
 
-[[plan-copy-effects]] (permanent copy also rides the continuous-effect/layer seam P1 widens),
-[[plan-tokens]] (anthem/lord scopes apply to tokens; Captain of the Watch makes Soldier tokens),
-[[plan-counters]] (layer 7d, already the model for P1's layer 7c filtered scopes).
+- [Copy effects](plan-copy-effects.md): permanent copy uses the same characteristics/layer seam.
+- Tokens and counters are shipped engine substrates rather than remaining standalone plans;
+  anthem/lord scopes already apply to token creatures, and counters occupy layer 7d beneath the
+  same characteristics pipeline.

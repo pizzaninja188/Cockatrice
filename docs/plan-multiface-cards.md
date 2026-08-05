@@ -1,6 +1,9 @@
 # Design Plan — Multi-face cards (remaining phases)
 
-> **Status (2026-07-23):** §1–§2 (battlefield face state, MDFC) shipped; §3–§5 tracked as issues #33–#35 in [issues.md](issues.md). Moved from repo root to `docs/`.
+> **Status (verified 2026-08-05):** §§1–2 (battlefield face state and MDFC) shipped. §3
+> Adventure and §5 generator ingestion remain TODO. §4 Transform/Flip has engine/proto scaffolding
+> but still lacks card-driven effects/triggers and C++ display consumption. Remaining phases are
+> tracked as issues #33–#35 in [issues.md](issues.md).
 
 ## Status
 
@@ -20,34 +23,40 @@ The **faces substrate** and **split** layout are implemented (commit `c97582b4`,
 - Relay indexes face names; Cockatrice shows a face picker for `"A // B"` cards and sends `face_index`.
 - **Split (CR 709)**: Fire // Ice, each half independently castable (`data/multiface/fire_ice.ron`).
 
-## Remaining design
+## Current substrate and remaining design
 
 Everything below builds on the shipped `faces` model and the `face_index` plumbing.
 
 ### 1. The shared prerequisite: in-place face state on permanents
 
+> **Shipped.** `GameObject.face_up_index`, face-aware characteristics/abilities, battlefield view
+> state, and active-face relay/client presentation landed with the MDFC work.
+
 MDFC permanent faces, transform, and flip all need a permanent to *be* a specific face on the
-battlefield, not just on the stack. Add `face_up_index: usize` to `GameObject` (0 = front) and
-route the battlefield characteristic queries through it:
+battlefield, not just on the stack. The shipped implementation adds `face_up_index: usize` to
+`GameObject` (0 = front) and routes battlefield characteristic queries through it:
 
-- `GameObject::is_creature` / `has_keyword` and the P/T base read
-  `registry.get(card_id).face(face_up_index)` instead of the flat fields.
-- ETB sets `face_up_index` to the cast/entering face; a `move_object_to_zone` to the battlefield
-  carries it from the resolving `StackItem.face_index`.
-- Proto: `BattlefieldObjectMap` / `GameObject` and `StackPushed` carry `face_up_index` so the relay
-  renders the active face image (Oracle `cards.xml` has both face images under the `//` entry).
+- `GameEngine::characteristics`, continuous/static ability reads, legal actions, and zone views
+  resolve `definition.face(object.face_up_index)`.
+- Resolution copies `StackItem.face_index` into the entering permanent's `face_up_index`.
+- Proto `BattlefieldObject.face_up_index` carries the active face through the relay/client view;
+  Oracle `cards.xml` supplies the display faces but never rules decisions.
 
-This is the pervasive bit the split layout did **not** need (split halves never become permanents).
-Do it first; MDFC/transform/flip are small once it exists.
+This was the pervasive bit the split layout did **not** need (split halves never become
+permanents). It is now the common substrate for the remaining phases.
 
 ### 2. MDFC — modal double-faced (CR 712)
 
-With §1 in place: either face castable from hand (already true for the cast path); a permanent face
-enters as that face (`face_up_index = face_index`). First cards: a pathway land (land // land) or a
-simple creature // spell MDFC. The `play_land` path still reads `def.is_land` (flat) — make it
-face-aware for land faces.
+> **Shipped.** Either face can be cast or played from hand where its type permits, and a permanent
+> enters and renders with the selected face. Pathway lands have focused scenario/client coverage.
+
+With §1 in place, the cast and land-play paths are face-aware and carry `face_index` into
+`face_up_index` when the selected face becomes a permanent.
 
 ### 3. Adventure (CR 715)
+
+> **TODO — issue #33.** The card model recognizes the `Adventure` layout, but no exile permission
+> or cast-from-exile gameplay path exists.
 
 Most stateful layout. Casting the adventure (spell) half puts the card into **exile on resolution
 with permission** to later cast the creature half from exile:
@@ -59,22 +68,33 @@ with permission** to later cast the creature half from exile:
 
 ### 4. TDFC / Flip (CR 710 / 712.8) — lowest priority
 
-A `TransformPermanent` effect/keyword flips `face_up_index`; characteristic queries already read the
-active face (§1). **CR 712.8: transforming does not trigger ETB.** Flip (710) is the same mechanism.
-Werewolf day/night triggers and the transform action are the engine work here.
+> **Partially scaffolded — issue #34.** The engine validates `TransformPermanent` for only
+> `Transform`/`Flip` layouts, changes `face_up_index` in place, rejects MDFCs, and emits the public
+> `FaceChanged` event. No card effect/trigger invokes this command during normal play, werewolf
+> day/night is absent, and the C++ ruled path does not yet consume `FaceChanged` to rename/repaint
+> the physical card.
+
+A card-driven `TransformPermanent` effect/trigger must reuse the scaffold and preserve in-place
+identity. Characteristic queries already read the active face (§1). **CR 712.8: transforming does
+not trigger ETB.** Flip (710) uses the same mechanism. Werewolf day/night triggers and C++ display
+updates are the remaining end-to-end work.
 
 ### 5. Phase-6 generator
+
+> **TODO — issue #35.** `gen-cards` still rejects every Scryfall object whose
+> `layout != "normal"`.
 
 Update the generator filter (currently `layout == "normal"`) to ingest qualifying multi-face
 vanilla/keyword faces, authoring a `faces` vec from Scryfall's `card_faces` array.
 
 ## Tests
 
-- `scenario.rs`: cast each face of an MDFC; an MDFC permanent face enters and queries as that face;
-  adventure half resolves to exile then the creature is cast from exile; (phase 4) a transform swaps
-  P/T/types in place **without** an ETB trigger.
-- `conformance.rs`: already sweeps every face; extend the harness to exercise battlefield face state
-  once §1 lands.
+- **Existing:** focused scenarios cast/play MDFC faces, verify the selected battlefield face and
+  active-face abilities, and reject transforming a Modal DFC. Conformance sweeps every authored
+  face.
+- **Remaining:** Adventure must resolve to exile and then cast its creature face exactly once;
+  Transform/Flip must swap P/T/types/keywords in place without an ETB trigger; generator tests must
+  cover qualifying and rejected multi-face records before the conformance sweep consumes output.
 
 ## Out of scope
 

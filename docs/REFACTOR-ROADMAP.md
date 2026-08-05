@@ -58,6 +58,10 @@ These apply to all work from now on, refactor or not.
 
 ### Step 1 — Hygiene (½ day)
 
+> **Done 2026-07-23.** The committed build log was removed, scenario imports were normalized,
+> stale root notes moved under `docs/`, and upstream-owned trees were left untouched (commit
+> `a53b3ca5`).
+
 - Delete `tricerules/build_log3.txt` (committed build log).
 - Fix the two scenario test files importing `super::helpers` instead of `crate::helpers`
   (`equipment.rs`, `regenerate.rs`).
@@ -708,10 +712,10 @@ scenario suite), so medium risk despite the width.
 
 Unscheduled by design. Each entry fires on its trigger, not before.
 
-- **Data-dir moves** — *trigger: anytime, trivial.* Move the ~119 hand-authored flat
-  `data/*.ron` into `data/authored/<letter>/` mirroring `generated/` (build.rs walks
-  recursively — no code change; first confirm `gen-cards` skip-existing matches by id/name,
-  not path). Normalize the few dash-named files (`bad-moon.ron`, …). Two-letter sharding of
+- **Data-dir moves** — *trigger: anytime, trivial.* Move the 138 hand-authored flat RON files
+  present as of 2026-08-05 (`data/*.ron`) into `data/authored/<letter>/` mirroring `generated/`
+  (`build.rs` walks recursively — no code change; first confirm `gen-cards` skip-existing matches
+  by id/name, not path). Normalize the few dash-named files (`bad-moon.ron`, …). Two-letter sharding of
   `generated/<letter>/` only when a single dir exceeds ~2,000 files (pure `git mv`).
 - **Binary card-data embed** — *trigger: registry load > ~1s or visible CI wall-time
   regression (expected ~5–10k cards).* The `include_str!`-every-RON const array is fine until
