@@ -1050,7 +1050,7 @@ pub(crate) fn anthem_engine(seed: u64, p0_card: &str) -> GameEngine {
 /// `AbilityInfo.activatable` for every activated ability of `oid`, read out of the zone-view
 /// snapshot the engine broadcasts. This is exactly what the client greys its activation menu from,
 /// so asserting on it is asserting on what the UI will actually offer.
-pub(crate) fn zone_view_ability_flags(e: &GameEngine, player: usize, oid: u32) -> Vec<bool> {
+pub(crate) fn zone_view_ability_flags(e: &mut GameEngine, player: usize, oid: u32) -> Vec<bool> {
     e.initial_response_batch()
         .events
         .iter()

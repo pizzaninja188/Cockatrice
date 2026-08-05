@@ -51,6 +51,9 @@ struct RuledPlayerBinding
     // "unchanged" view arriving before that means the physical zones were never seeded and would
     // now stay stale silently. applyRuledEngineZoneView warns instead.
     bool privateZonesSynced = false;
+    // Whether at least one complete battlefield replacement has been applied successfully.
+    // `ZoneViewSync::battlefields_unchanged` is meaningful only after this seed exists.
+    bool battlefieldSynced = false;
 
     bool isEngineOidSummoningSick(quint32 engineOid) const
     {
@@ -95,7 +98,8 @@ struct RuledPlayerBinding
                                                  const ruled::v1::RuledPerPlayerView &v,
                                                  GameEventStorage *tapGes = nullptr,
                                                  bool allowUntapReset = true,
-                                                 const QSet<quint32> *engineUntappedOids = nullptr);
+                                                 const QSet<quint32> *engineUntappedOids = nullptr,
+                                                 bool battlefieldsUnchanged = false);
     // CR 111: mint a physical token Server_Card on the player's table from an engine
     // TokenCreated identity (tokens have no deck card / Oracle entry) and bind it to `engineOid`
     // so the following zone-view sync matches the engine battlefield slot to it. The token is

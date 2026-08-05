@@ -739,14 +739,14 @@ fn tap_ability_activatability_tracks_the_tap_cost() {
     let tome = battlefield_object_for_card(&e, 0, "jayemdae_tome");
 
     assert_eq!(
-        zone_view_ability_flags(&e, 0, tome),
+        zone_view_ability_flags(&mut e, 0, tome),
         vec![true],
         "a noncreature artifact's tap ability is available the turn it resolves (CR 302.6)"
     );
 
     e.state.objects.get_mut(&tome).expect("tome").tapped = true;
     assert_eq!(
-        zone_view_ability_flags(&e, 0, tome),
+        zone_view_ability_flags(&mut e, 0, tome),
         vec![false],
         "an already-tapped permanent cannot pay a tap cost"
     );

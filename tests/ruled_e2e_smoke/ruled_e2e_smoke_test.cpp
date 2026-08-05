@@ -252,6 +252,7 @@ public:
     bool sentBottom = false;
     bool sawDevConjuredPermanent = false;
     bool sawDevMana = false;
+    bool sawBattlefieldOmission = false;
     quint32 boltOid = 0;
     quint32 borosCharmOid = 0;
     quint32 brainstormOid = 0;
@@ -562,19 +563,30 @@ public:
                             .arg(rcr.candidate_object_ids_size()));
                 }
             } else if (ev.has_zone_view()) {
+                if (ev.zone_view().battlefields_unchanged()) {
+                    sawBattlefieldOmission = true;
+                    for (const auto &pp : ev.zone_view().per_player()) {
+                        if (pp.battlefield_objects_size() != 0) {
+                            ADD_FAILURE() << "battlefield omission carried replacement objects";
+                        }
+                    }
+                }
                 for (const ruled::v1::RuledPerPlayerView &pp : ev.zone_view().per_player()) {
                     auto &bf = battlefieldByPlayer[pp.player_id()];
-                    bf.clear();
-                    for (const auto &battlefieldObject : pp.battlefield_objects()) {
-                        Permanent perm;
-                        perm.cardId = QString::fromStdString(battlefieldObject.card_id());
-                        perm.oid = battlefieldObject.object_id();
-                        perm.tapped = battlefieldObject.tapped();
-                        perm.creature = battlefieldObject.is_creature();
-                        perm.sick = battlefieldObject.summoning_sick();
-                        perm.haste = std::find(battlefieldObject.keywords().begin(), battlefieldObject.keywords().end(),
-                                               "Haste") != battlefieldObject.keywords().end();
-                        bf.push_back(perm);
+                    if (!ev.zone_view().battlefields_unchanged()) {
+                        bf.clear();
+                        for (const auto &battlefieldObject : pp.battlefield_objects()) {
+                            Permanent perm;
+                            perm.cardId = QString::fromStdString(battlefieldObject.card_id());
+                            perm.oid = battlefieldObject.object_id();
+                            perm.tapped = battlefieldObject.tapped();
+                            perm.creature = battlefieldObject.is_creature();
+                            perm.sick = battlefieldObject.summoning_sick();
+                            perm.haste = std::find(battlefieldObject.keywords().begin(),
+                                                   battlefieldObject.keywords().end(),
+                                                   "Haste") != battlefieldObject.keywords().end();
+                            bf.push_back(perm);
+                        }
                     }
                     if (oppId < 0 && myId >= 0 && pp.player_id() != myId) {
                         oppId = pp.player_id();
@@ -1363,7 +1375,8 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
 
     // --- Drive the scripted game until every milestone is observed ---
     const auto milestonesDone = [&] {
-        return p2.sentBottom && p1.sawBoltPushWithTarget && p1.sawBoltLifeLoss &&
+        return p2.sentBottom && p1.sawBattlefieldOmission && p2.sawBattlefieldOmission &&
+               p1.sawBoltPushWithTarget && p1.sawBoltLifeLoss &&
                p1.sawBorosCharmPushWithMode && p1.sawBorosCharmLifeLoss &&
                p1.sawAttackersDeclared && p1.sawCombatLifeLoss && p2.sawBrainstormChoice &&
                p2.submittedBrainstormChoice && p2.sawBrainstormResolved && p2.sentCleanupDiscard &&
@@ -1394,6 +1407,8 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
         << "tricerules-server never logged a session with the forced seed " << kForcedSeed;
     EXPECT_TRUE(p2.didMulligan) << "hoarder never took its scripted mulligan";
     EXPECT_TRUE(p2.sawBottomAction && p2.sentBottom) << "London mulligan bottoming never happened";
+    EXPECT_TRUE(p1.sawBattlefieldOmission && p2.sawBattlefieldOmission)
+        << "no unchanged battlefield snapshot was omitted end to end";
     EXPECT_TRUE(p1.sawBoltPushWithTarget) << "no targeted Lightning Bolt cast was observed on the stack";
     EXPECT_TRUE(p1.sawBoltLifeLoss) << "Lightning Bolt never dealt its 3 damage";
     EXPECT_TRUE(p1.sawBorosCharmPushWithMode) << "Boros Charm chosen-mode metadata was not observed on the stack";

@@ -116,7 +116,8 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                                              const ruled::v1::RuledPerPlayerView &v,
                                              GameEventStorage *tapGes,
                                              bool allowUntapReset,
-                                             const QSet<quint32> *engineUntappedOids)
+                                             const QSet<quint32> *engineUntappedOids,
+                                             bool battlefieldsUnchanged)
 {
     RuledZoneSyncResult result;
     const int playerId = player->getPlayerId();
@@ -242,10 +243,20 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
         privateZonesSynced = true;
     }
 
-    // Build an engine_oid -> Server_Card id map and (when permitted) sync tap state.
-    // The map is rebuilt whenever the engine reports a battlefield, even if the caller
-    // doesn't ask for tap propagation, so combat translation in the driver can rely on it.
-    if (v.battlefield_objects_size() == tableZone->getCards().size()) {
+    // A global battlefield omission means the complete prior replacement remains authoritative.
+    // Keep every identity/keyword/creature map and every physical visual untouched. Empty lists
+    // without this flag still mean an explicit replacement with an empty battlefield.
+    if (battlefieldsUnchanged) {
+        if (!battlefieldSynced) {
+            qWarning() << "applyRuledEngineZoneView: player" << playerId
+                       << "reports unchanged battlefield before any full sync — identity and visuals were never seeded";
+        }
+    } else {
+        battlefieldSynced = false;
+        // Build an engine_oid -> Server_Card id map and (when permitted) sync tap state.
+        // The map is rebuilt whenever the engine reports a battlefield, even if the caller
+        // doesn't ask for tap propagation, so combat translation in the driver can rely on it.
+        if (v.battlefield_objects_size() == tableZone->getCards().size()) {
         QList<Server_Card *> tablePool;
         tablePool.reserve(tableZone->getCards().size());
         for (Server_Card *c : tableZone->getCards()) {
@@ -469,7 +480,9 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                     }
                 }
             }
+            battlefieldSynced = true;
         }
+    }
     }
 
     // Hand OIDs (discard, bounce-to-hand, etc.): register after battlefield rebuild so

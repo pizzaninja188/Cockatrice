@@ -995,7 +995,8 @@ void RuledGameDriver::applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBat
                 const RuledPlayerBinding::RuledZoneSyncResult sync =
                     playerBinding(p.player_id())
                         .applyRuledEngineZoneView(static_cast<Server_Player *>(ab), p, &tapSyncGes,
-                                                  perPlayerAllowUntap, &engineUntappedOids);
+                                                  perPlayerAllowUntap, &engineUntappedOids,
+                                                  e.zone_view().battlefields_unchanged());
                 result.handOrLibraryChanged = result.handOrLibraryChanged || sync.handOrLibraryChanged;
                 result.battlefieldOrderChanged = result.battlefieldOrderChanged || sync.battlefieldOrderChanged;
                 result.tapStateEventsQueued = result.tapStateEventsQueued || sync.tapStateChanged;
@@ -1914,7 +1915,7 @@ void RuledGameDriver::applyRuledStartupBatch(const ruled::v1::IpcResponse &resp,
                 // engine never marks it unchanged (its per-session cache starts empty). Seeing
                 // the flag here means a version-skewed sidecar; treat it exactly like a count
                 // mismatch rather than starting a ruled game on unseeded zones.
-                if (p.private_zones_unchanged() || libCount != needLib) {
+                if (z.battlefields_unchanged() || p.private_zones_unchanged() || libCount != needLib) {
                     qWarning() << "Ruled zone sync: player" << p.player_id() << "expected" << needLib
                                << "library card ids, library_card_ids has" << libCount
                                << "entries — is tricerules-server up to date? "
@@ -1928,7 +1929,9 @@ void RuledGameDriver::applyRuledStartupBatch(const ruled::v1::IpcResponse &resp,
             }
             for (const auto &p : e.zone_view().per_player()) {
                 if (Server_AbstractPlayer *ab = game->getPlayer(p.player_id())) {
-                    playerBinding(p.player_id()).applyRuledEngineZoneView(static_cast<Server_Player *>(ab), p);
+                    playerBinding(p.player_id())
+                        .applyRuledEngineZoneView(static_cast<Server_Player *>(ab), p, nullptr, true, nullptr,
+                                                  e.zone_view().battlefields_unchanged());
                 }
             }
             startupZoneViewApplied = true;

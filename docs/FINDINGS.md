@@ -1,10 +1,34 @@
 # Codebase Audit Findings
 
-> **Status (2026-08-02):** every pending finding below was re-verified against the current tree on
-> 2026-08-02. Findings that had since been fixed were deleted (see *Resolved since the audit*);
-> line references and rationale were refreshed for the ones that survived.
+> **Status (2026-08-05):** every audit finding has now been resolved. Findings that had already
+> been fixed when the audit was re-verified remain under *Resolved since the audit*; implemented
+> audit work is recorded under *Applied Fixes*.
 
 ## Applied Fixes
+
+### 2026-08-05
+
+- **Unchanged public battlefields were recomputed and retransmitted on every command**
+  (`ruled_v1.proto`, `engine/events.rs`, ruled relay/client consumers): `ZoneViewSync` now carries
+  the public, global `battlefields_unchanged` marker. When it is set, every
+  `battlefield_objects` list is empty and Servatrice, the Qt view model, and the E2E receiver keep
+  their complete prior battlefield; an unmarked empty list remains an explicit empty-board
+  replacement. The first session view is always full, and Servatrice rejects an omitted startup
+  view rather than beginning with unseeded identity maps.
+  The engine decides before constructing any `BattlefieldObject`: an engine-local snapshot covers
+  controller-ordered membership, every raw object field used by the public view, continuous
+  effects, combat participants, active player/phase, and stack emptiness. Stable batches therefore
+  skip characteristic layers, ability formatting/activatability, keyword scans, protobuf
+  population, relay reconciliation, and client cache replacement. The cached first-strike prompt
+  uses the same invalidation inputs, so an omitted combat view performs no hidden per-permanent
+  characteristics pass. Any relevant change resends all players' battlefields in full; keeping the
+  contract global avoids per-player ownership bookkeeping in the client's ObjectId maps.
+  Red/green coverage first proved a priority-only batch still serialized the battlefield, then
+  added a full-view receiver mirror across command/turn walks, relay map/keyword/tap retention,
+  client P/T/damage/ability retention plus explicit-empty clearing, public-field redaction, and a
+  real sidecar + Servatrice E2E assertion that omissions occur without breaking later casting or
+  combat. The full Windows Ninja build, all 18 C++ tests, full `cargo test` (408 scenarios plus
+  unit/integration/doc tests), Clippy with warnings denied, and `cargo fmt --check` exit 0.
 
 ### 2026-08-04
 
@@ -264,14 +288,4 @@
 
 ## Pending Findings
 
-### Reusability / Scalability
-
-- **`ev_zone_view_sync` still re-sends every player's full battlefield on every `apply_command`
-  return** (`tricerules-core/src/engine/events.rs`): the concealed half of this finding is fixed
-  (see *Applied Fixes*, 2026-08-03) — hand and library are now omitted while unchanged. The public
-  half remains: each view recomputes `battlefield_objects` from scratch per permanent
-  (`characteristics()` layer computation, a per-ability `ability_activatable` check, a 16-keyword
-  scan) for every player, every batch. Unlike the concealed zones this one has real client
-  consumers that treat a view as a full replacement (`RuledEventDispatcher::applyZoneView`, the
-  driver's oid-map rebuild, the e2e fake client), so an omission here is a genuine protocol change
-  rather than a server-side-only one, and it needs its own design.
+None.

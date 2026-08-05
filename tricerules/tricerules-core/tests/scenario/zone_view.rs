@@ -13,7 +13,7 @@
 use crate::helpers::*;
 use tricerules_proto::ruled::v1::dev_command::Dev;
 use tricerules_proto::ruled::v1::{
-    DevCommand, DevPutCardInZone, DevZone, RuledPerPlayerView, ZoneViewSync,
+    BattlefieldObject, DevCommand, DevPutCardInZone, DevZone, RuledPerPlayerView, ZoneViewSync,
 };
 
 /// Every zone view in a batch, in order. A batch can carry two (the untap-step roll emits one
@@ -42,6 +42,14 @@ fn view_for(view: &ZoneViewSync, player: i32) -> &RuledPerPlayerView {
 
 /// The contract in one assertion: an omission carries nothing, and a full view carries everything.
 fn assert_omission_is_total(view: &ZoneViewSync) {
+    if view.battlefields_unchanged {
+        assert!(
+            view.per_player
+                .iter()
+                .all(|player| player.battlefield_objects.is_empty()),
+            "battlefields marked unchanged but replacement objects were still shipped"
+        );
+    }
     for p in &view.per_player {
         if p.private_zones_unchanged {
             assert!(
@@ -77,6 +85,7 @@ fn library_card_ids(e: &GameEngine, player: usize) -> Vec<String> {
 struct ZoneMirror {
     hands: Vec<Vec<String>>,
     libraries: Vec<Vec<String>>,
+    battlefields: Vec<Vec<BattlefieldObject>>,
 }
 
 impl ZoneMirror {
@@ -85,13 +94,16 @@ impl ZoneMirror {
         if self.hands.len() < view.per_player.len() {
             self.hands.resize(view.per_player.len(), Vec::new());
             self.libraries.resize(view.per_player.len(), Vec::new());
+            self.battlefields.resize(view.per_player.len(), Vec::new());
         }
         for (i, p) in view.per_player.iter().enumerate() {
-            if p.private_zones_unchanged {
-                continue;
+            if !p.private_zones_unchanged {
+                self.hands[i] = p.hand_cards.iter().map(|c| c.card_id.clone()).collect();
+                self.libraries[i] = p.library_card_ids.clone();
             }
-            self.hands[i] = p.hand_cards.iter().map(|c| c.card_id.clone()).collect();
-            self.libraries[i] = p.library_card_ids.clone();
+            if !view.battlefields_unchanged {
+                self.battlefields[i] = p.battlefield_objects.clone();
+            }
         }
     }
 
@@ -101,7 +113,7 @@ impl ZoneMirror {
         }
     }
 
-    fn assert_matches(&self, e: &GameEngine, context: &str) {
+    fn assert_matches(&self, e: &mut GameEngine, context: &str) {
         for player in 0..e.state.players.len() {
             assert_eq!(
                 self.hands[player],
@@ -112,6 +124,15 @@ impl ZoneMirror {
                 self.libraries[player],
                 library_card_ids(e, player),
                 "{context}: mirrored library for P{player} drifted from the engine"
+            );
+        }
+        let full = e.initial_response_batch();
+        let expected = last_zone_view(&full);
+        assert!(!expected.battlefields_unchanged);
+        for (player, expected_player) in expected.per_player.iter().enumerate() {
+            assert_eq!(
+                self.battlefields[player], expected_player.battlefield_objects,
+                "{context}: mirrored battlefield for P{player} drifted from a fresh full view"
             );
         }
     }
@@ -128,7 +149,7 @@ fn land_deck() -> Option<Vec<Vec<String>>> {
 /// omission — the cache starts empty precisely to guarantee that.
 #[test]
 fn first_zone_view_of_a_session_is_full() {
-    let e = GameEngine::new(99, &[0, 1], 20, None, true).expect("new");
+    let mut e = GameEngine::new(99, &[0, 1], 20, None, true).expect("new");
     let initial = e.initial_response_batch();
     let view = last_zone_view(&initial);
     for player in [0, 1] {
@@ -159,6 +180,16 @@ fn priority_pass_omits_both_players_concealed_zones() {
             "P{player} changed neither hand nor library, so the view must omit them"
         );
     }
+    assert!(
+        view.battlefields_unchanged,
+        "a priority handoff with no battlefield-visible change must omit every battlefield"
+    );
+    assert!(
+        view.per_player
+            .iter()
+            .all(|player| player.battlefield_objects.is_empty()),
+        "a battlefield omission must carry no replacement objects"
+    );
 }
 
 /// The decision is per player, not per batch: playing a land empties one hand slot and leaves the
@@ -312,7 +343,7 @@ fn a_contract_following_receiver_never_drifts_from_the_engine() {
     let mut e = GameEngine::new(7, &[0, 1], 20, decks, true).expect("new");
     let mut mirror = ZoneMirror::default();
     mirror.apply(last_zone_view(&e.initial_response_batch()));
-    mirror.assert_matches(&e, "initial batch");
+    mirror.assert_matches(&mut e, "initial batch");
 
     // Every command from here on is applied through the mirror: a batch the mirror never sees
     // would let it drift for reasons that have nothing to do with the omission contract.
@@ -322,14 +353,14 @@ fn a_contract_following_receiver_never_drifts_from_the_engine() {
         mirror.apply_batch(&b);
     }
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main1);
-    mirror.assert_matches(&e, "at main1");
+    mirror.assert_matches(&mut e, "at main1");
 
     let idx = hand_index_for_card(&e, 0, "mountain");
     let b = e
         .apply_command(0, &play_land(idx))
         .expect("p0 plays a mountain");
     mirror.apply_batch(&b);
-    mirror.assert_matches(&e, "after the land drop");
+    mirror.assert_matches(&mut e, "after the land drop");
 
     // Several turns of passing, which walks draws, turn rolls and the CR 514.1 cleanup discard —
     // the three things that actually move cards into and out of the concealed zones.
@@ -348,7 +379,7 @@ fn a_contract_following_receiver_never_drifts_from_the_engine() {
             .unwrap_or_else(|| e.state.priority_player_id());
         let b = e.apply_command(actor, &command).expect("command");
         mirror.apply_batch(&b);
-        mirror.assert_matches(&e, &format!("after command {step}"));
+        mirror.assert_matches(&mut e, &format!("after command {step}"));
         drew |= e.state.turn > 1;
     }
     assert!(

@@ -1290,7 +1290,7 @@ fn published_zone_targets_follow_apnap_and_zone_order() {
         .expect("Reanimate in hand") as u32;
 
     let assert_targets =
-        |engine: &GameEngine, expected_battlefield: Vec<u32>, expected_graveyard: Vec<u32>| {
+        |engine: &mut GameEngine, expected_battlefield: Vec<u32>, expected_graveyard: Vec<u32>| {
             let batch = engine.initial_response_batch();
             let legal = batch.legal_by_player.get(&0).expect("legal actions for P0");
             assert_eq!(
@@ -1306,14 +1306,14 @@ fn published_zone_targets_follow_apnap_and_zone_order() {
         };
 
     assert_targets(
-        &e,
+        &mut e,
         p0_battlefield.into_iter().chain(p1_battlefield).collect(),
         p0_graveyard.into_iter().chain(p1_graveyard).collect(),
     );
 
     e.state.active_player_idx = 1;
     assert_targets(
-        &e,
+        &mut e,
         p1_battlefield.into_iter().chain(p0_battlefield).collect(),
         p1_graveyard.into_iter().chain(p0_graveyard).collect(),
     );

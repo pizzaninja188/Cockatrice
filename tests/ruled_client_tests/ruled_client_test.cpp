@@ -793,8 +793,7 @@ TEST_F(RuledClientTest, GraveyardStaysRequestedWhileTheSpellIsOnTheStack)
     auto *sr = resolved.add_events()->mutable_stack_resolved();
     sr->set_object_id(800);
     apply(resolved);
-    EXPECT_TRUE(spy.last().at(0).value<QList<int>>().isEmpty())
-        << "once the spell leaves the stack the view may close";
+    EXPECT_TRUE(spy.last().at(0).value<QList<int>>().isEmpty()) << "once the spell leaves the stack the view may close";
 }
 
 // A target chosen in a graveyard is latched as such the moment it is put on the stack, without
@@ -1209,6 +1208,44 @@ TEST_F(RuledClientTest, ZoneViewParsesDamageAndPipeDelimitedAbilities)
     // The flag only re-announces on a change.
     apply(batch);
     EXPECT_EQ(fsSpy.count(), 1);
+}
+
+TEST_F(RuledClientTest, BattlefieldOmissionRetainsStateWhileOtherZoneViewFieldsUpdate)
+{
+    ruled::v1::RuledEventBatch full;
+    auto *fullView = full.add_events()->mutable_zone_view()->add_per_player();
+    fullView->set_player_id(kLocalPlayer);
+    auto *object = fullView->add_battlefield_objects();
+    object->set_object_id(100);
+    object->set_power(4);
+    object->set_toughness(5);
+    object->set_damage(2);
+    auto *ability = object->add_activated_abilities();
+    ability->set_text("Draw a card.");
+    ability->set_cost_label("{T}");
+    ability->set_activatable(true);
+    apply(full);
+
+    ruled::v1::RuledEventBatch omitted;
+    auto *omittedZone = omitted.add_events()->mutable_zone_view();
+    omittedZone->set_battlefields_unchanged(true);
+    auto *omittedView = omittedZone->add_per_player();
+    omittedView->set_player_id(kLocalPlayer);
+    omittedView->set_first_strike_step_pending(true);
+    apply(omitted);
+
+    EXPECT_EQ(state->markedDamageForEngineOid(100), 2);
+    EXPECT_EQ(state->combatPowerForCreatureOid(100), 4);
+    EXPECT_EQ(state->combatToughnessForCreatureOid(100), 5);
+    EXPECT_EQ(state->activatedAbilitiesForOid(100), QStringList({QStringLiteral("Draw a card.")}));
+    EXPECT_EQ(state->activatedAbilityCostLabelsForOid(100), QStringList({QStringLiteral("{T}")}));
+    EXPECT_TRUE(state->isFirstStrikeStepPending()) << "non-battlefield fields in an omitted view still apply";
+
+    ruled::v1::RuledEventBatch explicitEmpty;
+    explicitEmpty.add_events()->mutable_zone_view()->add_per_player()->set_player_id(kLocalPlayer);
+    apply(explicitEmpty);
+    EXPECT_EQ(state->markedDamageForEngineOid(100), 0);
+    EXPECT_TRUE(state->activatedAbilitiesForOid(100).isEmpty());
 }
 
 // ---------------------------------------------------------------------------------------

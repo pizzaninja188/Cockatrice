@@ -741,17 +741,23 @@ void RuledEventDispatcher::applyGraveyardObjectMap(const ruled::v1::GraveyardObj
 
 void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, BatchContext &ctx)
 {
-    state->engineOidMarkedDamage.clear();
-    state->engineOidBattlefieldPower.clear();
-    state->engineOidBattlefieldToughness.clear();
-    state->engineOidToActivatedAbilityTexts.clear();
-    state->engineOidToActivatedAbilityManaCosts.clear();
-    state->engineOidToActivatedAbilityManaProduced.clear();
-    state->engineOidToActivatedAbilityActivatable.clear();
+    if (!view.battlefields_unchanged()) {
+        state->engineOidMarkedDamage.clear();
+        state->engineOidBattlefieldPower.clear();
+        state->engineOidBattlefieldToughness.clear();
+        state->engineOidToActivatedAbilityTexts.clear();
+        state->engineOidToActivatedAbilityManaCosts.clear();
+        state->engineOidToActivatedAbilityManaProduced.clear();
+        state->engineOidToActivatedAbilityCostLabels.clear();
+        state->engineOidToActivatedAbilityActivatable.clear();
+    }
     bool anyFirstStrikePending = false;
     for (const auto &p : view.per_player()) {
         if (p.first_strike_step_pending()) {
             anyFirstStrikePending = true;
+        }
+        if (view.battlefields_unchanged()) {
+            continue;
         }
         for (const auto &battlefieldObject : p.battlefield_objects()) {
             const quint32 oid = battlefieldObject.object_id();

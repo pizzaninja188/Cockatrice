@@ -131,6 +131,12 @@ pub struct GameEngine {
     /// omits the same views. Empty here means "nothing broadcast yet", which is what forces the
     /// first view of a session to be full.
     private_zone_cache: HashMap<PlayerId, PrivateZoneSnapshot>,
+    /// Inputs that produced the last full public battlefield view. Kept outside `GameState`
+    /// because it controls emission only and can never affect a rules decision.
+    battlefield_view_cache: Option<BattlefieldViewSnapshot>,
+    /// Derived companion to `battlefield_view_cache`. Its inputs are included in that snapshot,
+    /// so an unchanged battlefield view can reuse this without another characteristics pass.
+    first_strike_step_pending_cache: bool,
 }
 
 /// A player's concealed-zone contents as last broadcast, compared to decide whether the next
@@ -143,6 +149,50 @@ pub struct GameEngine {
 struct PrivateZoneSnapshot {
     hand: Vec<ObjectId>,
     library: Vec<ObjectId>,
+}
+
+/// Cheap, rules-state inputs that completely determine every serialized `BattlefieldObject`.
+/// Comparing this before building the protobuf avoids characteristic-layer evaluation, registry
+/// ability formatting, keyword scans, and string allocation on unchanged batches.
+#[derive(Clone, PartialEq, Eq)]
+struct BattlefieldViewSnapshot {
+    players: Vec<PlayerBattlefieldSnapshot>,
+    continuous_effects: Vec<ContinuousEffect>,
+    active_player: PlayerId,
+    turn_step: TurnStep,
+    stack_empty: bool,
+    combat: Option<BattlefieldCombatSnapshot>,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+struct BattlefieldCombatSnapshot {
+    attacking: Vec<ObjectId>,
+    blockers: Vec<(ObjectId, Vec<ObjectId>)>,
+    first_strike_damage_done: bool,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+struct PlayerBattlefieldSnapshot {
+    player_id: PlayerId,
+    object_ids: Vec<ObjectId>,
+    objects: Vec<BattlefieldObjectSnapshot>,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+struct BattlefieldObjectSnapshot {
+    object_id: ObjectId,
+    card_id: String,
+    owner: PlayerId,
+    controller: PlayerId,
+    zone: Zone,
+    tapped: bool,
+    summoning_sick: bool,
+    power: Option<u32>,
+    toughness: Option<u32>,
+    damage: u32,
+    counters: BTreeMap<CounterKind, u32>,
+    attached_to: Option<ObjectId>,
+    face_up_index: usize,
 }
 
 /// CR 701.19 / 701.20: set `oid`'s tap status, returning whether it actually changed.
@@ -351,6 +401,8 @@ impl GameEngine {
             registry,
             dev_commands_enabled: false,
             private_zone_cache: HashMap::new(),
+            battlefield_view_cache: None,
+            first_strike_step_pending_cache: false,
         };
         let mut e = vec![];
         let _ = eng.apply_sbas(&mut e);

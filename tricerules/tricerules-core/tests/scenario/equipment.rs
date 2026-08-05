@@ -453,20 +453,20 @@ fn equip_is_reported_unactivatable_at_instant_speed() {
         },
     );
 
-    let activatable_now = |e: &GameEngine| -> bool {
+    let activatable_now = |e: &mut GameEngine| -> bool {
         zone_view_ability_flags(e, 0, splitter)
             .first()
             .copied()
             .expect("bonesplitter has an equip ability")
     };
     assert!(
-        activatable_now(&e),
+        activatable_now(&mut e),
         "equip is available in our own main phase with an empty stack"
     );
 
     end_active_turn(&mut e, 0);
     assert!(
-        !activatable_now(&e),
+        !activatable_now(&mut e),
         "equip must report as unavailable on the opponent's turn (CR 702.6a)"
     );
 }

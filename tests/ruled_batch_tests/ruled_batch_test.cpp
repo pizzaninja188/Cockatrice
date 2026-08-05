@@ -27,6 +27,7 @@
 #include "server_test_helpers.h"
 
 #include <QString>
+#include <algorithm>
 #include <google/protobuf/dynamic_message.h>
 #include <gtest/gtest.h>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
@@ -34,12 +35,12 @@
 #include <libcockatrice/rng/rng_abstract.h>
 #include <libcockatrice/utility/color.h>
 #include <libcockatrice/utility/zone_names.h>
-#include <algorithm>
 #include <memory>
 
 RNG_Abstract *rng = nullptr; // required by other server code
 
-namespace {
+namespace
+{
 
 void collectBroadcastFields(const google::protobuf::Descriptor *message,
                             QSet<const google::protobuf::Descriptor *> &visited,
@@ -198,16 +199,22 @@ protected:
                                                           const ruled::v1::RuledPerPlayerView &v,
                                                           GameEventStorage *tapGes,
                                                           bool allowUntapReset = true,
-                                                          const QSet<quint32> *engineUntappedOids = nullptr)
+                                                          const QSet<quint32> *engineUntappedOids = nullptr,
+                                                          bool battlefieldsUnchanged = false)
     {
         return game->ruled()
             ->playerBinding(p->getPlayerId())
-            .applyRuledEngineZoneView(p, v, tapGes, allowUntapReset, engineUntappedOids);
+            .applyRuledEngineZoneView(p, v, tapGes, allowUntapReset, engineUntappedOids, battlefieldsUnchanged);
     }
 
     Server_Card *findCardByEngineOid(Server_Player *p, quint32 engineOid)
     {
         return game->ruled()->playerBinding(p->getPlayerId()).findCardByEngineOid(p, engineOid);
+    }
+
+    const RuledPlayerBinding &bindingFor(Server_Player *p)
+    {
+        return game->ruled()->playerBinding(p->getPlayerId());
     }
 
     BatchOutcome callBatchApply(const ruled::v1::IpcResponse &resp)
@@ -338,7 +345,9 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
 {
     ruled::v1::RuledEventBatch batch;
     batch.add_events()->mutable_card_catalog()->add_entries()->set_card_id("secret_deck_card");
-    auto *view = batch.add_events()->mutable_zone_view()->add_per_player();
+    auto *zoneView = batch.add_events()->mutable_zone_view();
+    zoneView->set_battlefields_unchanged(true);
+    auto *view = zoneView->add_per_player();
     view->set_player_id(1);
     view->add_hand_cards()->set_card_id("secret_hand_card");
     view->add_library_card_ids("secret_top_card");
@@ -380,6 +389,7 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
                                          [](const auto &event) { return event.has_zone_view(); });
         ASSERT_NE(zoneIt, redacted->events().end());
         const auto &redactedView = zoneIt->zone_view().per_player(0);
+        EXPECT_TRUE(zoneIt->zone_view().battlefields_unchanged());
         EXPECT_EQ(redactedView.hand_cards_size(), 0);
         EXPECT_EQ(redactedView.library_card_ids_size(), 0);
         EXPECT_FALSE(redactedView.private_zones_unchanged());
@@ -399,8 +409,8 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
 
     EXPECT_TRUE(std::any_of(forP1.events().begin(), forP1.events().end(),
                             [](const auto &event) { return event.has_log() && event.log().text() == "P1 only"; }));
-    EXPECT_TRUE(std::none_of(forP2.events().begin(), forP2.events().end(),
-                             [](const auto &event) { return event.has_log(); }));
+    EXPECT_TRUE(
+        std::none_of(forP2.events().begin(), forP2.events().end(), [](const auto &event) { return event.has_log(); }));
 }
 
 // The HandSlotMap is re-sent only when the mapping changed. It rides on every ruled command
@@ -625,6 +635,36 @@ TEST_F(RuledBatchTest, PrivateZonesUnchangedSkipsTheHandAndLibraryReconcile)
     const QList<Server_Card *> &graveyard = p1->getZones().value(ZoneNames::GRAVE)->getCards();
     ASSERT_EQ(graveyard.size(), 1);
     EXPECT_EQ(graveyard.first(), inHand) << "cleanup must move the selected physical card";
+}
+
+TEST_F(RuledBatchTest, BattlefieldOmissionRetainsMapsFlagsAndPhysicalState)
+{
+    Server_Card *bear = addCardToTable(p1, "Grizzly Bears");
+    ruled::v1::RuledPerPlayerView full = buildPerPlayerView(p1, {101u}, {true});
+    full.mutable_battlefield_objects(0)->set_summoning_sick(true);
+    full.mutable_battlefield_objects(0)->set_is_creature(true);
+    full.mutable_battlefield_objects(0)->add_keywords("Haste");
+    full.mutable_battlefield_objects(0)->add_keywords("Trample");
+    GameEventStorage firstGes;
+    const auto first = applyZoneView(p1, full, &firstGes);
+    ASSERT_EQ(first.engineOidToServerCardId.value(101u, -1), bear->getId());
+    ASSERT_TRUE(bear->getTapped());
+
+    ruled::v1::RuledPerPlayerView omitted;
+    omitted.set_player_id(p1->getPlayerId());
+    omitted.set_private_zones_unchanged(true);
+    GameEventStorage omittedGes;
+    const auto retained = applyZoneView(p1, omitted, &omittedGes, true, nullptr, true);
+
+    EXPECT_EQ(retained.engineOidToServerCardId.value(101u, -1), bear->getId());
+    EXPECT_EQ(findCardByEngineOid(p1, 101u), bear);
+    EXPECT_TRUE(bindingFor(p1).isEngineOidSummoningSick(101u));
+    EXPECT_TRUE(bindingFor(p1).isEngineOidHaste(101u));
+    EXPECT_TRUE(bindingFor(p1).isEngineOidTrample(101u));
+    EXPECT_TRUE(bindingFor(p1).isEngineOidCreature(101u));
+    EXPECT_TRUE(bear->getTapped());
+    EXPECT_FALSE(retained.tapStateChanged);
+    EXPECT_FALSE(retained.battlefieldOrderChanged);
 }
 
 TEST_F(RuledBatchTest, ZoneViewDoesNotForceUntapOutsideUntapStep)
@@ -1013,10 +1053,8 @@ TEST_F(RuledBatchTest, ApplyRuledBatchIndexesAMidGameCardCatalog)
 
     callBatchApply(resp);
 
-    EXPECT_EQ(game->ruled()->ruledCardIdForName(QStringLiteral("Serra Angel")),
-              QStringLiteral("serra_angel"));
-    EXPECT_EQ(game->ruled()->ruledCardNameForId(QStringLiteral("serra_angel")),
-              QStringLiteral("Serra Angel"));
+    EXPECT_EQ(game->ruled()->ruledCardIdForName(QStringLiteral("Serra Angel")), QStringLiteral("serra_angel"));
+    EXPECT_EQ(game->ruled()->ruledCardNameForId(QStringLiteral("serra_angel")), QStringLiteral("Serra Angel"));
 }
 
 TEST_F(RuledBatchTest, ApplyRuledBatchLeavesTheCatalogAloneWhenTheBatchHasNone)
@@ -1025,8 +1063,7 @@ TEST_F(RuledBatchTest, ApplyRuledBatchLeavesTheCatalogAloneWhenTheBatchHasNone)
     // "the catalog is now empty", or the first ordinary command after startup would wipe the index
     // and break every name lookup for the rest of the game.
     seedCardCatalog({QStringLiteral("Lightning Bolt")});
-    ASSERT_EQ(game->ruled()->ruledCardIdForName(QStringLiteral("Lightning Bolt")),
-              QStringLiteral("lightning_bolt"));
+    ASSERT_EQ(game->ruled()->ruledCardIdForName(QStringLiteral("Lightning Bolt")), QStringLiteral("lightning_bolt"));
 
     ruled::v1::IpcResponse resp;
     resp.set_ok(true);
@@ -1034,8 +1071,7 @@ TEST_F(RuledBatchTest, ApplyRuledBatchLeavesTheCatalogAloneWhenTheBatchHasNone)
 
     callBatchApply(resp);
 
-    EXPECT_EQ(game->ruled()->ruledCardIdForName(QStringLiteral("Lightning Bolt")),
-              QStringLiteral("lightning_bolt"));
+    EXPECT_EQ(game->ruled()->ruledCardIdForName(QStringLiteral("Lightning Bolt")), QStringLiteral("lightning_bolt"));
 }
 
 TEST_F(RuledBatchTest, ApplyRuledBatchMintsConjuredCardOnTableAsARealCardNotAToken)

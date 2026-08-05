@@ -928,6 +928,11 @@ message RuledPerPlayerView {
 
 message ZoneViewSync {
   repeated RuledPerPlayerView per_player = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Every player's battlefield is identical to the previous zone view in this session, so each
+  // `battlefield_objects` list is omitted and the receiver keeps its complete prior battlefield.
+  // Never set on the first view of a session. Unlike `private_zones_unchanged`, this is global:
+  // any public battlefield change causes every player's battlefield to be sent in full.
+  bool battlefields_unchanged = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message GameSnapshot {
