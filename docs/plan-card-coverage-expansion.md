@@ -1,8 +1,8 @@
 # Design Plan — Card-coverage primitive expansion
 
 > **Status (verified 2026-08-05):** P1–P3 shipped. P4's attachment substrate and first
-> Aura/Equipment cards shipped. P5 regeneration and combat requirements shipped; parameterized
-> evasion remains TODO. The calibration re-measure remains the next gate.
+> Aura/Equipment cards shipped. P5 regeneration, combat requirements, and basic landwalk shipped.
+> The calibration re-measure remains the next gate.
 
 ## Status
 
@@ -15,8 +15,9 @@ become implementable without new custom Rust. Its current state is:
   graveyard-to-battlefield reanimation followed as an extension.
 - **P4: partial.** Attachment state, attachment SBAs, basic P/T Auras, and Equipment are shipped.
   Attachment-based restrictions/keyword grants and broader enchant variants remain.
-- **P5: partial.** Regeneration and "attacks/blocks each combat if able" are shipped.
-  Landwalk/conditional unblockable remains the next engine primitive in this phase.
+- **P5: shipped.** Regeneration, "attacks/blocks each combat if able," and parameterized basic
+  landwalk are implemented. Further conditional-evasion forms can extend the same `Evasion`
+  characteristic when two real cards justify a new reusable value.
 
 Shipped in P1: `StaticAbilityDef::AnthemPt` + `AnthemFilter` (controller/subtype/color/
 exclude_self), `AffectedScope::CreaturesMatching` (dynamic, registry-evaluated),
@@ -57,9 +58,9 @@ are modest, high-ROI data+engine changes; P4 is a structural project on its own.
 - `ReturnFromGraveyard` and `SearchLibrary` are resolved in `engine/resolution/zones.rs`; private
   library candidates reuse the generic resolution-choice protocol and relay redaction.
 - `GameObject.attached_to`, Aura/Equipment primitives, attachment SBAs, regeneration shields,
-  and attack/block requirement flags are all active engine state. Parameterized landwalk-style
-  evasion is still absent; `Keyword` remains parameterless and `combat::can_block` handles the
-  existing blocking keywords.
+  and attack/block requirement flags are all active engine state. Parameterized `Evasion` values
+  remain separate from the parameterless `Keyword` enum; `combat::can_block` AND-composes both
+  while dynamically checking the defending player's derived permanent characteristics.
 
 ---
 
@@ -219,10 +220,10 @@ player/land", reconfigure, modular.
 
 ## P5 — Regenerate + minor drawback / evasion keywords
 
-> **Partially shipped.** Regeneration shields and their destroy/SBA interactions are implemented
-> with Cudgel Troll and Drudge Skeletons. Attack/block requirements are engine-authoritative;
-> Juggernaut, Crazed Goblin, and Goblin Brigand exercise must-attack. Parameterized landwalk or
-> conditional unblockable remains TODO.
+> **Shipped.** Regeneration shields and their destroy/SBA interactions are implemented with Cudgel
+> Troll and Drudge Skeletons. Attack/block requirements are engine-authoritative; Juggernaut,
+> Crazed Goblin, and Goblin Brigand exercise must-attack. River Boa and Shanodin Dryads exercise
+> parameterized Islandwalk and Forestwalk through one generic basic-landwalk implementation.
 
 **Cards:** Cudgel Troll, Drudge Skeletons (regenerate); Juggernaut, Berserkers of Blood Ridge
 ("attacks each combat if able"); landwalk creatures; "can't be blocked except by …".
@@ -236,14 +237,15 @@ card each but collectively tax older sets.
   bypasses are covered by focused scenarios.
 - **"Attacks/blocks each combat if able": shipped.** Face-level requirement flags feed combat
   declaration legality and the authoritative required attacker/blocker sets.
-- **Landwalk / conditional unblockable: TODO.** These need
-  characteristic matching against the defending player's permanents; model as a small
-  `Evasion` enum on the creature, consulted in block legality. The card-model doc currently
-  defers parameterized keywords to custom Rust — revisit: a bounded `Evasion` enum is data-tier.
+- **Basic landwalk: shipped.** `Evasion::Landwalk { land_subtype }` is a face characteristic,
+  separate from parameterless `Keyword`. Block legality dynamically checks lands controlled by
+  the defending player through derived characteristics, and the shared legality predicate keeps
+  explicit rejection, must-block calculation, menace pairing, and auto-skip consistent. Island
+  and Forest demonstrate subtype reuse without card-specific Rust.
 
-**Remaining tests.** Landwalk/conditional evasion must prove both sides of the condition, illegal
-block rejection, and declare-blockers auto-skip when no legal blocker exists. Add conformance
-coverage for the first cards.
+**Coverage.** Scenarios prove matching and nonmatching subtypes, no-land behavior, controller vs.
+owner, two landwalk values, composition with existing evasion, illegal block rejection, and
+declare-blockers auto-skip. Registry conformance covers both cards.
 
 **Out of scope:** protection (CR 702.16 — multi-axis: damage/enchant/block/target, its own
 plan), banding, phasing.
@@ -256,8 +258,8 @@ plan), banding, phasing.
    mechanic, and recompute the full/partial hit rate against the now-shipped P1–P5 substrate.
 2. If the hit rate is worthwhile, generate or author the newly unblocked data-tier band and run
    the registry/conformance/checklist gates.
-3. Implement P5 landwalk/conditional evasion opportunistically when the sample supports it; keep
-   the representation player-set-generic and require two real cards.
+3. Extend the shipped `Evasion` representation only when the sample supports another conditional
+   evasion form; keep each value player-set-generic and require two real cards.
 4. Promote the remaining P4 restriction/keyword-grant work to a focused plan before expanding
    attachments further.
 
@@ -268,7 +270,7 @@ CR governs every phase. P1: CR 604 (static abilities), 611/613.4 (continuous P/T
 (targeting) + 601.2c (legal targets). P3: CR 700-zone changes + 701.16 (search) + hidden-zone
 redaction (CR 400.2 player-private information). P4: CR 303/301 (Auras/Equipment), 704.5n/m
 (attachment SBAs), 613 (the attached continuous effects). P5: CR 701.15 (regenerate), 508/509
-(attack/block requirements), 702.x (landwalk/evasion). Names stay Oracle-sourced, mechanics
+(attack/block requirements), and 702.14 (landwalk). Names stay Oracle-sourced, mechanics
 tricerules-owned, per the two-database rule. Each card cites its Oracle text + CR in-file and
 carries happy + illegal scenario coverage, same standard as existing engine changes.
 

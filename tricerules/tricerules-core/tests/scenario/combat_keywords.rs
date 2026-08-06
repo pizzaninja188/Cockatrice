@@ -1,4 +1,6 @@
 use crate::helpers::*;
+use tricerules_cards::{ContinuousEffectKind, EffectDuration, Keyword};
+use tricerules_core::state::{AffectedScope, ContinuousEffect};
 
 #[test]
 fn summoning_sick_creature_can_block() {
@@ -165,7 +167,171 @@ fn flying_auto_skips_blockers_when_no_reach_or_flyers() {
     );
 }
 
-// ── Intimidate Keyword Tests ──────────────────────────────────────────────────
+// ── Landwalk Evasion Tests ──────────────────────────────────────────────
+//
+// CR 702.14c: basic landwalk prevents blocks while the defending player controls a land
+// with the specified land subtype. CR 509.1b: every applicable blocking restriction must hold.
+
+fn advance_landwalk_attack_to_manual_blocks(e: &mut GameEngine, landwalker_id: &str) -> (u32, u32) {
+    advance_to_declare_attackers(e);
+    let landwalker = inject_creature_on_battlefield(e, 0, landwalker_id);
+    let vanilla_attacker = inject_creature_on_battlefield(e, 0, "grizzly_bears");
+    e.apply_command(0, &declare_attackers(vec![landwalker, vanilla_attacker]))
+        .expect("declare landwalker and vanilla attacker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    e.apply_command(1, &pass())
+        .expect("defender pass reaches manual blockers");
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareBlockers
+    );
+    assert!(!e.state.combat.as_ref().unwrap().blockers_declared);
+    (landwalker, vanilla_attacker)
+}
+
+#[test]
+fn islandwalk_cannot_be_blocked_when_defender_controls_island() {
+    let mut e = GameEngine::new(9050, &[0, 1], 20, None, true).expect("new");
+    let blocker = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    inject_permanent_on_battlefield(&mut e, 1, "island");
+    let (boa, _) = advance_landwalk_attack_to_manual_blocks(&mut e, "river_boa");
+
+    let err = e
+        .apply_command(
+            1,
+            &declare_blockers(vec![BlockPair {
+                attacker_id: boa,
+                blocker_id: blocker,
+            }]),
+        )
+        .expect_err("islandwalk attacker must reject a blocker while defender controls Island");
+    assert!(
+        err.to_string().contains("evasion"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn islandwalk_can_be_blocked_when_defender_controls_no_land() {
+    let mut e = GameEngine::new(9051, &[0, 1], 20, None, true).expect("new");
+    let blocker = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    let (boa, _) = advance_landwalk_attack_to_manual_blocks(&mut e, "river_boa");
+
+    e.apply_command(
+        1,
+        &declare_blockers(vec![BlockPair {
+            attacker_id: boa,
+            blocker_id: blocker,
+        }]),
+    )
+    .expect("islandwalk is inactive without a matching land");
+}
+
+#[test]
+fn nonmatching_land_subtype_does_not_enable_islandwalk() {
+    let mut e = GameEngine::new(9052, &[0, 1], 20, None, true).expect("new");
+    let blocker = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    inject_permanent_on_battlefield(&mut e, 1, "forest");
+    let (boa, _) = advance_landwalk_attack_to_manual_blocks(&mut e, "river_boa");
+
+    e.apply_command(
+        1,
+        &declare_blockers(vec![BlockPair {
+            attacker_id: boa,
+            blocker_id: blocker,
+        }]),
+    )
+    .expect("Forest must not enable Islandwalk");
+}
+
+#[test]
+fn inactive_landwalk_still_obeys_flying_restriction() {
+    let mut e = GameEngine::new(9056, &[0, 1], 20, None, true).expect("new");
+    let ground_blocker = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    inject_creature_on_battlefield(&mut e, 1, "storm_crow");
+    inject_permanent_on_battlefield(&mut e, 1, "forest");
+    let (boa, _) = advance_landwalk_attack_to_manual_blocks(&mut e, "river_boa");
+    e.state.continuous_effects.push(ContinuousEffect {
+        source_id: None,
+        affected: AffectedScope::Single(boa),
+        kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Flying),
+        duration: EffectDuration::UntilEndOfTurn,
+        timestamp: e.state.command_index,
+    });
+
+    e.apply_command(
+        1,
+        &declare_blockers(vec![BlockPair {
+            attacker_id: boa,
+            blocker_id: ground_blocker,
+        }]),
+    )
+    .expect_err("inactive Islandwalk must not bypass the attacker's flying restriction");
+}
+
+#[test]
+fn forestwalk_uses_the_same_land_subtype_evasion() {
+    let mut e = GameEngine::new(9053, &[0, 1], 20, None, true).expect("new");
+    let blocker = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    inject_permanent_on_battlefield(&mut e, 1, "forest");
+    let (dryads, _) = advance_landwalk_attack_to_manual_blocks(&mut e, "shanodin_dryads");
+
+    let err = e
+        .apply_command(
+            1,
+            &declare_blockers(vec![BlockPair {
+                attacker_id: dryads,
+                blocker_id: blocker,
+            }]),
+        )
+        .expect_err("forestwalk attacker must reject a blocker while defender controls Forest");
+    assert!(
+        err.to_string().contains("evasion"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn landwalk_uses_defending_land_controller_not_owner() {
+    let mut e = GameEngine::new(9054, &[0, 1], 20, None, true).expect("new");
+    let blocker = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    let island = inject_permanent_on_battlefield(&mut e, 1, "island");
+    e.state.objects.get_mut(&island).unwrap().owner = e.state.players[0].id;
+    let (boa, _) = advance_landwalk_attack_to_manual_blocks(&mut e, "river_boa");
+
+    e.apply_command(
+        1,
+        &declare_blockers(vec![BlockPair {
+            attacker_id: boa,
+            blocker_id: blocker,
+        }]),
+    )
+    .expect_err("the defending player's controlled Island enables Islandwalk despite ownership");
+}
+
+#[test]
+fn landwalk_auto_skips_when_every_available_blocker_is_illegal() {
+    let mut e = GameEngine::new(9055, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let boa = inject_creature_on_battlefield(&mut e, 0, "river_boa");
+    inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    inject_permanent_on_battlefield(&mut e, 1, "island");
+    e.apply_command(0, &declare_attackers(vec![boa]))
+        .expect("declare islandwalk attacker");
+    e.apply_command(0, &pass())
+        .expect("active pass declare attackers");
+    let batch = e
+        .apply_command(1, &pass())
+        .expect("defender pass auto-skips illegal blockers");
+
+    let declared = blockers_declared_in(&batch);
+    assert_eq!(declared.len(), 1);
+    assert!(declared[0].block_pairs.is_empty());
+    assert!(e.state.combat.as_ref().unwrap().blockers_declared);
+}
+
+// ── Intimidate Keyword Tests ─────────────────────────────────────────────────
 //
 // Tests for CR 702.13b: a creature with intimidate can only be blocked by
 // artifact creatures and/or creatures that share a color with it.

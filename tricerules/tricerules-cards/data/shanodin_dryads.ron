@@ -1,0 +1,9 @@
+(
+  id: "shanodin_dryads",
+  name: "Shanodin Dryads",
+  mana_cost: "{G}",
+  types: ["Creature", "Nymph", "Dryad"],
+  power: 1,
+  toughness: 1,
+  evasions: [Landwalk(land_subtype: "Forest")],
+)

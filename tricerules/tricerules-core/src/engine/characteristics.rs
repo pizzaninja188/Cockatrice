@@ -31,6 +31,7 @@ pub struct Characteristics {
     pub supertypes: Vec<String>,
     pub colors: Vec<Color>,
     pub keywords: Vec<Keyword>,
+    pub evasions: Vec<Evasion>,
     pub power: Option<u32>,
     pub toughness: Option<u32>,
 }
@@ -88,6 +89,7 @@ impl CharacteristicsEvaluator<'_> {
             supertypes: face.supertypes.to_vec(),
             colors: face.colors(),
             keywords: face.keywords.to_vec(),
+            evasions: face.evasions.to_vec(),
             // Object snapshots take precedence for tokens and scenario overrides. Multi-face
             // objects leave these unset and read the active face.
             power: object.power.or(face.power),

@@ -1,4 +1,5 @@
-//! Colors and parameterless keyword abilities used by card characteristics.
+//! Colors, parameterless keywords, and parameterized evasion abilities used by card
+//! characteristics.
 
 use serde::{Deserialize, Serialize};
 
@@ -13,10 +14,18 @@ pub enum Color {
     Green,
 }
 
-/// Static keyword abilities that affect game rules (blocking restrictions, attack
-/// rules, damage modifiers, etc.). Parameterless only — parameterized keywords
-/// (e.g. Protection from X, Landwalk) are deferred to the custom-Rust tier since
-/// they require characteristic matching the data-driven tier can't express.
+/// A parameterized evasion ability, kept separate from [`Keyword`] so one data-tier value can
+/// represent every matching land subtype rather than adding a keyword variant per subtype.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Evasion {
+    /// CR 702.14c: this creature can't be blocked while the defending player controls a land
+    /// with `land_subtype` (River Boa's Islandwalk, Shanodin Dryads' Forestwalk).
+    Landwalk { land_subtype: String },
+}
+
+/// Static keyword abilities that affect game rules (blocking restrictions, attack rules, damage
+/// modifiers, etc.). Parameterless only; parameterized values live in dedicated data-tier types
+/// such as [`Evasion`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Keyword {
     /// CR 702.9: this creature can only be blocked by creatures with flying or reach.

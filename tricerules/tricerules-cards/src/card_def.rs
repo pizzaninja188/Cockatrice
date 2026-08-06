@@ -15,8 +15,8 @@
 
 use crate::mana::ManaCost;
 use crate::primitives::{
-    ActivatedAbilityDef, Color, Keyword, PermanentTypeFilter, SpellEffectKind, StaticAbilityDef,
-    TriggeredAbilityDef,
+    ActivatedAbilityDef, Color, Evasion, Keyword, PermanentTypeFilter, SpellEffectKind,
+    StaticAbilityDef, TriggeredAbilityDef,
 };
 use serde::{Deserialize, Serialize};
 
@@ -105,6 +105,9 @@ pub struct CardFace {
     /// Static keyword abilities (Flying, Reach, Intimidate, …). Omit for keywordless faces.
     #[serde(default)]
     pub keywords: Vec<Keyword>,
+    /// Parameterized combat evasion abilities (Islandwalk, Forestwalk, …).
+    #[serde(default)]
+    pub evasions: Vec<Evasion>,
     /// Activated abilities (cost + effect pairs). Omit or leave empty for faces with none.
     #[serde(default)]
     pub activated_abilities: Vec<ActivatedAbilityDef>,
@@ -251,6 +254,8 @@ pub struct RawCardDefinition {
     #[serde(default)]
     pub keywords: Vec<Keyword>,
     #[serde(default)]
+    pub evasions: Vec<Evasion>,
+    #[serde(default)]
     pub activated_abilities: Vec<ActivatedAbilityDef>,
     #[serde(default)]
     pub triggered_abilities: Vec<TriggeredAbilityDef>,
@@ -291,6 +296,7 @@ impl RawCardDefinition {
                 modal_spell: self.modal_spell,
                 custom_effect: self.custom_effect,
                 keywords: self.keywords,
+                evasions: self.evasions,
                 activated_abilities: self.activated_abilities,
                 triggered_abilities: self.triggered_abilities,
                 static_abilities: self.static_abilities,

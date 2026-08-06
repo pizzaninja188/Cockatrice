@@ -1,0 +1,16 @@
+(
+  id: "river_boa",
+  name: "River Boa",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Snake"],
+  power: 2,
+  toughness: 1,
+  evasions: [Landwalk(land_subtype: "Island")],
+  activated_abilities: [
+    (
+      cost: Mana("{G}"),
+      effect: [Regenerate(subject: Source)],
+      text: "{G}: Regenerate this creature.",
+    ),
+  ],
+)

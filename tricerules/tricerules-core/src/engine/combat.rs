@@ -19,7 +19,7 @@ impl GameEngine {
     /// Returns false if `blocker_id` is not permitted to block `attacker_id` due to
     /// keyword evasion abilities. Checks all active blocking restrictions in order.
     pub(super) fn can_block(&self, attacker_id: ObjectId, blocker_id: ObjectId) -> bool {
-        use tricerules_cards::Keyword;
+        use tricerules_cards::{Evasion, Keyword};
         if !self.state.objects.contains_key(&attacker_id) {
             return false;
         };
@@ -55,6 +55,41 @@ impl GameEngine {
                 let shares_color = att_colors.iter().any(|c| blk_colors.contains(c));
                 if !shares_color {
                     return false;
+                }
+            }
+        }
+
+        // CR 702.14c — basic landwalk: the condition is evaluated at block declaration against
+        // the defending player's currently controlled permanents and their derived types. Each
+        // active evasion is an additional restriction (CR 509.1b), so any match forbids blocking.
+        if let Some(attacker_characteristics) = self.characteristics(attacker_id) {
+            for evasion in &attacker_characteristics.evasions {
+                match evasion {
+                    Evasion::Landwalk { land_subtype } => {
+                        let matching_land = self
+                            .state
+                            .sole_defending_player_id()
+                            .and_then(|defending_player| {
+                                self.state.player_idx(defending_player).map(|idx| {
+                                    self.state.players[idx].battlefield.iter().any(|land_id| {
+                                        self.state.objects.get(land_id).is_some_and(|object| {
+                                            object.zone == Zone::Battlefield
+                                                && self.characteristics(*land_id).is_some_and(
+                                                    |land| {
+                                                        land.controller == defending_player
+                                                            && land.has_type("Land")
+                                                            && land.has_type(land_subtype)
+                                                    },
+                                                )
+                                        })
+                                    })
+                                })
+                            })
+                            .unwrap_or(false);
+                        if matching_land {
+                            return false;
+                        }
+                    }
                 }
             }
         }
