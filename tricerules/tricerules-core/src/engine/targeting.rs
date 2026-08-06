@@ -166,6 +166,35 @@ fn filter_characteristics_match(engine: &GameEngine, filter: &TargetFilter, oid:
     true
 }
 
+/// Whether a battlefield permanent still satisfies an Aura's printed enchant restriction.
+/// Unlike spell-target legality, an existing attachment is unaffected by hexproof or shroud.
+/// `only_controller` remains relevant because "enchant creature you control" is a continuous
+/// restriction evaluated against the Aura's current controller.
+pub(super) fn attachment_filter_legal(
+    engine: &GameEngine,
+    filter: &TargetFilter,
+    oid: ObjectId,
+    attachment_controller: PlayerId,
+) -> bool {
+    let Some(object) = engine.state.objects.get(&oid) else {
+        return false;
+    };
+    if object.zone != Zone::Battlefield {
+        return false;
+    }
+    let Some(characteristics) = engine.characteristics(oid) else {
+        return false;
+    };
+    let kind_ok = match filter.kind {
+        TargetKind::Creature => characteristics.is_creature(),
+        TargetKind::AnyPermanent => true,
+        _ => false,
+    };
+    kind_ok
+        && filter_characteristics_match(engine, filter, oid)
+        && (!filter.only_controller || characteristics.controller == attachment_controller)
+}
+
 /// Legality of a single target against a [`TargetFilter`].
 /// `caster` is needed only to enforce the opponent-only restriction.
 /// True if `oid` is a battlefield permanent selected by a mass effect's `kind` filter

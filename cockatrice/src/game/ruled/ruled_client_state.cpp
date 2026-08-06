@@ -534,8 +534,10 @@ void RuledClientState::togglePendingAttacker(quint32 engineOid)
     }
     if (pendingAttackerOids.contains(engineOid)) {
         pendingAttackerOids.remove(engineOid);
-    } else {
+    } else if (selectableAttackerOids.contains(engineOid)) {
         pendingAttackerOids.insert(engineOid);
+    } else {
+        return;
     }
     syncAttackersPreviewToServer();
     emit combatStateChanged();
@@ -555,8 +557,10 @@ void RuledClientState::toggleStagedBlocker(quint32 blockerOid)
 {
     if (stagedBlockerOids.contains(blockerOid)) {
         stagedBlockerOids.remove(blockerOid);
-    } else {
+    } else if (selectableBlockerOids.contains(blockerOid)) {
         stagedBlockerOids.insert(blockerOid);
+    } else {
+        return;
     }
     emit combatStateChanged();
 }

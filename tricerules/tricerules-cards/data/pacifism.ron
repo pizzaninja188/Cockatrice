@@ -1,0 +1,10 @@
+(
+  id: "pacifism",
+  name: "Pacifism",
+  mana_cost: "{1}{W}",
+  // Oracle: Enchant creature. Enchanted creature can't attack or block.
+  // CR 303.4 (Auras); CR 508/509 (attack and block restrictions).
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach(target: (kind: Creature))],
+  static_abilities: [AttachedModifier(cant_attack: true, cant_block: true)],
+)

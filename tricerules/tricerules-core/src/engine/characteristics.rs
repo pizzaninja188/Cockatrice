@@ -147,50 +147,49 @@ impl CharacteristicsEvaluator<'_> {
             .continuous_effects
             .iter()
             .enumerate()
-            .filter(|(_, effect)| self.effect_affects(effect, oid, pre_layer_6))
+            .filter(|(_, effect)| effect_affects(self.state, effect, oid, pre_layer_6))
             .collect();
         effects.sort_by_key(|(index, effect)| (effect.timestamp, *index));
         effects.into_iter().map(|(_, effect)| effect).collect()
     }
+}
 
-    /// Whether an effect applies, evaluated from the characteristic snapshot after layer 5.
-    /// Current scopes only depend on controller, types, and colors, avoiding recursive full
-    /// characteristic queries. Dependency ordering becomes necessary once scopes can depend on
-    /// characteristics changed in their own layer.
-    fn effect_affects(
-        &self,
-        effect: &ContinuousEffect,
-        oid: ObjectId,
-        pre_layer_6: &Characteristics,
-    ) -> bool {
-        match &effect.affected {
-            AffectedScope::Single(id) => *id == oid,
-            AffectedScope::AllCreatures => pre_layer_6.is_creature(),
-            AffectedScope::EquippedBy(equipment_oid) => self
-                .state
-                .objects
-                .get(equipment_oid)
-                .is_some_and(|equipment| {
-                    equipment.zone == Zone::Battlefield && equipment.attached_to == Some(oid)
-                }),
-            AffectedScope::CreaturesMatching {
-                controller,
-                subtype,
-                color,
-                exclude,
-            } => {
-                *exclude != Some(oid)
-                    && controller.is_none_or(|pid| pre_layer_6.controller == pid)
-                    && pre_layer_6.is_creature()
-                    && subtype
-                        .as_ref()
-                        .is_none_or(|value| pre_layer_6.types.contains(value))
-                    && color.is_none_or(|value| pre_layer_6.colors.contains(&value))
-            }
-            AffectedScope::Player(_) => false,
+/// Whether an effect applies, evaluated from the relevant characteristic snapshot. Current scopes
+/// only depend on controller, types, and colors, avoiding recursive full-characteristic queries.
+/// Dependency ordering becomes necessary once scopes can depend on values changed in their layer.
+pub(super) fn effect_affects(
+    state: &GameState,
+    effect: &ContinuousEffect,
+    oid: ObjectId,
+    characteristics: &Characteristics,
+) -> bool {
+    match &effect.affected {
+        AffectedScope::Single(id) => *id == oid,
+        AffectedScope::AllCreatures => characteristics.is_creature(),
+        AffectedScope::AttachedTo(source_oid) => {
+            state.objects.get(source_oid).is_some_and(|attachment| {
+                attachment.zone == Zone::Battlefield && attachment.attached_to == Some(oid)
+            })
         }
+        AffectedScope::CreaturesMatching {
+            controller,
+            subtype,
+            color,
+            exclude,
+        } => {
+            *exclude != Some(oid)
+                && controller.is_none_or(|pid| characteristics.controller == pid)
+                && characteristics.is_creature()
+                && subtype
+                    .as_ref()
+                    .is_none_or(|value| characteristics.types.contains(value))
+                && color.is_none_or(|value| characteristics.colors.contains(&value))
+        }
+        AffectedScope::Player(_) => false,
     }
+}
 
+impl CharacteristicsEvaluator<'_> {
     fn apply_layer_6_abilities(&self, result: &mut Characteristics, effects: &[&ContinuousEffect]) {
         for effect in effects {
             if let ContinuousEffectKind::Layer6AddKeyword(keyword) = effect.kind {

@@ -151,8 +151,9 @@ The `connect` lines live in `tab_game.cpp` and are the accepted residual fork de
    See the enum's comment before changing either path.
 4. **Legal actions are per-batch.** `resetPerBatchLegalActions()` wipes them before every payload,
    so nothing can leak across games. `applyNoLegalActions()` deliberately does *not* clear the
-   must-attack / must-block requirement sets (a Servatrice-synthesized preview echo carries no
-   `legal_by_player` entry for us).
+   must-attack / must-block requirement sets or the selectable attacker / blocker sets (a
+   Servatrice-synthesized preview echo carries no `legal_by_player` entry for us). Combat clicks
+   are gated by those selectable sets, keeping continuous restrictions engine-authoritative.
 5. **Labels are display-only.** Gameplay reads `LegalActions.hand_actions` (structured
    `LegalHandAction`); `LegalActions.labels` feeds the prompt text and nothing else.
 

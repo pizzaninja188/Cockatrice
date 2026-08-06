@@ -1,0 +1,10 @@
+(
+  id: "indestructibility",
+  name: "Indestructibility",
+  mana_cost: "{3}{W}",
+  // Oracle: Enchant permanent. Enchanted permanent has indestructible.
+  // CR 303.4 (Auras); CR 702.12 (indestructible); CR 613.1f (ability-adding effects).
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach(target: (kind: AnyPermanent))],
+  static_abilities: [AttachedModifier(keywords: [Indestructible])],
+)

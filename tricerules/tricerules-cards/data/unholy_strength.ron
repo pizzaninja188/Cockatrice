@@ -6,6 +6,6 @@
   types: ["Enchantment", "Aura"],
   spell_effect: [AuraAttach(target: (kind: Creature))],
   static_abilities: [
-    AuraPtModify(delta_power: 2, delta_toughness: 1),
+    AttachedModifier(delta_power: 2, delta_toughness: 1),
   ],
 )

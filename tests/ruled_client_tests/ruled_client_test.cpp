@@ -489,6 +489,8 @@ TEST_F(RuledClientTest, RequirementSetsSurviveABatchWithoutLegalActions)
     addHandAction(actions, ruled::v1::HAND_ACTION_CAST_SPELL, 0, "Grizzly Bears");
     actions.add_required_attacker_ids(100); // CR 508.1d
     actions.add_required_blocker_ids(200);  // CR 509.1c
+    actions.add_selectable_attacker_ids(100);
+    actions.add_selectable_blocker_ids(200);
     apply(withActions);
     ASSERT_EQ(state->requiredAttackerOids.size(), 1);
 
@@ -503,6 +505,8 @@ TEST_F(RuledClientTest, RequirementSetsSurviveABatchWithoutLegalActions)
     EXPECT_FALSE(state->isHandActionLegal(ruled::v1::HAND_ACTION_CAST_SPELL, 0));
     EXPECT_TRUE(state->requiredAttackerOids.contains(100));
     EXPECT_TRUE(state->requiredBlockerOids.contains(200));
+    EXPECT_TRUE(state->isSelectableAttacker(100));
+    EXPECT_TRUE(state->isSelectableBlocker(200));
     EXPECT_TRUE(state->remoteAttackerPreviewOids.contains(100));
 }
 
@@ -929,7 +933,9 @@ TEST_F(RuledClientTest, OpeningPhaseSlugIsRecognised)
 
 TEST_F(RuledClientTest, AttackerStagingSyncsAPreviewAndClearsOnDeclaration)
 {
-    apply(phaseBatch(ruled::v1::PHASE_ID_DECLARE_ATTACKERS, kLocalPlayer));
+    auto batch = phaseBatch(ruled::v1::PHASE_ID_DECLARE_ATTACKERS, kLocalPlayer);
+    (*batch.mutable_legal_by_player())[kLocalPlayer].add_selectable_attacker_ids(100);
+    apply(batch);
     ASSERT_TRUE(state->localPlayerIsActive());
     host.sentCommands.clear();
 
@@ -961,6 +967,7 @@ TEST_F(RuledClientTest, ConfirmAttackersIsGatedOnMustAttackRequirements)
     ruled::v1::RuledEventBatch batch = phaseBatch(ruled::v1::PHASE_ID_DECLARE_ATTACKERS, kLocalPlayer);
     auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
     actions.add_required_attacker_ids(100); // CR 508.1d "attacks if able"
+    actions.add_selectable_attacker_ids(100);
     apply(batch);
 
     EXPECT_FALSE(state->combatDeclarationSatisfied());
@@ -975,7 +982,11 @@ TEST_F(RuledClientTest, BlockerStagingPairsToAnAttackerAndSyncsAPreview)
     ad->add_attacker_object_ids(100);
     apply(declared);
     // The opponent is the active player during our declare-blockers step.
-    apply(phaseBatch(ruled::v1::PHASE_ID_DECLARE_BLOCKERS, kOpponent));
+    auto batch = phaseBatch(ruled::v1::PHASE_ID_DECLARE_BLOCKERS, kOpponent);
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    actions.add_selectable_blocker_ids(200);
+    actions.add_selectable_blocker_ids(201);
+    apply(batch);
     ASSERT_TRUE(state->localPlayerIsDefender());
     host.sentCommands.clear();
 
@@ -1002,7 +1013,9 @@ TEST_F(RuledClientTest, RejectedBlockDeclarationRollsBackTheLocalGuard)
     ruled::v1::RuledEventBatch declared;
     declared.add_events()->mutable_attackers_declared()->add_attacker_object_ids(100);
     apply(declared);
-    apply(phaseBatch(ruled::v1::PHASE_ID_DECLARE_BLOCKERS, kOpponent));
+    auto batch = phaseBatch(ruled::v1::PHASE_ID_DECLARE_BLOCKERS, kOpponent);
+    (*batch.mutable_legal_by_player())[kLocalPlayer].add_selectable_blocker_ids(200);
+    apply(batch);
     state->toggleStagedBlocker(200);
     state->pairStagedBlockerToAttacker(100);
     host.sentCommands.clear();
@@ -1021,6 +1034,32 @@ TEST_F(RuledClientTest, RejectedBlockDeclarationRollsBackTheLocalGuard)
     // The staged pairs come back so the defender can fix and resubmit.
     EXPECT_EQ(state->getPendingBlocks().value(200), 100u);
     EXPECT_TRUE(state->getCommittedBlocks().isEmpty());
+}
+
+TEST_F(RuledClientTest, CombatStagingIgnoresCreaturesOutsideEngineSelectableSets)
+{
+    auto attackers = phaseBatch(ruled::v1::PHASE_ID_DECLARE_ATTACKERS, kLocalPlayer);
+    (*attackers.mutable_legal_by_player())[kLocalPlayer].add_selectable_attacker_ids(100);
+    apply(attackers);
+    host.sentCommands.clear();
+
+    state->togglePendingAttacker(200);
+    EXPECT_FALSE(state->isPendingAttacker(200));
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+    state->togglePendingAttacker(100);
+    EXPECT_TRUE(state->isPendingAttacker(100));
+
+    ruled::v1::RuledEventBatch declared;
+    declared.add_events()->mutable_attackers_declared()->add_attacker_object_ids(300);
+    apply(declared);
+    auto blockers = phaseBatch(ruled::v1::PHASE_ID_DECLARE_BLOCKERS, kOpponent);
+    (*blockers.mutable_legal_by_player())[kLocalPlayer].add_selectable_blocker_ids(400);
+    apply(blockers);
+
+    state->toggleStagedBlocker(500);
+    EXPECT_FALSE(state->isStagedBlocker(500));
+    state->toggleStagedBlocker(400);
+    EXPECT_TRUE(state->isStagedBlocker(400));
 }
 
 TEST_F(RuledClientTest, RemovedFromCombatPrunesAttackersAndBlockPairs)

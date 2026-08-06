@@ -194,21 +194,27 @@ impl GameEngine {
             self.fire_triggers(&trigger_events);
         }
 
-        // CR 704.5p: equipment falls off if the attached creature is no longer on the battlefield.
+        // CR 704.5p: Equipment attached to an illegal permanent becomes unattached but remains on
+        // the battlefield. Use derived characteristics so future type-changing effects feed the
+        // same SBA rather than teaching attachment state about those effects.
         let equipment_to_unattach: Vec<ObjectId> = self
             .state
             .objects
             .iter()
             .filter(|(_, eq)| {
                 eq.zone == Zone::Battlefield
+                    && self
+                        .characteristics(eq.id)
+                        .is_some_and(|value| value.has_type("Equipment"))
                     && eq
                         .attached_to
                         .map(|target_id| {
-                            self.state
-                                .objects
-                                .get(&target_id)
-                                .map(|t| t.zone != Zone::Battlefield)
-                                .unwrap_or(true)
+                            self.state.objects.get(&target_id).is_none_or(|target| {
+                                target.zone != Zone::Battlefield
+                                    || !self
+                                        .characteristics(target_id)
+                                        .is_some_and(|value| value.is_creature())
+                            })
                         })
                         .unwrap_or(false)
             })
@@ -257,15 +263,26 @@ impl GameEngine {
                     && self
                         .characteristics(o.id)
                         .is_some_and(|value| value.is_aura())
-                    && o.attached_to
-                        .map(|eid| {
-                            self.state
-                                .objects
-                                .get(&eid)
-                                .map(|e| e.zone != Zone::Battlefield)
-                                .unwrap_or(true)
+                    && o.attached_to.is_none_or(|enchanted_id| {
+                        let enchant_filter = self
+                            .registry
+                            .get(&o.card_id)
+                            .and_then(|definition| definition.face(o.face_up_index))
+                            .and_then(|face| {
+                                face.spell_effect.iter().find_map(|effect| match effect {
+                                    SpellEffectKind::AuraAttach { target } => Some(target),
+                                    _ => None,
+                                })
+                            });
+                        enchant_filter.is_none_or(|filter| {
+                            !super::targeting::attachment_filter_legal(
+                                self,
+                                filter,
+                                enchanted_id,
+                                o.controller,
+                            )
                         })
-                        .unwrap_or(true)
+                    })
             })
             .map(|(id, _)| *id)
             .collect();

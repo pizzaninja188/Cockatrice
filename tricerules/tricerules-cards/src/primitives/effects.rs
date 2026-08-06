@@ -463,7 +463,7 @@ pub enum SpellEffectKind {
     /// CR 301.5 / 702.6: the equip activated ability — attach this equipment to `target` creature
     /// you control. At resolution the engine moves `attached_to` on the equipment's `GameObject`
     /// to the new target (detaching from any previous creature automatically). The P/T bonus
-    /// (if any) is a separate [`StaticAbilityDef::EquippedBonus`] that reads `attached_to`
+    /// (if any) is a separate [`StaticAbilityDef::AttachedModifier`] that reads `attached_to`
     /// dynamically, so no continuous effect is updated on re-equip. Legal only as an activated
     /// ability's `effect`, never a spell effect; equip only as a sorcery (CR 702.6a).
     /// Covers Bonesplitter (equip {1}) and Vulshok Morningstar (equip {2}).
@@ -808,7 +808,7 @@ impl SpellEffectKind {
             }
             // CR 303.4a: an aura enchants a permanent (never a player).
             SpellEffectKind::AuraAttach { target } => {
-                if target.is_player() {
+                if !matches!(target.kind, TargetKind::Creature | TargetKind::AnyPermanent) {
                     Err(
                         "AuraAttach cannot target players; auras enchant permanents (CR 303.4a)"
                             .into(),
@@ -882,6 +882,10 @@ pub enum ContinuousEffectKind {
     /// (Goblin Chieftain → Haste), pump sorceries (Overrun → Trample), and any
     /// "creatures you control gain [keyword] until end of turn" effect.
     Layer6AddKeyword(Keyword),
+    CombatRestriction {
+        cant_attack: bool,
+        cant_block: bool,
+    },
     /// CR 305.2b / layer 5 (rule-change): controller may play `count` additional lands per turn.
     /// Covers Exploration, Oracle of Mul Daya, and similar enchantments/permanents.
     ExtraLandPlays(u32),

@@ -344,6 +344,10 @@ public:
     // CR 509.1c: engine-reported creatures the local defending player MUST declare as blockers this
     // combat (LegalActions.required_blocker_ids). Confirm-blockers is disabled until all are staged.
     QSet<quint32> requiredBlockerOids;
+    // Engine-authoritative creatures that may be staged in the current declaration. These include
+    // all continuous combat restrictions, not just client-visible tapped/summoning-sick state.
+    QSet<quint32> selectableAttackerOids;
+    QSet<quint32> selectableBlockerOids;
     // Defender's currently selected blockers waiting to be paired to an attacker.
     QSet<quint32> stagedBlockerOids;
     // Local UI guard flags: once we submit declarations for the current declare step,
@@ -762,6 +766,14 @@ public:
     [[nodiscard]] const QHash<quint32, quint32> &getRemoteBlockPreviewPairs() const
     {
         return remoteBlockPreviewPairs;
+    }
+    [[nodiscard]] bool isSelectableAttacker(quint32 oid) const
+    {
+        return selectableAttackerOids.contains(oid);
+    }
+    [[nodiscard]] bool isSelectableBlocker(quint32 oid) const
+    {
+        return selectableBlockerOids.contains(oid);
     }
     /// CR 508.1d / 509.1c: true when the local player's staged combat declaration satisfies every
     /// must-attack / must-block requirement the engine reported for the current step — i.e. the

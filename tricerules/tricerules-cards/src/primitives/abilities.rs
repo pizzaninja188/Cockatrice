@@ -274,24 +274,21 @@ pub enum StaticAbilityDef {
         delta_power: i32,
         delta_toughness: i32,
     },
-    /// CR 613.4 layer 7c + CR 303.4: the enchanted creature (stored as `attached_to` on the aura's
-    /// `GameObject`) gets +`delta_power`/+`delta_toughness` as long as the aura remains attached.
-    /// The effect drains via `WhileSourceOnBattlefield` (source = the aura permanent); it is
-    /// scoped to a single permanent (`AffectedScope::Single`) so it disappears the moment the aura
-    /// leaves. Holy Strength (+1/+2), Unholy Strength (+2/+1).
-    AuraPtModify {
+    /// Continuous modifiers supplied to the permanent currently attached to this Aura or
+    /// Equipment. P/T changes apply in layer 7c, keywords in layer 6, and combat prohibitions as
+    /// rule restrictions. The dynamic attachment scope moves every modifier together when an
+    /// Equipment is re-equipped. Holy Strength/Oakenform, Flight/Swiftfoot Boots, and Pacifism.
+    AttachedModifier {
+        #[serde(default)]
         delta_power: i32,
+        #[serde(default)]
         delta_toughness: i32,
-    },
-    /// CR 301.5b / 702.6: while this equipment is attached to a creature (i.e.
-    /// `attached_to` is `Some`), that creature gets +`delta_power`/+`delta_toughness`
-    /// (layer 7c). The scope is `AffectedScope::EquippedBy(equipment_oid)` — it reads
-    /// `attached_to` dynamically at P/T query time, so re-equipping shifts the bonus
-    /// without recreating the continuous effect. Covers Bonesplitter (+2/+0) and
-    /// Vulshok Morningstar (+2/+2); any equipment with a stat boost uses this variant.
-    EquippedBonus {
-        delta_power: i32,
-        delta_toughness: i32,
+        #[serde(default)]
+        keywords: Vec<Keyword>,
+        #[serde(default)]
+        cant_attack: bool,
+        #[serde(default)]
+        cant_block: bool,
     },
     /// CR 613 layer 6: every creature matching `filter` gains `keyword` while the source is on the
     /// battlefield. Covers lords (Goblin Chieftain, Captain of the Watch) and keyword-granting

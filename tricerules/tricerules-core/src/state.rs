@@ -433,13 +433,10 @@ pub enum AffectedScope {
         color: Option<Color>,
         exclude: Option<ObjectId>,
     },
-    /// CR 613.4 layer 7c: the creature currently equipped by the equipment with ObjectId
-    /// `equipment_oid`. Resolved dynamically — reads `attached_to` on the equipment's
-    /// `GameObject` each time P/T is queried, so re-equipping to a different creature
-    /// immediately shifts the bonus without recreating the continuous effect. The effect exists
-    /// only while the equipment is on the battlefield (`WhileSourceOnBattlefield`) and is drained
-    /// normally when the equipment leaves (CR 611.3).
-    EquippedBy(ObjectId),
+    /// The permanent currently attached to the Aura or Equipment with `source_oid`. Resolved
+    /// dynamically from the source object's `attached_to`, so re-equipping moves every modifier
+    /// together without recreating effects.
+    AttachedTo(ObjectId),
     /// Effect that targets a specific player rather than permanents (e.g. extra land plays,
     /// future hand-size modifiers). Not considered by `effect_affects` (permanent queries).
     Player(PlayerId),

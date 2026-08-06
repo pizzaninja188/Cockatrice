@@ -570,13 +570,10 @@ bool tryHandleCombatClick(CardItem *card)
     const bool ownCreature = owner && owner->getPlayerInfo()->getLocal();
 
     if (phase == Phase::DeclareAttackers && state->localPlayerIsActive() && ownCreature) {
-        if (card->getTapped()) {
-            return false;
-        }
-        // CR 702.10b: Haste bypasses summoning sickness — a creature with Haste
-        // may be selected as an attacker even on the turn it entered the battlefield.
-        if (state->isEngineOidSummoningSick(oid) && !state->isEngineOidHaste(oid)) {
-            return false;
+        // The engine's set already accounts for tapping, summoning sickness, haste, and effects
+        // such as Pacifism. Consume invalid clicks so ruled combat never falls through to freeform.
+        if (!state->isSelectableAttacker(oid)) {
+            return true;
         }
         state->togglePendingAttacker(oid);
         return true;
@@ -584,8 +581,8 @@ bool tryHandleCombatClick(CardItem *card)
 
     if (phase == Phase::DeclareBlockers && state->localPlayerIsDefender()) {
         if (ownCreature) {
-            if (card->getTapped()) {
-                return false;
+            if (!state->isSelectableBlocker(oid)) {
+                return true;
             }
             // Toggle this creature in/out of the staged blocker set.
             state->toggleStagedBlocker(oid);

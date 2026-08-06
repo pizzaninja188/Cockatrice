@@ -1,5 +1,5 @@
 use crate::card_def::{CardDefinition, RawCardDefinition};
-use crate::primitives::{EffectContext, SpellEffectKind};
+use crate::primitives::{EffectContext, SpellEffectKind, StaticAbilityDef};
 use crate::token_def::TokenDefinition;
 use once_cell::sync::Lazy;
 use ron::extensions::Extensions;
@@ -175,6 +175,70 @@ impl CardRegistry {
                             "static_abilities are only valid on permanents (not instant/sorcery)"
                                 .into(),
                     });
+                }
+                let spell_aura_attach_count = face
+                    .spell_effect
+                    .iter()
+                    .filter(|effect| matches!(effect, SpellEffectKind::AuraAttach { .. }))
+                    .count();
+                let nonspell_aura_attach = face
+                    .activated_abilities
+                    .iter()
+                    .flat_map(|ability| &ability.effect)
+                    .chain(
+                        face.triggered_abilities
+                            .iter()
+                            .flat_map(|ability| &ability.effect),
+                    )
+                    .chain(
+                        face.modal_spell
+                            .iter()
+                            .flat_map(|modal| &modal.modes)
+                            .flat_map(|mode| &mode.effects),
+                    )
+                    .any(|effect| matches!(effect, SpellEffectKind::AuraAttach { .. }));
+                if face.is_aura && (spell_aura_attach_count != 1 || nonspell_aura_attach) {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: "an Aura face requires exactly one AuraAttach in spell_effect"
+                            .into(),
+                    });
+                }
+                if !face.is_aura && (spell_aura_attach_count != 0 || nonspell_aura_attach) {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: "AuraAttach is only valid on an Aura face".into(),
+                    });
+                }
+                let attachment_source = face.is_aura || face.types.iter().any(|t| t == "Equipment");
+                for ability in &face.static_abilities {
+                    if let StaticAbilityDef::AttachedModifier {
+                        delta_power,
+                        delta_toughness,
+                        keywords,
+                        cant_attack,
+                        cant_block,
+                    } = ability
+                    {
+                        if !attachment_source {
+                            return Err(RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason: "AttachedModifier requires an Aura or Equipment source"
+                                    .into(),
+                            });
+                        }
+                        if *delta_power == 0
+                            && *delta_toughness == 0
+                            && keywords.is_empty()
+                            && !cant_attack
+                            && !cant_block
+                        {
+                            return Err(RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason: "AttachedModifier must modify at least one value".into(),
+                            });
+                        }
+                    }
                 }
                 // An ability's effect list gets the same two checks a spell's does: each effect
                 // against its context, then the list as a whole (CR 608.2 — the effects resolve
@@ -879,6 +943,49 @@ mod tests {
         assert!(
             matches!(err, RegistryError::InvalidCard { ref reason, .. } if reason.contains("one resolution owner"))
         );
+    }
+
+    #[test]
+    fn load_rejects_malformed_attachment_definitions() {
+        let invalid = [
+            r#"(
+                id: "aura_without_enchant",
+                name: "Aura Without Enchant",
+                mana_cost: "{W}",
+                types: ["Enchantment", "Aura"],
+                static_abilities: [AttachedModifier(keywords: [Flying])],
+            )"#,
+            r#"(
+                id: "instant_aura_attach",
+                name: "Instant Aura Attach",
+                mana_cost: "{W}",
+                types: ["Instant"],
+                spell_effect: [AuraAttach(target: (kind: Creature))],
+            )"#,
+            r#"(
+                id: "ordinary_enchantment_modifier",
+                name: "Ordinary Enchantment Modifier",
+                mana_cost: "{W}",
+                types: ["Enchantment"],
+                static_abilities: [AttachedModifier(keywords: [Flying])],
+            )"#,
+            r#"(
+                id: "empty_attachment_modifier",
+                name: "Empty Attachment Modifier",
+                mana_cost: "{1}",
+                types: ["Artifact", "Equipment"],
+                static_abilities: [AttachedModifier()],
+            )"#,
+        ];
+        for bad in invalid {
+            assert!(
+                matches!(
+                    CardRegistry::from_chunks(&[bad]),
+                    Err(RegistryError::InvalidCard { .. })
+                ),
+                "expected malformed attachment definition to be rejected"
+            );
+        }
     }
 
     #[test]

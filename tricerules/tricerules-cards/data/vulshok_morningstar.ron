@@ -4,7 +4,7 @@
   mana_cost: "{2}",
   types: ["Artifact", "Equipment"],
   static_abilities: [
-    EquippedBonus(delta_power: 2, delta_toughness: 2),
+    AttachedModifier(delta_power: 2, delta_toughness: 2),
   ],
   activated_abilities: [
     (

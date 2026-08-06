@@ -5,6 +5,7 @@
 //! SBA: equipment falls off when attached creature leaves the battlefield (CR 704.5p).
 
 use crate::helpers::*;
+use tricerules_cards::Keyword;
 use tricerules_proto::ruled::v1::TargetRef;
 
 fn equipment_deck(equipment: &str) -> Vec<String> {
@@ -93,7 +94,7 @@ fn bonesplitter_equip_adds_bonus() {
         Some(creature),
         "Bonesplitter attached_to should be the creature"
     );
-    // Creature now has +2/+0 from the EquippedBonus static ability (layer 7c).
+    // Creature now has +2/+0 from the attached modifier (layer 7c).
     assert_eq!(e.effective_power(creature), Some(4), "+2 from Bonesplitter");
     assert_eq!(
         e.effective_toughness(creature),
@@ -237,7 +238,7 @@ fn equipment_falls_off_when_creature_dies() {
     );
 
     // Mark lethal damage on the bear (base 2/2 toughness, 2 damage = lethal per CR 704.5g).
-    // Note: EquippedBonus adds power only (+2/+0 for Bonesplitter), not toughness.
+    // Bonesplitter's attached modifier adds power only (+2/+0), not toughness.
     e.state.objects.get_mut(&bear).unwrap().damage = 2;
 
     // SBAs run inside pass_priority (CR 704.3); passing priority flushes them.
@@ -469,4 +470,174 @@ fn equip_is_reported_unactivatable_at_instant_speed() {
         !activatable_now(&mut e),
         "equip must report as unavailable on the opponent's turn (CR 702.6a)"
     );
+}
+
+#[test]
+fn swiftfoot_boots_moves_both_keywords_on_reequip() {
+    let decks = Some(vec![
+        equipment_deck("swiftfoot_boots"),
+        equipment_deck("grizzly_bears"),
+    ]);
+    let mut e = GameEngine::new(5010, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let boots = cast_and_resolve_equipment(
+        &mut e,
+        0,
+        "swiftfoot_boots",
+        ManaGift {
+            c: 2,
+            ..Default::default()
+        },
+    );
+    let bear1 = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let bear2 = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    e.state
+        .objects
+        .get_mut(&bear1)
+        .expect("bear1")
+        .summoning_sick = true;
+    e.state
+        .objects
+        .get_mut(&bear2)
+        .expect("bear2")
+        .summoning_sick = true;
+
+    for target in [bear1, bear2] {
+        give_mana(
+            &mut e,
+            0,
+            ManaGift {
+                c: 1,
+                ..Default::default()
+            },
+        );
+        e.apply_command(
+            0,
+            &activate_ability(
+                boots,
+                0,
+                vec![TargetRef {
+                    object_id: target,
+                    damage_amount: 0,
+                }],
+            ),
+        )
+        .expect("equip Swiftfoot Boots");
+        pass_both_players(&mut e);
+    }
+
+    assert!(!e.effective_has_keyword(bear1, Keyword::Hexproof));
+    assert!(!e.effective_has_keyword(bear1, Keyword::Haste));
+    assert!(e.effective_has_keyword(bear2, Keyword::Hexproof));
+    assert!(e.effective_has_keyword(bear2, Keyword::Haste));
+
+    e.apply_command(0, &primitive_yield())
+        .expect("main1 to begin combat");
+    e.apply_command(0, &pass()).expect("ap pass begin combat");
+    e.apply_command(1, &pass()).expect("nap pass begin combat");
+    assert!(
+        e.apply_command(0, &declare_attackers(vec![bear1])).is_err(),
+        "the previously equipped summoning-sick creature lost haste"
+    );
+    e.apply_command(0, &declare_attackers(vec![bear2]))
+        .expect("the currently equipped creature can attack with haste");
+}
+
+#[test]
+fn equipment_unattaches_when_host_stops_being_a_creature() {
+    let decks = Some(vec![
+        equipment_deck("bonesplitter"),
+        equipment_deck("grizzly_bears"),
+    ]);
+    let mut e = GameEngine::new(5011, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let splitter = cast_and_resolve_equipment(
+        &mut e,
+        0,
+        "bonesplitter",
+        ManaGift {
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            c: 1,
+            ..Default::default()
+        },
+    );
+    e.apply_command(
+        0,
+        &activate_ability(
+            splitter,
+            0,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("equip Bonesplitter");
+    pass_both_players(&mut e);
+
+    e.state.objects.get_mut(&bear).expect("bear").card_id = "plains".into();
+    e.apply_command(0, &pass()).expect("pass triggers SBAs");
+    assert_eq!(
+        e.state
+            .objects
+            .get(&splitter)
+            .and_then(|object| object.attached_to),
+        None
+    );
+    assert_eq!(
+        e.state.objects.get(&splitter).map(|object| object.zone),
+        Some(tricerules_core::Zone::Battlefield),
+        "illegal Equipment detaches instead of going to the graveyard"
+    );
+}
+
+#[test]
+fn short_sword_grants_its_printed_pt_bonus() {
+    let decks = Some(vec![
+        equipment_deck("short_sword"),
+        equipment_deck("grizzly_bears"),
+    ]);
+    let mut e = GameEngine::new(5012, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let sword = cast_and_resolve_equipment(
+        &mut e,
+        0,
+        "short_sword",
+        ManaGift {
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            c: 1,
+            ..Default::default()
+        },
+    );
+    e.apply_command(
+        0,
+        &activate_ability(
+            sword,
+            0,
+            vec![TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("equip Short Sword");
+    pass_both_players(&mut e);
+    assert_eq!(e.effective_power(bear), Some(3));
+    assert_eq!(e.effective_toughness(bear), Some(3));
 }

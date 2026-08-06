@@ -1,0 +1,10 @@
+(
+  id: "flight",
+  name: "Flight",
+  mana_cost: "{U}",
+  // Oracle: Enchant creature. Enchanted creature has flying.
+  // CR 303.4 (Auras); CR 702.9 (flying); CR 613.1f (ability-adding effects).
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach(target: (kind: Creature))],
+  static_abilities: [AttachedModifier(keywords: [Flying])],
+)

@@ -1,0 +1,10 @@
+(
+  id: "oakenform",
+  name: "Oakenform",
+  mana_cost: "{2}{G}",
+  // Oracle: Enchant creature. Enchanted creature gets +3/+3.
+  // CR 303.4 (Auras); CR 613.4c (P/T-modifying continuous effects).
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach(target: (kind: Creature))],
+  static_abilities: [AttachedModifier(delta_power: 3, delta_toughness: 3)],
+)

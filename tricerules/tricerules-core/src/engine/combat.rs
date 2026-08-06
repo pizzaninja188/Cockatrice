@@ -16,6 +16,109 @@ impl GameEngine {
                 && self.effective_has_keyword(attacker_id, tricerules_cards::Keyword::Trample))
     }
 
+    fn combat_restrictions(&self, oid: ObjectId) -> (bool, bool) {
+        let Some(characteristics) = self.characteristics(oid) else {
+            return (false, false);
+        };
+        self.state
+            .continuous_effects
+            .iter()
+            .filter(|effect| {
+                super::characteristics::effect_affects(&self.state, effect, oid, &characteristics)
+            })
+            .fold((false, false), |(cant_attack, cant_block), effect| {
+                if let ContinuousEffectKind::CombatRestriction {
+                    cant_attack: effect_cant_attack,
+                    cant_block: effect_cant_block,
+                } = &effect.kind
+                {
+                    (
+                        cant_attack || *effect_cant_attack,
+                        cant_block || *effect_cant_block,
+                    )
+                } else {
+                    (cant_attack, cant_block)
+                }
+            })
+    }
+
+    fn attacker_illegality(&self, oid: ObjectId, active_player: PlayerId) -> Option<&'static str> {
+        let Some(object) = self.state.objects.get(&oid) else {
+            return Some("attacker id");
+        };
+        if object.zone != Zone::Battlefield {
+            return Some("illegal attacker");
+        }
+        let Some(characteristics) = self.characteristics(oid) else {
+            return Some("attacker id");
+        };
+        if characteristics.controller != active_player {
+            return Some("illegal attacker");
+        }
+        if !characteristics.is_creature() {
+            return Some("not creature");
+        }
+        if characteristics.has_keyword(tricerules_cards::Keyword::Defender) {
+            return Some("creature has defender");
+        }
+        if self.combat_restrictions(oid).0 {
+            return Some("creature cannot attack");
+        }
+        if object.summoning_sick && !characteristics.has_keyword(tricerules_cards::Keyword::Haste) {
+            return Some("summoning sick");
+        }
+        if object.tapped {
+            return Some("tapped");
+        }
+        None
+    }
+
+    pub(super) fn eligible_attacker_ids(&self, player: PlayerId) -> Vec<ObjectId> {
+        let Some(player_idx) = self.state.player_idx(player) else {
+            return Vec::new();
+        };
+        self.state.players[player_idx]
+            .battlefield
+            .iter()
+            .copied()
+            .filter(|oid| self.attacker_illegality(*oid, player).is_none())
+            .collect()
+    }
+
+    fn base_blocker_eligible(&self, oid: ObjectId, defending_player: PlayerId) -> bool {
+        let Some(object) = self.state.objects.get(&oid) else {
+            return false;
+        };
+        object.zone == Zone::Battlefield
+            && !object.tapped
+            && self.characteristics(oid).is_some_and(|characteristics| {
+                characteristics.controller == defending_player && characteristics.is_creature()
+            })
+    }
+
+    pub(super) fn eligible_blocker_ids(&self, defending_player: PlayerId) -> Vec<ObjectId> {
+        let attackers = self
+            .state
+            .combat
+            .as_ref()
+            .map(|combat| combat.attacking.as_slice())
+            .unwrap_or_default();
+        let Some(player_idx) = self.state.player_idx(defending_player) else {
+            return Vec::new();
+        };
+        self.state.players[player_idx]
+            .battlefield
+            .iter()
+            .copied()
+            .filter(|oid| {
+                self.base_blocker_eligible(*oid, defending_player)
+                    && attackers
+                        .iter()
+                        .any(|attacker_id| self.can_block(*attacker_id, *oid))
+            })
+            .collect()
+    }
+
     /// Returns false if `blocker_id` is not permitted to block `attacker_id` due to
     /// keyword evasion abilities. Checks all active blocking restrictions in order.
     pub(super) fn can_block(&self, attacker_id: ObjectId, blocker_id: ObjectId) -> bool {
@@ -26,6 +129,9 @@ impl GameEngine {
         if !self.state.objects.contains_key(&blocker_id) {
             return false;
         };
+        if self.combat_restrictions(blocker_id).1 {
+            return false;
+        }
 
         // CR 702.9b — flying: can only be blocked by creatures with flying or reach.
         if self.effective_has_keyword(attacker_id, Keyword::Flying)
@@ -99,39 +205,11 @@ impl GameEngine {
 
     pub(super) fn active_player_has_eligible_attackers(&self) -> bool {
         let ap = self.state.active_player_id();
-        let Some(ap_idx) = self.state.player_idx(ap) else {
-            return false;
-        };
-        self.state.players[ap_idx].battlefield.iter().any(|oid| {
-            self.state.objects.get(oid).is_some_and(|o| {
-                // CR 702.10b: Haste lets a creature attack (and use {T} abilities) even if it
-                // just entered the battlefield this turn (i.e. ignore summoning sickness).
-                let effectively_sick = o.summoning_sick
-                    && !self.effective_has_keyword(*oid, tricerules_cards::Keyword::Haste);
-                // CR 702.3b: defenders can't attack, so they don't count as eligible attackers.
-                let has_defender =
-                    self.effective_has_keyword(*oid, tricerules_cards::Keyword::Defender);
-                // CR 506.2: only the *controller* of a creature can declare it as an attacker.
-                // The list already scopes to `ap`'s controlled permanents; the field check keeps
-                // the two in agreement.
-                o.zone == Zone::Battlefield
-                    && o.controller == ap
-                    && self
-                        .characteristics(*oid)
-                        .is_some_and(|value| value.is_creature())
-                    && !effectively_sick
-                    && !o.tapped
-                    && !has_defender
-            })
-        })
+        !self.eligible_attacker_ids(ap).is_empty()
     }
 
     pub(super) fn defending_player_has_eligible_blockers(&self) -> bool {
-        use tricerules_cards::Keyword;
         let Some(dp) = self.state.sole_defending_player_id() else {
-            return false;
-        };
-        let Some(dp_idx) = self.state.player_idx(dp) else {
             return false;
         };
         let attacking: Vec<ObjectId> = self
@@ -146,22 +224,7 @@ impl GameEngine {
         // CR 302.6: summoning sickness does NOT prevent blocking.
         // Build the full list of untapped defender creatures up-front so the menace
         // check can count potential co-blockers without re-scanning the battlefield.
-        let defenders: Vec<ObjectId> = self.state.players[dp_idx]
-            .battlefield
-            .iter()
-            .filter(|&&oid| {
-                self.state.objects.get(&oid).is_some_and(|o| {
-                    // CR 509.1a: a creature blocks for the player who controls it.
-                    o.zone == Zone::Battlefield
-                        && o.controller == dp
-                        && self
-                            .characteristics(oid)
-                            .is_some_and(|value| value.is_creature())
-                        && !o.tapped
-                })
-            })
-            .copied()
-            .collect();
+        let defenders = self.eligible_blocker_ids(dp);
         // A legal non-empty blocking assignment exists only when at least one defender
         // creature can participate in a valid block. For menace attackers (CR 702.111),
         // participation requires at least one OTHER defender that can block the same
@@ -189,17 +252,16 @@ impl GameEngine {
     /// when a defending player exists to attack. Single source of truth shared by `set_attackers`
     /// enforcement and the client-facing `LegalActions` gate (Juggernaut, Goblin Brigand, Crazed Goblin).
     pub(super) fn required_attacker_ids(&self) -> Vec<ObjectId> {
-        use tricerules_cards::Keyword;
         // "when a defending player exists to attack" — the count does not matter here, only that
         // there is someone (CR 508.1a).
         if self.state.defending_player_ids().is_empty() {
             return Vec::new();
         }
         let ap = self.state.active_player_id();
-        let Some(ap_idx) = self.state.player_idx(ap) else {
-            return Vec::new();
-        };
         let mut out = Vec::new();
+        let Some(ap_idx) = self.state.player_idx(ap) else {
+            return out;
+        };
         for &oid in &self.state.players[ap_idx].battlefield {
             let Some(obj) = self.state.objects.get(&oid) else {
                 continue;
@@ -207,19 +269,7 @@ impl GameEngine {
             if !obj.must_attack_if_able {
                 continue;
             }
-            let Some(characteristics) = self.characteristics(oid) else {
-                continue;
-            };
-            if !characteristics.is_creature() {
-                continue;
-            }
-            if obj.tapped {
-                continue;
-            }
-            if obj.summoning_sick && !characteristics.has_keyword(Keyword::Haste) {
-                continue;
-            }
-            if characteristics.has_keyword(Keyword::Defender) {
+            if self.attacker_illegality(oid, ap).is_some() {
                 continue;
             }
             out.push(oid);
@@ -244,10 +294,14 @@ impl GameEngine {
         if attacking.is_empty() {
             return Vec::new();
         }
-        let Some(dp_idx) = self.state.player_idx(defending_player) else {
-            return Vec::new();
-        };
+        let eligible: HashSet<ObjectId> = self
+            .eligible_blocker_ids(defending_player)
+            .into_iter()
+            .collect();
         let mut out = Vec::new();
+        let Some(dp_idx) = self.state.player_idx(defending_player) else {
+            return out;
+        };
         for &oid in &self.state.players[dp_idx].battlefield {
             let Some(obj) = self.state.objects.get(&oid) else {
                 continue;
@@ -255,16 +309,7 @@ impl GameEngine {
             if !obj.must_block_if_able {
                 continue;
             }
-            if !self
-                .characteristics(oid)
-                .is_some_and(|value| value.is_creature())
-            {
-                continue;
-            }
-            if obj.tapped {
-                continue;
-            }
-            if attacking.iter().any(|&aid| self.can_block(aid, oid)) {
+            if eligible.contains(&oid) {
                 out.push(oid);
             }
         }
@@ -314,35 +359,8 @@ impl GameEngine {
             if !seen_attackers.insert(oid) {
                 return Err(EngineError::Illegal("duplicate attacker"));
             }
-            let o = self
-                .state
-                .objects
-                .get(&oid)
-                .ok_or(EngineError::Illegal("attacker id"))?;
-            // CR 506.2: attacking is a controller's privilege, not an owner's — a creature you
-            // control but do not own attacks for you. Command validation runs once per command,
-            // so it reads control through the layer pipeline rather than the base field.
-            if o.zone != Zone::Battlefield || self.controller_of(oid) != Some(ap) {
-                return Err(EngineError::Illegal("illegal attacker"));
-            }
-            if !self
-                .characteristics(oid)
-                .is_some_and(|value| value.is_creature())
-            {
-                return Err(EngineError::Illegal("not creature"));
-            }
-            // CR 702.3b: a creature with defender can't attack.
-            if self.effective_has_keyword(oid, tricerules_cards::Keyword::Defender) {
-                return Err(EngineError::Illegal("creature has defender"));
-            }
-            // CR 702.10b: Haste bypasses summoning sickness — the creature may attack even
-            // if it entered the battlefield this turn.
-            let has_haste = self.effective_has_keyword(oid, tricerules_cards::Keyword::Haste);
-            if o.summoning_sick && !has_haste {
-                return Err(EngineError::Illegal("summoning sick"));
-            }
-            if o.tapped {
-                return Err(EngineError::Illegal("tapped"));
+            if let Some(reason) = self.attacker_illegality(oid, ap) {
+                return Err(EngineError::Illegal(reason));
             }
             list.push(oid);
         }

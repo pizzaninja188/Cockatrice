@@ -1,8 +1,7 @@
 # Design Plan — Card-coverage primitive expansion
 
-> **Status (verified 2026-08-05):** P1–P3 shipped. P4's attachment substrate and first
-> Aura/Equipment cards shipped. P5 regeneration, combat requirements, and basic landwalk shipped.
-> The calibration re-measure remains the next gate.
+> **Status (verified 2026-08-05):** P1–P5 shipped. The calibration re-measure remains the next
+> gate.
 
 ## Status
 
@@ -13,8 +12,8 @@ become implementable without new custom Rust. Its current state is:
   implemented.
 - **P3: shipped.** `ReturnFromGraveyard` and `SearchLibrary` landed with private-choice routing;
   graveyard-to-battlefield reanimation followed as an extension.
-- **P4: partial.** Attachment state, attachment SBAs, basic P/T Auras, and Equipment are shipped.
-  Attachment-based restrictions/keyword grants and broader enchant variants remain.
+- **P4: shipped.** Auras and Equipment share dynamic attachment modifiers for P/T, keywords, and
+  combat restrictions; attachment SBAs enforce ongoing enchant/equip legality.
 - **P5: shipped.** Regeneration, "attacks/blocks each combat if able," and parameterized basic
   landwalk are implemented. Further conditional-evasion forms can extend the same `Evasion`
   characteristic when two real cards justify a new reusable value.
@@ -180,11 +179,11 @@ after this phase with controller-aware battlefield entry and ETB handling.
 
 ## P4 — Auras & Equipment (attachment)  — largest count, structural
 
-> **Partially shipped.** `GameObject.attached_to`, Aura/Equipment targeting and resolution,
-> attachment SBAs, relay/client attachment presentation, `AuraPtModify`, and `EquippedBonus` are
-> implemented. Holy Strength, Unholy Strength, Bonesplitter, and Vulshok Morningstar exercise the
-> substrate. Pacifism-class restrictions, attached keyword grants, and broader enchant variants
-> remain and should receive a focused follow-up plan before implementation.
+> **Shipped.** `GameObject.attached_to`, Aura/Equipment targeting and resolution, attachment SBAs,
+> relay/client attachment presentation, and the unified `AttachedModifier` cover P/T changes,
+> keyword grants, and combat restrictions. Holy Strength, Unholy Strength, Oakenform, Pacifism,
+> Flight, Guard Duty, Indestructibility, Bonesplitter, Short Sword, Vulshok Morningstar, and
+> Swiftfoot Boots exercise the substrate.
 
 **Cards:** Pacifism, Holy Strength, Oakenform (Auras); Bonesplitter, Short Sword, any Equipment.
 By raw count this is likely the single biggest gap, but it is a **structural engine project**,
@@ -194,24 +193,26 @@ not a primitive widening — sequence it after P1–P3.
 closed that structural gap; the remaining work is expanding what attached continuous effects can
 express.
 
-**Shipped substrate and remaining shape.**
+**Shipped design.**
 - `GameObject.attached_to: Option<ObjectId>` and the inverse "attachments of X".
 - Auras: cast targets a permanent (CR 303.4); on resolution the Aura enters the battlefield
   **attached** (not the normal ETB-to-open-battlefield path). SBA (CR 704.5n/m): an Aura
   attached illegally or to nothing is put into the graveyard — a new SBA in the `apply_sbas`
   fixpoint (the loop from `3120efd8` already re-checks to convergence).
-- The Aura's effect is a `WhileSourceOnBattlefield` continuous effect **scoped to the attached
-  object** — this reuses the P1 continuous-effect plumbing, which is a second reason P1 comes
-  first. Pacifism-class "can't attack or block" needs a restriction layer (new
-  `ContinuousEffectKind`), and keyword-granting auras need `Layer6AddKeyword` (the P1 reserved
-  slot).
+- `StaticAbilityDef::AttachedModifier` emits `WhileSourceOnBattlefield` effects dynamically scoped
+  through `AffectedScope::AttachedTo`: layer-6 keyword grants, layer-7c P/T modifiers, and
+  non-layered combat restrictions. Re-equipping moves the whole modifier set together.
 - Equipment: `{cost}: Attach` activated ability that moves the Equipment to a creature you
   control (CR 301.5); detaches when the creature leaves. Effects are the same attached
   continuous effects as Auras.
+- Attachment SBAs use derived characteristics: an Aura whose host stops satisfying its printed
+  enchant filter goes to the graveyard, while Equipment whose host stops being a creature merely
+  detaches. Existing attachments ignore shroud/hexproof because those restrict targeting only.
 
-**Tests.** Existing scenario coverage pins Aura attachment/P/T modification, illegal Aura targets,
-host-leaves attachment SBAs, and Equipment reattachment/survival. A future restriction or keyword
-grant must add its own happy and illegal cases plus conformance coverage.
+**Tests.** Scenarios cover attachment/P/T modification, keyword grant/removal and reattachment,
+Pacifism attack/block legality including must-attack interaction, Indestructibility, illegal Aura
+hosts, Equipment detachment, illegal cast/equip targets, and registry validation. Conformance
+covers every added card.
 
 **Out of scope (initially):** fortifications, Auras with triggered abilities, "enchant
 player/land", reconfigure, modular.
@@ -260,8 +261,6 @@ plan), banding, phasing.
    the registry/conformance/checklist gates.
 3. Extend the shipped `Evasion` representation only when the sample supports another conditional
    evasion form; keep each value player-set-generic and require two real cards.
-4. Promote the remaining P4 restriction/keyword-grant work to a focused plan before expanding
-   attachments further.
 
 ## MTG applicability
 

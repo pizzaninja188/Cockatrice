@@ -986,6 +986,14 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
     for (const quint32 oid : actions.required_blocker_ids()) {
         state->requiredBlockerOids.insert(oid);
     }
+    state->selectableAttackerOids.clear();
+    for (const quint32 oid : actions.selectable_attacker_ids()) {
+        state->selectableAttackerOids.insert(oid);
+    }
+    state->selectableBlockerOids.clear();
+    for (const quint32 oid : actions.selectable_blocker_ids()) {
+        state->selectableBlockerOids.insert(oid);
+    }
 }
 
 void RuledEventDispatcher::applyNoLegalActions()
@@ -994,12 +1002,12 @@ void RuledEventDispatcher::applyNoLegalActions()
     state->openingBottomSelectedIndices.clear();
     state->openingPickSeatIds.clear();
     state->openingUiKind = RuledOpeningUiKind::None;
-    // NB: do NOT clear requiredAttackerOids / requiredBlockerOids here. Servatrice-synthesized
+    // NB: do NOT clear the required or selectable combat sets here. Servatrice-synthesized
     // combat preview batches (AttackersPreview / BlockersPreview, emitted while the local player
     // stages attackers/blocks) carry no legal_by_player entry and land in this branch. The
-    // must-attack / must-block sets are engine-authoritative and only change when a real engine
-    // batch (with legal_by_player) arrives, so they must survive preview echoes — otherwise
-    // deselecting a staged required creature couldn't re-disable OK.
+    // combat sets are engine-authoritative and only change when a real engine batch (with
+    // legal_by_player) arrives, so they must survive preview echoes — otherwise deselecting a
+    // staged required creature couldn't re-disable OK and legal creatures would become inert.
     emit state->undoableManaAbilitiesChanged(0);
 }
 

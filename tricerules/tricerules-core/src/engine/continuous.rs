@@ -65,43 +65,47 @@ impl GameEngine {
                         timestamp,
                     });
                 }
-                StaticAbilityDef::AuraPtModify {
+                StaticAbilityDef::AttachedModifier {
                     delta_power,
                     delta_toughness,
+                    keywords,
+                    cant_attack,
+                    cant_block,
                 } => {
-                    let Some(enchanted_oid) = self
-                        .state
-                        .objects
-                        .get(&object_id)
-                        .and_then(|value| value.attached_to)
-                    else {
-                        continue;
-                    };
-                    self.state.continuous_effects.push(ContinuousEffect {
-                        source_id: Some(object_id),
-                        affected: AffectedScope::Single(enchanted_oid),
-                        kind: ContinuousEffectKind::PtModify {
-                            delta_power,
-                            delta_toughness,
-                        },
-                        duration: EffectDuration::WhileSourceOnBattlefield,
-                        timestamp,
-                    });
-                }
-                StaticAbilityDef::EquippedBonus {
-                    delta_power,
-                    delta_toughness,
-                } => {
-                    self.state.continuous_effects.push(ContinuousEffect {
-                        source_id: Some(object_id),
-                        affected: AffectedScope::EquippedBy(object_id),
-                        kind: ContinuousEffectKind::PtModify {
-                            delta_power,
-                            delta_toughness,
-                        },
-                        duration: EffectDuration::WhileSourceOnBattlefield,
-                        timestamp,
-                    });
+                    let affected = AffectedScope::AttachedTo(object_id);
+                    if delta_power != 0 || delta_toughness != 0 {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            source_id: Some(object_id),
+                            affected: affected.clone(),
+                            kind: ContinuousEffectKind::PtModify {
+                                delta_power,
+                                delta_toughness,
+                            },
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
+                    for keyword in keywords {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            source_id: Some(object_id),
+                            affected: affected.clone(),
+                            kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
+                    if cant_attack || cant_block {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            source_id: Some(object_id),
+                            affected,
+                            kind: ContinuousEffectKind::CombatRestriction {
+                                cant_attack,
+                                cant_block,
+                            },
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
                 }
                 StaticAbilityDef::AnthemKeyword { filter, keyword } => {
                     self.state.continuous_effects.push(ContinuousEffect {

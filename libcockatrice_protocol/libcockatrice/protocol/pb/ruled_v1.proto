@@ -441,6 +441,14 @@ message LegalActions {
   // Valid targets for flashback casts. Key = (graveyard slot << 8) | face index.
   map<uint32, SpellTargets> valid_targets_by_graveyard_index = 10
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Battlefield creatures the active player may currently stage as attackers. Populated only
+  // while that player is making the declaration; derived from the same legality predicate used
+  // by DeclareAttackers, so restrictions such as Defender and Pacifism are reflected in the UI.
+  repeated uint32 selectable_attacker_ids = 11 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Battlefield creatures the defending player may currently stage as blockers. A creature is
+  // included when it can legally block at least one declared attacker; pair-specific restrictions
+  // remain authoritative when the staged blocker is assigned to an attacker.
+  repeated uint32 selectable_blocker_ids = 12 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // Servatrice-injected each ruled broadcast: engine hand slot index -> Server_Card.id for that player,
