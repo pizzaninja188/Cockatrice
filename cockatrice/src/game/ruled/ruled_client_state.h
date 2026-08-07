@@ -130,6 +130,13 @@ struct RuledFaceOption
 /// Shared engine/client hand-action kind from ruled_v1.proto. Labels are display-only.
 using RuledHandActionKind = ruled::v1::HandActionKind;
 
+enum class RuledCastSource : int
+{
+    Hand,
+    Graveyard,
+    Exile,
+};
+
 /// The engine's offer for one hand-action kind, rebuilt from LegalActions every batch.
 struct RuledHandActionSet
 {
@@ -260,10 +267,10 @@ public:
     // One entry per hand-action kind the engine offered this batch; absent kind = nothing legal.
     // Written wholesale by RuledEventDispatcher::applyLegalActions.
     QHash<RuledHandActionKind, RuledHandActionSet> handActions;
-    // Flashback actions use the graveyard slot as the index, but share the same face/mode shape
-    // as hand casts so the pending-cast UI can reuse its target and payment flow.
-    RuledHandActionSet graveyardActions;
-    QHash<int, QString> flashbackCostsByCastKey;
+    // Public-zone casts use the engine ObjectId as their index and share the hand cast shape.
+    RuledHandActionSet zoneCastActions;
+    QHash<int, RuledCastSource> zoneCastSourceByOid;
+    QHash<int, QString> zoneCastCostsByCastKey;
     QSet<int> cleanupDiscardSelectedIndices;
     QList<int> openingBottomSelectedIndices;
     QVector<int> openingPickSeatIds;
@@ -301,6 +308,9 @@ public:
     // the second lets a targeting arrow find the CardItem to point at.
     QHash<quint32, int> graveyardOidToPlayerId;
     QHash<quint32, int> graveyardOidToServerCardId;
+    QHash<quint64, quint32> ownedExileCardToEngineOid;
+    QHash<quint32, int> exileOidToPlayerId;
+    QHash<quint32, int> exileOidToServerCardId;
     // Graveyard OIDs the in-progress cast may target. Client-local UI state (not engine state):
     // set by the pending-cast state machine, cleared when the cast completes or is cancelled.
     QSet<quint32> pendingCastGraveyardOids;
@@ -308,8 +318,8 @@ public:
     // Key = (engine hand slot << 8 | face index); see spellTargetKey(). One entry per castable
     // face of a hand card that needs a target (single-face cards use face 0).
     QHash<int, SpellTargetData> validTargetsByHandSlot;
-    // Key = (engine graveyard slot << 8 | face index), for Flashback casts.
-    QHash<int, SpellTargetData> validTargetsByGraveyardIndex;
+    // Key = (public-zone engine ObjectId << 8 | face index), for Flashback/Adventure casts.
+    QHash<quint64, SpellTargetData> validTargetsByZoneObject;
     // Key = (permanentOid << 32 | abilityIndex). Presence means the ability needs a target.
     QHash<quint64, SpellTargetData> validTargetsByAbility;
     // Engine ObjectId -> marked damage currently shown in ruled ZoneView.
@@ -467,6 +477,10 @@ public:
     {
         return (handSlot << 8) | (faceIndex & 0xff);
     }
+    [[nodiscard]] static quint64 zoneSpellTargetKey(quint32 objectId, int faceIndex)
+    {
+        return (static_cast<quint64>(objectId) << 8) | static_cast<quint64>(faceIndex & 0xff);
+    }
     [[nodiscard]] static quint64 abilityTargetKey(quint32 permanentOid, int abilityIndex)
     {
         return (static_cast<quint64>(permanentOid) << 32) | static_cast<quint64>(abilityIndex);
@@ -501,6 +515,10 @@ public:
     [[nodiscard]] quint32 graveyardEngineOidForOwnedCard(int ownerPlayerId, int serverCardId) const
     {
         return ownedGraveyardCardToEngineOid.value(makeOwnedCardKey(ownerPlayerId, serverCardId), 0);
+    }
+    [[nodiscard]] quint32 exileEngineOidForOwnedCard(int ownerPlayerId, int serverCardId) const
+    {
+        return ownedExileCardToEngineOid.value(makeOwnedCardKey(ownerPlayerId, serverCardId), 0);
     }
     [[nodiscard]] int cardIdForEngineOid(quint32 engineOid) const
     {
@@ -556,24 +574,28 @@ public:
     [[nodiscard]] QVector<RuledFaceOption> handActionFaceOptions(RuledHandActionKind kind, int handIndex) const;
     /// True when the action on this slot needs a cast-time target (CastSpell).
     [[nodiscard]] bool handActionNeedsTarget(RuledHandActionKind kind, int handIndex) const;
-    [[nodiscard]] QVector<RuledFaceOption> graveyardActionFaceOptions(int graveyardIndex) const
+    [[nodiscard]] QVector<RuledFaceOption> zoneActionFaceOptions(quint32 objectId) const
     {
-        QVector<RuledFaceOption> options = graveyardActions.faceOptionsByIndex.value(graveyardIndex);
+        QVector<RuledFaceOption> options = zoneCastActions.faceOptionsByIndex.value(static_cast<int>(objectId));
         std::sort(options.begin(), options.end(),
                   [](const RuledFaceOption &a, const RuledFaceOption &b) { return a.faceIndex < b.faceIndex; });
         return options;
     }
-    [[nodiscard]] bool isGraveyardActionLegal(int graveyardIndex) const
+    [[nodiscard]] bool isZoneActionLegal(quint32 objectId) const
     {
-        return graveyardActions.handIndices.contains(graveyardIndex);
+        return zoneCastActions.handIndices.contains(static_cast<int>(objectId));
     }
-    [[nodiscard]] bool graveyardActionNeedsTarget(int graveyardIndex) const
+    [[nodiscard]] bool zoneActionNeedsTarget(quint32 objectId) const
     {
-        return graveyardActions.needsTargetIndices.contains(graveyardIndex);
+        return zoneCastActions.needsTargetIndices.contains(static_cast<int>(objectId));
     }
-    [[nodiscard]] QString flashbackCost(int graveyardIndex, int faceIndex) const
+    [[nodiscard]] QString zoneActionCost(quint32 objectId, int faceIndex) const
     {
-        return flashbackCostsByCastKey.value(spellTargetKey(graveyardIndex, faceIndex));
+        return zoneCastCostsByCastKey.value(spellTargetKey(static_cast<int>(objectId), faceIndex));
+    }
+    [[nodiscard]] RuledCastSource zoneActionSource(quint32 objectId) const
+    {
+        return zoneCastSourceByOid.value(static_cast<int>(objectId), RuledCastSource::Hand);
     }
     void clearHandActions();
     [[nodiscard]] bool localPlayerMustCleanupDiscard() const;
@@ -588,58 +610,58 @@ public:
     // -----------------------------------------------------------------------------------
     // Spell / ability targeting queries.
     // -----------------------------------------------------------------------------------
-    [[nodiscard]] SpellTargetData spellTargetData(int slot, int faceIndex, bool fromGraveyard = false) const
+    [[nodiscard]] SpellTargetData
+    spellTargetData(int slot, int faceIndex, RuledCastSource source = RuledCastSource::Hand) const
     {
-        const auto &targets = fromGraveyard ? validTargetsByGraveyardIndex : validTargetsByHandSlot;
-        return targets.value(spellTargetKey(slot, faceIndex));
+        return source == RuledCastSource::Hand
+            ? validTargetsByHandSlot.value(spellTargetKey(slot, faceIndex))
+            : validTargetsByZoneObject.value(zoneSpellTargetKey(static_cast<quint32>(slot), faceIndex));
     }
     [[nodiscard]] bool isValidSpellTarget(int handSlot, int faceIndex, quint32 oid,
-                                          bool fromGraveyard = false) const
+                                          RuledCastSource source = RuledCastSource::Hand) const
     {
-        const auto &targets = fromGraveyard ? validTargetsByGraveyardIndex : validTargetsByHandSlot;
-        const auto it = targets.constFind(spellTargetKey(handSlot, faceIndex));
-        return it != targets.constEnd() && it->validPermanentIds.contains(oid);
+        return spellTargetData(handSlot, faceIndex, source).validPermanentIds.contains(oid);
     }
     [[nodiscard]] bool isValidSpellStackTarget(int handSlot, int faceIndex, quint32 oid,
-                                               bool fromGraveyard = false) const
+                                               RuledCastSource source = RuledCastSource::Hand) const
     {
-        const auto &targets = fromGraveyard ? validTargetsByGraveyardIndex : validTargetsByHandSlot;
-        const auto it = targets.constFind(spellTargetKey(handSlot, faceIndex));
-        return it != targets.constEnd() && it->validStackIds.contains(oid);
+        return spellTargetData(handSlot, faceIndex, source).validStackIds.contains(oid);
     }
     [[nodiscard]] bool isValidSpellGraveyardTarget(int handSlot, int faceIndex, quint32 oid,
-                                                   bool fromGraveyard = false) const
+                                                   RuledCastSource source = RuledCastSource::Hand) const
     {
-        const auto &targets = fromGraveyard ? validTargetsByGraveyardIndex : validTargetsByHandSlot;
-        const auto it = targets.constFind(spellTargetKey(handSlot, faceIndex));
-        return it != targets.constEnd() && it->validGraveyardIds.contains(oid);
+        return spellTargetData(handSlot, faceIndex, source).validGraveyardIds.contains(oid);
     }
-    [[nodiscard]] bool canSpellTargetSelf(int handSlot, int faceIndex, bool fromGraveyard = false) const
+    [[nodiscard]] bool canSpellTargetSelf(int handSlot, int faceIndex,
+                                          RuledCastSource source = RuledCastSource::Hand) const
     {
-        return spellTargetData(handSlot, faceIndex, fromGraveyard).canTargetSelf;
+        return spellTargetData(handSlot, faceIndex, source).canTargetSelf;
     }
     [[nodiscard]] bool canSpellTargetOpponent(int handSlot, int faceIndex,
-                                              bool fromGraveyard = false) const
+                                              RuledCastSource source = RuledCastSource::Hand) const
     {
-        return spellTargetData(handSlot, faceIndex, fromGraveyard).canTargetOpponent;
+        return spellTargetData(handSlot, faceIndex, source).canTargetOpponent;
     }
     // DamageTargets: max targets (0 = unlimited), fixed damage total (0 = X-spell), and flag.
-    [[nodiscard]] int spellMaxTargets(int handSlot, int faceIndex, bool fromGraveyard = false) const
+    [[nodiscard]] int spellMaxTargets(int handSlot, int faceIndex,
+                                      RuledCastSource source = RuledCastSource::Hand) const
     {
-        return spellTargetData(handSlot, faceIndex, fromGraveyard).maxTargets;
+        return spellTargetData(handSlot, faceIndex, source).maxTargets;
     }
-    [[nodiscard]] int spellFixedDamage(int handSlot, int faceIndex, bool fromGraveyard = false) const
+    [[nodiscard]] int spellFixedDamage(int handSlot, int faceIndex,
+                                       RuledCastSource source = RuledCastSource::Hand) const
     {
-        return spellTargetData(handSlot, faceIndex, fromGraveyard).fixedDamage;
+        return spellTargetData(handSlot, faceIndex, source).fixedDamage;
     }
-    [[nodiscard]] bool spellIsDamageTargets(int handSlot, int faceIndex, bool fromGraveyard = false) const
+    [[nodiscard]] bool spellIsDamageTargets(int handSlot, int faceIndex,
+                                            RuledCastSource source = RuledCastSource::Hand) const
     {
-        return spellTargetData(handSlot, faceIndex, fromGraveyard).isDamageTargets;
+        return spellTargetData(handSlot, faceIndex, source).isDamageTargets;
     }
     [[nodiscard]] int spellExtraManaPerTarget(int handSlot, int faceIndex,
-                                              bool fromGraveyard = false) const
+                                              RuledCastSource source = RuledCastSource::Hand) const
     {
-        return spellTargetData(handSlot, faceIndex, fromGraveyard).extraManaPerTarget;
+        return spellTargetData(handSlot, faceIndex, source).extraManaPerTarget;
     }
     [[nodiscard]] bool abilityNeedsTarget(quint32 permanentOid, int abilityIndex) const
     {

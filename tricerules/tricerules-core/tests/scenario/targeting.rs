@@ -616,20 +616,14 @@ fn bump_in_the_night_can_be_cast_from_graveyard_with_flashback() {
             ..Default::default()
         },
     );
-    let graveyard_idx = e.state.players[0]
-        .graveyard
-        .iter()
-        .position(|&oid| oid == bump_oid)
-        .expect("bump graveyard index");
     let target = target_player(1);
     let cast = e
         .apply_command(
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CastSpell(CastSpell {
-                    hand_card_index: graveyard_idx as u32,
                     targets: target,
-                    flashback: true,
+                    source: Some(graveyard_cast_source(bump_oid)),
                     ..Default::default()
                 })),
             },
@@ -823,6 +817,7 @@ fn mind_sculpt_rejects_self_target() {
                 must_attack_if_able: false,
                 must_block_if_able: false,
                 face_up_index: 0,
+                adventure_cast_permission: None,
             },
         );
         e.state.players[0].hand.push(id);

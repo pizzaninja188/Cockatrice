@@ -28,6 +28,7 @@ class BlockersDeclared;
 class BlockersPreview;
 class CombatDamageAssigned;
 class CreaturesRemovedFromCombat;
+class ExileObjectMap;
 class GraveyardObjectMap;
 class HandSlotMap;
 class LegalActions;
@@ -88,6 +89,7 @@ private:
     void applyBattlefieldObjectMap(const ruled::v1::BattlefieldObjectMap &map, BatchContext &ctx);
     void applyHandSlotMap(const ruled::v1::HandSlotMap &map);
     void applyGraveyardObjectMap(const ruled::v1::GraveyardObjectMap &map);
+    void applyExileObjectMap(const ruled::v1::ExileObjectMap &map);
     void applyZoneView(const ruled::v1::ZoneViewSync &view, BatchContext &ctx);
     void applyAttackersDeclared(const ruled::v1::AttackersDeclared &ad, BatchContext &ctx);
     void applyAttackersPreview(const ruled::v1::AttackersPreview &ap, BatchContext &ctx);

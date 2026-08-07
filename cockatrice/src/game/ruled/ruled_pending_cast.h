@@ -61,7 +61,7 @@ struct PendingRuledSpellCast
     };
 
     int handIndex = -1;
-    bool fromGraveyard = false;
+    RuledCastSource source = RuledCastSource::Hand;
     /// Fireball's "divided evenly, rounded down": the engine splits on resolution, so there is no
     /// allocation to collect, no one-damage-per-target cap, and zero targets is a legal cast.
     bool damageDividedEvenly = false;

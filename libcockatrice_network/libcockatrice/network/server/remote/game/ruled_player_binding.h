@@ -45,6 +45,8 @@ struct RuledPlayerBinding
     // hash above because a command that names a graveyard *slot* (a flashback cast) has only the
     // index, and the physical pile runs the other way — see the ordering note in the .cpp.
     QVector<quint32> graveyardEngineOidsOldestFirst;
+    // Public exile identity for Adventure and other engine-authorized casts from exile.
+    QHash<quint32, int> exileEngineOidToServerCardId;
     // Whether a zone view has ever reconciled this player's hand and library. The engine omits
     // those two zones while they are unchanged (RuledPerPlayerView::private_zones_unchanged), so
     // an omission is only meaningful once a full snapshot has actually landed here — an
@@ -73,6 +75,7 @@ struct RuledPlayerBinding
     }
     Server_Card *findCardByEngineOid(const Server_Player *player, quint32 engineOid) const;
     Server_Card *findGraveyardCardByEngineOid(const Server_Player *player, quint32 engineOid) const;
+    Server_Card *findExileCardByEngineOid(const Server_Player *player, quint32 engineOid) const;
     /// Resolve an *engine* graveyard index (as carried by CastSpell.hand_card_index on a flashback
     /// cast) to the physical card. Never index the pile with an engine index directly: the two
     /// zones run in opposite directions.

@@ -8,6 +8,14 @@ use tricerules_proto::ruled::v1::ChoiceKind;
 pub type PlayerId = i32;
 pub type ObjectId = u32;
 
+/// CR 715.3d: the player who resolved this card as an Adventure may cast one specific permanent
+/// face for as long as this exact object remains exiled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AdventureCastPermission {
+    pub player_id: PlayerId,
+    pub face_index: usize,
+}
+
 /// Turn structure for vanilla (no first-strike or trample substeps).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TurnStep {
@@ -101,6 +109,8 @@ pub struct GameObject {
     /// permanent enters the battlefield (MDFC, Transform, Flip). Engine reads characteristics
     /// through this so the active face's types/keywords/P/T are used everywhere, not the front.
     pub face_up_index: usize,
+    /// Present only while this exact object remains exiled after its Adventure face resolved.
+    pub adventure_cast_permission: Option<AdventureCastPermission>,
 }
 
 impl GameObject {

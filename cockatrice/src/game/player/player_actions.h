@@ -276,7 +276,7 @@ private:
     // the split/MDFC half (0 for single-face); castName/castCost are that face's name and mana cost.
     // Handles the toggle-cancel, {X}, hybrid/Phyrexian pip, target and mana-payment flow.
     bool beginRuledSpellCast(CardItem *card, int ruledHandIndex, int faceIndex, const QString &castName,
-                             const QString &castCost, bool fromGraveyard = false);
+                             const QString &castCost, RuledCastSource source = RuledCastSource::Hand);
     bool storeCurrentModalTargetsAndAdvance();
     static QMap<QChar, int> parseSimpleManaCost(const QString &manaCost);
     static QVector<RuledFlexPip> parseFlexPips(const QString &manaCost);

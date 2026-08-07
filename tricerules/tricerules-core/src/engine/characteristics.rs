@@ -305,6 +305,7 @@ mod tests {
                 must_attack_if_able: false,
                 must_block_if_able: false,
                 face_up_index: 0,
+                adventure_cast_permission: None,
             },
         );
         engine.state.continuous_effects.extend([

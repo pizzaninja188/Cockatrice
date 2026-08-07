@@ -1,0 +1,24 @@
+// Bonecrusher Giant // Stomp (Throne of Eldraine) — Adventure, CR 715.
+// The Adventure lifecycle is implemented by the engine. The two unrelated Oracle clauses named
+// in `partial` are tracked as follow-up issues in docs/issues.md.
+(
+    id: "bonecrusher_giant_stomp",
+    name: "Bonecrusher Giant // Stomp",
+    layout: Adventure,
+    faces: [
+        (
+            name: "Bonecrusher Giant",
+            mana_cost: "{2}{R}",
+            types: ["Creature", "Giant"],
+            power: 4,
+            toughness: 3,
+        ),
+        (
+            name: "Stomp",
+            mana_cost: "{1}{R}",
+            types: ["Instant"],
+            spell_effect: [DamageTarget(amount: 2, target: (kind: AnyTarget))],
+        ),
+    ],
+    partial: "Bonecrusher Giant's becomes-the-target trigger and Stomp's damage-prevention prohibition are not implemented",
+)

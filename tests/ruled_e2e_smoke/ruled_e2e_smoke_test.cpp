@@ -230,6 +230,15 @@ public:
     bool flashbackCast = false;
     bool sawFlashbackGraveToStack = false;
     bool sawFlashbackStackToExile = false;
+    bool devAdventureConjureSent = false;
+    bool devAdventureManaSent = false;
+    bool stompCast = false;
+    bool giantCastFromExile = false;
+    bool sawAdventureStackToExile = false;
+    bool sawAdventureExileToStack = false;
+    bool sawAdventureStackToBattlefield = false;
+    bool adventurePhysicalIdentityContinuous = true;
+    int adventurePhysicalCardId = -1;
     bool attackersSentThisCombat = false;
     bool blockersSentThisCombat = false;
     bool devConjureSent = false;
@@ -447,7 +456,28 @@ public:
                 const QLatin1String grave(ZoneNames::GRAVE);
                 const QLatin1String stack(ZoneNames::STACK);
                 const QLatin1String exile(ZoneNames::EXILE);
-                if (name == QLatin1String("Bump in the Night")) {
+                if (name.contains(QLatin1String("Bonecrusher Giant"))) {
+                    const QLatin1String hand(ZoneNames::HAND);
+                    const QLatin1String table(ZoneNames::TABLE);
+                    auto followPhysicalCard = [&] {
+                        if (adventurePhysicalCardId >= 0 && mc.card_id() != adventurePhysicalCardId) {
+                            adventurePhysicalIdentityContinuous = false;
+                        }
+                        adventurePhysicalCardId = mc.new_card_id();
+                    };
+                    if (from == hand && to == stack && mc.start_player_id() == myId) {
+                        adventurePhysicalCardId = mc.new_card_id();
+                    } else if (from == stack && to == exile && mc.target_player_id() == myId) {
+                        followPhysicalCard();
+                        sawAdventureStackToExile = true;
+                    } else if (from == exile && to == stack && mc.start_player_id() == myId) {
+                        followPhysicalCard();
+                        sawAdventureExileToStack = true;
+                    } else if (from == stack && to == table && mc.target_player_id() == myId) {
+                        followPhysicalCard();
+                        sawAdventureStackToBattlefield = true;
+                    }
+                } else if (name == QLatin1String("Bump in the Night")) {
                     // Scope to THIS seat's card. Every client sees both seats' moves, so an
                     // unscoped flag would be satisfied by the other seat's successful flashback
                     // and hide a rejected one — which is the whole failure being tested for.
@@ -860,7 +890,10 @@ public:
             return true;
         }
         if (!flashbackCast && devFlashbackManaSent) {
-            for (const auto &ga : latestLegal.graveyard_actions()) {
+            for (const auto &ga : latestLegal.zone_cast_actions()) {
+                if (ga.source_zone() != ruled::v1::CAST_SOURCE_ZONE_GRAVEYARD) {
+                    continue;
+                }
                 if (QString::fromStdString(ga.card_name()) != QLatin1String("Bump in the Night")) {
                     continue;
                 }
@@ -869,13 +902,65 @@ public:
                 }
                 ruled::v1::RuledCommand cmd;
                 auto *cast = cmd.mutable_cast_spell();
-                cast->set_hand_card_index(ga.graveyard_index());
-                cast->set_flashback(true);
+                cast->mutable_source()->set_graveyard_object_id(ga.object_id());
                 cast->add_targets()->set_object_id(static_cast<quint32>(oppId));
                 flashbackCast = true;
-                sendRuled(cmd, QStringLiteral("flashback Bump in the Night (gy idx %1) at player %2")
-                                   .arg(ga.graveyard_index())
+                sendRuled(cmd, QStringLiteral("flashback Bump in the Night (oid %1) at player %2")
+                                   .arg(ga.object_id())
                                    .arg(oppId));
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool tryAdventureSequence()
+    {
+        if (!devAdventureConjureSent) {
+            devAdventureConjureSent = true;
+            ruled::v1::RuledCommand cmd;
+            auto *dev = cmd.mutable_dev_command();
+            dev->set_target_player_id(myId);
+            auto *put = dev->mutable_put_card_in_zone();
+            put->set_card_name("Bonecrusher Giant // Stomp");
+            put->set_zone(ruled::v1::DEV_ZONE_HAND);
+            sendRuled(cmd, QStringLiteral("dev: conjure Bonecrusher Giant // Stomp"));
+            return true;
+        }
+        if (!devAdventureManaSent) {
+            devAdventureManaSent = true;
+            ruled::v1::RuledCommand cmd;
+            auto *dev = cmd.mutable_dev_command();
+            dev->set_target_player_id(myId);
+            dev->mutable_add_mana()->set_r(2);
+            dev->mutable_add_mana()->set_c(3);
+            sendRuled(cmd, QStringLiteral("dev: add mana for both Adventure casts"));
+            return true;
+        }
+        if (!stompCast) {
+            if (const auto *stomp = handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Stomp"))) {
+                ruled::v1::RuledCommand cmd;
+                auto *cast = cmd.mutable_cast_spell();
+                cast->mutable_source()->set_hand_index(stomp->hand_index());
+                cast->set_face_index(1);
+                cast->add_targets()->set_object_id(static_cast<quint32>(oppId));
+                stompCast = true;
+                sendRuled(cmd, QStringLiteral("cast Stomp at player %1").arg(oppId));
+                return true;
+            }
+        }
+        if (stompCast && !giantCastFromExile) {
+            for (const auto &action : latestLegal.zone_cast_actions()) {
+                if (action.source_zone() != ruled::v1::CAST_SOURCE_ZONE_EXILE ||
+                    QString::fromStdString(action.card_name()) != QLatin1String("Bonecrusher Giant")) {
+                    continue;
+                }
+                ruled::v1::RuledCommand cmd;
+                auto *cast = cmd.mutable_cast_spell();
+                cast->mutable_source()->set_exile_object_id(action.object_id());
+                cast->set_face_index(action.face_index());
+                giantCastFromExile = true;
+                sendRuled(cmd, QStringLiteral("cast Bonecrusher Giant from exile oid %1").arg(action.object_id()));
                 return true;
             }
         }
@@ -1013,6 +1098,9 @@ public:
             if (tryFlashbackSequence()) {
                 return;
             }
+            if (tryAdventureSequence()) {
+                return;
+            }
             // --- Dev commands (roadmap backlog dev-loop piece 2) ---------------------------
             // The only cross-language check that a C++-built DevCommand decodes and applies in
             // Rust; the behaviour itself is covered by the engine's scenario suite. Serra Angel
@@ -1069,7 +1157,7 @@ public:
                 if (myPool.r >= 1) {
                     ruled::v1::RuledCommand cmd;
                     auto *cast = cmd.mutable_cast_spell();
-                    cast->set_hand_card_index(bolt->hand_index());
+                    cast->mutable_source()->set_hand_index(bolt->hand_index());
                     cast->add_targets()->set_object_id(static_cast<quint32>(oppId));
                     boltCast = true;
                     sendRuled(cmd, QStringLiteral("cast Lightning Bolt at player %1").arg(oppId));
@@ -1091,7 +1179,7 @@ public:
                 if (myPool.r >= 1 && myPool.w >= 1) {
                     ruled::v1::RuledCommand cmd;
                     auto *cast = cmd.mutable_cast_spell();
-                    cast->set_hand_card_index(charm->hand_index());
+                    cast->mutable_source()->set_hand_index(charm->hand_index());
                     auto *mode = cast->add_selected_modes();
                     mode->set_mode_index(0);
                     mode->add_targets()->set_object_id(static_cast<quint32>(oppId));
@@ -1105,7 +1193,7 @@ public:
                                         : nullptr) {
                 if (myPool.total() >= 4) {
                     ruled::v1::RuledCommand cmd;
-                    cmd.mutable_cast_spell()->set_hand_card_index(giant->hand_index());
+                    cmd.mutable_cast_spell()->mutable_source()->set_hand_index(giant->hand_index());
                     giantCast = true;
                     sendRuled(cmd, QStringLiteral("cast Hill Giant"));
                     return;
@@ -1139,7 +1227,7 @@ public:
                                     : nullptr) {
                 if (myPool.u >= 1) {
                     ruled::v1::RuledCommand cmd;
-                    cmd.mutable_cast_spell()->set_hand_card_index(brainstorm->hand_index());
+                    cmd.mutable_cast_spell()->mutable_source()->set_hand_index(brainstorm->hand_index());
                     brainstormCast = true;
                     sendRuled(cmd, QStringLiteral("cast Brainstorm"));
                     return;
@@ -1381,6 +1469,7 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
                p1.sawAttackersDeclared && p1.sawCombatLifeLoss && p2.sawBrainstormChoice &&
                p2.submittedBrainstormChoice && p2.sawBrainstormResolved && p2.sentCleanupDiscard &&
                p1.sawDevConjuredPermanent && p1.sawDevMana && p1.sawFlashbackGraveToStack && p1.sawFlashbackStackToExile &&
+               p1.sawAdventureStackToExile && p1.sawAdventureExileToStack && p1.sawAdventureStackToBattlefield &&
                p2.sawFlashbackGraveToStack && p2.sawFlashbackStackToExile && p2.handSizeByPlayer.count(p2.myId) &&
                p2.handSizeByPlayer[p2.myId] <= 7;
     };
@@ -1429,6 +1518,13 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
         << "seat 1's flashback card never physically moved stack -> exile (CR 702.34a)";
     EXPECT_TRUE(p2.sawFlashbackStackToExile)
         << "seat 2's flashback card never physically moved stack -> exile (CR 702.34a)";
+    EXPECT_TRUE(p1.stompCast) << "Stomp was never cast from hand";
+    EXPECT_TRUE(p1.giantCastFromExile) << "Bonecrusher Giant was never cast from its exile permission";
+    EXPECT_TRUE(p1.sawAdventureStackToExile) << "Stomp never physically moved stack -> exile";
+    EXPECT_TRUE(p1.sawAdventureExileToStack) << "Bonecrusher Giant never physically moved exile -> stack";
+    EXPECT_TRUE(p1.sawAdventureStackToBattlefield) << "Bonecrusher Giant never entered the battlefield";
+    EXPECT_TRUE(p1.adventurePhysicalIdentityContinuous)
+        << "Adventure casting moved a different physical card between zones";
     EXPECT_TRUE(p2.sawCleanupDiscardActions && p2.sentCleanupDiscard) << "cleanup discard never happened";
     ASSERT_TRUE(p2.handSizeByPlayer.count(p2.myId));
     EXPECT_LE(p2.handSizeByPlayer[p2.myId], 7) << "hand size not enforced after cleanup discard";

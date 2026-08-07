@@ -13,9 +13,9 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
     for p in &eng.state.players {
         let labels = legal_labels(eng, p.id);
         let hand_actions = legal_hand_actions(eng, p.id);
-        let graveyard_actions = legal_graveyard_actions(eng, p.id);
+        let zone_cast_actions = legal_zone_cast_actions(eng, p.id);
         let mut valid_targets_by_hand_slot = BTreeMap::new();
-        let mut valid_targets_by_graveyard_index = BTreeMap::new();
+        let mut valid_targets_by_zone_object = BTreeMap::new();
         let mut valid_targets_by_ability = BTreeMap::new();
 
         if let Some(idx) = eng.state.player_idx(p.id) {
@@ -36,26 +36,6 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                     valid_targets_by_hand_slot.insert(key, t);
                 }
             }
-            for (slot, &oid) in eng.state.players[idx].graveyard.iter().enumerate() {
-                let Some(obj) = eng.state.objects.get(&oid) else {
-                    continue;
-                };
-                let Some(def) = eng.registry.get(&obj.card_id) else {
-                    continue;
-                };
-                for (face_index, face) in def.faces_iter().enumerate() {
-                    if face.flashback_cost.is_none()
-                        || face.is_land
-                        || !face.spell_effect.iter().any(spell_effect_kind_needs_target)
-                    {
-                        continue;
-                    }
-                    let t = compute_spell_targets(eng, p.id, &face.spell_effect);
-                    let key = (slot as u32) << 8 | face_index as u32;
-                    valid_targets_by_graveyard_index.insert(key, t);
-                }
-            }
-
             for &poid in &eng.state.players[idx].battlefield {
                 let Some(pobj) = eng.state.objects.get(&poid) else {
                     continue;
@@ -76,6 +56,24 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                     }
                 }
             }
+        }
+        for action in &zone_cast_actions {
+            if !action.needs_target {
+                continue;
+            }
+            let Some(face) = eng
+                .state
+                .objects
+                .get(&action.object_id)
+                .and_then(|object| eng.registry.get(&object.card_id))
+                .and_then(|definition| definition.face(action.face_index as usize))
+            else {
+                continue;
+            };
+            valid_targets_by_zone_object.insert(
+                (u64::from(action.object_id) << 8) | u64::from(action.face_index),
+                compute_spell_targets(eng, p.id, &face.spell_effect),
+            );
         }
 
         // CR 603.3d: a triggered ability chooses its targets as it is put on the stack. While one
@@ -150,10 +148,10 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 required_attacker_ids,
                 required_blocker_ids,
                 hand_actions,
-                graveyard_actions,
-                valid_targets_by_graveyard_index,
                 selectable_attacker_ids,
                 selectable_blocker_ids,
+                zone_cast_actions,
+                valid_targets_by_zone_object,
             },
         );
     }
@@ -329,7 +327,7 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
     actions
 }
 
-fn legal_graveyard_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalGraveyardAction> {
+fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZoneCastAction> {
     if eng.state.opening.is_some()
         || eng.state.blocking_choice().is_some()
         || eng.state.turn_step == TurnStep::Cleanup
@@ -349,7 +347,7 @@ fn legal_graveyard_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalGra
     let instant_ok = instant_timing_step_allowed(eng.state.turn_step);
     let sorcery_ok = sorcery_speed_available(&eng.state, pid);
     let mut actions = Vec::new();
-    for (graveyard_index, &oid) in eng.state.players[player_index].graveyard.iter().enumerate() {
+    for &oid in &eng.state.players[player_index].graveyard {
         let Some(card_id) = eng.state.objects.get(&oid).map(|object| &object.card_id) else {
             continue;
         };
@@ -368,8 +366,9 @@ fn legal_graveyard_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalGra
             if !cast_ok {
                 continue;
             }
-            let mut action = rv1::LegalGraveyardAction {
-                graveyard_index: graveyard_index as u32,
+            let mut action = rv1::LegalZoneCastAction {
+                source_zone: rv1::CastSourceZone::Graveyard as i32,
+                object_id: oid,
                 card_name: face.name.clone(),
                 face_index: face_index as u32,
                 needs_target: face.spell_effect.iter().any(spell_effect_kind_needs_target),
@@ -410,6 +409,80 @@ fn legal_graveyard_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalGra
             }
             actions.push(action);
         }
+    }
+
+    // CR 715.3d: the permission names the player and permanent face, and remains valid only while
+    // that exact object is still in exile. Walk all owners' public exile zones because the spell's
+    // controller and the physical card's owner need not be the same in future effects.
+    for &oid in eng
+        .state
+        .players
+        .iter()
+        .flat_map(|owner| owner.exile.iter())
+    {
+        let Some(object) = eng.state.objects.get(&oid) else {
+            continue;
+        };
+        let Some(permission) = object.adventure_cast_permission else {
+            continue;
+        };
+        if permission.player_id != pid {
+            continue;
+        }
+        let Some(face) = eng
+            .registry
+            .get(&object.card_id)
+            .and_then(|definition| definition.face(permission.face_index))
+        else {
+            continue;
+        };
+        if face.is_land {
+            continue;
+        }
+        let cast_ok = if castable_at_instant_speed(&face) {
+            instant_ok
+        } else {
+            sorcery_ok
+        };
+        if !cast_ok {
+            continue;
+        }
+        let mut action = rv1::LegalZoneCastAction {
+            source_zone: rv1::CastSourceZone::Exile as i32,
+            object_id: object.id,
+            card_name: face.name.clone(),
+            face_index: permission.face_index as u32,
+            needs_target: face.spell_effect.iter().any(spell_effect_kind_needs_target),
+            min_modes: 0,
+            max_modes: 0,
+            modes: vec![],
+            cost: face.mana_cost.to_string(),
+        };
+        if let Some(modal) = &face.modal_spell {
+            action.min_modes = modal.min_modes;
+            action.max_modes = modal.max_modes;
+            action.modes = modal
+                .modes
+                .iter()
+                .enumerate()
+                .map(|(mode_index, mode)| {
+                    let needs_target = mode.effects.iter().any(spell_effect_kind_needs_target);
+                    let targets = compute_spell_targets(eng, pid, &mode.effects);
+                    rv1::LegalSpellMode {
+                        mode_index: mode_index as u32,
+                        label: mode.label.clone(),
+                        selectable: !needs_target || spell_targets_have_candidate(&targets),
+                        needs_target,
+                        targets: Some(targets),
+                    }
+                })
+                .collect();
+            if action.modes.iter().filter(|mode| mode.selectable).count() < modal.min_modes as usize
+            {
+                continue;
+            }
+        }
+        actions.push(action);
     }
     actions
 }

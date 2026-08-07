@@ -525,6 +525,20 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
         }
     }
 
+    // Exile is a public pile with the same newest-first physical ordering as the graveyard, while
+    // the engine vector is oldest-first. Bind by reversed position so an Adventure cast selects
+    // the exact card even when several copies share a name.
+    Server_CardZone *exileZone = zones.value(ZoneNames::EXILE);
+    if (exileZone && v.exile_object_ids_size() == exileZone->getCards().size()) {
+        exileEngineOidToServerCardId.clear();
+        const int exileSize = v.exile_object_ids_size();
+        for (int i = 0; i < exileSize; ++i) {
+            const quint32 oid = static_cast<quint32>(v.exile_object_ids(i));
+            Server_Card *card = exileZone->getCards().at(exileSize - 1 - i);
+            exileEngineOidToServerCardId.insert(oid, card->getId());
+        }
+    }
+
     result.engineOidToServerCardId = engineOidToServerCardId;
     return result;
 }
@@ -563,6 +577,18 @@ Server_Card *RuledPlayerBinding::findGraveyardCardByEngineOid(const Server_Playe
     const int serverCardId = *it;
     if (Server_CardZone *z = player->getZones().value(ZoneNames::GRAVE)) {
         return z->getCard(serverCardId, nullptr, false);
+    }
+    return nullptr;
+}
+
+Server_Card *RuledPlayerBinding::findExileCardByEngineOid(const Server_Player *player, quint32 engineOid) const
+{
+    const auto it = exileEngineOidToServerCardId.constFind(engineOid);
+    if (it == exileEngineOidToServerCardId.constEnd()) {
+        return nullptr;
+    }
+    if (Server_CardZone *zone = player->getZones().value(ZoneNames::EXILE)) {
+        return zone->getCard(*it, nullptr, false);
     }
     return nullptr;
 }

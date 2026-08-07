@@ -1,4 +1,4 @@
-use crate::card_def::{CardDefinition, RawCardDefinition};
+use crate::card_def::{CardDefinition, Layout, RawCardDefinition};
 use crate::primitives::{EffectContext, SpellEffectKind, StaticAbilityDef};
 use crate::token_def::TokenDefinition;
 use once_cell::sync::Lazy;
@@ -79,6 +79,19 @@ impl CardRegistry {
                 .map_err(|reason| RegistryError::InvalidCard { id, reason })?;
             // Type flags are derived from `types`/`supertypes`, not authored in RON (per face).
             card.derive_type_flags();
+            if card.layout == Layout::Adventure {
+                let valid_roles = card.faces.len() == 2
+                    && card.faces[0].is_permanent()
+                    && (card.faces[1].is_instant || card.faces[1].is_sorcery)
+                    && !card.faces[1].is_permanent();
+                if !valid_roles {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: "Adventure requires exactly two faces: permanent face 0 and instant/sorcery face 1"
+                            .into(),
+                    });
+                }
+            }
             // Validate every face's effects at startup — multi-face cards (CR 709/712/715)
             // validate each face uniformly. Spell effects have no source permanent, so `Source`
             // subjects are rejected here (EffectContext::Spell); activated/triggered
@@ -943,6 +956,45 @@ mod tests {
         assert!(
             matches!(err, RegistryError::InvalidCard { ref reason, .. } if reason.contains("one resolution owner"))
         );
+    }
+
+    #[test]
+    fn load_rejects_malformed_adventure_faces() {
+        let invalid = [
+            r#"(
+                id: "one_face_adventure",
+                name: "One Face Adventure",
+                layout: Adventure,
+                faces: [(name: "Creature", mana_cost: "{2}{G}", types: ["Creature"])],
+            )"#,
+            r#"(
+                id: "spell_first_adventure",
+                name: "Spell First Adventure",
+                layout: Adventure,
+                faces: [
+                    (name: "Spell", mana_cost: "{G}", types: ["Instant"]),
+                    (name: "Other Spell", mana_cost: "{1}{G}", types: ["Sorcery"]),
+                ],
+            )"#,
+            r#"(
+                id: "permanent_second_adventure",
+                name: "Permanent Second Adventure",
+                layout: Adventure,
+                faces: [
+                    (name: "Creature", mana_cost: "{2}{G}", types: ["Creature"]),
+                    (name: "Other Creature", mana_cost: "{1}{G}", types: ["Creature"]),
+                ],
+            )"#,
+        ];
+        for bad in invalid {
+            assert!(
+                matches!(
+                    CardRegistry::from_chunks(&[bad]),
+                    Err(RegistryError::InvalidCard { .. })
+                ),
+                "expected malformed Adventure definition to be rejected"
+            );
+        }
     }
 
     #[test]

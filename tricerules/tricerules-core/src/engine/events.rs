@@ -357,6 +357,8 @@ impl GameEngine {
             first_strike_step_pending,
             // Engine ObjectIds for each card in this player's graveyard (in graveyard order).
             graveyard_object_ids: p.graveyard.clone(),
+            // Engine ObjectIds for each card in this player's public exile zone.
+            exile_object_ids: p.exile.clone(),
         }
     }
 

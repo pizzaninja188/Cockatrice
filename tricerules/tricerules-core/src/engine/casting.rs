@@ -192,8 +192,6 @@ impl GameEngine {
         player: PlayerId,
         command: &rv1::CastSpell,
     ) -> Result<RuledEventBatch, EngineError> {
-        let hand_idx = command.hand_card_index as usize;
-        let flashback = command.flashback;
         let targets = command.targets.as_slice();
         let x_value = command.x_value;
         let flex_payments = command.flex_payments.as_slice();
@@ -209,16 +207,45 @@ impl GameEngine {
             .state
             .player_idx(player)
             .ok_or(EngineError::UnknownPlayer(player))?;
-        let oid = if flashback {
-            *self.state.players[idx]
-                .graveyard
-                .get(hand_idx)
-                .ok_or(EngineError::Illegal("bad graveyard index"))?
-        } else {
-            *self.state.players[idx]
-                .hand
-                .get(hand_idx)
-                .ok_or(EngineError::Illegal("bad hand index"))?
+        let source = command
+            .source
+            .as_ref()
+            .and_then(|source| source.location.as_ref())
+            .ok_or(EngineError::Illegal("missing cast source"))?;
+        let (oid, flashback, from_adventure) = match source {
+            rv1::cast_source::Location::HandIndex(hand_index) => (
+                *self.state.players[idx]
+                    .hand
+                    .get(*hand_index as usize)
+                    .ok_or(EngineError::Illegal("bad hand index"))?,
+                false,
+                false,
+            ),
+            rv1::cast_source::Location::GraveyardObjectId(source_oid) => {
+                if !self.state.players[idx].graveyard.contains(source_oid) {
+                    return Err(EngineError::Illegal("card is not in your graveyard"));
+                }
+                (*source_oid, true, false)
+            }
+            rv1::cast_source::Location::ExileObjectId(source_oid) => {
+                let object = self
+                    .state
+                    .objects
+                    .get(source_oid)
+                    .ok_or(EngineError::Illegal("unknown exile object"))?;
+                let permission = object
+                    .adventure_cast_permission
+                    .ok_or(EngineError::Illegal(
+                        "card has no cast-from-exile permission",
+                    ))?;
+                if object.zone != Zone::Exile || permission.player_id != player {
+                    return Err(EngineError::Illegal("illegal cast from exile"));
+                }
+                if permission.face_index != face_index {
+                    return Err(EngineError::Illegal("wrong Adventure face"));
+                }
+                (*source_oid, false, true)
+            }
         };
         let card_id = self.state.objects.get(&oid).unwrap().card_id.clone();
         let def = self
@@ -228,6 +255,11 @@ impl GameEngine {
         let face = def
             .face(face_index)
             .ok_or(EngineError::Illegal("bad face index"))?;
+        if from_adventure && !face.is_permanent() {
+            return Err(EngineError::Illegal(
+                "Adventure permission requires a permanent face",
+            ));
+        }
         if face.is_land {
             return Err(EngineError::Illegal("use play land"));
         }
@@ -406,11 +438,6 @@ impl GameEngine {
             flex_payments,
         )?;
 
-        if flashback {
-            self.state.players[idx].graveyard.retain(|&x| x != oid);
-        } else {
-            self.state.players[idx].hand.retain(|&x| x != oid);
-        }
         let trefs: Vec<ObjectId> = public_targets
             .iter()
             .map(|target| target.object_id)

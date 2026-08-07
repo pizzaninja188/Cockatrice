@@ -2,10 +2,10 @@
 
 use crate::custom::{self, ResolutionChoice, ResolutionCtx, ResolutionStep};
 use crate::state::{
-    AffectedScope, BlockingChoice, ChosenSpellMode, CombatState, ContinuousEffect, GameObject,
-    GameState, ObjectId, OpeningSequence, PendingResolution, PendingTrigger, PendingTriggerOrder,
-    PlayerId, PlayerState, StackItem, StagedTrigger, StagedTriggerGroup, TurnStep,
-    UndoableManaAbility, Zone,
+    AdventureCastPermission, AffectedScope, BlockingChoice, ChosenSpellMode, CombatState,
+    ContinuousEffect, GameObject, GameState, ObjectId, OpeningSequence, PendingResolution,
+    PendingTrigger, PendingTriggerOrder, PlayerId, PlayerState, StackItem, StagedTrigger,
+    StagedTriggerGroup, TurnStep, UndoableManaAbility, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -20,7 +20,7 @@ use tricerules_cards::primitives::{
     LifeAmount, PlayerRecipient, RelativePlayerSet, SearchDestination, SpellEffectKind,
     SpellTypeFilter, StaticAbilityDef, TargetFilter, TargetKind, TokenController, TriggerCondition,
 };
-use tricerules_cards::{CardRegistry, FaceRef};
+use tricerules_cards::{CardRegistry, FaceRef, Layout};
 use tricerules_proto::ruled::v1 as rv1;
 use tricerules_proto::ruled::v1::{
     IpcResponse, LegalActions, RuledCommand, RuledEvent, RuledEventBatch,
@@ -268,6 +268,7 @@ fn new_object_from_card(
         must_attack_if_able: face.must_attack_if_able,
         must_block_if_able: face.must_block_if_able,
         face_up_index: 0,
+        adventure_cast_permission: None,
     }
 }
 

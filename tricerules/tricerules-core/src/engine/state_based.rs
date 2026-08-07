@@ -468,6 +468,7 @@ mod sba_tests {
                 must_attack_if_able: false,
                 must_block_if_able: false,
                 face_up_index: 0,
+                adventure_cast_permission: None,
             },
         );
         let idx = e.state.player_idx(owner).unwrap();

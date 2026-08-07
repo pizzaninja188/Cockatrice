@@ -123,6 +123,26 @@ impl GameEngine {
                 .registry
                 .get(&card_id)
                 .and_then(|d| d.face(top.face_index));
+            let is_adventure_spell = self.registry.get(&card_id).is_some_and(|definition| {
+                definition.layout == Layout::Adventure && top.face_index == 1
+            });
+            // CR 715.3d applies only when the Adventure actually resolves. The ordinary fizzle
+            // check occurs later for every spell; preflight it here as well because destination is
+            // chosen before effects run and an all-illegal-target Adventure must go to graveyard.
+            let adventure_fizzles = if is_adventure_spell {
+                let (effects, _) = self.build_resolution_effects(&top);
+                let targeted: Vec<_> = effects
+                    .iter()
+                    .filter(|(effect, _, _)| spell_effect_kind_needs_target(effect))
+                    .collect();
+                !targeted.is_empty()
+                    && targeted.iter().all(|(effect, targets, _)| {
+                        !effect_has_legal_target_at_resolution(self, effect, targets, controller)
+                    })
+            } else {
+                false
+            };
+            let adventure_resolves_to_exile = is_adventure_spell && !adventure_fizzles;
             let resolves_to_battlefield_raw =
                 resolving_face.map(|f| f.is_permanent()).unwrap_or(false);
             // CR 303.4f: an aura whose enchant target is no longer on the battlefield at resolution
@@ -144,7 +164,7 @@ impl GameEngine {
                 !top.flashback && resolves_to_battlefield_raw && aura_target_valid;
             let destination = if resolves_to_battlefield {
                 rv1::StackResolveDestination::Battlefield as i32
-            } else if top.flashback {
+            } else if top.flashback || adventure_resolves_to_exile {
                 rv1::StackResolveDestination::Exile as i32
             } else {
                 rv1::StackResolveDestination::Graveyard as i32
@@ -161,7 +181,7 @@ impl GameEngine {
                 top.id,
                 if resolves_to_battlefield {
                     Zone::Battlefield
-                } else if top.flashback {
+                } else if top.flashback || adventure_resolves_to_exile {
                     Zone::Exile
                 } else {
                     Zone::Graveyard
@@ -171,6 +191,14 @@ impl GameEngine {
                 // case today, but it is the spell's controller that is authoritative.
                 Some(top.controller),
             )?;
+            if adventure_resolves_to_exile {
+                if let Some(object) = self.state.objects.get_mut(&top.id) {
+                    object.adventure_cast_permission = Some(AdventureCastPermission {
+                        player_id: top.controller,
+                        face_index: 0,
+                    });
+                }
+            }
             if resolves_to_battlefield {
                 // CR 712.4: a permanent enters the battlefield showing the face that was cast.
                 // Set face_up_index from the stack item so characteristic queries (types, keywords,
@@ -604,6 +632,7 @@ impl GameEngine {
                         must_attack_if_able: false,
                         must_block_if_able: false,
                         face_up_index: 0,
+                        adventure_cast_permission: None,
                     },
                 );
                 self.state.players[pidx].battlefield.push(oid);
@@ -764,6 +793,9 @@ pub(crate) fn move_object_to_zone(
         .map(|characteristics| characteristics.keywords);
     if old_zone != Some(z) {
         *state.zone_change_generation.entry(oid).or_insert(0) += 1;
+        if let Some(object) = state.objects.get_mut(&oid) {
+            object.adventure_cast_permission = None;
+        }
     }
 
     // CR 400.7: a zone change creates a new game object. Remove any Single-target continuous
@@ -1109,6 +1141,7 @@ mod source_keyword_tests {
                 must_attack_if_able: false,
                 must_block_if_able: false,
                 face_up_index: 0,
+                adventure_cast_permission: None,
             },
         );
         let player_index = engine.state.player_idx(controller).unwrap();
@@ -1141,6 +1174,7 @@ mod source_keyword_tests {
                 must_attack_if_able: false,
                 must_block_if_able: false,
                 face_up_index: 0,
+                adventure_cast_permission: None,
             },
         );
         engine.state.players[0].battlefield.push(source);

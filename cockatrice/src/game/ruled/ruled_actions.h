@@ -116,6 +116,9 @@ resolveSpellTargetItem(AbstractGame *game, RuledClientState *state, quint32 targ
 /// that action on it. The only click→slot entry point; a new hand mechanic needs no new function.
 [[nodiscard]] int
 resolveHandActionIndex(const RuledClientState *state, RuledHandActionKind kind, const CardItem *card);
+/// Engine object id for a clicked public-zone card, using the server-injected zone identity map.
+/// Returns 0 for non-graveyard/exile cards or when the current batch has no mapping.
+[[nodiscard]] quint32 resolvePublicZoneObjectId(const RuledClientState *state, const CardItem *card);
 
 /// True when `card` lives in the zone the active tier-3 resolution pick is drawing candidates
 /// from. **Every id-keyed pick query must be gated on this**: a candidate's `Server_Card.id` is

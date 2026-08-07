@@ -1068,6 +1068,9 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     // game and offer phantom targets.
     ownedGraveyardCardToEngineOid.clear();
     graveyardOidToPlayerId.clear();
+    ownedExileCardToEngineOid.clear();
+    exileOidToPlayerId.clear();
+    exileOidToServerCardId.clear();
     pendingCastGraveyardOids.clear();
 
     // Legal actions + opening sequence. Skipped on the game-start transition: the incoming
@@ -1077,6 +1080,11 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     // it at the head of every payload.
     if (scope == RuledSessionResetScope::All) {
         clearHandActions();
+        zoneCastActions = {};
+        zoneCastSourceByOid.clear();
+        zoneCastCostsByCastKey.clear();
+        validTargetsByHandSlot.clear();
+        validTargetsByZoneObject.clear();
         openingUiKind = RuledOpeningUiKind::None;
         openingMulliganCount = 0;
         openingPickSeatIds.clear();

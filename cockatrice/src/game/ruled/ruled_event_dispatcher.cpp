@@ -150,8 +150,11 @@ bool RuledEventDispatcher::processPayload(const std::string &payload)
 void RuledEventDispatcher::resetPerBatchLegalActions()
 {
     state->clearHandActions();
-    state->graveyardActions = {};
-    state->flashbackCostsByCastKey.clear();
+    state->zoneCastActions = {};
+    state->zoneCastSourceByOid.clear();
+    state->zoneCastCostsByCastKey.clear();
+    state->validTargetsByHandSlot.clear();
+    state->validTargetsByZoneObject.clear();
     state->openingBottomSelectedIndices.clear();
     state->openingPickSeatIds.clear();
     state->openingUiKind = RuledOpeningUiKind::None;
@@ -198,6 +201,9 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
         }
         if (e.has_graveyard_object_map()) {
             applyGraveyardObjectMap(e.graveyard_object_map());
+        }
+        if (e.has_exile_object_map()) {
+            applyExileObjectMap(e.exile_object_map());
         }
         if (e.has_zone_view()) {
             applyZoneView(e.zone_view(), ctx);
@@ -739,6 +745,20 @@ void RuledEventDispatcher::applyGraveyardObjectMap(const ruled::v1::GraveyardObj
     }
 }
 
+void RuledEventDispatcher::applyExileObjectMap(const ruled::v1::ExileObjectMap &map)
+{
+    state->ownedExileCardToEngineOid.clear();
+    state->exileOidToPlayerId.clear();
+    state->exileOidToServerCardId.clear();
+    for (const auto &entry : map.entries()) {
+        const quint32 oid = static_cast<quint32>(entry.engine_object_id());
+        state->ownedExileCardToEngineOid.insert(
+            RuledClientState::makeOwnedCardKey(entry.player_id(), entry.server_card_id()), oid);
+        state->exileOidToPlayerId.insert(oid, entry.player_id());
+        state->exileOidToServerCardId.insert(oid, entry.server_card_id());
+    }
+}
+
 void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, BatchContext &ctx)
 {
     if (!view.battlefields_unchanged()) {
@@ -915,18 +935,34 @@ void RuledEventDispatcher::applyLifeChanged(const ruled::v1::LifeChanged &lc, Ba
 void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &actions, BatchContext &ctx)
 {
     state->handActions = copyHandActions(actions);
-    for (const auto &action : actions.graveyard_actions()) {
-        const int graveyardIndex = static_cast<int>(action.graveyard_index());
+    for (const auto &action : actions.zone_cast_actions()) {
+        const int objectId = static_cast<int>(action.object_id());
         const int faceIndex = static_cast<int>(action.face_index());
-        const int castKey = RuledClientState::spellTargetKey(graveyardIndex, faceIndex);
-        state->graveyardActions.handIndices.insert(graveyardIndex);
+        const int castKey = RuledClientState::spellTargetKey(objectId, faceIndex);
+        state->zoneCastActions.handIndices.insert(objectId);
         const QString cardName = QString::fromStdString(action.card_name());
-        state->graveyardActions.indicesByCardName.insert(cardName, graveyardIndex);
-        state->graveyardActions.faceOptionsByIndex[graveyardIndex].append({faceIndex, cardName});
+        state->zoneCastActions.indicesByCardName.insert(cardName, objectId);
+        state->zoneCastActions.faceOptionsByIndex[objectId].append({faceIndex, cardName});
+        state->zoneCastSourceByOid.insert(
+            objectId, action.source_zone() == ruled::v1::CAST_SOURCE_ZONE_EXILE
+                          ? RuledCastSource::Exile
+                          : RuledCastSource::Graveyard);
         if (action.needs_target()) {
-            state->graveyardActions.needsTargetIndices.insert(graveyardIndex);
+            state->zoneCastActions.needsTargetIndices.insert(objectId);
         }
-        state->flashbackCostsByCastKey.insert(castKey, QString::fromStdString(action.cost()));
+        state->zoneCastCostsByCastKey.insert(castKey, QString::fromStdString(action.cost()));
+        if (action.modes_size() > 0) {
+            state->zoneCastActions.modalMinModesByCastKey.insert(castKey, static_cast<int>(action.min_modes()));
+            state->zoneCastActions.modalMaxModesByCastKey.insert(castKey, static_cast<int>(action.max_modes()));
+            QVector<RuledModalSpellOption> modes;
+            for (const auto &mode : action.modes()) {
+                modes.append({static_cast<int>(mode.mode_index()), QString::fromStdString(mode.label()),
+                              mode.selectable(), mode.needs_target(),
+                              mode.has_targets() ? parseSpellTargets(mode.targets())
+                                                 : RuledClientState::SpellTargetData{}});
+            }
+            state->zoneCastActions.modalOptionsByCastKey.insert(castKey, modes);
+        }
     }
 
     state->validTargetsByHandSlot.clear();
@@ -935,9 +971,9 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
         // matched by RuledClientState::spellTargetKey().
         state->validTargetsByHandSlot.insert(static_cast<int>(entry.first), parseSpellTargets(entry.second));
     }
-    state->validTargetsByGraveyardIndex.clear();
-    for (const auto &entry : actions.valid_targets_by_graveyard_index()) {
-        state->validTargetsByGraveyardIndex.insert(static_cast<int>(entry.first), parseSpellTargets(entry.second));
+    state->validTargetsByZoneObject.clear();
+    for (const auto &entry : actions.valid_targets_by_zone_object()) {
+        state->validTargetsByZoneObject.insert(static_cast<quint64>(entry.first), parseSpellTargets(entry.second));
     }
     state->validTargetsByAbility.clear();
     for (const auto &entry : actions.valid_targets_by_ability()) {

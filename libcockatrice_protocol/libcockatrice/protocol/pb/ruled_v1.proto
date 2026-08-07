@@ -219,8 +219,19 @@ message PassPriority {}
 
 message PrimitiveYieldStructured {}
 
+message CastSource {
+  oneof location {
+    // Concealed hand identity remains the short-lived engine slot published in HandSlotMap.
+    uint32 hand_index = 1;
+    // Public zones use stable engine ObjectIds so pile display order cannot select another card.
+    uint32 graveyard_object_id = 2;
+    uint32 exile_object_id = 3;
+  }
+}
+
 message CastSpell {
-  uint32 hand_card_index = 1;
+  reserved 1, 7;
+  reserved "hand_card_index", "flashback";
   repeated TargetRef targets = 2;
   // CR 107.3: value chosen for {X} as the spell is cast. 0 when the cost has no {X} pip.
   uint32 x_value = 3;
@@ -235,9 +246,9 @@ message CastSpell {
   // distinct and the engine resolves selected modes in printed order regardless of submission
   // order.
   repeated SelectedSpellMode selected_modes = 6;
-  // CR 702.34: cast this spell from its owner's graveyard for its flashback cost. When true,
-  // hand_card_index is interpreted as an index in the caster's graveyard.
-  bool flashback = 7;
+  // Exactly one physical source. Graveyard means flashback; exile requires an engine-issued
+  // permission such as Adventure. A missing source is always illegal.
+  CastSource source = 8;
 }
 
 // A payment decision for one flexible mana pip (CR 107.4d–f). Currently only Phyrexian pips
@@ -398,15 +409,23 @@ message LegalHandAction {
 }
 
 // CR 702.34: a spell the player may cast from their own graveyard using flashback.
-message LegalGraveyardAction {
-  uint32 graveyard_index = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  string card_name = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  uint32 face_index = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  bool needs_target = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  uint32 min_modes = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  uint32 max_modes = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  repeated LegalSpellMode modes = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  string cost = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+enum CastSourceZone {
+  CAST_SOURCE_ZONE_GRAVEYARD = 0;
+  CAST_SOURCE_ZONE_EXILE = 1;
+}
+
+// A spell the player may cast from a public zone. Flashback and Adventure share this shape while
+// retaining mechanic-specific validation and costs in the engine.
+message LegalZoneCastAction {
+  CastSourceZone source_zone = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 object_id = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  string card_name = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 face_index = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool needs_target = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 min_modes = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 max_modes = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated LegalSpellMode modes = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  string cost = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message LegalActions {
@@ -437,10 +456,8 @@ message LegalActions {
   // disable the confirm-blockers control until every id is staged as a blocker (mirrors set_blockers).
   repeated uint32 required_blocker_ids = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated LegalHandAction hand_actions = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  repeated LegalGraveyardAction graveyard_actions = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  // Valid targets for flashback casts. Key = (graveyard slot << 8) | face index.
-  map<uint32, SpellTargets> valid_targets_by_graveyard_index = 10
-      [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  reserved 9, 10;
+  reserved "graveyard_actions", "valid_targets_by_graveyard_index";
   // Battlefield creatures the active player may currently stage as attackers. Populated only
   // while that player is making the declaration; derived from the same legality predicate used
   // by DeclareAttackers, so restrictions such as Defender and Pacifism are reflected in the UI.
@@ -449,6 +466,10 @@ message LegalActions {
   // included when it can legally block at least one declared attacker; pair-specific restrictions
   // remain authoritative when the staged blocker is assigned to an attacker.
   repeated uint32 selectable_blocker_ids = 12 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated LegalZoneCastAction zone_cast_actions = 13 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Valid targets for public-zone casts. Key = (engine ObjectId << 8) | face index.
+  map<uint64, SpellTargets> valid_targets_by_zone_object = 14
+      [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // Servatrice-injected each ruled broadcast: engine hand slot index -> Server_Card.id for that player,
@@ -531,6 +552,8 @@ message RuledEvent {
     // and never prompted, so one event covers exactly one player's own block; the next player's
     // block (if any) raises its own event once this one is answered.
     TriggerOrderRequired trigger_order_required = 31 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    // Server-built exile OID map so an Adventure card click resolves to its exact engine object.
+    ExileObjectMap exile_object_map = 32 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   }
 }
 
@@ -932,6 +955,8 @@ message RuledPerPlayerView {
   // per player: a draw re-sends the drawing player in full while the other stays omitted.
   // Server-only, like the two concealed fields it describes.
   bool private_zones_unchanged = 33 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+  // Engine ObjectIds in public exile order, used for Adventure/source identity mapping.
+  repeated uint32 exile_object_ids = 34 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message ZoneViewSync {
@@ -1002,6 +1027,16 @@ message GraveyardObjectMap {
     int32 player_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
     uint32 engine_object_id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
     // Server_Card.id for the graveyard card; -1 if unknown.
+    int32 server_card_id = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  }
+  repeated Entry entries = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+}
+
+// Server-built mapping so clients and the relay can bind public exile cards to engine ObjectIds.
+message ExileObjectMap {
+  message Entry {
+    int32 player_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    uint32 engine_object_id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
     int32 server_card_id = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   }
   repeated Entry entries = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];

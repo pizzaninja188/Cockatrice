@@ -280,6 +280,15 @@ protected:
         return card;
     }
 
+    static Server_Card *addCardToExile(Server_Player *p, const QString &name)
+    {
+        Server_CardZone *exile = p->getZones().value(ZoneNames::EXILE);
+        const QString id = name.toLower().replace(' ', '_');
+        auto *card = new Server_Card({name, id}, p->newCardId(), 0, 0);
+        exile->insertCard(card, 0, 0); // public piles render newest first
+        return card;
+    }
+
     // Builds a RuledPerPlayerView consistent with the player's current TABLE zone
     // and the supplied tap state. Hand / library counts must already be zero on
     // the server side for this synthetic batch (we don't seed hand/library cards,
@@ -568,6 +577,22 @@ TEST_F(RuledBatchTest, ZoneViewBuildsOidMapAndPropagatesTapState)
     EXPECT_EQ(findCardByEngineOid(p1, 101u), bear);
     EXPECT_EQ(findCardByEngineOid(p1, 102u), wolf);
     EXPECT_EQ(findCardByEngineOid(p1, 999u), nullptr);
+}
+
+TEST_F(RuledBatchTest, ExileOidMapReversesEngineAndPhysicalPileOrder)
+{
+    Server_Card *oldest = addCardToExile(p1, "Bonecrusher Giant // Stomp");
+    Server_Card *newest = addCardToExile(p1, "Bonecrusher Giant // Stomp");
+    ruled::v1::RuledPerPlayerView view = buildPerPlayerView(p1, {}, {});
+    view.add_exile_object_ids(701u); // engine order: oldest first
+    view.add_exile_object_ids(702u);
+    GameEventStorage ges;
+    applyZoneView(p1, view, &ges);
+
+    const auto &binding = bindingFor(p1);
+    EXPECT_EQ(binding.findExileCardByEngineOid(p1, 701u), oldest);
+    EXPECT_EQ(binding.findExileCardByEngineOid(p1, 702u), newest);
+    EXPECT_EQ(binding.findExileCardByEngineOid(p1, 999u), nullptr);
 }
 
 // The engine omits hand + library while they are unchanged. Servatrice must then leave the

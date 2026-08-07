@@ -189,7 +189,7 @@ fn modal_cast_rejects_bad_counts_duplicates_and_legacy_targets() {
         let index = hand_index_for_card(&e, 0, "boros_charm");
         let mut command = command;
         if let Some(Cmd::CastSpell(cast)) = command.cmd.as_mut() {
-            cast.hand_card_index = index as u32;
+            cast.source = Some(hand_cast_source(index));
         }
         assert!(e.apply_command(0, &command).is_err());
     }

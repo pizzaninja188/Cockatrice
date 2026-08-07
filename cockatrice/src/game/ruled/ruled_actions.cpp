@@ -459,6 +459,21 @@ int resolveHandActionIndex(const RuledClientState *state, RuledHandActionKind ki
     return resolved;
 }
 
+quint32 resolvePublicZoneObjectId(const RuledClientState *state, const CardItem *card)
+{
+    if (!state || !card || !card->getZone() || !card->getZone()->getPlayer()) {
+        return 0;
+    }
+    const int playerId = card->getZone()->getPlayer()->getPlayerInfo()->getId();
+    if (card->getZone()->getName() == ZoneNames::GRAVE) {
+        return state->graveyardEngineOidForOwnedCard(playerId, card->getId());
+    }
+    if (card->getZone()->getName() == ZoneNames::EXILE) {
+        return state->exileEngineOidForOwnedCard(playerId, card->getId());
+    }
+    return 0;
+}
+
 bool isResolutionPickZoneCard(const RuledClientState *state, const CardItem *card)
 {
     if (!state || !card || !state->isResolutionHandPickActive()) {
@@ -616,12 +631,10 @@ bool isSingleClickPlayLegal(const CardItem *card)
     if (!card || !card->getOwner() || !card->getZone()) {
         return false;
     }
-    // CR 702.34: a flashback card is cast from its owner's own graveyard, so a graveyard card the
-    // engine offered a graveyard action for is single-click castable exactly like a hand card.
     const bool inHand = card->getZone()->getName() == ZoneNames::HAND;
-    const bool inOwnGraveyard =
-        card->getZone()->getName() == ZoneNames::GRAVE && card->getZone()->getPlayer() == card->getOwner();
-    if (!inHand && !inOwnGraveyard) {
+    const bool inPublicCastZone = card->getZone()->getName() == ZoneNames::GRAVE ||
+                                  card->getZone()->getName() == ZoneNames::EXILE;
+    if (!inHand && !inPublicCastZone) {
         return false;
     }
     RuledClientState *state = stateForCard(card);
@@ -632,8 +645,9 @@ bool isSingleClickPlayLegal(const CardItem *card)
     if (zoneIndex < 0) {
         return false;
     }
-    if (inOwnGraveyard) {
-        return state->isGraveyardActionLegal(zoneIndex);
+    if (inPublicCastZone) {
+        const quint32 objectId = resolvePublicZoneObjectId(state, card);
+        return objectId != 0 && state->isZoneActionLegal(objectId);
     }
     const bool isLand = card->getCardInfo().getCardType().contains("Land", Qt::CaseInsensitive);
     const RuledHandActionKind kind =

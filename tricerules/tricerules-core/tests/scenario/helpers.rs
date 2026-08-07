@@ -2,14 +2,16 @@
 #![allow(dead_code)]
 
 pub(crate) use tricerules_core::GameEngine;
+use tricerules_proto::ruled::v1 as rv1;
 pub(crate) use tricerules_proto::ruled::v1::ruled_command::Cmd;
 pub(crate) use tricerules_proto::ruled::v1::ruled_event::Ev;
 pub(crate) use tricerules_proto::ruled::v1::{
-    ActivateAbility, AssignCombatDamage, BlockPair, CastSpell, ChoiceKind, ChooseTriggerTarget,
-    DamagePair, DeclareAttackers, DeclareBlockers, DiscardToHandSize, FlexPipPayment, PassPriority,
-    PlayLand, PreviewDeclareAttackers, PreviewDeclareBlockers, PrimitiveYieldStructured,
-    ResolutionChoiceRequired, RuledCommand, RuledEventBatch, SelectedSpellMode,
-    SubmitResolutionChoice, SubmitTriggerOrder, TargetRef, TransformPermanent, UndoManaAbility,
+    ActivateAbility, AssignCombatDamage, BlockPair, CastSource, CastSpell, ChoiceKind,
+    ChooseTriggerTarget, DamagePair, DeclareAttackers, DeclareBlockers, DiscardToHandSize,
+    FlexPipPayment, PassPriority, PlayLand, PreviewDeclareAttackers, PreviewDeclareBlockers,
+    PrimitiveYieldStructured, ResolutionChoiceRequired, RuledCommand, RuledEventBatch,
+    SelectedSpellMode, SubmitResolutionChoice, SubmitTriggerOrder, TargetRef, TransformPermanent,
+    UndoManaAbility,
 };
 
 pub(crate) fn pass() -> RuledCommand {
@@ -24,7 +26,7 @@ pub(crate) fn cast_modal_spell(
 ) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::CastSpell(CastSpell {
-            hand_card_index: hand_card_index as u32,
+            source: Some(hand_cast_source(hand_card_index)),
             selected_modes: modes
                 .into_iter()
                 .map(|(mode_index, targets)| SelectedSpellMode {
@@ -105,7 +107,7 @@ pub(crate) fn cast_spell_x(
 ) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::CastSpell(CastSpell {
-            hand_card_index: hand_card_index as u32,
+            source: Some(hand_cast_source(hand_card_index)),
             targets,
             x_value,
             ..Default::default()
@@ -120,7 +122,7 @@ pub(crate) fn cast_spell_flex(
 ) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::CastSpell(CastSpell {
-            hand_card_index: hand_card_index as u32,
+            source: Some(hand_cast_source(hand_card_index)),
             targets,
             x_value: 0,
             flex_payments,
@@ -137,7 +139,7 @@ pub(crate) fn cast_spell_face(
 ) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::CastSpell(CastSpell {
-            hand_card_index: hand_card_index as u32,
+            source: Some(hand_cast_source(hand_card_index)),
             targets,
             face_index,
             ..Default::default()
@@ -415,6 +417,26 @@ pub(crate) fn resolve_entire_stack_two_player(e: &mut GameEngine) {
     }
 }
 
+pub(crate) fn hand_cast_source(hand_card_index: usize) -> CastSource {
+    CastSource {
+        location: Some(rv1::cast_source::Location::HandIndex(
+            hand_card_index as u32,
+        )),
+    }
+}
+
+pub(crate) fn graveyard_cast_source(object_id: u32) -> CastSource {
+    CastSource {
+        location: Some(rv1::cast_source::Location::GraveyardObjectId(object_id)),
+    }
+}
+
+pub(crate) fn exile_cast_source(object_id: u32) -> CastSource {
+    CastSource {
+        location: Some(rv1::cast_source::Location::ExileObjectId(object_id)),
+    }
+}
+
 pub(crate) fn advance_to_main1_from_game_start(e: &mut GameEngine) {
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
     pass_both_players(e); // upkeep -> draw
@@ -464,6 +486,7 @@ pub(crate) fn inject_creature_on_battlefield(
             must_attack_if_able: false,
             must_block_if_able: false,
             face_up_index: 0,
+            adventure_cast_permission: None,
         },
     );
     e.state.players[player].battlefield.push(id);
@@ -500,6 +523,7 @@ pub(crate) fn inject_permanent_on_battlefield(
             must_attack_if_able: false,
             must_block_if_able: false,
             face_up_index: 0,
+            adventure_cast_permission: None,
         },
     );
     e.state.players[player].battlefield.push(id);
@@ -532,6 +556,7 @@ pub(crate) fn inject_library_card(e: &mut GameEngine, player: usize, card_id: &s
             must_attack_if_able: false,
             must_block_if_able: false,
             face_up_index: 0,
+            adventure_cast_permission: None,
         },
     );
     e.state.players[player].library.push_back(id);
@@ -571,6 +596,7 @@ pub(crate) fn inject_creature_under_foreign_control(
             must_attack_if_able: false,
             must_block_if_able: false,
             face_up_index: 0,
+            adventure_cast_permission: None,
         },
     );
     // The battlefield list is the control index, so the permanent goes on the *controller's*.
@@ -605,6 +631,7 @@ pub(crate) fn inject_graveyard_card(e: &mut GameEngine, player: usize, card_id: 
             must_attack_if_able: false,
             must_block_if_able: false,
             face_up_index: 0,
+            adventure_cast_permission: None,
         },
     );
     e.state.players[player].graveyard.push(id);
@@ -811,6 +838,7 @@ pub(crate) fn inject_creature_with_stats(
             must_attack_if_able: false,
             must_block_if_able: false,
             face_up_index: 0,
+            adventure_cast_permission: None,
         },
     );
     e.state.players[player].battlefield.push(id);

@@ -17,7 +17,7 @@ use tricerules_cards::CardRegistry;
 use tricerules_core::{GameEngine, TurnStep, Zone};
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
 use tricerules_proto::ruled::v1::{
-    ActivateAbility, CastSpell, PassPriority, PlayLand, RuledCommand, TargetRef,
+    ActivateAbility, CastSource, CastSpell, PassPriority, PlayLand, RuledCommand, TargetRef,
 };
 
 fn pass() -> RuledCommand {
@@ -46,7 +46,11 @@ fn cast_spell(hand_card_index: u32, targets: Vec<TargetRef>) -> RuledCommand {
 fn cast_spell_face(hand_card_index: u32, targets: Vec<TargetRef>, face_index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::CastSpell(CastSpell {
-            hand_card_index,
+            source: Some(CastSource {
+                location: Some(
+                    tricerules_proto::ruled::v1::cast_source::Location::HandIndex(hand_card_index),
+                ),
+            }),
             targets,
             x_value: 0,
             face_index,

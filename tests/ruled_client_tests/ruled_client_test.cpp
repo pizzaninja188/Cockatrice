@@ -241,7 +241,7 @@ TEST_F(RuledClientTest, BattlefieldObjectMapBuildsIdentityMapsBothWays)
     EXPECT_EQ(state->playerIdForEngineOid(999), -1);
 }
 
-TEST_F(RuledClientTest, HandSlotAndGraveyardMapsAreQueryable)
+TEST_F(RuledClientTest, HandSlotAndPublicZoneMapsAreQueryable)
 {
     ruled::v1::RuledEventBatch batch;
     auto *hs = batch.add_events()->mutable_hand_slot_map();
@@ -254,6 +254,10 @@ TEST_F(RuledClientTest, HandSlotAndGraveyardMapsAreQueryable)
     ge->set_player_id(kLocalPlayer);
     ge->set_engine_object_id(500);
     ge->set_server_card_id(11);
+    auto *xe = batch.add_events()->mutable_exile_object_map()->add_entries();
+    xe->set_player_id(kOpponent);
+    xe->set_engine_object_id(700);
+    xe->set_server_card_id(13);
     apply(batch);
 
     EXPECT_EQ(state->engineHandSlotForServerCard(kOpponent, 42), 3);
@@ -262,6 +266,8 @@ TEST_F(RuledClientTest, HandSlotAndGraveyardMapsAreQueryable)
     EXPECT_EQ(state->graveyardEngineOidForOwnedCard(kLocalPlayer, 12), 0u);
     // Card ids repeat across players' zones, so the owner has to be part of the key.
     EXPECT_EQ(state->graveyardEngineOidForOwnedCard(kOpponent, 11), 0u);
+    EXPECT_EQ(state->exileEngineOidForOwnedCard(kOpponent, 13), 700u);
+    EXPECT_EQ(state->exileEngineOidForOwnedCard(kLocalPlayer, 13), 0u);
 }
 
 TEST_F(RuledClientTest, HandSlotMapPersistsUntilReplaced)
@@ -1034,6 +1040,34 @@ TEST_F(RuledClientTest, RejectedBlockDeclarationRollsBackTheLocalGuard)
     // The staged pairs come back so the defender can fix and resubmit.
     EXPECT_EQ(state->getPendingBlocks().value(200), 100u);
     EXPECT_TRUE(state->getCommittedBlocks().isEmpty());
+}
+
+TEST_F(RuledClientTest, AppliesAndClearsObjectIdKeyedExileCastActions)
+{
+    constexpr quint32 objectId = 0x01020304u;
+    ruled::v1::RuledEventBatch batch;
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    auto *cast = actions.add_zone_cast_actions();
+    cast->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_EXILE);
+    cast->set_object_id(objectId);
+    cast->set_face_index(0);
+    cast->set_card_name("Bonecrusher Giant");
+    cast->set_cost("{2}{R}");
+    cast->set_needs_target(true);
+    auto &targets = (*actions.mutable_valid_targets_by_zone_object())[(quint64(objectId) << 8) | 0u];
+    targets.add_valid_permanent_ids(99);
+    apply(batch);
+
+    ASSERT_TRUE(state->isZoneActionLegal(objectId));
+    ASSERT_EQ(state->zoneActionSource(objectId), RuledCastSource::Exile);
+    ASSERT_EQ(state->zoneActionCost(objectId, 0), QStringLiteral("{2}{R}"));
+    ASSERT_EQ(state->zoneActionFaceOptions(objectId).size(), 1);
+    EXPECT_EQ(state->zoneActionFaceOptions(objectId).first().faceName, QStringLiteral("Bonecrusher Giant"));
+    EXPECT_TRUE(state->isValidSpellTarget(static_cast<int>(objectId), 0, 99, RuledCastSource::Exile));
+
+    apply(phaseBatch(ruled::v1::PHASE_ID_MAIN1, kLocalPlayer));
+    EXPECT_FALSE(state->isZoneActionLegal(objectId));
+    EXPECT_FALSE(state->isValidSpellTarget(static_cast<int>(objectId), 0, 99, RuledCastSource::Exile));
 }
 
 TEST_F(RuledClientTest, CombatStagingIgnoresCreaturesOutsideEngineSelectableSets)

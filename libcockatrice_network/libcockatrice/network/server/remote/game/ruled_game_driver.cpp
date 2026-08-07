@@ -332,20 +332,41 @@ RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &c
                 // The index cannot be used against the physical graveyard pile directly: the
                 // engine's graveyard is oldest-first while the Cockatrice pile is newest-first, so
                 // the binding resolves the engine slot to the real card.
-                const bool fromGraveyard = ruledCmd.cast_spell().flashback();
-                Server_CardZone *sourceZone =
-                    fromGraveyard ? cmdPlayer->getZones().value(ZoneNames::GRAVE) : handZone;
-                const int handIndex = static_cast<int>(ruledCmd.cast_spell().hand_card_index());
+                const auto &source = ruledCmd.cast_spell().source();
+                Server_CardZone *sourceZone = nullptr;
                 Server_Card *card = nullptr;
-                if (fromGraveyard) {
-                    if (auto *serverPlayer = dynamic_cast<Server_Player *>(cmdPlayer)) {
-                        card = playerBinding(serverPlayer->getPlayerId())
-                                   .findGraveyardCardByEngineIndex(serverPlayer, handIndex);
+                QString sourceLabel = QStringLiteral("missing");
+                if (source.location_case() == ruled::v1::CastSource::kHandIndex) {
+                    const int handIndex = static_cast<int>(source.hand_index());
+                    sourceZone = handZone;
+                    sourceLabel = QStringLiteral("hand:%1").arg(handIndex);
+                    if (handZone && handIndex >= 0 && handIndex < handZone->getCards().size()) {
+                        card = handZone->getCards().at(handIndex);
                     }
-                } else if (handZone && handIndex >= 0 && handIndex < handZone->getCards().size()) {
-                    card = handZone->getCards().at(handIndex);
+                } else if (source.location_case() == ruled::v1::CastSource::kGraveyardObjectId ||
+                           source.location_case() == ruled::v1::CastSource::kExileObjectId) {
+                    const bool fromGraveyard =
+                        source.location_case() == ruled::v1::CastSource::kGraveyardObjectId;
+                    const quint32 oid = static_cast<quint32>(
+                        fromGraveyard ? source.graveyard_object_id() : source.exile_object_id());
+                    sourceLabel = QStringLiteral("%1:%2")
+                                      .arg(fromGraveyard ? QStringLiteral("graveyard") : QStringLiteral("exile"))
+                                      .arg(oid);
+                    for (Server_AbstractPlayer *candidate : game->getPlayers()) {
+                        auto *owner = dynamic_cast<Server_Player *>(candidate);
+                        if (!owner) {
+                            continue;
+                        }
+                        card = fromGraveyard
+                            ? playerBinding(owner->getPlayerId()).findGraveyardCardByEngineOid(owner, oid)
+                            : playerBinding(owner->getPlayerId()).findExileCardByEngineOid(owner, oid);
+                        if (card) {
+                            sourceZone = owner->getZones().value(fromGraveyard ? ZoneNames::GRAVE : ZoneNames::EXILE);
+                            break;
+                        }
+                    }
                 }
-                RULED_TRACE("relay") << "cast: flashback=" << fromGraveyard << " index=" << handIndex
+                RULED_TRACE("relay") << "cast source=" << sourceLabel
                                      << " sourceZone=" << (sourceZone ? sourceZone->getName() : QStringLiteral("<null>"))
                                      << " sourceZoneSize=" << (sourceZone ? sourceZone->getCards().size() : -1)
                                      << " resolvedCard=" << (card ? card->getName() : QStringLiteral("<none>"))
@@ -1443,6 +1464,28 @@ void RuledGameDriver::appendServerObjectMaps(ruled::v1::IpcResponse &toSend)
         if (gm->entries_size() > 0) {
             *toSend.mutable_batch()->add_events() = graveyardEv;
         }
+    }
+    // Exile OID map: Adventure legal actions name an engine object, while clicks carry a
+    // Server_Card id. Publish the binding for every public exile pile.
+    {
+        ruled::v1::RuledEvent exileEv;
+        auto *map = exileEv.mutable_exile_object_map();
+        for (Server_AbstractPlayer *ab : game->getPlayers().values()) {
+            if (!ab) {
+                continue;
+            }
+            auto *player = static_cast<Server_Player *>(ab);
+            const auto &oidMap = playerBinding(player->getPlayerId()).exileEngineOidToServerCardId;
+            for (auto it = oidMap.constBegin(); it != oidMap.constEnd(); ++it) {
+                auto *entry = map->add_entries();
+                entry->set_player_id(player->getPlayerId());
+                entry->set_engine_object_id(it.key());
+                entry->set_server_card_id(it.value());
+            }
+        }
+        // An empty map is meaningful: it clears client-side identity after the last exiled card
+        // leaves. Unlike an omitted retained snapshot, this server-built map is a full replacement.
+        *toSend.mutable_batch()->add_events() = exileEv;
     }
 }
 
