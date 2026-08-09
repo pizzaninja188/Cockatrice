@@ -139,16 +139,24 @@ pub(super) fn damage_all(
     // DamageTarget; lethal-damage destruction is left to state-based actions
     // (CR 704.5g), which run immediately after this spell resolves.
     let affected = battlefield_objects_matching(engine, &kind);
-    for tid in &affected {
-        super::damage::apply_damage_to_permanent(
-            engine,
-            events,
-            *tid,
-            amount,
+    let damage: Vec<_> = affected
+        .into_iter()
+        .map(|tid| crate::engine::damage::DamageSpec {
+            event: crate::engine::damage::DamageEvent::noncombat(
+                cx.top.id,
+                cx.controller,
+                spell_label,
+                crate::engine::damage::DamageRecipient::Permanent(tid),
+                amount,
+            ),
             source_has_deathtouch,
-            spell_label,
-        );
-    }
+            source_has_lifelink: false,
+        })
+        .collect();
+    let Some(completed) = engine.process_or_park_damage_batch(cx.top, damage, events) else {
+        return Ok(EffectOutcome::Suspended);
+    };
+    engine.commit_completed_damage_batch(&completed, events);
 
     Ok(EffectOutcome::Continue)
 }

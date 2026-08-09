@@ -179,11 +179,7 @@ fn healing_salve_shield_fully_consumed_by_bolt() {
     e.apply_command(0, &pass()).expect("p0 pass");
     e.apply_command(1, &pass()).expect("p1 pass resolves salve");
     assert_eq!(
-        e.state
-            .damage_prevention_shields
-            .get(&1u32)
-            .copied()
-            .unwrap_or(0),
+        e.state.remaining_damage_prevention(1),
         3,
         "3-point shield placed on P1"
     );
@@ -208,11 +204,7 @@ fn healing_salve_shield_fully_consumed_by_bolt() {
         "shield absorbs all 3 — P1 life unchanged"
     );
     assert_eq!(
-        e.state
-            .damage_prevention_shields
-            .get(&1u32)
-            .copied()
-            .unwrap_or(0),
+        e.state.remaining_damage_prevention(1),
         0,
         "shield exhausted after absorbing 3 damage"
     );
@@ -254,11 +246,7 @@ fn healing_salve_double_shield_partially_consumed_by_bolt() {
         e.apply_command(1, &pass()).expect("p1 pass resolves salve");
     }
     assert_eq!(
-        e.state
-            .damage_prevention_shields
-            .get(&1u32)
-            .copied()
-            .unwrap_or(0),
+        e.state.remaining_damage_prevention(1),
         6,
         "6-point shield placed on P1 (two salves)"
     );
@@ -278,16 +266,20 @@ fn healing_salve_double_shield_partially_consumed_by_bolt() {
         .expect("cast bolt on P1");
     e.apply_command(0, &pass()).expect("p0 pass");
     e.apply_command(1, &pass()).expect("p1 pass resolves bolt");
+    let application = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("two independent shields require a CR 616 choice")
+        .candidates[0];
+    e.apply_command(1, &submit_resolution_choice(vec![application]))
+        .expect("P1 chooses which shield absorbs Bolt");
     assert_eq!(
         e.state.players[1].life, p1_life,
         "P1 life unchanged — shield absorbed bolt"
     );
     assert_eq!(
-        e.state
-            .damage_prevention_shields
-            .get(&1u32)
-            .copied()
-            .unwrap_or(0),
+        e.state.remaining_damage_prevention(1),
         3,
         "3 shield points remaining after absorbing 3 of 6"
     );
@@ -2617,8 +2609,7 @@ fn setup_noncombat_deathtouch_scenario(
     if prevention > 0 {
         engine
             .state
-            .damage_prevention_shields
-            .insert(target, prevention);
+            .add_damage_prevention_shield(target, prevention);
     }
     (engine, source, target)
 }

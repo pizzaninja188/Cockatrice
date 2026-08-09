@@ -1,75 +1,23 @@
 use super::*;
-
-/// CR 120.3a: `source_label` deals `amount` damage to `player`, after prevention (CR 615.1).
-///
-/// The single funnel for non-combat damage dealt to a player. `damage_target`'s player branch and
-/// the untargeted [`SpellEffectKind::DamagePlayer`] share it, so a future "whenever a source deals
-/// damage to a player" trigger — or infect (CR 120.3b) — hangs off one call site.
-///
-/// `LifeChanged` is emitted even when prevention reduced the damage to 0. That mirrors what the
-/// inlined version did; clients repaint an unchanged total, which is harmless.
-pub(super) fn apply_damage_to_player(
-    engine: &mut GameEngine,
-    events: &mut Vec<rv1::RuledEvent>,
-    player: PlayerId,
-    amount: u32,
-    source_label: &str,
-) {
-    let Some(pi) = engine.state.player_idx(player) else {
-        return;
-    };
-    engine.state.players[pi].life -= amount as i32;
-    events.push(rv1::RuledEvent {
-        ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
-            player_id: engine.state.players[pi].id,
-            new_total: engine.state.players[pi].life,
-            delta: -(amount as i32),
-        })),
-    });
-    if amount > 0 {
-        events.push(ev_log(format!(
-            "{source_label} deals {amount} damage to P{player}"
-        )));
-    }
-}
+use crate::engine::damage::{DamageEvent, DamageRecipient, DamageSpec};
 
 /// The single funnel for non-combat damage dealt to a creature. Prevention is applied before
 /// either marked damage or the CR 702.2b deathtouch history bit is recorded.
 pub(super) fn apply_damage_to_permanent(
     engine: &mut GameEngine,
     events: &mut Vec<rv1::RuledEvent>,
-    target: ObjectId,
-    amount: u32,
+    item: &StackItem,
+    event: DamageEvent,
     source_has_deathtouch: bool,
-    source_label: &str,
-) -> u32 {
-    let dealt = apply_prevention_shield(
-        &mut engine.state.damage_prevention_shields,
-        target,
-        amount,
-        events,
-    );
-    if dealt == 0 {
-        return 0;
-    }
-
-    let is_creature = engine
-        .characteristics(target)
-        .is_some_and(|value| value.is_creature());
-    let target_label = object_display_name(&engine.state, engine.registry, target);
-    if let Some(object) = engine.state.objects.get_mut(&target) {
-        if object.zone == Zone::Battlefield && is_creature {
-            object.damage += dealt;
-            if source_has_deathtouch {
-                object.deathtouch_damage = true;
-            }
-            events.push(ev_log(format!(
-                "{source_label} deals {dealt} damage to {target_label}"
-            )));
-            return dealt;
-        }
-    }
-    0
+) -> Option<u32> {
+    let DamageRecipient::Permanent(target) = event.recipient else {
+        return Some(0);
+    };
+    let result =
+        engine.process_or_park_damage_event(item, event.clone(), source_has_deathtouch, events)?;
+    let dealt = engine.commit_damage_result(&event, result, source_has_deathtouch, events);
+    debug_assert_eq!(event.recipient, DamageRecipient::Permanent(target));
+    Some(dealt)
 }
 
 pub(super) fn damage_target(
@@ -91,27 +39,42 @@ pub(super) fn damage_target(
     // CR 107.3: `amount` may be the cast-time X (Fireball) or a literal (Bolt).
     let amount = amount.resolve(top.chosen_x);
     if let Some(&tid) = targets.first() {
-        // CR 615.1: consume prevention shield before recording damage. A player target is keyed
-        // by its player id widened to an ObjectId, the same convention `TargetRef::object_id`
-        // uses, so one call covers both branches below.
         if let Some(pi) = engine.state.player_idx(tid as i32) {
-            let amount = apply_prevention_shield(
-                &mut engine.state.damage_prevention_shields,
-                tid,
-                amount,
-                events,
-            );
             let pid = engine.state.players[pi].id;
-            apply_damage_to_player(engine, events, pid, amount, spell_label);
+            let event = DamageEvent::noncombat(
+                top.id,
+                top.controller,
+                spell_label,
+                DamageRecipient::Player(pid),
+                amount,
+            );
+            let Some(result) = engine.process_or_park_damage_event(
+                top,
+                event.clone(),
+                source_has_deathtouch,
+                events,
+            ) else {
+                return Ok(EffectOutcome::Suspended);
+            };
+            engine.commit_damage_result(&event, result, source_has_deathtouch, events);
         } else {
-            apply_damage_to_permanent(
+            if apply_damage_to_permanent(
                 engine,
                 events,
-                tid,
-                amount,
+                top,
+                DamageEvent::noncombat(
+                    top.id,
+                    top.controller,
+                    spell_label,
+                    DamageRecipient::Permanent(tid),
+                    amount,
+                ),
                 source_has_deathtouch,
-                spell_label,
-            );
+            )
+            .is_none()
+            {
+                return Ok(EffectOutcome::Suspended);
+            }
         }
     }
 
@@ -163,6 +126,7 @@ pub(super) fn damage_targets(
     } else {
         0
     };
+    let mut damage = Vec::new();
     for (i, &tid) in targets.iter().enumerate() {
         let damage_amount = if matches!(division, DamageDivision::EvenAtResolution) {
             even_damage
@@ -179,26 +143,28 @@ pub(super) fn damage_targets(
             )));
             continue;
         }
-        if let Some(pi) = engine.state.player_idx(tid as i32) {
-            let damage_amount = apply_prevention_shield(
-                &mut engine.state.damage_prevention_shields,
-                tid,
-                damage_amount,
-                events,
-            );
+        let recipient = if let Some(pi) = engine.state.player_idx(tid as i32) {
             let pid = engine.state.players[pi].id;
-            apply_damage_to_player(engine, events, pid, damage_amount, spell_label);
+            DamageRecipient::Player(pid)
         } else {
-            apply_damage_to_permanent(
-                engine,
-                events,
-                tid,
-                damage_amount,
-                source_has_deathtouch,
+            DamageRecipient::Permanent(tid)
+        };
+        damage.push(DamageSpec {
+            event: DamageEvent::noncombat(
+                cx.top.id,
+                controller,
                 spell_label,
-            );
-        }
+                recipient,
+                damage_amount,
+            ),
+            source_has_deathtouch,
+            source_has_lifelink: false,
+        });
     }
+    let Some(completed) = engine.process_or_park_damage_batch(cx.top, damage, events) else {
+        return Ok(EffectOutcome::Suspended);
+    };
+    engine.commit_completed_damage_batch(&completed, events);
 
     Ok(EffectOutcome::Continue)
 }
@@ -238,15 +204,27 @@ pub(super) fn damage_player(
             .map(|p| p.id)
             .collect(),
     };
-    for player in recipients {
-        // CR 615.1: each recipient's own prevention shield applies to their share.
-        let dealt = apply_prevention_shield(
-            &mut cx.engine.state.damage_prevention_shields,
-            player as ObjectId,
-            amount,
-            cx.events,
-        );
-        apply_damage_to_player(cx.engine, cx.events, player, dealt, cx.spell_label);
-    }
+    let damage: Vec<_> = recipients
+        .into_iter()
+        .map(|player| DamageSpec {
+            event: DamageEvent::noncombat(
+                cx.top.id,
+                cx.controller,
+                cx.spell_label,
+                DamageRecipient::Player(player),
+                amount,
+            ),
+            source_has_deathtouch: false,
+            source_has_lifelink: false,
+        })
+        .collect();
+    let Some(completed) = cx
+        .engine
+        .process_or_park_damage_batch(cx.top, damage, cx.events)
+    else {
+        return Ok(EffectOutcome::Suspended);
+    };
+    cx.engine
+        .commit_completed_damage_batch(&completed, cx.events);
     Ok(EffectOutcome::Continue)
 }

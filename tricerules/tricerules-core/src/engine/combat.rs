@@ -1,6 +1,6 @@
+use super::damage::{DamageEvent, DamageRecipient};
 use super::events::{ev_log, ev_phase, ev_priority_changed, object_display_name};
 use super::legal_actions::fill_legal;
-use super::resolution::apply_prevention_shield;
 use super::*;
 
 impl GameEngine {
@@ -804,6 +804,9 @@ impl GameEngine {
             events.push(ev_log("First strike combat damage dealt.".to_string()));
             events.push(ev_phase(self, rv1::PhaseId::FirstStrikeDamage));
             self.resolve_combat_damage(&c2, DamagePass::FirstStrike, events)?;
+            if self.state.pending_damage_batch.is_some() {
+                return Ok(());
+            }
             // CR 510.2 + 704: SBAs run between damage steps so creatures with lethal damage are
             // moved to graveyards before the regular step decides who deals damage.
             self.apply_sbas(events)?;
@@ -821,6 +824,9 @@ impl GameEngine {
             events.push(ev_log("Combat damage dealt.".to_string()));
             events.push(ev_phase(self, rv1::PhaseId::CombatDamage));
             self.resolve_combat_damage(&c_init, DamagePass::Normal, events)?;
+            if self.state.pending_damage_batch.is_some() {
+                return Ok(());
+            }
             self.apply_sbas(events)?;
             events.push(ev_priority_changed(self));
         }
@@ -834,13 +840,10 @@ impl GameEngine {
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
         use tricerules_cards::Keyword;
-        // CR 614.1a: Fog-style global prevention — skip all combat damage this step.
-        if self.state.prevent_all_combat_damage_this_turn {
-            events.push(ev_log(
-                "All combat damage prevented (Fog effect).".to_string(),
-            ));
+        if self.try_park_ordered_combat_damage(c, pass, events)? {
             return Ok(());
         }
+        // CR 614.1a: Fog-style global prevention — skip all combat damage this step.
         // Combat damage needs to name the player being attacked, so it fails closed rather than
         // panicking if the defender is gone — an engine error is a rejected command, an unwrap here
         // would take the sidecar task and the game down with it.
@@ -891,12 +894,21 @@ impl GameEngine {
                 // Unblocked: deal full power to defending player — only if the attacker assigns
                 // damage this pass (CR 510.4).
                 if attacker_participates {
-                    let p = apply_prevention_shield(
-                        &mut self.state.damage_prevention_shields,
-                        dfd as ObjectId,
-                        att_power,
+                    let Some(result) = self.process_or_park_combat_damage(
+                        DamageEvent::combat(
+                            att,
+                            att_controller,
+                            object_display_name(&self.state, self.registry, att),
+                            DamageRecipient::Player(dfd),
+                            att_power,
+                        ),
+                        att_has_deathtouch,
+                        att_has_lifelink,
                         events,
-                    );
+                    ) else {
+                        return Ok(());
+                    };
+                    let p = result.dealt;
                     if let Some(di) = self.state.player_idx(dfd) {
                         self.state.players[di].life -= p as i32;
                         total_life_lost += p as i32;
@@ -926,12 +938,21 @@ impl GameEngine {
                     .map(|o| o.controller)
                     .unwrap_or(dfd);
                 if blocker_participates {
-                    let dmg_to_att = apply_prevention_shield(
-                        &mut self.state.damage_prevention_shields,
-                        att,
-                        bpw,
+                    let Some(result) = self.process_or_park_combat_damage(
+                        DamageEvent::combat(
+                            blk,
+                            blk_controller,
+                            object_display_name(&self.state, self.registry, blk),
+                            DamageRecipient::Permanent(att),
+                            bpw,
+                        ),
+                        blk_has_deathtouch,
+                        blk_has_lifelink,
                         events,
-                    );
+                    ) else {
+                        return Ok(());
+                    };
+                    let dmg_to_att = result.dealt;
                     if let Some(af) = self.state.objects.get_mut(&att) {
                         af.damage += dmg_to_att;
                         // CR 702.2b / CR 704.5h: any damage from a deathtouch source is lethal.
@@ -945,12 +966,21 @@ impl GameEngine {
                     }
                 }
                 if attacker_participates {
-                    let dmg_to_blk = apply_prevention_shield(
-                        &mut self.state.damage_prevention_shields,
-                        blk,
-                        att_power,
+                    let Some(result) = self.process_or_park_combat_damage(
+                        DamageEvent::combat(
+                            att,
+                            att_controller,
+                            object_display_name(&self.state, self.registry, att),
+                            DamageRecipient::Permanent(blk),
+                            att_power,
+                        ),
+                        att_has_deathtouch,
+                        att_has_lifelink,
                         events,
-                    );
+                    ) else {
+                        return Ok(());
+                    };
+                    let dmg_to_blk = result.dealt;
                     if let Some(bf) = self.state.objects.get_mut(&blk) {
                         bf.damage += dmg_to_blk;
                         // CR 702.2b: any damage from attacker with deathtouch is lethal.
@@ -994,7 +1024,7 @@ impl GameEngine {
                 let mut any_blocker_deathtouch_hit = false;
                 let mut blocker_damage_dealt = Vec::new();
                 for (
-                    _,
+                    blocker_id,
                     blocker_power,
                     has_lifelink,
                     has_deathtouch,
@@ -1005,12 +1035,21 @@ impl GameEngine {
                     if !*participates || *blocker_power == 0 {
                         continue;
                     }
-                    let dealt = apply_prevention_shield(
-                        &mut self.state.damage_prevention_shields,
-                        att,
-                        *blocker_power,
+                    let Some(result) = self.process_or_park_combat_damage(
+                        DamageEvent::combat(
+                            *blocker_id,
+                            *blocker_controller,
+                            object_display_name(&self.state, self.registry, *blocker_id),
+                            DamageRecipient::Permanent(att),
+                            *blocker_power,
+                        ),
+                        *has_deathtouch,
+                        *has_lifelink,
                         events,
-                    );
+                    ) else {
+                        return Ok(());
+                    };
+                    let dealt = result.dealt;
                     total_blocker_damage += dealt;
                     if *has_deathtouch && dealt > 0 {
                         any_blocker_deathtouch_hit = true;
@@ -1031,12 +1070,21 @@ impl GameEngine {
                     ))?;
                     let mut total_att_lifelink: u32 = 0;
                     for &(blk, dmg) in pairs {
-                        let dmg_to_blk = apply_prevention_shield(
-                            &mut self.state.damage_prevention_shields,
-                            blk,
-                            dmg,
+                        let Some(result) = self.process_or_park_combat_damage(
+                            DamageEvent::combat(
+                                att,
+                                att_controller,
+                                object_display_name(&self.state, self.registry, att),
+                                DamageRecipient::Permanent(blk),
+                                dmg,
+                            ),
+                            att_has_deathtouch,
+                            att_has_lifelink,
                             events,
-                        );
+                        ) else {
+                            return Ok(());
+                        };
+                        let dmg_to_blk = result.dealt;
                         if let Some(bf) = self.state.objects.get_mut(&blk) {
                             bf.damage += dmg_to_blk;
                             // CR 702.2b: any damage from attacker with deathtouch is lethal.
@@ -1050,12 +1098,21 @@ impl GameEngine {
                     let player_trample_dmg =
                         c.trample_player_damage.get(&att).copied().unwrap_or(0);
                     if player_trample_dmg > 0 {
-                        let trample_after = apply_prevention_shield(
-                            &mut self.state.damage_prevention_shields,
-                            dfd as ObjectId,
-                            player_trample_dmg,
+                        let Some(result) = self.process_or_park_combat_damage(
+                            DamageEvent::combat(
+                                att,
+                                att_controller,
+                                object_display_name(&self.state, self.registry, att),
+                                DamageRecipient::Player(dfd),
+                                player_trample_dmg,
+                            ),
+                            att_has_deathtouch,
+                            att_has_lifelink,
                             events,
-                        );
+                        ) else {
+                            return Ok(());
+                        };
+                        let trample_after = result.dealt;
                         if let Some(di) = self.state.player_idx(dfd) {
                             self.state.players[di].life -= trample_after as i32;
                             total_life_lost += trample_after as i32;

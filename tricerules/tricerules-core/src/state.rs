@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use tricerules_cards::primitives::{
-    Color, ContinuousEffectKind, CounterKind, EffectDuration, Keyword, ManaAmount,
-    SearchDestination,
+    Color, ContinuousEffectKind, CounterKind, DamagePreventionAdditionalEffect, EffectDuration,
+    Keyword, ManaAmount, SearchDestination,
 };
 use tricerules_proto::ruled::v1::ChoiceKind;
 
@@ -111,6 +111,46 @@ pub struct GameObject {
     pub face_up_index: usize,
     /// Present only while this exact object remains exiled after its Adventure face resolved.
     pub adventure_cast_permission: Option<AdventureCastPermission>,
+}
+
+/// Runtime scope of one damage-prevention effect. Player ids use the engine's existing widened
+/// `ObjectId` convention, so `Recipient` covers both players and permanents.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DamagePreventionScope {
+    Recipient(ObjectId),
+    Combat,
+    OtherCreaturesYouControl {
+        source_id: ObjectId,
+        controller: PlayerId,
+    },
+}
+
+/// How much damage one active prevention effect can prevent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DamagePreventionAmount {
+    All,
+    FixedPerEvent(u32),
+    Remaining(u32),
+}
+
+/// One independently identifiable prevention effect. IDs are opaque ordering-choice values;
+/// source identity is kept separate because several effects may come from one object.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActiveDamagePrevention {
+    pub id: u32,
+    pub source_id: Option<ObjectId>,
+    pub source_label: String,
+    pub scope: DamagePreventionScope,
+    pub amount: DamagePreventionAmount,
+    pub duration: EffectDuration,
+    pub additional_effect: Option<DamagePreventionAdditionalEffect>,
+}
+
+/// A prohibition is not a prevention effect (CR 615.12). Keeping it in a separate collection
+/// ensures prevention applications can still run without consuming finite effects.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DamagePreventionProhibition {
+    pub source_id: Option<ObjectId>,
 }
 
 impl GameObject {
@@ -590,19 +630,21 @@ pub struct GameState {
     /// At most one at a time; while set it blocks priority (like a [`PendingTrigger`]) until the
     /// deciding player submits their choice. See [`PendingResolution`] and the `custom` module.
     pub pending_resolution: Option<PendingResolution>,
+    /// Damage processing parked behind a public CR 616 prevention-order choice. The parallel
+    /// `pending_resolution` owns the generic prompt/continuation metadata.
+    pub(crate) pending_damage_batch: Option<crate::engine::damage::PendingDamageBatch>,
     /// Active continuous effects (CR 611/613). Effects are pushed here at resolution and drained
     /// at cleanup or when their source leaves the battlefield. P/T and other characteristics are
     /// recomputed from base + this list on demand — `GameObject.power/toughness` always hold the
     /// printed base value and are never mutated by effects.
     pub continuous_effects: Vec<ContinuousEffect>,
-    /// CR 614.1a: damage prevention shields keyed by target id. Key is either a creature
-    /// `ObjectId` or a player's `PlayerId` cast to `ObjectId` (same convention as `targets`
-    /// throughout the engine). The value is remaining damage absorb capacity; consumed when
-    /// damage is dealt and cleared at cleanup.
-    pub damage_prevention_shields: HashMap<ObjectId, u32>,
-    /// CR 614.1a: if true, all combat damage this turn is prevented (Fog / Holy Day).
-    /// Set when a `PreventAllCombatDamageTurn` effect resolves; cleared at cleanup.
-    pub prevent_all_combat_damage_this_turn: bool,
+    /// Active CR 615 prevention effects. Healing Salve and Fog are both represented here so every
+    /// producer enters one event pipeline and finite effects have stable opaque identities.
+    pub damage_prevention_effects: Vec<ActiveDamagePrevention>,
+    /// Active CR 615.12 prohibitions, deliberately separate from prevention effects.
+    pub damage_prevention_prohibitions: Vec<DamagePreventionProhibition>,
+    pub next_damage_prevention_effect_id: u32,
+    pub next_damage_prevention_application_id: u32,
     /// Mana abilities the priority player has activated this priority window that are still
     /// inconsequential and may be rewound by `UndoManaAbility` (CR 605 float courtesy). Newest
     /// last. Cleared by any consequential action (see [`UndoableManaAbility`]); empty whenever no
@@ -618,6 +660,33 @@ pub struct GameState {
 }
 
 impl GameState {
+    pub fn add_damage_prevention_shield(&mut self, recipient: ObjectId, amount: u32) {
+        let id = self.next_damage_prevention_effect_id;
+        self.next_damage_prevention_effect_id = id.saturating_add(1);
+        self.damage_prevention_effects.push(ActiveDamagePrevention {
+            id,
+            source_id: None,
+            source_label: "Prevention shield".to_string(),
+            scope: DamagePreventionScope::Recipient(recipient),
+            amount: DamagePreventionAmount::Remaining(amount),
+            duration: EffectDuration::UntilEndOfTurn,
+            additional_effect: None,
+        });
+    }
+
+    pub fn remaining_damage_prevention(&self, recipient: ObjectId) -> u32 {
+        self.damage_prevention_effects
+            .iter()
+            .filter_map(|effect| match (effect.scope, effect.amount) {
+                (
+                    DamagePreventionScope::Recipient(target),
+                    DamagePreventionAmount::Remaining(amount),
+                ) if target == recipient => Some(amount),
+                _ => None,
+            })
+            .sum()
+    }
+
     pub fn player_idx(&self, pid: PlayerId) -> Option<usize> {
         self.players.iter().position(|p| p.id == pid)
     }

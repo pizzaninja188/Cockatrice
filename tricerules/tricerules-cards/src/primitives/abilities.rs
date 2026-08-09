@@ -1,6 +1,6 @@
 //! Activated, triggered, and static ability definitions.
 
-use super::{AbilityCost, Color, Keyword, SpellEffectKind};
+use super::{AbilityCost, Color, CounterKind, Keyword, SpellEffectKind};
 use crate::ManaAmount;
 use serde::{Deserialize, Serialize};
 
@@ -269,11 +269,53 @@ pub struct AnthemFilter {
     pub exclude_self: bool,
 }
 
+/// Which creature(s) a static damage-prevention ability protects. `Source` covers Anti-Venom;
+/// `OtherCreaturesYouControl` covers Vigor and future controller-scoped prevention permanents.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DamagePreventionSubject {
+    Source,
+    OtherCreaturesYouControl,
+}
+
+/// Capacity of a static prevention application. Static abilities do not have a total pool: the
+/// amount resets for each damage event while the source remains on the battlefield.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StaticDamagePreventionAmount {
+    All,
+    FixedPerEvent(u32),
+}
+
+/// Which quantity an additional prevention effect uses. `Attempted` is the damage still present
+/// when this application begins (Anti-Venom); `Prevented` supports wording such as Vigor's
+/// "for each 1 damage prevented this way".
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PreventionAmountBasis {
+    Attempted,
+    Prevented,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DamagePreventionAdditionalEffect {
+    PutCounters {
+        counter: CounterKind,
+        basis: PreventionAmountBasis,
+    },
+}
+
 /// One static ability on a permanent (CR 604) — a continuous effect that exists only while the
 /// permanent is on the battlefield. Distinct from triggered/activated abilities (which use the
 /// stack); the engine emits the corresponding continuous effect on ETB and drains it at LTB.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StaticAbilityDef {
+    /// CR 615: a prevention effect generated continuously while this permanent is on the
+    /// battlefield. Anti-Venom protects itself and counts attempted damage; Vigor protects other
+    /// creatures its controller controls and counts damage actually prevented.
+    PreventDamage {
+        subject: DamagePreventionSubject,
+        amount: StaticDamagePreventionAmount,
+        #[serde(default)]
+        additional_effect: Option<DamagePreventionAdditionalEffect>,
+    },
     /// CR 613.4 layer 7c: every creature matching `filter` gets +`delta_power`/+`delta_toughness`
     /// (negative values for a debuff anthem). Anthems (Glorious Anthem) and lords (Crusade, Bad Moon).
     AnthemPt {

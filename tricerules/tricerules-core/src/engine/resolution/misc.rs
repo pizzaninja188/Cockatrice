@@ -256,12 +256,12 @@ pub(super) fn prevent_next_damage(
 
     // CR 614.1a: place a damage prevention shield on the target object or player.
     if let Some(&tid) = targets.first() {
-        let shield = engine
-            .state
-            .damage_prevention_shields
-            .entry(tid)
-            .or_insert(0);
-        *shield = shield.saturating_add(amount);
+        engine.add_damage_prevention(
+            Some(cx.top.id),
+            cx.spell_label,
+            DamagePreventionScope::Recipient(tid),
+            DamagePreventionAmount::Remaining(amount),
+        );
         let tgt_name = if let Some(pi) = engine.state.player_idx(tid as i32) {
             format!("P{}", engine.state.players[pi].id)
         } else {
@@ -283,11 +283,34 @@ pub(super) fn prevent_all_combat_damage_turn(
     let events = &mut *cx.events;
 
     // CR 614.1a: prevent all combat damage this turn (Fog, Holy Day).
-    engine.state.prevent_all_combat_damage_this_turn = true;
+    engine.add_damage_prevention(
+        Some(cx.top.id),
+        cx.spell_label,
+        DamagePreventionScope::Combat,
+        DamagePreventionAmount::All,
+    );
     events.push(ev_log(
         "All combat damage is prevented this turn.".to_string(),
     ));
 
+    Ok(EffectOutcome::Continue)
+}
+
+pub(super) fn damage_cant_be_prevented_this_turn(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::DamageCantBePreventedThisTurn = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    cx.engine
+        .state
+        .damage_prevention_prohibitions
+        .push(DamagePreventionProhibition {
+            source_id: Some(cx.top.id),
+        });
+    cx.events
+        .push(ev_log("Damage can't be prevented this turn.".to_string()));
     Ok(EffectOutcome::Continue)
 }
 

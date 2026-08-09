@@ -49,6 +49,47 @@ impl GameEngine {
 
         for static_ability in statics {
             match static_ability {
+                StaticAbilityDef::PreventDamage {
+                    subject,
+                    amount,
+                    additional_effect,
+                } => {
+                    let scope = match subject {
+                        DamagePreventionSubject::Source => {
+                            DamagePreventionScope::Recipient(object_id)
+                        }
+                        DamagePreventionSubject::OtherCreaturesYouControl => {
+                            DamagePreventionScope::OtherCreaturesYouControl {
+                                source_id: object_id,
+                                controller,
+                            }
+                        }
+                    };
+                    let amount = match amount {
+                        StaticDamagePreventionAmount::All => DamagePreventionAmount::All,
+                        StaticDamagePreventionAmount::FixedPerEvent(amount) => {
+                            DamagePreventionAmount::FixedPerEvent(amount)
+                        }
+                    };
+                    let id = self.state.next_damage_prevention_effect_id;
+                    self.state.next_damage_prevention_effect_id = id.saturating_add(1);
+                    let source_label = self
+                        .registry
+                        .get(&card_id)
+                        .map(|definition| definition.name.clone())
+                        .unwrap_or_else(|| card_id.clone());
+                    self.state
+                        .damage_prevention_effects
+                        .push(ActiveDamagePrevention {
+                            id,
+                            source_id: Some(object_id),
+                            source_label,
+                            scope,
+                            amount,
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            additional_effect,
+                        });
+                }
                 StaticAbilityDef::AnthemPt {
                     filter,
                     delta_power,
@@ -145,7 +186,9 @@ impl GameEngine {
                 object.regeneration_shields = 0;
             }
         }
-        self.state.damage_prevention_shields.clear();
-        self.state.prevent_all_combat_damage_this_turn = false;
+        self.state
+            .damage_prevention_effects
+            .retain(|effect| effect.duration != EffectDuration::UntilEndOfTurn);
+        self.state.damage_prevention_prohibitions.clear();
     }
 }

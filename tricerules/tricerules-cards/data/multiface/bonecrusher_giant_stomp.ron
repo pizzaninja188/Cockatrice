@@ -17,8 +17,11 @@
             name: "Stomp",
             mana_cost: "{1}{R}",
             types: ["Instant"],
-            spell_effect: [DamageTarget(amount: 2, target: (kind: AnyTarget))],
+            spell_effect: [
+                DamageCantBePreventedThisTurn,
+                DamageTarget(amount: 2, target: (kind: AnyTarget)),
+            ],
         ),
     ],
-    partial: "Bonecrusher Giant's becomes-the-target trigger and Stomp's damage-prevention prohibition are not implemented",
+    partial: "Bonecrusher Giant's becomes-the-target trigger is not implemented (issue #47)",
 )

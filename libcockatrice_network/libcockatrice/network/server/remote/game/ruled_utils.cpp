@@ -101,6 +101,7 @@ bool isPrivateChoiceKind(ruled::v1::ChoiceKind kind)
         case ruled::v1::CHOICE_KIND_REVEALED:
         case ruled::v1::CHOICE_KIND_TARGET_OBJECTS:
         case ruled::v1::CHOICE_KIND_LEGEND_KEEP:
+        case ruled::v1::CHOICE_KIND_DAMAGE_PREVENTION:
             return false;
         default:
             // Unknown kind from a newer engine: assume it conceals something.

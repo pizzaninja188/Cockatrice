@@ -6249,7 +6249,7 @@ Legend: `[x]` = fully implemented · `[ ] 🟡 partial` = partially implemented 
 - [ ] Bold Plagiarist
 - [ ] Boltwing Marauder
 - [ ] Bonders' Enclave
-- [ ] Bonecrusher Giant // Stomp — 🟡 partial: Bonecrusher Giant's becomes-the-target trigger and Stomp's damage-prevention prohibition are not implemented
+- [ ] Bonecrusher Giant // Stomp — 🟡 partial: Bonecrusher Giant's becomes-the-target trigger is not implemented (issue #47)
 - [x] Bonesplitter
 - [ ] Boneyard Lurker
 - [ ] Boneyard Wurm

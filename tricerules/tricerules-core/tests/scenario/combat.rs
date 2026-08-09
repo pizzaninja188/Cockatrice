@@ -2003,7 +2003,7 @@ fn prevented_lifelink_blocker_damage_gains_no_life() {
 
     // A 3-point prevention shield on the attacker: enough to absorb all of the lifelinker's 2
     // damage and 1 of the other blocker's.
-    e.state.damage_prevention_shields.insert(attacker, 3);
+    e.state.add_damage_prevention_shield(attacker, 3);
 
     e.apply_command(0, &declare_attackers(vec![attacker]))
         .expect("declare attacker");
@@ -2033,6 +2033,14 @@ fn prevented_lifelink_blocker_damage_gains_no_life() {
         &assign_combat_damage_cmd(attacker, vec![(lifelinker, 1), (plain_blocker, 1)]),
     )
     .expect("assign 1+1");
+    let lifelinker_application = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("finite shield allocation choice")
+        .candidates[0];
+    e.apply_command(0, &submit_resolution_choice(vec![lifelinker_application]))
+        .expect("allocate the shield to Child of Night first");
 
     assert_eq!(
         e.state.players[1].life, p1_life,

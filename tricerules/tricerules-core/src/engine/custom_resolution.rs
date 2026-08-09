@@ -311,6 +311,9 @@ impl GameEngine {
         if pending.custom_key == "__sacrifice_chosen" {
             return self.finish_sacrifice_chosen(pending, chosen);
         }
+        if pending.custom_key == "__damage_prevention" {
+            return self.finish_damage_prevention_choice(pending, chosen[0]);
+        }
 
         // CR 704.5j: legend SBA choice — the chosen object id is the legend to KEEP;
         // all others are sacrificed through the normal die path so LTB/death triggers fire.
@@ -806,7 +809,7 @@ impl GameEngine {
     ///
     /// Priority returns to the active player only if the tail did not park again (a second
     /// suspending effect in the same list, e.g. a hypothetical `[Scry, DiscardCards]`).
-    fn complete_parked_resolution(
+    pub(super) fn complete_parked_resolution(
         &mut self,
         item: StackItem,
         resume_effect_index: Option<u32>,
@@ -815,6 +818,11 @@ impl GameEngine {
         if let Some(start) = resume_effect_index {
             let (effects, spell_label) = self.build_resolution_effects(&item);
             self.run_effect_list(&item, &spell_label, effects, start as usize, &mut ev)?;
+        }
+        if self.state.pending_resolution.is_none() {
+            // The original pass-priority call deliberately skipped SBAs while this primitive was
+            // parked. Run them only after the resumed effect tail, before granting priority.
+            self.apply_sbas(&mut ev)?;
         }
         if self.state.pending_resolution.is_none() {
             if let Some(i) = self.state.player_idx(self.state.active_player_id()) {

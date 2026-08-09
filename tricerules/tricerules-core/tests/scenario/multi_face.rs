@@ -690,6 +690,10 @@ fn stomp_with_no_legal_target_goes_to_graveyard_without_permission() {
     .unwrap();
     resolve_entire_stack_two_player(&mut e);
 
+    assert!(
+        e.state.damage_prevention_prohibitions.is_empty(),
+        "a fully fizzled Stomp creates no turn-scoped prohibition"
+    );
     assert_eq!(
         e.state.objects[&adventure].zone,
         tricerules_core::Zone::Graveyard

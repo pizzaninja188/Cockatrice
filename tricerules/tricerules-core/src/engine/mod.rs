@@ -2,10 +2,11 @@
 
 use crate::custom::{self, ResolutionChoice, ResolutionCtx, ResolutionStep};
 use crate::state::{
-    AdventureCastPermission, AffectedScope, BlockingChoice, ChosenSpellMode, CombatState,
-    ContinuousEffect, GameObject, GameState, ObjectId, OpeningSequence, PendingResolution,
-    PendingTrigger, PendingTriggerOrder, PlayerId, PlayerState, StackItem, StagedTrigger,
-    StagedTriggerGroup, TurnStep, UndoableManaAbility, Zone,
+    ActiveDamagePrevention, AdventureCastPermission, AffectedScope, BlockingChoice,
+    ChosenSpellMode, CombatState, ContinuousEffect, DamagePreventionAmount,
+    DamagePreventionProhibition, DamagePreventionScope, GameObject, GameState, ObjectId,
+    OpeningSequence, PendingResolution, PendingTrigger, PendingTriggerOrder, PlayerId, PlayerState,
+    StackItem, StagedTrigger, StagedTriggerGroup, TurnStep, UndoableManaAbility, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -16,10 +17,11 @@ use thiserror::Error;
 use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
     AbilityCost, AnthemController, AnthemFilter, CastTriggerPlayer, Color, ContinuousEffectKind,
-    CounterKind, DamageDivision, EffectDuration, EffectSubject, Evasion, FaceChangeAction,
-    InterveningIf, Keyword, LifeAmount, PlayerRecipient, RelativePlayerSet, SearchDestination,
-    SpellEffectKind, SpellTypeFilter, StaticAbilityDef, TargetFilter, TargetKind, TokenController,
-    TriggerCondition,
+    CounterKind, DamageDivision, DamagePreventionAdditionalEffect, DamagePreventionSubject,
+    EffectDuration, EffectSubject, Evasion, FaceChangeAction, InterveningIf, Keyword, LifeAmount,
+    PlayerRecipient, PreventionAmountBasis, RelativePlayerSet, SearchDestination, SpellEffectKind,
+    SpellTypeFilter, StaticAbilityDef, StaticDamagePreventionAmount, TargetFilter, TargetKind,
+    TokenController, TriggerCondition,
 };
 use tricerules_cards::{CardRegistry, FaceRef, Layout};
 use tricerules_proto::ruled::v1 as rv1;
@@ -35,6 +37,7 @@ mod characteristics;
 mod combat;
 mod continuous;
 mod custom_resolution;
+pub(crate) mod damage;
 mod dev;
 mod events;
 mod legal_actions;
@@ -501,9 +504,12 @@ impl GameEngine {
             staged_trigger_groups: VecDeque::new(),
             pending_trigger_order: None,
             pending_resolution: None,
+            pending_damage_batch: None,
             continuous_effects: Vec::new(),
-            damage_prevention_shields: HashMap::new(),
-            prevent_all_combat_damage_this_turn: false,
+            damage_prevention_effects: Vec::new(),
+            damage_prevention_prohibitions: Vec::new(),
+            next_damage_prevention_effect_id: 1,
+            next_damage_prevention_application_id: 1,
             undoable_mana_abilities: Vec::new(),
             untapped_this_command: Vec::new(),
         };
@@ -608,6 +614,11 @@ impl GameEngine {
                 && e.duration
                     == tricerules_cards::primitives::EffectDuration::WhileSourceOnBattlefield;
             !static_from_this
+        });
+        self.state.damage_prevention_effects.retain(|effect| {
+            !(effect.source_id == Some(permanent_id)
+                && effect.duration
+                    == tricerules_cards::primitives::EffectDuration::WhileSourceOnBattlefield)
         });
         if let Some(o) = self.state.objects.get_mut(&permanent_id) {
             o.face_up_index = new_face;

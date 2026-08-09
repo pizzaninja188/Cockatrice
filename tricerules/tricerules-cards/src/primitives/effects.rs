@@ -504,6 +504,10 @@ pub enum SpellEffectKind {
     /// Safe Passage partial). Untargeted — sets a global flag checked when combat damage resolves.
     /// Cleared at the cleanup step alongside marked damage.
     PreventAllCombatDamageTurn,
+    /// CR 615.12: damage cannot be prevented for the rest of the turn. Prevention effects still
+    /// apply, including any additional effects, but prevent zero damage and do not consume finite
+    /// shields. Cards: Stomp and Skullcrack (whose life-gain prohibition is a separate effect).
+    DamageCantBePreventedThisTurn,
     /// CR 701.27 / 710: change the face/status of the permanent that sourced this ability.
     /// Ineligible objects produce the rules-defined no-op during resolution.
     ChangeSourceFace {

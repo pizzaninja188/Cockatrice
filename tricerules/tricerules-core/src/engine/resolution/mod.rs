@@ -507,6 +507,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::PreventAllCombatDamageTurn => {
                         misc::prevent_all_combat_damage_turn(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::DamageCantBePreventedThisTurn => {
+                        misc::damage_cant_be_prevented_this_turn(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::ReturnFromGraveyard { .. } => {
                         zones::return_from_graveyard(&mut cx, effect)?
                     }
@@ -831,6 +834,10 @@ pub(crate) fn move_object_to_zone(
                 e.source_id == Some(oid) && e.duration == EffectDuration::WhileSourceOnBattlefield;
             !single_on_this && !static_from_this
         });
+        state.damage_prevention_effects.retain(|effect| {
+            !(effect.source_id == Some(oid)
+                && effect.duration == EffectDuration::WhileSourceOnBattlefield)
+        });
         // CR 400.7 / 121.2: a zone change makes this a new game object — transient
         // battlefield-only state (marked damage, deathtouch marking, tap status, regeneration
         // shields) and all counters do not carry over. Centralized here so every leave path
@@ -1069,34 +1076,6 @@ pub(super) fn consume_regen_shield(
         }
     }
     true
-}
-
-/// CR 614.1a: consume damage from `shields` for target `tid`, returning the net damage after
-/// prevention. Emits a log event for any prevented amount. `amount` is the incoming damage.
-pub(super) fn apply_prevention_shield(
-    shields: &mut std::collections::HashMap<crate::state::ObjectId, u32>,
-    tid: crate::state::ObjectId,
-    amount: u32,
-    events: &mut Vec<rv1::RuledEvent>,
-) -> u32 {
-    if amount == 0 {
-        return 0;
-    }
-    let shield = shields.get(&tid).copied().unwrap_or(0);
-    if shield == 0 {
-        return amount;
-    }
-    let prevented = amount.min(shield);
-    let remaining = shield - prevented;
-    if remaining == 0 {
-        shields.remove(&tid);
-    } else {
-        shields.insert(tid, remaining);
-    }
-    if prevented > 0 {
-        events.push(ev_log(format!("{prevented} damage prevented (shield).")));
-    }
-    amount - prevented
 }
 
 #[cfg(test)]
