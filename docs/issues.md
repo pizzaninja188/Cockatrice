@@ -11,8 +11,11 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   reuse IDs.
 - Give each a `Priority:` (High / Medium / Low) — the automation works High first.
 - Use labels in brackets: `[bug]`, `[feature]`, `[chore]`, `[docs]`.
-- When a `fix/issue-N` branch is merged, remove that issue from here (its status is
-  tracked in `AUTOMATION_STATUS.md` until then).
+- Delete completed issues from this file rather than marking them checked. For work
+  committed directly to `master`, remove the issue in the implementation commit; for a
+  `fix/issue-N` branch, remove it immediately after merge. Before reporting completion,
+  reconcile dependency wording in the remaining issues. Historical status stays in
+  `AUTOMATION_STATUS.md`.
 - Workflow: you add issues here → the box (cron) fixes them on `fix/issue-N`
   branches and pushes them → you pull, UI-test, and merge to `master`. Status and
   per-branch manual UI test steps live in `AUTOMATION_STATUS.md` / the branch
@@ -48,10 +51,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
 
 - [ ] #37 [feature] Continuous control-change effects (Mind Control, Threaten)
   - Details: Issue #20 filled the CR 613 layer-2 slot for control decided **at battlefield entry** (`GameObject::controller`, read by `characteristics()`; the per-player `battlefield` list is the control index). Effects that change control of a permanent already on the battlefield are still unimplemented: `apply_layer_2_control` in `tricerules-core/src/engine/characteristics.rs` is an empty stub and its doc comment records the two traps. (1) It cannot use `ordered_effects` — that runs after layer 5 and its `effect_affects` reads `pre_layer_6.controller`, which is circular for a `CreaturesMatching { controller }` scope; this is exactly CR 613.8 dependency ordering. It needs its own earlier pass over `AffectedScope::Single` effects on the same `(timestamp, index)` key. (2) Once the derived controller can differ from the `controller` field, the battlefield lists stop being a valid control index and must be rebuilt whenever `continuous_effects` changes (add `reindex_battlefield_control()`, called from `apply_sbas`); the `debug_assert_battlefield_control_index` check in `state_based.rs` currently holds the two in sync and will start failing. Cards: Mind Control (aura, needs #10), Threaten / Act of Treason (until-EOT control + untap + haste), Confiscate, Ray of Command. The relay and client already handle a permanent sitting on a non-owner's table, so this is engine-side plus the existing `Owner:` annotation.
-  - Priority: Low
-
-- [ ] #40 [chore] `target:` vocabulary on auto-bound self-effects
-  - Details: "Target" is a defined game term (CR 115.1), and three effects use it for things that do not target. `PumpTarget`, `Regenerate` and `PutCounters` take a `target: TargetFilter` that five cards fill with `(kind: Self_)` for abilities whose Oracle text never says "target": Fiery Hellhound ("This creature gets +1/+0 until end of turn"), Cudgel Troll and Drudge Skeletons ("Regenerate this creature"), Ajani's Pridemate and Bloodthirsty Aerialist ("put a +1/+1 counter on this creature"). The cost is already visible in the code: `TargetKind::Self_` has to carry a "**Not 'targeting' in the CR sense** (CR 115)" disclaimer in `tricerules-cards/src/primitives/targeting.rs`, and `spell_effect_kind_needs_target` (`tricerules-core/src/engine/targeting.rs`) hardcodes a carve-out naming exactly these three effects so they don't demand a target. That carve-out is the smell — the vocabulary is forcing a special case. The honest model is a subject enum (`{ Source, Chosen(TargetFilter) }`) on the effects that can auto-bind, which deletes the carve-out and lets `Self_` leave `TargetKind` entirely. Inert today, but every new self-referencing ability widens it. Note the correct pattern already exists and now has three instances: `RelativePlayerSet`, `TokenController`, and `PlayerRecipient` (added with `DamagePlayer`), all deliberately kept out of `TargetFilter` because those effects do not target. Verified while adding `PlayerRecipient`: the `TargetPlayer*` family is *not* affected — every card using it (Acolyte of Xathrid, Blood Artist, Bump in the Night, Diabolic Edict, Healing Salve, Mind Sculpt, Tome Scour) literally says "target player", as do `DestroyTarget` / `DamageTarget` / `CounterTargetSpell` / `CopyTargetSpell`, and `TargetKind::AnyTarget` is a real CR 115.4 term. Don't "fix" those.
   - Priority: Low
 
 - [ ] #41 [chore] Unify the two trigger-firing paths — simultaneous events as a set
