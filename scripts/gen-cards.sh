@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Generates vanilla / french-vanilla creature RON from a Scryfall bulk dump (Phase 6).
+# Generates vanilla / french-vanilla card RON from a Scryfall bulk dump (Phase 6).
 #
 # Writes one RON file per qualifying card under tricerules-cards/data/generated/<letter>/;
-# build.rs embeds them automatically. Cards already present in data/ (by id or name) and
-# cards with rules text beyond the supported keyword set are skipped.
+# build.rs embeds them automatically. Normal creatures and supported two-face layouts are
+# eligible. Cards already present in data/ (by id or name) and cards with rules text beyond
+# the supported keyword set are skipped.
 #
 # Workflow:
 #   ./scripts/fetch-scryfall-bulk.sh                 # download oracle-cards.json

@@ -1,10 +1,11 @@
 <#
 .SYNOPSIS
-    Generates vanilla / french-vanilla creature RON from a Scryfall bulk dump (Phase 6).
+    Generates vanilla / french-vanilla card RON from a Scryfall bulk dump (Phase 6).
 .DESCRIPTION
     Writes one RON file per qualifying card under tricerules-cards\data\generated\<letter>\;
-    build.rs embeds them automatically. Cards already present in data\ (by id or name) and
-    cards with rules text beyond the supported keyword set are skipped.
+    build.rs embeds them automatically. Normal creatures and supported two-face layouts are
+    eligible. Cards already present in data\ (by id or name) and cards with rules text beyond
+    the supported keyword set are skipped.
 
     Workflow:
         ./scripts/fetch-scryfall-bulk.ps1            # download oracle-cards.json
@@ -27,7 +28,7 @@ $defaultInput = Join-Path $repoRoot "oracle-cards.json"
 $extra = @()
 if ($args -notcontains "--input") {
     if (-not (Test-Path $defaultInput)) {
-        Write-Error "$defaultInput not found — run ./scripts/fetch-scryfall-bulk.ps1 first, or pass --input <path>."
+        Write-Error "$defaultInput not found - run ./scripts/fetch-scryfall-bulk.ps1 first, or pass --input <path>."
         exit 1
     }
     $extra = @("--input", $defaultInput)
