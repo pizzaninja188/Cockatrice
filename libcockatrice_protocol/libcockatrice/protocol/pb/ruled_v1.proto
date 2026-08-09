@@ -22,6 +22,7 @@ extend google.protobuf.FieldOptions {
 // Intent from a client; carried inside GameCommand Command_RuledPayload.payload
 message RuledCommand {
   reserved 15;
+  reserved 21;
   reserved "assign_damage_order";
   // Tag 9 was AddManaToPool, the client-trusted "mint mana into my pool" command. Removed:
   // mana is now engine-owned and produced only by activating a mana ability (CR 605), so a
@@ -66,9 +67,6 @@ message RuledCommand {
     // strictly inconsequential — no mana spent, no spell/ability cast, priority not passed).
     // The engine untaps the source and removes the produced mana; rejected once consequential.
     UndoManaAbility undo_mana_ability = 20;
-    // Flip the active face of a Transform/Flip layout permanent (CR 710/712.8). The controller
-    // sends this; the engine validates layout and emits FaceChanged.
-    TransformPermanent transform_permanent = 21;
     // Debug-only cheat command. The engine rejects it outright unless the session was started
     // with dev commands enabled; see DevCommand.
     DevCommand dev_command = 22;
@@ -277,12 +275,6 @@ message PlayLand {
   // CR 712: for MDFC land cards, which face to enter the battlefield as (0 = front face,
   // 1 = back face). 0 for single-face lands (field absent or default is always front).
   uint32 face_index = 2;
-}
-
-// Controller requests a Transform/Flip layout permanent change its active face (CR 710/712.8).
-// Only valid for permanents with layout Transform or Flip. Servatrice forwards to the engine.
-message TransformPermanent {
-  uint32 permanent_id = 1;
 }
 
 message MulliganDecision {
@@ -628,7 +620,7 @@ message AuraAttached {
 // A permanent changed its active face (CR 710/712.8: transform does not trigger ETB).
 message FaceChanged {
   uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
-  int32 owner_player_id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  int32 controller_player_id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   uint32 face_up_index = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 

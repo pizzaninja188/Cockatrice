@@ -87,7 +87,11 @@ impl CharacteristicsEvaluator<'_> {
             controller: object.controller,
             types: face.types.to_vec(),
             supertypes: face.supertypes.to_vec(),
-            colors: face.colors(),
+            colors: if definition.layout == Layout::Flip && object.face_up_index > 0 {
+                definition.primary_face().colors()
+            } else {
+                face.colors()
+            },
             keywords: face.keywords.to_vec(),
             evasions: face.evasions.to_vec(),
             // Object snapshots take precedence for tokens and scenario overrides. Multi-face

@@ -131,6 +131,12 @@ impl GameEngine {
             let owner = self.state.objects.get(&id).map(|o| o.owner);
             let controller = self.state.objects.get(&id).map(|o| o.controller);
             let card_id_for_trigger = self.state.objects.get(&id).map(|o| o.card_id.clone());
+            let face_index = self
+                .state
+                .objects
+                .get(&id)
+                .map(|o| o.face_up_index)
+                .unwrap_or(0);
             let was_creature = self
                 .characteristics(id)
                 .is_some_and(|value| value.is_creature());
@@ -145,7 +151,7 @@ impl GameEngine {
                     ));
                 }
                 if let (Some(cid), Some(ctrl)) = (card_id_for_trigger, controller) {
-                    dies.push((id, cid, ctrl, was_creature));
+                    dies.push((id, cid, ctrl, face_index, was_creature));
                 }
             }
         }
@@ -154,6 +160,12 @@ impl GameEngine {
             let owner = self.state.objects.get(&id).map(|o| o.owner);
             let controller = self.state.objects.get(&id).map(|o| o.controller);
             let card_id_for_trigger = self.state.objects.get(&id).map(|o| o.card_id.clone());
+            let face_index = self
+                .state
+                .objects
+                .get(&id)
+                .map(|o| o.face_up_index)
+                .unwrap_or(0);
             let was_creature = self
                 .characteristics(id)
                 .is_some_and(|value| value.is_creature());
@@ -172,7 +184,7 @@ impl GameEngine {
                     ));
                 }
                 if let (Some(cid), Some(ctrl)) = (card_id_for_trigger, controller) {
-                    dies.push((id, cid, ctrl, was_creature));
+                    dies.push((id, cid, ctrl, face_index, was_creature));
                 }
             }
         }
@@ -181,11 +193,12 @@ impl GameEngine {
             let trigger_events: Vec<GameEvent> = dies
                 .into_iter()
                 .map(
-                    |(object_id, card_id, controller, was_creature)| GameEvent::Dies {
+                    |(object_id, card_id, controller, face_index, was_creature)| GameEvent::Dies {
                         source: TriggerSourceSnapshot {
                             object_id,
                             card_id,
                             controller,
+                            face_index,
                         },
                         was_creature,
                     },
@@ -290,6 +303,12 @@ impl GameEngine {
             let owner = self.state.objects.get(&id).map(|o| o.owner);
             let controller = self.state.objects.get(&id).map(|o| o.controller);
             let card_id_for_trigger = self.state.objects.get(&id).map(|o| o.card_id.clone());
+            let face_index = self
+                .state
+                .objects
+                .get(&id)
+                .map(|o| o.face_up_index)
+                .unwrap_or(0);
             let was_creature = self
                 .characteristics(id)
                 .is_some_and(|value| value.is_creature());
@@ -309,6 +328,7 @@ impl GameEngine {
                             object_id: id,
                             card_id: cid,
                             controller: ctrl,
+                            face_index,
                         },
                         was_creature,
                     }]);
@@ -341,7 +361,14 @@ impl GameEngine {
             if !characteristics.is_legendary() {
                 continue;
             }
-            let n = self.registry.get(&o.card_id).unwrap().name.clone();
+            let Some(n) = self
+                .registry
+                .get(&o.card_id)
+                .and_then(|def| def.face(o.face_up_index))
+                .map(|face| face.name.clone())
+            else {
+                continue;
+            };
             by_controller_name
                 .entry((characteristics.controller, n))
                 .or_default()
@@ -398,6 +425,7 @@ impl GameEngine {
                 ability_text: None,
                 source_permanent_id: None,
                 source_zone_change: 0,
+                source_face_change: 0,
                 ability_index: None,
                 is_triggered: false,
                 is_copy: false,

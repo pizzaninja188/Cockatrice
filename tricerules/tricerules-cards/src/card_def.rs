@@ -127,6 +127,9 @@ pub struct CardFace {
     /// whenever it could legally block an attacking creature.
     #[serde(default)]
     pub must_block_if_able: bool,
+    /// CR 105.2: an authored color indicator printed to the left of the type line.
+    #[serde(default)]
+    pub color_indicator: Option<Vec<Color>>,
     /// Explicit colors for a face synthesized from a
     /// [`TokenDefinition`](crate::token_def::TokenDefinition) (CR 111.4: a token's color comes from
     /// the creating effect, not a mana cost). `None` for printed faces, whose colors derive from
@@ -186,7 +189,10 @@ impl CardFace {
     pub fn colors(&self) -> Vec<Color> {
         match &self.colors_override {
             Some(colors) => colors.clone(),
-            None => self.mana_cost.colors(),
+            None => self
+                .color_indicator
+                .clone()
+                .unwrap_or_else(|| self.mana_cost.colors()),
         }
     }
 
@@ -265,6 +271,8 @@ pub struct RawCardDefinition {
     pub must_attack_if_able: bool,
     #[serde(default)]
     pub must_block_if_able: bool,
+    #[serde(default)]
+    pub color_indicator: Option<Vec<Color>>,
 }
 
 impl RawCardDefinition {
@@ -302,6 +310,7 @@ impl RawCardDefinition {
                 static_abilities: self.static_abilities,
                 must_attack_if_able: self.must_attack_if_able,
                 must_block_if_able: self.must_block_if_able,
+                color_indicator: self.color_indicator,
                 ..Default::default()
             }]
         } else {
@@ -369,6 +378,17 @@ impl CardDefinition {
     /// True if this card has more than one face (any non-`Normal` layout).
     pub fn is_multiface(&self) -> bool {
         self.faces.len() > 1
+    }
+
+    /// Whether `face_index` is a face the player may choose while playing this card from hand.
+    /// Split cards, modal DFCs, and Adventures expose both authored spell/land choices there;
+    /// transforming DFCs and flip cards expose only their front/top face. This is a layout rule,
+    /// independent of timing, costs, targets, and whether the chosen face is a spell or land.
+    pub fn face_available_from_hand(&self, face_index: usize) -> bool {
+        match self.layout {
+            Layout::Normal | Layout::Transform | Layout::Flip => face_index == 0,
+            Layout::Split | Layout::ModalDfc | Layout::Adventure => face_index < self.face_count(),
+        }
     }
 
     /// True if *any* face satisfies `pred` — the "is this a creature card?" question asked of a

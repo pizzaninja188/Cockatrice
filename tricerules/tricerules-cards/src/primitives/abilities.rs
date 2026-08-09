@@ -199,6 +199,14 @@ pub enum SpellTypeFilter {
 pub enum InterveningIf {
     /// "if {this} is untapped" — Howling Mine.
     SourceUntapped,
+    /// Total spells successfully cast during the immediately preceding turn, inclusive bounds.
+    /// `None` is an open bound. Covers both faces of the original Innistrad werewolves.
+    SpellsCastLastTurn {
+        #[serde(default)]
+        min: Option<u32>,
+        #[serde(default)]
+        max: Option<u32>,
+    },
 }
 
 /// One triggered ability on a permanent (RON data tier). The effects are plain

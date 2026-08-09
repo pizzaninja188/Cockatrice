@@ -214,6 +214,9 @@ impl ManaPool {
 pub struct StagedTrigger {
     pub object_id: ObjectId,
     pub source_permanent_id: ObjectId,
+    pub source_face_index: usize,
+    pub source_zone_change: u64,
+    pub source_face_change: u64,
     pub card_id: String,
     /// Registry display name captured at collection, so a source that has already left the game
     /// still renders in the ordering prompt (a Blood Artist that died in the same wipe).
@@ -277,6 +280,9 @@ pub struct PendingTrigger {
     /// [`StagedTrigger::object_id`].
     pub object_id: ObjectId,
     pub source_permanent_id: ObjectId,
+    pub source_face_index: usize,
+    pub source_zone_change: u64,
+    pub source_face_change: u64,
     pub ability_index: usize,
     pub ability_text: String,
     pub card_id: String,
@@ -356,6 +362,8 @@ pub struct StackItem {
     /// A matching ObjectId after a leave-and-return is a different object and must not receive
     /// the old ability's self-bound effect.
     pub source_zone_change: u64,
+    /// Face-change generation captured when an ability was put on the stack (CR 701.27f).
+    pub source_face_change: u64,
     /// Index into the card's `activated_abilities` or `triggered_abilities` list. `None` for spells.
     pub ability_index: Option<usize>,
     /// `true` = this is a triggered ability; `false` = activated ability or spell.
@@ -539,6 +547,8 @@ pub struct GameState {
     /// for relay compatibility, while this generation preserves CR 400.7 identity semantics for
     /// effects that resolve after a source leaves and returns.
     pub zone_change_generation: HashMap<ObjectId, u64>,
+    /// Incremented whenever a battlefield permanent changes face/status in place.
+    pub face_change_generation: HashMap<ObjectId, u64>,
     pub stack: Vec<StackItem>,
     /// Index into players for who holds priority
     pub priority_idx: usize,
@@ -551,6 +561,8 @@ pub struct GameState {
     pub passes_since_stack_change: u32,
     /// Number of lands played from hand this turn; compared against max (1 + extra land plays).
     pub lands_played_this_turn: u32,
+    pub spells_cast_this_turn: u32,
+    pub spells_cast_last_turn: u32,
     /// Active combat, if in declare/damage
     pub combat: Option<CombatState>,
     /// If set, game is over; winning player

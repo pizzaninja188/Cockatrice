@@ -16,9 +16,10 @@ use thiserror::Error;
 use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
     AbilityCost, AnthemController, AnthemFilter, CastTriggerPlayer, Color, ContinuousEffectKind,
-    CounterKind, DamageDivision, EffectDuration, EffectSubject, Evasion, InterveningIf, Keyword,
-    LifeAmount, PlayerRecipient, RelativePlayerSet, SearchDestination, SpellEffectKind,
-    SpellTypeFilter, StaticAbilityDef, TargetFilter, TargetKind, TokenController, TriggerCondition,
+    CounterKind, DamageDivision, EffectDuration, EffectSubject, Evasion, FaceChangeAction,
+    InterveningIf, Keyword, LifeAmount, PlayerRecipient, RelativePlayerSet, SearchDestination,
+    SpellEffectKind, SpellTypeFilter, StaticAbilityDef, TargetFilter, TargetKind, TokenController,
+    TriggerCondition,
 };
 use tricerules_cards::{CardRegistry, FaceRef, Layout};
 use tricerules_proto::ruled::v1 as rv1;
@@ -44,6 +45,106 @@ mod state_based;
 mod targeting;
 mod triggers;
 
+#[cfg(test)]
+mod face_change_tests {
+    use super::*;
+    use crate::engine::resolution::move_object_to_zone;
+
+    fn engine_with(cards: &[&str]) -> GameEngine {
+        let mut p0: Vec<String> = cards.iter().map(|card| (*card).to_string()).collect();
+        p0.extend(std::iter::repeat_n("forest".to_string(), 8));
+        GameEngine::new(
+            341,
+            &[0, 1],
+            20,
+            Some(vec![p0, vec!["forest".to_string(); 12]]),
+            true,
+        )
+        .expect("engine")
+    }
+
+    fn put_on_battlefield(engine: &mut GameEngine, card_id: &str) -> ObjectId {
+        let oid = engine
+            .state
+            .objects
+            .values()
+            .find(|object| object.owner == 0 && object.card_id == card_id)
+            .expect("card in deck")
+            .id;
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            oid,
+            Zone::Battlefield,
+            Some(0),
+        )
+        .expect("move to battlefield");
+        oid
+    }
+
+    #[test]
+    fn internal_transform_and_flip_obey_layout_semantics() {
+        let mut engine = engine_with(&[
+            "cragcrown_pathway_timbercrown_pathway",
+            "akki_lavarunner_tok-tok,_volcano_born",
+            "fire_ice",
+        ]);
+        let mdfc = put_on_battlefield(&mut engine, "cragcrown_pathway_timbercrown_pathway");
+        let flip = put_on_battlefield(&mut engine, "akki_lavarunner_tok-tok,_volcano_born");
+        let split = put_on_battlefield(&mut engine, "fire_ice");
+        let mut events = vec![];
+
+        assert!(engine
+            .change_permanent_face(mdfc, FaceChangeAction::Transform, &mut events)
+            .unwrap());
+        assert_eq!(engine.state.objects[&mdfc].face_up_index, 1);
+        assert!(engine
+            .change_permanent_face(flip, FaceChangeAction::Flip, &mut events)
+            .unwrap());
+        assert_eq!(engine.state.objects[&flip].face_up_index, 1);
+        let tok_tok = engine
+            .characteristics(flip)
+            .expect("flipped characteristics");
+        assert_eq!(tok_tok.power, Some(2));
+        assert_eq!(tok_tok.toughness, Some(2));
+        assert!(!engine
+            .change_permanent_face(flip, FaceChangeAction::Flip, &mut events)
+            .unwrap());
+        assert_eq!(
+            engine.state.objects[&flip].face_up_index, 1,
+            "flip is one-way"
+        );
+        assert!(!engine
+            .change_permanent_face(split, FaceChangeAction::Transform, &mut events)
+            .unwrap());
+        assert_eq!(engine.state.objects[&split].face_up_index, 0);
+    }
+
+    #[test]
+    fn leaving_battlefield_resets_face_status() {
+        let mut engine = engine_with(&["reckless_waif_merciless_predator"]);
+        let oid = put_on_battlefield(&mut engine, "reckless_waif_merciless_predator");
+        let mut events = vec![];
+        engine
+            .change_permanent_face(oid, FaceChangeAction::Transform, &mut events)
+            .unwrap();
+        let predator = engine
+            .characteristics(oid)
+            .expect("transformed characteristics");
+        assert_eq!(predator.power, Some(3));
+        assert_eq!(predator.toughness, Some(2));
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            oid,
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        assert_eq!(engine.state.objects[&oid].face_up_index, 0);
+    }
+}
+
 // Re-export the two helpers that are called from outside the `engine` module tree
 // (`crate::custom`) so their long-standing `crate::engine::<fn>` paths keep resolving.
 pub use characteristics::Characteristics;
@@ -68,6 +169,7 @@ struct TriggerSourceSnapshot {
     object_id: ObjectId,
     card_id: String,
     controller: PlayerId,
+    face_index: usize,
 }
 
 enum GameEvent {
@@ -370,6 +472,7 @@ impl GameEngine {
             last_known_tapped_by_generation: HashMap::new(),
             last_known_keywords_by_generation: HashMap::new(),
             zone_change_generation: HashMap::new(),
+            face_change_generation: HashMap::new(),
             stack: Vec::new(),
             priority_idx: if skip_opening_sequence {
                 0
@@ -387,6 +490,8 @@ impl GameEngine {
             command_index: 0,
             passes_since_stack_change: 0,
             lands_played_this_turn: 0,
+            spells_cast_this_turn: 0,
+            spells_cast_last_turn: 0,
             combat: None,
             winner: None,
             cleanup_discard_player: None,
@@ -453,37 +558,49 @@ impl GameEngine {
                 == item.source_zone_change
     }
 
-    /// CR 712.8 / 710: flip the active face of a Transform or Flip layout permanent.
-    /// Transforming does not trigger ETB. Only the controller may transform their own permanent.
-    pub(super) fn transform_permanent(
+    /// Central CR 701.27 / 710 face-change primitive. Ineligible actions are no-ops.
+    pub(super) fn change_permanent_face(
         &mut self,
-        player: PlayerId,
         permanent_id: ObjectId,
-    ) -> Result<RuledEventBatch, EngineError> {
-        use tricerules_cards::Layout;
-        let obj = self
-            .state
-            .objects
-            .get(&permanent_id)
-            .ok_or(EngineError::Illegal("no such object"))?;
+        action: FaceChangeAction,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<bool, EngineError> {
+        let Some(obj) = self.state.objects.get(&permanent_id) else {
+            return Ok(false);
+        };
         if obj.zone != Zone::Battlefield {
-            return Err(EngineError::Illegal("not on battlefield"));
-        }
-        // CR 701.28: transforming is done by the permanent's controller.
-        if obj.controller != player {
-            return Err(EngineError::Illegal("not your permanent"));
+            return Ok(false);
         }
         let card_id = obj.card_id.clone();
-        let def = self
-            .registry
-            .get(&card_id)
-            .ok_or_else(|| EngineError::MissingCard(card_id.clone()))?;
-        if !matches!(def.layout, Layout::Transform | Layout::Flip) {
-            return Err(EngineError::Illegal("not a Transform or Flip card"));
-        }
-        let face_count = def.face_count();
+        let controller = obj.controller;
         let current_face = obj.face_up_index;
-        let new_face = (current_face + 1) % face_count;
+        let Some(def) = self.registry.get(&card_id) else {
+            return Err(EngineError::MissingCard(card_id));
+        };
+        let new_face = match action {
+            FaceChangeAction::Transform
+                if matches!(def.layout, Layout::Transform | Layout::ModalDfc) =>
+            {
+                let candidate = if current_face == 0 { 1 } else { 0 };
+                match def.face(candidate) {
+                    Some(face) if face.is_permanent() => candidate,
+                    _ => return Ok(false),
+                }
+            }
+            FaceChangeAction::Flip if def.layout == Layout::Flip && current_face == 0 => 1,
+            _ => return Ok(false),
+        };
+        let new_face_values = def
+            .face(new_face)
+            .map(|face| {
+                (
+                    face.power,
+                    face.toughness,
+                    face.must_attack_if_able,
+                    face.must_block_if_able,
+                )
+            })
+            .expect("validated face index");
 
         // Drain static abilities from the old face, then flip, then emit for the new face.
         self.state.continuous_effects.retain(|e| {
@@ -494,21 +611,26 @@ impl GameEngine {
         });
         if let Some(o) = self.state.objects.get_mut(&permanent_id) {
             o.face_up_index = new_face;
+            o.power = new_face_values.0;
+            o.toughness = new_face_values.1;
+            o.must_attack_if_able = new_face_values.2;
+            o.must_block_if_able = new_face_values.3;
         }
-        // Emit static abilities for the newly-revealed face (CR 712.8: no ETB, but statics apply).
+        *self
+            .state
+            .face_change_generation
+            .entry(permanent_id)
+            .or_insert(0) += 1;
+        // Refresh source-bound static effects without emitting an ETB game event.
         self.emit_static_abilities_on_enter(permanent_id);
-
-        let owner = player;
-        let mut batch = RuledEventBatch::default();
-        batch.events.push(rv1::RuledEvent {
+        events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::FaceChanged(rv1::FaceChanged {
                 object_id: permanent_id,
-                owner_player_id: owner,
+                controller_player_id: controller,
                 face_up_index: new_face as u32,
             })),
         });
-        legal_actions::fill_legal(&mut batch, self);
-        Ok(batch)
+        Ok(true)
     }
 
     pub fn apply_command(
@@ -714,7 +836,6 @@ impl GameEngine {
             Some(Cmd::PlayLand(pl)) => {
                 self.play_land(player, pl.hand_card_index as usize, pl.face_index as usize)
             }
-            Some(Cmd::TransformPermanent(tp)) => self.transform_permanent(player, tp.permanent_id),
             // Gated in `apply_command`; unreachable here unless the session enabled dev commands.
             Some(Cmd::DevCommand(dc)) => self.apply_dev_command(dc),
             Some(Cmd::DiscardToHandSize(d)) => self.discard_to_hand_size(player, d),

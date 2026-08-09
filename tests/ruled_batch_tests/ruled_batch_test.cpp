@@ -137,6 +137,7 @@ protected:
     {
         bool zoneViewApplied = false;
         bool handOrLibraryChanged = false;
+        bool battlefieldDisplayChanged = false;
         bool tapStateEventsQueued = false;
         bool phaseChanged = false;
     };
@@ -194,6 +195,19 @@ protected:
         }
     }
 
+    void seedMultifaceCatalog(const QString &cardId, const QString &combinedName, const QStringList &faceNames)
+    {
+        ruled::v1::CardCatalog_Entry entry;
+        entry.set_card_id(cardId.toStdString());
+        entry.set_name(combinedName.toStdString());
+        for (const QString &faceName : faceNames) {
+            entry.add_face_names(faceName.toStdString());
+            game->ruled()->ruledCardIdByLowerName.insert(faceName.trimmed().toLower(), cardId);
+        }
+        game->ruled()->ruledCardCatalogById.insert(cardId, entry);
+        game->ruled()->ruledCardIdByLowerName.insert(combinedName.trimmed().toLower(), cardId);
+    }
+
     // Per-player binding access (the maps moved off Server_Player onto the driver).
     RuledPlayerBinding::RuledZoneSyncResult applyZoneView(Server_Player *p,
                                                           const ruled::v1::RuledPerPlayerView &v,
@@ -223,6 +237,7 @@ protected:
         BatchOutcome out;
         out.zoneViewApplied = r.zoneViewApplied;
         out.handOrLibraryChanged = r.handOrLibraryChanged;
+        out.battlefieldDisplayChanged = r.battlefieldDisplayChanged;
         out.tapStateEventsQueued = r.tapStateEventsQueued;
         out.phaseChanged = r.phaseChanged;
         return out;
@@ -1350,6 +1365,144 @@ TEST_F(RuledBatchTest, ApplyRuledBatchClearsAttackersOnEmptyDeclare)
     }
 
     EXPECT_FALSE(bear->getAttacking());
+}
+
+TEST_F(RuledBatchTest, FaceChangedRenamesPermanentInPlace)
+{
+    const QString cardId = "reckless_waif_merciless_predator";
+    seedMultifaceCatalog(cardId,
+                         "Reckless Waif // Merciless Predator",
+                         {"Reckless Waif", "Merciless Predator"});
+    Server_Card *card = addCardToTable(p1, "Reckless Waif");
+    const int serverId = card->getId();
+    card->setCoords(4, 1);
+    card->setTapped(true);
+
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *zoneView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto view = buildPerPlayerView(p1, {701u}, {true});
+    view.mutable_battlefield_objects(0)->set_card_id(cardId.toStdString());
+    *zoneView->add_per_player() = view;
+    *zoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(seed);
+
+    ruled::v1::IpcResponse changed;
+    changed.set_ok(true);
+    auto *face = changed.mutable_batch()->add_events()->mutable_face_changed();
+    face->set_object_id(701u);
+    face->set_controller_player_id(1);
+    face->set_face_up_index(1);
+    const BatchOutcome outcome = callBatchApply(changed);
+
+    EXPECT_TRUE(outcome.battlefieldDisplayChanged);
+    EXPECT_EQ(card->getName(), QString("Merciless Predator"));
+    EXPECT_EQ(card->getId(), serverId);
+    EXPECT_EQ(card->getX(), 4);
+    EXPECT_EQ(card->getY(), 1);
+    EXPECT_TRUE(card->getTapped());
+    EXPECT_EQ(findCardByEngineOid(p1, 701u), card);
+}
+
+TEST_F(RuledBatchTest, FullSnapshotRestoresControlledPermanentActiveFace)
+{
+    const QString cardId = "reckless_waif_merciless_predator";
+    seedMultifaceCatalog(cardId,
+                         "Reckless Waif // Merciless Predator",
+                         {"Reckless Waif", "Merciless Predator"});
+    Server_Card *card = addCardToTable(p1, "Reckless Waif");
+    const int serverId = card->getId();
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *zoneView = response.mutable_batch()->add_events()->mutable_zone_view();
+    auto controlledView = buildPerPlayerView(p1, {702u}, {false}, {2});
+    auto *object = controlledView.mutable_battlefield_objects(0);
+    object->set_card_id(cardId.toStdString());
+    object->set_face_up_index(1);
+    *zoneView->add_per_player() = controlledView;
+    *zoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+
+    const BatchOutcome outcome = callBatchApply(response);
+    EXPECT_TRUE(outcome.battlefieldDisplayChanged);
+    EXPECT_EQ(card->getName(), QString("Merciless Predator"));
+    EXPECT_EQ(card->getId(), serverId);
+    EXPECT_EQ(findCardByEngineOid(p1, 702u), card);
+}
+
+TEST_F(RuledBatchTest, LeavingBattlefieldRestoresFrontFaceDisplay)
+{
+    const QString cardId = "reckless_waif_merciless_predator";
+    seedMultifaceCatalog(cardId,
+                         "Reckless Waif // Merciless Predator",
+                         {"Reckless Waif", "Merciless Predator"});
+    Server_Card *card = addCardToTable(p1, "Reckless Waif");
+    const int serverId = card->getId();
+
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *zoneView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto view = buildPerPlayerView(p1, {703u}, {false});
+    view.mutable_battlefield_objects(0)->set_card_id(cardId.toStdString());
+    *zoneView->add_per_player() = view;
+    *zoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(seed);
+
+    ruled::v1::IpcResponse changed;
+    changed.set_ok(true);
+    auto *face = changed.mutable_batch()->add_events()->mutable_face_changed();
+    face->set_object_id(703u);
+    face->set_controller_player_id(1);
+    face->set_face_up_index(1);
+    callBatchApply(changed);
+    ASSERT_EQ(card->getName(), QString("Merciless Predator"));
+
+    ruled::v1::IpcResponse bounced;
+    bounced.set_ok(true);
+    auto *moved = bounced.mutable_batch()->add_events()->mutable_permanent_moved();
+    moved->set_object_id(703u);
+    moved->set_owner_player_id(1);
+    moved->set_controller_player_id(1);
+    moved->set_card_id(cardId.toStdString());
+    moved->set_destination(ruled::v1::PermanentMoved::DESTINATION_HAND);
+    callBatchApply(bounced);
+
+    ASSERT_EQ(p1->getZones().value(ZoneNames::HAND)->getCards().size(), 1);
+    EXPECT_EQ(p1->getZones().value(ZoneNames::HAND)->getCards().first(), card);
+    EXPECT_EQ(card->getName(), QString("Reckless Waif"));
+    EXPECT_EQ(card->getId(), serverId);
+}
+
+TEST_F(RuledBatchTest, SplitCardKeepsWholeCardDisplayOutsideBattlefield)
+{
+    const QString cardId = "fire_ice";
+    seedMultifaceCatalog(cardId, "Fire // Ice", {"Fire", "Ice"});
+    Server_Card *card = addCardToHand(p1, "Fire // Ice");
+
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *zoneView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto view = buildPerPlayerView(p1, {}, {});
+    auto *handCard = view.add_hand_cards();
+    handCard->set_card_id(cardId.toStdString());
+    handCard->set_object_id(704u);
+    *zoneView->add_per_player() = view;
+    *zoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(seed);
+
+    ruled::v1::IpcResponse movedResponse;
+    movedResponse.set_ok(true);
+    auto *moved = movedResponse.mutable_batch()->add_events()->mutable_permanent_moved();
+    moved->set_object_id(704u);
+    moved->set_owner_player_id(1);
+    moved->set_controller_player_id(1);
+    moved->set_card_id(cardId.toStdString());
+    moved->set_destination(ruled::v1::PermanentMoved::DESTINATION_GRAVEYARD);
+    callBatchApply(movedResponse);
+
+    ASSERT_EQ(p1->getZones().value(ZoneNames::GRAVE)->getCards().size(), 1);
+    EXPECT_EQ(p1->getZones().value(ZoneNames::GRAVE)->getCards().first(), card);
+    EXPECT_EQ(card->getName(), QString("Fire // Ice"));
 }
 
 int main(int argc, char **argv)

@@ -558,6 +558,8 @@ impl GameEngine {
         self.cleanup_marked_damage();
         self.clear_all_mana_pools();
         self.state.lands_played_this_turn = 0;
+        self.state.spells_cast_last_turn = self.state.spells_cast_this_turn;
+        self.state.spells_cast_this_turn = 0;
         let n = self.state.players.len();
         if n >= 1 {
             self.state.active_player_idx = (self.state.active_player_idx + 1) % n;

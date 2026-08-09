@@ -10,8 +10,7 @@ pub(crate) use tricerules_proto::ruled::v1::{
     ChooseTriggerTarget, DamagePair, DeclareAttackers, DeclareBlockers, DiscardToHandSize,
     FlexPipPayment, PassPriority, PlayLand, PreviewDeclareAttackers, PreviewDeclareBlockers,
     PrimitiveYieldStructured, ResolutionChoiceRequired, RuledCommand, RuledEventBatch,
-    SelectedSpellMode, SubmitResolutionChoice, SubmitTriggerOrder, TargetRef, TransformPermanent,
-    UndoManaAbility,
+    SelectedSpellMode, SubmitResolutionChoice, SubmitTriggerOrder, TargetRef, UndoManaAbility,
 };
 
 pub(crate) fn pass() -> RuledCommand {
@@ -189,12 +188,6 @@ pub(crate) fn activate_ability(
 pub(crate) fn undo_mana_ability() -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::UndoManaAbility(UndoManaAbility {})),
-    }
-}
-
-pub(crate) fn transform_permanent_cmd(permanent_id: u32) -> RuledCommand {
-    RuledCommand {
-        cmd: Some(Cmd::TransformPermanent(TransformPermanent { permanent_id })),
     }
 }
 

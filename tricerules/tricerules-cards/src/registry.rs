@@ -1,5 +1,5 @@
 use crate::card_def::{CardDefinition, Layout, RawCardDefinition};
-use crate::primitives::{EffectContext, SpellEffectKind, StaticAbilityDef};
+use crate::primitives::{EffectContext, FaceChangeAction, SpellEffectKind, StaticAbilityDef};
 use crate::token_def::TokenDefinition;
 use once_cell::sync::Lazy;
 use ron::extensions::Extensions;
@@ -285,6 +285,23 @@ impl CardRegistry {
                     .chain(face.activated_abilities.iter().flat_map(|a| &a.effect))
                     .chain(face.triggered_abilities.iter().flat_map(|t| &t.effect));
                 for effect in all_effects {
+                    if let SpellEffectKind::ChangeSourceFace { action } = effect {
+                        let valid_layout = match action {
+                            FaceChangeAction::Transform => {
+                                matches!(card.layout, Layout::Transform | Layout::ModalDfc)
+                            }
+                            FaceChangeAction::Flip => card.layout == Layout::Flip,
+                        };
+                        if !valid_layout {
+                            return Err(RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason: format!(
+                                    "ChangeSourceFace({action:?}) is incompatible with {:?} layout",
+                                    card.layout
+                                ),
+                            });
+                        }
+                    }
                     if let SpellEffectKind::CreateTokens { token, .. } = effect {
                         if !reg.tokens.contains_key(token) {
                             return Err(RegistryError::InvalidCard {
@@ -956,6 +973,36 @@ mod tests {
         assert!(
             matches!(err, RegistryError::InvalidCard { ref reason, .. } if reason.contains("one resolution owner"))
         );
+    }
+
+    #[test]
+    fn authored_color_indicator_overrides_empty_mana_cost() {
+        let reg = CardRegistry::from_embedded().unwrap();
+        let back = reg
+            .get("reckless_waif_merciless_predator")
+            .unwrap()
+            .face(1)
+            .unwrap();
+        assert_eq!(back.colors(), vec![crate::primitives::Color::Red]);
+    }
+
+    #[test]
+    fn face_change_action_must_match_layout() {
+        let bad = r#"(
+            id: "bad_flip",
+            name: "Bad Flip",
+            mana_cost: "{R}",
+            types: ["Creature"],
+            power: 1,
+            toughness: 1,
+            triggered_abilities: [(
+                trigger: WheneverSelfAttacks,
+                effect: [ChangeSourceFace(action: Flip)],
+                text: "Flip it.",
+            )],
+        )"#;
+        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        assert!(matches!(err, RegistryError::InvalidCard { ref id, .. } if id == "bad_flip"));
     }
 
     #[test]

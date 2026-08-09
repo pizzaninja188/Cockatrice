@@ -1,6 +1,32 @@
 use super::*;
 use crate::engine::set_tapped;
 
+pub(super) fn change_source_face(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::ChangeSourceFace { action } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let Some(source_id) = cx.top.source_permanent_id else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let current_face_generation = cx
+        .engine
+        .state
+        .face_change_generation
+        .get(&source_id)
+        .copied()
+        .unwrap_or(0);
+    if cx.engine.source_is_current_object(cx.top)
+        && current_face_generation == cx.top.source_face_change
+    {
+        cx.engine
+            .change_permanent_face(source_id, action, cx.events)?;
+    }
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn destroy_target(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -27,6 +53,12 @@ pub(super) fn destroy_target(
             let owner = engine.state.objects.get(&tid).map(|o| o.owner);
             let controller = engine.state.objects.get(&tid).map(|o| o.controller);
             let card_id_t = engine.state.objects.get(&tid).map(|o| o.card_id.clone());
+            let face_index = engine
+                .state
+                .objects
+                .get(&tid)
+                .map(|o| o.face_up_index)
+                .unwrap_or(0);
             let was_creature = engine
                 .characteristics(tid)
                 .is_some_and(|value| value.is_creature());
@@ -45,6 +77,7 @@ pub(super) fn destroy_target(
                         object_id: tid,
                         card_id: cid,
                         controller: ctrl,
+                        face_index,
                     },
                     was_creature,
                 }]);

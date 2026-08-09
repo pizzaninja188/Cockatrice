@@ -664,6 +664,7 @@ pub(super) fn validate_effect_targets(
         // acts on are the top of the controller's own library, decided at resolution.
         | SpellEffectKind::SearchLibrary { .. }
         | SpellEffectKind::Scry { .. }
+        | SpellEffectKind::ChangeSourceFace { .. }
         | SpellEffectKind::None => {
             if !targets.is_empty() {
                 return Err(EngineError::Illegal("this effect takes no targets"));

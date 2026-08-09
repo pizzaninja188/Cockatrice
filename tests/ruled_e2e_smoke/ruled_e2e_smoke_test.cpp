@@ -198,6 +198,9 @@ public:
         bool creature = false;
         bool sick = false;
         bool haste = false;
+        int power = 0;
+        int toughness = 0;
+        int faceIndex = 0;
     };
     std::map<int, std::vector<Permanent>> battlefieldByPlayer;
     struct Pool
@@ -242,6 +245,7 @@ public:
     bool attackersSentThisCombat = false;
     bool blockersSentThisCombat = false;
     bool devConjureSent = false;
+    bool devWaifSent = false;
     bool devBorosCharmSent = false;
     bool devManaSent = false;
 
@@ -260,11 +264,15 @@ public:
     bool sawBottomAction = false;
     bool sentBottom = false;
     bool sawDevConjuredPermanent = false;
+    bool sawWaifOnBattlefield = false;
+    bool sawWaifFaceChanged = false;
+    bool sawWaifBackPt = false;
     bool sawDevMana = false;
     bool sawBattlefieldOmission = false;
     quint32 boltOid = 0;
     quint32 borosCharmOid = 0;
     quint32 brainstormOid = 0;
+    quint32 waifOid = 0;
     bool inCombatDamageWindow = false;
 
     void log(const QString &line)
@@ -575,6 +583,11 @@ public:
                     log(QStringLiteral("attackers declared: %1 creature(s)")
                             .arg(ev.attackers_declared().attacker_object_ids_size()));
                 }
+            } else if (ev.has_face_changed()) {
+                const auto &face = ev.face_changed();
+                if (waifOid != 0 && face.object_id() == waifOid && face.face_up_index() == 1) {
+                    sawWaifFaceChanged = true;
+                }
             } else if (ev.has_trigger_order_required()) {
                 const auto &tor = ev.trigger_order_required();
                 if (tor.deciding_player_id() == myId && tor.candidates_size() > 0) {
@@ -612,10 +625,20 @@ public:
                             perm.tapped = battlefieldObject.tapped();
                             perm.creature = battlefieldObject.is_creature();
                             perm.sick = battlefieldObject.summoning_sick();
+                            perm.power = static_cast<int>(battlefieldObject.power());
+                            perm.toughness = static_cast<int>(battlefieldObject.toughness());
+                            perm.faceIndex = static_cast<int>(battlefieldObject.face_up_index());
                             perm.haste = std::find(battlefieldObject.keywords().begin(),
                                                    battlefieldObject.keywords().end(),
                                                    "Haste") != battlefieldObject.keywords().end();
                             bf.push_back(perm);
+                            if (perm.cardId == QLatin1String("reckless_waif_merciless_predator")) {
+                                sawWaifOnBattlefield = true;
+                                waifOid = perm.oid;
+                                if (perm.faceIndex == 1 && perm.power == 3 && perm.toughness == 2) {
+                                    sawWaifBackPt = true;
+                                }
+                            }
                         }
                     }
                     if (oppId < 0 && myId >= 0 && pp.player_id() != myId) {
@@ -1120,6 +1143,18 @@ public:
                 sendRuled(cmd, QStringLiteral("dev: conjure Serra Angel onto the battlefield"));
                 return;
             }
+            if (!devWaifSent) {
+                devWaifSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                auto *put = dev->mutable_put_card_in_zone();
+                put->set_card_name("Reckless Waif");
+                put->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+                put->set_ready(true);
+                sendRuled(cmd, QStringLiteral("dev: conjure Reckless Waif onto the battlefield"));
+                return;
+            }
             if (!devBorosCharmSent) {
                 devBorosCharmSent = true;
                 ruled::v1::RuledCommand cmd;
@@ -1468,7 +1503,9 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
                p1.sawBorosCharmPushWithMode && p1.sawBorosCharmLifeLoss &&
                p1.sawAttackersDeclared && p1.sawCombatLifeLoss && p2.sawBrainstormChoice &&
                p2.submittedBrainstormChoice && p2.sawBrainstormResolved && p2.sentCleanupDiscard &&
-               p1.sawDevConjuredPermanent && p1.sawDevMana && p1.sawFlashbackGraveToStack && p1.sawFlashbackStackToExile &&
+               p1.sawDevConjuredPermanent && p1.sawDevMana && p1.sawWaifFaceChanged && p2.sawWaifFaceChanged &&
+               p1.sawWaifBackPt && p2.sawWaifBackPt &&
+               p1.sawFlashbackGraveToStack && p1.sawFlashbackStackToExile &&
                p1.sawAdventureStackToExile && p1.sawAdventureExileToStack && p1.sawAdventureStackToBattlefield &&
                p2.sawFlashbackGraveToStack && p2.sawFlashbackStackToExile && p2.handSizeByPlayer.count(p2.myId) &&
                p2.handSizeByPlayer[p2.myId] <= 7;
@@ -1542,6 +1579,14 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
            "'applyRuledEngineZoneView: count mismatch' or 'missing')";
     EXPECT_GE(p1.countOwn(QStringLiteral("serra_angel"), false), 1) << "conjured permanent missing at end of game";
     EXPECT_TRUE(p1.sawDevMana) << "dev mana never reached the aggressor's pool";
+    EXPECT_TRUE(p1.sawWaifOnBattlefield && p2.sawWaifOnBattlefield)
+        << "both clients did not receive the conjured Reckless Waif battlefield identity";
+    EXPECT_NE(p1.waifOid, 0u);
+    EXPECT_EQ(p1.waifOid, p2.waifOid) << "clients disagreed on the permanent's engine OID";
+    EXPECT_TRUE(p1.sawWaifFaceChanged && p2.sawWaifFaceChanged)
+        << "both clients did not receive the in-place Merciless Predator face change";
+    EXPECT_TRUE(p1.sawWaifBackPt && p2.sawWaifBackPt)
+        << "both clients did not receive Merciless Predator's 3/2 battlefield characteristics";
 
     if (::testing::Test::HasFailure()) {
         ADD_FAILURE() << "milestones incomplete after " << deadline.elapsed() << " ms; see transcript below";

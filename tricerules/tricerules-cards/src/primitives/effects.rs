@@ -152,6 +152,14 @@ pub enum EffectSubject {
     Chosen(TargetFilter),
 }
 
+/// The two distinct CR face-change actions. Transform toggles an eligible double-faced
+/// permanent; flip changes an unflipped Kamigawa flip permanent to its flipped status once.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FaceChangeAction {
+    Transform,
+    Flip,
+}
+
 impl Default for EffectSubject {
     fn default() -> Self {
         Self::Chosen(TargetFilter::default_creature())
@@ -496,6 +504,11 @@ pub enum SpellEffectKind {
     /// Safe Passage partial). Untargeted — sets a global flag checked when combat damage resolves.
     /// Cleared at the cleanup step alongside marked damage.
     PreventAllCombatDamageTurn,
+    /// CR 701.27 / 710: change the face/status of the permanent that sourced this ability.
+    /// Ineligible objects produce the rules-defined no-op during resolution.
+    ChangeSourceFace {
+        action: FaceChangeAction,
+    },
     None,
 }
 
@@ -664,11 +677,11 @@ impl SpellEffectKind {
                 ..
             } | SpellEffectKind::Regenerate {
                 subject: EffectSubject::Source,
-            }
+            } | SpellEffectKind::ChangeSourceFace { .. }
         );
         if context == EffectContext::Spell && source_bound {
             return Err(
-                "Source subject is only valid on an activated or triggered ability, not a spell"
+                "source-bound effects are only valid on an activated or triggered ability, not a spell"
                     .into(),
             );
         }

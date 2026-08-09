@@ -27,7 +27,9 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                     continue;
                 };
                 for (face_index, face) in def.faces_iter().enumerate() {
-                    if face.is_land || !face.spell_effect.iter().any(spell_effect_kind_needs_target)
+                    if !def.face_available_from_hand(face_index)
+                        || face.is_land
+                        || !face.spell_effect.iter().any(spell_effect_kind_needs_target)
                     {
                         continue;
                     }
@@ -184,6 +186,30 @@ fn spell_targets_have_candidate(targets: &rv1::SpellTargets) -> bool {
         || targets.can_target_opponent
 }
 
+/// Number of face-level cast actions the engine is currently publishing for this exact physical
+/// source. Stack display uses this to annotate a chosen face only when the player actually had a
+/// choice; modal spell choices remain separate annotations.
+pub(super) fn cast_option_count_for_source(
+    eng: &GameEngine,
+    pid: PlayerId,
+    source: &rv1::cast_source::Location,
+) -> usize {
+    match source {
+        rv1::cast_source::Location::HandIndex(hand_index) => legal_hand_actions(eng, pid)
+            .iter()
+            .filter(|action| {
+                action.hand_index == *hand_index
+                    && action.kind == rv1::HandActionKind::HandActionCastSpell as i32
+            })
+            .count(),
+        rv1::cast_source::Location::GraveyardObjectId(object_id)
+        | rv1::cast_source::Location::ExileObjectId(object_id) => legal_zone_cast_actions(eng, pid)
+            .iter()
+            .filter(|action| action.object_id == *object_id)
+            .count(),
+    }
+}
+
 fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandAction> {
     if let Some(opening) = &eng.state.opening {
         let Some((bottoming_player, _)) = opening.bottom else {
@@ -263,6 +289,9 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
             continue;
         };
         for (face_index, face) in definition.faces_iter().enumerate() {
+            if !definition.face_available_from_hand(face_index) {
+                continue;
+            }
             if face.is_land {
                 let max_lands = 1 + eng.extra_land_plays_for(pid);
                 if sorcery_ok && eng.state.lands_played_this_turn < max_lands {
@@ -615,6 +644,9 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
         let cid = &eng.state.objects.get(&oid).unwrap().card_id;
         if let Some(def) = eng.registry.get(cid) {
             for (face_index, face) in def.faces_iter().enumerate() {
+                if !def.face_available_from_hand(face_index) {
+                    continue;
+                }
                 let name = &face.name;
                 if face.is_land {
                     let max_lands = 1 + eng.extra_land_plays_for(pid);
@@ -646,24 +678,6 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
             }
         } else if !combat_decl_lock && (instant_ok || sorcery_ok) {
             v.push(format!("Play unknown card (hand idx {i})"));
-        }
-    }
-    // Transform right-click action for Transform/Flip layout permanents the priority player controls.
-    if eng.state.priority_player_id() == pid {
-        for &poid in &eng.state.players[idx].battlefield {
-            let Some(pobj) = eng.state.objects.get(&poid) else {
-                continue;
-            };
-            let Some(pdef) = eng.registry.get(&pobj.card_id) else {
-                continue;
-            };
-            if matches!(
-                pdef.layout,
-                tricerules_cards::Layout::Transform | tricerules_cards::Layout::Flip
-            ) {
-                let name = pdef.name.as_str();
-                v.push(format!("Transform {name} (oid {poid})"));
-            }
         }
     }
     v

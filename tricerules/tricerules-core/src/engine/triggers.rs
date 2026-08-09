@@ -11,6 +11,9 @@ use super::*;
 pub(super) struct CollectedTrigger {
     pub source_id: ObjectId,
     pub card_id: String,
+    pub face_index: usize,
+    pub source_zone_change: u64,
+    pub source_face_change: u64,
     /// CR 603.3d: the ability's controller — the controller of its source permanent.
     pub controller: PlayerId,
     pub ability_index: usize,
@@ -77,18 +80,21 @@ impl GameEngine {
                 let object_id = self.state.next_object_id;
                 self.state.next_object_id += 1;
                 let def = self.registry.get(&trigger.card_id);
-                let card_name = def.map(|d| d.name.clone()).unwrap_or_default();
+                let card_name = def
+                    .and_then(|d| d.face(trigger.face_index))
+                    .map(|face| face.name.clone())
+                    .unwrap_or_default();
                 let may = def
-                    .and_then(|d| {
-                        d.primary_face()
-                            .triggered_abilities
-                            .get(trigger.ability_index)
-                    })
+                    .and_then(|d| d.face(trigger.face_index))
+                    .and_then(|face| face.triggered_abilities.get(trigger.ability_index))
                     .map(|ta| ta.may)
                     .unwrap_or(false);
                 StagedTrigger {
                     object_id,
                     source_permanent_id: trigger.source_id,
+                    source_face_index: trigger.face_index,
+                    source_zone_change: trigger.source_zone_change,
+                    source_face_change: trigger.source_face_change,
                     card_id: trigger.card_id,
                     card_name,
                     controller: trigger.controller,
@@ -206,6 +212,7 @@ impl GameEngine {
                         object_id: source_id,
                         card_id: object.card_id.clone(),
                         controller: object.controller,
+                        face_index: object.face_up_index,
                     });
                 }
             }
@@ -236,6 +243,7 @@ impl GameEngine {
                     &entering_card_id,
                     entering_id,
                     entering_controller,
+                    obj.face_up_index,
                     |tc| *tc == TriggerCondition::WhenSelfEntersBattlefield,
                 ));
 
@@ -247,6 +255,7 @@ impl GameEngine {
                         src_card,
                         src_id,
                         src_ctrl,
+                        source.face_index,
                         |tc| {
                             let TriggerCondition::WheneverPermanentEntersBattlefield {
                                 controller,
@@ -299,6 +308,7 @@ impl GameEngine {
                     &dying.card_id,
                     dying.object_id,
                     dying.controller,
+                    dying.face_index,
                     |tc| *tc == TriggerCondition::WhenSelfDies,
                 );
                 if !was_creature {
@@ -309,6 +319,7 @@ impl GameEngine {
                         &source.card_id,
                         source.object_id,
                         source.controller,
+                        source.face_index,
                         |tc| {
                             let TriggerCondition::WheneverCreatureDies {
                                 controller,
@@ -342,6 +353,7 @@ impl GameEngine {
                     &obj.card_id,
                     *attacker_id,
                     obj.controller,
+                    obj.face_up_index,
                     |tc| *tc == TriggerCondition::WheneverSelfAttacks,
                 )
             }
@@ -355,12 +367,19 @@ impl GameEngine {
                 let card_id = obj.card_id.clone();
                 let controller = obj.controller;
                 let defender = *defender_id;
-                self.matching_triggered_abilities(&card_id, *attacker_id, controller, |tc| match tc
-                {
-                    TriggerCondition::WheneverSelfDealsCombatDamageToPlayer => true,
-                    TriggerCondition::WheneverSelfDealsDamageToOpponent => defender != controller,
-                    _ => false,
-                })
+                self.matching_triggered_abilities(
+                    &card_id,
+                    *attacker_id,
+                    controller,
+                    obj.face_up_index,
+                    |tc| match tc {
+                        TriggerCondition::WheneverSelfDealsCombatDamageToPlayer => true,
+                        TriggerCondition::WheneverSelfDealsDamageToOpponent => {
+                            defender != controller
+                        }
+                        _ => false,
+                    },
+                )
             }
             GameEvent::UpkeepBegin { player: upkeep } => {
                 // CR 603.2: every player's permanents watch, not just the active player's — a
@@ -374,6 +393,7 @@ impl GameEngine {
                             &source.card_id,
                             source.object_id,
                             source.controller,
+                            source.face_index,
                             |tc| {
                                 let TriggerCondition::AtBeginningOfUpkeep {
                                     player: player_filter,
@@ -402,6 +422,7 @@ impl GameEngine {
                             &source.card_id,
                             source.object_id,
                             source.controller,
+                            source.face_index,
                             |tc| {
                                 let TriggerCondition::AtBeginningOfDrawStep {
                                     player: player_filter,
@@ -429,6 +450,7 @@ impl GameEngine {
                             &source.card_id,
                             source.object_id,
                             source.controller,
+                            source.face_index,
                             |tc| {
                                 let TriggerCondition::WheneverPlayerGainsLife {
                                     player: player_filter,
@@ -469,6 +491,7 @@ impl GameEngine {
                             &source.card_id,
                             source.object_id,
                             source.controller,
+                            source.face_index,
                             |tc| {
                                 let TriggerCondition::WheneverPlayerCastsSpell {
                                     caster: caster_filter,
@@ -510,16 +533,16 @@ impl GameEngine {
         card_id: &str,
         source_id: ObjectId,
         controller: PlayerId,
+        face_index: usize,
         filter: impl Fn(&TriggerCondition) -> bool,
     ) -> Vec<CollectedTrigger> {
         let Some(def) = self.registry.get(card_id) else {
             return vec![];
         };
-        // Triggered-ability indices are face-0-relative everywhere (`StackItem::face_index` is `0`
-        // for abilities); the back face of a transforming permanent granting its own triggers is
-        // the point at which this must read the source object's active face instead.
-        def.primary_face()
-            .triggered_abilities
+        let Some(face) = def.face(face_index) else {
+            return vec![];
+        };
+        face.triggered_abilities
             .iter()
             .enumerate()
             .filter(|(_, ta)| filter(&ta.trigger))
@@ -529,6 +552,31 @@ impl GameEngine {
             .map(|(idx, ta)| CollectedTrigger {
                 source_id,
                 card_id: card_id.to_string(),
+                face_index,
+                source_zone_change: {
+                    let current = self
+                        .state
+                        .zone_change_generation
+                        .get(&source_id)
+                        .copied()
+                        .unwrap_or(0);
+                    if self
+                        .state
+                        .objects
+                        .get(&source_id)
+                        .is_some_and(|object| object.zone != Zone::Battlefield)
+                    {
+                        current.saturating_sub(1)
+                    } else {
+                        current
+                    }
+                },
+                source_face_change: self
+                    .state
+                    .face_change_generation
+                    .get(&source_id)
+                    .copied()
+                    .unwrap_or(0),
                 controller,
                 ability_index: idx,
                 ability_text: ta.text.clone(),
@@ -590,6 +638,11 @@ impl GameEngine {
                     !lki
                 }
             },
+            Some(InterveningIf::SpellsCastLastTurn { min, max }) => {
+                let count = self.state.spells_cast_last_turn;
+                min.is_none_or(|minimum| count >= minimum)
+                    && max.is_none_or(|maximum| count <= maximum)
+            }
         }
     }
 
@@ -623,6 +676,9 @@ impl GameEngine {
         let StagedTrigger {
             object_id: virtual_id,
             source_permanent_id: source_id,
+            source_face_index,
+            source_zone_change,
+            source_face_change,
             card_id,
             card_name,
             controller,
@@ -635,7 +691,9 @@ impl GameEngine {
             Some(d) => d.clone(),
             None => return,
         };
-        let trigger_def = def.primary_face().triggered_abilities.get(ability_index);
+        let trigger_def = def
+            .face(source_face_index)
+            .and_then(|face| face.triggered_abilities.get(ability_index));
         let needs_target = trigger_def
             .map(|ta| ta.effect.iter().any(spell_effect_kind_needs_target))
             .unwrap_or(false);
@@ -657,6 +715,9 @@ impl GameEngine {
             self.state.pending_triggers.push_back(PendingTrigger {
                 object_id: virtual_id,
                 source_permanent_id: source_id,
+                source_face_index,
+                source_zone_change,
+                source_face_change,
                 ability_index,
                 ability_text: ability_text.clone(),
                 card_id,
@@ -691,17 +752,13 @@ impl GameEngine {
                 targets: vec![],
                 ability_text: Some(ability_text.clone()),
                 source_permanent_id: Some(source_id),
-                source_zone_change: self
-                    .state
-                    .zone_change_generation
-                    .get(&source_id)
-                    .copied()
-                    .unwrap_or(0),
+                source_zone_change,
+                source_face_change,
                 ability_index: Some(ability_index),
                 is_triggered: true,
                 is_copy: false,
                 chosen_x: 0,
-                face_index: 0,
+                face_index: source_face_index,
                 target_damage: vec![],
                 chosen_modes: vec![],
                 trigger_player,

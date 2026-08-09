@@ -56,7 +56,8 @@ impl GameEngine {
             Some(def) => {
                 let name = def.name.clone();
                 match def
-                    .primary_face()
+                    .face(pending.source_face_index)
+                    .expect("pending trigger captured a registry-valid face")
                     .triggered_abilities
                     .get(pending.ability_index)
                 {
@@ -83,6 +84,9 @@ impl GameEngine {
         let ability_text = pending.ability_text.clone();
         let card_id = pending.card_id.clone();
         let source_id = pending.source_permanent_id;
+        let source_face_index = pending.source_face_index;
+        let source_zone_change = pending.source_zone_change;
+        let source_face_change = pending.source_face_change;
         let ability_index = pending.ability_index;
         let controller = pending.controller;
         let trigger_player = pending.trigger_player;
@@ -97,17 +101,13 @@ impl GameEngine {
             targets: trefs,
             ability_text: Some(ability_text.clone()),
             source_permanent_id: Some(source_id),
-            source_zone_change: self
-                .state
-                .zone_change_generation
-                .get(&source_id)
-                .copied()
-                .unwrap_or(0),
+            source_zone_change,
+            source_face_change,
             ability_index: Some(ability_index),
             is_triggered: true,
             is_copy: false,
             chosen_x: 0,
-            face_index: 0,
+            face_index: source_face_index,
             target_damage: vec![],
             chosen_modes: vec![],
             trigger_player,
@@ -549,6 +549,12 @@ impl GameEngine {
             .get(&oid)
             .map(|o| o.controller)
             .ok_or(EngineError::Illegal("sacrificed object missing"))?;
+        let face_index = self
+            .state
+            .objects
+            .get(&oid)
+            .map(|o| o.face_up_index)
+            .unwrap_or(0);
         let was_creature = self
             .characteristics(oid)
             .is_some_and(|value| value.is_creature());
@@ -573,6 +579,7 @@ impl GameEngine {
                 object_id: oid,
                 card_id,
                 controller,
+                face_index,
             },
             was_creature,
         }]);
@@ -598,6 +605,12 @@ impl GameEngine {
             let owner = self.state.objects.get(&oid).map(|o| o.owner);
             let controller = self.state.objects.get(&oid).map(|o| o.controller);
             let card_id = self.state.objects.get(&oid).map(|o| o.card_id.clone());
+            let face_index = self
+                .state
+                .objects
+                .get(&oid)
+                .map(|o| o.face_up_index)
+                .unwrap_or(0);
             let was_creature = self
                 .characteristics(oid)
                 .is_some_and(|value| value.is_creature());
@@ -616,6 +629,7 @@ impl GameEngine {
                             object_id: oid,
                             card_id: cid,
                             controller: ctrl,
+                            face_index,
                         },
                         was_creature,
                     });

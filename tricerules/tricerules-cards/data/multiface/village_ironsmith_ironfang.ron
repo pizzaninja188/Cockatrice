@@ -1,0 +1,37 @@
+// Village Ironsmith // Ironfang (Innistrad) — transforming DFC (CR 701.27/712).
+(
+    id: "village_ironsmith_ironfang",
+    name: "Village Ironsmith // Ironfang",
+    layout: Transform,
+    faces: [
+        (
+            name: "Village Ironsmith",
+            mana_cost: "{1}{R}",
+            types: ["Creature", "Human", "Werewolf"],
+            power: Some(1),
+            toughness: Some(1),
+            keywords: [FirstStrike],
+            triggered_abilities: [(
+                trigger: AtBeginningOfUpkeep(player: AnyPlayer),
+                intervening_if: Some(SpellsCastLastTurn(min: Some(0), max: Some(0))),
+                effect: [ChangeSourceFace(action: Transform)],
+                text: "At the beginning of each upkeep, if no spells were cast last turn, transform Village Ironsmith.",
+            )],
+        ),
+        (
+            name: "Ironfang",
+            mana_cost: "",
+            color_indicator: Some([Red]),
+            types: ["Creature", "Werewolf"],
+            power: Some(3),
+            toughness: Some(1),
+            keywords: [FirstStrike],
+            triggered_abilities: [(
+                trigger: AtBeginningOfUpkeep(player: AnyPlayer),
+                intervening_if: Some(SpellsCastLastTurn(min: Some(2), max: None)),
+                effect: [ChangeSourceFace(action: Transform)],
+                text: "At the beginning of each upkeep, if a player cast two or more spells last turn, transform Ironfang.",
+            )],
+        ),
+    ],
+)

@@ -1,0 +1,30 @@
+// Akki Lavarunner // Tok-Tok, Volcano Born (Champions of Kamigawa) — flip card (CR 710).
+(
+    id: "akki_lavarunner_tok-tok,_volcano_born",
+    name: "Akki Lavarunner // Tok-Tok, Volcano Born",
+    layout: Flip,
+    partial: "Tok-Tok's protection from red and damage-replacement ability are unsupported",
+    faces: [
+        (
+            name: "Akki Lavarunner",
+            mana_cost: "{3}{R}",
+            types: ["Creature", "Goblin", "Warrior"],
+            power: Some(1),
+            toughness: Some(1),
+            keywords: [Haste],
+            triggered_abilities: [(
+                trigger: WheneverSelfDealsDamageToOpponent,
+                effect: [ChangeSourceFace(action: Flip)],
+                text: "Whenever Akki Lavarunner deals damage to an opponent, flip it.",
+            )],
+        ),
+        (
+            name: "Tok-Tok, Volcano Born",
+            mana_cost: "",
+            types: ["Creature", "Goblin", "Shaman"],
+            supertypes: ["Legendary"],
+            power: Some(2),
+            toughness: Some(2),
+        ),
+    ],
+)

@@ -122,6 +122,7 @@ private:
         bool zoneViewApplied = false;
         bool handOrLibraryChanged = false;
         bool battlefieldOrderChanged = false;
+        bool battlefieldDisplayChanged = false;
         bool tapStateEventsQueued = false;
         bool phaseChanged = false;
     };
@@ -163,6 +164,8 @@ private:
     void applyPermanentMoves(const ruled::v1::RuledEventBatch &batch,
                              const QHash<int, QHash<quint32, int>> &preBatchOidMaps);
     void applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBatch &batch, RuledBatchApplyResult &result);
+    void applyFaceDisplays(const ruled::v1::RuledEventBatch &batch, RuledBatchApplyResult &result);
+    Server_Card *findBattlefieldCardByEngineOid(quint32 oid, int preferredControllerId = -1);
     void applyAttachmentRestores(const ruled::v1::RuledEventBatch &batch);
     void applyLifeManaAndCombatEvents(const ruled::v1::RuledEventBatch &batch);
     void applyRuledStackResolvedEvent(const ruled::v1::StackResolved &stackResolved);

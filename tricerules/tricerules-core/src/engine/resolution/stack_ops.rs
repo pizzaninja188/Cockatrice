@@ -123,6 +123,7 @@ pub(super) fn copy_target_spell(
                     ability_text: None,
                     source_permanent_id: None,
                     source_zone_change: 0,
+                    source_face_change: 0,
                     ability_index: None,
                     is_triggered: false,
                     is_copy: true,

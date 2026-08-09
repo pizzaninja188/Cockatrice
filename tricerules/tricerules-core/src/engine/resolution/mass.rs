@@ -21,7 +21,7 @@ pub(super) fn destroy_all(
     // (CR 702.12b). `prevent_regeneration` bypasses shields (Wrath of God).
     // Untargeted, so hexproof/shroud are irrelevant.
     let victims = battlefield_objects_matching(engine, &kind);
-    let mut destroyed: Vec<(ObjectId, String, PlayerId, bool)> = Vec::new();
+    let mut destroyed: Vec<(ObjectId, String, PlayerId, usize, bool)> = Vec::new();
     for tid in victims {
         let indestructible = engine.effective_has_keyword(tid, Keyword::Indestructible);
         let tgt = object_display_name(&engine.state, engine.registry, tid);
@@ -39,6 +39,12 @@ pub(super) fn destroy_all(
         let owner = engine.state.objects.get(&tid).map(|o| o.owner);
         let controller = engine.state.objects.get(&tid).map(|o| o.controller);
         let card_id_t = engine.state.objects.get(&tid).map(|o| o.card_id.clone());
+        let face_index = engine
+            .state
+            .objects
+            .get(&tid)
+            .map(|o| o.face_up_index)
+            .unwrap_or(0);
         let was_creature = engine
             .characteristics(tid)
             .is_some_and(|value| value.is_creature());
@@ -53,17 +59,18 @@ pub(super) fn destroy_all(
             ));
         }
         if let (Some(cid), Some(ctrl)) = (card_id_t, controller) {
-            destroyed.push((tid, cid, ctrl, was_creature));
+            destroyed.push((tid, cid, ctrl, face_index, was_creature));
         }
     }
     let trigger_events: Vec<GameEvent> = destroyed
         .into_iter()
         .map(
-            |(object_id, card_id, controller, was_creature)| GameEvent::Dies {
+            |(object_id, card_id, controller, face_index, was_creature)| GameEvent::Dies {
                 source: TriggerSourceSnapshot {
                     object_id,
                     card_id,
                     controller,
+                    face_index,
                 },
                 was_creature,
             },

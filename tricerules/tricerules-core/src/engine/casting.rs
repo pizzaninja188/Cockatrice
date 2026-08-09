@@ -10,6 +10,7 @@ struct SacrificeSnapshot {
     object_id: ObjectId,
     card_id: String,
     controller: PlayerId,
+    face_index: usize,
     was_creature: bool,
 }
 
@@ -212,6 +213,7 @@ impl GameEngine {
             .as_ref()
             .and_then(|source| source.location.as_ref())
             .ok_or(EngineError::Illegal("missing cast source"))?;
+        let from_hand = matches!(source, rv1::cast_source::Location::HandIndex(_));
         let (oid, flashback, from_adventure) = match source {
             rv1::cast_source::Location::HandIndex(hand_index) => (
                 *self.state.players[idx]
@@ -247,6 +249,8 @@ impl GameEngine {
                 (*source_oid, false, true)
             }
         };
+        let has_multiple_cast_options =
+            super::legal_actions::cast_option_count_for_source(self, player, source) > 1;
         let card_id = self.state.objects.get(&oid).unwrap().card_id.clone();
         let def = self
             .registry
@@ -255,6 +259,9 @@ impl GameEngine {
         let face = def
             .face(face_index)
             .ok_or(EngineError::Illegal("bad face index"))?;
+        if from_hand && !def.face_available_from_hand(face_index) {
+            return Err(EngineError::Illegal("face cannot be cast from hand"));
+        }
         if from_adventure && !face.is_permanent() {
             return Err(EngineError::Illegal(
                 "Adventure permission requires a permanent face",
@@ -273,7 +280,6 @@ impl GameEngine {
             face.mana_cost.clone()
         };
         let face_name = face.name.to_string();
-        let is_multiface = def.is_multiface();
         let face_effects: Vec<SpellEffectKind> = face.spell_effect.to_vec();
         let modal_spell = face.modal_spell.clone();
         let sorcery_ok = super::priority::sorcery_speed_available(&self.state, player);
@@ -475,6 +481,7 @@ impl GameEngine {
             ability_text: None,
             source_permanent_id: None,
             source_zone_change: 0,
+            source_face_change: 0,
             ability_index: None,
             is_triggered: false,
             is_copy: false,
@@ -513,7 +520,7 @@ impl GameEngine {
             "P{} casts {}{}{}{}",
             player, face_name, modes_line, x_line, tgt_line
         )));
-        let mut stack_annotation = match (is_multiface, has_x) {
+        let mut stack_annotation = match (has_multiple_cast_options, has_x) {
             (true, true) => format!("{face_name} (X = {chosen_x})"),
             (true, false) => face_name.clone(),
             (false, true) => format!("X = {chosen_x}"),
@@ -560,6 +567,7 @@ impl GameEngine {
                 chosen_mode_labels,
             })),
         });
+        self.state.spells_cast_this_turn = self.state.spells_cast_this_turn.saturating_add(1);
         self.fire_triggers(&[GameEvent::SpellCast {
             caster: player,
             card_id: cast_card_id,
@@ -680,11 +688,17 @@ impl GameEngine {
             ability_text: Some(ability_text.clone()),
             source_permanent_id: Some(permanent_id),
             source_zone_change,
+            source_face_change: self
+                .state
+                .face_change_generation
+                .get(&permanent_id)
+                .copied()
+                .unwrap_or(0),
             ability_index: Some(ability_index),
             is_triggered: false,
             is_copy: false,
             chosen_x: 0,
-            face_index: 0,
+            face_index: face_up_index,
             target_damage: vec![],
             chosen_modes: vec![],
             // An activated ability's effects act on the player who activated it.
@@ -800,6 +814,7 @@ impl GameEngine {
             object_id: permanent_id,
             card_id: object.card_id.clone(),
             controller: object.controller,
+            face_index: object.face_up_index,
             was_creature: self
                 .characteristics(permanent_id)
                 .is_some_and(|value| value.is_creature()),
@@ -819,6 +834,7 @@ impl GameEngine {
                 object_id: snapshot.object_id,
                 card_id: snapshot.card_id,
                 controller: snapshot.controller,
+                face_index: snapshot.face_index,
             },
             was_creature: snapshot.was_creature,
         }]);
@@ -1061,6 +1077,9 @@ impl GameEngine {
         let face = def
             .face(face_index)
             .ok_or(EngineError::Illegal("bad face index"))?;
+        if !def.face_available_from_hand(face_index) {
+            return Err(EngineError::Illegal("face cannot be played from hand"));
+        }
         if !face.is_land {
             return Err(EngineError::Illegal("not a land"));
         }

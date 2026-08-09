@@ -519,6 +519,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::Regenerate { .. } => {
                         misc::regenerate(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::ChangeSourceFace { .. } => {
+                        misc::change_source_face(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::None => misc::none(&mut cx, effect)?,
                     effect @ SpellEffectKind::AuraAttach { .. } => {
                         misc::aura_attach(&mut cx, effect)?
@@ -791,6 +794,23 @@ pub(crate) fn move_object_to_zone(
         .then(|| super::characteristics::characteristics_from(state, registry, oid))
         .flatten()
         .map(|characteristics| characteristics.keywords);
+    let front_face_values = leaving_battlefield
+        .then(|| {
+            state
+                .objects
+                .get(&oid)
+                .and_then(|object| registry.get(&object.card_id))
+                .map(|definition| {
+                    let face = definition.primary_face();
+                    (
+                        face.power,
+                        face.toughness,
+                        face.must_attack_if_able,
+                        face.must_block_if_able,
+                    )
+                })
+        })
+        .flatten();
     if old_zone != Some(z) {
         *state.zone_change_generation.entry(oid).or_insert(0) += 1;
         if let Some(object) = state.objects.get_mut(&oid) {
@@ -825,6 +845,13 @@ pub(crate) fn move_object_to_zone(
             o.counters.clear();
             o.attached_to = None;
             o.regeneration_shields = 0;
+            o.face_up_index = 0;
+            if let Some((power, toughness, must_attack, must_block)) = front_face_values {
+                o.power = power;
+                o.toughness = toughness;
+                o.must_attack_if_able = must_attack;
+                o.must_block_if_able = must_block;
+            }
             let generation = state
                 .zone_change_generation
                 .get(&oid)
@@ -1085,6 +1112,7 @@ mod source_keyword_tests {
             ability_text: Some("ping".to_string()),
             source_permanent_id: Some(source),
             source_zone_change: generation,
+            source_face_change: 0,
             ability_index: Some(0),
             is_triggered: false,
             is_copy: false,
@@ -1106,6 +1134,7 @@ mod source_keyword_tests {
             ability_text: None,
             source_permanent_id: None,
             source_zone_change: 0,
+            source_face_change: 0,
             ability_index: None,
             is_triggered: false,
             is_copy: false,

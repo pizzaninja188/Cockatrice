@@ -304,6 +304,53 @@ fn dev_conjure_emits_catalog_and_conjure_events() {
     );
 }
 
+/// A face name is accepted by the dev console as an alias for the physical card, but cards in
+/// hand use the front face. The relay needs that front Oracle name to load art and hover text.
+#[test]
+fn dev_conjuring_transform_back_face_name_displays_the_front_face() {
+    let mut e = basics_engine(930);
+    let batch = e
+        .apply_command(0, &put(0, DevZone::Hand, "Merciless Predator"))
+        .expect("conjure by back-face alias");
+
+    let conjured = batch
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(Ev::DevCardConjured(conjured)) => Some(conjured),
+            _ => None,
+        })
+        .expect("conjure event");
+    assert_eq!(conjured.card_name, "Reckless Waif");
+
+    let oid = *e.state.players[0].hand.last().expect("card in hand");
+    assert_eq!(
+        e.state.objects[&oid].card_id,
+        "reckless_waif_merciless_predator"
+    );
+    assert_eq!(e.state.objects[&oid].face_up_index, 0);
+}
+
+/// Unlike a DFC, a split card has its combined characteristics outside the stack, so resolving a
+/// face-name alias must keep the whole-card display rather than arbitrarily choosing face 0.
+#[test]
+fn dev_conjuring_split_face_name_keeps_the_combined_display() {
+    let mut e = basics_engine(931);
+    let batch = e
+        .apply_command(0, &put(0, DevZone::Hand, "Ice"))
+        .expect("conjure by split-face alias");
+
+    let conjured = batch
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(Ev::DevCardConjured(conjured)) => Some(conjured),
+            _ => None,
+        })
+        .expect("conjure event");
+    assert_eq!(conjured.card_name, "Fire // Ice");
+}
+
 /// Only hand and battlefield can be conjured into; the rest are move-only because Servatrice
 /// keeps separate physical binding maps for them.
 #[test]

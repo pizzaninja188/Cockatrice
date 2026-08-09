@@ -399,7 +399,9 @@ RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &c
     }
 
     const RuledBatchApplyResult batchResult = applyRuledBatch(resp);
-    if (batchResult.zoneViewApplied && (batchResult.handOrLibraryChanged || batchResult.battlefieldOrderChanged)) {
+    if ((batchResult.zoneViewApplied &&
+         (batchResult.handOrLibraryChanged || batchResult.battlefieldOrderChanged)) ||
+        batchResult.battlefieldDisplayChanged) {
         game->sendGameStateToPlayers();
     }
     // Append to deterministic replay log (concatenated RuledCommand bytes)
@@ -426,7 +428,9 @@ void RuledGameDriver::relayRuledPayloadAndBroadcast(int playerId, const QByteArr
         return;
     }
     const RuledBatchApplyResult batchResult = applyRuledBatch(resp);
-    if (batchResult.zoneViewApplied && (batchResult.handOrLibraryChanged || batchResult.battlefieldOrderChanged)) {
+    if ((batchResult.zoneViewApplied &&
+         (batchResult.handOrLibraryChanged || batchResult.battlefieldOrderChanged)) ||
+        batchResult.battlefieldDisplayChanged) {
         game->sendGameStateToPlayers();
     }
     if (game->currentReplay) {
@@ -592,6 +596,7 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
     applyTokenCreations(batch);
     applyPermanentMoves(batch, preBatchOidMaps);
     applyPhaseStackAndZoneViews(batch, result);
+    applyFaceDisplays(batch, result);
     applyAttachmentRestores(batch);
     applyLifeManaAndCombatEvents(batch);
     return result;
@@ -837,6 +842,31 @@ void RuledGameDriver::applyPermanentMoves(const ruled::v1::RuledEventBatch &batc
         if (!targetZone) {
             continue;
         }
+        // Transform/flip status and the chosen MDFC face do not carry to another zone. If this
+        // physical card is displaying an alternate face, rename it before moveCard serializes it
+        // so every client receives the front-face image and hover details. Do not normalize every
+        // multiface card: split cards keep their combined name outside the stack.
+        if (pm.destination() != ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD) {
+            const QString cardId = QString::fromStdString(pm.card_id());
+            const QString resolvedCardId = cardId.isEmpty() ? ruledCardIdForName(card->getName()) : cardId;
+            const auto catalogIt = ruledCardCatalogById.constFind(resolvedCardId);
+            bool displaysAlternateFace = false;
+            if (catalogIt != ruledCardCatalogById.constEnd()) {
+                for (int faceIndex = 1; faceIndex < catalogIt->face_names_size(); ++faceIndex) {
+                    const QString faceName = QString::fromStdString(catalogIt->face_names(faceIndex));
+                    if (faceName.trimmed().compare(card->getName().trimmed(), Qt::CaseInsensitive) == 0) {
+                        displaysAlternateFace = true;
+                        break;
+                    }
+                }
+            }
+            if (displaysAlternateFace) {
+                const QString frontName = ruledActiveFaceName(resolvedCardId, 0);
+                if (!frontName.isEmpty() && frontName != card->getName()) {
+                    card->setCardRef(CardRef{frontName});
+                }
+            }
+        }
         // Hidden zones (the library) address cards by position index in moveCard/getCard, not by
         // intrinsic card id. Mill moves come out of the deck, so pass the card's current position;
         // public/private zones (table, hand) use the card id. Position is recomputed per event
@@ -1027,6 +1057,72 @@ void RuledGameDriver::applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBat
     }
     if (result.tapStateEventsQueued) {
         tapSyncGes.sendToGame(game);
+    }
+}
+
+Server_Card *RuledGameDriver::findBattlefieldCardByEngineOid(quint32 oid, int preferredControllerId)
+{
+    const auto findForPlayer = [this, oid](int playerId) -> Server_Card * {
+        Server_AbstractPlayer *abstractPlayer = game->getPlayer(playerId);
+        if (!abstractPlayer) {
+            return nullptr;
+        }
+        auto *player = static_cast<Server_Player *>(abstractPlayer);
+        return playerBinding(playerId).findCardByEngineOid(player, oid);
+    };
+    if (preferredControllerId >= 0) {
+        if (Server_Card *card = findForPlayer(preferredControllerId)) {
+            return card;
+        }
+    }
+    for (Server_AbstractPlayer *abstractPlayer : game->getPlayers().values()) {
+        if (!abstractPlayer || abstractPlayer->getPlayerId() == preferredControllerId) {
+            continue;
+        }
+        if (Server_Card *card = findForPlayer(abstractPlayer->getPlayerId())) {
+            return card;
+        }
+    }
+    return nullptr;
+}
+
+void RuledGameDriver::applyFaceDisplays(const ruled::v1::RuledEventBatch &batch, RuledBatchApplyResult &result)
+{
+    const auto applyName = [this, &result](quint32 oid,
+                                           int controllerId,
+                                           const QString &cardId,
+                                           int faceIndex) {
+        Server_Card *card = findBattlefieldCardByEngineOid(oid, controllerId);
+        if (!card) {
+            return;
+        }
+        const QString resolvedCardId = cardId.isEmpty() ? ruledCardIdForName(card->getName()) : cardId;
+        const QString activeName = ruledActiveFaceName(resolvedCardId, faceIndex);
+        if (!activeName.isEmpty() && activeName != card->getName()) {
+            card->setCardRef(CardRef{activeName});
+            result.battlefieldDisplayChanged = true;
+        }
+    };
+
+    for (const auto &event : batch.events()) {
+        if (event.has_face_changed()) {
+            const auto &changed = event.face_changed();
+            applyName(static_cast<quint32>(changed.object_id()),
+                      changed.controller_player_id(),
+                      QString(),
+                      static_cast<int>(changed.face_up_index()));
+        }
+        if (!event.has_zone_view() || event.zone_view().battlefields_unchanged()) {
+            continue;
+        }
+        for (const auto &view : event.zone_view().per_player()) {
+            for (const auto &object : view.battlefield_objects()) {
+                applyName(static_cast<quint32>(object.object_id()),
+                          view.player_id(),
+                          QString::fromStdString(object.card_id()),
+                          static_cast<int>(object.face_up_index()));
+            }
+        }
     }
 }
 
@@ -1879,8 +1975,7 @@ QString RuledGameDriver::ruledActiveFaceName(const QString &cardId, int faceInde
     if (it == ruledCardCatalogById.constEnd()) {
         return QString();
     }
-    // face_names is empty for single-face cards; the front face (0) uses the combined/base name.
-    if (faceIndex > 0 && faceIndex < it->face_names_size()) {
+    if (faceIndex >= 0 && faceIndex < it->face_names_size()) {
         return QString::fromStdString(it->face_names(faceIndex));
     }
     return QString::fromStdString(it->name());
