@@ -351,6 +351,27 @@ fn dev_conjuring_split_face_name_keeps_the_combined_display() {
     assert_eq!(conjured.card_name, "Fire // Ice");
 }
 
+/// Adventure uses one combined cards.xml entry in every physical zone. The face names remain
+/// cast-choice labels only; minting the card under either alias must use the combined CardRef so
+/// art and hover details work before and after it changes zones.
+#[test]
+fn dev_conjuring_adventure_face_name_keeps_the_combined_display() {
+    let mut e = basics_engine(932);
+    let batch = e
+        .apply_command(0, &put(0, DevZone::Hand, "Bonecrusher Giant"))
+        .expect("conjure by creature-face alias");
+
+    let conjured = batch
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(Ev::DevCardConjured(conjured)) => Some(conjured),
+            _ => None,
+        })
+        .expect("conjure event");
+    assert_eq!(conjured.card_name, "Bonecrusher Giant // Stomp");
+}
+
 /// Only hand and battlefield can be conjured into; the rest are move-only because Servatrice
 /// keeps separate physical binding maps for them.
 #[test]
