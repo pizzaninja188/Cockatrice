@@ -132,9 +132,9 @@ QVector<RuledFaceOption> RuledClientState::handActionFaceOptions(RuledHandAction
     return options;
 }
 
-bool RuledClientState::handActionNeedsTarget(RuledHandActionKind kind, int handIndex) const
+bool RuledClientState::handActionNeedsTarget(RuledHandActionKind kind, int handIndex, int faceIndex) const
 {
-    return handActionSet(kind).needsTargetIndices.contains(handIndex);
+    return handActionSet(kind).needsTargetCastKeys.contains(spellTargetKey(handIndex, faceIndex));
 }
 
 void RuledClientState::clearHandActions()

@@ -202,7 +202,8 @@ protected:
                                                      int handIndex,
                                                      const std::string &cardName,
                                                      int faceIndex = 0,
-                                                     bool needsTarget = false)
+                                                     bool needsTarget = false,
+                                                     const std::string &cost = {})
     {
         auto *action = actions.add_hand_actions();
         action->set_kind(kind);
@@ -210,6 +211,7 @@ protected:
         action->set_card_name(cardName);
         action->set_face_index(static_cast<quint32>(faceIndex));
         action->set_needs_target(needsTarget);
+        action->set_cost(cost);
         return action;
     }
 };
@@ -352,6 +354,27 @@ TEST_F(RuledClientTest, AppliesStructuredCastActionsAndTargetRequirement)
     EXPECT_FALSE(state->handActionNeedsTarget(kCast, 3));
     EXPECT_EQ(state->handActionIndexForCard(kCast, "Llanowar Elves", 99), 3);
     EXPECT_EQ(state->handActionIndexForCard(kCast, "Nonexistent", 0), -1);
+}
+
+TEST_F(RuledClientTest, AdventureCastFacesCarryEngineNamesAndCosts)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    addHandAction(actions, ruled::v1::HAND_ACTION_CAST_SPELL, 6, "Bonecrusher Giant", 0, false, "{2}{R}");
+    addHandAction(actions, ruled::v1::HAND_ACTION_CAST_SPELL, 6, "Stomp", 1, true, "{1}{R}");
+    apply(batch);
+
+    const QVector<RuledFaceOption> faces =
+        state->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, 6);
+    ASSERT_EQ(faces.size(), 2);
+    EXPECT_EQ(faces[0].faceIndex, 0);
+    EXPECT_EQ(faces[0].faceName, QStringLiteral("Bonecrusher Giant"));
+    EXPECT_EQ(faces[0].manaCost, QStringLiteral("{2}{R}"));
+    EXPECT_FALSE(state->handActionNeedsTarget(ruled::v1::HAND_ACTION_CAST_SPELL, 6, 0));
+    EXPECT_EQ(faces[1].faceIndex, 1);
+    EXPECT_EQ(faces[1].faceName, QStringLiteral("Stomp"));
+    EXPECT_EQ(faces[1].manaCost, QStringLiteral("{1}{R}"));
+    EXPECT_TRUE(state->handActionNeedsTarget(ruled::v1::HAND_ACTION_CAST_SPELL, 6, 1));
 }
 
 TEST_F(RuledClientTest, AppliesAuthoritativeModalModeDataPerFace)

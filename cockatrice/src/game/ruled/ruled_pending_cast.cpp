@@ -11,6 +11,29 @@
 
 RuledPendingCast::RuledPendingCast() = default;
 
+std::optional<RuledFaceOption> RuledPendingCast::chooseFace(QWidget *parent,
+                                                            const QString &cardName,
+                                                            const QVector<RuledFaceOption> &faces)
+{
+    if (faces.isEmpty()) {
+        return std::nullopt;
+    }
+
+    QMenu menu(parent);
+    menu.setTitle(cardName);
+    QVector<QAction *> actions;
+    actions.reserve(faces.size());
+    for (const auto &face : faces) {
+        actions.append(menu.addAction(QObject::tr("Cast %1").arg(face.faceName)));
+    }
+    QAction *chosen = menu.exec(QCursor::pos());
+    const int position = actions.indexOf(chosen);
+    if (position < 0) {
+        return std::nullopt;
+    }
+    return faces.at(position);
+}
+
 std::optional<QVector<int>> RuledPendingCast::chooseModes(QWidget *parent,
                                                           const QString &cardName,
                                                           const QVector<RuledModalSpellOption> &modes,

@@ -118,13 +118,14 @@ struct RuledModalSpellOption
     RuledSpellTargetData targets;
 };
 
-// CR 712: one playable face of a hand card the engine offers for a hand action. An MDFC land
-// (pathway) yields more than one option for a single hand slot (front + back), each with its own
-// face index and Oracle face name for the side-picker menu.
+// CR 709/712/715: one playable face of a hand card the engine offers for a hand action. Split,
+// modal-double-faced, and Adventure cards can yield multiple options for one physical slot. Names
+// and cast costs are engine-authored because Cockatrice may display only the permanent/front face.
 struct RuledFaceOption
 {
     int faceIndex;
     QString faceName;
+    QString manaCost;
 };
 
 /// Shared engine/client hand-action kind from ruled_v1.proto. Labels are display-only.
@@ -145,11 +146,14 @@ struct RuledHandActionSet
     /// Oracle name (as the engine labelled it) -> hand slot. Multi-valued: two copies of a card
     /// in hand are two slots under one name.
     QMultiHash<QString, int> indicesByCardName;
-    /// CR 712: hand slot -> the faces offered there. More than one entry means a multi-face card
-    /// whose side the player must choose (MDFC lands today).
+    /// Hand slot -> the engine-authored faces offered there. More than one entry means the player
+    /// must choose which face to cast or play.
     QHash<int, QVector<RuledFaceOption>> faceOptionsByIndex;
-    /// Slots whose action needs a cast-time target (CastSpell only).
+    /// Public-zone object IDs whose cast action needs a target.
     QSet<int> needsTargetIndices;
+    /// CastSpell target requirements keyed by (hand slot, face index). A multi-face slot may mix
+    /// a nontargeting permanent face with a targeting spell face (Bonecrusher Giant // Stomp).
+    QSet<int> needsTargetCastKeys;
     /// Modal metadata keyed by RuledClientState::spellTargetKey(hand slot, face index).
     QHash<int, QVector<RuledModalSpellOption>> modalOptionsByCastKey;
     QHash<int, int> modalMinModesByCastKey;
@@ -572,8 +576,8 @@ public:
     /// CR 712: every playable face the engine offers for a given hand slot, sorted by face index.
     /// Size > 1 means a multi-face card whose side the player must choose.
     [[nodiscard]] QVector<RuledFaceOption> handActionFaceOptions(RuledHandActionKind kind, int handIndex) const;
-    /// True when the action on this slot needs a cast-time target (CastSpell).
-    [[nodiscard]] bool handActionNeedsTarget(RuledHandActionKind kind, int handIndex) const;
+    /// True when this exact castable face needs a cast-time target (CastSpell).
+    [[nodiscard]] bool handActionNeedsTarget(RuledHandActionKind kind, int handIndex, int faceIndex = 0) const;
     [[nodiscard]] QVector<RuledFaceOption> zoneActionFaceOptions(quint32 objectId) const
     {
         QVector<RuledFaceOption> options = zoneCastActions.faceOptionsByIndex.value(static_cast<int>(objectId));

@@ -325,12 +325,18 @@ fn stomp_resolves_to_exile() {
         .hand_actions
         .iter()
         .filter(|action| action.hand_index == hand_index as u32)
-        .map(|action| action.face_index)
+        .map(|action| {
+            (
+                action.face_index,
+                action.card_name.as_str(),
+                action.cost.as_str(),
+            )
+        })
         .collect();
     assert_eq!(
         offered_faces,
-        vec![0, 1],
-        "both the permanent and Adventure faces remain castable from hand"
+        vec![(0, "Bonecrusher Giant", "{2}{R}"), (1, "Stomp", "{1}{R}"),],
+        "both hand-cast faces carry their engine names and costs"
     );
     give_mana(
         &mut e,

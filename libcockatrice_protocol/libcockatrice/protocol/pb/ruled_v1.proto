@@ -398,6 +398,9 @@ message LegalHandAction {
   uint32 min_modes = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   uint32 max_modes = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated LegalSpellMode modes = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // CastSpell only: authoritative cost of this face. Multi-face physical cards may expose only
+  // the front face's Oracle display data to Cockatrice, so the client must not infer this value.
+  string cost = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // CR 702.34: a spell the player may cast from their own graveyard using flashback.

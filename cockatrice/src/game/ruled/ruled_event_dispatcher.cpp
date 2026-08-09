@@ -108,9 +108,10 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
         set.handIndices.insert(handIndex);
         const QString cardName = QString::fromStdString(action.card_name());
         set.indicesByCardName.insert(cardName, handIndex);
-        set.faceOptionsByIndex[handIndex].append({faceIndex, cardName});
+        set.faceOptionsByIndex[handIndex].append(
+            {faceIndex, cardName, QString::fromStdString(action.cost())});
         if (action.needs_target()) {
-            set.needsTargetIndices.insert(handIndex);
+            set.needsTargetCastKeys.insert(castKey);
         }
         if (action.modes_size() > 0) {
             set.modalMinModesByCastKey.insert(castKey, static_cast<int>(action.min_modes()));

@@ -100,6 +100,11 @@ public:
                                                    int minModes,
                                                    int maxModes);
 
+    /// Pick one engine-authoritative castable face. The physical CardItem may expose only its
+    /// front display name (Adventure), so menu entries come exclusively from `faces`.
+    static std::optional<RuledFaceOption>
+    chooseFace(QWidget *parent, const QString &cardName, const QVector<RuledFaceOption> &faces);
+
     PendingRuledSpellCast spell;
     PendingActivatedAbility ability;
 };

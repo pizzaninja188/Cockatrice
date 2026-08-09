@@ -434,29 +434,10 @@ int resolveHandActionIndex(const RuledClientState *state, RuledHandActionKind ki
     if (!state || !card) {
         return -1;
     }
-    // A land's client CardItem carries its front-face Oracle name (an MDFC's back face never becomes
-    // a separate hand card), which the engine also uses to label each playable face of that slot —
-    // so a single lookup resolves the shared hand slot for both faces of a pathway.
-    // Cleanup and opening-bottom deliberately return every legal slot here: their CardItem is
-    // identified authoritatively by HandSlotMap, and a display-name mismatch must not disable a
-    // required game action.
-    int resolved = engineHandIndexFromLegalSlots(state, card, state->handActionClickCandidates(kind, card->getName()));
-    if (resolved >= 0 || kind != ruled::v1::HAND_ACTION_CAST_SPELL) {
-        return resolved;
-    }
-    // CR 709/712/715: the engine labels each castable face of a multi-face card (split half / MDFC
-    // face) by that face's own name, not the combined "A // B" Oracle name a CardItem carries. Try
-    // each face so a click on a multi-face card resolves to its shared hand slot.
-    const QStringList faceNames = card->getName().split(QStringLiteral(" // "), Qt::SkipEmptyParts);
-    if (faceNames.size() > 1) {
-        for (const QString &faceName : faceNames) {
-            resolved = engineHandIndexFromLegalSlots(state, card, state->handActionIndicesForCardName(kind, faceName));
-            if (resolved >= 0) {
-                return resolved;
-            }
-        }
-    }
-    return resolved;
+    // HandSlotMap binds the exact physical CardItem to its engine slot. Resolve against every slot
+    // the engine offered for this action, not its display name: Adventure cards show only the
+    // permanent name while the sole currently castable face may be the differently named spell.
+    return engineHandIndexFromLegalSlots(state, card, state->handActionLegalIndicesSorted(kind));
 }
 
 quint32 resolvePublicZoneObjectId(const RuledClientState *state, const CardItem *card)

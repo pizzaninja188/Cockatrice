@@ -41,6 +41,28 @@ QVector<RuledModalSpellOption> threeModes()
 }
 } // namespace
 
+TEST(ModalCastMenuTest, AdventureFacePickerUsesEngineOptionsWhenPhysicalNameIsOnlyTheFront)
+{
+    QTimer::singleShot(0, []() {
+        QMenu *menu = activeMenu();
+        ASSERT_NE(menu, nullptr);
+        ASSERT_EQ(menu->actions().size(), 2);
+        EXPECT_EQ(menu->actions().at(0)->text(), QStringLiteral("Cast Bonecrusher Giant"));
+        EXPECT_EQ(menu->actions().at(1)->text(), QStringLiteral("Cast Stomp"));
+        const QRect actionRect = menu->actionGeometry(menu->actions().at(1));
+        QTest::mouseClick(menu, Qt::LeftButton, Qt::NoModifier, actionRect.center());
+    });
+    const QVector<RuledFaceOption> faces = {
+        {0, QStringLiteral("Bonecrusher Giant"), QStringLiteral("{2}{R}")},
+        {1, QStringLiteral("Stomp"), QStringLiteral("{1}{R}")},
+    };
+    const auto result = RuledPendingCast::chooseFace(nullptr, QStringLiteral("Bonecrusher Giant"), faces);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->faceIndex, 1);
+    EXPECT_EQ(result->faceName, QStringLiteral("Stomp"));
+    EXPECT_EQ(result->manaCost, QStringLiteral("{1}{R}"));
+}
+
 TEST(ModalCastMenuTest, ChooseOneUsesOrdinaryActionsAndDisablesUnavailableMode)
 {
     QTimer::singleShot(0, []() {

@@ -1218,19 +1218,21 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
                                    geh->zoneActionSource(objectId));
     }
 
-    // CR 709/712/715: a multi-face card carries an Oracle "A // B" name; each half is cast
-    // separately. Present a side-picker menu ("Cast Fire" / "Cast Ice") rather than casting a
-    // single fixed face. Single-face cards fall through to the direct cast below.
-    if (card->getName().split(QStringLiteral(" // "), Qt::SkipEmptyParts).size() > 1) {
-        return tryRuledSpellCastFaceMenu(card);
-    }
-
     const int ruledHandIndex =
         RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_CAST_SPELL, card);
     if (ruledHandIndex < 0) {
         return false;
     }
-    return beginRuledSpellCast(card, ruledHandIndex, 0, card->getName(), card->getCardInfo().getManaCost());
+    const QVector<RuledFaceOption> faces =
+        geh->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, ruledHandIndex);
+    if (faces.size() > 1) {
+        return tryRuledSpellCastFaceMenu(card);
+    }
+    if (faces.isEmpty()) {
+        return false;
+    }
+    const auto &face = faces.first();
+    return beginRuledSpellCast(card, ruledHandIndex, face.faceIndex, face.faceName, face.manaCost);
 }
 
 bool PlayerActions::beginRuledSpellCast(CardItem *,
@@ -1330,7 +1332,7 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
     pendingRuledSpellCast.waitingForTarget = pendingRuledSpellCast.activeModePosition >= 0 ||
         (selectedModes.isEmpty() &&
          (source == RuledCastSource::Hand
-              ? geh->handActionNeedsTarget(ruled::v1::HAND_ACTION_CAST_SPELL, ruledHandIndex)
+              ? geh->handActionNeedsTarget(ruled::v1::HAND_ACTION_CAST_SPELL, ruledHandIndex, faceIndex)
               : geh->zoneActionNeedsTarget(static_cast<quint32>(ruledHandIndex))));
     if (pendingRuledSpellCast.activeModePosition >= 0) {
         const auto &targetData = selectedModes.at(pendingRuledSpellCast.activeModePosition).targets;
@@ -1405,62 +1407,31 @@ bool PlayerActions::tryRuledSpellCastFaceMenu(CardItem *card)
     if (!geh) {
         return false;
     }
-    const QStringList faceNames = card->getName().split(QStringLiteral(" // "), Qt::SkipEmptyParts);
-    if (faceNames.size() < 2) {
-        const int handIndex =
-            RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_CAST_SPELL, card);
+    const int handIndex =
+        RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_CAST_SPELL, card);
+    if (handIndex < 0) {
+        return false;
+    }
+    const QVector<RuledFaceOption> faces =
+        geh->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, handIndex);
+    if (faces.isEmpty()) {
+        return false;
+    }
+    if (faces.size() == 1) {
         const auto actionIt = geh->handActions.constFind(ruled::v1::HAND_ACTION_CAST_SPELL);
-        const int castKey = RuledClientState::spellTargetKey(handIndex, 0);
-        if (handIndex < 0 || actionIt == geh->handActions.constEnd() ||
-            !actionIt->modalOptionsByCastKey.contains(castKey)) {
+        const int faceIndex = faces.first().faceIndex;
+        const int castKey = RuledClientState::spellTargetKey(handIndex, faceIndex);
+        if (actionIt == geh->handActions.constEnd() || !actionIt->modalOptionsByCastKey.contains(castKey)) {
             return false;
         }
-        return beginRuledSpellCast(card, handIndex, 0, card->getName(), card->getCardInfo().getManaCost());
+        const auto &face = faces.first();
+        return beginRuledSpellCast(card, handIndex, face.faceIndex, face.faceName, face.manaCost);
     }
-
-    // Collect the faces that are currently castable. Timing/zone legality is already reflected in the
-    // engine's per-face cast labels; all faces of one card resolve to the same hand slot. Oracle stores
-    // a split mana cost as "{1}{R} // {1}{U}"; fall back to the whole string for non-split costs.
-    struct FaceOption
-    {
-        int faceIndex;
-        int handIndex;
-        QString name;
-        QString cost;
-    };
-    QVector<FaceOption> options;
-    const QStringList faceCosts = card->getCardInfo().getManaCost().split(QStringLiteral(" // "));
-    for (int f = 0; f < faceNames.size(); ++f) {
-        const QList<int> legalSlots =
-            geh->handActionIndicesForCardName(ruled::v1::HAND_ACTION_CAST_SPELL, faceNames.at(f));
-        const int handIndex = RuledActions::engineHandIndexFromLegalSlots(geh, card, legalSlots);
-        if (handIndex < 0) {
-            continue;
-        }
-        const QString cost = f < faceCosts.size() ? faceCosts.at(f).trimmed() : QString();
-        options.append({f, handIndex, faceNames.at(f), cost});
-    }
-    if (options.isEmpty()) {
-        return false; // no face castable right now — let the caller fall through
-    }
-
-    QMenu menu;
-    menu.setTitle(card->getName());
-    QVector<QAction *> actionsByOption;
-    actionsByOption.reserve(options.size());
-    for (const FaceOption &opt : options) {
-        actionsByOption.append(menu.addAction(tr("Cast %1").arg(opt.name)));
-    }
-    QAction *chosen = menu.exec(QCursor::pos());
-    if (!chosen) {
+    const auto chosen = RuledPendingCast::chooseFace(player->getGame()->getTab(), card->getName(), faces);
+    if (!chosen.has_value()) {
         return true; // menu was shown, player cancelled
     }
-    const int sel = actionsByOption.indexOf(chosen);
-    if (sel < 0) {
-        return true;
-    }
-    const FaceOption &opt = options.at(sel);
-    beginRuledSpellCast(card, opt.handIndex, opt.faceIndex, opt.name, opt.cost);
+    beginRuledSpellCast(card, handIndex, chosen->faceIndex, chosen->faceName, chosen->manaCost);
     return true;
 }
 

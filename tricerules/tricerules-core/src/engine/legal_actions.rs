@@ -175,6 +175,7 @@ fn hand_action(
         min_modes: 0,
         max_modes: 0,
         modes: vec![],
+        cost: String::new(),
     }
 }
 
@@ -321,6 +322,7 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                     face_index,
                     face.spell_effect.iter().any(spell_effect_kind_needs_target),
                 );
+                action.cost = face.mana_cost.to_string();
                 if let Some(modal) = &face.modal_spell {
                     action.min_modes = modal.min_modes;
                     action.max_modes = modal.max_modes;
