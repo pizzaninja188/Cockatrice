@@ -366,10 +366,19 @@ fn flight_grants_flying_only_while_attached() {
     );
 
     assert!(e.effective_has_keyword(bear, Keyword::Flying));
+    assert_eq!(
+        zone_view_granted_ability_labels(&mut e, 0, bear),
+        vec!["Flying"],
+        "Flight's static ability is visible in the granted-ability feed"
+    );
     e.state.objects.get_mut(&flight).expect("Flight").zone = tricerules_core::Zone::Graveyard;
     assert!(
         !e.effective_has_keyword(bear, Keyword::Flying),
         "the attached keyword stops applying as soon as its source leaves"
+    );
+    assert!(
+        zone_view_granted_ability_labels(&mut e, 0, bear).is_empty(),
+        "the annotation disappears with the granting source"
     );
 }
 

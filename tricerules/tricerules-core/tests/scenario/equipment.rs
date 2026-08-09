@@ -530,6 +530,15 @@ fn swiftfoot_boots_moves_both_keywords_on_reequip() {
     assert!(!e.effective_has_keyword(bear1, Keyword::Haste));
     assert!(e.effective_has_keyword(bear2, Keyword::Hexproof));
     assert!(e.effective_has_keyword(bear2, Keyword::Haste));
+    assert!(
+        zone_view_granted_ability_labels(&mut e, 0, bear1).is_empty(),
+        "re-equipping removes both granted labels from the old bearer"
+    );
+    assert_eq!(
+        zone_view_granted_ability_labels(&mut e, 0, bear2),
+        vec!["Hexproof", "Haste"],
+        "multiple granted keywords retain their effective-characteristics order"
+    );
 
     e.apply_command(0, &primitive_yield())
         .expect("main1 to begin combat");

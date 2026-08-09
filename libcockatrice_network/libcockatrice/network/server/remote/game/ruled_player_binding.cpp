@@ -109,6 +109,30 @@ QString mergeRuledOwnerIntoAnnotation(const QString &baseAnn, const QString &own
     }
     return without + QLatin1Char('\n') + ownerLine;
 }
+
+// Engine-authored labels for abilities added by derived characteristics. Keep them on one
+// replaceable line so every authoritative battlefield sync can remove expired grants without
+// disturbing user text or the other ruled annotation lines above.
+QString mergeRuledGrantedAbilitiesIntoAnnotation(const QString &baseAnn, const QStringList &abilityLabels)
+{
+    const QString marker = QStringLiteral("Granted:");
+    QStringList kept;
+    for (const QString &line : baseAnn.split(QLatin1Char('\n'))) {
+        if (line.trimmed().startsWith(marker)) {
+            continue;
+        }
+        kept.append(line);
+    }
+    QString without = kept.join(QLatin1Char('\n')).trimmed();
+    if (abilityLabels.isEmpty()) {
+        return without;
+    }
+    const QString grantedLine = marker + QLatin1Char(' ') + abilityLabels.join(QStringLiteral(", "));
+    if (without.isEmpty()) {
+        return grantedLine;
+    }
+    return without + QLatin1Char('\n') + grantedLine;
+}
 } // namespace
 
 RuledPlayerBinding::RuledZoneSyncResult
@@ -468,6 +492,12 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                     QString mergedAnn = mergeRuledDamageIntoAnnotation(card->getAnnotation(), isCreature ? dmg : 0);
                     mergedAnn = mergeRuledCountersIntoAnnotation(mergedAnn, counterAnn);
                     mergedAnn = mergeRuledOwnerIntoAnnotation(mergedAnn, ownerName);
+                    QStringList grantedAbilityLabels;
+                    grantedAbilityLabels.reserve(battlefieldObject.granted_ability_labels_size());
+                    for (const std::string &label : battlefieldObject.granted_ability_labels()) {
+                        grantedAbilityLabels.append(QString::fromStdString(label));
+                    }
+                    mergedAnn = mergeRuledGrantedAbilitiesIntoAnnotation(mergedAnn, grantedAbilityLabels);
                     if (mergedAnn != card->getAnnotation()) {
                         card->setAnnotation(mergedAnn);
                         result.tapStateChanged = true;

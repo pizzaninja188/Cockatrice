@@ -941,6 +941,64 @@ TEST_F(RuledBatchTest, ForeignControlledPermanentIsAnnotatedWithItsOwner)
         << "annotation was: " << bear->getAnnotation().toStdString();
 }
 
+// Ability labels are attached to the physical card bound to the engine OID, coexist with other
+// annotation text, and are removed on the next authoritative sync or zone transition.
+TEST_F(RuledBatchTest, GrantedAbilitiesAnnotateOnlyTheBoundBattlefieldCardAndClearCleanly)
+{
+    Server_Card *first = addCardToTable(p1, "Grizzly Bears");
+    Server_Card *second = addCardToTable(p1, "Timber Wolves");
+    first->setAnnotation(QStringLiteral("Keep me"));
+    second->setAnnotation(QStringLiteral("Keep me"));
+
+    {
+        ruled::v1::IpcResponse resp;
+        resp.set_ok(true);
+        auto *evZv = resp.mutable_batch()->add_events()->mutable_zone_view();
+        auto view = buildPerPlayerView(p1, {910u, 911u}, {false, false});
+        auto *object = view.mutable_battlefield_objects(1);
+        object->add_granted_ability_labels("Deathtouch");
+        object->add_granted_ability_labels("Haste");
+        *evZv->add_per_player() = view;
+        *evZv->add_per_player() = buildPerPlayerView(p2, {}, {});
+        callBatchApply(resp);
+    }
+
+    Server_Card *unaffected = findCardByEngineOid(p1, 910u);
+    Server_Card *enhanced = findCardByEngineOid(p1, 911u);
+    ASSERT_NE(unaffected, nullptr);
+    ASSERT_NE(enhanced, nullptr);
+    ASSERT_NE(unaffected, enhanced);
+    EXPECT_FALSE(unaffected->getAnnotation().contains(QStringLiteral("Granted:")));
+    EXPECT_EQ(enhanced->getAnnotation(), QStringLiteral("Keep me\nGranted: Deathtouch, Haste"));
+
+    {
+        ruled::v1::IpcResponse resp;
+        resp.set_ok(true);
+        auto *evZv = resp.mutable_batch()->add_events()->mutable_zone_view();
+        *evZv->add_per_player() = buildPerPlayerView(p1, {910u, 911u}, {false, false});
+        *evZv->add_per_player() = buildPerPlayerView(p2, {}, {});
+        callBatchApply(resp);
+    }
+    EXPECT_EQ(enhanced->getAnnotation(), QStringLiteral("Keep me"));
+
+    // Re-add the line, then prove a battlefield -> graveyard move cannot carry it into the new
+    // object generation. The normal ruled move resets transient card attributes.
+    enhanced->setAnnotation(QStringLiteral("Granted: Deathtouch"));
+    {
+        ruled::v1::IpcResponse resp;
+        resp.set_ok(true);
+        auto *moved = resp.mutable_batch()->add_events()->mutable_permanent_moved();
+        moved->set_object_id(911u);
+        moved->set_owner_player_id(p1->getPlayerId());
+        moved->set_controller_player_id(p1->getPlayerId());
+        moved->set_destination(ruled::v1::PermanentMoved::DESTINATION_GRAVEYARD);
+        callBatchApply(resp);
+    }
+    ASSERT_NE(enhanced->getZone(), nullptr);
+    EXPECT_EQ(enhanced->getZone()->getName(), QString(ZoneNames::GRAVE));
+    EXPECT_TRUE(enhanced->getAnnotation().isEmpty());
+}
+
 // ruledAllowsCrossPlayerMove decides which engine-driven moves may cross seats. It lives in
 // ruled_utils, but is exercised here because it needs a real Server_Game and zone pair.
 TEST_F(RuledBatchTest, CrossPlayerMovePredicateAllowsOnlyEngineDrivenRuledMoves)

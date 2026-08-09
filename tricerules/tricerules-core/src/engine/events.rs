@@ -244,6 +244,19 @@ impl GameEngine {
                             .registry
                             .get(&object.card_id)
                             .and_then(|definition| definition.face(object.face_up_index));
+                        let granted_ability_labels = characteristics
+                            .as_ref()
+                            .zip(face)
+                            .map(|(effective, intrinsic)| {
+                                effective
+                                    .keywords
+                                    .iter()
+                                    .copied()
+                                    .filter(|keyword| !intrinsic.keywords.contains(keyword))
+                                    .map(|keyword| keyword.as_str().to_string())
+                                    .collect()
+                            })
+                            .unwrap_or_default();
                         let activated_abilities = face
                             .map(|face| {
                                 face.activated_abilities
@@ -346,6 +359,7 @@ impl GameEngine {
                             // half the relay needs for the "Owner:" annotation and for routing
                             // the card home when it leaves the battlefield.
                             owner_player_id: object.owner,
+                            granted_ability_labels,
                         }
                     })
                     .collect()

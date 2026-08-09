@@ -1103,3 +1103,24 @@ pub(crate) fn zone_view_ability_flags(e: &mut GameEngine, player: usize, oid: u3
         })
         .unwrap_or_default()
 }
+
+/// Engine-authored display labels for abilities added to `oid` by derived characteristics.
+pub(crate) fn zone_view_granted_ability_labels(
+    e: &mut GameEngine,
+    player: usize,
+    oid: u32,
+) -> Vec<String> {
+    e.initial_response_batch()
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(Ev::ZoneView(view)) => Some(view),
+            _ => None,
+        })
+        .and_then(|view| view.per_player.get(player))
+        .into_iter()
+        .flat_map(|p| p.battlefield_objects.iter())
+        .find(|object| object.object_id == oid)
+        .map(|object| object.granted_ability_labels.clone())
+        .unwrap_or_default()
+}

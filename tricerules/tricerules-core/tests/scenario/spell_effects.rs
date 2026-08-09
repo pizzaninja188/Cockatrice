@@ -2706,6 +2706,7 @@ fn bladebrand_turns_prodigal_sorcerer_damage_lethal_and_draws_a_card() {
     let mut engine = GameEngine::new(7023, &[0, 1], 20, decks, true).expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     let source = inject_creature_on_battlefield(&mut engine, 0, "prodigal_sorcerer");
+    let intrinsic_deathtouch = inject_creature_on_battlefield(&mut engine, 0, "pharikas_chosen");
     let target = inject_creature_with_stats(&mut engine, 1, "hill_giant", 3, 3);
 
     ensure_in_hand(&mut engine, 0, "bladebrand");
@@ -2736,6 +2737,15 @@ fn bladebrand_turns_prodigal_sorcerer_damage_lethal_and_draws_a_card() {
 
     assert!(engine.effective_has_keyword(source, Keyword::Deathtouch));
     assert_eq!(
+        zone_view_granted_ability_labels(&mut engine, 0, source),
+        vec!["Deathtouch"],
+        "the battlefield feed identifies Bladebrand's derived ability"
+    );
+    assert!(
+        zone_view_granted_ability_labels(&mut engine, 0, intrinsic_deathtouch).is_empty(),
+        "an ability printed on the active face is not annotated as granted"
+    );
+    assert_eq!(
         engine.state.players[0].library.len(),
         library_before - 1,
         "Bladebrand draws one card"
@@ -2760,6 +2770,12 @@ fn bladebrand_turns_prodigal_sorcerer_damage_lethal_and_draws_a_card() {
         engine.state.objects.get(&target).expect("target").zone,
         Zone::Graveyard,
         "Bladebrand makes the Sorcerer's one noncombat damage lethal"
+    );
+
+    end_active_turn(&mut engine, 0);
+    assert!(
+        zone_view_granted_ability_labels(&mut engine, 0, source).is_empty(),
+        "the derived annotation expires with Bladebrand's until-end-of-turn effect"
     );
 }
 
