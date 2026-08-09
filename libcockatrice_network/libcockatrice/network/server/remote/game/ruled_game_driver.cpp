@@ -303,7 +303,8 @@ RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &c
                     // id, so later zone-view reconciliation still resolves this permanent.
                     const int faceIndex = static_cast<int>(ruledCmd.play_land().face_index());
                     if (faceIndex > 0) {
-                        const QString activeName = ruledActiveFaceName(ruledCardIdForName(card->getName()), faceIndex);
+                        const QString activeName =
+                            ruledFaceDisplayName(ruledCardIdForName(card->getName()), faceIndex);
                         if (!activeName.isEmpty() && activeName != card->getName()) {
                             card->setCardRef(CardRef{activeName});
                         }
@@ -861,7 +862,7 @@ void RuledGameDriver::applyPermanentMoves(const ruled::v1::RuledEventBatch &batc
                 }
             }
             if (displaysAlternateFace) {
-                const QString frontName = ruledActiveFaceName(resolvedCardId, 0);
+                const QString frontName = ruledFaceDisplayName(resolvedCardId, 0);
                 if (!frontName.isEmpty() && frontName != card->getName()) {
                     card->setCardRef(CardRef{frontName});
                 }
@@ -1097,7 +1098,7 @@ void RuledGameDriver::applyFaceDisplays(const ruled::v1::RuledEventBatch &batch,
             return;
         }
         const QString resolvedCardId = cardId.isEmpty() ? ruledCardIdForName(card->getName()) : cardId;
-        const QString activeName = ruledActiveFaceName(resolvedCardId, faceIndex);
+        const QString activeName = ruledFaceDisplayName(resolvedCardId, faceIndex);
         if (!activeName.isEmpty() && activeName != card->getName()) {
             card->setCardRef(CardRef{activeName});
             result.battlefieldDisplayChanged = true;
@@ -1969,14 +1970,14 @@ QString RuledGameDriver::ruledCardNameForId(const QString &cardId) const
     return it == ruledCardCatalogById.constEnd() ? QString() : QString::fromStdString(it->name());
 }
 
-QString RuledGameDriver::ruledActiveFaceName(const QString &cardId, int faceIndex) const
+QString RuledGameDriver::ruledFaceDisplayName(const QString &cardId, int faceIndex) const
 {
     const auto it = ruledCardCatalogById.constFind(cardId);
     if (it == ruledCardCatalogById.constEnd()) {
         return QString();
     }
-    if (faceIndex >= 0 && faceIndex < it->face_names_size()) {
-        return QString::fromStdString(it->face_names(faceIndex));
+    if (faceIndex >= 0 && faceIndex < it->face_display_names_size()) {
+        return QString::fromStdString(it->face_display_names(faceIndex));
     }
     return QString::fromStdString(it->name());
 }

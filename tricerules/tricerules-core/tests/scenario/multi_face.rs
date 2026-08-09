@@ -302,6 +302,62 @@ fn fire_ice_target_sets_are_per_face() {
 // Adventure (CR 715): resolve the Adventure half into exile, then cast the permanent face.
 // ---------------------------------------------------------------------------
 
+#[test]
+fn multiface_catalog_separates_face_labels_from_physical_display_names() {
+    let decks = Some(vec![
+        deck_with(
+            "mountain",
+            &[
+                "bonecrusher_giant_stomp",
+                "reckless_waif_merciless_predator",
+            ],
+        ),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(42, &[0, 1], 20, decks, true).expect("new");
+    let batch = e.initial_response_batch();
+    let catalog = batch
+        .events
+        .iter()
+        .find_map(|event| match event.ev.as_ref() {
+            Some(Ev::CardCatalog(catalog)) => Some(catalog),
+            _ => None,
+        })
+        .expect("card catalog");
+
+    let adventure = catalog
+        .entries
+        .iter()
+        .find(|entry| entry.card_id == "bonecrusher_giant_stomp")
+        .expect("Adventure catalog entry");
+    assert_eq!(
+        adventure.face_names,
+        vec!["Bonecrusher Giant".to_string(), "Stomp".to_string()]
+    );
+    assert_eq!(
+        adventure.face_display_names,
+        vec![
+            "Bonecrusher Giant // Stomp".to_string(),
+            "Bonecrusher Giant // Stomp".to_string(),
+        ],
+        "Adventure faces share one cards.xml entry"
+    );
+
+    let transform = catalog
+        .entries
+        .iter()
+        .find(|entry| entry.card_id == "reckless_waif_merciless_predator")
+        .expect("transform catalog entry");
+    assert_eq!(
+        transform.face_display_names,
+        vec![
+            "Reckless Waif".to_string(),
+            "Merciless Predator".to_string(),
+        ],
+        "transform faces have separate cards.xml entries"
+    );
+}
+
 /// CR 715.3d: an Adventure spell that resolves is exiled instead of going to its owner's
 /// graveyard. The later cast permission is covered separately once the source-zone command is
 /// wired; this regression first pins the destination decision that creates that permission.

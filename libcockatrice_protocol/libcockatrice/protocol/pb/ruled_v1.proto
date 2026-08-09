@@ -746,8 +746,13 @@ message CardCatalog {
     repeated string types = 3 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY]; // from CardDefinition.types (primary face for multi-face cards)
     bool is_permanent = 4 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];     // CR 110.4: resolves to the battlefield, not the graveyard
     // CR 709/712/715: per-face Oracle names in face order (e.g. ["Fire", "Ice"]). Empty for
-    // single-face cards. Lets the relay display the cast/active half by its own name.
+    // single-face cards. These are labels and lookup aliases; not every face is a standalone
+    // cards.xml entry (Adventure and split cards use the whole-card name there).
     repeated string face_names = 5 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+    // Exact cards.xml CardRef name for each face. Transform, flip, and modal DFC faces have
+    // separate entries; Adventure and split faces repeat the whole-card name. This keeps physical
+    // card hover details resolvable without asking the display database for rules information.
+    repeated string face_display_names = 6 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
   }
   repeated Entry entries = 1 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
 }

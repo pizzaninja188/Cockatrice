@@ -105,9 +105,9 @@ public:
     QString ruledCardIdForName(const QString &cardName) const;
     /// Oracle card name for an engine card id via the session catalog; empty when unknown.
     QString ruledCardNameForId(const QString &cardId) const;
-    /// CR 712: Oracle name of a multi-face card's active face (0 = front/combined name). Used to
-    /// display the correct face image for an MDFC/Transform/Flip permanent. Empty when unknown.
-    QString ruledActiveFaceName(const QString &cardId, int faceIndex) const;
+    /// Exact cards.xml name used to display a multi-face card in the selected face state. This is
+    /// a face name for MDFC/Transform/Flip cards and the whole-card name for Adventure/Split.
+    QString ruledFaceDisplayName(const QString &cardId, int faceIndex) const;
 
 private:
     struct PendingRuledCastVisual

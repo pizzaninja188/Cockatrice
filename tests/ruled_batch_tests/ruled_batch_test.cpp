@@ -195,7 +195,10 @@ protected:
         }
     }
 
-    void seedMultifaceCatalog(const QString &cardId, const QString &combinedName, const QStringList &faceNames)
+    void seedMultifaceCatalog(const QString &cardId,
+                              const QString &combinedName,
+                              const QStringList &faceNames,
+                              const QStringList &faceDisplayNames)
     {
         ruled::v1::CardCatalog_Entry entry;
         entry.set_card_id(cardId.toStdString());
@@ -203,6 +206,9 @@ protected:
         for (const QString &faceName : faceNames) {
             entry.add_face_names(faceName.toStdString());
             game->ruled()->ruledCardIdByLowerName.insert(faceName.trimmed().toLower(), cardId);
+        }
+        for (const QString &displayName : faceDisplayNames) {
+            entry.add_face_display_names(displayName.toStdString());
         }
         game->ruled()->ruledCardCatalogById.insert(cardId, entry);
         game->ruled()->ruledCardIdByLowerName.insert(combinedName.trimmed().toLower(), cardId);
@@ -1397,6 +1403,7 @@ TEST_F(RuledBatchTest, FaceChangedRenamesPermanentInPlace)
     const QString cardId = "reckless_waif_merciless_predator";
     seedMultifaceCatalog(cardId,
                          "Reckless Waif // Merciless Predator",
+                         {"Reckless Waif", "Merciless Predator"},
                          {"Reckless Waif", "Merciless Predator"});
     Server_Card *card = addCardToTable(p1, "Reckless Waif");
     const int serverId = card->getId();
@@ -1434,6 +1441,7 @@ TEST_F(RuledBatchTest, FullSnapshotRestoresControlledPermanentActiveFace)
     const QString cardId = "reckless_waif_merciless_predator";
     seedMultifaceCatalog(cardId,
                          "Reckless Waif // Merciless Predator",
+                         {"Reckless Waif", "Merciless Predator"},
                          {"Reckless Waif", "Merciless Predator"});
     Server_Card *card = addCardToTable(p1, "Reckless Waif");
     const int serverId = card->getId();
@@ -1460,6 +1468,7 @@ TEST_F(RuledBatchTest, LeavingBattlefieldRestoresFrontFaceDisplay)
     const QString cardId = "reckless_waif_merciless_predator";
     seedMultifaceCatalog(cardId,
                          "Reckless Waif // Merciless Predator",
+                         {"Reckless Waif", "Merciless Predator"},
                          {"Reckless Waif", "Merciless Predator"});
     Server_Card *card = addCardToTable(p1, "Reckless Waif");
     const int serverId = card->getId();
@@ -1498,10 +1507,41 @@ TEST_F(RuledBatchTest, LeavingBattlefieldRestoresFrontFaceDisplay)
     EXPECT_EQ(card->getId(), serverId);
 }
 
+TEST_F(RuledBatchTest, AdventurePermanentKeepsWholeCardOracleDisplayName)
+{
+    const QString cardId = "bonecrusher_giant_stomp";
+    seedMultifaceCatalog(cardId,
+                         "Bonecrusher Giant // Stomp",
+                         {"Bonecrusher Giant", "Stomp"},
+                         {"Bonecrusher Giant // Stomp", "Bonecrusher Giant // Stomp"});
+    Server_Card *card = addCardToTable(p1, "Bonecrusher Giant // Stomp");
+    const int serverId = card->getId();
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *zoneView = response.mutable_batch()->add_events()->mutable_zone_view();
+    auto view = buildPerPlayerView(p1, {705u}, {false});
+    auto *object = view.mutable_battlefield_objects(0);
+    object->set_card_id(cardId.toStdString());
+    object->set_face_up_index(0);
+    *zoneView->add_per_player() = view;
+    *zoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+
+    const BatchOutcome outcome = callBatchApply(response);
+
+    EXPECT_FALSE(outcome.battlefieldDisplayChanged);
+    EXPECT_EQ(card->getName(), QString("Bonecrusher Giant // Stomp"));
+    EXPECT_EQ(card->getId(), serverId);
+    EXPECT_EQ(findCardByEngineOid(p1, 705u), card);
+}
+
 TEST_F(RuledBatchTest, SplitCardKeepsWholeCardDisplayOutsideBattlefield)
 {
     const QString cardId = "fire_ice";
-    seedMultifaceCatalog(cardId, "Fire // Ice", {"Fire", "Ice"});
+    seedMultifaceCatalog(cardId,
+                         "Fire // Ice",
+                         {"Fire", "Ice"},
+                         {"Fire // Ice", "Fire // Ice"});
     Server_Card *card = addCardToHand(p1, "Fire // Ice");
 
     ruled::v1::IpcResponse seed;

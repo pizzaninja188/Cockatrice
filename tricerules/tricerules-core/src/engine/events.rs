@@ -49,10 +49,26 @@ impl GameEngine {
                 // Multi-face cards carry no flat types; describe by the primary (front) face.
                 types: def.primary_face().types.to_vec(),
                 is_permanent: def.primary_face().is_permanent(),
-                // CR 709/712/715: per-face names so the relay can display a cast/active half;
+                // CR 709/712/715: per-face labels for cast choices and name lookup aliases;
                 // empty for single-face cards.
                 face_names: if def.is_multiface() {
                     def.faces.iter().map(|f| f.name.clone()).collect()
+                } else {
+                    Vec::new()
+                },
+                // Cockatrice's cards.xml stores Transform, Flip, and Modal DFC faces as separate
+                // cards, while Split and Adventure cards have one whole-card entry. Keep the
+                // physical CardRef mapping separate from the face labels used by cast choices.
+                face_display_names: if def.is_multiface() {
+                    match def.layout {
+                        Layout::Transform | Layout::Flip | Layout::ModalDfc => {
+                            def.faces.iter().map(|f| f.name.clone()).collect()
+                        }
+                        Layout::Split | Layout::Adventure => {
+                            vec![def.name.clone(); def.faces.len()]
+                        }
+                        Layout::Normal => Vec::new(),
+                    }
                 } else {
                     Vec::new()
                 },
