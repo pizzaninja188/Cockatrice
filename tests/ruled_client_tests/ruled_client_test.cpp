@@ -48,6 +48,7 @@ public:
     QVector<ruled::v1::RuledCommand> sentCommands;
     int dialogRequests = 0;
     QString lastDialogPrompt;
+    bool autoSubmitDialogChoice = false;
 
     /// Optional P/T fallback, keyed by engine oid, for the ZoneView-stripped path.
     QHash<quint32, QPair<int, int>> fallbackPt;
@@ -114,7 +115,7 @@ public:
         pendingAck = std::move(onFinished);
     }
     void requestResolutionChoiceDialog(const QString &prompt,
-                                       const QVector<quint32> &,
+                                       const QVector<quint32> &candidateOids,
                                        const QStringList &,
                                        int,
                                        int,
@@ -123,6 +124,11 @@ public:
     {
         ++dialogRequests;
         lastDialogPrompt = prompt;
+        if (autoSubmitDialogChoice && !candidateOids.isEmpty()) {
+            ruled::v1::RuledCommand command;
+            command.mutable_submit_resolution_choice()->add_chosen_object_ids(candidateOids.first());
+            sendRuledCommand(command);
+        }
     }
     void scheduleSpellTargetArrowSync() override
     {
@@ -1813,6 +1819,26 @@ TEST_F(RuledClientTest, UnrecognisedChoiceKindFallsBackToTheModalDialog)
     EXPECT_FALSE(state->isResolutionHandPickActive());
     EXPECT_EQ(host.dialogRequests, 1);
     EXPECT_EQ(host.lastDialogPrompt, QStringLiteral("Choose one."));
+}
+
+TEST_F(RuledClientTest, DamagePreventionChoiceUsesModalFallbackAndSubmitsOpaqueApplicationId)
+{
+    host.autoSubmitDialogChoice = true;
+    ruled::v1::RuledEventBatch batch;
+    auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+    rcr->set_deciding_player_id(kLocalPlayer);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_DAMAGE_PREVENTION);
+    rcr->set_prompt_text("Choose prevention order.");
+    rcr->set_min(1);
+    rcr->set_max(1);
+    rcr->add_candidate_object_ids(7001);
+    rcr->add_candidate_names("Anti-Venom prevention");
+    apply(batch);
+
+    EXPECT_EQ(host.dialogRequests, 1);
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    ASSERT_TRUE(host.sentCommands[0].has_submit_resolution_choice());
+    EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().chosen_object_ids(0), 7001u);
 }
 
 TEST_F(RuledClientTest, ChoicesForAnotherPlayerNeverPromptUs)

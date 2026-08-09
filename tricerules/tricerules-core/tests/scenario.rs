@@ -19,6 +19,8 @@ mod control;
 mod counters_and_pump;
 #[path = "scenario/custom_resolution.rs"]
 mod custom_resolution;
+#[path = "scenario/damage_prevention.rs"]
+mod damage_prevention;
 #[path = "scenario/dev_commands.rs"]
 mod dev_commands;
 #[path = "scenario/equipment.rs"]

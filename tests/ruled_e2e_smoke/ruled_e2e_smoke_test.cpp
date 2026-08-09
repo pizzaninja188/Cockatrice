@@ -248,6 +248,12 @@ public:
     bool devWaifSent = false;
     bool devBorosCharmSent = false;
     bool devManaSent = false;
+    bool devAntiVenomSent = false;
+    bool devPreventionSalveSent = false;
+    bool devPreventionBlazeSent = false;
+    bool devPreventionManaSent = false;
+    bool preventionSalveCast = false;
+    bool preventionBlazeCast = false;
 
     // Milestone observations (asserted by the fixture)
     bool sawBoltPushWithTarget = false;
@@ -259,6 +265,8 @@ public:
     bool sawBrainstormChoice = false;
     bool submittedBrainstormChoice = false;
     bool sawBrainstormResolved = false;
+    bool sawDamagePreventionChoice = false;
+    bool submittedDamagePreventionChoice = false;
     bool sawCleanupDiscardActions = false;
     bool sentCleanupDiscard = false;
     bool sawBottomAction = false;
@@ -1041,8 +1049,12 @@ public:
         // --- Tier-3 resolution choice (may target either player at any point) ---
         if (pendingChoice) {
             const auto &rcr = *pendingChoice;
+            const bool isDamagePrevention = rcr.choice_kind() == ruled::v1::CHOICE_KIND_DAMAGE_PREVENTION;
             if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_HAND_CARDS && rcr.ordered()) {
                 sawBrainstormChoice = true;
+            }
+            if (isDamagePrevention) {
+                sawDamagePreventionChoice = true;
             }
             ruled::v1::RuledCommand cmd;
             auto *choice = cmd.mutable_submit_resolution_choice();
@@ -1051,7 +1063,11 @@ public:
                 choice->add_chosen_object_ids(rcr.candidate_object_ids(i));
             }
             pendingChoice.reset();
-            submittedBrainstormChoice = true;
+            if (isDamagePrevention) {
+                submittedDamagePreventionChoice = true;
+            } else {
+                submittedBrainstormChoice = true;
+            }
             sendRuled(cmd, QStringLiteral("submit resolution choice (%1 cards)").arg(need));
             return;
         }
@@ -1065,7 +1081,9 @@ public:
             // kill the opponent before the later milestones (Brainstorm, cleanup discard) land.
             if (it != battlefieldByPlayer.end() && !sawCombatLifeLoss) {
                 for (const Permanent &perm : it->second) {
-                    if (perm.creature && !perm.tapped && (!perm.sick || perm.haste)) {
+                    if (perm.cardId != QStringLiteral("anti-venom,_horrifying_healer") && perm.creature &&
+                        !perm.tapped &&
+                        (!perm.sick || perm.haste)) {
                         att->add_creature_ids(perm.oid);
                     }
                 }
@@ -1123,6 +1141,86 @@ public:
             }
             if (tryAdventureSequence()) {
                 return;
+            }
+            if (!devAntiVenomSent) {
+                devAntiVenomSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                auto *put = dev->mutable_put_card_in_zone();
+                put->set_card_name("Anti-Venom, Horrifying Healer");
+                put->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+                put->set_ready(true);
+                sendRuled(cmd, QStringLiteral("dev: conjure Anti-Venom onto the battlefield"));
+                return;
+            }
+            if (!devPreventionSalveSent) {
+                devPreventionSalveSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                auto *put = dev->mutable_put_card_in_zone();
+                put->set_card_name("Healing Salve");
+                put->set_zone(ruled::v1::DEV_ZONE_HAND);
+                sendRuled(cmd, QStringLiteral("dev: conjure Healing Salve into hand"));
+                return;
+            }
+            if (!devPreventionBlazeSent) {
+                devPreventionBlazeSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                auto *put = dev->mutable_put_card_in_zone();
+                put->set_card_name("Blaze");
+                put->set_zone(ruled::v1::DEV_ZONE_HAND);
+                sendRuled(cmd, QStringLiteral("dev: conjure Blaze into hand"));
+                return;
+            }
+            if (!devPreventionManaSent) {
+                devPreventionManaSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                dev->mutable_add_mana()->set_w(1);
+                dev->mutable_add_mana()->set_r(1);
+                dev->mutable_add_mana()->set_c(5);
+                sendRuled(cmd, QStringLiteral("dev: add mana for prevention-order smoke"));
+                return;
+            }
+            std::optional<quint32> antiVenomOid;
+            const auto battlefield = battlefieldByPlayer.find(myId);
+            if (battlefield != battlefieldByPlayer.end()) {
+                for (const Permanent &permanent : battlefield->second) {
+                    if (permanent.cardId == QStringLiteral("anti-venom,_horrifying_healer")) {
+                        antiVenomOid = permanent.oid;
+                        break;
+                    }
+                }
+            }
+            if (!preventionSalveCast && antiVenomOid) {
+                if (const auto *salve = handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Healing Salve"))) {
+                    ruled::v1::RuledCommand cmd;
+                    auto *cast = cmd.mutable_cast_spell();
+                    cast->mutable_source()->set_hand_index(salve->hand_index());
+                    auto *mode = cast->add_selected_modes();
+                    mode->set_mode_index(1);
+                    mode->add_targets()->set_object_id(*antiVenomOid);
+                    preventionSalveCast = true;
+                    sendRuled(cmd, QStringLiteral("cast Healing Salve prevention mode on Anti-Venom"));
+                    return;
+                }
+            }
+            if (preventionSalveCast && !preventionBlazeCast && antiVenomOid) {
+                if (const auto *blaze = handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Blaze"))) {
+                    ruled::v1::RuledCommand cmd;
+                    auto *cast = cmd.mutable_cast_spell();
+                    cast->mutable_source()->set_hand_index(blaze->hand_index());
+                    cast->set_x_value(5);
+                    cast->add_targets()->set_object_id(*antiVenomOid);
+                    preventionBlazeCast = true;
+                    sendRuled(cmd, QStringLiteral("cast Blaze for 5 on shielded Anti-Venom"));
+                    return;
+                }
             }
             // --- Dev commands (roadmap backlog dev-loop piece 2) ---------------------------
             // The only cross-language check that a C++-built DevCommand decodes and applies in
@@ -1507,6 +1605,7 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
                p1.sawWaifBackPt && p2.sawWaifBackPt &&
                p1.sawFlashbackGraveToStack && p1.sawFlashbackStackToExile &&
                p1.sawAdventureStackToExile && p1.sawAdventureExileToStack && p1.sawAdventureStackToBattlefield &&
+               p1.sawDamagePreventionChoice && p1.submittedDamagePreventionChoice &&
                p2.sawFlashbackGraveToStack && p2.sawFlashbackStackToExile && p2.handSizeByPlayer.count(p2.myId) &&
                p2.handSizeByPlayer[p2.myId] <= 7;
     };
@@ -1543,6 +1642,8 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     EXPECT_TRUE(p1.sawCombatLifeLoss) << "combat damage never changed a life total";
     EXPECT_TRUE(p2.sawBrainstormChoice) << "Brainstorm's tier-3 resolution choice never arrived";
     EXPECT_TRUE(p2.sawBrainstormResolved) << "Brainstorm never finished resolving after the choice";
+    EXPECT_TRUE(p1.sawDamagePreventionChoice) << "damage-prevention ordering choice never arrived";
+    EXPECT_TRUE(p1.submittedDamagePreventionChoice) << "damage-prevention ordering choice was never submitted";
     EXPECT_TRUE(p1.flashbackCast) << "seat 1 never sent its flashback cast";
     EXPECT_TRUE(p2.flashbackCast) << "seat 2 never sent its flashback cast";
     // One of these two seats does not own the canonical stack, so its cast crosses players.

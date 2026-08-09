@@ -1,0 +1,19 @@
+// Anti-Venom, Horrifying Healer — Marvel's Spider-Man. The cast-conditioned ETB reanimation
+// trigger is deferred; its static CR 615 prevention effect is fully data-driven.
+(
+  id: "anti-venom,_horrifying_healer",
+  name: "Anti-Venom, Horrifying Healer",
+  mana_cost: "{W}{W}{W}{W}{W}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Symbiote", "Hero"],
+  power: 5,
+  toughness: 5,
+  static_abilities: [
+    PreventDamage(
+      subject: Source,
+      amount: All,
+      additional_effect: Some(PutCounters(counter: PlusOnePlusOne, basis: Attempted)),
+    ),
+  ],
+  partial: "Cast-conditioned ETB creature reanimation trigger is not implemented",
+)
