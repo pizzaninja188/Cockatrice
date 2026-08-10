@@ -206,7 +206,7 @@ pub(super) fn each_opponent_loses_life_you_gain_equal(
         .players
         .iter()
         .enumerate()
-        .filter(|(_, p)| p.id != controller && !p.has_lost)
+        .filter(|(_, p)| engine.state.are_opponents(p.id, controller) && !p.has_lost)
         .map(|(i, p)| (i, p.id))
         .collect();
     let mut total_lost: u32 = 0;

@@ -206,7 +206,7 @@ pub(super) fn damage_player(
             .state
             .players
             .iter()
-            .filter(|p| p.id != cx.controller && !p.has_lost)
+            .filter(|p| cx.engine.state.are_opponents(p.id, cx.controller) && !p.has_lost)
             .map(|p| p.id)
             .collect(),
         PlayerRecipient::EachPlayer => cx

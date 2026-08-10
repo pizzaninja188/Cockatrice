@@ -158,9 +158,10 @@ pub(super) fn tap_all_creatures(
                             RelativePlayerSet::Controller => {
                                 characteristics.controller == controller
                             }
-                            RelativePlayerSet::Opponents => {
-                                characteristics.controller != controller
-                            }
+                            RelativePlayerSet::Opponents => cx
+                                .engine
+                                .state
+                                .are_opponents(characteristics.controller, controller),
                             RelativePlayerSet::All => true,
                         }
                 })

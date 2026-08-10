@@ -102,7 +102,9 @@ pub(super) fn untap_all(
                 .characteristics(*oid)
                 .is_some_and(|characteristics| match players {
                     RelativePlayerSet::Controller => characteristics.controller == controller,
-                    RelativePlayerSet::Opponents => characteristics.controller != controller,
+                    RelativePlayerSet::Opponents => engine
+                        .state
+                        .are_opponents(characteristics.controller, controller),
                     RelativePlayerSet::All => true,
                 })
         })

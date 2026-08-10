@@ -46,7 +46,9 @@ These apply to all work from now on, refactor or not.
    proto field, engine helper, or UI flow may assume exactly one opponent: "each opponent" /
    "each player" are player *sets*; turn order is a rotation, not a toggle. Any 2-seat-only
    simplification carries a comment naming the assumption. (Actual multi-seat support is
-   deferred indefinitely — this rule is about not poisoning the well.)
+   deferred indefinitely — this rule is about not poisoning the well.) Every rules-semantic
+   opponent check goes through `GameState::are_opponents`; inequalities that mean "another
+   player," "nonactive player," or a different chooser remain distinct concepts.
 5. **Prioritize by bleeding rate.** The clock that matters: every new mechanic currently adds
    lines to `server_game.cpp`, `game_event_handler.{h,cpp}`, `RuledPerPlayerView`,
    `resolution.rs`'s match, and `game_prompt_widget`'s state. Work that stops that bleeding

@@ -274,13 +274,14 @@ impl<'a> ResolutionCtx<'a> {
             .unwrap_or_else(|| "card".to_string())
     }
 
-    /// The opponent of `player` in a 1v1 game (CR 102.1), if there is exactly one.
+    /// The sole opponent of `player` under the engine's current relationship model, if exactly
+    /// one exists. Gifts Ungiven remains explicitly simplified to this single-opponent choice.
     pub fn opponent_of(&self, player: PlayerId) -> Option<PlayerId> {
         let others: Vec<PlayerId> = self
             .state
             .players
             .iter()
-            .filter(|p| p.id != player)
+            .filter(|p| self.state.are_opponents(p.id, player))
             .map(|p| p.id)
             .collect();
         if others.len() == 1 {

@@ -816,6 +816,16 @@ impl GameState {
         self.players.iter().position(|p| p.id == pid)
     }
 
+    /// Whether two players are opponents (CR 102.2-102.3).
+    ///
+    /// The current engine has no teams, so every distinct player is an opponent. Keep this
+    /// relationship separate from player validity, seat order, and [`PlayerState::has_lost`]:
+    /// callers that enumerate legal or affected players remain responsible for those concerns.
+    /// When a concrete team format is implemented, team membership belongs behind this method.
+    pub(crate) fn are_opponents(&self, first: PlayerId, second: PlayerId) -> bool {
+        first != second
+    }
+
     pub fn active_player_id(&self) -> PlayerId {
         self.players[self.active_player_idx].id
     }
@@ -865,8 +875,10 @@ impl GameState {
         (idx + seats - self.active_player_idx) % seats
     }
 
-    /// Every defending player this turn (CR 506.2): each nonactive player still in the game, in
-    /// APNAP order (CR 101.4). Exactly one element in 1v1.
+    /// Every defending player under the current duel/free-for-all combat policy (CR 506.2): each
+    /// nonactive player still in the game, in APNAP order (CR 101.4). Exactly one element in 1v1.
+    /// Team variants and multiplayer options choose defenders differently and must replace this
+    /// policy rather than treating seat-generic ordering as complete format support.
     pub fn defending_player_ids(&self) -> Vec<PlayerId> {
         defending_player_ids_of(&self.players, self.active_player_idx)
     }

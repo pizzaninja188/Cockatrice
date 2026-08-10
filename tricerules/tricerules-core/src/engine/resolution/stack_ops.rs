@@ -169,7 +169,8 @@ pub(super) fn copy_target_spell(
                         candidates.extend(sp.valid_stack_ids);
                         for p in &engine.state.players {
                             if (sp.can_target_self && p.id == controller)
-                                || (sp.can_target_opponent && p.id != controller)
+                                || (sp.can_target_opponent
+                                    && engine.state.are_opponents(p.id, controller))
                             {
                                 candidates.push(p.id as ObjectId);
                             }

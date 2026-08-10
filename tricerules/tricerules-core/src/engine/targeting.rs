@@ -162,7 +162,11 @@ fn object_targetable_by(engine: &GameEngine, tid: ObjectId, caster: PlayerId) ->
     if characteristics.has_keyword(Keyword::Shroud) {
         return false;
     }
-    if characteristics.has_keyword(Keyword::Hexproof) && characteristics.controller != caster {
+    if characteristics.has_keyword(Keyword::Hexproof)
+        && engine
+            .state
+            .are_opponents(characteristics.controller, caster)
+    {
         return false;
     }
     true
@@ -233,10 +237,9 @@ fn filter_characteristics_match(engine: &GameEngine, filter: &TargetFilter, oid:
     true
 }
 
-/// Match a permanent's current derived controller against a target restriction. The current game
-/// model has no teams, so every different player is an opponent; keeping this comparison in one
-/// player-id-based helper avoids two-player seat arithmetic and provides one future team hook.
+/// Match a permanent's current derived controller against a target restriction.
 fn target_controller_matches(
+    state: &GameState,
     relation: TargetController,
     ability_controller: PlayerId,
     target_controller: PlayerId,
@@ -244,7 +247,7 @@ fn target_controller_matches(
     match relation {
         TargetController::Any => true,
         TargetController::You => target_controller == ability_controller,
-        TargetController::Opponent => target_controller != ability_controller,
+        TargetController::Opponent => state.are_opponents(target_controller, ability_controller),
     }
 }
 
@@ -277,6 +280,7 @@ pub(super) fn attachment_filter_legal(
         && (!filter.exclude_source || oid != attachment_id)
         && filter_characteristics_match(engine, filter, oid)
         && target_controller_matches(
+            &engine.state,
             filter.controller,
             attachment_controller,
             characteristics.controller,
@@ -355,7 +359,8 @@ fn target_filter_legal(
         TargetKind::Creature => destroy_spell_target_legal(engine, tid),
         TargetKind::AnyPlayer => player_target_legal(&engine.state, tid),
         TargetKind::OpponentPlayer => {
-            player_target_legal(&engine.state, tid) && tid as i32 != caster
+            player_target_legal(&engine.state, tid)
+                && engine.state.are_opponents(tid as i32, caster)
         }
         TargetKind::AnyPermanent => any_battlefield_permanent_target_legal(&engine.state, tid),
     };
@@ -383,7 +388,12 @@ fn target_filter_legal(
         let Some(characteristics) = engine.characteristics(tid) else {
             return false;
         };
-        if !target_controller_matches(filter.controller, caster, characteristics.controller) {
+        if !target_controller_matches(
+            &engine.state,
+            filter.controller,
+            caster,
+            characteristics.controller,
+        ) {
             return false;
         }
     }
@@ -692,7 +702,9 @@ pub(super) fn validate_effect_targets(
                 return Err(EngineError::Illegal("target must be a player in the game"));
             }
             if matches!(filter.kind, TargetKind::OpponentPlayer)
-                && targets[0].object_id as i32 == caster
+                && !engine
+                    .state
+                    .are_opponents(targets[0].object_id as i32, caster)
             {
                 return Err(EngineError::Illegal("cannot target yourself"));
             }
@@ -927,7 +939,9 @@ pub(super) fn spell_target_legality_error(
             if !player_target_legal(&engine.state, tid) {
                 return Err(EngineError::Illegal("target must be a player in the game"));
             }
-            if matches!(filter.kind, TargetKind::OpponentPlayer) && tid as i32 == caster {
+            if matches!(filter.kind, TargetKind::OpponentPlayer)
+                && !engine.state.are_opponents(tid as i32, caster)
+            {
                 return Err(EngineError::Illegal(
                     "target must be an opponent (cannot target yourself)",
                 ));
@@ -1038,7 +1052,7 @@ pub(super) fn compute_spell_targets(
         if legal {
             if p.id == caster {
                 can_target_self = true;
-            } else {
+            } else if engine.state.are_opponents(p.id, caster) {
                 can_target_opponent = true;
             }
         }
@@ -1094,26 +1108,50 @@ mod tests {
     use super::*;
 
     #[test]
-    fn opponent_relation_is_player_id_based_not_two_seat_arithmetic() {
+    fn opponent_relation_is_state_backed_and_independent_of_loss() {
+        let mut engine = GameEngine::new(96905, &[10, 20], 20, None, true).expect("new");
         assert!(target_controller_matches(
+            &engine.state,
             TargetController::Opponent,
             10,
             20
         ));
-        assert!(target_controller_matches(
-            TargetController::Opponent,
-            10,
-            30
-        ));
         assert!(!target_controller_matches(
+            &engine.state,
             TargetController::Opponent,
             10,
             10
         ));
-        assert!(target_controller_matches(TargetController::You, 10, 10));
-        assert!(!target_controller_matches(TargetController::You, 10, 20));
-        assert!(target_controller_matches(TargetController::Any, 10, 10));
-        assert!(target_controller_matches(TargetController::Any, 10, 20));
+        assert!(target_controller_matches(
+            &engine.state,
+            TargetController::You,
+            10,
+            10
+        ));
+        assert!(!target_controller_matches(
+            &engine.state,
+            TargetController::You,
+            10,
+            20
+        ));
+        assert!(target_controller_matches(
+            &engine.state,
+            TargetController::Any,
+            10,
+            10
+        ));
+        assert!(target_controller_matches(
+            &engine.state,
+            TargetController::Any,
+            10,
+            20
+        ));
+
+        engine.state.players[1].has_lost = true;
+        assert!(
+            engine.state.are_opponents(10, 20),
+            "relationship membership is independent of whether a player has lost"
+        );
     }
 
     #[test]

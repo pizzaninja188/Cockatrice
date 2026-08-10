@@ -421,8 +421,11 @@ fn new_object_from_card(
     }
 }
 
-/// Seat count [`GameEngine::new`] accepts. Everything the engine does with seats — opening order,
-/// APNAP, priority, the defending-player set — is written generically; the one thing that is not is
+/// Seat count [`GameEngine::new`] accepts. Seat-order mechanics — opening order, APNAP, priority,
+/// and the current duel/free-for-all defending-player policy — are written generically. This is
+/// not team-format support: opponent membership is only the default relation in
+/// [`GameState::are_opponents`](crate::state::GameState::are_opponents), and team turns, priority,
+/// combat, life, and victory are deliberately unmodeled. The remaining arity-specific mechanic is
 /// naming *the* defender during combat, because `DeclareAttackers` carries no per-attacker defender
 /// to choose between them. Widening this constant therefore means a `ruled_v1.proto` change plus
 /// client UI first; the sites to revisit are named on

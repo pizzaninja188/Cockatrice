@@ -283,15 +283,11 @@ impl GameEngine {
                             if *exclude_self && src_id == entering_id {
                                 return false;
                             }
-                            let rel_ok = match controller {
-                                tricerules_cards::CastTriggerPlayer::Controller => {
-                                    entering_controller == src_ctrl
-                                }
-                                tricerules_cards::CastTriggerPlayer::Opponent => {
-                                    entering_controller != src_ctrl
-                                }
-                                tricerules_cards::CastTriggerPlayer::AnyPlayer => true,
-                            };
+                            let rel_ok = self.relative_player_matches(
+                                *controller,
+                                entering_controller,
+                                src_ctrl,
+                            );
                             if !rel_ok {
                                 return false;
                             }
@@ -346,15 +342,11 @@ impl GameEngine {
                             if *exclude_self && source.object_id == dying.object_id {
                                 return false;
                             }
-                            match controller {
-                                CastTriggerPlayer::Controller => {
-                                    dying.controller == source.controller
-                                }
-                                CastTriggerPlayer::Opponent => {
-                                    dying.controller != source.controller
-                                }
-                                CastTriggerPlayer::AnyPlayer => true,
-                            }
+                            self.relative_player_matches(
+                                *controller,
+                                dying.controller,
+                                source.controller,
+                            )
                         },
                     ));
                 }
@@ -390,7 +382,7 @@ impl GameEngine {
                     |tc| match tc {
                         TriggerCondition::WheneverSelfDealsCombatDamageToPlayer => true,
                         TriggerCondition::WheneverSelfDealsDamageToOpponent => {
-                            defender != controller
+                            self.state.are_opponents(defender, controller)
                         }
                         _ => false,
                     },
@@ -416,11 +408,11 @@ impl GameEngine {
                                 else {
                                     return false;
                                 };
-                                match player_filter {
-                                    CastTriggerPlayer::Controller => *upkeep == source.controller,
-                                    CastTriggerPlayer::Opponent => *upkeep != source.controller,
-                                    CastTriggerPlayer::AnyPlayer => true,
-                                }
+                                self.relative_player_matches(
+                                    *player_filter,
+                                    *upkeep,
+                                    source.controller,
+                                )
                             },
                         )
                     })
@@ -445,11 +437,11 @@ impl GameEngine {
                                 else {
                                     return false;
                                 };
-                                match player_filter {
-                                    CastTriggerPlayer::Controller => *drawing == source.controller,
-                                    CastTriggerPlayer::Opponent => *drawing != source.controller,
-                                    CastTriggerPlayer::AnyPlayer => true,
-                                }
+                                self.relative_player_matches(
+                                    *player_filter,
+                                    *drawing,
+                                    source.controller,
+                                )
                             },
                         )
                     })
@@ -473,11 +465,11 @@ impl GameEngine {
                                 else {
                                     return false;
                                 };
-                                match player_filter {
-                                    CastTriggerPlayer::Controller => *gaining == source.controller,
-                                    CastTriggerPlayer::Opponent => *gaining != source.controller,
-                                    CastTriggerPlayer::AnyPlayer => true,
-                                }
+                                self.relative_player_matches(
+                                    *player_filter,
+                                    *gaining,
+                                    source.controller,
+                                )
                             },
                         )
                     })
@@ -519,7 +511,7 @@ impl GameEngine {
                             source.controller,
                             source.face_index,
                             |condition| {
-                                let Some(permanent_type) = Self::target_trigger_permanent_filter(
+                                let Some(permanent_type) = self.target_trigger_permanent_filter(
                                     condition,
                                     *targeting_source,
                                     *targeting_controller,
@@ -587,11 +579,11 @@ impl GameEngine {
                                 else {
                                     return false;
                                 };
-                                let caster_ok = match caster_filter {
-                                    CastTriggerPlayer::Controller => *caster == source.controller,
-                                    CastTriggerPlayer::Opponent => *caster != source.controller,
-                                    CastTriggerPlayer::AnyPlayer => true,
-                                };
+                                let caster_ok = self.relative_player_matches(
+                                    *caster_filter,
+                                    *caster,
+                                    source.controller,
+                                );
                                 if !caster_ok {
                                     return false;
                                 }
@@ -635,6 +627,7 @@ impl GameEngine {
     /// `None` means the condition does not match this targeting event.
     #[allow(clippy::too_many_arguments)]
     fn target_trigger_permanent_filter(
+        &self,
         condition: &TriggerCondition,
         targeting_source: TargetingSourceKind,
         targeting_controller: PlayerId,
@@ -649,7 +642,7 @@ impl GameEngine {
                 source_controller: source_controller_filter,
             } => (source_id == target_id
                 && Self::targeting_source_matches(*source, targeting_source)
-                && Self::relative_player_matches(
+                && self.relative_player_matches(
                     *source_controller_filter,
                     targeting_controller,
                     source_controller,
@@ -663,12 +656,12 @@ impl GameEngine {
                 exclude_self,
             } => ((!*exclude_self || source_id != target_id)
                 && Self::targeting_source_matches(*source, targeting_source)
-                && Self::relative_player_matches(
+                && self.relative_player_matches(
                     *source_controller_filter,
                     targeting_controller,
                     source_controller,
                 )
-                && Self::relative_player_matches(
+                && self.relative_player_matches(
                     *target_controller_filter,
                     target_controller,
                     source_controller,
@@ -679,13 +672,14 @@ impl GameEngine {
     }
 
     fn relative_player_matches(
+        &self,
         filter: CastTriggerPlayer,
         player: PlayerId,
         source_controller: PlayerId,
     ) -> bool {
         match filter {
             CastTriggerPlayer::Controller => player == source_controller,
-            CastTriggerPlayer::Opponent => player != source_controller,
+            CastTriggerPlayer::Opponent => self.state.are_opponents(player, source_controller),
             CastTriggerPlayer::AnyPlayer => true,
         }
     }
@@ -969,7 +963,8 @@ mod tests {
         target_id: ObjectId,
         target_controller: PlayerId,
     ) -> Option<Option<PermanentTypeFilter>> {
-        GameEngine::target_trigger_permanent_filter(
+        let engine = GameEngine::new(96907, &[0, 1], 20, None, true).expect("new");
+        engine.target_trigger_permanent_filter(
             condition,
             targeting_source,
             targeting_controller,
