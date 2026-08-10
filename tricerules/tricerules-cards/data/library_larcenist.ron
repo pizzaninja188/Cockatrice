@@ -1,0 +1,15 @@
+(
+  id: "library_larcenist",
+  name: "Library Larcenist",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Merfolk", "Rogue"],
+  power: 1,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      trigger: WheneverSelfAttacks,
+      effect: [Draw(count: 1)],
+      text: "Whenever this creature attacks, draw a card.",
+    ),
+  ],
+)

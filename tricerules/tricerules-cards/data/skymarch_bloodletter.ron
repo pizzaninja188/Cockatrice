@@ -1,0 +1,16 @@
+(
+  id: "skymarch_bloodletter",
+  name: "Skymarch Bloodletter",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Vampire", "Soldier"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying],
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [DrainTarget(amount: 1, target: (kind: OpponentPlayer))],
+      text: "When this creature enters, target opponent loses 1 life and you gain 1 life.",
+    ),
+  ],
+)

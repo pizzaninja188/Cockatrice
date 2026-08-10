@@ -1,0 +1,22 @@
+(
+  id: "steadfast_sentry",
+  name: "Steadfast Sentry",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 3,
+  toughness: 2,
+  keywords: [Vigilance],
+  triggered_abilities: [
+    (
+      trigger: WhenSelfDies,
+      effect: [
+        PutCounters(
+          counter: PlusOnePlusOne,
+          count: 1,
+          subject: Chosen((kind: Creature, only_controller: true)),
+        ),
+      ],
+      text: "When this creature dies, put a +1/+1 counter on target creature you control.",
+    ),
+  ],
+)

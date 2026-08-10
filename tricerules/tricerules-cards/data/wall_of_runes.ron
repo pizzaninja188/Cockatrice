@@ -1,0 +1,16 @@
+(
+  id: "wall_of_runes",
+  name: "Wall of Runes",
+  mana_cost: "{U}",
+  types: ["Creature", "Wall"],
+  power: 0,
+  toughness: 4,
+  keywords: [Defender],
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Scry(count: 1)],
+      text: "When this creature enters, scry 1.",
+    ),
+  ],
+)

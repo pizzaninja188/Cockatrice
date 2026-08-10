@@ -1,0 +1,15 @@
+(
+  id: "highland_game",
+  name: "Highland Game",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Elk"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      trigger: WhenSelfDies,
+      effect: [GainLife(amount: 2)],
+      text: "When this creature dies, you gain 2 life.",
+    ),
+  ],
+)

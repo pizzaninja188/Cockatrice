@@ -1,0 +1,15 @@
+(
+  id: "audacious_thief",
+  name: "Audacious Thief",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Human", "Rogue"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      trigger: WheneverSelfAttacks,
+      effect: [Draw(count: 1), LoseLife(amount: Fixed(1))],
+      text: "Whenever this creature attacks, you draw a card and you lose 1 life.",
+    ),
+  ],
+)

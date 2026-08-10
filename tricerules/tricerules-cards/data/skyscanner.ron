@@ -1,0 +1,16 @@
+(
+  id: "skyscanner",
+  name: "Skyscanner",
+  mana_cost: "{3}",
+  types: ["Artifact", "Creature", "Thopter"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Draw(count: 1)],
+      text: "When this creature enters, draw a card.",
+    ),
+  ],
+)
