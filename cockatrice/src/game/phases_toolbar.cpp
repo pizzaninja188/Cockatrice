@@ -228,6 +228,7 @@ PhasesToolbar::PhasesToolbar(QGraphicsItem *parent)
             } else {
                 stopOnMyTurn[i] = enabled;
             }
+            emit phaseStopsChanged();
         });
     }
 

@@ -16,6 +16,7 @@
 #include "../game/prompt/game_prompt_widget.h"
 #include "../game/replay.h"
 #include "../game/ruled/ruled_actions.h"
+#include "../game/ruled/ruled_auto_pass_policy.h"
 #include "../game/ruled/ruled_client_state.h"
 #include "../game/ruled/ruled_dev_command_parser.h"
 #include "../game/ruled/ruled_dev_console.h"
@@ -245,6 +246,7 @@ void TabGame::connectToGameEventHandler()
     connect(game->getGameEventHandler(), &GameEventHandler::gameStopped, this, &TabGame::stopGame);
     connect(game->getGameEventHandler(), &GameEventHandler::gameStopped, messageLog, &MessageLogWidget::prepareForNewGame);
     connect(game->getGameEventHandler()->ruled(), &RuledClientState::sessionReset, this, [this] {
+        publishRuledAutoPassPolicy();
         if (gamePromptWidget) {
             gamePromptWidget->setRuledStackHasItems(false);
             gamePromptWidget->setSpellCastPending(false);
@@ -254,6 +256,8 @@ void TabGame::connectToGameEventHandler()
             refreshRuledPromptState();
         }
     });
+    connect(game->getGameEventHandler()->ruled(), &RuledClientState::engineCommandPendingUiChanged, this,
+            [this]() { refreshRuledPromptState(); });
     connect(game->getGameEventHandler(), &GameEventHandler::gameClosed, this, &TabGame::closeGame);
     connect(game->getGameEventHandler(), &GameEventHandler::localPlayerReadyStateChanged, this,
             &TabGame::processLocalPlayerReadyStateChanged);
@@ -632,13 +636,17 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         return state.mode;
     }
 
-    // Priority order, highest first. A parked resolution pick outranks everything (the engine is
+    // Priority order, highest first. An in-flight command owns the prompt because all gameplay
+    // input is locked immediately, even during the short interval before its status text appears.
+    // A parked resolution pick otherwise outranks everything (the engine is
     // blocked on it), then the pre-game opening sequence, then the cleanup discard, then a parked
     // click-a-permanent choice. Anything below that is the ordinary priority prompt.
     using ChoiceKind = RuledClientState::ChoiceKind;
     using OpeningKind = RuledClientState::RuledOpeningUiKind;
     const OpeningKind opening = h->getOpeningUiKind();
-    if (h->hasPendingTriggerOrder()) {
+    if (h->isEngineCommandPending()) {
+        state.mode = h->isEngineCommandIndicatorVisible() ? PromptMode::UpdatingGame : PromptMode::CommandPending;
+    } else if (h->hasPendingTriggerOrder()) {
         // Above the resolution pick, mirroring the engine's own blocking_choice() precedence: a
         // parked resolution defers staged triggers, so the two are never outstanding together.
         state.mode = PromptMode::TriggerOrder;
@@ -1736,35 +1744,7 @@ Player *TabGame::setPriorityPlayer(int id)
         if (priorityPlayer) {
             gamePromptWidget->setPriorityPlayerName(priorityPlayer->getPlayerInfo()->getName());
         }
-        if (localHasPriority) {
-            // Defer the auto-advance decision: combatStateChanged (which updates
-            // localPlayerHasCombatButtons) is emitted after the full event batch, but
-            // setPriorityPlayer is called during batch processing. Deferring ensures the
-            // mustDeclare check sees up-to-date combat state.
-            QTimer::singleShot(0, this, [this, localPlayerId]() {
-                if (!game || !game->getGameState() || !game->getGameEventHandler()) {
-                    return;
-                }
-                if (game->getGameState()->getPriorityPlayer() != localPlayerId) {
-                    return;
-                }
-                const int currentPhase = game->getGameState()->getCurrentPhase();
-                const bool myTurn = (game->getGameState()->getActivePlayer() == localPlayerId);
-                const bool hasManualStop = phasesToolbar->shouldStopAtPhase(currentPhase, myTurn);
-                const bool stackIsEmpty = !game->getGameEventHandler()->ruled()->hasStackItems();
-                const bool cleanupDiscard = game->getGameEventHandler()->ruled()->localPlayerMustCleanupDiscard();
-                const bool openingPhase = game->getGameEventHandler()->ruled()->engineOpeningPhaseActive();
-                const bool mustDeclare = gamePromptWidget && gamePromptWidget->localPlayerMustDeclareCombat();
-                // CR 510.4: the first-strike damage step shares the "Combat Damage" toolbar
-                // slot (phase 7) with regular damage, matching MTGO — both substeps obey the
-                // same Combat Damage stop. If the player has that stop enabled, they get a
-                // priority window for both FS damage and regular damage; if disabled, auto-pass
-                // skips both. No special override here.
-                if (!openingPhase && !hasManualStop && stackIsEmpty && !cleanupDiscard && !mustDeclare) {
-                    game->getGameEventHandler()->handleNextTurn();
-                }
-            });
-        } else {
+        if (!localHasPriority) {
             Player *localPlayer = game->getPlayerManager()->getPlayers().value(localPlayerId, nullptr);
             if (localPlayer && localPlayer->getPlayerActions()) {
                 localPlayer->getPlayerActions()->clearLandTapUndoStack();
@@ -2048,9 +2028,12 @@ void TabGame::actResetLayout()
 void TabGame::createPlayAreaWidget(bool bReplay)
 {
     phasesToolbar = new PhasesToolbar;
-    if (!bReplay)
+    if (!bReplay) {
         connect(phasesToolbar, &PhasesToolbar::sendGameCommand, game->getGameEventHandler(),
                 qOverload<const ::google::protobuf::Message &, int>(&GameEventHandler::sendGameCommand));
+        connect(phasesToolbar, &PhasesToolbar::phaseStopsChanged, this, &TabGame::publishRuledAutoPassPolicy);
+        QTimer::singleShot(0, this, &TabGame::publishRuledAutoPassPolicy);
+    }
     scene = new GameScene(phasesToolbar, this);
     connect(game->getPlayerManager(), &PlayerManager::playerConceded, scene, &GameScene::rearrange);
     connect(game->getPlayerManager(), &PlayerManager::playerCountChanged, scene, &GameScene::rearrange);
@@ -2063,6 +2046,17 @@ void TabGame::createPlayAreaWidget(bool bReplay)
     gamePlayAreaWidget = new QWidget;
     gamePlayAreaWidget->setObjectName("gamePlayAreaWidget");
     gamePlayAreaWidget->setLayout(gamePlayAreaVBox);
+}
+
+void TabGame::publishRuledAutoPassPolicy()
+{
+    if (!phasesToolbar || !RuledActions::isRuledGame(game)) {
+        return;
+    }
+    ruled::v1::RuledCommand command;
+    command.mutable_set_auto_pass_policy()->CopyFrom(RuledAutoPassPolicy::fromToolbarStops(
+        phasesToolbar->stopsOnMyTurn(), phasesToolbar->stopsOnOpponentTurn()));
+    RuledActions::sendRuledCommand(game, command);
 }
 
 void TabGame::createReplayDock(GameReplay *replay)

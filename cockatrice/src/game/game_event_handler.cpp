@@ -280,6 +280,51 @@ QString GameEventHandler::battlefieldCardName(quint32 engineOid) const
     return {};
 }
 
+namespace
+{
+bool isRuledUiOnlyCommand(const ruled::v1::RuledCommand &command)
+{
+    return command.has_set_auto_pass_policy() || command.has_preview_declare_attackers() ||
+           command.has_preview_declare_blockers();
+}
+
+bool containsEngineBoundRuledCommand(const PendingCommand *pending)
+{
+    if (!pending) {
+        return false;
+    }
+    const CommandContainer &container = const_cast<PendingCommand *>(pending)->getCommandContainer();
+    for (const GameCommand &gameCommand : container.game_command()) {
+        if (getPbExtension(gameCommand) != GameCommand::RULED_PAYLOAD) {
+            continue;
+        }
+        ruled::v1::RuledCommand command;
+        const Command_RuledPayload &payload = gameCommand.GetExtension(Command_RuledPayload::ext);
+        if (!command.ParseFromString(payload.payload()) || !isRuledUiOnlyCommand(command)) {
+            return true;
+        }
+    }
+    return false;
+}
+} // namespace
+
+bool GameEventHandler::beginRuledGameplayCommand()
+{
+    return ruledState && ruledState->beginEngineCommand();
+}
+
+void GameEventHandler::finishRuledGameplayCommand(quint64 token)
+{
+    if (token == ruledPendingCommandToken && ruledState) {
+        ruledState->finishEngineCommand();
+        const int localPlayerId = game->getPlayerManager()->getLocalPlayerId();
+        Player *localPlayer = game->getPlayerManager()->getPlayers().value(localPlayerId, nullptr);
+        if (localPlayer && localPlayer->getPlayerActions()) {
+            localPlayer->getPlayerActions()->resumePendingRuledPaymentAfterEngineCommand();
+        }
+    }
+}
+
 void GameEventHandler::sendRuledCommand(const ruled::v1::RuledCommand &command)
 {
     AbstractClient *client = game->getClientForPlayer(-1);
@@ -292,8 +337,19 @@ void GameEventHandler::sendRuledCommand(const ruled::v1::RuledCommand &command)
     }
     Command_RuledPayload cmd;
     cmd.set_payload(payload);
+    const bool engineBound = !isRuledUiOnlyCommand(command);
+    if (engineBound && !beginRuledGameplayCommand()) {
+        return;
+    }
+    const quint64 token = engineBound ? ++ruledPendingCommandToken : 0;
     PendingCommand *pend = prepareGameCommand(cmd);
     connect(pend, &PendingCommand::finished, this, &GameEventHandler::commandFinished);
+    if (engineBound) {
+        connect(pend, &PendingCommand::finished, this,
+                [this, token](const Response &, const CommandContainer &, const QVariant &) {
+                    finishRuledGameplayCommand(token);
+                });
+    }
     client->sendCommand(pend);
 }
 
@@ -302,18 +358,33 @@ void GameEventHandler::sendRuledCommandExpectingAck(const ruled::v1::RuledComman
 {
     AbstractClient *client = game->getClientForPlayer(-1);
     if (!client) {
+        onFinished(false);
         return;
     }
     std::string payload;
     if (!command.SerializeToString(&payload)) {
+        onFinished(false);
         return;
     }
     Command_RuledPayload cmd;
     cmd.set_payload(payload);
+    const bool engineBound = !isRuledUiOnlyCommand(command);
+    if (engineBound && !beginRuledGameplayCommand()) {
+        onFinished(false);
+        return;
+    }
+    const quint64 token = engineBound ? ++ruledPendingCommandToken : 0;
     PendingCommand *pend = prepareGameCommand(cmd);
     QObject::connect(
         pend, &PendingCommand::finished, this,
-        [handler = std::move(onFinished)](const Response &response, const CommandContainer &, const QVariant &) {
+        [this, engineBound, token, handler = std::move(onFinished)](const Response &response, const CommandContainer &,
+                                                                   const QVariant &) {
+            if (engineBound && token != ruledPendingCommandToken) {
+                return;
+            }
+            if (engineBound) {
+                finishRuledGameplayCommand(token);
+            }
             handler(response.response_code() == Response::RespOk);
         });
     client->sendCommand(pend);
@@ -361,10 +432,25 @@ void GameEventHandler::scheduleSpellTargetArrowSync()
 void GameEventHandler::sendGameCommand(PendingCommand *pend, int playerId)
 {
     AbstractClient *client = game->getClientForPlayer(playerId);
-    if (!client)
+    if (!client) {
+        delete pend;
         return;
+    }
+
+    const bool engineBound = RuledActions::isRuledGame(game) && containsEngineBoundRuledCommand(pend);
+    if (engineBound && !beginRuledGameplayCommand()) {
+        delete pend;
+        return;
+    }
+    const quint64 token = engineBound ? ++ruledPendingCommandToken : 0;
 
     connect(pend, &PendingCommand::finished, this, &GameEventHandler::commandFinished);
+    if (engineBound) {
+        connect(pend, &PendingCommand::finished, this,
+                [this, token](const Response &, const CommandContainer &, const QVariant &) {
+                    finishRuledGameplayCommand(token);
+                });
+    }
     client->sendCommand(pend);
 }
 
@@ -383,9 +469,7 @@ void GameEventHandler::sendGameCommand(const google::protobuf::Message &command,
         return;
     }
 
-    PendingCommand *pend = prepareGameCommand(command);
-    connect(pend, &PendingCommand::finished, this, &GameEventHandler::commandFinished);
-    client->sendCommand(pend);
+    sendGameCommand(prepareGameCommand(command), playerId);
 }
 
 void GameEventHandler::commandFinished(const Response &response)
@@ -941,6 +1025,9 @@ void GameEventHandler::syncRuledSpellTargetingArrows()
 
 void GameEventHandler::clearRuledSessionState(RuledSessionResetScope scope)
 {
+    // Invalidate a response callback from the old session before the view model unlocks. It must
+    // not be able to clear a newer command sent after this reset.
+    ++ruledPendingCommandToken;
     // Remove synthetic ability cards from their zones before the state clears the maps.
     const QList<quint32> syntheticOids = syntheticAbilityStackCards.keys();
     for (const quint32 oid : syntheticOids) {

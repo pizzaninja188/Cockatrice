@@ -177,6 +177,8 @@ private:
     void sendRuledCommand(const ruled::v1::RuledCommand &command) override;
     void sendRuledCommandExpectingAck(const ruled::v1::RuledCommand &command,
                                       std::function<void(bool accepted)> onFinished) override;
+    [[nodiscard]] bool beginRuledGameplayCommand();
+    void finishRuledGameplayCommand(quint64 token);
     void requestResolutionChoiceDialog(const QString &prompt,
                                        const QVector<quint32> &candidateOids,
                                        const QStringList &candidateNames,
@@ -202,6 +204,7 @@ private:
     QHash<quint32, QPointer<CardItem>> syntheticAbilityStackCards;
     QList<QPair<Player *, int>> ruledSpellTargetSyntheticArrows;
     int nextRuledSpellTargetArrowId = -2;
+    quint64 ruledPendingCommandToken = 0;
 };
 
 #endif // COCKATRICE_GAME_EVENT_HANDLER_H

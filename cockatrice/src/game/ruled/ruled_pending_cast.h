@@ -87,6 +87,37 @@ struct PendingRuledSpellCast
     int activeModePosition = -1;
 };
 
+enum class RuledPendingPaymentAction
+{
+    None,
+    CastSpell,
+    ActivateAbility,
+};
+
+/// Identify a locally staged spell or ability whose last mana pip was consumed while another
+/// engine command (normally that mana ability) was still in flight. The caller invokes this after
+/// the command lock clears and submits the returned action.
+[[nodiscard]] inline RuledPendingPaymentAction
+readyRuledPendingPaymentAction(const PendingRuledSpellCast &spell, const PendingActivatedAbility &ability)
+{
+    const auto costIsPaid = [](const QMap<QChar, int> &fixed, const QVector<RuledFlexPip> &flex) {
+        for (auto it = fixed.constBegin(); it != fixed.constEnd(); ++it) {
+            if (it.value() > 0) {
+                return false;
+            }
+        }
+        return flex.isEmpty();
+    };
+    if (spell.valid && !spell.waitingForTarget && !spell.inDamageAllocationMode &&
+        costIsPaid(spell.remainingCost, spell.flexPips)) {
+        return RuledPendingPaymentAction::CastSpell;
+    }
+    if (ability.valid && !ability.waitingForTarget && costIsPaid(ability.remainingCost, ability.flexPips)) {
+        return RuledPendingPaymentAction::ActivateAbility;
+    }
+    return RuledPendingPaymentAction::None;
+}
+
 class RuledPendingCast
 {
 public:

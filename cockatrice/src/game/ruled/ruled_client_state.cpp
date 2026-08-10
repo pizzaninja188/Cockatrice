@@ -3,10 +3,48 @@
 #include "ruled_client_host.h"
 
 #include <algorithm>
+#include <QTimer>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 
 RuledClientState::RuledClientState(RuledClientHost *_host, QObject *parent) : QObject(parent), host(_host)
 {
+}
+
+bool RuledClientState::beginEngineCommand()
+{
+    if (engineCommandPending) {
+        return false;
+    }
+    engineCommandPending = true;
+    engineCommandIndicatorVisible = false;
+    const quint64 generation = ++engineCommandGeneration;
+    emit engineCommandPendingUiChanged();
+    QTimer::singleShot(150, this, [this, generation] {
+        if (engineCommandPending && engineCommandGeneration == generation) {
+            showEngineCommandIndicator();
+        }
+    });
+    return true;
+}
+
+void RuledClientState::showEngineCommandIndicator()
+{
+    if (!engineCommandPending || engineCommandIndicatorVisible) {
+        return;
+    }
+    engineCommandIndicatorVisible = true;
+    emit engineCommandPendingUiChanged();
+}
+
+void RuledClientState::finishEngineCommand()
+{
+    ++engineCommandGeneration;
+    if (!engineCommandPending && !engineCommandIndicatorVisible) {
+        return;
+    }
+    engineCommandPending = false;
+    engineCommandIndicatorVisible = false;
+    emit engineCommandPendingUiChanged();
 }
 
 // ---------------------------------------------------------------------------------------
@@ -760,8 +798,10 @@ void RuledClientState::openingBottomDone()
     const QList<int> clickOrder = openingBottomSelectedIndices;
     clearOpeningBottomSelection(false);
     notifyHandUiChanged();
-    // Send in click order. Each sent command removes a card from the engine hand Vec, shifting all
-    // higher indices down by one. Adjust each index for prior removals.
+    // Each accepted command removes a card from the engine hand Vec, shifting all higher indices
+    // down by one. Compute the adjusted sequence up front, then wait for each acknowledgement so
+    // the global one-gameplay-command lock never drops or reorders a bottoming choice.
+    QList<int> adjustedIndices;
     for (int k = 0; k < clickOrder.size(); ++k) {
         const int orig = clickOrder[k];
         int adjusted = orig;
@@ -770,10 +810,24 @@ void RuledClientState::openingBottomDone()
                 --adjusted;
             }
         }
-        ruled::v1::RuledCommand ruledCommand;
-        ruledCommand.mutable_put_opening_hand_on_bottom()->set_hand_card_index(static_cast<quint32>(adjusted));
-        host->sendRuledCommand(ruledCommand);
+        adjustedIndices.append(adjusted);
     }
+    sendOpeningBottomCommandSequence(adjustedIndices, 0);
+}
+
+void RuledClientState::sendOpeningBottomCommandSequence(const QList<int> &adjustedIndices, int position)
+{
+    if (position < 0 || position >= adjustedIndices.size()) {
+        return;
+    }
+    ruled::v1::RuledCommand ruledCommand;
+    ruledCommand.mutable_put_opening_hand_on_bottom()->set_hand_card_index(
+        static_cast<quint32>(adjustedIndices[position]));
+    host->sendRuledCommandExpectingAck(ruledCommand, [this, adjustedIndices, position](bool accepted) {
+        if (accepted) {
+            sendOpeningBottomCommandSequence(adjustedIndices, position + 1);
+        }
+    });
 }
 
 // ---------------------------------------------------------------------------------------
@@ -1046,6 +1100,7 @@ void RuledClientState::unregisterSyntheticStackCard(quint32 virtualOid, int fake
 
 void RuledClientState::clearSessionState(RuledSessionResetScope scope)
 {
+    finishEngineCommand();
     // Pending choice + the trigger stack bookkeeping that outlives it.
     clearPendingChoice();
     lastTriggerSourceOid = 0;

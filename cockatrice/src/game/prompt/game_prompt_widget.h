@@ -28,6 +28,11 @@ public:
     {
         /// Priority / combat layout: the pass button, the combat declare buttons, undo.
         Normal,
+        /// A ruled gameplay command is in flight. Keep the existing prompt text during the short
+        /// no-indicator window, but suppress every gameplay control immediately.
+        CommandPending,
+        /// The same input lock after its 150 ms threshold; owns the waiting status line.
+        UpdatingGame,
         /// A cast or activated ability is collecting X, mana or targets. Never pushed by the
         /// caller — derived from the targeting sources, which arrive on independent signals.
         Targeting,

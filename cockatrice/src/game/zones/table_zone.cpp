@@ -300,6 +300,9 @@ void TableZone::toggleTapped()
     if (ruledGame && localPlayerId != priorityPlayer) {
         return;
     }
+    if (ruledGame && RuledActions::gameplayInputLocked(getLogic()->getPlayer()->getGame())) {
+        return;
+    }
     if (ruledGame) {
         const RuledClientState *handler = getLogic()->getPlayer()->getGame()->getGameEventHandler()->ruled();
         const auto combatPhase = handler->getCombatPhase();

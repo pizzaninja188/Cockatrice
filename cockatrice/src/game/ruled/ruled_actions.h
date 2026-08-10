@@ -50,6 +50,9 @@ namespace RuledActions
 /// The ruled view model for this game, or nullptr when the game is freeform / unavailable.
 [[nodiscard]] RuledClientState *stateFor(const AbstractGame *game);
 [[nodiscard]] RuledClientState *stateForCard(const CardItem *card);
+/// True only while a server-authoritative gameplay command is awaiting completion. UI-only policy
+/// and combat-preview messages do not enter this state.
+[[nodiscard]] bool gameplayInputLocked(const AbstractGame *game);
 
 /// Tell the view model which graveyard OIDs the pending cast of `handSlot`/`faceIndex` may target,
 /// so `TabGame` can open the right players' graveyard views. Pass `handSlot < 0` to retract the

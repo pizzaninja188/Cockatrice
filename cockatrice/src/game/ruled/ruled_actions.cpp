@@ -100,6 +100,12 @@ RuledClientState *stateFor(const AbstractGame *game)
     return handler ? handler->ruled() : nullptr;
 }
 
+bool gameplayInputLocked(const AbstractGame *game)
+{
+    const RuledClientState *state = stateFor(game);
+    return state && state->isEngineCommandPending();
+}
+
 void updateGraveyardTargetHint(const Player *player, int handSlot, int faceIndex)
 {
     if (!player) {
@@ -517,7 +523,7 @@ namespace
 quint32 combatClickOid(const CardItem *card, RuledClientState **outState)
 {
     RuledClientState *state = stateForCard(card);
-    if (!state || !isCombatEligibleCreature(card)) {
+    if (!state || state->isEngineCommandPending() || !isCombatEligibleCreature(card)) {
         return 0;
     }
     Player *owner = card->getOwner();

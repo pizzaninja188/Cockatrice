@@ -1,5 +1,439 @@
 use crate::helpers::*;
 use prost::Message;
+use tricerules_proto::ruled::v1::{AutoPassPolicy, CanonicalGameplayCommand, PhaseId};
+
+fn canonical_with_policies(inner: RuledCommand, policies: Vec<AutoPassPolicy>) -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::CanonicalGameplay(CanonicalGameplayCommand {
+            command: inner.encode_to_vec(),
+            auto_pass_policies: policies,
+        })),
+    }
+}
+
+fn auto_pass_everywhere(player_id: i32) -> AutoPassPolicy {
+    AutoPassPolicy {
+        player_id,
+        stop_on_own_turn: vec![],
+        stop_on_opponent_turn: vec![],
+    }
+}
+
+fn all_land_decks() -> Option<Vec<Vec<String>>> {
+    Some(vec![vec!["forest".into(); 20], vec!["mountain".into(); 20]])
+}
+
+#[test]
+fn canonical_settlement_does_not_infer_a_stop_from_a_legal_land_play() {
+    let mut e = GameEngine::new(9901, &[0, 1], 20, all_land_decks(), true).expect("new");
+    let batch = e
+        .apply_command(
+            0,
+            &canonical_with_policies(
+                pass(),
+                vec![
+                    AutoPassPolicy {
+                        player_id: 0,
+                        stop_on_own_turn: vec![PhaseId::BeginCombat as i32],
+                        stop_on_opponent_turn: vec![],
+                    },
+                    AutoPassPolicy {
+                        player_id: 1,
+                        stop_on_own_turn: vec![],
+                        stop_on_opponent_turn: vec![PhaseId::BeginCombat as i32],
+                    },
+                ],
+            ),
+        )
+        .expect("canonical pass settles");
+
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::BeginCombat);
+    let phases: Vec<_> = batch
+        .events
+        .iter()
+        .filter_map(|event| match event.ev.as_ref() {
+            Some(Ev::PhaseChanged(phase)) => Some(phase.phase_id),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(phases, vec![PhaseId::BeginCombat as i32]);
+    assert_eq!(
+        batch
+            .events
+            .iter()
+            .filter(|event| matches!(event.ev, Some(Ev::PriorityChanged(_))))
+            .count(),
+        1,
+        "only the settled priority holder is published"
+    );
+    assert_eq!(
+        batch
+            .events
+            .iter()
+            .filter(|event| matches!(event.ev, Some(Ev::ZoneView(_))))
+            .count(),
+        1,
+        "intermediate phase zone views are suppressed"
+    );
+}
+
+#[test]
+fn canonical_turn_roll_publishes_untap_and_draw_after_coalescing() {
+    let mut e = GameEngine::new(9909, &[0, 1], 20, all_land_decks(), true).expect("new");
+    let forest_oid = inject_permanent_on_battlefield(&mut e, 1, "forest");
+    e.state.objects.get_mut(&forest_oid).expect("forest").tapped = true;
+    e.state.turn_step = tricerules_core::TurnStep::EndStep;
+    e.state.active_player_idx = 0;
+    e.state.priority_idx = 0;
+    e.state.passes_since_stack_change = 0;
+    let hand_before = e.state.players[1].hand.len();
+    let _ = e.initial_response_batch();
+
+    let batch = e
+        .apply_command(
+            0,
+            &canonical_with_policies(
+                pass(),
+                vec![
+                    auto_pass_everywhere(0),
+                    AutoPassPolicy {
+                        player_id: 1,
+                        stop_on_own_turn: vec![PhaseId::Draw as i32],
+                        stop_on_opponent_turn: vec![],
+                    },
+                ],
+            ),
+        )
+        .expect("canonical turn roll");
+
+    assert_eq!(e.state.active_player_id(), 1);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Draw);
+    assert_eq!(e.state.players[1].hand.len(), hand_before + 1);
+    assert!(!e.state.objects[&forest_oid].tapped);
+    assert!(batch.events.iter().any(|event| {
+        matches!(
+            event.ev.as_ref(),
+            Some(Ev::PermanentsUntapped(untapped)) if untapped.object_ids.contains(&forest_oid)
+        )
+    }));
+
+    let view = batch
+        .events
+        .iter()
+        .find_map(|event| match event.ev.as_ref() {
+            Some(Ev::ZoneView(view)) => Some(view),
+            _ => None,
+        })
+        .expect("settled zone view");
+    assert!(!view.battlefields_unchanged);
+    let player_view = view
+        .per_player
+        .iter()
+        .find(|player| player.player_id == 1)
+        .expect("active player view");
+    assert!(!player_view.private_zones_unchanged);
+    assert!(player_view
+        .battlefield_objects
+        .iter()
+        .any(|object| object.object_id == forest_oid && !object.tapped));
+}
+
+#[test]
+fn canonical_settlement_stops_at_configured_phase() {
+    let mut e = GameEngine::new(9902, &[0, 1], 20, all_land_decks(), true).expect("new");
+    let batch = e
+        .apply_command(
+            0,
+            &canonical_with_policies(
+                pass(),
+                vec![
+                    AutoPassPolicy {
+                        player_id: 0,
+                        stop_on_own_turn: vec![PhaseId::Draw as i32],
+                        stop_on_opponent_turn: vec![],
+                    },
+                    auto_pass_everywhere(1),
+                ],
+            ),
+        )
+        .expect("canonical pass settles to configured stop");
+
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Draw);
+    assert_eq!(
+        batch
+            .events
+            .iter()
+            .filter_map(|event| match event.ev.as_ref() {
+                Some(Ev::PhaseChanged(phase)) => Some(phase.phase_id),
+                _ => None,
+            })
+            .collect::<Vec<_>>(),
+        vec![PhaseId::Draw as i32]
+    );
+}
+
+#[test]
+fn missing_auto_pass_policy_stops_conservatively() {
+    let mut e = GameEngine::new(9903, &[0, 1], 20, all_land_decks(), true).expect("new");
+    e.apply_command(
+        0,
+        &canonical_with_policies(pass(), vec![auto_pass_everywhere(0)]),
+    )
+    .expect("explicit pass remains accepted");
+
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
+    assert_eq!(e.state.priority_player_id(), 1);
+}
+
+#[test]
+fn canonical_settlement_stops_with_a_spell_on_the_stack() {
+    let decks = Some(vec![
+        vec![
+            "mountain".into(),
+            "lightning_bolt".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec!["forest".into(); 7],
+    ]);
+    let mut e = GameEngine::new(9904, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+    let bolt = hand_index_for_card(&e, 0, "lightning_bolt");
+    let batch = e
+        .apply_command(
+            0,
+            &canonical_with_policies(
+                cast_spell(bolt, target_player(1)),
+                vec![auto_pass_everywhere(0), auto_pass_everywhere(1)],
+            ),
+        )
+        .expect("canonical cast");
+
+    assert_eq!(e.state.stack.len(), 1);
+    assert_eq!(e.state.priority_player_id(), 0);
+    assert!(
+        batch
+            .events
+            .iter()
+            .any(|event| matches!(event.ev, Some(Ev::StackPushed(_)))),
+        "the meaningful stack event remains in the published batch"
+    );
+}
+
+#[test]
+fn canonical_resolution_publishes_new_creature_battlefield_snapshot() {
+    let decks = Some(vec![
+        vec![
+            "forest".into(),
+            "grizzly_bears".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+            "forest".into(),
+        ],
+        vec!["mountain".into(); 7],
+    ]);
+    let mut e = GameEngine::new(9910, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let _ = e.initial_response_batch();
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            g: 2,
+            ..Default::default()
+        },
+    );
+    let bears = hand_index_for_card(&e, 0, "grizzly_bears");
+    e.apply_command(0, &cast_spell(bears, vec![]))
+        .expect("cast creature");
+    e.apply_command(0, &pass()).expect("caster pass");
+
+    let resolved = e
+        .apply_command(
+            1,
+            &canonical_with_policies(
+                pass(),
+                vec![
+                    auto_pass_everywhere(0),
+                    AutoPassPolicy {
+                        player_id: 1,
+                        stop_on_own_turn: vec![],
+                        stop_on_opponent_turn: vec![PhaseId::Main1 as i32],
+                    },
+                ],
+            ),
+        )
+        .expect("opponent pass resolves and settles");
+
+    let creature_oid = *e.state.players[0]
+        .battlefield
+        .last()
+        .expect("creature resolved to battlefield");
+    let view = resolved
+        .events
+        .iter()
+        .find_map(|event| match event.ev.as_ref() {
+            Some(Ev::ZoneView(view)) => Some(view),
+            _ => None,
+        })
+        .expect("settled zone view");
+    assert!(
+        !view.battlefields_unchanged,
+        "the intermediate full view was suppressed, so the final published view must remain full"
+    );
+    let controller_view = view
+        .per_player
+        .iter()
+        .find(|player| player.player_id == 0)
+        .expect("controller view");
+    assert!(controller_view
+        .battlefield_objects
+        .iter()
+        .any(|object| object.object_id == creature_oid && object.is_creature));
+}
+
+#[test]
+fn automatic_settlement_stops_when_a_step_trigger_reaches_the_stack() {
+    let mut e = GameEngine::new(9908, &[0, 1], 20, all_land_decks(), true).expect("new");
+    inject_permanent_on_battlefield(&mut e, 0, "howling_mine");
+    let batch = e
+        .apply_command(
+            0,
+            &canonical_with_policies(
+                pass(),
+                vec![auto_pass_everywhere(0), auto_pass_everywhere(1)],
+            ),
+        )
+        .expect("settle to draw-step trigger");
+
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Draw);
+    assert_eq!(
+        e.state.stack.len(),
+        1,
+        "the trigger is a meaningful boundary"
+    );
+    assert!(batch
+        .events
+        .iter()
+        .any(|event| matches!(event.ev, Some(Ev::StackPushed(_)))));
+}
+
+#[test]
+fn regular_combat_damage_stop_also_stops_at_first_strike_damage() {
+    let mut e = GameEngine::new(9905, &[0, 1], 20, all_land_decks(), true).expect("new");
+    e.state.turn_step = tricerules_core::TurnStep::FirstStrikeDamage;
+    e.apply_command(
+        0,
+        &canonical_with_policies(
+            pass(),
+            vec![
+                auto_pass_everywhere(0),
+                AutoPassPolicy {
+                    player_id: 1,
+                    stop_on_own_turn: vec![],
+                    stop_on_opponent_turn: vec![PhaseId::CombatDamage as i32],
+                },
+            ],
+        ),
+    )
+    .expect("first priority pass");
+
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::FirstStrikeDamage
+    );
+    assert_eq!(e.state.priority_player_id(), 1);
+}
+
+#[test]
+fn automatic_settlement_publishes_terminal_draw_loss() {
+    let mut e = GameEngine::new(9906, &[0, 1], 20, all_land_decks(), true).expect("new");
+    e.state.turn = 2; // the starting player's turn-one draw is intentionally skipped (CR 103.8)
+    e.state.players[0].library.clear();
+    let batch = e
+        .apply_command(
+            0,
+            &canonical_with_policies(
+                pass(),
+                vec![auto_pass_everywhere(0), auto_pass_everywhere(1)],
+            ),
+        )
+        .expect("settle into terminal draw");
+
+    assert_eq!(e.state.winner, Some(1));
+    assert!(batch.events.iter().any(
+        |event| matches!(&event.ev, Some(Ev::Log(log)) if log.text == "Game over: empty library on draw")
+    ));
+    assert!(batch.legal_by_player.is_empty());
+}
+
+#[test]
+fn automatic_settlement_stops_at_the_safety_limit() {
+    let decks = Some(vec![
+        vec!["grizzly_bears".into(); 200],
+        vec!["grizzly_bears".into(); 200],
+    ]);
+    let mut e = GameEngine::new(9907, &[0, 1], 20, decks, true).expect("new");
+    e.state.players[0].hand.clear();
+    e.state.players[1].hand.clear();
+    let batch = e
+        .apply_command(
+            0,
+            &canonical_with_policies(
+                pass(),
+                vec![auto_pass_everywhere(0), auto_pass_everywhere(1)],
+            ),
+        )
+        .expect("bounded settlement");
+
+    assert_eq!(
+        e.state.command_index, 1,
+        "the transaction remains one replay command"
+    );
+    assert_eq!(e.state.winner, None);
+    assert!(
+        e.state.turn > 1,
+        "settlement crossed an active-player change"
+    );
+    assert_eq!(
+        batch
+            .events
+            .iter()
+            .filter(|event| matches!(event.ev, Some(Ev::PhaseChanged(_))))
+            .count(),
+        1
+    );
+    assert_eq!(
+        batch
+            .events
+            .iter()
+            .filter(|event| matches!(event.ev, Some(Ev::ZoneView(_))))
+            .count(),
+        1
+    );
+    let final_phase = batch
+        .events
+        .iter()
+        .find_map(|event| match event.ev.as_ref() {
+            Some(Ev::PhaseChanged(phase)) => Some(phase),
+            _ => None,
+        })
+        .expect("settled phase");
+    assert_eq!(final_phase.active_player_id, e.state.active_player_id());
+}
 
 fn engine_in_cleanup_with_excess(seed: u64, excess: usize) -> GameEngine {
     let mut e = GameEngine::new(seed, &[0, 1], 20, None, true).expect("new");

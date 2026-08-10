@@ -726,6 +726,9 @@ void CardItem::playCard(bool faceDown)
     if (tz) {
         if (auto *game = owner->getGame();
             RuledActions::isRuledGame(game)) {
+            if (RuledActions::gameplayInputLocked(game)) {
+                return;
+            }
             // Non-lands: no freeform click-to-tap. Face-up lands: still use table tap for local mana shortcut.
             if (!isTableLandSingleClickLegal(this) || faceDown) {
                 return;
@@ -846,6 +849,13 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
         const bool stationaryLeft = isStationaryLeftRelease(event);
         if (owner != nullptr) {
             auto *game = owner->getGame();
+            if (stationaryLeft && RuledActions::gameplayInputLocked(game)) {
+                // Keep the scene responsive and the last settled board visible, but do not let a
+                // second gameplay click mutate local staging while its predecessor is in flight.
+                setCursor(Qt::OpenHandCursor);
+                AbstractCardItem::mouseReleaseEvent(event);
+                return;
+            }
             auto *playerManager = game ? game->getPlayerManager() : nullptr;
             auto *localPlayer = playerManager ? playerManager->getPlayers().value(playerManager->getLocalPlayerId()) : nullptr;
             auto *actions = localPlayer ? localPlayer->getPlayerActions() : nullptr;

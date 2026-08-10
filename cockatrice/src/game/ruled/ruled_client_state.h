@@ -266,6 +266,23 @@ public:
     explicit RuledClientState(RuledClientHost *host, QObject *parent = nullptr);
 
     // -----------------------------------------------------------------------------------
+    // Local command lifecycle. The board keeps rendering the last settled engine batch while
+    // one gameplay command is in flight; this state only gates further gameplay input and owns
+    // the delayed prompt indicator.
+    // -----------------------------------------------------------------------------------
+    [[nodiscard]] bool beginEngineCommand();
+    void showEngineCommandIndicator();
+    void finishEngineCommand();
+    [[nodiscard]] bool isEngineCommandPending() const
+    {
+        return engineCommandPending;
+    }
+    [[nodiscard]] bool isEngineCommandIndicatorVisible() const
+    {
+        return engineCommandIndicatorVisible;
+    }
+
+    // -----------------------------------------------------------------------------------
     // Legal actions offered to the local player this batch.
     // -----------------------------------------------------------------------------------
     // One entry per hand-action kind the engine offered this batch; absent kind = nothing legal.
@@ -1074,6 +1091,8 @@ signals:
     /// Emitted when ruled game-session state is cleared (game stopped or new game started).
     /// Listeners should reset any UI state derived from the previous game's engine events.
     void sessionReset();
+    /// Immediate on begin/finish and again when the 150 ms waiting label becomes visible.
+    void engineCommandPendingUiChanged();
     /// Authoritative ruled-game timeline (lands, spells, combat, life) for the message log.
     void engineTimeline(QString message);
     /// Phase, priority, legal actions, and local UI hints for the ruled prompt panel only.
@@ -1129,6 +1148,8 @@ signals:
     void revealedPickChanged(bool started, QStringList cardNames, QVector<int> serverCardIds, int min, int max);
 
 private:
+    void sendOpeningBottomCommandSequence(const QList<int> &adjustedIndices, int position);
+
     /// Push the local player's in-progress attacker / block staging to the server so the opponent
     /// sees a live preview. No-ops outside the matching declare step or after submitting.
     void syncAttackersPreviewToServer();
@@ -1142,6 +1163,9 @@ private:
     void sendResolutionChoice(const QVector<quint32> &chosenOids);
 
     RuledClientHost *host;
+    bool engineCommandPending = false;
+    bool engineCommandIndicatorVisible = false;
+    quint64 engineCommandGeneration = 0;
 };
 
 #endif // COCKATRICE_RULED_CLIENT_STATE_H

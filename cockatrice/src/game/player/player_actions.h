@@ -123,6 +123,9 @@ public:
     /// through the same step a pool-counter click uses; pips the pending cost cannot use are left in
     /// the pool. No-op when nothing is pending payment, so pre-floated mana keeps the manual-click path.
     void autoApplyFloatedManaToPendingCost(const QString &counterName, int amount);
+    /// Resume the cast/activation whose last pip was paid by an engine mana-ability response while
+    /// the one-command lock was still active. No-op unless a staged action is fully paid.
+    void resumePendingRuledPaymentAfterEngineCommand();
     void cancelPendingActivatedAbility();
     /// Returns the mana-payment prompt text if an ability is pending and still needs mana, otherwise empty.
     [[nodiscard]] QString pendingRuledAbilityPromptText() const;

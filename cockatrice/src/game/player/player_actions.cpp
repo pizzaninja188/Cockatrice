@@ -519,7 +519,7 @@ void PlayerActions::undoLastLandTap()
     // an engine command (UndoManaAbility) that untaps the source and removes the floated mana. The
     // resulting batch refreshes undoable_mana_abilities, which drives the button back off when 0.
     if (RuledActions::isRuledGame(player->getGame())) {
-        if (ruledUndoableManaCount <= 0) {
+        if (RuledActions::gameplayInputLocked(player->getGame()) || ruledUndoableManaCount <= 0) {
             return;
         }
         ruled::v1::RuledCommand ruledCommand;
@@ -583,6 +583,9 @@ void PlayerActions::clearLandTapUndoStack()
 
 bool PlayerActions::completePendingRuledSpellCast()
 {
+    if (RuledActions::gameplayInputLocked(player->getGame())) {
+        return false;
+    }
     if (!pendingRuledSpellCast.valid || pendingRuledSpellCast.handIndex < 0) {
         clearPendingRuledSpellCast();
         return false;
@@ -655,6 +658,9 @@ bool PlayerActions::completePendingRuledSpellCast()
 
 bool PlayerActions::completeActivateAbility()
 {
+    if (RuledActions::gameplayInputLocked(player->getGame())) {
+        return false;
+    }
     if (!pendingActivatedAbility.valid || pendingActivatedAbility.waitingForTarget ||
         pendingActivatedAbility.waitingForMana) {
         return false;
@@ -826,7 +832,8 @@ QString PlayerActions::pendingRuledAbilityPromptText() const
 
 Command_RuledPayload *PlayerActions::newRuledPayloadActivateManaAbilityForLand(CardItem *card, QChar desiredColor)
 {
-    if (!card || !RuledActions::isRuledGame(player->getGame())) {
+    if (!card || !RuledActions::isRuledGame(player->getGame()) ||
+        RuledActions::gameplayInputLocked(player->getGame())) {
         return nullptr;
     }
     RuledClientState *handler = player->getGame()->getGameEventHandler()->ruled();
@@ -957,8 +964,29 @@ void PlayerActions::autoApplyFloatedManaToPendingCost(const QString &counterName
     }
 }
 
+void PlayerActions::resumePendingRuledPaymentAfterEngineCommand()
+{
+    if (RuledActions::gameplayInputLocked(player->getGame())) {
+        return;
+    }
+    switch (readyRuledPendingPaymentAction(pendingRuledSpellCast, pendingActivatedAbility)) {
+        case RuledPendingPaymentAction::CastSpell:
+            completePendingRuledSpellCast();
+            break;
+        case RuledPendingPaymentAction::ActivateAbility:
+            pendingActivatedAbility.waitingForMana = false;
+            completeActivateAbility();
+            break;
+        case RuledPendingPaymentAction::None:
+            break;
+    }
+}
+
 bool PlayerActions::sendRuledPlayLand(int handIndex, int faceIndex)
 {
+    if (RuledActions::gameplayInputLocked(player->getGame())) {
+        return false;
+    }
     ruled::v1::RuledCommand ruledCommand;
     auto *pl = ruledCommand.mutable_play_land();
     pl->set_hand_card_index(handIndex);
@@ -980,6 +1008,9 @@ bool PlayerActions::tryPlayRuledLand(CardItem *card)
 {
     if (!card || !RuledActions::isRuledGame(player->getGame())) {
         return false;
+    }
+    if (RuledActions::gameplayInputLocked(player->getGame())) {
+        return true;
     }
     if (card->getZone()->getName() != ZoneNames::HAND) {
         return false;
@@ -1014,6 +1045,9 @@ bool PlayerActions::tryRuledLandPlayFaceMenu(CardItem *card)
     }
     if (!RuledActions::isRuledGame(player->getGame())) {
         return false;
+    }
+    if (RuledActions::gameplayInputLocked(player->getGame())) {
+        return false; // preserve the ordinary right-click inspection menu
     }
     if (card->getZone()->getName() != ZoneNames::HAND) {
         return false;
@@ -1064,6 +1098,9 @@ bool PlayerActions::tryRuledOpeningBottomCard(CardItem *card)
     if (!player->getPlayerInfo()->getLocal()) {
         return false;
     }
+    if (RuledActions::gameplayInputLocked(player->getGame())) {
+        return true;
+    }
     if (card->getZone()->getName() != ZoneNames::HAND || card->getZone()->getPlayer() != player) {
         return false;
     }
@@ -1088,6 +1125,9 @@ bool PlayerActions::tryRuledResolutionHandPickCard(CardItem *card)
     }
     if (!player->getPlayerInfo()->getLocal()) {
         return false;
+    }
+    if (RuledActions::gameplayInputLocked(player->getGame())) {
+        return true;
     }
     RuledClientState *handler = player->getGame()->getGameEventHandler()->ruled();
     if (!handler || !handler->isResolutionHandPickActive()) {
@@ -1114,6 +1154,9 @@ bool PlayerActions::tryRuledTriggerOrderCard(CardItem *card)
     if (!player->getPlayerInfo()->getLocal()) {
         return false;
     }
+    if (RuledActions::gameplayInputLocked(player->getGame())) {
+        return true;
+    }
     RuledClientState *handler = player->getGame()->getGameEventHandler()->ruled();
     if (!handler || !handler->isTriggerOrderPickCard(card->getId())) {
         return false;
@@ -1131,6 +1174,9 @@ bool PlayerActions::tryToggleRuledCleanupDiscard(CardItem *card)
     }
     if (!player->getPlayerInfo()->getLocal()) {
         return false;
+    }
+    if (RuledActions::gameplayInputLocked(player->getGame())) {
+        return true;
     }
     if (card->getZone()->getName() != ZoneNames::HAND || card->getZone()->getPlayer() != player) {
         return false;
@@ -1155,6 +1201,9 @@ bool PlayerActions::tryToggleRuledCleanupDiscard(CardItem *card)
 bool PlayerActions::sendRuledCleanupDiscardBatchIfComplete()
 {
     if (!RuledActions::isRuledGame(player->getGame())) {
+        return false;
+    }
+    if (RuledActions::gameplayInputLocked(player->getGame())) {
         return false;
     }
     RuledClientState *h = player->getGame()->getGameEventHandler()->ruled();
@@ -1188,6 +1237,9 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
 {
     if (!card || !RuledActions::isRuledGame(player->getGame())) {
         return false;
+    }
+    if (RuledActions::gameplayInputLocked(player->getGame())) {
+        return true;
     }
     const bool fromHand = card->getZone()->getName() == ZoneNames::HAND;
     const bool fromPublicZone = card->getZone()->getName() == ZoneNames::GRAVE ||
@@ -1400,6 +1452,9 @@ bool PlayerActions::tryRuledSpellCastFaceMenu(CardItem *card)
     if (!RuledActions::isRuledGame(player->getGame())) {
         return false;
     }
+    if (RuledActions::gameplayInputLocked(player->getGame())) {
+        return false; // preserve the ordinary right-click inspection menu
+    }
     if (card->getZone()->getName() != ZoneNames::HAND) {
         return false;
     }
@@ -1439,6 +1494,9 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
 {
     if (!pendingRuledSpellCast.valid || !pendingRuledSpellCast.waitingForTarget) {
         return false;
+    }
+    if (RuledActions::gameplayInputLocked(player->getGame())) {
+        return true;
     }
     if (!card || !card->getZone()) {
         return true;
@@ -1594,6 +1652,9 @@ bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
 {
     if (!pendingRuledSpellCast.valid || !pendingRuledSpellCast.waitingForTarget) {
         return false;
+    }
+    if (RuledActions::gameplayInputLocked(player->getGame())) {
+        return true;
     }
     if (!targetPlayer || !RuledActions::isRuledGame(player->getGame())) {
         clearPendingRuledSpellCast();
@@ -3917,6 +3978,9 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     if (!RuledActions::isRuledGame(player->getGame())) {
         return false;
     }
+    if (RuledActions::gameplayInputLocked(player->getGame())) {
+        return leftClick; // left-click is consumed; right-click still opens inspection
+    }
     // Only show the ability menu when the local player actually has priority.
     {
         const int localId = player->getPlayerInfo()->getId();
@@ -4109,6 +4173,9 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
 bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
 {
     RuledClientState *handler = player->getGame()->getGameEventHandler()->ruled();
+    if (handler && handler->isEngineCommandPending()) {
+        return true;
+    }
 
     // Check pending copy target choice first (CR 707.10c: redirect targets for a spell copy).
     if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget)) {
@@ -4227,6 +4294,9 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
 bool PlayerActions::tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer)
 {
     RuledClientState *handler = player->getGame()->getGameEventHandler()->ruled();
+    if (handler && handler->isEngineCommandPending()) {
+        return true;
+    }
 
     // Check pending copy target choice first (CR 707.10c: redirect targets for a spell copy).
     if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget)) {

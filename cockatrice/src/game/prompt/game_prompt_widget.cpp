@@ -261,6 +261,8 @@ GamePromptWidget::PromptMode GamePromptWidget::effectiveMode() const
     // One priority chain, resolved here and nowhere else: a take-over mode outranks the
     // mid-cast targeting state, which outranks a parked click-a-permanent choice.
     switch (promptState.mode) {
+        case PromptMode::CommandPending:
+        case PromptMode::UpdatingGame:
         case PromptMode::ResolutionPick:
         // The engine is hard-blocked on the ordering answer, so a leftover mid-cast targeting
         // state cannot legitimately coexist with it — this takes over.
@@ -306,6 +308,12 @@ void GamePromptWidget::setRuledPromptState(RuledPromptState newState)
 void GamePromptWidget::applyPromptStateText()
 {
     switch (promptState.mode) {
+        case PromptMode::CommandPending:
+            // Preserve the last settled prompt during the sub-150 ms input lock.
+            return;
+        case PromptMode::UpdatingGame:
+            setPromptText(tr("Updating game%1").arg(QChar(0x2026)));
+            return;
         case PromptMode::CleanupDiscard:
             if (promptState.required > 0) {
                 setPromptText(tr("Cleanup — discard %2 card(s) to reach hand size 7. Selected: %1 of %2. Click hand "

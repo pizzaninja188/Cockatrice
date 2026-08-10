@@ -108,6 +108,14 @@ public:
     }
     [[nodiscard]] QString getLongPhaseName(int phase) const;
     [[nodiscard]] bool shouldStopAtPhase(int phase, bool myTurn) const;
+    [[nodiscard]] const std::array<bool, 11> &stopsOnMyTurn() const
+    {
+        return stopOnMyTurn;
+    }
+    [[nodiscard]] const std::array<bool, 11> &stopsOnOpponentTurn() const
+    {
+        return stopOnOpponentTurn;
+    }
     void syncButtonStopsFromState();
 public slots:
     void setActivePhase(int phase);
@@ -119,6 +127,9 @@ private slots:
     void actDrawCard();
 signals:
     void sendGameCommand(const ::google::protobuf::Message &command, int playerId);
+    /// A phase-stop preference changed. Ruled mode publishes the complete policy to Servatrice;
+    /// freeform ignores this signal and retains its local behavior.
+    void phaseStopsChanged();
 
 protected:
     void paint(QPainter *painter, const QStyleOptionGraphicsItem * /*option*/, QWidget * /*widget*/) override;

@@ -31,6 +31,9 @@ use tricerules_proto::ruled::v1::{
 
 /// CR 514.1: default maximum hand size (Reliquary Tower–style overrides not modeled yet).
 const MAX_HAND_SIZE: usize = 7;
+/// A malformed or future policy must never make one command spin forever. Reaching the cap leaves
+/// the engine at its current valid priority window and publishes that settled state.
+const MAX_AUTOMATIC_PRIORITY_PASSES: usize = 128;
 
 mod casting;
 mod characteristics;
@@ -255,7 +258,7 @@ pub struct GameEngine {
 /// Object ids, not card ids: `GameObject::card_id` is fixed for an object's lifetime (transform
 /// moves `face_up_index`, not `card_id`), so the oid sequence determines the card-id sequence
 /// exactly — and comparing oids does none of the string cloning the omission exists to avoid.
-#[derive(Default, PartialEq, Eq)]
+#[derive(Clone, Default, PartialEq, Eq)]
 struct PrivateZoneSnapshot {
     hand: Vec<ObjectId>,
     library: Vec<ObjectId>,
@@ -653,6 +656,34 @@ impl GameEngine {
             return Err(EngineError::Illegal("game over"));
         }
         use rv1::ruled_command::Cmd;
+        if let Some(Cmd::CanonicalGameplay(canonical)) = cmd.cmd.as_ref() {
+            self.validate_auto_pass_policies(&canonical.auto_pass_policies)?;
+            let inner = RuledCommand::decode(canonical.command.as_slice())
+                .map_err(|_| EngineError::Illegal("invalid canonical gameplay command"))?;
+            return self.apply_gameplay_command(
+                player,
+                &inner,
+                Some(&canonical.auto_pass_policies),
+            );
+        }
+        self.apply_gameplay_command(player, cmd, None)
+    }
+
+    fn apply_gameplay_command(
+        &mut self,
+        player: PlayerId,
+        cmd: &RuledCommand,
+        auto_pass_policies: Option<&[rv1::AutoPassPolicy]>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        use rv1::ruled_command::Cmd;
+        if matches!(
+            cmd.cmd.as_ref(),
+            Some(Cmd::SetAutoPassPolicy(_) | Cmd::CanonicalGameplay(_))
+        ) {
+            return Err(EngineError::Illegal(
+                "UI-only or nested canonical command is not gameplay",
+            ));
+        }
         if matches!(
             cmd.cmd.as_ref(),
             Some(Cmd::PreviewDeclareBlockers(_) | Cmd::PreviewDeclareAttackers(_))
@@ -670,7 +701,23 @@ impl GameEngine {
         // `set_tapped` appends to this while the command runs; anything left over from an earlier
         // command (or from a rejected one, which never drains) is stale by definition.
         self.state.untapped_this_command.clear();
+        // Canonical settlement may discard every intermediate ZoneView and publish one final
+        // replacement. Preserve the cache that describes what was actually published before this
+        // command: generating those soon-to-be-discarded views advances the live cache, and using
+        // that advanced value would incorrectly mark the final replacement as unchanged.
+        let zone_view_cache_before = auto_pass_policies.map(|_| {
+            (
+                self.private_zone_cache.clone(),
+                self.battlefield_view_cache.clone(),
+                self.first_strike_step_pending_cache,
+            )
+        });
         let mut result = self.dispatch_command(player, cmd);
+        if let (Ok(batch), Some(policies), Some(cache_before)) =
+            (result.as_mut(), auto_pass_policies, zone_view_cache_before)
+        {
+            self.settle_automatic_priority(policies, batch, cache_before)?;
+        }
         // Replay determinism: `command_index` seeds shuffles (mulligan/search) and stamps
         // continuous-effect timestamps (CR 613.7). Only a command that is actually applied may
         // advance it — a rejected command must leave it untouched, otherwise replay (which
@@ -703,6 +750,215 @@ impl GameEngine {
             "triggers left staged with nothing blocking them"
         );
         result
+    }
+
+    fn validate_auto_pass_policies(
+        &self,
+        policies: &[rv1::AutoPassPolicy],
+    ) -> Result<(), EngineError> {
+        let mut previous_player_id = None;
+        let mut seen_players = HashSet::new();
+        for policy in policies {
+            if self.state.player_idx(policy.player_id).is_none() {
+                return Err(EngineError::Illegal("auto-pass policy has unknown player"));
+            }
+            if previous_player_id.is_some_and(|previous| policy.player_id <= previous) {
+                return Err(EngineError::Illegal(
+                    "auto-pass policies must be sorted and unique",
+                ));
+            }
+            if !seen_players.insert(policy.player_id) {
+                return Err(EngineError::Illegal("duplicate auto-pass policy player"));
+            }
+            previous_player_id = Some(policy.player_id);
+            Self::validate_auto_pass_stop_list(&policy.stop_on_own_turn)?;
+            Self::validate_auto_pass_stop_list(&policy.stop_on_opponent_turn)?;
+        }
+        Ok(())
+    }
+
+    fn validate_auto_pass_stop_list(stops: &[i32]) -> Result<(), EngineError> {
+        let mut seen = HashSet::new();
+        for &raw_phase in stops {
+            let phase = rv1::PhaseId::try_from(raw_phase)
+                .map_err(|_| EngineError::Illegal("auto-pass policy has invalid phase"))?;
+            if !matches!(
+                phase,
+                rv1::PhaseId::Upkeep
+                    | rv1::PhaseId::Draw
+                    | rv1::PhaseId::Main1
+                    | rv1::PhaseId::BeginCombat
+                    | rv1::PhaseId::DeclareAttackers
+                    | rv1::PhaseId::DeclareBlockers
+                    | rv1::PhaseId::FirstStrikeDamage
+                    | rv1::PhaseId::CombatDamage
+                    | rv1::PhaseId::EndCombat
+                    | rv1::PhaseId::Main2
+                    | rv1::PhaseId::EndStep
+            ) {
+                return Err(EngineError::Illegal(
+                    "auto-pass policy has non-stoppable phase",
+                ));
+            }
+            if !seen.insert(raw_phase) {
+                return Err(EngineError::Illegal("duplicate auto-pass policy phase"));
+            }
+        }
+        Ok(())
+    }
+
+    fn current_phase_id(&self) -> rv1::PhaseId {
+        match self.state.turn_step {
+            TurnStep::Untap => rv1::PhaseId::Untap,
+            TurnStep::Upkeep => rv1::PhaseId::Upkeep,
+            TurnStep::Draw => rv1::PhaseId::Draw,
+            TurnStep::Main1 => rv1::PhaseId::Main1,
+            TurnStep::BeginCombat => rv1::PhaseId::BeginCombat,
+            TurnStep::DeclareAttackers => rv1::PhaseId::DeclareAttackers,
+            TurnStep::DeclareBlockers => {
+                if self
+                    .state
+                    .combat
+                    .as_ref()
+                    .is_some_and(|combat| combat.assign_combat_damage_phase)
+                {
+                    rv1::PhaseId::AssignCombatDamage
+                } else {
+                    rv1::PhaseId::DeclareBlockers
+                }
+            }
+            TurnStep::FirstStrikeDamage => rv1::PhaseId::FirstStrikeDamage,
+            TurnStep::CombatDamage => rv1::PhaseId::CombatDamage,
+            TurnStep::EndCombat => rv1::PhaseId::EndCombat,
+            TurnStep::Main2 => rv1::PhaseId::Main2,
+            TurnStep::EndStep => rv1::PhaseId::EndStep,
+            TurnStep::Cleanup => rv1::PhaseId::Cleanup,
+        }
+    }
+
+    fn policy_stops_at_current_phase(&self, policy: &rv1::AutoPassPolicy) -> bool {
+        let stops = if policy.player_id == self.state.active_player_id() {
+            &policy.stop_on_own_turn
+        } else {
+            &policy.stop_on_opponent_turn
+        };
+        let phase = self.current_phase_id();
+        if matches!(
+            phase,
+            rv1::PhaseId::FirstStrikeDamage | rv1::PhaseId::CombatDamage
+        ) {
+            return stops.contains(&(rv1::PhaseId::FirstStrikeDamage as i32))
+                || stops.contains(&(rv1::PhaseId::CombatDamage as i32));
+        }
+        stops.contains(&(phase as i32))
+    }
+
+    fn can_automatically_pass_priority(&self, policies: &[rv1::AutoPassPolicy]) -> bool {
+        if self.state.winner.is_some()
+            || self.state.opening.is_some()
+            || self.state.blocking_choice().is_some()
+            || !self.state.stack.is_empty()
+            || self.state.cleanup_discard_player.is_some()
+        {
+            return false;
+        }
+        if self.state.combat.as_ref().is_some_and(|combat| {
+            (self.state.turn_step == TurnStep::DeclareAttackers && !combat.attackers_declared)
+                || (self.state.turn_step == TurnStep::DeclareBlockers
+                    && (!combat.blockers_declared
+                        || combat.damage_assignment_needed
+                        || combat.assign_combat_damage_phase))
+        }) {
+            return false;
+        }
+        let priority_player = self.state.priority_player_id();
+        let Some(policy) = policies
+            .iter()
+            .find(|policy| policy.player_id == priority_player)
+        else {
+            return false;
+        };
+        !self.policy_stops_at_current_phase(policy)
+    }
+
+    fn settle_automatic_priority(
+        &mut self,
+        policies: &[rv1::AutoPassPolicy],
+        batch: &mut RuledEventBatch,
+        zone_view_cache_before: (
+            HashMap<PlayerId, PrivateZoneSnapshot>,
+            Option<BattlefieldViewSnapshot>,
+            bool,
+        ),
+    ) -> Result<(), EngineError> {
+        let mut automatic_passes = 0;
+        while automatic_passes < MAX_AUTOMATIC_PRIORITY_PASSES
+            && self.can_automatically_pass_priority(policies)
+        {
+            let priority_player = self.state.priority_player_id();
+            let mut next = self.pass_priority(priority_player)?;
+            // Internal passes bypass dispatch_command's normal post-command trigger flush. A
+            // beginning-of-step trigger must reach the stack (or its ordering/target prompt)
+            // before the settlement policy decides whether another priority pass is harmless.
+            self.flush_staged_triggers(&mut next.events);
+            batch.events.extend(next.events);
+            automatic_passes += 1;
+        }
+        use rv1::ruled_event::Ev;
+        let mut published_phase_count = 0;
+        let mut published_priority_count = 0;
+        let mut published_zone_view_count = 0;
+        let mut published_mana_pool_count = 0;
+        for event in &batch.events {
+            match event.ev.as_ref() {
+                Some(Ev::PhaseChanged(_)) => published_phase_count += 1,
+                Some(Ev::PriorityChanged(_)) => published_priority_count += 1,
+                Some(Ev::ZoneView(_)) => published_zone_view_count += 1,
+                Some(Ev::ManaPoolUpdated(_)) => published_mana_pool_count += 1,
+                _ => {}
+            }
+        }
+        if automatic_passes == 0
+            && published_phase_count <= 1
+            && published_priority_count <= 1
+            && published_zone_view_count <= 1
+            && published_mana_pool_count <= self.state.players.len()
+        {
+            return Ok(());
+        }
+        let mut saw_phase = false;
+        let mut saw_priority = false;
+        batch.events.retain(|event| match event.ev.as_ref() {
+            Some(Ev::PhaseChanged(_)) => {
+                saw_phase = true;
+                false
+            }
+            Some(Ev::PriorityChanged(_)) => {
+                saw_priority = true;
+                false
+            }
+            Some(Ev::ZoneView(_) | Ev::ManaPoolUpdated(_)) => false,
+            _ => true,
+        });
+        if saw_phase {
+            batch
+                .events
+                .insert(0, events::ev_phase(self, self.current_phase_id()));
+        }
+        if saw_priority && self.state.winner.is_none() && self.state.blocking_choice().is_none() {
+            batch.events.push(events::ev_priority_changed(self));
+        }
+        (
+            self.private_zone_cache,
+            self.battlefield_view_cache,
+            self.first_strike_step_pending_cache,
+        ) = zone_view_cache_before;
+        batch.events.push(self.ev_zone_view_sync_tracked());
+        for player_index in 0..self.state.players.len() {
+            batch.events.push(self.ev_mana_pool_updated(player_index));
+        }
+        legal_actions::fill_legal(batch, self);
+        Ok(())
     }
 
     /// Apply a single accepted command, mutating state and producing its event batch. Called by
@@ -775,6 +1031,9 @@ impl GameEngine {
             None => return Err(EngineError::Illegal("empty command")),
             Some(Cmd::PreviewDeclareBlockers(_) | Cmd::PreviewDeclareAttackers(_)) => {
                 unreachable!("preview rejected before command_index bump")
+            }
+            Some(Cmd::SetAutoPassPolicy(_) | Cmd::CanonicalGameplay(_)) => {
+                unreachable!("UI-only and canonical commands rejected before dispatch")
             }
             Some(Cmd::Mulligan(_)) => {
                 return Err(EngineError::Illegal("mulligan only during opening"));

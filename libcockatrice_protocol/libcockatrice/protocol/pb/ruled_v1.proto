@@ -73,7 +73,34 @@ message RuledCommand {
     // Answer an outstanding TriggerOrderRequired: the order this player's simultaneous triggered
     // abilities are put on the stack (CR 603.3b).
     SubmitTriggerOrder submit_trigger_order = 23;
+    // UI-only: replace the authenticated sender's phase-stop preferences. Servatrice caches this
+    // command and never forwards or records it; engine-bound commands instead carry the complete,
+    // server-authored auto_pass_policies snapshot below.
+    SetAutoPassPolicy set_auto_pass_policy = 24;
+    // Servatrice-only envelope for an authenticated gameplay command plus the complete policy
+    // snapshot. Clients may not send this variant; replay records and re-applies it verbatim.
+    CanonicalGameplayCommand canonical_gameplay = 25;
   }
+}
+
+message SetAutoPassPolicy {
+  repeated PhaseId stop_on_own_turn = 1;
+  repeated PhaseId stop_on_opponent_turn = 2;
+}
+
+message AutoPassPolicy {
+  int32 player_id = 1;
+  repeated PhaseId stop_on_own_turn = 2;
+  repeated PhaseId stop_on_opponent_turn = 3;
+}
+
+message CanonicalGameplayCommand {
+  // Serialized RuledCommand containing one ordinary engine command. Nested canonical/UI-only
+  // commands are rejected by both Servatrice and the engine.
+  bytes command = 1;
+  // Servatrice-authored rows for seated players, sorted by player_id. An absent player row means
+  // "stop", preserving conservative behavior for reconnect/startup races.
+  repeated AutoPassPolicy auto_pass_policies = 2;
 }
 
 // Undo the most recent undoable mana ability for the commanding player (no payload needed; the

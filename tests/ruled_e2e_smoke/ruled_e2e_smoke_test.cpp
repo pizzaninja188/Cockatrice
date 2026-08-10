@@ -67,6 +67,7 @@
 #include <libcockatrice/protocol/pb/event_move_card.pb.h>
 #include <libcockatrice/protocol/pb/event_notify_user.pb.h>
 #include <libcockatrice/protocol/pb/event_ruled_payload.pb.h>
+#include <libcockatrice/protocol/pb/event_set_card_attr.pb.h>
 #include <libcockatrice/protocol/pb/game_commands.pb.h>
 #include <libcockatrice/protocol/pb/game_event.pb.h>
 #include <libcockatrice/utility/zone_names.h>
@@ -187,6 +188,8 @@ public:
     int activePlayer = -1;
     int priorityPlayer = -1;
     int stackDepth = 0;
+    bool sawDirectOpeningToMain1 = false;
+    int directSettledActivePlayer = -1;
     QStringList labels;
     std::map<int, int> handSizeByPlayer;
     std::map<int, int> lifeByPlayer;
@@ -277,6 +280,8 @@ public:
     bool sawWaifBackPt = false;
     bool sawDevMana = false;
     bool sawBattlefieldOmission = false;
+    bool sawPhysicalTap = false;
+    bool sawPhysicalUntap = false;
     quint32 boltOid = 0;
     quint32 borosCharmOid = 0;
     quint32 brainstormOid = 0;
@@ -513,6 +518,13 @@ public:
                                   << to.toStdString();
                 }
             }
+            if (ev.HasExtension(Event_SetCardAttr::ext)) {
+                const auto &attr = ev.GetExtension(Event_SetCardAttr::ext);
+                if (attr.attribute() == AttrTapped) {
+                    sawPhysicalTap = sawPhysicalTap || attr.attr_value() == "1";
+                    sawPhysicalUntap = sawPhysicalUntap || attr.attr_value() == "0";
+                }
+            }
             if (ev.HasExtension(Event_RuledPayload::ext)) {
                 ruled::v1::RuledEventBatch batch;
                 if (batch.ParseFromString(ev.GetExtension(Event_RuledPayload::ext).payload())) {
@@ -525,8 +537,12 @@ public:
     void applyRuledBatch(const ruled::v1::RuledEventBatch &batch)
     {
         ++stateVersion;
+        const ruled::v1::PhaseId previousPhase = phase;
+        int phaseEvents = 0;
+        bool batchDeclaredAttackers = false;
         for (const ruled::v1::RuledEvent &ev : batch.events()) {
             if (ev.has_phase_changed()) {
+                ++phaseEvents;
                 const ruled::v1::PhaseId newPhase = ev.phase_changed().phase_id();
                 if (newPhase != phase) {
                     log(QStringLiteral("phase: %1 (active %2)")
@@ -582,11 +598,12 @@ public:
                 if (lc.delta() == -4 && borosCharmOid != 0 && !sawBorosCharmLifeLoss && !inCombatDamageWindow) {
                     sawBorosCharmLifeLoss = true;
                 }
-                if (lc.delta() < 0 && inCombatDamageWindow && sawAttackersDeclared) {
+                if (lc.delta() < 0 && batchDeclaredAttackers) {
                     sawCombatLifeLoss = true;
                 }
             } else if (ev.has_attackers_declared()) {
                 if (ev.attackers_declared().attacker_object_ids_size() > 0) {
+                    batchDeclaredAttackers = true;
                     sawAttackersDeclared = true;
                     log(QStringLiteral("attackers declared: %1 creature(s)")
                             .arg(ev.attackers_declared().attacker_object_ids_size()));
@@ -678,6 +695,13 @@ public:
                 log(QStringLiteral("gamelog: %1").arg(QString::fromStdString(ev.log().text()).left(160)));
             }
         }
+        if ((previousPhase == ruled::v1::PHASE_ID_OPENING_CHOOSE_FIRST ||
+             previousPhase == ruled::v1::PHASE_ID_OPENING_MULLIGAN) &&
+            phase == ruled::v1::PHASE_ID_MAIN1 && phaseEvents == 1) {
+            sawDirectOpeningToMain1 = true;
+            directSettledActivePlayer = activePlayer;
+        }
+        EXPECT_LE(phaseEvents, 1) << "one settled ruled batch published multiple phase states";
         const auto it = batch.legal_by_player().find(myId);
         if (it != batch.legal_by_player().end()) {
             labels.clear();
@@ -801,6 +825,34 @@ public:
         sendContainer(cont);
         lastActedVersion = stateVersion;
         log(QStringLiteral("-> %1").arg(what));
+    }
+
+    ::testing::AssertionResult publishMain1Stops()
+    {
+        ruled::v1::RuledCommand cmd;
+        auto *policy = cmd.mutable_set_auto_pass_policy();
+        // The scripted clients need one ordinary priority window in which to play their lands and
+        // spells. Stack entries and required combat/cleanup choices stop automatically; every
+        // other empty step is intentionally allowed to settle without an inferred legal-action stop.
+        policy->add_stop_on_own_turn(ruled::v1::PHASE_ID_MAIN1);
+        policy->add_stop_on_opponent_turn(ruled::v1::PHASE_ID_MAIN1);
+        CommandContainer cont;
+        cont.set_game_id(gameId);
+        std::string bytes;
+        cmd.SerializeToString(&bytes);
+        cont.add_game_command()->MutableExtension(Command_RuledPayload::ext)->set_payload(bytes);
+        const quint64 commandId = nextCmdId;
+        sendContainer(cont);
+        log(QStringLiteral("-> publish Main1 stop policy"));
+        auto result = pumpUntil([&] { return responses.count(commandId) > 0; }, 10000, "auto-pass policy response");
+        if (!result) {
+            return result;
+        }
+        if (responses[commandId].response_code() != Response::RespOk) {
+            return ::testing::AssertionFailure()
+                   << "auto-pass policy failed with code " << responses[commandId].response_code();
+        }
+        return ::testing::AssertionSuccess();
     }
 
     // ---- reactive policy ----
@@ -1593,6 +1645,8 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     p2.sendReady();
     ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000, "ruled game start (p1)"));
     ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000, "ruled game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
 
     // --- Drive the scripted game until every milestone is observed ---
     const auto milestonesDone = [&] {
@@ -1631,9 +1685,17 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     EXPECT_TRUE(sidecarStderr.contains(seedNeedle))
         << "tricerules-server never logged a session with the forced seed " << kForcedSeed;
     EXPECT_TRUE(p2.didMulligan) << "hoarder never took its scripted mulligan";
+    EXPECT_TRUE(p1.sawDirectOpeningToMain1 && p2.sawDirectOpeningToMain1)
+        << "both clients did not jump directly from opening to the same settled first main phase";
+    EXPECT_EQ(p1.directSettledActivePlayer, p2.directSettledActivePlayer)
+        << "clients disagreed on the player active in the directly published settled state";
     EXPECT_TRUE(p2.sawBottomAction && p2.sentBottom) << "London mulligan bottoming never happened";
     EXPECT_TRUE(p1.sawBattlefieldOmission && p2.sawBattlefieldOmission)
         << "no unchanged battlefield snapshot was omitted end to end";
+    EXPECT_TRUE(p1.sawPhysicalTap && p2.sawPhysicalTap)
+        << "a mana activation never produced a physical tapped-card event for both clients";
+    EXPECT_TRUE(p1.sawPhysicalUntap && p2.sawPhysicalUntap)
+        << "an untap step never produced a physical untapped-card event for both clients";
     EXPECT_TRUE(p1.sawBoltPushWithTarget) << "no targeted Lightning Bolt cast was observed on the stack";
     EXPECT_TRUE(p1.sawBoltLifeLoss) << "Lightning Bolt never dealt its 3 damage";
     EXPECT_TRUE(p1.sawBorosCharmPushWithMode) << "Boros Charm chosen-mode metadata was not observed on the stack";

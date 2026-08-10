@@ -173,6 +173,7 @@ private:
     /// Recompute the ruled prompt panel's exclusive mode from the view model and push it as one
     /// state. The single place the mode priority is decided; returns the mode it pushed.
     GamePromptWidget::PromptMode refreshRuledPromptState();
+    void publishRuledAutoPassPolicy();
     void ensureStackWindow();
     void saveStackWindowLayout();
     CardZoneLogic *findVisibleStackZone() const;

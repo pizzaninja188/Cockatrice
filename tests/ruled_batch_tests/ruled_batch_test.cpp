@@ -255,6 +255,16 @@ protected:
         return game->ruled()->redactBatchForParticipant(batch, participant);
     }
 
+    bool cacheAutoPassPolicy(int playerId, const ruled::v1::SetAutoPassPolicy &policy)
+    {
+        return game->ruled()->cacheAutoPassPolicy(playerId, policy);
+    }
+
+    QByteArray canonicalGameplayCommand(int playerId, const ruled::v1::RuledCommand &command)
+    {
+        return game->ruled()->canonicalGameplayCommand(playerId, command);
+    }
+
     // Runs the identity-map injection stage of broadcastRuledResponse on an otherwise empty
     // response, and reports whether it decided to carry a HandSlotMap this time.
     bool appendedHandSlotMap()
@@ -339,6 +349,61 @@ protected:
         return v;
     }
 };
+
+TEST_F(RuledBatchTest, AutoPassPoliciesAreAuthenticatedSortedAndDefaultMissingPlayersToStop)
+{
+    ruled::v1::SetAutoPassPolicy alicePolicy;
+    alicePolicy.add_stop_on_own_turn(ruled::v1::PHASE_ID_MAIN1);
+    alicePolicy.add_stop_on_opponent_turn(ruled::v1::PHASE_ID_BEGIN_COMBAT);
+    ASSERT_TRUE(cacheAutoPassPolicy(1, alicePolicy));
+
+    ruled::v1::RuledCommand pass;
+    pass.mutable_pass_priority();
+    const QByteArray bytes = canonicalGameplayCommand(1, pass);
+    ASSERT_FALSE(bytes.isEmpty());
+
+    ruled::v1::RuledCommand outer;
+    ASSERT_TRUE(outer.ParseFromArray(bytes.constData(), bytes.size()));
+    ASSERT_TRUE(outer.has_canonical_gameplay());
+    const auto &canonical = outer.canonical_gameplay();
+    ASSERT_EQ(canonical.auto_pass_policies_size(), 2);
+    EXPECT_EQ(canonical.auto_pass_policies(0).player_id(), 1);
+    EXPECT_EQ(canonical.auto_pass_policies(1).player_id(), 2);
+    EXPECT_EQ(canonical.auto_pass_policies(0).stop_on_own_turn_size(), 1);
+    EXPECT_EQ(canonical.auto_pass_policies(0).stop_on_own_turn(0), ruled::v1::PHASE_ID_MAIN1);
+    EXPECT_EQ(canonical.auto_pass_policies(0).stop_on_opponent_turn_size(), 1);
+    EXPECT_EQ(canonical.auto_pass_policies(0).stop_on_opponent_turn(0), ruled::v1::PHASE_ID_BEGIN_COMBAT);
+
+    const auto &bob = canonical.auto_pass_policies(1);
+    EXPECT_GT(bob.stop_on_own_turn_size(), 0);
+    EXPECT_GT(bob.stop_on_opponent_turn_size(), 0);
+    EXPECT_NE(std::find(bob.stop_on_own_turn().begin(), bob.stop_on_own_turn().end(),
+                        ruled::v1::PHASE_ID_DRAW),
+              bob.stop_on_own_turn().end());
+
+    ruled::v1::RuledCommand inner;
+    ASSERT_TRUE(inner.ParseFromString(canonical.command()));
+    EXPECT_TRUE(inner.has_pass_priority());
+}
+
+TEST_F(RuledBatchTest, AutoPassPolicyRejectsUnknownAndNonStoppablePhases)
+{
+    ruled::v1::SetAutoPassPolicy policy;
+    policy.add_stop_on_own_turn(ruled::v1::PHASE_ID_OPENING_MULLIGAN);
+    EXPECT_FALSE(cacheAutoPassPolicy(1, policy));
+
+    policy.Clear();
+    policy.add_stop_on_own_turn(ruled::v1::PHASE_ID_DRAW);
+    EXPECT_FALSE(cacheAutoPassPolicy(99, policy));
+}
+
+TEST_F(RuledBatchTest, ClientCannotSupplyCanonicalPolicyRows)
+{
+    ruled::v1::RuledCommand spoofed;
+    auto *canonical = spoofed.mutable_canonical_gameplay();
+    canonical->mutable_auto_pass_policies()->Add()->set_player_id(2);
+    EXPECT_TRUE(canonicalGameplayCommand(1, spoofed).isEmpty());
+}
 
 TEST(RuledProtocolVisibilityTest, EveryBroadcastReachableFieldIsClassifiedAndClearable)
 {
@@ -813,6 +878,37 @@ TEST_F(RuledBatchTest, ApplyRuledBatchAppliesUntapEffectMidTurn)
     BatchOutcome r = callBatchApply(resp);
     EXPECT_TRUE(r.zoneViewApplied);
     EXPECT_TRUE(r.tapStateEventsQueued);
+    EXPECT_FALSE(bear->getTapped());
+}
+
+// Canonical priority settlement can coalesce an entire turn boundary into one response. The
+// explicit edge remains authoritative even when the zone-view cache omits the battlefield
+// replacement; the relay already has the ObjectId binding from the preceding full view.
+TEST_F(RuledBatchTest, ApplyRuledBatchAppliesReportedUntapWhenBattlefieldIsOmitted)
+{
+    Server_Card *bear = addCardToTable(p1, "Grizzly Bears");
+    bear->setTapped(true);
+
+    ruled::v1::IpcResponse seedResp;
+    seedResp.set_ok(true);
+    auto *seedView = seedResp.mutable_batch()->add_events()->mutable_zone_view();
+    *seedView->add_per_player() = buildPerPlayerView(p1, {101u}, {true});
+    ASSERT_TRUE(callBatchApply(seedResp).zoneViewApplied);
+    ASSERT_EQ(findCardByEngineOid(p1, 101u), bear);
+
+    ruled::v1::IpcResponse untapResp;
+    untapResp.set_ok(true);
+    auto *batch = untapResp.mutable_batch();
+    auto *omittedView = batch->add_events()->mutable_zone_view();
+    omittedView->set_battlefields_unchanged(true);
+    auto *playerView = omittedView->add_per_player();
+    playerView->set_player_id(p1->getPlayerId());
+    playerView->set_private_zones_unchanged(true);
+    batch->add_events()->mutable_permanents_untapped()->add_object_ids(101u);
+
+    const BatchOutcome result = callBatchApply(untapResp);
+    EXPECT_TRUE(result.zoneViewApplied);
+    EXPECT_TRUE(result.tapStateEventsQueued);
     EXPECT_FALSE(bear->getTapped());
 }
 

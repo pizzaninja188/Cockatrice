@@ -30,6 +30,7 @@
 #include <libcockatrice/protocol/pb/game_replay.pb.h>
 #include <libcockatrice/protocol/pb/session_event.pb.h>
 #include <libcockatrice/utility/zone_names.h>
+#include <algorithm>
 
 namespace {
 
@@ -151,6 +152,127 @@ RuledGameDriver::RuledGameDriver(Server_Game *_game) : game(_game), ruledSeed(0)
 
 RuledGameDriver::~RuledGameDriver() = default;
 
+namespace
+{
+bool isAutoPassStopPhase(ruled::v1::PhaseId phase)
+{
+    switch (phase) {
+        case ruled::v1::PHASE_ID_UPKEEP:
+        case ruled::v1::PHASE_ID_DRAW:
+        case ruled::v1::PHASE_ID_MAIN1:
+        case ruled::v1::PHASE_ID_BEGIN_COMBAT:
+        case ruled::v1::PHASE_ID_DECLARE_ATTACKERS:
+        case ruled::v1::PHASE_ID_DECLARE_BLOCKERS:
+        case ruled::v1::PHASE_ID_FIRST_STRIKE_DAMAGE:
+        case ruled::v1::PHASE_ID_COMBAT_DAMAGE:
+        case ruled::v1::PHASE_ID_END_COMBAT:
+        case ruled::v1::PHASE_ID_MAIN2:
+        case ruled::v1::PHASE_ID_END_STEP:
+            return true;
+        default:
+            return false;
+    }
+}
+
+QList<ruled::v1::PhaseId> allAutoPassStopPhases()
+{
+    return {ruled::v1::PHASE_ID_UPKEEP,
+            ruled::v1::PHASE_ID_DRAW,
+            ruled::v1::PHASE_ID_MAIN1,
+            ruled::v1::PHASE_ID_BEGIN_COMBAT,
+            ruled::v1::PHASE_ID_DECLARE_ATTACKERS,
+            ruled::v1::PHASE_ID_DECLARE_BLOCKERS,
+            ruled::v1::PHASE_ID_FIRST_STRIKE_DAMAGE,
+            ruled::v1::PHASE_ID_COMBAT_DAMAGE,
+            ruled::v1::PHASE_ID_END_COMBAT,
+            ruled::v1::PHASE_ID_MAIN2,
+            ruled::v1::PHASE_ID_END_STEP};
+}
+
+bool normalizeAutoPassStops(const google::protobuf::RepeatedField<int> &input,
+                            google::protobuf::RepeatedField<int> *output)
+{
+    QSet<int> unique;
+    for (const int rawPhase : input) {
+        if (!ruled::v1::PhaseId_IsValid(rawPhase) ||
+            !isAutoPassStopPhase(static_cast<ruled::v1::PhaseId>(rawPhase))) {
+            return false;
+        }
+        unique.insert(rawPhase);
+        // CR 510.4: the UI owns one Combat Damage stop for both damage steps.
+        if (rawPhase == ruled::v1::PHASE_ID_FIRST_STRIKE_DAMAGE || rawPhase == ruled::v1::PHASE_ID_COMBAT_DAMAGE) {
+            unique.insert(ruled::v1::PHASE_ID_FIRST_STRIKE_DAMAGE);
+            unique.insert(ruled::v1::PHASE_ID_COMBAT_DAMAGE);
+        }
+    }
+    QList<int> sorted = unique.values();
+    std::sort(sorted.begin(), sorted.end());
+    output->Clear();
+    for (const int phase : sorted) {
+        output->Add(phase);
+    }
+    return true;
+}
+
+ruled::v1::SetAutoPassPolicy stopEverywhereAutoPassPolicy()
+{
+    ruled::v1::SetAutoPassPolicy policy;
+    for (const ruled::v1::PhaseId phase : allAutoPassStopPhases()) {
+        policy.add_stop_on_own_turn(phase);
+        policy.add_stop_on_opponent_turn(phase);
+    }
+    return policy;
+}
+} // namespace
+
+bool RuledGameDriver::cacheAutoPassPolicy(int playerId, const ruled::v1::SetAutoPassPolicy &policy)
+{
+    if (!game || !game->getPlayers().contains(playerId)) {
+        return false;
+    }
+    ruled::v1::SetAutoPassPolicy normalized;
+    if (!normalizeAutoPassStops(policy.stop_on_own_turn(), normalized.mutable_stop_on_own_turn()) ||
+        !normalizeAutoPassStops(policy.stop_on_opponent_turn(), normalized.mutable_stop_on_opponent_turn())) {
+        return false;
+    }
+    autoPassPolicies.insert(playerId, normalized);
+    return true;
+}
+
+QByteArray RuledGameDriver::canonicalGameplayCommand(int playerId, const ruled::v1::RuledCommand &command) const
+{
+    if (!game || !game->getPlayers().contains(playerId) ||
+        command.cmd_case() == ruled::v1::RuledCommand::CMD_NOT_SET ||
+        command.has_set_auto_pass_policy() || command.has_canonical_gameplay() ||
+        command.has_preview_declare_attackers() || command.has_preview_declare_blockers()) {
+        return {};
+    }
+    std::string innerBytes;
+    if (!command.SerializeToString(&innerBytes)) {
+        return {};
+    }
+
+    ruled::v1::RuledCommand outer;
+    auto *canonical = outer.mutable_canonical_gameplay();
+    canonical->set_command(innerBytes);
+    QList<int> playerIds = game->getPlayers().keys();
+    std::sort(playerIds.begin(), playerIds.end());
+    const ruled::v1::SetAutoPassPolicy defaultPolicy = stopEverywhereAutoPassPolicy();
+    for (const int id : playerIds) {
+        const ruled::v1::SetAutoPassPolicy policy = autoPassPolicies.value(id, defaultPolicy);
+        auto *row = canonical->add_auto_pass_policies();
+        row->set_player_id(id);
+        row->mutable_stop_on_own_turn()->CopyFrom(policy.stop_on_own_turn());
+        row->mutable_stop_on_opponent_turn()->CopyFrom(policy.stop_on_opponent_turn());
+    }
+
+    std::string outerBytes;
+    if (!outer.SerializeToString(&outerBytes)) {
+        return {};
+    }
+    return QByteArray::fromStdString(outerBytes);
+}
+
 void RuledGameDriver::insertParticipantForTest(int id, Server_AbstractParticipant *participant)
 {
     game->participants.insert(id, participant);
@@ -206,6 +328,7 @@ void RuledGameDriver::resetForNewGame()
     ruledStackTargetsByObjectId.clear();
     ruledStackCopyObjectIds.clear();
     ruledPendingCastVisualQueue.clear();
+    autoPassPolicies.clear();
     // Drop the hand-slot change cache: a new game's clients start with an empty map, so the first
     // broadcast has to carry one even if the hands happen to serialize identically.
     lastBroadcastHandSlotMap.Clear();
@@ -230,54 +353,65 @@ void RuledGameDriver::endSidecarSession()
 Response::ResponseCode
 RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &cmd, GameEventStorage & /*ges*/)
 {
+    ruled::v1::RuledCommand ruledCmd;
+    if (!ruledCmd.ParseFromString(cmd.payload())) {
+        return Response::RespInvalidCommand;
+    }
+    if (ruledCmd.has_set_auto_pass_policy()) {
+        return cacheAutoPassPolicy(playerId, ruledCmd.set_auto_pass_policy()) ? Response::RespOk
+                                                                              : Response::RespContextError;
+    }
+    if (ruledCmd.has_canonical_gameplay()) {
+        // The canonical envelope is a trusted Servatrice->engine/replay shape, never client input.
+        return Response::RespInvalidCommand;
+    }
+    if (ruledCmd.has_preview_declare_blockers()) {
+        // Cockatrice-only: show tentative blocks to the opponent. Never touch the engine or replay log.
+        constexpr int declareBlockersToolbarPhase = 6;
+        if (game->getActivePhase() != declareBlockersToolbarPhase || game->getActivePlayer() < 0 ||
+            playerId == game->getActivePlayer()) {
+            return Response::RespContextError;
+        }
+        ruled::v1::IpcResponse previewResp;
+        previewResp.set_ok(true);
+        auto *bpMsg = previewResp.mutable_batch()->add_events()->mutable_blockers_preview();
+        bpMsg->set_declaring_player_id(playerId);
+        const auto &pairs = ruledCmd.preview_declare_blockers();
+        for (int pi = 0; pi < pairs.block_pairs_size(); ++pi) {
+            const auto &pr = pairs.block_pairs(pi);
+            auto *out = bpMsg->add_block_pairs();
+            out->set_attacker_id(pr.attacker_id());
+            out->set_blocker_id(pr.blocker_id());
+        }
+        broadcastRuledResponse(previewResp);
+        return Response::RespOk;
+    }
+    if (ruledCmd.has_preview_declare_attackers()) {
+        constexpr int declareAttackersToolbarPhase = 5;
+        if (game->getActivePhase() != declareAttackersToolbarPhase || game->getActivePlayer() < 0 ||
+            playerId != game->getActivePlayer()) {
+            return Response::RespContextError;
+        }
+        ruled::v1::IpcResponse previewResp;
+        previewResp.set_ok(true);
+        auto *apMsg = previewResp.mutable_batch()->add_events()->mutable_attackers_preview();
+        apMsg->set_declaring_player_id(playerId);
+        const auto &ids = ruledCmd.preview_declare_attackers();
+        for (int ai = 0; ai < ids.creature_ids_size(); ++ai) {
+            apMsg->add_attacker_object_ids(static_cast<uint32_t>(ids.creature_ids(ai)));
+        }
+        broadcastRuledResponse(previewResp);
+        return Response::RespOk;
+    }
     if (!rulesRelay) {
         return Response::RespInvalidCommand;
     }
 
-    ruled::v1::RuledCommand uiOnlyCmd;
-    if (uiOnlyCmd.ParseFromString(cmd.payload())) {
-        if (uiOnlyCmd.has_preview_declare_blockers()) {
-            // Cockatrice-only: show tentative blocks to the opponent. Never touch the engine or replay log.
-            constexpr int declareBlockersToolbarPhase = 6;
-            if (game->getActivePhase() != declareBlockersToolbarPhase || game->getActivePlayer() < 0 ||
-                playerId == game->getActivePlayer()) {
-                return Response::RespContextError;
-            }
-            ruled::v1::IpcResponse previewResp;
-            previewResp.set_ok(true);
-            auto *bpMsg = previewResp.mutable_batch()->add_events()->mutable_blockers_preview();
-            bpMsg->set_declaring_player_id(playerId);
-            const auto &pairs = uiOnlyCmd.preview_declare_blockers();
-            for (int pi = 0; pi < pairs.block_pairs_size(); ++pi) {
-                const auto &pr = pairs.block_pairs(pi);
-                auto *out = bpMsg->add_block_pairs();
-                out->set_attacker_id(pr.attacker_id());
-                out->set_blocker_id(pr.blocker_id());
-            }
-            broadcastRuledResponse(previewResp);
-            return Response::RespOk;
-        }
-        if (uiOnlyCmd.has_preview_declare_attackers()) {
-            constexpr int declareAttackersToolbarPhase = 5;
-            if (game->getActivePhase() != declareAttackersToolbarPhase || game->getActivePlayer() < 0 ||
-                playerId != game->getActivePlayer()) {
-                return Response::RespContextError;
-            }
-            ruled::v1::IpcResponse previewResp;
-            previewResp.set_ok(true);
-            auto *apMsg = previewResp.mutable_batch()->add_events()->mutable_attackers_preview();
-            apMsg->set_declaring_player_id(playerId);
-            const auto &ids = uiOnlyCmd.preview_declare_attackers();
-            for (int ai = 0; ai < ids.creature_ids_size(); ++ai) {
-                apMsg->add_attacker_object_ids(static_cast<uint32_t>(ids.creature_ids(ai)));
-            }
-            broadcastRuledResponse(previewResp);
-            return Response::RespOk;
-        }
+    const QByteArray payload = canonicalGameplayCommand(playerId, ruledCmd);
+    if (payload.isEmpty()) {
+        return Response::RespInvalidCommand;
     }
-
     ruled::v1::IpcResponse resp;
-    QByteArray payload = QByteArray::fromStdString(cmd.payload());
     if (!rulesRelay->playerCommand(playerId, payload, resp)) {
         // Relay (not the engine) failed: the sidecar connection dropped mid-game. Tell the
         // players why the game has frozen rather than returning a silent internal error.
@@ -287,121 +421,114 @@ RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &c
     if (!resp.ok()) {
         return Response::RespContextError;
     }
-    ruled::v1::RuledCommand ruledCmd;
-    if (ruledCmd.ParseFromString(cmd.payload())) {
-        if (Server_AbstractPlayer *cmdPlayer = game->getPlayer(playerId)) {
-            Server_CardZone *handZone = cmdPlayer->getZones().value(ZoneNames::HAND);
-            if (ruledCmd.has_play_land()) {
-                Server_CardZone *tableZone = cmdPlayer->getZones().value(ZoneNames::TABLE);
-                const int handIndex = static_cast<int>(ruledCmd.play_land().hand_card_index());
-                if (handZone && tableZone && handIndex >= 0 && handIndex < handZone->getCards().size()) {
-                    Server_Card *card = handZone->getCards().at(handIndex);
-                    // CR 712: an MDFC land (a pathway) enters as the chosen face. Rename the physical
-                    // card to that face's Oracle name before it moves to the battlefield, so the
-                    // move event reveals the active face and the client shows its art (cards.xml has
-                    // a separate entry per face). The catalog maps both face names to the same engine
-                    // id, so later zone-view reconciliation still resolves this permanent.
-                    const int faceIndex = static_cast<int>(ruledCmd.play_land().face_index());
-                    if (faceIndex > 0) {
-                        const QString activeName =
-                            ruledFaceDisplayName(ruledCardIdForName(card->getName()), faceIndex);
-                        if (!activeName.isEmpty() && activeName != card->getName()) {
-                            card->setCardRef(CardRef{activeName});
-                        }
-                    }
-                    CardToMove cardToMove;
-                    cardToMove.set_card_id(card->getId());
-                    GameEventStorage moveGes;
-                    // Cockatrice table uses 3 rows; lands belong on the bottom row (grid y = 2).
-                    static constexpr int RULED_LAND_GRID_Y = 2;
-                    if (ruledApplyMove(cmdPlayer, moveGes, handZone, tableZone, cardToMove, -1,
-                                       RULED_LAND_GRID_Y, "playLand")) {
-                        moveGes.sendToGame(game);
+    if (Server_AbstractPlayer *cmdPlayer = game->getPlayer(playerId)) {
+        Server_CardZone *handZone = cmdPlayer->getZones().value(ZoneNames::HAND);
+        if (ruledCmd.has_play_land()) {
+            Server_CardZone *tableZone = cmdPlayer->getZones().value(ZoneNames::TABLE);
+            const int handIndex = static_cast<int>(ruledCmd.play_land().hand_card_index());
+            if (handZone && tableZone && handIndex >= 0 && handIndex < handZone->getCards().size()) {
+                Server_Card *card = handZone->getCards().at(handIndex);
+                // CR 712: an MDFC land (a pathway) enters as the chosen face. Rename the physical
+                // card to that face's Oracle name before it moves to the battlefield, so the
+                // move event reveals the active face and the client shows its art (cards.xml has
+                // a separate entry per face). The catalog maps both face names to the same engine
+                // id, so later zone-view reconciliation still resolves this permanent.
+                const int faceIndex = static_cast<int>(ruledCmd.play_land().face_index());
+                if (faceIndex > 0) {
+                    const QString activeName = ruledFaceDisplayName(ruledCardIdForName(card->getName()), faceIndex);
+                    if (!activeName.isEmpty() && activeName != card->getName()) {
+                        card->setCardRef(CardRef{activeName});
                     }
                 }
-            } else if (ruledCmd.has_cast_spell()) {
-                // Route all spells to the canonical (lowest player-id) stack zone so every
-                // client's stack window shows the complete stack without a split view.
-                // Resolution uses ruledStackObjectIdToCasterPlayerId to send the card to the
-                // correct destination zone regardless of which physical zone it sat in.
-                Server_CardZone *stackZone = ruledCanonicalStackZone(game);
-                // CR 702.34: a flashback cast comes from the caster's graveyard, and
-                // hand_card_index indexes that zone instead. Sourcing it from the hand would move
-                // an unrelated hand card to the stack — and that card, not the flashback spell,
-                // would then be the one exiled on resolution.
-                //
-                // The index cannot be used against the physical graveyard pile directly: the
-                // engine's graveyard is oldest-first while the Cockatrice pile is newest-first, so
-                // the binding resolves the engine slot to the real card.
-                const auto &source = ruledCmd.cast_spell().source();
-                Server_CardZone *sourceZone = nullptr;
-                Server_Card *card = nullptr;
-                QString sourceLabel = QStringLiteral("missing");
-                if (source.location_case() == ruled::v1::CastSource::kHandIndex) {
-                    const int handIndex = static_cast<int>(source.hand_index());
-                    sourceZone = handZone;
-                    sourceLabel = QStringLiteral("hand:%1").arg(handIndex);
-                    if (handZone && handIndex >= 0 && handIndex < handZone->getCards().size()) {
-                        card = handZone->getCards().at(handIndex);
+                CardToMove cardToMove;
+                cardToMove.set_card_id(card->getId());
+                GameEventStorage moveGes;
+                // Cockatrice table uses 3 rows; lands belong on the bottom row (grid y = 2).
+                static constexpr int RULED_LAND_GRID_Y = 2;
+                if (ruledApplyMove(cmdPlayer, moveGes, handZone, tableZone, cardToMove, -1, RULED_LAND_GRID_Y,
+                                   "playLand")) {
+                    moveGes.sendToGame(game);
+                }
+            }
+        } else if (ruledCmd.has_cast_spell()) {
+            // Route all spells to the canonical (lowest player-id) stack zone so every
+            // client's stack window shows the complete stack without a split view.
+            // Resolution uses ruledStackObjectIdToCasterPlayerId to send the card to the
+            // correct destination zone regardless of which physical zone it sat in.
+            Server_CardZone *stackZone = ruledCanonicalStackZone(game);
+            // CR 702.34: a flashback cast comes from the caster's graveyard, and
+            // hand_card_index indexes that zone instead. Sourcing it from the hand would move
+            // an unrelated hand card to the stack — and that card, not the flashback spell,
+            // would then be the one exiled on resolution.
+            //
+            // The index cannot be used against the physical graveyard pile directly: the
+            // engine's graveyard is oldest-first while the Cockatrice pile is newest-first, so
+            // the binding resolves the engine slot to the real card.
+            const auto &source = ruledCmd.cast_spell().source();
+            Server_CardZone *sourceZone = nullptr;
+            Server_Card *card = nullptr;
+            QString sourceLabel = QStringLiteral("missing");
+            if (source.location_case() == ruled::v1::CastSource::kHandIndex) {
+                const int handIndex = static_cast<int>(source.hand_index());
+                sourceZone = handZone;
+                sourceLabel = QStringLiteral("hand:%1").arg(handIndex);
+                if (handZone && handIndex >= 0 && handIndex < handZone->getCards().size()) {
+                    card = handZone->getCards().at(handIndex);
+                }
+            } else if (source.location_case() == ruled::v1::CastSource::kGraveyardObjectId ||
+                       source.location_case() == ruled::v1::CastSource::kExileObjectId) {
+                const bool fromGraveyard = source.location_case() == ruled::v1::CastSource::kGraveyardObjectId;
+                const quint32 oid =
+                    static_cast<quint32>(fromGraveyard ? source.graveyard_object_id() : source.exile_object_id());
+                sourceLabel = QStringLiteral("%1:%2")
+                                  .arg(fromGraveyard ? QStringLiteral("graveyard") : QStringLiteral("exile"))
+                                  .arg(oid);
+                for (Server_AbstractPlayer *candidate : game->getPlayers()) {
+                    auto *owner = dynamic_cast<Server_Player *>(candidate);
+                    if (!owner) {
+                        continue;
                     }
-                } else if (source.location_case() == ruled::v1::CastSource::kGraveyardObjectId ||
-                           source.location_case() == ruled::v1::CastSource::kExileObjectId) {
-                    const bool fromGraveyard =
-                        source.location_case() == ruled::v1::CastSource::kGraveyardObjectId;
-                    const quint32 oid = static_cast<quint32>(
-                        fromGraveyard ? source.graveyard_object_id() : source.exile_object_id());
-                    sourceLabel = QStringLiteral("%1:%2")
-                                      .arg(fromGraveyard ? QStringLiteral("graveyard") : QStringLiteral("exile"))
-                                      .arg(oid);
-                    for (Server_AbstractPlayer *candidate : game->getPlayers()) {
-                        auto *owner = dynamic_cast<Server_Player *>(candidate);
-                        if (!owner) {
-                            continue;
-                        }
-                        card = fromGraveyard
-                            ? playerBinding(owner->getPlayerId()).findGraveyardCardByEngineOid(owner, oid)
-                            : playerBinding(owner->getPlayerId()).findExileCardByEngineOid(owner, oid);
-                        if (card) {
-                            sourceZone = owner->getZones().value(fromGraveyard ? ZoneNames::GRAVE : ZoneNames::EXILE);
-                            break;
-                        }
+                    card = fromGraveyard ? playerBinding(owner->getPlayerId()).findGraveyardCardByEngineOid(owner, oid)
+                                         : playerBinding(owner->getPlayerId()).findExileCardByEngineOid(owner, oid);
+                    if (card) {
+                        sourceZone = owner->getZones().value(fromGraveyard ? ZoneNames::GRAVE : ZoneNames::EXILE);
+                        break;
                     }
                 }
-                RULED_TRACE("relay") << "cast source=" << sourceLabel
-                                     << " sourceZone=" << (sourceZone ? sourceZone->getName() : QStringLiteral("<null>"))
-                                     << " sourceZoneSize=" << (sourceZone ? sourceZone->getCards().size() : -1)
-                                     << " resolvedCard=" << (card ? card->getName() : QStringLiteral("<none>"))
-                                     << " serverCardId=" << (card ? card->getId() : -1);
-                if (sourceZone && stackZone && card) {
-                    PendingRuledCastVisual pending;
-                    pending.cardName = card ? card->getName() : QString();
-                    pending.serverCardId = card ? card->getId() : -1;
-                    pending.casterPlayerId = playerId;
-                    for (int ti = 0; ti < ruledCmd.cast_spell().targets_size(); ++ti) {
-                        pending.targetOids.append(static_cast<quint32>(ruledCmd.cast_spell().targets(ti).object_id()));
+            }
+            RULED_TRACE("relay") << "cast source=" << sourceLabel
+                                 << " sourceZone=" << (sourceZone ? sourceZone->getName() : QStringLiteral("<null>"))
+                                 << " sourceZoneSize=" << (sourceZone ? sourceZone->getCards().size() : -1)
+                                 << " resolvedCard=" << (card ? card->getName() : QStringLiteral("<none>"))
+                                 << " serverCardId=" << (card ? card->getId() : -1);
+            if (sourceZone && stackZone && card) {
+                PendingRuledCastVisual pending;
+                pending.cardName = card ? card->getName() : QString();
+                pending.serverCardId = card ? card->getId() : -1;
+                pending.casterPlayerId = playerId;
+                for (int ti = 0; ti < ruledCmd.cast_spell().targets_size(); ++ti) {
+                    pending.targetOids.append(static_cast<quint32>(ruledCmd.cast_spell().targets(ti).object_id()));
+                }
+                // Modal targets are grouped on the atomic command for rules resolution, but
+                // Cockatrice's visual arrow/binding layer consumes one flat target list.
+                for (const auto &mode : ruledCmd.cast_spell().selected_modes()) {
+                    for (const auto &target : mode.targets()) {
+                        pending.targetOids.append(static_cast<quint32>(target.object_id()));
                     }
-                    // Modal targets are grouped on the atomic command for rules resolution, but
-                    // Cockatrice's visual arrow/binding layer consumes one flat target list.
-                    for (const auto &mode : ruledCmd.cast_spell().selected_modes()) {
-                        for (const auto &target : mode.targets()) {
-                            pending.targetOids.append(static_cast<quint32>(target.object_id()));
-                        }
-                    }
-                    ruledPendingCastVisualQueue.append(pending);
-                    CardToMove cardToMove;
-                    cardToMove.set_card_id(card->getId());
-                    GameEventStorage moveGes;
-                    if (ruledApplyMove(cmdPlayer, moveGes, sourceZone, stackZone, cardToMove, -1, 0, "cast")) {
-                        moveGes.sendToGame(game);
-                    }
+                }
+                ruledPendingCastVisualQueue.append(pending);
+                CardToMove cardToMove;
+                cardToMove.set_card_id(card->getId());
+                GameEventStorage moveGes;
+                if (ruledApplyMove(cmdPlayer, moveGes, sourceZone, stackZone, cardToMove, -1, 0, "cast")) {
+                    moveGes.sendToGame(game);
                 }
             }
         }
     }
 
     const RuledBatchApplyResult batchResult = applyRuledBatch(resp);
-    if ((batchResult.zoneViewApplied &&
-         (batchResult.handOrLibraryChanged || batchResult.battlefieldOrderChanged)) ||
+    if ((batchResult.zoneViewApplied && (batchResult.handOrLibraryChanged || batchResult.battlefieldOrderChanged)) ||
         batchResult.battlefieldDisplayChanged) {
         game->sendGameStateToPlayers();
     }
@@ -419,8 +546,16 @@ void RuledGameDriver::relayRuledPayloadAndBroadcast(int playerId, const QByteArr
     if (!rulesRelay || ruledCmdBytes.isEmpty()) {
         return;
     }
+    ruled::v1::RuledCommand command;
+    if (!command.ParseFromArray(ruledCmdBytes.constData(), ruledCmdBytes.size())) {
+        return;
+    }
+    const QByteArray canonicalBytes = canonicalGameplayCommand(playerId, command);
+    if (canonicalBytes.isEmpty()) {
+        return;
+    }
     ruled::v1::IpcResponse resp;
-    if (!rulesRelay->playerCommand(playerId, ruledCmdBytes, resp)) {
+    if (!rulesRelay->playerCommand(playerId, canonicalBytes, resp)) {
         // Relay (not the engine) failed: the sidecar connection dropped mid-game.
         handleRuledEngineConnectionLost();
         return;
@@ -435,8 +570,8 @@ void RuledGameDriver::relayRuledPayloadAndBroadcast(int playerId, const QByteArr
         game->sendGameStateToPlayers();
     }
     if (game->currentReplay) {
-        game->currentReplay->mutable_ruled_command_log()->append(ruledCmdBytes.constData(),
-                                                                 static_cast<size_t>(ruledCmdBytes.size()));
+        game->currentReplay->mutable_ruled_command_log()->append(canonicalBytes.constData(),
+                                                                 static_cast<size_t>(canonicalBytes.size()));
     }
     broadcastRuledResponse(resp);
 }
@@ -925,6 +1060,25 @@ void RuledGameDriver::applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBat
                 engineUntappedOids.insert(static_cast<quint32>(oid));
             }
         }
+    }
+    // PermanentsUntapped is an authoritative state edge, not merely a hint that relaxes the
+    // zone-view reconciliation guard. Canonical settlement may coalesce the battlefield snapshot
+    // away after an untap step, and mid-turn untap effects / mana undo can do the same. Drive every
+    // already-bound physical card directly so both clients receive an idempotent AttrTapped=0 even
+    // when the batch carries no battlefield replacement.
+    for (const quint32 oid : engineUntappedOids) {
+        Server_Card *card = findBattlefieldCardByEngineOid(oid);
+        if (!card || !card->getZone() || !card->getZone()->getPlayer()) {
+            continue;
+        }
+        card->setTapped(false);
+        Event_SetCardAttr untapEvent;
+        untapEvent.set_zone_name(std::string(ZoneNames::TABLE));
+        untapEvent.set_card_id(card->getId());
+        untapEvent.set_attribute(AttrTapped);
+        untapEvent.set_attr_value("0");
+        tapSyncGes.enqueueGameEvent(untapEvent, card->getZone()->getPlayer()->getPlayerId());
+        result.tapStateEventsQueued = true;
     }
     for (int ei = 0; ei < batch.events_size(); ++ei) {
         const auto &e = batch.events(ei);

@@ -11,12 +11,15 @@
 // `RULED_PAYLOAD` case of the upstream `GameEventHandler`, behind the whole client.
 
 #include "game/ruled/ruled_client_host.h"
+#include "game/ruled/ruled_auto_pass_policy.h"
 #include "game/ruled/ruled_client_state.h"
 #include "game/ruled/ruled_dev_command_parser.h"
 #include "game/ruled/ruled_event_dispatcher.h"
+#include "game/ruled/ruled_pending_cast.h"
 
 #include <QSignalSpy>
 #include <QString>
+#include <QTest>
 #include <gtest/gtest.h>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 
@@ -247,6 +250,95 @@ TEST_F(RuledClientTest, BattlefieldObjectMapBuildsIdentityMapsBothWays)
     EXPECT_EQ(state->engineOidForCardId(kLocalPlayer, 999), 0u);
     EXPECT_EQ(state->cardIdForEngineOid(999), -1);
     EXPECT_EQ(state->playerIdForEngineOid(999), -1);
+}
+
+TEST(RuledAutoPassPolicyTest, MapsToolbarStopsAndSharesCombatDamageStop)
+{
+    std::array<bool, 11> own{};
+    std::array<bool, 11> opponent{};
+    own[2] = true;      // Draw
+    own[7] = true;      // Combat damage (both CR 510.4 steps)
+    opponent[4] = true; // Beginning of combat
+
+    const ruled::v1::SetAutoPassPolicy policy = RuledAutoPassPolicy::fromToolbarStops(own, opponent);
+    EXPECT_EQ(policy.stop_on_own_turn_size(), 3);
+    EXPECT_EQ(policy.stop_on_own_turn(0), ruled::v1::PHASE_ID_DRAW);
+    EXPECT_EQ(policy.stop_on_own_turn(1), ruled::v1::PHASE_ID_FIRST_STRIKE_DAMAGE);
+    EXPECT_EQ(policy.stop_on_own_turn(2), ruled::v1::PHASE_ID_COMBAT_DAMAGE);
+    ASSERT_EQ(policy.stop_on_opponent_turn_size(), 1);
+    EXPECT_EQ(policy.stop_on_opponent_turn(0), ruled::v1::PHASE_ID_BEGIN_COMBAT);
+}
+
+TEST_F(RuledClientTest, EngineCommandPendingLocksImmediatelyAndRejectsDuplicateBegin)
+{
+    QSignalSpy spy(state, &RuledClientState::engineCommandPendingUiChanged);
+    EXPECT_TRUE(state->beginEngineCommand());
+    EXPECT_TRUE(state->isEngineCommandPending());
+    EXPECT_FALSE(state->isEngineCommandIndicatorVisible());
+    EXPECT_FALSE(state->beginEngineCommand());
+    EXPECT_EQ(spy.count(), 1);
+
+    state->showEngineCommandIndicator();
+    EXPECT_TRUE(state->isEngineCommandIndicatorVisible());
+    EXPECT_EQ(spy.count(), 2);
+
+    state->finishEngineCommand();
+    EXPECT_FALSE(state->isEngineCommandPending());
+    EXPECT_FALSE(state->isEngineCommandIndicatorVisible());
+    EXPECT_EQ(spy.count(), 3);
+}
+
+TEST_F(RuledClientTest, EngineCommandIndicatorAppearsOnlyAfterDelay)
+{
+    ASSERT_TRUE(state->beginEngineCommand());
+    QTest::qWait(100);
+    EXPECT_FALSE(state->isEngineCommandIndicatorVisible());
+    QTRY_VERIFY_WITH_TIMEOUT(state->isEngineCommandIndicatorVisible(), 200);
+
+    state->finishEngineCommand();
+}
+
+TEST_F(RuledClientTest, FinishedCommandCancelsItsDelayedIndicator)
+{
+    ASSERT_TRUE(state->beginEngineCommand());
+    state->finishEngineCommand();
+    QTest::qWait(175);
+    EXPECT_FALSE(state->isEngineCommandPending());
+    EXPECT_FALSE(state->isEngineCommandIndicatorVisible());
+}
+
+TEST_F(RuledClientTest, StaleIndicatorCallbackCannotAffectLaterCommand)
+{
+    ASSERT_TRUE(state->beginEngineCommand());
+    QTest::qWait(50);
+    state->finishEngineCommand();
+    ASSERT_TRUE(state->beginEngineCommand());
+
+    // The first command's 150 ms callback has now fired, but the second command has not reached
+    // its own threshold. Its generation token must keep the new prompt unchanged.
+    QTest::qWait(110);
+    EXPECT_TRUE(state->isEngineCommandPending());
+    EXPECT_FALSE(state->isEngineCommandIndicatorVisible());
+    QTRY_VERIFY_WITH_TIMEOUT(state->isEngineCommandIndicatorVisible(), 100);
+    state->finishEngineCommand();
+}
+
+TEST(RuledPendingPaymentTest, LastManaPipConsumedDuringEngineCommandIsReadyAfterUnlock)
+{
+    PendingRuledSpellCast spell;
+    spell.valid = true;
+    spell.waitingForTarget = false;
+    spell.remainingCost.insert(QChar('G'), 0);
+    EXPECT_EQ(readyRuledPendingPaymentAction(spell, {}), RuledPendingPaymentAction::CastSpell);
+
+    spell.remainingCost[QChar('G')] = 1;
+    EXPECT_EQ(readyRuledPendingPaymentAction(spell, {}), RuledPendingPaymentAction::None);
+
+    PendingActivatedAbility ability;
+    ability.valid = true;
+    ability.waitingForTarget = false;
+    ability.waitingForMana = false; // the last-pip path clears this before command submission
+    EXPECT_EQ(readyRuledPendingPaymentAction({}, ability), RuledPendingPaymentAction::ActivateAbility);
 }
 
 TEST_F(RuledClientTest, HandSlotAndPublicZoneMapsAreQueryable)
@@ -1928,8 +2020,10 @@ TEST_F(RuledClientTest, OpeningBottomAdjustsLaterIndicesForEarlierRemovals)
     state->toggleOpeningBottomHandIndex(4);
     host.sentCommands.clear();
     state->openingBottomDone();
-    ASSERT_EQ(host.sentCommands.size(), 2);
+    ASSERT_EQ(host.sentCommands.size(), 1);
     EXPECT_EQ(host.sentCommands[0].put_opening_hand_on_bottom().hand_card_index(), 1u);
+    host.answerPendingAck(true);
+    ASSERT_EQ(host.sentCommands.size(), 2);
     EXPECT_EQ(host.sentCommands[1].put_opening_hand_on_bottom().hand_card_index(), 3u);
 }
 

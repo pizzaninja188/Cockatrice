@@ -147,6 +147,12 @@ private:
     /// players once (the game is unrecoverable) and tears down the dead relay so subsequent
     /// commands fail fast instead of re-timing-out and re-notifying. Idempotent.
     void handleRuledEngineConnectionLost();
+    /// Validate and cache one authenticated player's UI-only phase-stop preferences. The command
+    /// carries no player id; `playerId` always comes from the server-side participant binding.
+    bool cacheAutoPassPolicy(int playerId, const ruled::v1::SetAutoPassPolicy &policy);
+    /// Wrap one ordinary gameplay command with a sorted, complete server-authored policy snapshot.
+    /// Returns empty for a UI-only/nested command or an unknown player.
+    QByteArray canonicalGameplayCommand(int playerId, const ruled::v1::RuledCommand &command) const;
     void applyRuledStartupBatch(const ruled::v1::IpcResponse &resp,
                                 const QList<QPair<int, QStringList>> &deckByPlayer);
     RuledBatchApplyResult applyRuledBatch(const ruled::v1::IpcResponse &resp);
@@ -222,6 +228,9 @@ private:
     ruled::v1::HandSlotMap lastBroadcastHandSlotMap;
     bool hasLastBroadcastHandSlotMap = false;
     QSet<int> lastBroadcastHandSlotParticipants;
+    /// Authenticated phase-stop preferences by seat. Missing entries are expanded to an explicit
+    /// stop-everywhere row when a gameplay command is canonicalized.
+    QHash<int, ruled::v1::SetAutoPassPolicy> autoPassPolicies;
 };
 
 #endif

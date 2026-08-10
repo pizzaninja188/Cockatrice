@@ -192,6 +192,27 @@ TEST_F(GamePromptWidgetTest, DefaultModeIsNormal)
     EXPECT_EQ(widget->effectiveMode(), PromptMode::Normal);
 }
 
+TEST_F(GamePromptWidgetTest, CommandPendingHidesActionsWithoutReplacingCurrentPrompt)
+{
+    widget->setLocalPlayerHasPriority(true);
+    widget->setPromptText("Choose attackers.");
+    widget->setRuledPromptState({PromptMode::CommandPending});
+    EXPECT_EQ(widget->effectiveMode(), PromptMode::CommandPending);
+    EXPECT_EQ(label("promptLabel")->text(), "Choose attackers.");
+    EXPECT_TRUE(btn("passPriorityButton")->isHidden());
+    EXPECT_TRUE(btn("confirmAttackersButton")->isHidden());
+}
+
+TEST_F(GamePromptWidgetTest, UpdatingGameShowsDelayedStatusAndNoActions)
+{
+    widget->setLocalPlayerHasPriority(true);
+    widget->setRuledPromptState({PromptMode::UpdatingGame});
+    EXPECT_EQ(widget->effectiveMode(), PromptMode::UpdatingGame);
+    EXPECT_EQ(label("promptLabel")->text(), QStringLiteral("Updating game") + QChar(0x2026));
+    EXPECT_TRUE(btn("passPriorityButton")->isHidden());
+    EXPECT_TRUE(btn("cancelTargetingButton")->isHidden());
+}
+
 TEST_F(GamePromptWidgetTest, TargetingSourcesOrIntoTheTargetingMode)
 {
     widget->setSpellCastPending(true);
