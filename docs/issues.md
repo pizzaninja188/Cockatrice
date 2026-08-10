@@ -97,10 +97,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Add a reusable attack trigger predicate based on the declared attacking group, not one event per creature. Calibration evidence: Makeshift Battalion. Capture the simultaneous declaration set, trigger only once when its threshold is met, and cover attacks split among multiple defending players or planeswalkers; satisfy the two-card-or-mechanic reuse gate before adding the condition.
   - Priority: Low
 
-- [ ] #69 [feature] Opponent-controller target filters
-  - Details: Extend `TargetFilter` with controller-relative opponent predicates that work for any player count. Calibration evidence: Glaring Aegis and Rambunctious Mutt. Use the source or selecting player's controller as appropriate, reject teammates only when the game definition says they are not opponents, and cover target legality changing before resolution.
-  - Priority: Low
-
 - [ ] #70 [feature] Source-excluding "another" target filters
   - Details: Add an explicit source-object exclusion predicate to target filters instead of relying on card names or list position. Calibration evidence: Pegasus Courser. Cover spells, activated abilities, and triggered abilities whose source may have changed zones, and satisfy the two-card-or-mechanic reuse gate before committing the filter.
   - Priority: Low

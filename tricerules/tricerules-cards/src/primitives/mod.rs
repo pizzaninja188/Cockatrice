@@ -65,14 +65,14 @@ mod tests {
         }
     }
 
-    /// Issue #39: untargeted mass selection has no activating player, so `only_controller` can
+    /// Issue #39: untargeted mass selection has no activating player, so a controller relation can
     /// never be honored there — the effect's own `players` scope is the correct knob. Reject the
     /// filter at load rather than silently ignoring the field.
     #[test]
-    fn mass_effect_rejects_only_controller_filter() {
+    fn mass_effect_rejects_controller_relative_filter() {
         let scoped = TargetFilter {
             kind: TargetKind::Creature,
-            only_controller: true,
+            controller: TargetController::You,
             ..Default::default()
         };
         assert!(SpellEffectKind::DestroyAll {
@@ -117,5 +117,76 @@ mod tests {
             EffectSubject::default(),
             EffectSubject::Chosen(TargetFilter::default_creature())
         );
+    }
+
+    #[test]
+    fn target_controller_relation_is_a_composable_filter_dimension() {
+        let filter = TargetFilter {
+            kind: TargetKind::Creature,
+            controller: TargetController::Opponent,
+            tapped: Some(true),
+            not_artifact: true,
+            ..TargetFilter::default()
+        };
+
+        assert_eq!(filter.controller, TargetController::Opponent);
+        assert_eq!(filter.tapped, Some(true));
+        assert!(filter.not_artifact);
+        assert_eq!(TargetFilter::default().controller, TargetController::Any);
+    }
+
+    #[test]
+    fn controller_relative_target_filter_requires_a_permanent_kind() {
+        for kind in [
+            TargetKind::AnyTarget,
+            TargetKind::AnyPlayer,
+            TargetKind::OpponentPlayer,
+        ] {
+            let effect = SpellEffectKind::DamageTarget {
+                amount: Amount::Fixed(1),
+                target: TargetFilter {
+                    kind,
+                    controller: TargetController::Opponent,
+                    ..TargetFilter::default()
+                },
+            };
+            assert!(effect.validate(EffectContext::Spell).is_err());
+        }
+    }
+
+    #[test]
+    fn untargeted_filter_preserves_you_scope_but_defers_opponent_scope() {
+        let keywords = vec![Keyword::Indestructible];
+        let filter = |controller| TargetFilter {
+            kind: TargetKind::AnyPermanent,
+            controller,
+            ..TargetFilter::default()
+        };
+
+        assert!(SpellEffectKind::GrantKeywordsAllPermanents {
+            filter: filter(TargetController::You),
+            keywords: keywords.clone(),
+        }
+        .validate(EffectContext::Spell)
+        .is_ok());
+        assert!(SpellEffectKind::GrantKeywordsAllPermanents {
+            filter: filter(TargetController::Opponent),
+            keywords,
+        }
+        .validate(EffectContext::Spell)
+        .is_err());
+        assert!(SpellEffectKind::TargetPlayerSacrifices {
+            target: TargetFilter {
+                kind: TargetKind::OpponentPlayer,
+                ..TargetFilter::default()
+            },
+            filter: TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                ..TargetFilter::default()
+            },
+        }
+        .validate(EffectContext::Spell)
+        .is_err());
     }
 }

@@ -1,0 +1,24 @@
+(
+  id: "rambunctious_mutt",
+  name: "Rambunctious Mutt",
+  mana_cost: "{3}{W}{W}",
+  // Oracle: When this creature enters, destroy target artifact or enchantment an opponent controls.
+  types: ["Creature", "Dog"],
+  power: 3,
+  toughness: 4,
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [
+        DestroyTarget(
+          target: (
+            kind: AnyPermanent,
+            controller: Opponent,
+            permanent_types: [Artifact, Enchantment],
+          ),
+        ),
+      ],
+      text: "When this creature enters, destroy target artifact or enchantment an opponent controls.",
+    ),
+  ],
+)

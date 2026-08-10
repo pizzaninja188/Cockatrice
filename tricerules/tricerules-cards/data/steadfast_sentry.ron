@@ -13,7 +13,7 @@
         PutCounters(
           counter: PlusOnePlusOne,
           count: 1,
-          subject: Chosen((kind: Creature, only_controller: true)),
+          subject: Chosen((kind: Creature, controller: You)),
         ),
       ],
       text: "When this creature dies, put a +1/+1 counter on target creature you control.",

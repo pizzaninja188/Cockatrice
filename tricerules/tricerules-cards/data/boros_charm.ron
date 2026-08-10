@@ -15,7 +15,7 @@
         label: "Permanents you control gain indestructible",
         effects: [
           GrantKeywordsAllPermanents(
-            filter: (kind: AnyPermanent, only_controller: true),
+            filter: (kind: AnyPermanent, controller: You),
             keywords: [Indestructible],
           ),
         ],

@@ -1,8 +1,8 @@
 //! Spell and continuous-effect vocabulary plus shared effect parameters.
 
 use super::{
-    AnthemFilter, GraveyardDestination, GraveyardFilter, Keyword, SpellTypeFilter, TargetFilter,
-    TargetKind,
+    AnthemFilter, GraveyardDestination, GraveyardFilter, Keyword, SpellTypeFilter,
+    TargetController, TargetFilter, TargetKind,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -257,7 +257,7 @@ pub enum SpellEffectKind {
     },
     /// CR 701.20: untap every permanent matching `filter` controlled by `players`. Untargeted, and
     /// snapshots the battlefield as it resolves, like [`Self::TapAllCreatures`]. Controller scope
-    /// lives in `players` rather than in the filter's `only_controller`, because untargeted mass
+    /// lives in `players` rather than in the filter's `controller`, because untargeted mass
     /// selection goes through `battlefield_objects_matching`, which has no activating player to
     /// compare against. Covers Vitalize (`Controller` + creature) and Early Harvest / Turnabout
     /// (a player's lands).
@@ -669,6 +669,10 @@ impl SpellEffectKind {
     /// `context` distinguishes spells from abilities so source-bound subjects are
     /// rejected where they make no sense.
     pub fn validate(&self, context: EffectContext) -> Result<(), String> {
+        for filter in self.target_filters() {
+            filter.validate_target_controller()?;
+        }
+
         // CR 115: a source-bound ability effect is not targeting and only exists where there is
         // a source permanent — never in a spell's effect list.
         let source_bound = matches!(
@@ -744,6 +748,12 @@ impl SpellEffectKind {
                         filter.kind
                     ));
                 }
+                if filter.controller != TargetController::Any {
+                    return Err(
+                        "TargetPlayerSacrifices.filter cannot use a controller-relative target filter"
+                            .into(),
+                    );
+                }
                 Ok(())
             }
             // Mass effects select objects, not players, and never use AnyTarget (which includes
@@ -761,9 +771,9 @@ impl SpellEffectKind {
                 // no activating player to compare a controller against — controller scope belongs
                 // in the effect's own `players` (RelativePlayerSet) or `AnthemFilter`, not here.
                 // Rejecting it beats silently ignoring it.
-                if kind.only_controller {
+                if kind.controller != TargetController::Any {
                     return Err(
-                        "mass effect filter cannot use only_controller; scope the effect with \
+                        "mass effect filter cannot use a controller relationship; scope the effect with \
                          `players` (RelativePlayerSet) instead"
                             .into(),
                     );
@@ -788,6 +798,11 @@ impl SpellEffectKind {
                         "GrantKeywordsAllPermanents filter must be Creature or AnyPermanent, got {:?}",
                         filter.kind
                     ))
+                } else if filter.controller == TargetController::Opponent {
+                    Err(
+                        "GrantKeywordsAllPermanents does not support opponent scope; use the dedicated untargeted player scope"
+                            .into(),
+                    )
                 } else if keywords.is_empty() {
                     Err("GrantKeywordsAllPermanents requires at least one keyword".into())
                 } else {

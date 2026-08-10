@@ -1,6 +1,6 @@
 use tricerules_cards::primitives::{
     AnthemController, AnthemFilter, EffectSubject, LifeAmount, SpellEffectKind, SpellTypeFilter,
-    TargetFilter, TargetKind,
+    TargetController, TargetFilter, TargetKind,
 };
 use tricerules_cards::{
     AbilityCost, Amount, CardRegistry, CastTriggerPlayer, CounterKind, Keyword, ManaAmount,
@@ -230,10 +230,10 @@ fn trigger(card_id: &str) -> &'static TriggeredAbilityDef {
     &face.triggered_abilities[0]
 }
 
-fn creature_target(only_controller: bool) -> TargetFilter {
+fn creature_target(controller: TargetController) -> TargetFilter {
     TargetFilter {
         kind: TargetKind::Creature,
-        only_controller,
+        controller,
         ..TargetFilter::default()
     }
 }
@@ -330,7 +330,7 @@ fn issue_49_targeted_etbs_use_one_existing_target_group() {
     assert_eq!(
         trigger("gale_swooper").effect,
         [SpellEffectKind::GrantKeywordsTarget {
-            target: creature_target(false),
+            target: creature_target(TargetController::Any),
             keywords: vec![Keyword::Flying],
         }]
     );
@@ -339,7 +339,7 @@ fn issue_49_targeted_etbs_use_one_existing_target_group() {
         [SpellEffectKind::PumpTarget {
             power: 2,
             toughness: 0,
-            subject: EffectSubject::Chosen(creature_target(false)),
+            subject: EffectSubject::Chosen(creature_target(TargetController::Any)),
         }]
     );
     assert_eq!(
@@ -358,10 +358,10 @@ fn issue_49_targeted_etbs_use_one_existing_target_group() {
             SpellEffectKind::PumpTarget {
                 power: 2,
                 toughness: 0,
-                subject: EffectSubject::Chosen(creature_target(false)),
+                subject: EffectSubject::Chosen(creature_target(TargetController::Any)),
             },
             SpellEffectKind::GrantKeywordsTarget {
-                target: creature_target(false),
+                target: creature_target(TargetController::Any),
                 keywords: vec![Keyword::FirstStrike],
             },
         ]
@@ -451,7 +451,7 @@ fn issue_49_observer_and_dies_triggers_use_existing_subjects() {
         [SpellEffectKind::PutCounters {
             counter: CounterKind::PlusOnePlusOne,
             count: 1,
-            subject: EffectSubject::Chosen(creature_target(true)),
+            subject: EffectSubject::Chosen(creature_target(TargetController::You)),
         }]
     );
     assert_eq!(

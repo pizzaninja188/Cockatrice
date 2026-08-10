@@ -93,7 +93,7 @@ pub(super) fn untap_all(
 
     // CR 701.20: untargeted, so hexproof/shroud are irrelevant and the battlefield is snapshotted
     // as this resolves. `filter` selects what (creature / any permanent), `players` selects whose
-    // — the filter's `only_controller` cannot: untargeted selection has no activating player for
+    // — the filter's controller relation cannot: untargeted selection has no activating player for
     // `battlefield_objects_matching` to compare against.
     let affected: Vec<_> = battlefield_objects_matching(engine, &filter)
         .into_iter()

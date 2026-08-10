@@ -8,7 +8,7 @@
   static_abilities: [AttachedModifier(delta_power: 1, delta_toughness: 1)],
   activated_abilities: [(
     cost: Mana("{1}"),
-    effect: [Equip(target: (kind: Creature, only_controller: true))],
+    effect: [Equip(target: (kind: Creature, controller: You))],
     text: "Equip {1}",
   )],
 )

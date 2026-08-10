@@ -111,8 +111,8 @@ fn object_targetable_by(engine: &GameEngine, tid: ObjectId, caster: PlayerId) ->
 /// Deliberately excluded, because they are **not** shared:
 /// - hexproof/shroud ([`object_targetable_by`]) — CR 702.11e, untargeted effects affect those
 ///   permanents normally, so only the targeted caller applies it;
-/// - `only_controller` — needs an activating player, which untargeted mass selection does not
-///   have (it is rejected in a mass filter at registry load);
+/// - `controller` — needs an activating player, which untargeted mass selection does not have
+///   (non-`Any` values are rejected in a mass filter at registry load);
 /// - the [`TargetKind`] mapping — the two paths accept different kinds and check zone differently.
 fn filter_characteristics_match(engine: &GameEngine, filter: &TargetFilter, oid: ObjectId) -> bool {
     let Some(object) = engine.state.objects.get(&oid) else {
@@ -166,10 +166,25 @@ fn filter_characteristics_match(engine: &GameEngine, filter: &TargetFilter, oid:
     true
 }
 
+/// Match a permanent's current derived controller against a target restriction. The current game
+/// model has no teams, so every different player is an opponent; keeping this comparison in one
+/// player-id-based helper avoids two-player seat arithmetic and provides one future team hook.
+fn target_controller_matches(
+    relation: TargetController,
+    ability_controller: PlayerId,
+    target_controller: PlayerId,
+) -> bool {
+    match relation {
+        TargetController::Any => true,
+        TargetController::You => target_controller == ability_controller,
+        TargetController::Opponent => target_controller != ability_controller,
+    }
+}
+
 /// Whether a battlefield permanent still satisfies an Aura's printed enchant restriction.
 /// Unlike spell-target legality, an existing attachment is unaffected by hexproof or shroud.
-/// `only_controller` remains relevant because "enchant creature you control" is a continuous
-/// restriction evaluated against the Aura's current controller.
+/// `controller` remains relevant because controller-qualified enchant restrictions are continuous
+/// restrictions evaluated against the Aura's current controller.
 pub(super) fn attachment_filter_legal(
     engine: &GameEngine,
     filter: &TargetFilter,
@@ -192,11 +207,15 @@ pub(super) fn attachment_filter_legal(
     };
     kind_ok
         && filter_characteristics_match(engine, filter, oid)
-        && (!filter.only_controller || characteristics.controller == attachment_controller)
+        && target_controller_matches(
+            filter.controller,
+            attachment_controller,
+            characteristics.controller,
+        )
 }
 
 /// Legality of a single target against a [`TargetFilter`].
-/// `caster` is needed only to enforce the opponent-only restriction.
+/// `caster` supplies the reference player for hexproof and controller-relative restrictions.
 /// True if `oid` is a battlefield permanent selected by a mass effect's `kind` filter
 /// (DestroyAll / DamageAll). Unlike [`target_filter_legal`] this is **not** targeting: it
 /// ignores hexproof/shroud (CR 702.11e — untargeted effects affect them normally) and only
@@ -284,17 +303,14 @@ fn target_filter_legal(
         if !filter_characteristics_match(engine, filter, tid) {
             return false;
         }
-        // "target creature you control" (equip, regenerate, …) — CR 110.2 control, read through
-        // the layer pipeline, so a permanent you control but do not own qualifies. Targeting-only:
-        // an untargeted mass effect has no activating player to compare against.
-        if filter.only_controller {
-            if let Some(value) = engine.characteristics(tid) {
-                if value.controller != caster {
-                    return false;
-                }
-            } else {
-                return false;
-            }
+        // Controller-relative restrictions read CR 110.2 control through the layer pipeline, so
+        // current control rather than ownership decides. Targeting-only: an untargeted mass effect
+        // has no activating player to compare against.
+        let Some(characteristics) = engine.characteristics(tid) else {
+            return false;
+        };
+        if !target_controller_matches(filter.controller, caster, characteristics.controller) {
+            return false;
         }
     }
     true
@@ -981,5 +997,77 @@ pub(super) fn compute_spell_targets(
         is_damage_targets,
         extra_mana_per_target,
         damage_division: damage_division as i32,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn opponent_relation_is_player_id_based_not_two_seat_arithmetic() {
+        assert!(target_controller_matches(
+            TargetController::Opponent,
+            10,
+            20
+        ));
+        assert!(target_controller_matches(
+            TargetController::Opponent,
+            10,
+            30
+        ));
+        assert!(!target_controller_matches(
+            TargetController::Opponent,
+            10,
+            10
+        ));
+        assert!(target_controller_matches(TargetController::You, 10, 10));
+        assert!(!target_controller_matches(TargetController::You, 10, 20));
+        assert!(target_controller_matches(TargetController::Any, 10, 10));
+        assert!(target_controller_matches(TargetController::Any, 10, 20));
+    }
+
+    #[test]
+    fn attachment_controller_relation_uses_current_derived_control() {
+        let decks = Some(vec![
+            vec!["grizzly_bears".into(); 7],
+            vec!["forest".into(); 7],
+        ]);
+        let mut engine = GameEngine::new(96906, &[0, 1], 20, decks, true).expect("new");
+        let bear = engine.state.players[0]
+            .hand
+            .iter()
+            .copied()
+            .find(|oid| {
+                engine
+                    .state
+                    .objects
+                    .get(oid)
+                    .is_some_and(|o| o.card_id == "grizzly_bears")
+            })
+            .expect("bear in hand");
+        engine.state.players[0].hand.retain(|oid| *oid != bear);
+        engine.state.players[0].battlefield.push(bear);
+        engine.state.objects.get_mut(&bear).expect("bear").zone = Zone::Battlefield;
+
+        let opponent_only = TargetFilter {
+            kind: TargetKind::Creature,
+            controller: TargetController::Opponent,
+            ..TargetFilter::default()
+        };
+        assert!(!attachment_filter_legal(&engine, &opponent_only, bear, 0));
+
+        engine.state.players[0]
+            .battlefield
+            .retain(|oid| *oid != bear);
+        engine.state.players[1].battlefield.push(bear);
+        engine
+            .state
+            .objects
+            .get_mut(&bear)
+            .expect("bear")
+            .controller = 1;
+        assert!(attachment_filter_legal(&engine, &opponent_only, bear, 0));
+        assert!(!attachment_filter_legal(&engine, &opponent_only, bear, 1));
     }
 }

@@ -39,6 +39,8 @@ mod modal_spells;
 mod multi_face;
 #[path = "scenario/opening.rs"]
 mod opening;
+#[path = "scenario/opponent_targets.rs"]
+mod opponent_targets;
 #[path = "scenario/performance.rs"]
 mod performance;
 #[path = "scenario/priority_and_turns.rs"]

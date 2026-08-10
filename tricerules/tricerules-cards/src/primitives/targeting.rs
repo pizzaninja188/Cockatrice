@@ -19,6 +19,19 @@ pub enum TargetKind {
     AnyPermanent,
 }
 
+/// Controller relationship required of a permanent target, relative to the spell or ability
+/// controller. This remains independently composable with the other `TargetFilter` predicates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum TargetController {
+    /// A permanent controlled by any player.
+    #[default]
+    Any,
+    /// A permanent controlled by the spell or ability's controller ("you control").
+    You,
+    /// A permanent controlled by an opponent of the spell or ability's controller.
+    Opponent,
+}
+
 /// Which player's graveyard a [`GraveyardFilter`] targets. Defaults to [`Controller`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum GraveyardOwner {
@@ -76,9 +89,10 @@ fn default_creature_filter() -> TargetFilter {
 /// - `(kind: Creature, not_color: Black)` — nonblack creature (Doom Blade, Terror)
 /// - `(kind: Creature, is_color: Green)` — green creature (Perish, Virtue's Ruin)
 /// - `(kind: Creature, attacking_or_blocking: true)` — Divine Verdict, Hunt Down
-/// - `(kind: Creature, only_controller: true)` — "target creature you control" (Equip,
-///   Regenerate, many activated abilities). Enforced at targeting time; the controller
-///   is the activating player.
+/// - `(kind: Creature, controller: You)` — "target creature you control" (Equip, Regenerate,
+///   many activated abilities). Enforced at targeting time relative to the activating player.
+/// - `(kind: AnyPermanent, controller: Opponent, permanent_types: [Artifact, Enchantment])` —
+///   Rambunctious Mutt.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct TargetFilter {
     #[serde(default)]
@@ -102,12 +116,11 @@ pub struct TargetFilter {
     /// the untargeted side; Hydroblast / Pyroblast ("target red permanent") on the targeted side.
     #[serde(default)]
     pub is_color: Option<Color>,
-    /// "target creature you control" restriction (CR 702.6a / 701.15 regenerate / various
-    /// activated abilities). The target must be owned/controlled by the activating player.
-    /// Covers Equipment equip (Bonesplitter, Vulshok Morningstar) and Regenerate (Drudge
-    /// Skeletons, Cudgel Troll) without a new variant.
+    /// Controller relationship for a permanent target, relative to the spell or ability's
+    /// controller. Covers "you control" (Equipment, regeneration) and "an opponent controls"
+    /// (Glaring Aegis, Rambunctious Mutt) while composing with every other filter field.
     #[serde(default)]
-    pub only_controller: bool,
+    pub controller: TargetController,
     /// Optional OR-combined permanent type restriction. For example, Icy Manipulator uses
     /// `[Artifact, Creature, Land]`; an empty list means no additional type restriction.
     #[serde(default)]
@@ -128,9 +141,23 @@ impl TargetFilter {
     pub fn default_equip() -> Self {
         TargetFilter {
             kind: TargetKind::Creature,
-            only_controller: true,
+            controller: TargetController::You,
             ..TargetFilter::default()
         }
+    }
+
+    /// Validate a controller relationship used for actual targeting. Player and `AnyTarget`
+    /// filters cannot carry a permanent-controller predicate.
+    pub(crate) fn validate_target_controller(&self) -> Result<(), String> {
+        if self.controller != TargetController::Any
+            && !matches!(self.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+        {
+            return Err(format!(
+                "controller-relative target filter requires Creature or AnyPermanent kind, got {:?}",
+                self.kind
+            ));
+        }
+        Ok(())
     }
 
     /// True for player-only kinds (used by startup validation).

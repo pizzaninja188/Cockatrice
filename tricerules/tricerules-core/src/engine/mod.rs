@@ -23,7 +23,8 @@ use tricerules_cards::primitives::{
     EffectDuration, EffectSubject, EntersTappedAffected, Evasion, FaceChangeAction, InterveningIf,
     Keyword, LifeAmount, PlayerRecipient, PreventionAmountBasis, RelativePlayerSet,
     SearchDestination, SpellEffectKind, SpellTypeFilter, StaticAbilityDef,
-    StaticDamagePreventionAmount, TargetFilter, TargetKind, TokenController, TriggerCondition,
+    StaticDamagePreventionAmount, TargetController, TargetFilter, TargetKind, TokenController,
+    TriggerCondition,
 };
 use tricerules_cards::{CardRegistry, FaceRef, Layout};
 use tricerules_proto::ruled::v1 as rv1;

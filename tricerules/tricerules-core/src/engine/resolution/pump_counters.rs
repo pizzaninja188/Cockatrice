@@ -174,12 +174,18 @@ pub(super) fn grant_keywords_all_permanents(
     // Snapshot the affected permanents now. A permanent entering later in the turn was not
     // affected by this resolving one-shot effect (CR 611.2c).
     let mut affected = battlefield_objects_matching(cx.engine, &filter);
-    if filter.only_controller {
-        affected.retain(|oid| {
+    match filter.controller {
+        TargetController::Any => {}
+        TargetController::You => affected.retain(|oid| {
             cx.engine
                 .characteristics(*oid)
                 .is_some_and(|value| value.controller == cx.controller)
-        });
+        }),
+        TargetController::Opponent => {
+            return Err(EngineError::Illegal(
+                "opponent scope is not supported by GrantKeywordsAllPermanents",
+            ));
+        }
     }
     let keyword_names: Vec<&str> = keywords.iter().map(|keyword| keyword.as_str()).collect();
     for oid in affected {
