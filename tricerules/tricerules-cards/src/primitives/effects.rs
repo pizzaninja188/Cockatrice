@@ -273,7 +273,7 @@ pub enum DamageDivision {
     EvenAtResolution,
 }
 
-/// How much life a [`SpellEffectKind::LoseLife`] costs.
+/// How much life a [`SpellEffectKind::LoseLife`] causes each recipient to lose.
 ///
 /// Kept separate from [`Amount`] on purpose: its dynamic variants query shared engine context,
 /// while `TargetManaValue` specifically needs the resolving spell's target, so folding it into
@@ -515,13 +515,18 @@ pub enum SpellEffectKind {
     GainLife {
         amount: Amount,
     },
-    /// CR 118: the effect's controller loses life. **Untargeted** — "you lose life" does not
-    /// target (CR 115.1), so this is deliberately absent from `spell_effect_kind_needs_target`
-    /// and from [`SpellEffectKind::target_filters`]. Adding it to either would make every
-    /// `LoseLife`-only card demand a target.
-    /// Two cards: Thoughtseize (`Fixed(2)`), Reanimate (`TargetManaValue`).
+    /// CR 119.3: the players named by `who` lose life. **Untargeted** — neither "you" nor
+    /// "each opponent" uses the word "target" (CR 115.1), so this is deliberately absent from
+    /// `spell_effect_kind_needs_target` and [`SpellEffectKind::target_filters`]. Adding it to
+    /// either would make every `LoseLife`-only card demand a target.
+    ///
+    /// Thoughtseize and Reanimate use the default `Controller`; Infectious Horror and Caged
+    /// Zombie use `EachOpponent`. `EachPlayer` shares the same recipient vocabulary for cards
+    /// that affect everyone without targeting.
     LoseLife {
         amount: LifeAmount,
+        #[serde(default)]
+        who: PlayerRecipient,
     },
     TargetPlayerGainsLife {
         amount: u32,
@@ -832,7 +837,8 @@ impl SpellEffectKind {
             matches!(
                 e,
                 SpellEffectKind::LoseLife {
-                    amount: LifeAmount::TargetManaValue
+                    amount: LifeAmount::TargetManaValue,
+                    ..
                 }
             )
         }) && !effects.iter().any(|e| e.targets_an_object())

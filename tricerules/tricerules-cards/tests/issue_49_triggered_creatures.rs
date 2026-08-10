@@ -1,6 +1,6 @@
 use tricerules_cards::primitives::{
-    AnthemController, AnthemFilter, EffectSubject, LifeAmount, SpellEffectKind, SpellTypeFilter,
-    TargetController, TargetFilter, TargetKind,
+    AnthemController, AnthemFilter, EffectSubject, LifeAmount, PlayerRecipient, SpellEffectKind,
+    SpellTypeFilter, TargetController, TargetFilter, TargetKind,
 };
 use tricerules_cards::{
     AbilityCost, Amount, CardRegistry, CastTriggerPlayer, CounterKind, Keyword, ManaAmount,
@@ -486,6 +486,7 @@ fn issue_49_attack_triggers_use_existing_ordered_effects() {
             },
             SpellEffectKind::LoseLife {
                 amount: LifeAmount::Fixed(1),
+                who: PlayerRecipient::Controller,
             },
         ]
     );

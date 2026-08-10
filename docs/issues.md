@@ -34,7 +34,7 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Priority: Low
 
 - [ ] #54 [feature] Activated-ability timing and board-state restrictions
-  - Details: Add reusable activation predicates for sorcery-speed timing and conditions over controlled permanents or keywords. Calibration evidence: Celestial Enforcer, Goblin Bird-Grabber, and Liliana's Steward's secondary `activation_timing_and_discard_choice` gap. Integrate the predicates into authoritative legal actions and command validation; Caged Zombie can reuse the shipped `GameCondition::CreatureDeathsThisTurn` predicate.
+  - Details: Add reusable activation predicates for sorcery-speed timing and conditions over controlled permanents or keywords. Calibration evidence: Celestial Enforcer, Goblin Bird-Grabber, and Liliana's Steward's secondary `activation_timing_and_discard_choice` gap. Integrate the predicates into authoritative legal actions and command validation. Caged Zombie can reuse the shipped `GameCondition::CreatureDeathsThisTurn`; its tap-and-mana cost is already supported and its untargeted each-opponent life-loss effect shipped with Issue #87, so the activation predicate is its only remaining gap.
   - Priority: Low
 
 - [ ] #55 [feature] Conditional mana output and restricted mana spending
@@ -151,10 +151,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
 
 - [ ] #86 [feature] Related-player effect recipients
   - Details: Add recipient expressions for the controller of a target or blocking creature and the defending player or planeswalker associated with an attacker. Calibration evidence: Chandra's Outrage, Gloom Sower's secondary controller-recipient gap, and Scorch Spitter. Derive recipients from engine identities at the event or resolution time required by the effect, with controller-aware multiplayer coverage.
-  - Priority: Low
-
-- [ ] #87 [feature] Untargeted each-opponent life loss
-  - Details: Add a non-targeted effect recipient covering every opponent of the relevant player. Calibration evidence: Infectious Horror and Caged Zombie's secondary effect gap. Preserve multiplayer opponent sets and life-loss semantics distinct from damage, and satisfy the two-card-or-mechanic reuse gate before adding the recipient.
   - Priority: Low
 
 - [ ] #88 [feature] Soft counters with optional payment

@@ -50,6 +50,29 @@ mod tests {
     }
 
     #[test]
+    fn lose_life_serde_supports_explicit_and_default_player_recipients() {
+        let explicit: SpellEffectKind =
+            ron::from_str("LoseLife(amount: Fixed(2), who: EachOpponent)")
+                .expect("each-opponent life loss should deserialize");
+        assert!(matches!(
+            explicit,
+            SpellEffectKind::LoseLife {
+                amount: LifeAmount::Fixed(2),
+                ..
+            }
+        ));
+        assert!(ron::to_string(&explicit)
+            .expect("each-opponent life loss should serialize")
+            .contains("who:EachOpponent"));
+
+        let legacy: SpellEffectKind = ron::from_str("LoseLife(amount: Fixed(1))")
+            .expect("legacy controller life loss should deserialize");
+        assert!(ron::to_string(&legacy)
+            .expect("legacy controller life loss should serialize")
+            .contains("who:Controller"));
+    }
+
+    #[test]
     fn turn_history_condition_requires_a_valid_bound() {
         assert!(GameCondition::CreatureDeathsThisTurn {
             min: None,

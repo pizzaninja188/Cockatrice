@@ -1,0 +1,15 @@
+(
+  id: "infectious_horror",
+  name: "Infectious Horror",
+  mana_cost: "{3}{B}",
+  types: ["Creature", "Zombie", "Horror"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      trigger: WheneverSelfAttacks,
+      effect: [LoseLife(amount: Fixed(2), who: EachOpponent)],
+      text: "Whenever this creature attacks, each opponent loses 2 life.",
+    ),
+  ],
+)

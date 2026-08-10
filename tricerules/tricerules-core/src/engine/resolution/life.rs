@@ -70,7 +70,31 @@ pub(super) fn gain_life(
     Ok(EffectOutcome::Continue)
 }
 
-/// CR 118: the effect's controller loses life. Untargeted (CR 115.1).
+fn lose_life_recipients(
+    state: &GameState,
+    controller: PlayerId,
+    affected_player: PlayerId,
+    who: PlayerRecipient,
+) -> Vec<PlayerId> {
+    match who {
+        PlayerRecipient::Controller => vec![controller],
+        PlayerRecipient::AffectedPlayer => vec![affected_player],
+        PlayerRecipient::EachOpponent => state
+            .players
+            .iter()
+            .filter(|player| state.are_opponents(player.id, controller) && !player.has_lost)
+            .map(|player| player.id)
+            .collect(),
+        PlayerRecipient::EachPlayer => state
+            .players
+            .iter()
+            .filter(|player| !player.has_lost)
+            .map(|player| player.id)
+            .collect(),
+    }
+}
+
+/// CR 119.3: the players named by `who` lose life. Untargeted (CR 115.1).
 ///
 /// `LifeAmount::TargetManaValue` (CR 202.3) reads the mana value of the object the *spell*
 /// targets — a sibling effect declared it, this one only borrows it. Position relative to that
@@ -82,13 +106,13 @@ pub(super) fn lose_life(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::LoseLife { amount } = effect else {
+    let SpellEffectKind::LoseLife { amount, who } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    let recipients = lose_life_recipients(&cx.engine.state, cx.controller, cx.affected_player, who);
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let targets = cx.targets;
-    let controller = cx.controller;
     let spell_label = cx.spell_label;
 
     let amount = match amount {
@@ -119,18 +143,22 @@ pub(super) fn lose_life(
     if amount == 0 {
         return Ok(EffectOutcome::Continue);
     }
-    let pi = engine.state.player_idx(controller).unwrap();
-    engine.state.players[pi].life -= amount as i32;
-    events.push(rv1::RuledEvent {
-        ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
-            player_id: controller,
-            new_total: engine.state.players[pi].life,
-            delta: -(amount as i32),
-        })),
-    });
-    events.push(ev_log(format!(
-        "P{controller} loses {amount} life ({spell_label})."
-    )));
+    for player in recipients {
+        let Some(pi) = engine.state.player_idx(player) else {
+            continue;
+        };
+        engine.state.players[pi].life -= amount as i32;
+        events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                player_id: player,
+                new_total: engine.state.players[pi].life,
+                delta: -(amount as i32),
+            })),
+        });
+        events.push(ev_log(format!(
+            "P{player} loses {amount} life ({spell_label})."
+        )));
+    }
 
     Ok(EffectOutcome::Continue)
 }
@@ -262,4 +290,36 @@ pub(super) fn drain_target(
     }
 
     Ok(EffectOutcome::Continue)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::PlayerState;
+
+    #[test]
+    fn lose_life_recipient_sets_are_player_generic_and_skip_lost_players() {
+        let mut engine = GameEngine::new(87, &[10, 20], 20, None, true).expect("two-player engine");
+        engine.state.players.push(PlayerState::new(30, 20));
+        let mut lost_player = PlayerState::new(40, 20);
+        lost_player.has_lost = true;
+        engine.state.players.push(lost_player);
+
+        assert_eq!(
+            lose_life_recipients(&engine.state, 10, 30, PlayerRecipient::Controller),
+            vec![10]
+        );
+        assert_eq!(
+            lose_life_recipients(&engine.state, 10, 30, PlayerRecipient::AffectedPlayer),
+            vec![30]
+        );
+        assert_eq!(
+            lose_life_recipients(&engine.state, 10, 30, PlayerRecipient::EachOpponent),
+            vec![20, 30]
+        );
+        assert_eq!(
+            lose_life_recipients(&engine.state, 10, 30, PlayerRecipient::EachPlayer),
+            vec![10, 20, 30]
+        );
+    }
 }
