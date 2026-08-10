@@ -21,10 +21,10 @@ use tricerules_cards::primitives::{
     AbilityCost, AnthemController, AnthemFilter, CastTriggerPlayer, Color, ContinuousEffectKind,
     CounterKind, DamageDivision, DamagePreventionAdditionalEffect, DamagePreventionSubject,
     EffectDuration, EffectSubject, EntersTappedAffected, Evasion, FaceChangeAction, InterveningIf,
-    Keyword, LifeAmount, PlayerRecipient, PreventionAmountBasis, RelativePlayerSet,
-    SearchDestination, SpellEffectKind, SpellTypeFilter, StaticAbilityDef,
-    StaticDamagePreventionAmount, TargetController, TargetFilter, TargetKind, TokenController,
-    TriggerCondition,
+    Keyword, LifeAmount, PermanentTypeFilter, PlayerRecipient, PreventionAmountBasis,
+    RelativePlayerSet, SearchDestination, SpellEffectKind, SpellTypeFilter, StaticAbilityDef,
+    StaticDamagePreventionAmount, TargetController, TargetFilter, TargetKind,
+    TargetingSourceFilter, TokenController, TriggerCondition,
 };
 use tricerules_cards::{CardRegistry, FaceRef, Layout};
 use tricerules_proto::ruled::v1 as rv1;
@@ -182,6 +182,16 @@ struct TriggerSourceSnapshot {
     face_index: usize,
 }
 
+/// The kind of stack object whose final target set was chosen. Cast spells and copied spells are
+/// distinct because "cast a spell that targets" and "target of a spell" are different trigger
+/// templates; activated and triggered abilities share the ability kind.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TargetingSourceKind {
+    SpellCast,
+    SpellCopy,
+    Ability,
+}
+
 enum GameEvent {
     EntersBattlefield {
         object_id: ObjectId,
@@ -229,6 +239,14 @@ enum GameEvent {
         /// CR 709/712: the half/face that was cast. On the stack a multi-face spell has only that
         /// face's characteristics, so cast triggers filter on it rather than on the whole card.
         face_index: usize,
+    },
+    /// A spell or ability has legally acquired its final targets. `targets` intentionally keeps
+    /// duplicates for the stack object's own semantics; trigger collection deduplicates watched
+    /// permanents so one object becoming a target multiple times fires each watcher only once.
+    TargetsChosen {
+        controller: PlayerId,
+        source: TargetingSourceKind,
+        targets: Vec<ObjectId>,
     },
 }
 

@@ -568,6 +568,7 @@ impl GameEngine {
             target_damage: Vec::new(),
             chosen_modes: Vec::new(),
             trigger_player: None,
+            trigger_object: None,
         };
         let result = self.process_or_park_damage_event(&item, event, source_has_deathtouch, events);
         if result.is_none() {
@@ -729,6 +730,7 @@ impl GameEngine {
             target_damage: Vec::new(),
             chosen_modes: Vec::new(),
             trigger_player: None,
+            trigger_object: None,
         };
         let completed = self.process_or_park_damage_batch(&item, damage, events);
         debug_assert!(completed.is_none());

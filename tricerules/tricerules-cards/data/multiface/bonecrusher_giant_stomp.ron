@@ -1,6 +1,5 @@
 // Bonecrusher Giant // Stomp (Throne of Eldraine) — Adventure, CR 715.
-// The Adventure lifecycle is implemented by the engine. The two unrelated Oracle clauses named
-// in `partial` are tracked as follow-up issues in docs/issues.md.
+// The Adventure lifecycle and both faces' Oracle text are implemented by the engine.
 (
     id: "bonecrusher_giant_stomp",
     name: "Bonecrusher Giant // Stomp",
@@ -12,6 +11,16 @@
             types: ["Creature", "Giant"],
             power: 4,
             toughness: 3,
+            triggered_abilities: [
+                (
+                    trigger: WheneverSelfBecomesTarget(
+                        source: Spell,
+                        source_controller: AnyPlayer,
+                    ),
+                    effect: [DamagePlayer(amount: 2, who: AffectedPlayer)],
+                    text: "Whenever this creature becomes the target of a spell, this creature deals 2 damage to that spell's controller.",
+                ),
+            ],
         ),
         (
             name: "Stomp",
@@ -23,5 +32,4 @@
             ],
         ),
     ],
-    partial: "Bonecrusher Giant's becomes-the-target trigger is not implemented (issue #47)",
 )

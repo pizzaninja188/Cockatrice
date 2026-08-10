@@ -2093,6 +2093,269 @@ fn trigger_target_can_be_retried_after_a_rejection() {
     );
 }
 
+#[test]
+fn issue_47_bonecrusher_target_trigger_is_above_spell() {
+    let decks = Some(vec![
+        deck_with("mountain", &["bonecrusher_giant_stomp"]),
+        deck_with("mountain", &["lightning_bolt"]),
+    ]);
+    let mut e = GameEngine::new(94701, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let giant = relocate_to_battlefield(&mut e, 0, "bonecrusher_giant_stomp", false);
+    ensure_in_hand(&mut e, 1, "lightning_bolt");
+    grant_pool(&mut e, 1);
+
+    e.apply_command(0, &pass()).expect("P0 passes priority");
+    let bolt = hand_index_for_card(&e, 1, "lightning_bolt");
+    e.apply_command(
+        1,
+        &cast_spell(
+            bolt,
+            vec![TargetRef {
+                object_id: giant,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast Lightning Bolt targeting Bonecrusher Giant");
+
+    assert_eq!(e.state.stack.len(), 2, "the trigger is above the spell");
+    let trigger = e.state.stack.last().expect("Bonecrusher trigger");
+    assert!(trigger.is_triggered);
+    assert_eq!(trigger.source_permanent_id, Some(giant));
+    assert_eq!(trigger.controller, 0);
+    assert_eq!(trigger.trigger_player, Some(1));
+    assert_eq!(trigger.trigger_object, Some(giant));
+}
+
+#[test]
+fn issue_47_bonecrusher_trigger_resolves_after_targeting_spell_is_countered() {
+    let decks = Some(vec![
+        deck_with("island", &["bonecrusher_giant_stomp", "counterspell"]),
+        deck_with("mountain", &["lightning_bolt"]),
+    ]);
+    let mut e = GameEngine::new(94703, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let giant = relocate_to_battlefield(&mut e, 0, "bonecrusher_giant_stomp", false);
+    ensure_in_hand(&mut e, 0, "counterspell");
+    ensure_in_hand(&mut e, 1, "lightning_bolt");
+    grant_pool(&mut e, 0);
+    grant_pool(&mut e, 1);
+
+    e.apply_command(0, &pass()).expect("P0 passes priority");
+    let bolt = hand_index_for_card(&e, 1, "lightning_bolt");
+    e.apply_command(
+        1,
+        &cast_spell(
+            bolt,
+            vec![TargetRef {
+                object_id: giant,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("P1 casts Lightning Bolt targeting Bonecrusher Giant");
+    let bolt_id = e.state.stack[0].id;
+
+    e.apply_command(1, &pass())
+        .expect("P1 passes priority to P0");
+    let counterspell = hand_index_for_card(&e, 0, "counterspell");
+    e.apply_command(
+        0,
+        &cast_spell(
+            counterspell,
+            vec![TargetRef {
+                object_id: bolt_id,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("P0 counters the targeting spell");
+
+    resolve_entire_stack_two_player(&mut e);
+
+    assert_eq!(e.state.players[1].life, 18);
+    assert!(e.state.players[0].battlefield.contains(&giant));
+    assert_eq!(count_card_id_in_graveyard(&e, 1, "lightning_bolt"), 1);
+}
+
+#[test]
+fn issue_47_invalid_or_different_spell_target_emits_no_bonecrusher_trigger() {
+    let decks = Some(vec![
+        deck_with("mountain", &["bonecrusher_giant_stomp"]),
+        deck_with("mountain", &["lightning_bolt", "forest"]),
+    ]);
+    let mut e = GameEngine::new(94704, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let _giant = relocate_to_battlefield(&mut e, 0, "bonecrusher_giant_stomp", false);
+    let forest = relocate_to_battlefield(&mut e, 1, "forest", false);
+    ensure_in_hand(&mut e, 1, "lightning_bolt");
+    grant_pool(&mut e, 1);
+    e.apply_command(0, &pass()).expect("P0 passes priority");
+
+    let bolt = hand_index_for_card(&e, 1, "lightning_bolt");
+    assert!(
+        e.apply_command(
+            1,
+            &cast_spell(
+                bolt,
+                vec![TargetRef {
+                    object_id: forest,
+                    damage_amount: 0,
+                }],
+            ),
+        )
+        .is_err(),
+        "a land is not a legal Lightning Bolt target"
+    );
+    assert!(e.state.stack.is_empty());
+    assert!(e.state.staged_trigger_groups.is_empty());
+
+    let bolt = hand_index_for_card(&e, 1, "lightning_bolt");
+    e.apply_command(1, &cast_spell(bolt, target_player(0)))
+        .expect("cast Lightning Bolt at P0");
+    assert_eq!(
+        e.state.stack.len(),
+        1,
+        "only the differently-targeted spell"
+    );
+}
+
+#[test]
+fn issue_47_ability_target_does_not_match_bonecrushers_spell_filter() {
+    let decks = Some(vec![
+        deck_with("mountain", &["bonecrusher_giant_stomp"]),
+        deck_with("mountain", &["prodigal_pyromancer"]),
+    ]);
+    let mut e = GameEngine::new(94705, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let giant = relocate_to_battlefield(&mut e, 0, "bonecrusher_giant_stomp", false);
+    let pyromancer = relocate_to_battlefield(&mut e, 1, "prodigal_pyromancer", false);
+    e.apply_command(0, &pass()).expect("P0 passes priority");
+    e.apply_command(
+        1,
+        &activate_ability(
+            pyromancer,
+            0,
+            vec![TargetRef {
+                object_id: giant,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("activate Prodigal Pyromancer targeting Bonecrusher Giant");
+
+    assert_eq!(e.state.stack.len(), 1, "Bonecrusher watches spells only");
+    assert!(!e.state.stack[0].is_triggered);
+}
+
+#[test]
+fn issue_47_targeted_trigger_preserves_existing_placement_flow() {
+    let decks = Some(vec![
+        deck_with(
+            "plains",
+            &["bonecrusher_giant_stomp", "cavalry_drillmaster"],
+        ),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(94706, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let giant = relocate_to_battlefield(&mut e, 0, "bonecrusher_giant_stomp", false);
+    ensure_in_hand(&mut e, 0, "cavalry_drillmaster");
+    grant_pool(&mut e, 0);
+    let drillmaster = hand_index_for_card(&e, 0, "cavalry_drillmaster");
+    e.apply_command(0, &cast_spell(drillmaster, vec![]))
+        .expect("cast Cavalry Drillmaster");
+    pass_both_players(&mut e);
+    assert_eq!(e.state.pending_triggers.len(), 1);
+
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                target_object_id: giant,
+                decline: false,
+            })),
+        },
+    )
+    .expect("target Bonecrusher Giant with the ETB ability");
+
+    assert_eq!(
+        e.state.stack.len(),
+        1,
+        "the original trigger remains on the stack"
+    );
+    assert!(e.state.stack[0].is_triggered);
+    assert_eq!(e.state.stack[0].trigger_object, None);
+}
+
+#[test]
+fn issue_47_spell_copy_targeting_bonecrusher_creates_a_new_trigger() {
+    let decks = Some(vec![
+        deck_with("mountain", &["bonecrusher_giant_stomp", "lightning_bolt"]),
+        deck_with("island", &["twincast"]),
+    ]);
+    let mut e = GameEngine::new(94707, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let giant = relocate_to_battlefield(&mut e, 0, "bonecrusher_giant_stomp", false);
+    ensure_in_hand(&mut e, 0, "lightning_bolt");
+    ensure_in_hand(&mut e, 1, "twincast");
+    grant_pool(&mut e, 0);
+    grant_pool(&mut e, 1);
+
+    let bolt = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(
+        0,
+        &cast_spell(
+            bolt,
+            vec![TargetRef {
+                object_id: giant,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("P0 casts Lightning Bolt targeting Bonecrusher Giant");
+    pass_both_players(&mut e);
+    assert_eq!(e.state.stack.len(), 1, "the original Bolt remains");
+    let bolt_id = e.state.stack[0].id;
+
+    e.apply_command(0, &pass()).expect("P0 passes priority");
+    let twincast = hand_index_for_card(&e, 1, "twincast");
+    e.apply_command(
+        1,
+        &cast_spell(
+            twincast,
+            vec![TargetRef {
+                object_id: bolt_id,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("P1 casts Twincast targeting Lightning Bolt");
+    pass_both_players(&mut e);
+    assert!(e.state.pending_resolution.is_some());
+
+    e.apply_command(1, &submit_resolution_choice(vec![giant]))
+        .expect("P1 keeps Bonecrusher Giant as the copy's target");
+
+    assert_eq!(
+        e.state.stack.len(),
+        3,
+        "original, copy, then Bonecrusher trigger"
+    );
+    assert!(e.state.stack[1].is_copy);
+    let trigger = e.state.stack.last().expect("copy target trigger");
+    assert!(trigger.is_triggered);
+    assert_eq!(trigger.trigger_player, Some(1));
+    assert_eq!(trigger.trigger_object, Some(giant));
+}
+
 // ---------------------------------------------------------------------------
 // Issue #49 — simple triggered creatures cohort.
 //

@@ -443,6 +443,7 @@ fn dev_entry_item(controller: PlayerId, object_id: ObjectId, card_id: &str) -> S
         target_damage: Vec::new(),
         chosen_modes: Vec::new(),
         trigger_player: None,
+        trigger_object: None,
     }
 }
 

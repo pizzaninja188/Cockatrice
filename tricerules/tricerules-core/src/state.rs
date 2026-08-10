@@ -268,6 +268,9 @@ pub struct StagedTrigger {
     /// The event's beneficiary when the trigger names a player other than its controller
     /// ("**that player** draws a card"); `None` means the controller.
     pub trigger_player: Option<PlayerId>,
+    /// The distinct permanent whose becoming a target caused this trigger. Kept separate from
+    /// `targets`: this object was observed by the trigger and was not chosen as its CR 115 target.
+    pub trigger_object: Option<ObjectId>,
     /// CR 603.5: an optional triggered ability may be declined before it is put on the stack.
     pub may: bool,
 }
@@ -332,6 +335,8 @@ pub struct PendingTrigger {
     /// Mirror of [`StackItem::trigger_player`], carried across target selection so a targeted
     /// draw-step-style trigger keeps its beneficiary when it finally reaches the stack.
     pub trigger_player: Option<PlayerId>,
+    /// Mirror of [`StackItem::trigger_object`], carried across any CR 603.3d target choice.
+    pub trigger_object: Option<ObjectId>,
 }
 
 /// A tier-3 custom resolution (CR 608) parked mid-way, waiting on a player choice. Mirrors
@@ -524,6 +529,10 @@ pub struct StackItem {
     /// Controllership itself is unaffected: the Mine's controller still controls the ability and
     /// decides its stack ordering.
     pub trigger_player: Option<PlayerId>,
+    /// The permanent whose becoming a target caused this triggered ability. This is event
+    /// identity, not one of this stack item's own CR 115 targets, and therefore remains available
+    /// even for a non-targeted observer trigger.
+    pub trigger_object: Option<ObjectId>,
 }
 
 /// Pre-game: choose first player, then London-style mulligans (redraw to 7, then put N on bottom).

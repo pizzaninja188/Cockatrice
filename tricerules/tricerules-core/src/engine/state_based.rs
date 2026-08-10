@@ -434,6 +434,7 @@ impl GameEngine {
                 target_damage: vec![],
                 chosen_modes: vec![],
                 trigger_player: None,
+                trigger_object: None,
                 flashback: false,
             };
             self.state.pending_resolution = Some(PendingResolution {

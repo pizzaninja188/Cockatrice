@@ -20,6 +20,8 @@ pub(super) struct CollectedTrigger {
     pub ability_text: String,
     /// The event's affected player ("that player"), when distinct from the ability controller.
     pub trigger_player: Option<PlayerId>,
+    /// The distinct permanent whose becoming a target caused this trigger, if any.
+    pub trigger_object: Option<ObjectId>,
 }
 
 impl GameEngine {
@@ -38,6 +40,14 @@ impl GameEngine {
             }
         }
 
+        let collected = self.collect_event_triggers(events);
+        self.stage_triggers(collected);
+    }
+
+    /// Collect matching triggers without staging them. Casts and activations use this boundary to
+    /// snapshot becomes-the-target triggers at target selection, then commit them only after every
+    /// cost has been paid and the spell or ability has successfully reached the stack.
+    pub(super) fn collect_event_triggers(&self, events: &[GameEvent]) -> Vec<CollectedTrigger> {
         let mut sources = self.battlefield_sources_apnap();
         // Zone-leaving sources are no longer in the battlefield index. Their event-local snapshot
         // supplies the identity/controller needed for LKI trigger matching (CR 603.6/603.10).
@@ -55,7 +65,7 @@ impl GameEngine {
             }
             collected.extend(event_triggers);
         }
-        self.stage_triggers(collected);
+        collected
     }
 
     /// Turn a collected simultaneous group into a staged group (CR 603.3b), reserving each
@@ -101,6 +111,7 @@ impl GameEngine {
                     ability_index: trigger.ability_index,
                     ability_text: trigger.ability_text,
                     trigger_player: trigger.trigger_player,
+                    trigger_object: trigger.trigger_object,
                     may,
                 }
             })
@@ -468,6 +479,78 @@ impl GameEngine {
                     })
                     .collect()
             }
+            GameEvent::TargetsChosen {
+                controller: targeting_controller,
+                source: targeting_source,
+                targets,
+            } => {
+                // CR 603.2/115.9: becoming a target is observed after the complete legal target
+                // set is chosen. A single object named multiple times by that object produces one
+                // trigger per matching ability, while distinct watched permanents each produce
+                // their own trigger and retain their own event identity.
+                let mut seen = HashSet::new();
+                let distinct_targets: Vec<ObjectId> = targets
+                    .iter()
+                    .copied()
+                    .filter(|target| seen.insert(*target))
+                    .collect();
+                let mut out = Vec::new();
+                for source in sources {
+                    for target_id in &distinct_targets {
+                        if !self
+                            .state
+                            .objects
+                            .get(target_id)
+                            .is_some_and(|object| object.zone == Zone::Battlefield)
+                        {
+                            continue;
+                        }
+                        let Some(target_characteristics) = self.characteristics(*target_id) else {
+                            continue;
+                        };
+                        let target_controller = target_characteristics.controller;
+                        let mut matching = self.matching_triggered_abilities(
+                            &source.card_id,
+                            source.object_id,
+                            source.controller,
+                            source.face_index,
+                            |condition| {
+                                let Some(permanent_type) = Self::target_trigger_permanent_filter(
+                                    condition,
+                                    *targeting_source,
+                                    *targeting_controller,
+                                    source.object_id,
+                                    source.controller,
+                                    *target_id,
+                                    target_controller,
+                                ) else {
+                                    return false;
+                                };
+                                match permanent_type {
+                                    Some(PermanentTypeFilter::Creature) => {
+                                        target_characteristics.is_creature()
+                                    }
+                                    Some(PermanentTypeFilter::Artifact) => {
+                                        target_characteristics.is_artifact()
+                                    }
+                                    Some(PermanentTypeFilter::Enchantment) => {
+                                        target_characteristics.has_type("Enchantment")
+                                    }
+                                    Some(PermanentTypeFilter::Land) => {
+                                        target_characteristics.has_type("Land")
+                                    }
+                                    None => true,
+                                }
+                            },
+                        );
+                        for trigger in &mut matching {
+                            trigger.trigger_object = Some(*target_id);
+                        }
+                        out.extend(matching);
+                    }
+                }
+                out
+            }
             GameEvent::SpellCast {
                 caster,
                 card_id: cast_card_id,
@@ -528,6 +611,81 @@ impl GameEngine {
         }
     }
 
+    fn targeting_source_matches(
+        filter: TargetingSourceFilter,
+        source: TargetingSourceKind,
+    ) -> bool {
+        match filter {
+            TargetingSourceFilter::SpellCast => source == TargetingSourceKind::SpellCast,
+            TargetingSourceFilter::Spell => matches!(
+                source,
+                TargetingSourceKind::SpellCast | TargetingSourceKind::SpellCopy
+            ),
+            TargetingSourceFilter::Ability => source == TargetingSourceKind::Ability,
+            TargetingSourceFilter::SpellOrAbility => true,
+        }
+    }
+
+    /// Return the watched permanent-type filter when a target-trigger condition matches all
+    /// source/controller/identity predicates. `Some(None)` is a match with no type restriction;
+    /// `None` means the condition does not match this targeting event.
+    #[allow(clippy::too_many_arguments)]
+    fn target_trigger_permanent_filter(
+        condition: &TriggerCondition,
+        targeting_source: TargetingSourceKind,
+        targeting_controller: PlayerId,
+        source_id: ObjectId,
+        source_controller: PlayerId,
+        target_id: ObjectId,
+        target_controller: PlayerId,
+    ) -> Option<Option<PermanentTypeFilter>> {
+        match condition {
+            TriggerCondition::WheneverSelfBecomesTarget {
+                source,
+                source_controller: source_controller_filter,
+            } => (source_id == target_id
+                && Self::targeting_source_matches(*source, targeting_source)
+                && Self::relative_player_matches(
+                    *source_controller_filter,
+                    targeting_controller,
+                    source_controller,
+                ))
+            .then_some(None),
+            TriggerCondition::WheneverPermanentBecomesTarget {
+                source,
+                source_controller: source_controller_filter,
+                target_controller: target_controller_filter,
+                permanent_type,
+                exclude_self,
+            } => ((!*exclude_self || source_id != target_id)
+                && Self::targeting_source_matches(*source, targeting_source)
+                && Self::relative_player_matches(
+                    *source_controller_filter,
+                    targeting_controller,
+                    source_controller,
+                )
+                && Self::relative_player_matches(
+                    *target_controller_filter,
+                    target_controller,
+                    source_controller,
+                ))
+            .then_some(*permanent_type),
+            _ => None,
+        }
+    }
+
+    fn relative_player_matches(
+        filter: CastTriggerPlayer,
+        player: PlayerId,
+        source_controller: PlayerId,
+    ) -> bool {
+        match filter {
+            CastTriggerPlayer::Controller => player == source_controller,
+            CastTriggerPlayer::Opponent => player != source_controller,
+            CastTriggerPlayer::AnyPlayer => true,
+        }
+    }
+
     pub(super) fn matching_triggered_abilities(
         &self,
         card_id: &str,
@@ -581,6 +739,7 @@ impl GameEngine {
                 ability_index: idx,
                 ability_text: ta.text.clone(),
                 trigger_player: None,
+                trigger_object: None,
             })
             .collect()
     }
@@ -655,6 +814,7 @@ impl GameEngine {
             GameEvent::UpkeepBegin { player } | GameEvent::DrawStepBegin { player } => {
                 Some(*player)
             }
+            GameEvent::TargetsChosen { controller, .. } => Some(*controller),
             _ => None,
         }
     }
@@ -685,6 +845,7 @@ impl GameEngine {
             ability_index,
             ability_text,
             trigger_player,
+            trigger_object,
             may,
         } = trigger;
         let def = match self.registry.get(&card_id) {
@@ -723,6 +884,7 @@ impl GameEngine {
                 card_id,
                 controller,
                 trigger_player,
+                trigger_object,
                 may,
             });
             if was_empty {
@@ -762,6 +924,7 @@ impl GameEngine {
                 target_damage: vec![],
                 chosen_modes: vec![],
                 trigger_player,
+                trigger_object,
                 flashback: false,
             });
             self.state.passes_since_stack_change = 0;
@@ -787,6 +950,167 @@ impl GameEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn target_condition_match(
+        condition: &TriggerCondition,
+        targeting_source: TargetingSourceKind,
+        targeting_controller: PlayerId,
+        source_id: ObjectId,
+        source_controller: PlayerId,
+        target_id: ObjectId,
+        target_controller: PlayerId,
+    ) -> Option<Option<PermanentTypeFilter>> {
+        GameEngine::target_trigger_permanent_filter(
+            condition,
+            targeting_source,
+            targeting_controller,
+            source_id,
+            source_controller,
+            target_id,
+            target_controller,
+        )
+    }
+
+    #[test]
+    fn target_source_filters_distinguish_casts_copies_and_abilities() {
+        let heroic = TriggerCondition::WheneverSelfBecomesTarget {
+            source: TargetingSourceFilter::SpellCast,
+            source_controller: CastTriggerPlayer::Controller,
+        };
+        assert_eq!(
+            target_condition_match(&heroic, TargetingSourceKind::SpellCast, 0, 10, 0, 10, 0),
+            Some(None)
+        );
+        assert_eq!(
+            target_condition_match(&heroic, TargetingSourceKind::SpellCopy, 0, 10, 0, 10, 0),
+            None,
+            "a copied spell was not cast"
+        );
+
+        let bonecrusher = TriggerCondition::WheneverSelfBecomesTarget {
+            source: TargetingSourceFilter::Spell,
+            source_controller: CastTriggerPlayer::AnyPlayer,
+        };
+        assert_eq!(
+            target_condition_match(
+                &bonecrusher,
+                TargetingSourceKind::SpellCopy,
+                1,
+                10,
+                0,
+                10,
+                0,
+            ),
+            Some(None),
+            "a copy is still a spell"
+        );
+        assert_eq!(
+            target_condition_match(&bonecrusher, TargetingSourceKind::Ability, 1, 10, 0, 10, 0,),
+            None
+        );
+
+        let altanak = TriggerCondition::WheneverSelfBecomesTarget {
+            source: TargetingSourceFilter::SpellOrAbility,
+            source_controller: CastTriggerPlayer::Opponent,
+        };
+        assert_eq!(
+            target_condition_match(&altanak, TargetingSourceKind::Ability, 1, 10, 0, 10, 0),
+            Some(None)
+        );
+        assert_eq!(
+            target_condition_match(&altanak, TargetingSourceKind::SpellCast, 0, 10, 0, 10, 0),
+            None,
+            "an effect controlled by Altanak's controller does not qualify"
+        );
+    }
+
+    #[test]
+    fn observer_target_filter_supports_another_creature_you_control() {
+        let monk = TriggerCondition::WheneverPermanentBecomesTarget {
+            source: TargetingSourceFilter::SpellOrAbility,
+            source_controller: CastTriggerPlayer::AnyPlayer,
+            target_controller: CastTriggerPlayer::Controller,
+            permanent_type: Some(PermanentTypeFilter::Creature),
+            exclude_self: true,
+        };
+        assert_eq!(
+            target_condition_match(&monk, TargetingSourceKind::Ability, 1, 10, 0, 11, 0),
+            Some(Some(PermanentTypeFilter::Creature))
+        );
+        assert_eq!(
+            target_condition_match(&monk, TargetingSourceKind::SpellCast, 1, 10, 0, 10, 0),
+            None,
+            "another excludes the source"
+        );
+        assert_eq!(
+            target_condition_match(&monk, TargetingSourceKind::SpellCast, 1, 10, 0, 12, 1),
+            None,
+            "an opponent-controlled permanent does not qualify"
+        );
+    }
+
+    #[test]
+    fn target_collection_deduplicates_permanent_and_keeps_each_event_identity() {
+        let decks = Some(vec![
+            vec![
+                "bonecrusher_giant_stomp".into(),
+                "bonecrusher_giant_stomp".into(),
+                "mountain".into(),
+                "mountain".into(),
+                "mountain".into(),
+                "mountain".into(),
+                "mountain".into(),
+                "mountain".into(),
+                "mountain".into(),
+            ],
+            vec!["forest".into(); 8],
+        ]);
+        let mut engine = GameEngine::new(94702, &[0, 1], 20, decks, true).expect("new engine");
+        let mut giants: Vec<ObjectId> = engine
+            .state
+            .objects
+            .values()
+            .filter(|object| object.card_id == "bonecrusher_giant_stomp")
+            .map(|object| object.id)
+            .collect();
+        giants.sort_unstable();
+        assert_eq!(giants.len(), 2);
+        for giant in &giants {
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                *giant,
+                Zone::Battlefield,
+                Some(0),
+            )
+            .expect("put Bonecrusher Giant onto battlefield");
+        }
+
+        engine.fire_triggers(&[GameEvent::TargetsChosen {
+            controller: 1,
+            source: TargetingSourceKind::SpellCast,
+            targets: vec![giants[0], giants[0], giants[1]],
+        }]);
+
+        let group = engine
+            .state
+            .staged_trigger_groups
+            .front()
+            .expect("one target-trigger group");
+        assert_eq!(group.triggers.len(), 2);
+        assert!(group
+            .triggers
+            .iter()
+            .all(|trigger| trigger.trigger_player == Some(1)));
+        assert_eq!(
+            group
+                .triggers
+                .iter()
+                .filter_map(|trigger| trigger.trigger_object)
+                .collect::<BTreeSet<_>>(),
+            giants.into_iter().collect()
+        );
+    }
 
     #[test]
     fn simultaneous_etb_sources_observe_each_other() {

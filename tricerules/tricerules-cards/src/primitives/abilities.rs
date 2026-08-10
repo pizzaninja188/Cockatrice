@@ -100,6 +100,34 @@ pub enum TriggerCondition {
         #[serde(default)]
         spell_type: Option<SpellTypeFilter>,
     },
+    /// Whenever this permanent becomes the target of the selected kind of stack object. The
+    /// targeting object has already been legally cast, activated, copied, or put on the stack;
+    /// changing or copying targets can reuse the same event vocabulary when those actions exist.
+    /// Covers Bonecrusher Giant (spells only) and Altanak, the Thrice-Called (opponent-controlled
+    /// spells or abilities).
+    WheneverSelfBecomesTarget {
+        /// Whether casts, all spells (including copies), abilities, or either kind qualify.
+        source: TargetingSourceFilter,
+        /// Who controls the targeting spell or ability, relative to this permanent's controller.
+        source_controller: CastTriggerPlayer,
+    },
+    /// Whenever a qualifying permanent becomes the target of a selected kind of stack object.
+    /// One trigger is created for each distinct matching permanent, even when the same spell or
+    /// ability names that permanent more than once. Covers Monk Gyatso's "another creature you
+    /// control" watcher and similar heroic-support permanents.
+    WheneverPermanentBecomesTarget {
+        /// Whether casts, all spells (including copies), abilities, or either kind qualify.
+        source: TargetingSourceFilter,
+        /// Who controls the targeting spell or ability, relative to this permanent's controller.
+        source_controller: CastTriggerPlayer,
+        /// Who controls the targeted permanent, relative to this permanent's controller.
+        target_controller: CastTriggerPlayer,
+        /// If present, only targeted permanents of this type qualify.
+        permanent_type: Option<PermanentTypeFilter>,
+        /// The "another" clause: suppress this source permanent as the watched object.
+        #[serde(default)]
+        exclude_self: bool,
+    },
     /// Whenever a permanent enters the battlefield (CR 603.6). The ETB-watcher analog of
     /// [`Self::WheneverPlayerCastsSpell`]: parameters control whose permanents and which type
     /// qualify. Covers Soul Warden (`controller: AnyPlayer`, `Creature`, `exclude_self`),
@@ -172,6 +200,19 @@ pub enum CastTriggerPlayer {
     Opponent,
     /// "Whenever a player casts" — any player including the controller.
     AnyPlayer,
+}
+
+/// Which kind of object choosing targets can satisfy a becomes-the-target trigger.
+///
+/// `SpellCast` is deliberately narrower than `Spell`: heroic-style "whenever you cast a spell
+/// that targets" abilities do not fire for spell copies, while Bonecrusher Giant's "target of a
+/// spell" ability does (CR 707.10). `Ability` includes activated and triggered abilities.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TargetingSourceFilter {
+    SpellCast,
+    Spell,
+    Ability,
+    SpellOrAbility,
 }
 
 /// Spell type filter for `WheneverPlayerCastsSpell`. `None` on the field means any type.

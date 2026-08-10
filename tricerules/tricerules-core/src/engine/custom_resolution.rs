@@ -90,6 +90,7 @@ impl GameEngine {
         let ability_index = pending.ability_index;
         let controller = pending.controller;
         let trigger_player = pending.trigger_player;
+        let trigger_object = pending.trigger_object;
 
         let trefs = vec![target_object_id];
         let tgt_line = format_spell_targets_log(&self.state, self.registry, &trefs);
@@ -111,6 +112,7 @@ impl GameEngine {
             target_damage: vec![],
             chosen_modes: vec![],
             trigger_player,
+            trigger_object,
             flashback: false,
         });
         self.state.passes_since_stack_change = 0;
@@ -136,6 +138,14 @@ impl GameEngine {
                 chosen_mode_labels: vec![],
             })),
         });
+
+        // Choosing a target for the original triggered ability can itself cause target-watchers
+        // to trigger. This new simultaneous group waits behind the group currently being placed.
+        self.fire_triggers(&[GameEvent::TargetsChosen {
+            controller,
+            source: TargetingSourceKind::Ability,
+            targets: vec![target_object_id],
+        }]);
 
         self.resume_trigger_placement(&mut batch);
         fill_legal(&mut batch, self);
@@ -500,6 +510,12 @@ impl GameEngine {
 
         self.state.stack.push(copy_item);
         self.state.passes_since_stack_change = 0;
+
+        self.fire_triggers(&[GameEvent::TargetsChosen {
+            controller,
+            source: TargetingSourceKind::SpellCopy,
+            targets: chosen.to_vec(),
+        }]);
 
         let tgt_log = format_spell_targets_log(&self.state, self.registry, chosen);
         let mut ev = vec![

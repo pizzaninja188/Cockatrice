@@ -1162,6 +1162,7 @@ mod source_keyword_tests {
             target_damage: vec![],
             chosen_modes: vec![],
             trigger_player: None,
+            trigger_object: None,
         }
     }
 
@@ -1184,6 +1185,7 @@ mod source_keyword_tests {
             target_damage: vec![],
             chosen_modes: vec![],
             trigger_player: None,
+            trigger_object: None,
         }
     }
 

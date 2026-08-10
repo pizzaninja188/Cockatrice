@@ -435,6 +435,19 @@ impl GameEngine {
             }
             public_targets.extend_from_slice(targets);
         }
+
+        let trefs: Vec<ObjectId> = public_targets
+            .iter()
+            .map(|target| target.object_id)
+            .collect();
+        // CR 115.9: target-watchers see the final legal target set. Collect now so the event's
+        // battlefield identity is exact, but do not stage anything unless all costs are paid and
+        // the spell is successfully cast.
+        let mut target_triggers = self.collect_event_triggers(&[GameEvent::TargetsChosen {
+            controller: player,
+            source: TargetingSourceKind::SpellCast,
+            targets: trefs.clone(),
+        }]);
         let life_paid = pay_mana(
             &mut self.state,
             idx,
@@ -444,10 +457,6 @@ impl GameEngine {
             flex_payments,
         )?;
 
-        let trefs: Vec<ObjectId> = public_targets
-            .iter()
-            .map(|target| target.object_id)
-            .collect();
         // For DamageTargets, store per-target damage allocations parallel to targets.
         let target_damage: Vec<u32> = if face_effects
             .iter()
@@ -491,6 +500,7 @@ impl GameEngine {
             chosen_modes,
             // A spell's effects always act on its controller.
             trigger_player: None,
+            trigger_object: None,
             flashback,
         });
         super::resolution::move_object_to_zone(
@@ -568,11 +578,14 @@ impl GameEngine {
             })),
         });
         self.state.spells_cast_this_turn = self.state.spells_cast_this_turn.saturating_add(1);
-        self.fire_triggers(&[GameEvent::SpellCast {
+        target_triggers.extend(self.collect_event_triggers(&[GameEvent::SpellCast {
             caster: player,
             card_id: cast_card_id,
             face_index,
-        }]);
+        }]));
+        // Both kinds of triggers are waiting when the cast completes, so they form one CR 603.3b
+        // ordering group rather than forcing an artificial target-trigger/cast-trigger order.
+        self.stage_triggers(target_triggers);
         batch.events.push(ev_priority_changed(self));
         fill_legal(&mut batch, self);
         Ok(batch)
@@ -653,6 +666,15 @@ impl GameEngine {
         // same multi-target handling — so it goes through the list-level entry point.
         validate_ability_targets(self, player, &ability.effect, targets)?;
 
+        let trefs: Vec<ObjectId> = targets.iter().map(|t| t.object_id).collect();
+        // Snapshot target-watchers before costs: the source itself can be sacrificed while paying
+        // for the activation. Nothing is staged unless payment succeeds and the ability is pushed.
+        let mut target_triggers = self.collect_event_triggers(&[GameEvent::TargetsChosen {
+            controller: player,
+            source: TargetingSourceKind::Ability,
+            targets: trefs.clone(),
+        }]);
+
         let source_zone_change = self
             .state
             .zone_change_generation
@@ -669,7 +691,6 @@ impl GameEngine {
             flex_payments,
         )?;
 
-        let trefs: Vec<ObjectId> = targets.iter().map(|t| t.object_id).collect();
         let ability_text = ability.text.clone();
         let card_name = self
             .registry
@@ -703,6 +724,7 @@ impl GameEngine {
             chosen_modes: vec![],
             // An activated ability's effects act on the player who activated it.
             trigger_player: None,
+            trigger_object: None,
             flashback: false,
         });
         self.state.passes_since_stack_change = 0;
@@ -746,7 +768,8 @@ impl GameEngine {
         // the ability it paid for, so its events must follow that ability's StackPushed. Emitting
         // the trigger prompt first also made the client discard it, because an activated ability
         // reaching the stack is its signal that a pending trigger target was just answered.
-        self.fire_sacrifice_cost_dies(sacrificed);
+        target_triggers.extend(self.collect_sacrifice_cost_dies(sacrificed));
+        self.stage_triggers(target_triggers);
         batch.events.push(ev_priority_changed(self));
         fill_legal(&mut batch, self);
         Ok(batch)
@@ -825,11 +848,14 @@ impl GameEngine {
     /// battlefield abilities (Blood Artist, Bottle Gnomes' own controller triggers) see it. The
     /// triggers go on the stack *above* the ability whose cost they paid, so this runs after the
     /// ability has been pushed.
-    fn fire_sacrifice_cost_dies(&mut self, snapshot: Option<SacrificeSnapshot>) {
+    fn collect_sacrifice_cost_dies(
+        &self,
+        snapshot: Option<SacrificeSnapshot>,
+    ) -> Vec<super::triggers::CollectedTrigger> {
         let Some(snapshot) = snapshot else {
-            return;
+            return vec![];
         };
-        self.fire_triggers(&[GameEvent::Dies {
+        self.collect_event_triggers(&[GameEvent::Dies {
             source: TriggerSourceSnapshot {
                 object_id: snapshot.object_id,
                 card_id: snapshot.card_id,
@@ -837,7 +863,12 @@ impl GameEngine {
                 face_index: snapshot.face_index,
             },
             was_creature: snapshot.was_creature,
-        }]);
+        }])
+    }
+
+    fn fire_sacrifice_cost_dies(&mut self, snapshot: Option<SacrificeSnapshot>) {
+        let collected = self.collect_sacrifice_cost_dies(snapshot);
+        self.stage_triggers(collected);
     }
 
     /// Whether `ability` on `permanent_id` could be activated right now, so the client can grey it
@@ -1113,6 +1144,7 @@ impl GameEngine {
             target_damage: Vec::new(),
             chosen_modes: Vec::new(),
             trigger_player: None,
+            trigger_object: None,
         };
         match self.begin_battlefield_entry(
             item,

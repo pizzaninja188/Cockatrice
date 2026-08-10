@@ -134,6 +134,7 @@ pub(super) fn copy_target_spell(
                     // CR 707.2: the copy has the original's characteristics and choices. `None`
                     // for every spell today, but copying inherits it rather than dropping it.
                     trigger_player: src.trigger_player,
+                    trigger_object: src.trigger_object,
                     flashback: false,
                 };
                 // CR 707.10c: prompt for new targets on the first copy; push any
@@ -275,6 +276,11 @@ pub(super) fn copy_target_spell(
                     events.push(ev_log(format!(
                         "{spell_label} copies {copied_name} (P{controller})"
                     )));
+                    engine.fire_triggers(&[GameEvent::TargetsChosen {
+                        controller,
+                        source: TargetingSourceKind::SpellCopy,
+                        targets: src.targets.clone(),
+                    }]);
                 }
             }
         }
