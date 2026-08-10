@@ -2,7 +2,9 @@ use super::casting::castable_at_instant_speed;
 use super::combat::priority_locked_for_combat_declaration;
 use super::events::object_display_name;
 use super::priority::{instant_timing_step_allowed, sorcery_speed_available};
-use super::targeting::{compute_spell_targets, spell_effect_kind_needs_target};
+use super::targeting::{
+    compute_spell_targets, spell_effect_kind_needs_target, TargetSourceIdentity,
+};
 use super::*;
 
 pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
@@ -33,7 +35,12 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                     {
                         continue;
                     }
-                    let t = compute_spell_targets(eng, p.id, &face.spell_effect);
+                    let t = compute_spell_targets(
+                        eng,
+                        p.id,
+                        TargetSourceIdentity::current(eng, oid),
+                        &face.spell_effect,
+                    );
                     let key = (slot as u32) << 8 | face_index as u32;
                     valid_targets_by_hand_slot.insert(key, t);
                 }
@@ -52,7 +59,12 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 };
                 for (ai, ability) in face.activated_abilities.iter().enumerate() {
                     if ability.effect.iter().any(spell_effect_kind_needs_target) {
-                        let targets = compute_spell_targets(eng, p.id, &ability.effect);
+                        let targets = compute_spell_targets(
+                            eng,
+                            p.id,
+                            TargetSourceIdentity::current(eng, poid),
+                            &ability.effect,
+                        );
                         let key = (poid as u64) << 32 | ai as u64;
                         valid_targets_by_ability.insert(key, targets);
                     }
@@ -74,7 +86,12 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
             };
             valid_targets_by_zone_object.insert(
                 (u64::from(action.object_id) << 8) | u64::from(action.face_index),
-                compute_spell_targets(eng, p.id, &face.spell_effect),
+                compute_spell_targets(
+                    eng,
+                    p.id,
+                    TargetSourceIdentity::current(eng, action.object_id),
+                    &face.spell_effect,
+                ),
             );
         }
 
@@ -95,7 +112,15 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                     .and_then(|def| def.primary_face().triggered_abilities.get(pt.ability_index))
                     .map(|ta| &ta.effect)
                 {
-                    let targets = compute_spell_targets(eng, p.id, effects);
+                    let targets = compute_spell_targets(
+                        eng,
+                        p.id,
+                        TargetSourceIdentity::captured(
+                            pt.source_permanent_id,
+                            pt.source_zone_change,
+                        ),
+                        effects,
+                    );
                     let key = (pt.source_permanent_id as u64) << 32 | pt.ability_index as u64;
                     valid_targets_by_ability.insert(key, targets);
                 }
@@ -333,7 +358,12 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                         .map(|(mode_index, mode)| {
                             let needs_target =
                                 mode.effects.iter().any(spell_effect_kind_needs_target);
-                            let targets = compute_spell_targets(eng, pid, &mode.effects);
+                            let targets = compute_spell_targets(
+                                eng,
+                                pid,
+                                TargetSourceIdentity::current(eng, oid),
+                                &mode.effects,
+                            );
                             let selectable =
                                 !needs_target || spell_targets_have_candidate(&targets);
                             rv1::LegalSpellMode {
@@ -421,7 +451,12 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                     .enumerate()
                     .map(|(mode_index, mode)| {
                         let needs_target = mode.effects.iter().any(spell_effect_kind_needs_target);
-                        let targets = compute_spell_targets(eng, pid, &mode.effects);
+                        let targets = compute_spell_targets(
+                            eng,
+                            pid,
+                            TargetSourceIdentity::current(eng, oid),
+                            &mode.effects,
+                        );
                         let selectable = !needs_target || spell_targets_have_candidate(&targets);
                         rv1::LegalSpellMode {
                             mode_index: mode_index as u32,
@@ -498,7 +533,12 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                 .enumerate()
                 .map(|(mode_index, mode)| {
                     let needs_target = mode.effects.iter().any(spell_effect_kind_needs_target);
-                    let targets = compute_spell_targets(eng, pid, &mode.effects);
+                    let targets = compute_spell_targets(
+                        eng,
+                        pid,
+                        TargetSourceIdentity::current(eng, object.id),
+                        &mode.effects,
+                    );
                     rv1::LegalSpellMode {
                         mode_index: mode_index as u32,
                         label: mode.label.clone(),

@@ -121,6 +121,11 @@ pub struct TargetFilter {
     /// (Glaring Aegis, Rambunctious Mutt) while composing with every other filter field.
     #[serde(default)]
     pub controller: TargetController,
+    /// If true, the object that sourced this spell or ability is not a legal target. The engine
+    /// compares full object identity (ObjectId plus zone-change generation), so a card that leaves
+    /// and returns is a new object under CR 400.7 and is no longer excluded.
+    #[serde(default)]
+    pub exclude_source: bool,
     /// Optional OR-combined permanent type restriction. For example, Icy Manipulator uses
     /// `[Artifact, Creature, Land]`; an empty list means no additional type restriction.
     #[serde(default)]
@@ -146,14 +151,22 @@ impl TargetFilter {
         }
     }
 
-    /// Validate a controller relationship used for actual targeting. Player and `AnyTarget`
-    /// filters cannot carry a permanent-controller predicate.
-    pub(crate) fn validate_target_controller(&self) -> Result<(), String> {
+    /// Validate constraints that depend on the filter representing an actual target. Player and
+    /// `AnyTarget` filters cannot carry a permanent-controller predicate, while source exclusion
+    /// is meaningful for every object-capable kind (including `AnyTarget`) but never player-only
+    /// kinds.
+    pub(crate) fn validate_target_constraints(&self) -> Result<(), String> {
         if self.controller != TargetController::Any
             && !matches!(self.kind, TargetKind::Creature | TargetKind::AnyPermanent)
         {
             return Err(format!(
                 "controller-relative target filter requires Creature or AnyPermanent kind, got {:?}",
+                self.kind
+            ));
+        }
+        if self.exclude_source && self.is_player() {
+            return Err(format!(
+                "source-excluding target filter requires an object-capable kind, got {:?}",
                 self.kind
             ));
         }

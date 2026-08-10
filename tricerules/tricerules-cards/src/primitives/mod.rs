@@ -213,6 +213,52 @@ mod tests {
     }
 
     #[test]
+    fn source_exclusion_requires_an_object_capable_target_kind() {
+        for kind in [TargetKind::AnyPlayer, TargetKind::OpponentPlayer] {
+            let effect = SpellEffectKind::TargetPlayerGainsLife {
+                amount: 1,
+                target: TargetFilter {
+                    kind,
+                    exclude_source: true,
+                    ..TargetFilter::default()
+                },
+            };
+            assert!(effect.validate(EffectContext::Spell).is_err());
+        }
+
+        let object_capable = SpellEffectKind::DamageTarget {
+            amount: Amount::Fixed(1),
+            target: TargetFilter {
+                kind: TargetKind::AnyTarget,
+                exclude_source: true,
+                ..TargetFilter::default()
+            },
+        };
+        assert!(object_capable.validate(EffectContext::Ability).is_ok());
+    }
+
+    #[test]
+    fn untargeted_filters_reject_source_exclusion() {
+        let filter = TargetFilter {
+            kind: TargetKind::Creature,
+            exclude_source: true,
+            ..TargetFilter::default()
+        };
+        assert!(SpellEffectKind::DestroyAll {
+            kind: filter.clone(),
+            prevent_regeneration: false,
+        }
+        .validate(EffectContext::Spell)
+        .is_err());
+        assert!(SpellEffectKind::GrantKeywordsAllPermanents {
+            filter,
+            keywords: vec![Keyword::Flying],
+        }
+        .validate(EffectContext::Ability)
+        .is_err());
+    }
+
+    #[test]
     fn untargeted_filter_preserves_you_scope_but_defers_opponent_scope() {
         let keywords = vec![Keyword::Indestructible];
         let filter = |controller| TargetFilter {

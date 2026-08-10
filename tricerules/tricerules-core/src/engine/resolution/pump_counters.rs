@@ -140,7 +140,13 @@ pub(super) fn grant_keywords_target(
     let Some(tid) = cx.targets.first().copied() else {
         return Ok(EffectOutcome::Continue);
     };
-    if !target_filter_legal_at_resolution(cx.engine, &target, tid, cx.controller) {
+    if !target_filter_legal_at_resolution(
+        cx.engine,
+        &target,
+        tid,
+        cx.controller,
+        TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
+    ) {
         return Ok(EffectOutcome::Continue);
     }
 

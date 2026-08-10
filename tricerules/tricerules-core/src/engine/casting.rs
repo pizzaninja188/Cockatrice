@@ -2,7 +2,7 @@ use super::combat::priority_locked_for_combat_declaration;
 use super::events::{ev_log, ev_priority_changed, format_spell_targets_log};
 use super::legal_actions::fill_legal;
 use super::resolution::{permanent_moved_event, sacrifice_permanent};
-use super::targeting::{validate_ability_targets, validate_spell_targets};
+use super::targeting::{validate_ability_targets, validate_spell_targets, TargetSourceIdentity};
 use super::*;
 
 #[derive(Debug, Clone)]
@@ -251,6 +251,7 @@ impl GameEngine {
         };
         let has_multiple_cast_options =
             super::legal_actions::cast_option_count_for_source(self, player, source) > 1;
+        let target_source = TargetSourceIdentity::current(self, oid);
         let card_id = self.state.objects.get(&oid).unwrap().card_id.clone();
         let def = self
             .registry
@@ -353,7 +354,13 @@ impl GameEngine {
                     .modes
                     .get(selection.mode_index as usize)
                     .ok_or(EngineError::Illegal("bad spell mode index"))?;
-                validate_spell_targets(self, player, &mode.effects, &selection.targets)?;
+                validate_spell_targets(
+                    self,
+                    player,
+                    target_source,
+                    &mode.effects,
+                    &selection.targets,
+                )?;
                 for effect in &mode.effects {
                     if let SpellEffectKind::DamageTargets {
                         amount,
@@ -413,7 +420,7 @@ impl GameEngine {
                     "selected_modes given for a nonmodal spell",
                 ));
             }
-            validate_spell_targets(self, player, &face_effects, targets)?;
+            validate_spell_targets(self, player, target_source, &face_effects, targets)?;
             for effect in &face_effects {
                 if let SpellEffectKind::DamageTargets {
                     amount,
@@ -674,7 +681,8 @@ impl GameEngine {
 
         // CR 608.2: an ability's effect list validates exactly like a spell's — same shape,
         // same multi-target handling — so it goes through the list-level entry point.
-        validate_ability_targets(self, player, &ability.effect, targets)?;
+        let target_source = TargetSourceIdentity::current(self, permanent_id);
+        validate_ability_targets(self, player, target_source, &ability.effect, targets)?;
 
         let trefs: Vec<ObjectId> = targets.iter().map(|t| t.object_id).collect();
         // Snapshot target-watchers before costs: the source itself can be sacrificed while paying

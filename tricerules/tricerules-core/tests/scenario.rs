@@ -49,6 +49,8 @@ mod priority_and_turns;
 mod regenerate;
 #[path = "scenario/scry.rs"]
 mod scry;
+#[path = "scenario/source_excluding_targets.rs"]
+mod source_excluding_targets;
 #[path = "scenario/spell_effects.rs"]
 mod spell_effects;
 #[path = "scenario/stack_and_counterspells.rs"]

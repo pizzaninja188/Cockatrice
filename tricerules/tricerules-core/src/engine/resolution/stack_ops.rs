@@ -159,7 +159,12 @@ pub(super) fn copy_target_spell(
                                 .collect()
                         };
                     for effects in candidate_effect_groups {
-                        let sp = compute_spell_targets(engine, controller, &effects);
+                        let sp = compute_spell_targets(
+                            engine,
+                            controller,
+                            TargetSourceIdentity::for_stack_item(engine, &copy_template),
+                            &effects,
+                        );
                         candidates.extend(sp.valid_permanent_ids);
                         candidates.extend(sp.valid_stack_ids);
                         for p in &engine.state.players {

@@ -8,6 +8,7 @@ use super::events::{color_string, ev_log, object_display_name};
 use super::targeting::{
     battlefield_objects_matching, compute_spell_targets, effect_has_legal_target_at_resolution,
     object_matches_mass_filter, spell_effect_kind_needs_target, target_filter_legal_at_resolution,
+    TargetSourceIdentity,
 };
 use super::*;
 use rand::seq::SliceRandom;
@@ -146,7 +147,13 @@ impl GameEngine {
                     .collect();
                 !targeted.is_empty()
                     && targeted.iter().all(|(effect, targets, _)| {
-                        !effect_has_legal_target_at_resolution(self, effect, targets, controller)
+                        !effect_has_legal_target_at_resolution(
+                            self,
+                            effect,
+                            targets,
+                            controller,
+                            TargetSourceIdentity::for_stack_item(self, &top),
+                        )
                     })
             } else {
                 false
@@ -298,7 +305,13 @@ impl GameEngine {
             .collect();
         let fizzle = !targeted_effects.is_empty()
             && targeted_effects.iter().all(|(effect, mode_targets, _)| {
-                !effect_has_legal_target_at_resolution(self, effect, mode_targets, controller)
+                !effect_has_legal_target_at_resolution(
+                    self,
+                    effect,
+                    mode_targets,
+                    controller,
+                    TargetSourceIdentity::for_stack_item(self, &top),
+                )
             });
         if fizzle {
             events.push(ev_log(format!("{spell_label} fizzles (no legal targets).")));
@@ -412,6 +425,7 @@ impl GameEngine {
                     &effect,
                     &effect_targets,
                     controller,
+                    TargetSourceIdentity::for_stack_item(self, top),
                 )
             {
                 continue;

@@ -1,0 +1,20 @@
+(
+  id: "legion_guildmage",
+  name: "Legion Guildmage",
+  mana_cost: "{R}{W}",
+  types: ["Creature", "Human", "Wizard"],
+  power: 2,
+  toughness: 2,
+  activated_abilities: [
+    (
+      cost: TapAndMana("{5}{R}"),
+      effect: [DamagePlayer(amount: 3, who: EachOpponent)],
+      text: "{5}{R}, {T}: This creature deals 3 damage to each opponent.",
+    ),
+    (
+      cost: TapAndMana("{2}{W}"),
+      effect: [TapTarget(target: (kind: Creature, exclude_source: true))],
+      text: "{2}{W}, {T}: Tap another target creature.",
+    ),
+  ],
+)

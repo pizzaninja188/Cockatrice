@@ -815,7 +815,7 @@ impl SpellEffectKind {
     /// rejected where they make no sense.
     pub fn validate(&self, context: EffectContext) -> Result<(), String> {
         for filter in self.target_filters() {
-            filter.validate_target_controller()?;
+            filter.validate_target_constraints()?;
         }
 
         match self {
@@ -916,6 +916,11 @@ impl SpellEffectKind {
                             .into(),
                     );
                 }
+                if filter.exclude_source {
+                    return Err(
+                        "TargetPlayerSacrifices.filter cannot exclude the effect source".into(),
+                    );
+                }
                 Ok(())
             }
             // Mass effects select objects, not players, and never use AnyTarget (which includes
@@ -939,6 +944,9 @@ impl SpellEffectKind {
                          `players` (RelativePlayerSet) instead"
                             .into(),
                     );
+                }
+                if kind.exclude_source {
+                    return Err("mass effect filter cannot exclude the effect source".into());
                 }
                 Ok(())
             }
@@ -965,6 +973,8 @@ impl SpellEffectKind {
                         "GrantKeywordsAllPermanents does not support opponent scope; use the dedicated untargeted player scope"
                             .into(),
                     )
+                } else if filter.exclude_source {
+                    Err("GrantKeywordsAllPermanents filter cannot exclude the effect source".into())
                 } else if keywords.is_empty() {
                     Err("GrantKeywordsAllPermanents requires at least one keyword".into())
                 } else {

@@ -292,6 +292,7 @@ impl GameEngine {
                                 self,
                                 filter,
                                 enchanted_id,
+                                o.id,
                                 o.controller,
                             )
                         })

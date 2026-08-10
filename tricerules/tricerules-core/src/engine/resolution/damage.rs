@@ -97,6 +97,7 @@ pub(super) fn damage_targets(
     let source_has_deathtouch = cx
         .engine
         .resolving_source_has_keyword(cx.top, Keyword::Deathtouch);
+    let target_source = TargetSourceIdentity::for_stack_item(cx.engine, cx.top);
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let targets = cx.targets;
@@ -111,7 +112,11 @@ pub(super) fn damage_targets(
             .iter()
             .filter(|&&tid| {
                 super::targeting::target_filter_legal_at_resolution(
-                    engine, &filter, tid, controller,
+                    engine,
+                    &filter,
+                    tid,
+                    controller,
+                    target_source,
                 )
             })
             .count() as u32;
@@ -136,7 +141,13 @@ pub(super) fn damage_targets(
         if damage_amount == 0 {
             continue;
         }
-        if !super::targeting::target_filter_legal_at_resolution(engine, &filter, tid, controller) {
+        if !super::targeting::target_filter_legal_at_resolution(
+            engine,
+            &filter,
+            tid,
+            controller,
+            target_source,
+        ) {
             events.push(ev_log(format!(
                 "{spell_label}: target {} is no longer legal, skipping.",
                 tid

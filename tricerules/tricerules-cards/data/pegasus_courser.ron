@@ -1,0 +1,23 @@
+(
+  id: "pegasus_courser",
+  name: "Pegasus Courser",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Pegasus"],
+  power: 1,
+  toughness: 3,
+  keywords: [Flying],
+  triggered_abilities: [
+    (
+      trigger: WheneverSelfAttacks,
+      effect: [GrantKeywordsTarget(
+        target: (
+          kind: Creature,
+          attacking_or_blocking: true,
+          exclude_source: true,
+        ),
+        keywords: [Flying],
+      )],
+      text: "Whenever this creature attacks, another target attacking creature gains flying until end of turn.",
+    ),
+  ],
+)

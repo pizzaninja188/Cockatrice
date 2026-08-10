@@ -6,7 +6,7 @@ use super::legal_actions::fill_legal;
 use super::resolution::{
     permanent_moved_event, sacrifice_permanent, seat_resolved_spell_last_in_graveyard,
 };
-use super::targeting::{validate_ability_targets, validate_spell_targets};
+use super::targeting::{validate_ability_targets, validate_spell_targets, TargetSourceIdentity};
 use super::*;
 
 impl GameEngine {
@@ -61,10 +61,17 @@ impl GameEngine {
                     .triggered_abilities
                     .get(pending.ability_index)
                 {
-                    Some(ability) => {
-                        validate_ability_targets(self, player, &ability.effect, target_ref)
-                            .map(|()| name)
-                    }
+                    Some(ability) => validate_ability_targets(
+                        self,
+                        player,
+                        TargetSourceIdentity::captured(
+                            pending.source_permanent_id,
+                            pending.source_zone_change,
+                        ),
+                        &ability.effect,
+                        target_ref,
+                    )
+                    .map(|()| name),
                     None => Ok(name),
                 }
             }
@@ -394,6 +401,7 @@ impl GameEngine {
     ) -> Result<Vec<Vec<ObjectId>>, EngineError> {
         let item = &pending.item;
         let controller = item.controller;
+        let target_source = TargetSourceIdentity::for_stack_item(self, item);
         let face = self
             .registry
             .get(&item.card_id)
@@ -403,6 +411,7 @@ impl GameEngine {
             let effects = face.map(|f| f.spell_effect.to_vec()).unwrap_or_default();
             self.validate_copy_target_group(
                 controller,
+                target_source,
                 &effects,
                 chosen,
                 &item.targets,
@@ -429,6 +438,7 @@ impl GameEngine {
                 .ok_or(EngineError::Illegal("copied modal mode no longer exists"))?;
             self.validate_copy_target_group(
                 controller,
+                target_source,
                 &mode.effects,
                 mode_targets,
                 &chosen_mode.targets,
@@ -452,6 +462,7 @@ impl GameEngine {
     fn validate_copy_target_group(
         &self,
         controller: PlayerId,
+        target_source: TargetSourceIdentity,
         effects: &[SpellEffectKind],
         chosen: &[ObjectId],
         original: &[ObjectId],
@@ -465,7 +476,13 @@ impl GameEngine {
                 object_id,
                 damage_amount: target_damage.get(index).copied().unwrap_or(0),
             };
-            validate_spell_targets(self, controller, effects, std::slice::from_ref(&target_ref))?;
+            validate_spell_targets(
+                self,
+                controller,
+                target_source,
+                effects,
+                std::slice::from_ref(&target_ref),
+            )?;
         }
         Ok(())
     }
