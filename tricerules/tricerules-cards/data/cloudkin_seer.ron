@@ -1,0 +1,16 @@
+(
+  id: "cloudkin_seer",
+  name: "Cloudkin Seer",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Elemental", "Wizard"],
+  power: 2,
+  toughness: 1,
+  keywords: [Flying],
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Draw(count: 1)],
+      text: "When this creature enters, draw a card.",
+    ),
+  ],
+)

@@ -2092,3 +2092,387 @@ fn trigger_target_can_be_retried_after_a_rejection() {
         "the retried trigger returned the card to hand"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Issue #49 — simple triggered creatures cohort.
+//
+// The card-data contract test pins all twenty definitions. These scenarios cover each distinct
+// engine interaction used by the cohort: cast filters, persistent counters, shared trigger
+// targets, opponent-only targets, LKI after a simultaneous wipe, simultaneous observer triggers,
+// resolution-time mass-pump scope, attack timing, ordered effects, and resumable scry.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn issue_49_spellgorger_trigger_resolves_above_only_noncreature_spells() {
+    let decks = Some(vec![
+        deck_with(
+            "mountain",
+            &["spellgorger_weird", "bonesplitter", "grizzly_bears"],
+        ),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(94901, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let weird = relocate_to_battlefield(&mut e, 0, "spellgorger_weird", false);
+    ensure_in_hand(&mut e, 0, "bonesplitter");
+    ensure_in_hand(&mut e, 0, "grizzly_bears");
+    grant_pool(&mut e, 0);
+
+    let equipment = hand_index_for_card(&e, 0, "bonesplitter");
+    e.apply_command(0, &cast_spell(equipment, vec![]))
+        .expect("cast noncreature spell");
+    assert_eq!(e.state.stack.len(), 2, "trigger is above Bonesplitter");
+    assert!(
+        e.state
+            .stack
+            .last()
+            .expect("trigger")
+            .ability_text
+            .is_some(),
+        "the top object is Spellgorger Weird's trigger"
+    );
+
+    pass_both_players(&mut e);
+    assert_eq!(
+        e.state.objects[&weird].counter_count(tricerules_cards::CounterKind::PlusOnePlusOne),
+        1
+    );
+    assert_eq!(e.effective_power(weird), Some(3));
+    assert_eq!(e.effective_toughness(weird), Some(3));
+    pass_both_players(&mut e);
+
+    let creature = hand_index_for_card(&e, 0, "grizzly_bears");
+    e.apply_command(0, &cast_spell(creature, vec![]))
+        .expect("cast creature spell");
+    assert_eq!(
+        e.state.stack.len(),
+        1,
+        "a creature spell does not trigger Spellgorger Weird"
+    );
+}
+
+fn issue_49_stack_len_after_cast(source: &str, spell: &str, seed: u64) -> usize {
+    let decks = Some(vec![
+        deck_with("island", &[source, spell]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    relocate_to_battlefield(&mut e, 0, source, false);
+    ensure_in_hand(&mut e, 0, spell);
+    grant_pool(&mut e, 0);
+    let idx = hand_index_for_card(&e, 0, spell);
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast filter probe");
+    e.state.stack.len()
+}
+
+#[test]
+fn issue_49_cast_trigger_filters_distinguish_noncreature_from_instant_or_sorcery() {
+    assert_eq!(
+        issue_49_stack_len_after_cast("mistral_singer", "bonesplitter", 94902),
+        2,
+        "Mistral Singer triggers for any noncreature spell"
+    );
+    assert_eq!(
+        issue_49_stack_len_after_cast("mistral_singer", "grizzly_bears", 94903),
+        1,
+        "Mistral Singer ignores creature spells"
+    );
+    assert_eq!(
+        issue_49_stack_len_after_cast("aven_wind_mage", "bonesplitter", 94904),
+        1,
+        "Aven Wind Mage ignores non-instant, non-sorcery spells"
+    );
+    assert_eq!(
+        issue_49_stack_len_after_cast("aven_wind_mage", "opt", 94905),
+        2,
+        "Aven Wind Mage triggers for an instant"
+    );
+}
+
+#[test]
+fn issue_49_cavalry_drillmaster_applies_both_effects_to_one_trigger_target() {
+    let decks = Some(vec![
+        deck_with("plains", &["cavalry_drillmaster", "grizzly_bears"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(94906, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let bears = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
+    ensure_in_hand(&mut e, 0, "cavalry_drillmaster");
+    grant_pool(&mut e, 0);
+    let idx = hand_index_for_card(&e, 0, "cavalry_drillmaster");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast Cavalry Drillmaster");
+    pass_both_players(&mut e);
+    assert_eq!(e.state.pending_triggers.len(), 1);
+
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                target_object_id: bears,
+                decline: false,
+            })),
+        },
+    )
+    .expect("choose the shared trigger target");
+    pass_both_players(&mut e);
+
+    assert_eq!(e.effective_power(bears), Some(4));
+    assert_eq!(e.effective_toughness(bears), Some(2));
+    assert!(e.effective_has_keyword(bears, tricerules_cards::Keyword::FirstStrike));
+}
+
+#[test]
+fn issue_49_skymarch_bloodletter_rejects_its_controller_as_target() {
+    let decks = Some(vec![
+        deck_with("swamp", &["skymarch_bloodletter"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(94907, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    ensure_in_hand(&mut e, 0, "skymarch_bloodletter");
+    grant_pool(&mut e, 0);
+    let idx = hand_index_for_card(&e, 0, "skymarch_bloodletter");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast Skymarch Bloodletter");
+    pass_both_players(&mut e);
+
+    let controller = e.state.players[0].id as u32;
+    let opponent = e.state.players[1].id as u32;
+    let illegal = e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                target_object_id: controller,
+                decline: false,
+            })),
+        },
+    );
+    assert!(illegal.is_err(), "the controller is not an opponent");
+    assert_eq!(
+        e.state.pending_triggers.len(),
+        1,
+        "a rejected target leaves the trigger pending"
+    );
+
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                target_object_id: opponent,
+                decline: false,
+            })),
+        },
+    )
+    .expect("choose opponent");
+    pass_both_players(&mut e);
+    assert_eq!(e.state.players[0].life, 21);
+    assert_eq!(e.state.players[1].life, 19);
+}
+
+#[test]
+fn issue_49_steadfast_sentry_cannot_target_a_creature_that_died_with_it() {
+    let decks = Some(vec![
+        deck_with(
+            "plains",
+            &[
+                "steadfast_sentry",
+                "darksteel_myr",
+                "grizzly_bears",
+                "wrath_of_god",
+            ],
+        ),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(94908, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    relocate_to_battlefield(&mut e, 0, "steadfast_sentry", false);
+    let survivor = relocate_to_battlefield(&mut e, 0, "darksteel_myr", false);
+    let died_too = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
+    ensure_in_hand(&mut e, 0, "wrath_of_god");
+    grant_pool(&mut e, 0);
+    let idx = hand_index_for_card(&e, 0, "wrath_of_god");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast Wrath of God");
+    pass_both_players(&mut e);
+    assert_eq!(
+        e.state.objects[&died_too].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert_eq!(e.state.pending_triggers.len(), 1);
+
+    let illegal = e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                target_object_id: died_too,
+                decline: false,
+            })),
+        },
+    );
+    assert!(
+        illegal.is_err(),
+        "the other destroyed creature is no longer legal"
+    );
+    assert_eq!(e.state.pending_triggers.len(), 1);
+
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                target_object_id: survivor,
+                decline: false,
+            })),
+        },
+    )
+    .expect("target the indestructible survivor");
+    pass_both_players(&mut e);
+    assert_eq!(
+        e.state.objects[&survivor].counter_count(tricerules_cards::CounterKind::PlusOnePlusOne),
+        1
+    );
+}
+
+#[test]
+fn issue_49_griffin_protector_triggers_once_for_each_simultaneous_entrant() {
+    let decks = Some(vec![
+        deck_with("plains", &["griffin_protector", "raise_the_alarm"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(94909, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let griffin = relocate_to_battlefield(&mut e, 0, "griffin_protector", false);
+    ensure_in_hand(&mut e, 0, "raise_the_alarm");
+    grant_pool(&mut e, 0);
+    let idx = hand_index_for_card(&e, 0, "raise_the_alarm");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast Raise the Alarm");
+    pass_both_players(&mut e);
+
+    let pending = e
+        .state
+        .pending_trigger_order
+        .as_ref()
+        .expect("the two entrant triggers require ordering");
+    assert_eq!(pending.deciding_player, 0);
+    assert_eq!(pending.candidates.len(), 2);
+    answer_trigger_order_in_engine_order(&mut e);
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(e.effective_power(griffin), Some(4));
+    assert_eq!(e.effective_toughness(griffin), Some(5));
+}
+
+#[test]
+fn issue_49_inspiring_captain_pumps_creatures_present_when_the_trigger_resolves() {
+    let decks = Some(vec![
+        deck_with("plains", &["inspiring_captain", "grizzly_bears"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(94910, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let early = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
+    let opposing = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    ensure_in_hand(&mut e, 0, "inspiring_captain");
+    grant_pool(&mut e, 0);
+    let idx = hand_index_for_card(&e, 0, "inspiring_captain");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast Inspiring Captain");
+    pass_both_players(&mut e);
+    assert_eq!(e.state.stack.len(), 1, "Captain's ETB trigger is waiting");
+    let captain = e.state.players[0]
+        .battlefield
+        .iter()
+        .copied()
+        .find(|oid| e.state.objects[oid].card_id == "inspiring_captain")
+        .expect("Captain on battlefield");
+    let before_resolution = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+
+    pass_both_players(&mut e);
+    assert_eq!(e.effective_power(early), Some(3));
+    assert_eq!(e.effective_power(captain), Some(4));
+    assert_eq!(e.effective_power(before_resolution), Some(3));
+    assert_eq!(e.effective_power(opposing), Some(2));
+
+    let after_resolution = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    assert_eq!(
+        e.effective_power(after_resolution),
+        Some(2),
+        "the one-shot pump does not create a dynamic anthem"
+    );
+}
+
+#[test]
+fn issue_49_audacious_thief_attack_trigger_resolves_before_blockers() {
+    let decks = Some(vec![
+        deck_with("swamp", &["audacious_thief"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(94911, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let thief = relocate_to_battlefield(&mut e, 0, "audacious_thief", false);
+    let hand_before = e.state.players[0].hand.len();
+    let life_before = e.state.players[0].life;
+    e.apply_command(0, &primitive_yield())
+        .expect("move to beginning of combat");
+    e.apply_command(0, &pass()).expect("active player pass");
+    e.apply_command(1, &pass()).expect("defender pass");
+
+    e.apply_command(0, &declare_attackers(vec![thief]))
+        .expect("attack with Audacious Thief");
+    assert_eq!(e.state.stack.len(), 1);
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareAttackers
+    );
+    pass_both_players(&mut e);
+
+    assert_eq!(e.state.players[0].hand.len(), hand_before + 1);
+    assert_eq!(e.state.players[0].life, life_before - 1);
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareAttackers,
+        "the attack trigger resolves before blockers are declared"
+    );
+}
+
+#[test]
+fn issue_49_spined_megalodon_attack_trigger_parks_for_private_scry() {
+    let decks = Some(vec![
+        deck_with("island", &["spined_megalodon"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(94912, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let shark = relocate_to_battlefield(&mut e, 0, "spined_megalodon", false);
+    let top = *e.state.players[0].library.front().expect("library top");
+    e.apply_command(0, &primitive_yield())
+        .expect("move to beginning of combat");
+    e.apply_command(0, &pass()).expect("active player pass");
+    e.apply_command(1, &pass()).expect("defender pass");
+    e.apply_command(0, &declare_attackers(vec![shark]))
+        .expect("attack with Spined Megalodon");
+
+    e.apply_command(0, &pass())
+        .expect("active player pass on trigger");
+    let batch = e
+        .apply_command(1, &pass())
+        .expect("defender pass resolves trigger into scry choice");
+    let req = find_resolution_choice(&batch).expect("scry choice required");
+    assert_eq!(req.choice_kind(), ChoiceKind::LibraryTop);
+    assert_eq!(req.deciding_player_id, 0);
+    assert_eq!(req.candidate_object_ids, vec![top]);
+    assert!(e.state.pending_resolution.is_some());
+
+    e.apply_command(0, &submit_resolution_choice(vec![]))
+        .expect("keep the card on top");
+    assert!(e.state.pending_resolution.is_none());
+    assert!(e.state.stack.is_empty());
+    assert_eq!(e.state.players[0].library.front().copied(), Some(top));
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareAttackers
+    );
+}

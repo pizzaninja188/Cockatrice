@@ -72,20 +72,23 @@ pub(super) fn pump_all(
     let controller = cx.controller;
     let spell_label = cx.spell_label;
 
-    // CR 613.4 layer 7c, one-shot: an UntilEndOfTurn continuous effect over the
-    // filtered creature set (controller resolved from the spell's controller).
-    // The resolving spell is the nominal source; it does not persist as a creature,
-    // so the scope drains at cleanup (UntilEndOfTurn), not at LTB.
-    engine.state.continuous_effects.push(ContinuousEffect {
-        source_id: Some(top.id),
-        affected: resolve_anthem_scope(&filter, controller, top.id),
-        kind: ContinuousEffectKind::PtModify {
-            delta_power: power,
-            delta_toughness: toughness,
-        },
-        duration: EffectDuration::UntilEndOfTurn,
-        timestamp: engine.state.command_index,
-    });
+    // CR 611.2c / 613.4: snapshot the filtered creature set as the one-shot effect resolves, then
+    // represent its layer-7c modification as one UntilEndOfTurn effect per affected object.
+    // A creature entering later this turn was not affected and must not inherit the pump.
+    let filter_source = top.source_permanent_id.unwrap_or(top.id);
+    let affected = snapshot_anthem_scope(engine, &filter, controller, filter_source);
+    for oid in affected {
+        engine.state.continuous_effects.push(ContinuousEffect {
+            source_id: Some(top.id),
+            affected: AffectedScope::Single(oid),
+            kind: ContinuousEffectKind::PtModify {
+                delta_power: power,
+                delta_toughness: toughness,
+            },
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: engine.state.command_index,
+        });
+    }
     events.push(ev_log(format!(
         "{spell_label} gives +{power}/+{toughness} to each affected creature"
     )));

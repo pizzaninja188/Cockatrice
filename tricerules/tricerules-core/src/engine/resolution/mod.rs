@@ -778,11 +778,8 @@ pub(crate) fn permanent_moved_event(
     }
 }
 
-/// Resolve an [`AnthemFilter`] into an [`AffectedScope`] for a continuous effect, given the
-/// effect's `controller` and the source permanent `source`. Shared by static anthems
-/// (`AnthemPt`, source on the battlefield) and one-shot mass pumps (`PumpAll`, `source` is the
-/// resolving spell). `exclude_self` only applies when the source persists, so a spell passes a
-/// `source` that is harmlessly never on the battlefield as a creature.
+/// Resolve an [`AnthemFilter`] into a dynamic [`AffectedScope`] for a static continuous effect,
+/// given the effect's `controller` and the source permanent `source`.
 pub(super) fn resolve_anthem_scope(
     filter: &AnthemFilter,
     controller: PlayerId,
@@ -800,6 +797,41 @@ pub(super) fn resolve_anthem_scope(
             None
         },
     }
+}
+
+/// Snapshot the creatures matched by a resolving one-shot team effect (CR 611.2c).
+///
+/// Unlike a static anthem, a resolving spell or triggered ability fixes its affected objects when
+/// it resolves. Glorious Charge and Inspiring Captain both use this path; a creature entering
+/// later in the turn must not inherit their pump.
+pub(super) fn snapshot_anthem_scope(
+    engine: &GameEngine,
+    filter: &AnthemFilter,
+    controller: PlayerId,
+    source: ObjectId,
+) -> Vec<ObjectId> {
+    engine
+        .state
+        .players
+        .iter()
+        .flat_map(|player| player.battlefield.iter().copied())
+        .filter(|oid| !filter.exclude_self || *oid != source)
+        .filter_map(|oid| engine.characteristics(oid).map(|value| (oid, value)))
+        .filter(|(_, value)| {
+            value.is_creature()
+                && filter
+                    .controller
+                    .is_none_or(|AnthemController::YouControl| value.controller == controller)
+                && filter
+                    .subtype
+                    .as_ref()
+                    .is_none_or(|subtype| value.types.contains(subtype))
+                && filter
+                    .color
+                    .is_none_or(|color| value.colors.contains(&color))
+        })
+        .map(|(oid, _)| oid)
+        .collect()
 }
 
 /// Move `oid` into zone `z`, maintaining every zone list and the CR 400.7 new-object resets.

@@ -1,0 +1,22 @@
+(
+  id: "llanowar_visionary",
+  name: "Llanowar Visionary",
+  mana_cost: "{2}{G}",
+  types: ["Creature", "Elf", "Druid"],
+  power: 2,
+  toughness: 2,
+  activated_abilities: [
+    (
+      cost: Tap,
+      effect: [ProduceMana(options: [(g: 1)])],
+      text: "{T}: Add {G}.",
+    ),
+  ],
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Draw(count: 1)],
+      text: "When this creature enters, draw a card.",
+    ),
+  ],
+)

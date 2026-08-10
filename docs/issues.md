@@ -25,10 +25,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
 
 ## Open
 
-- [ ] #49 [chore] Batch-author the highest-yield triggered-creature cohort from the Issue #44 calibration
-  - Details: The reproducible 180-card M19-M21 calibration measured 76 full-now cards (42.2%) and 117 full-or-partial cards (65.0%). Its largest ready family contains 24 simple triggered creatures, so the capped 20-card data yield beats the best focused primitive candidate (14 enters-tapped cards). Author exactly these 20 full-fidelity RON definitions in selection-hash order: Spellgorger Weird, Gale Swooper, Steadfast Sentry, Daybreak Charger, Mistral Singer, Skyscanner, Skymarch Bloodletter, Griffin Protector, Llanowar Visionary, Inspiring Captain, Aven Wind Mage, Dawning Angel, Library Larcenist, Highland Game, Audacious Thief, Spined Megalodon, Cloudkin Seer, Wall of Runes, Rhox Oracle, and Cavalry Drillmaster. Use only existing `TriggerCondition`, `SpellEffectKind`, keyword, counter, and mana-ability vocabulary; add no primitive, custom Rust, proto, relay, or client path, and do not mark any card partial. Fetch each card's Oracle data and rulings before authoring. Add red/green scenario coverage for every trigger/effect shape not already characterized, registry/conformance coverage for all 20 cards, regenerate `tricerules/CARDS.md`, and pass the Rust card-data gates plus checklist `--check`. The full sample, classifications, and selection hashes are in `docs/card-coverage-calibration-2026-08.md` and `docs/card-coverage-calibration-2026-08.csv`.
-  - Priority: Medium
-
 - [ ] #51 [feature] Dynamic enters-with counters
   - Details: Extend the shared battlefield-entry replacement event so a permanent can enter with a counter count computed from the pre-entry game state. Calibration evidence: Squad Captain. Add the counter mutation to the proposed event and reuse its CR 616 affected-player choice/re-evaluation path; preserve replacement timing, clamp or reject invalid computed amounts, and cover zero and multiplayer counts. Before adding a new amount expression, satisfy the two-card-or-mechanic reuse gate.
   - Priority: Low

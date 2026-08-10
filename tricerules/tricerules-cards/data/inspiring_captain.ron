@@ -1,0 +1,21 @@
+(
+  id: "inspiring_captain",
+  name: "Inspiring Captain",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Human", "Knight"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [
+        PumpAll(
+          filter: (controller: YouControl),
+          power: 1,
+          toughness: 1,
+        ),
+      ],
+      text: "When this creature enters, creatures you control get +1/+1 until end of turn.",
+    ),
+  ],
+)

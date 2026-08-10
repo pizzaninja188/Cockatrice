@@ -1,0 +1,19 @@
+(
+  id: "mistral_singer",
+  name: "Mistral Singer",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Siren"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying],
+  triggered_abilities: [
+    (
+      trigger: WheneverPlayerCastsSpell(
+        caster: Controller,
+        spell_type: Some(Noncreature),
+      ),
+      effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+      text: "Prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)",
+    ),
+  ],
+)

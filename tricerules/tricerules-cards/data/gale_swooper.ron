@@ -1,0 +1,16 @@
+(
+  id: "gale_swooper",
+  name: "Gale Swooper",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Griffin"],
+  power: 3,
+  toughness: 2,
+  keywords: [Flying],
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [GrantKeywordsTarget(target: (kind: Creature), keywords: [Flying])],
+      text: "When this creature enters, target creature gains flying until end of turn.",
+    ),
+  ],
+)
