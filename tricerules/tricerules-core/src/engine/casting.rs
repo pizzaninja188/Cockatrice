@@ -368,7 +368,12 @@ impl GameEngine {
                                 .iter()
                                 .map(|target| target.damage_amount)
                                 .sum();
-                            if allocated != amount.resolve(chosen_x)
+                            if allocated
+                                != amount.resolve_unconditional(chosen_x).ok_or(
+                                    EngineError::Illegal(
+                                        "DamageTargets cannot use a conditional amount",
+                                    ),
+                                )?
                                 || selection
                                     .targets
                                     .iter()
@@ -420,7 +425,12 @@ impl GameEngine {
                     if matches!(division, DamageDivision::ChooseAtCast) {
                         let allocated: u32 =
                             targets.iter().map(|target| target.damage_amount).sum();
-                        if allocated != amount.resolve(chosen_x)
+                        if allocated
+                            != amount.resolve_unconditional(chosen_x).ok_or(
+                                EngineError::Illegal(
+                                    "DamageTargets cannot use a conditional amount",
+                                ),
+                            )?
                             || targets.iter().any(|target| target.damage_amount == 0)
                         {
                             return Err(EngineError::Illegal(
@@ -577,7 +587,7 @@ impl GameEngine {
                 chosen_mode_labels,
             })),
         });
-        self.state.spells_cast_this_turn = self.state.spells_cast_this_turn.saturating_add(1);
+        self.record_spell_cast();
         target_triggers.extend(self.collect_event_triggers(&[GameEvent::SpellCast {
             caster: player,
             card_id: cast_card_id,
@@ -768,7 +778,7 @@ impl GameEngine {
         // the ability it paid for, so its events must follow that ability's StackPushed. Emitting
         // the trigger prompt first also made the client discard it, because an activated ability
         // reaching the stack is its signal that a pending trigger target was just answered.
-        target_triggers.extend(self.collect_sacrifice_cost_dies(sacrificed));
+        target_triggers.extend(self.collect_committed_sacrifice_cost_dies(sacrificed));
         self.stage_triggers(target_triggers);
         batch.events.push(ev_priority_changed(self));
         fill_legal(&mut batch, self);
@@ -848,14 +858,14 @@ impl GameEngine {
     /// battlefield abilities (Blood Artist, Bottle Gnomes' own controller triggers) see it. The
     /// triggers go on the stack *above* the ability whose cost they paid, so this runs after the
     /// ability has been pushed.
-    fn collect_sacrifice_cost_dies(
-        &self,
+    fn collect_committed_sacrifice_cost_dies(
+        &mut self,
         snapshot: Option<SacrificeSnapshot>,
     ) -> Vec<super::triggers::CollectedTrigger> {
         let Some(snapshot) = snapshot else {
             return vec![];
         };
-        self.collect_event_triggers(&[GameEvent::Dies {
+        let event = GameEvent::Dies {
             source: TriggerSourceSnapshot {
                 object_id: snapshot.object_id,
                 card_id: snapshot.card_id,
@@ -863,11 +873,13 @@ impl GameEngine {
                 face_index: snapshot.face_index,
             },
             was_creature: snapshot.was_creature,
-        }])
+        };
+        self.record_committed_events(std::slice::from_ref(&event));
+        self.collect_event_triggers(&[event])
     }
 
     fn fire_sacrifice_cost_dies(&mut self, snapshot: Option<SacrificeSnapshot>) {
-        let collected = self.collect_sacrifice_cost_dies(snapshot);
+        let collected = self.collect_committed_sacrifice_cost_dies(snapshot);
         self.stage_triggers(collected);
     }
 

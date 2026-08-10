@@ -4,10 +4,56 @@ use super::{
     AnthemFilter, GraveyardDestination, GraveyardFilter, Keyword, SpellTypeFilter,
     TargetController, TargetFilter, TargetKind,
 };
+use serde::de::{EnumAccess, MapAccess, VariantAccess};
+use serde::ser::SerializeStructVariant;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-/// An effect amount that is either a fixed literal or the spell's cast-time X (CR 107.3).
+/// A public turn-history predicate evaluated by the rules engine at resolution.
+///
+/// The bounded count shape supports both boolean "a creature died" cards (Life Goes On,
+/// Brimstone Volley) and count-sensitive consumers (Bloodcrazed Paladin, Lagomos) without exposing
+/// the identities of the cards that moved through a graveyard.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GameCondition {
+    CreatureDeathsThisTurn {
+        #[serde(default)]
+        min: Option<u32>,
+        #[serde(default)]
+        max: Option<u32>,
+    },
+}
+
+impl GameCondition {
+    pub fn validate(self) -> Result<(), String> {
+        match self {
+            GameCondition::CreatureDeathsThisTurn { min, max } => {
+                if min.is_none() && max.is_none() {
+                    return Err("CreatureDeathsThisTurn requires at least one of min or max".into());
+                }
+                if min
+                    .zip(max)
+                    .is_some_and(|(minimum, maximum)| minimum > maximum)
+                {
+                    return Err("CreatureDeathsThisTurn min cannot exceed max".into());
+                }
+                Ok(())
+            }
+        }
+    }
+
+    pub fn matches_count(self, count: u32) -> bool {
+        match self {
+            GameCondition::CreatureDeathsThisTurn { min, max } => {
+                min.is_none_or(|minimum| count >= minimum)
+                    && max.is_none_or(|maximum| count <= maximum)
+            }
+        }
+    }
+}
+
+/// An effect amount that is a fixed literal, the spell's cast-time X (CR 107.3), or a value
+/// selected from public game state when the effect resolves.
 ///
 /// In RON a bare integer (`amount: 3`) is [`Amount::Fixed`]; the string `amount: "X"` is the
 /// chosen X, resolved from the resolving stack item's `chosen_x`. Custom (de)serialize keeps the
@@ -21,20 +67,40 @@ pub enum Amount {
     Fixed(u32),
     /// The spell's cast-time X value (CR 107.3); resolved at resolution from `chosen_x`.
     X,
+    /// Choose a literal from engine-owned public state as this effect resolves. Life Goes On and
+    /// Brimstone Volley are the first two cards covered by this shared form.
+    Conditional {
+        condition: GameCondition,
+        when_true: u32,
+        otherwise: u32,
+    },
 }
 
 impl Amount {
-    /// Resolve to a concrete count given the spell's chosen X (0 for non-X spells).
-    pub fn resolve(self, x: u32) -> u32 {
+    /// Resolve an amount that needs no game-state query. Conditional amounts return `None` so a
+    /// caller cannot accidentally choose a branch without consulting the authoritative engine.
+    pub fn resolve_unconditional(self, x: u32) -> Option<u32> {
         match self {
-            Amount::Fixed(n) => n,
-            Amount::X => x,
+            Amount::Fixed(n) => Some(n),
+            Amount::X => Some(x),
+            Amount::Conditional { .. } => None,
         }
     }
 
     /// True if this amount depends on the cast-time X.
     pub fn is_x(self) -> bool {
         matches!(self, Amount::X)
+    }
+
+    pub fn is_conditional(self) -> bool {
+        matches!(self, Amount::Conditional { .. })
+    }
+
+    pub fn validate(self) -> Result<(), String> {
+        match self {
+            Amount::Conditional { condition, .. } => condition.validate(),
+            Amount::Fixed(_) | Amount::X => Ok(()),
+        }
     }
 }
 
@@ -49,17 +115,84 @@ impl Serialize for Amount {
         match self {
             Amount::Fixed(n) => s.serialize_u32(*n),
             Amount::X => s.serialize_str("X"),
+            Amount::Conditional {
+                condition,
+                when_true,
+                otherwise,
+            } => {
+                let mut variant = s.serialize_struct_variant("Amount", 0, "Conditional", 3)?;
+                variant.serialize_field("condition", condition)?;
+                variant.serialize_field("when_true", when_true)?;
+                variant.serialize_field("otherwise", otherwise)?;
+                variant.end()
+            }
         }
+    }
+}
+
+#[derive(Deserialize)]
+enum AmountVariant {
+    Conditional,
+}
+
+#[derive(Deserialize)]
+#[serde(field_identifier, rename_all = "snake_case")]
+enum ConditionalField {
+    Condition,
+    WhenTrue,
+    Otherwise,
+}
+
+struct ConditionalAmountVisitor;
+
+impl<'de> serde::de::Visitor<'de> for ConditionalAmountVisitor {
+    type Value = Amount;
+
+    fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("Conditional(condition: ..., when_true: ..., otherwise: ...)")
+    }
+
+    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+        let mut condition = None;
+        let mut when_true = None;
+        let mut otherwise = None;
+        while let Some(field) = map.next_key()? {
+            match field {
+                ConditionalField::Condition => {
+                    if condition.is_some() {
+                        return Err(serde::de::Error::duplicate_field("condition"));
+                    }
+                    condition = Some(map.next_value()?);
+                }
+                ConditionalField::WhenTrue => {
+                    if when_true.is_some() {
+                        return Err(serde::de::Error::duplicate_field("when_true"));
+                    }
+                    when_true = Some(map.next_value()?);
+                }
+                ConditionalField::Otherwise => {
+                    if otherwise.is_some() {
+                        return Err(serde::de::Error::duplicate_field("otherwise"));
+                    }
+                    otherwise = Some(map.next_value()?);
+                }
+            }
+        }
+        Ok(Amount::Conditional {
+            condition: condition.ok_or_else(|| serde::de::Error::missing_field("condition"))?,
+            when_true: when_true.ok_or_else(|| serde::de::Error::missing_field("when_true"))?,
+            otherwise: otherwise.ok_or_else(|| serde::de::Error::missing_field("otherwise"))?,
+        })
     }
 }
 
 impl<'de> Deserialize<'de> for Amount {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         struct AmountVisitor;
-        impl serde::de::Visitor<'_> for AmountVisitor {
+        impl<'de> serde::de::Visitor<'de> for AmountVisitor {
             type Value = Amount;
             fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                f.write_str("a non-negative integer or the string \"X\"")
+                f.write_str("a non-negative integer, the string \"X\", or Conditional(...)")
             }
             fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<Amount, E> {
                 Ok(Amount::Fixed(v as u32))
@@ -74,6 +207,18 @@ impl<'de> Deserialize<'de> for Amount {
                     Ok(Amount::X)
                 } else {
                     Err(E::custom(format!("unknown amount {v:?}, expected \"X\"")))
+                }
+            }
+            fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Amount, A::Error> {
+                ConditionalAmountVisitor.visit_map(map)
+            }
+            fn visit_enum<A: EnumAccess<'de>>(self, data: A) -> Result<Amount, A::Error> {
+                let (variant, access) = data.variant::<AmountVariant>()?;
+                match variant {
+                    AmountVariant::Conditional => access.struct_variant(
+                        &["condition", "when_true", "otherwise"],
+                        ConditionalAmountVisitor,
+                    ),
                 }
             }
         }
@@ -93,9 +238,9 @@ pub enum DamageDivision {
 
 /// How much life a [`SpellEffectKind::LoseLife`] costs.
 ///
-/// Kept separate from [`Amount`] on purpose: `Amount::resolve(x)` answers from the cast-time X
-/// alone, while `TargetManaValue` needs the resolving spell's target, so folding it into `Amount`
-/// would force a context argument through ~15 call sites where it is meaningless.
+/// Kept separate from [`Amount`] on purpose: its dynamic variants query shared engine context,
+/// while `TargetManaValue` specifically needs the resolving spell's target, so folding it into
+/// `Amount` would force target context through call sites where it is meaningless.
 ///
 /// Named for widening — a later `TargetPower` (Rite of Consumption, Fling) or
 /// `ManaValueOfRevealedCard` (Dark Confidant) is an added variant, not a rename.
@@ -197,7 +342,7 @@ pub enum SpellEffectKind {
     /// `extra_mana_per_target` additional generic mana per target beyond the first (Fireball = 1,
     /// Fire = 0). `max_targets` caps the count (Fire = `Some(2)`; `None` = unlimited).
     /// At cast time the player submits `(target, damage_amount)` pairs via `TargetRef`; the sum
-    /// must equal `amount.resolve(x_value)`. Covers Fireball (X divided unlimited) and Fire
+    /// must equal the amount resolved from `x_value`. Covers Fireball (X divided unlimited) and Fire
     /// (fixed 2 divided among ≤ 2 targets). CR 608.2b: if some targets become illegal at
     /// resolution, damage is applied only to the remaining legal targets (partial fizzle).
     DamageTargets {
@@ -671,6 +816,23 @@ impl SpellEffectKind {
     pub fn validate(&self, context: EffectContext) -> Result<(), String> {
         for filter in self.target_filters() {
             filter.validate_target_controller()?;
+        }
+
+        match self {
+            SpellEffectKind::DamageTarget { amount, .. }
+            | SpellEffectKind::DamagePlayer { amount, .. }
+            | SpellEffectKind::Draw { count: amount }
+            | SpellEffectKind::GainLife { amount } => amount.validate()?,
+            SpellEffectKind::DamageTargets { amount, .. } => {
+                amount.validate()?;
+                if amount.is_conditional() {
+                    return Err(
+                        "DamageTargets cannot use a conditional amount because its allocation is chosen at cast time"
+                            .into(),
+                    );
+                }
+            }
+            _ => {}
         }
 
         // CR 115: a source-bound ability effect is not targeting and only exists where there is

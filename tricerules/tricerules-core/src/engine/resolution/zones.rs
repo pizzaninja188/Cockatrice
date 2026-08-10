@@ -18,7 +18,7 @@ pub(super) fn draw(
     let spell_label = cx.spell_label;
 
     // Blue Sun's Zenith / Braingeyser: `count` may be the cast-time X.
-    let count = count.resolve(top.chosen_x);
+    let count = engine.resolve_amount(count, top.chosen_x);
     let idx = engine.state.player_idx(drawer).unwrap();
     // CR 120.3 / 104.3c: drawing from an empty library does NOT fail the spell —
     // draw as many as possible, then the player loses as a state-based action

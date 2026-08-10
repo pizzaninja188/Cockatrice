@@ -1,0 +1,13 @@
+(
+  id: "life_goes_on",
+  name: "Life Goes On",
+  mana_cost: "{G}",
+  types: ["Instant"],
+  spell_effect: [
+    GainLife(amount: Conditional(
+      condition: CreatureDeathsThisTurn(min: Some(1), max: None),
+      when_true: 8,
+      otherwise: 4,
+    )),
+  ],
+)

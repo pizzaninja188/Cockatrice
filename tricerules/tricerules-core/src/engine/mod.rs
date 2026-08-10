@@ -8,7 +8,7 @@ use crate::state::{
     EntryReplacementApplication, EntryReplacementEffectId, GameObject, GameState, ObjectId,
     OpeningSequence, PendingBattlefieldEntry, PendingResolution, PendingTrigger,
     PendingTriggerOrder, PlayerId, PlayerState, ReplacementPriority, StackItem, StagedTrigger,
-    StagedTriggerGroup, TokenBattlefieldEntry, TurnStep, UndoableManaAbility, Zone,
+    StagedTriggerGroup, TokenBattlefieldEntry, TurnHistory, TurnStep, UndoableManaAbility, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -18,13 +18,13 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use thiserror::Error;
 use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
-    AbilityCost, AnthemController, AnthemFilter, CastTriggerPlayer, Color, ContinuousEffectKind,
-    CounterKind, DamageDivision, DamagePreventionAdditionalEffect, DamagePreventionSubject,
-    EffectDuration, EffectSubject, EntersTappedAffected, Evasion, FaceChangeAction, InterveningIf,
-    Keyword, LifeAmount, PermanentTypeFilter, PlayerRecipient, PreventionAmountBasis,
-    RelativePlayerSet, SearchDestination, SpellEffectKind, SpellTypeFilter, StaticAbilityDef,
-    StaticDamagePreventionAmount, TargetController, TargetFilter, TargetKind,
-    TargetingSourceFilter, TokenController, TriggerCondition,
+    AbilityCost, Amount, AnthemController, AnthemFilter, CastTriggerPlayer, Color,
+    ContinuousEffectKind, CounterKind, DamageDivision, DamagePreventionAdditionalEffect,
+    DamagePreventionSubject, EffectDuration, EffectSubject, EntersTappedAffected, Evasion,
+    FaceChangeAction, GameCondition, InterveningIf, Keyword, LifeAmount, PermanentTypeFilter,
+    PlayerRecipient, PreventionAmountBasis, RelativePlayerSet, SearchDestination, SpellEffectKind,
+    SpellTypeFilter, StaticAbilityDef, StaticDamagePreventionAmount, TargetController,
+    TargetFilter, TargetKind, TargetingSourceFilter, TokenController, TriggerCondition,
 };
 use tricerules_cards::{CardRegistry, FaceRef, Layout};
 use tricerules_proto::ruled::v1 as rv1;
@@ -46,6 +46,7 @@ mod custom_resolution;
 pub(crate) mod damage;
 mod dev;
 mod events;
+mod history;
 mod legal_actions;
 mod opening;
 mod priority;
@@ -518,8 +519,7 @@ impl GameEngine {
             command_index: 0,
             passes_since_stack_change: 0,
             lands_played_this_turn: 0,
-            spells_cast_this_turn: 0,
-            spells_cast_last_turn: 0,
+            turn_history: TurnHistory::default(),
             combat: None,
             winner: None,
             cleanup_discard_player: None,

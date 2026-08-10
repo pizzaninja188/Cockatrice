@@ -59,6 +59,8 @@ mod targeting;
 mod tokens;
 #[path = "scenario/triggers.rs"]
 mod triggers;
+#[path = "scenario/turn_history.rs"]
+mod turn_history;
 #[path = "scenario/tutor_search.rs"]
 mod tutor_search;
 #[path = "scenario/untap.rs"]

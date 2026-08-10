@@ -37,7 +37,7 @@ pub(super) fn damage_target(
     let spell_label = cx.spell_label;
 
     // CR 107.3: `amount` may be the cast-time X (Fireball) or a literal (Bolt).
-    let amount = amount.resolve(top.chosen_x);
+    let amount = engine.resolve_amount(amount, top.chosen_x);
     if let Some(&tid) = targets.first() {
         if let Some(pi) = engine.state.player_idx(tid as i32) {
             let pid = engine.state.players[pi].id;
@@ -118,8 +118,8 @@ pub(super) fn damage_targets(
         if legal_count == 0 {
             0
         } else {
-            amount
-                .resolve(cx.top.chosen_x)
+            engine
+                .resolve_amount(amount, cx.top.chosen_x)
                 .checked_div(legal_count)
                 .unwrap_or(0)
         }
@@ -181,7 +181,7 @@ pub(super) fn damage_player(
     let SpellEffectKind::DamagePlayer { amount, who } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let amount = amount.resolve(cx.top.chosen_x);
+    let amount = cx.engine.resolve_amount(amount, cx.top.chosen_x);
     // CR 101.4: APNAP for the multi-player recipients, so the log and the life-loss order are
     // reproducible in a replay.
     let recipients: Vec<PlayerId> = match who {

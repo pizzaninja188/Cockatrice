@@ -20,6 +20,64 @@ mod tests {
     use super::*;
 
     #[test]
+    fn amount_serde_preserves_literals_x_and_named_conditionals() {
+        assert_eq!(ron::from_str::<Amount>("4").unwrap(), Amount::Fixed(4));
+        assert_eq!(ron::from_str::<Amount>(r#""X""#).unwrap(), Amount::X);
+
+        let amount = Amount::Conditional {
+            condition: GameCondition::CreatureDeathsThisTurn {
+                min: Some(1),
+                max: None,
+            },
+            when_true: 8,
+            otherwise: 4,
+        };
+        let encoded = ron::to_string(&amount).unwrap();
+        assert_eq!(ron::from_str::<Amount>(&encoded).unwrap(), amount);
+    }
+
+    #[test]
+    fn turn_history_condition_requires_a_valid_bound() {
+        assert!(GameCondition::CreatureDeathsThisTurn {
+            min: None,
+            max: None,
+        }
+        .validate()
+        .is_err());
+        assert!(GameCondition::CreatureDeathsThisTurn {
+            min: Some(2),
+            max: Some(1),
+        }
+        .validate()
+        .is_err());
+        assert!(GameCondition::CreatureDeathsThisTurn {
+            min: Some(1),
+            max: None,
+        }
+        .validate()
+        .is_ok());
+    }
+
+    #[test]
+    fn damage_targets_rejects_conditional_amounts() {
+        let effect = SpellEffectKind::DamageTargets {
+            amount: Amount::Conditional {
+                condition: GameCondition::CreatureDeathsThisTurn {
+                    min: Some(1),
+                    max: None,
+                },
+                when_true: 5,
+                otherwise: 3,
+            },
+            target: TargetFilter::default(),
+            division: DamageDivision::ChooseAtCast,
+            extra_mana_per_target: 0,
+            max_targets: None,
+        };
+        assert!(effect.validate(EffectContext::Spell).is_err());
+    }
+
+    #[test]
     fn player_effect_accepts_player_spec() {
         assert!(SpellEffectKind::TargetPlayerLosesLife {
             amount: 3,

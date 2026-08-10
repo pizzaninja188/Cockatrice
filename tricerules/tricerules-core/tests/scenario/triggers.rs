@@ -1825,6 +1825,10 @@ fn sacrifice_cost_fires_dies_triggers() {
         1,
         "Blood Artist must trigger on a creature sacrificed as a cost"
     );
+    assert_eq!(
+        e.state.turn_history.current.creatures_died, 1,
+        "a creature sacrificed as an activation cost is committed turn history"
+    );
 }
 
 /// CR 603.6/603.10: creatures destroyed by one spell die simultaneously, so a Blood Artist that
@@ -1873,6 +1877,10 @@ fn blood_artist_dying_in_a_wipe_still_sees_the_other_deaths() {
         "Blood Artist sees its own death and both Bears dying simultaneously"
     );
     assert!(pending.candidates.iter().all(|c| c.controller == 0));
+    assert_eq!(
+        e.state.turn_history.current.creatures_died, 3,
+        "each creature in a simultaneous death set is counted"
+    );
 }
 
 /// The Bottle Gnomes softlock: a trigger queued while paying an activation cost must be emitted

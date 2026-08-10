@@ -32,6 +32,8 @@ impl GameEngine {
             return;
         }
 
+        self.record_committed_events(events);
+
         // All permanents in a simultaneous ETB set exist before any trigger check. Register every
         // static ability first so characteristics and trigger conditions see the completed event.
         for event in events {
@@ -798,7 +800,7 @@ impl GameEngine {
                 }
             },
             Some(InterveningIf::SpellsCastLastTurn { min, max }) => {
-                let count = self.state.spells_cast_last_turn;
+                let count = self.state.turn_history.previous.spells_cast;
                 min.is_none_or(|minimum| count >= minimum)
                     && max.is_none_or(|maximum| count <= maximum)
             }

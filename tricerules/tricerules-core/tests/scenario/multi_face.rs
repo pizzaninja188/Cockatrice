@@ -1007,7 +1007,7 @@ fn classic_werewolf_spell_count_thresholds_are_face_aware() {
         let mut e = GameEngine::new(89, &[0, 1], 20, None, true).expect("new");
         let oid = inject_permanent_on_battlefield(&mut e, 0, card_id);
 
-        e.state.spells_cast_this_turn = 1;
+        e.state.turn_history.current.spells_cast = 1;
         advance_to_next_upkeep_trigger(&mut e);
         assert!(e.state.stack.is_empty(), "one spell fires neither face");
         assert_eq!(e.state.objects[&oid].face_up_index, 0);
@@ -1019,7 +1019,7 @@ fn classic_werewolf_spell_count_thresholds_are_face_aware() {
             card_id != "village_ironsmith_ironfang"
                 || back.has_keyword(tricerules_cards::Keyword::FirstStrike)
         );
-        e.state.spells_cast_this_turn = 2;
+        e.state.turn_history.current.spells_cast = 2;
         advance_to_next_upkeep_trigger(&mut e);
         assert!(!e.state.stack.is_empty(), "two spells fire the back face");
         resolve_entire_stack_two_player(&mut e);
@@ -1036,7 +1036,7 @@ fn werewolf_intervening_if_is_rechecked_at_resolution() {
 
     // A state mutation stands in for a future spell-count-changing effect and proves the generic
     // CR 603.4 resolution check reads live predicate state, not the trigger-time result.
-    e.state.spells_cast_last_turn = 1;
+    e.state.turn_history.previous.spells_cast = 1;
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.objects[&oid].face_up_index, 0);
 }

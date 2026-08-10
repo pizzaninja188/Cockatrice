@@ -64,7 +64,7 @@ pub(super) fn gain_life(
     let controller = cx.controller;
     let spell_label = cx.spell_label;
 
-    let amount = amount.resolve(top.chosen_x);
+    let amount = engine.resolve_amount(amount, top.chosen_x);
     apply_life_gain(engine, events, controller, amount, spell_label);
 
     Ok(EffectOutcome::Continue)

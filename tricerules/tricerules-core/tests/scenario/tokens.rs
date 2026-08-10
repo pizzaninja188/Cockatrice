@@ -188,6 +188,10 @@ fn token_dies_and_ceases_to_exist() {
         !e.state.objects.contains_key(&victim),
         "dead token ceased to exist"
     );
+    assert_eq!(
+        e.state.turn_history.current.creatures_died, 1,
+        "a creature token still counts as having died before it ceases to exist"
+    );
     assert!(
         !e.state.players[0].graveyard.contains(&victim),
         "token must not linger in the graveyard"

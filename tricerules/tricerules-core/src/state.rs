@@ -660,6 +660,29 @@ pub struct UndoableManaAbility {
     pub produced: ManaAmount,
 }
 
+/// Public, identity-free facts accumulated during one turn. Counts are retained rather than
+/// booleans because some cards ask whether anything happened while others use the exact total.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TurnRecord {
+    pub spells_cast: u32,
+    pub creatures_died: u32,
+}
+
+/// Engine-owned event memory. Cleanup rolls the completed turn into `previous` and opens a fresh
+/// `current` record, so turn-bound conditions share one lifecycle instead of adding ad hoc fields.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TurnHistory {
+    pub current: TurnRecord,
+    pub previous: TurnRecord,
+}
+
+impl TurnHistory {
+    pub fn finish_turn(&mut self) {
+        self.previous = self.current;
+        self.current = TurnRecord::default();
+    }
+}
+
 #[derive(Debug)]
 pub struct GameState {
     pub seed: u64,
@@ -697,8 +720,7 @@ pub struct GameState {
     pub passes_since_stack_change: u32,
     /// Number of lands played from hand this turn; compared against max (1 + extra land plays).
     pub lands_played_this_turn: u32,
-    pub spells_cast_this_turn: u32,
-    pub spells_cast_last_turn: u32,
+    pub turn_history: TurnHistory,
     /// Active combat, if in declare/damage
     pub combat: Option<CombatState>,
     /// If set, game is over; winning player

@@ -38,7 +38,7 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Priority: Low
 
 - [ ] #54 [feature] Activated-ability timing and board-state restrictions
-  - Details: Add reusable activation predicates for sorcery-speed timing and conditions over controlled permanents or keywords. Calibration evidence: Celestial Enforcer, Goblin Bird-Grabber, and Liliana's Steward's secondary `activation_timing_and_discard_choice` gap. Integrate the predicates into authoritative legal actions and command validation; Caged Zombie can reuse the condition framework after Issue #61 supplies its turn-history predicate.
+  - Details: Add reusable activation predicates for sorcery-speed timing and conditions over controlled permanents or keywords. Calibration evidence: Celestial Enforcer, Goblin Bird-Grabber, and Liliana's Steward's secondary `activation_timing_and_discard_choice` gap. Integrate the predicates into authoritative legal actions and command validation; Caged Zombie can reuse the shipped `GameCondition::CreatureDeathsThisTurn` predicate.
   - Priority: Low
 
 - [ ] #55 [feature] Conditional mana output and restricted mana spending
@@ -62,11 +62,7 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Priority: Low
 
 - [ ] #60 [feature] End-step trigger conditions
-  - Details: Add reusable beginning/end-step trigger conditions with controller-aware active-player matching and normal APNAP collection. Calibration evidence: Sabertooth Mauler, whose effect also depends on Issue #61. Cover triggers created before the step, objects entering after the step began, and multiplayer ordering; satisfy the two-card-or-mechanic reuse gate before adding the trigger variant.
-  - Priority: Low
-
-- [ ] #61 [feature] Turn-history death watcher
-  - Details: Record whether one or more creatures died this turn in engine-owned, cleanup-scoped history that conditions and effects can query. Calibration evidence: Life Goes On and Caged Zombie; Sabertooth Mauler also consumes this history at the end step. Cover tokens, simultaneous deaths, controller changes, skipped turns, and cleanup reset without leaking hidden card identity.
+  - Details: Add reusable beginning/end-step trigger conditions with controller-aware active-player matching and normal APNAP collection. Calibration evidence: Sabertooth Mauler, whose effect can query the shipped counted `TurnHistory`. Cover triggers created before the step, objects entering after the step began, and multiplayer ordering; satisfy the two-card-or-mechanic reuse gate before adding the trigger variant.
   - Priority: Low
 
 - [ ] #62 [feature] Block-event triggers and related-player recipients

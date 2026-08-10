@@ -896,9 +896,13 @@ three-tier model is the deliberate middle path. Keep its gates.
 
 **Worth stealing:**
 1. **Watchers** (XMage): a dedicated event-memory subsystem — "creatures that died this turn",
-   "spells you've cast this turn" — that trigger conditions and effects query. Build it as a
-   subsystem when the first Morbid/revolt-class card lands; never as one-off `GameState`
-   fields per mechanic.
+   "spells you've cast this turn" — that trigger conditions and effects query.
+
+   > **Done 2026-08-10 (Issue #61).** `TurnHistory` now owns counted current/previous
+   > `TurnRecord`s, including spell casts and creature deaths, and rolls them together at cleanup.
+   > The event funnel records identity-free facts only; `GameCondition` is the shared card-data
+   > query surface. Future turn-memory mechanics extend this subsystem instead of adding one-off
+   > `GameState` fields.
 2. **Scenario-test DSL**: XMage's declarative test player + massive regression suite is what
    keeps 25k cards from rotting. `tests/scenario/helpers.rs` is this fork's equivalent — treat
    it as a first-class product; keep investing in one-line-per-action builders.

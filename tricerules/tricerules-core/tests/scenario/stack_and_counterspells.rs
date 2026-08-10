@@ -908,6 +908,10 @@ fn twincast_copies_bolt_both_deal_damage() {
         .expect("twincast stack push");
     assert!(!tw_push.is_copy, "the cast Twincast is not itself a copy");
     assert_eq!(e.state.stack.len(), 2, "bolt + twincast on stack");
+    assert_eq!(
+        e.state.turn_history.current.spells_cast, 2,
+        "Bolt and Twincast were cast"
+    );
 
     // Both pass: Twincast resolves and emits ResolutionChoiceRequired (CR 707.10c: copy
     // controller must choose new targets before the copy lands on the stack).
@@ -963,6 +967,10 @@ fn twincast_copies_bolt_both_deal_damage() {
     assert_eq!(e.state.stack.len(), 2, "original bolt + its copy on stack");
     let copy_item = e.state.stack.last().expect("copy on top");
     assert!(copy_item.is_copy, "top of stack is the copy");
+    assert_eq!(
+        e.state.turn_history.current.spells_cast, 2,
+        "putting the Bolt copy on the stack is not casting it"
+    );
     assert_eq!(
         copy_item.controller, 1,
         "copy controlled by Twincast's caster"
