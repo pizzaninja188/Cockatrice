@@ -1,0 +1,9 @@
+(
+  id: "wind-scarred_crag",
+  name: "Wind-Scarred Crag",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [(cost: Tap, effect: [ProduceMana(options: [(r: 1), (w: 1)])], text: "{T}: Add {R} or {W}.")],
+  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)], text: "When Wind-Scarred Crag enters, you gain 1 life.")],
+  static_abilities: [EntersTapped(affected: Self_)],
+)

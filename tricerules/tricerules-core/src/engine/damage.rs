@@ -466,8 +466,8 @@ impl GameEngine {
         let mut candidate_names = Vec::new();
         let mut candidate_effect_ids = Vec::new();
         for (event_index, effect_id, effect_label) in raw_candidates {
-            let choice_id = self.state.next_damage_prevention_application_id;
-            self.state.next_damage_prevention_application_id = choice_id.saturating_add(1);
+            let choice_id = self.state.next_replacement_application_id;
+            self.state.next_replacement_application_id = choice_id.saturating_add(1);
             applications.push(DamageApplicationChoice {
                 choice_id,
                 effect_id,
@@ -488,7 +488,7 @@ impl GameEngine {
                     deciding_player_id: deciding_player,
                     source_object_id: item.id,
                     prompt_text: prompt.clone(),
-                    choice_kind: rv1::ChoiceKind::DamagePrevention as i32,
+                    choice_kind: rv1::ChoiceKind::ReplacementEffect as i32,
                     candidate_object_ids: candidates.clone(),
                     candidate_card_ids: vec![String::new(); candidates.len()],
                     min: 1,
@@ -502,10 +502,11 @@ impl GameEngine {
         });
         events.push(ev_log(prompt.clone()));
         batch.applications = applications;
-        self.state.pending_damage_batch = Some(batch);
+        self.state.pending_replacement_event =
+            Some(super::replacement::PendingReplacementEvent::Damage(batch));
         self.state.pending_resolution = Some(PendingResolution {
             item,
-            custom_key: "__damage_prevention".to_string(),
+            custom_key: "__replacement_effect".to_string(),
             step: 1,
             scratch: candidate_effect_ids,
             deciding_player,
@@ -514,7 +515,7 @@ impl GameEngine {
             max: 1,
             ordered: false,
             prompt,
-            choice_kind: rv1::ChoiceKind::DamagePrevention,
+            choice_kind: rv1::ChoiceKind::ReplacementEffect,
             unique_names: false,
             copy_source_object_id: 0,
             search_destination: SearchDestination::Hand,
@@ -570,7 +571,9 @@ impl GameEngine {
         };
         let result = self.process_or_park_damage_event(&item, event, source_has_deathtouch, events);
         if result.is_none() {
-            if let Some(batch) = self.state.pending_damage_batch.as_mut() {
+            if let Some(super::replacement::PendingReplacementEvent::Damage(batch)) =
+                self.state.pending_replacement_event.as_mut()
+            {
                 if let Some(damage) = batch.damage.first_mut() {
                     damage.spec.source_has_lifelink = source_has_lifelink;
                 }
@@ -742,9 +745,17 @@ impl GameEngine {
         pending: PendingResolution,
         chosen_application_id: u32,
     ) -> Result<RuledEventBatch, EngineError> {
-        let Some(mut batch) = self.state.pending_damage_batch.take() else {
+        let Some(pending_event) = self.state.pending_replacement_event.take() else {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal("damage-prevention choice is stale"));
+        };
+        let mut batch = match pending_event {
+            super::replacement::PendingReplacementEvent::Damage(batch) => batch,
+            other => {
+                self.state.pending_replacement_event = Some(other);
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("damage-prevention choice is stale"));
+            }
         };
         let Some(application) = batch
             .applications
@@ -752,7 +763,8 @@ impl GameEngine {
             .find(|application| application.choice_id == chosen_application_id)
             .cloned()
         else {
-            self.state.pending_damage_batch = Some(batch);
+            self.state.pending_replacement_event =
+                Some(super::replacement::PendingReplacementEvent::Damage(batch));
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
                 "damage-prevention application is stale",
@@ -765,7 +777,8 @@ impl GameEngine {
             application.effect_id,
             &mut events,
         ) {
-            self.state.pending_damage_batch = Some(batch);
+            self.state.pending_replacement_event =
+                Some(super::replacement::PendingReplacementEvent::Damage(batch));
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
                 "damage-prevention effect is no longer active",

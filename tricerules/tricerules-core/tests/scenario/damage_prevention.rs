@@ -166,6 +166,7 @@ fn anti_venom_with_shield_awaiting_five_damage(seed: u64) -> (GameEngine, u32, u
         .pending_resolution
         .as_ref()
         .expect("CR 616 prompt");
+    assert_eq!(pending.choice_kind, ChoiceKind::ReplacementEffect);
     let anti_application = pending.candidates[pending
         .scratch
         .iter()

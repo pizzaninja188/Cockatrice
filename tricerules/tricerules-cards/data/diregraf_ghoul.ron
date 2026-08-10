@@ -1,0 +1,9 @@
+(
+  id: "diregraf_ghoul",
+  name: "Diregraf Ghoul",
+  mana_cost: "{B}",
+  types: ["Creature", "Zombie"],
+  power: 2,
+  toughness: 2,
+  static_abilities: [EntersTapped(affected: Self_)],
+)

@@ -1,0 +1,21 @@
+(
+  id: "tranquil_cove",
+  name: "Tranquil Cove",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      cost: Tap,
+      effect: [ProduceMana(options: [(w: 1), (u: 1)])],
+      text: "{T}: Add {W} or {U}.",
+    ),
+  ],
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [GainLife(amount: 1)],
+      text: "When Tranquil Cove enters, you gain 1 life.",
+    ),
+  ],
+  static_abilities: [EntersTapped(affected: Self_)],
+)

@@ -1,0 +1,8 @@
+(
+  id: "foul_orchard",
+  name: "Foul Orchard",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [(cost: Tap, effect: [ProduceMana(options: [(b: 1), (g: 1)])], text: "{T}: Add {B} or {G}.")],
+  static_abilities: [EntersTapped(affected: Self_)],
+)

@@ -1,0 +1,9 @@
+(
+  id: "jungle_hollow",
+  name: "Jungle Hollow",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [(cost: Tap, effect: [ProduceMana(options: [(b: 1), (g: 1)])], text: "{T}: Add {B} or {G}.")],
+  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)], text: "When Jungle Hollow enters, you gain 1 life.")],
+  static_abilities: [EntersTapped(affected: Self_)],
+)

@@ -311,8 +311,19 @@ impl GameEngine {
         if pending.custom_key == "__sacrifice_chosen" {
             return self.finish_sacrifice_chosen(pending, chosen);
         }
-        if pending.custom_key == "__damage_prevention" {
-            return self.finish_damage_prevention_choice(pending, chosen[0]);
+        if pending.custom_key == "__replacement_effect" {
+            return match self.state.pending_replacement_event.as_ref() {
+                Some(super::replacement::PendingReplacementEvent::Damage(_)) => {
+                    self.finish_damage_prevention_choice(pending, chosen[0])
+                }
+                Some(super::replacement::PendingReplacementEvent::BattlefieldEntry(_)) => {
+                    self.finish_battlefield_entry_replacement_choice(pending, chosen[0])
+                }
+                None => {
+                    self.state.pending_resolution = Some(pending);
+                    Err(EngineError::Illegal("replacement choice is stale"))
+                }
+            };
         }
 
         // CR 704.5j: legend SBA choice — the chosen object id is the legend to KEEP;

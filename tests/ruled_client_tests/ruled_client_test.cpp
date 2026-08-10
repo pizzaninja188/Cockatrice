@@ -1936,18 +1936,18 @@ TEST_F(RuledClientTest, UnrecognisedChoiceKindFallsBackToTheModalDialog)
     EXPECT_EQ(host.lastDialogPrompt, QStringLiteral("Choose one."));
 }
 
-TEST_F(RuledClientTest, DamagePreventionChoiceUsesModalFallbackAndSubmitsOpaqueApplicationId)
+TEST_F(RuledClientTest, ReplacementEffectChoiceUsesModalFallbackAndSubmitsOpaqueApplicationId)
 {
     host.autoSubmitDialogChoice = true;
     ruled::v1::RuledEventBatch batch;
     auto *rcr = batch.add_events()->mutable_resolution_choice_required();
     rcr->set_deciding_player_id(kLocalPlayer);
-    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_DAMAGE_PREVENTION);
-    rcr->set_prompt_text("Choose prevention order.");
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT);
+    rcr->set_prompt_text("Choose the next replacement effect for Diregraf Ghoul entering the battlefield.");
     rcr->set_min(1);
     rcr->set_max(1);
     rcr->add_candidate_object_ids(7001);
-    rcr->add_candidate_names("Anti-Venom prevention");
+    rcr->add_candidate_names("Orb of Dreams - permanents enter tapped");
     apply(batch);
 
     EXPECT_EQ(host.dialogRequests, 1);

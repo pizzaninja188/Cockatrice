@@ -1,0 +1,8 @@
+(
+  id: "submerged_boneyard",
+  name: "Submerged Boneyard",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [(cost: Tap, effect: [ProduceMana(options: [(u: 1), (b: 1)])], text: "{T}: Add {U} or {B}.")],
+  static_abilities: [EntersTapped(affected: Self_)],
+)

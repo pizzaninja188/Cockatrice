@@ -7,7 +7,9 @@
 
 use crate::helpers::*;
 use tricerules_proto::ruled::v1::dev_command::Dev;
-use tricerules_proto::ruled::v1::{DevAddMana, DevCommand, DevMoveCard, DevPutCardInZone, DevZone};
+use tricerules_proto::ruled::v1::{
+    permanent_moved, DevAddMana, DevCommand, DevMoveCard, DevPutCardInZone, DevZone,
+};
 
 fn dev(target: i32, payload: Dev) -> RuledCommand {
     RuledCommand {
@@ -302,6 +304,95 @@ fn dev_conjure_emits_catalog_and_conjure_events() {
         "the refreshed catalog must carry the conjured card, or the relay's zone reconcile \
          cannot resolve its name and abandons the sync"
     );
+}
+
+#[test]
+fn dev_conjure_waits_for_entry_replacement_choice_before_announcing_or_committing() {
+    let mut e = basics_engine(933);
+    e.apply_command(0, &put(0, DevZone::Battlefield, "Orb of Dreams"))
+        .expect("conjure Orb");
+
+    let prompt_batch = e
+        .apply_command(0, &put(0, DevZone::Battlefield, "Diregraf Ghoul"))
+        .expect("propose Ghoul entry");
+    assert!(prompt_batch
+        .events
+        .iter()
+        .all(|event| !matches!(&event.ev, Some(Ev::DevCardConjured(_)))));
+    let ghoul = e
+        .state
+        .objects
+        .values()
+        .find(|object| object.card_id == "diregraf_ghoul")
+        .expect("proposed Ghoul");
+    assert_eq!(ghoul.zone, tricerules_core::Zone::Stack);
+    assert!(!e.state.players[0].battlefield.contains(&ghoul.id));
+
+    let pending = e.state.pending_resolution.as_ref().expect("CR 616 choice");
+    assert_eq!(pending.choice_kind, ChoiceKind::ReplacementEffect);
+    assert_eq!(pending.candidates.len(), 2);
+    let application = pending.candidates[0];
+    let completion = e
+        .apply_command(0, &submit_resolution_choice(vec![application]))
+        .expect("choose entry replacement");
+
+    let ghoul = e
+        .state
+        .objects
+        .values()
+        .find(|object| object.card_id == "diregraf_ghoul")
+        .expect("committed Ghoul");
+    assert_eq!(ghoul.zone, tricerules_core::Zone::Battlefield);
+    assert!(ghoul.tapped);
+    assert!(completion
+        .events
+        .iter()
+        .any(|event| matches!(&event.ev, Some(Ev::DevCardConjured(_)))));
+}
+
+#[test]
+fn dev_move_waits_for_entry_replacement_choice_before_leaving_the_source_zone() {
+    let mut e = basics_engine(934);
+    e.apply_command(0, &put(0, DevZone::Battlefield, "Orb of Dreams"))
+        .expect("conjure Orb");
+    e.apply_command(0, &put(0, DevZone::Hand, "Diregraf Ghoul"))
+        .expect("conjure Ghoul into hand");
+    let ghoul = *e.state.players[0]
+        .hand
+        .iter()
+        .find(|oid| e.state.objects[oid].card_id == "diregraf_ghoul")
+        .expect("Ghoul in hand");
+
+    let prompt_batch = e
+        .apply_command(0, &mv(0, DevZone::Battlefield, "Diregraf Ghoul"))
+        .expect("propose move");
+    assert_eq!(e.state.objects[&ghoul].zone, tricerules_core::Zone::Hand);
+    assert!(e.state.players[0].hand.contains(&ghoul));
+    assert!(prompt_batch.events.iter().all(|event| !matches!(
+        &event.ev,
+        Some(Ev::PermanentMoved(moved))
+            if moved.destination == permanent_moved::Destination::Battlefield as i32
+    )));
+
+    let application = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("CR 616 choice")
+        .candidates[0];
+    let completion = e
+        .apply_command(0, &submit_resolution_choice(vec![application]))
+        .expect("choose entry replacement");
+    assert_eq!(
+        e.state.objects[&ghoul].zone,
+        tricerules_core::Zone::Battlefield
+    );
+    assert!(e.state.objects[&ghoul].tapped);
+    assert!(completion.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(Ev::PermanentMoved(moved))
+            if moved.destination == permanent_moved::Destination::Battlefield as i32
+    )));
 }
 
 /// A face name is accepted by the dev console as an alias for the physical card, but cards in

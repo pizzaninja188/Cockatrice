@@ -2,11 +2,13 @@
 
 use crate::custom::{self, ResolutionChoice, ResolutionCtx, ResolutionStep};
 use crate::state::{
-    ActiveDamagePrevention, AdventureCastPermission, AffectedScope, BlockingChoice,
-    ChosenSpellMode, CombatState, ContinuousEffect, DamagePreventionAmount,
-    DamagePreventionProhibition, DamagePreventionScope, GameObject, GameState, ObjectId,
-    OpeningSequence, PendingResolution, PendingTrigger, PendingTriggerOrder, PlayerId, PlayerState,
-    StackItem, StagedTrigger, StagedTriggerGroup, TurnStep, UndoableManaAbility, Zone,
+    ActiveDamagePrevention, AdventureCastPermission, AffectedScope, BattlefieldEntryCompletion,
+    BattlefieldEntryEvent, BlockingChoice, ChosenSpellMode, CombatState, ContinuousEffect,
+    DamagePreventionAmount, DamagePreventionProhibition, DamagePreventionScope,
+    EntryReplacementApplication, EntryReplacementEffectId, GameObject, GameState, ObjectId,
+    OpeningSequence, PendingBattlefieldEntry, PendingResolution, PendingTrigger,
+    PendingTriggerOrder, PlayerId, PlayerState, ReplacementPriority, StackItem, StagedTrigger,
+    StagedTriggerGroup, TokenBattlefieldEntry, TurnStep, UndoableManaAbility, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -18,10 +20,10 @@ use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
     AbilityCost, AnthemController, AnthemFilter, CastTriggerPlayer, Color, ContinuousEffectKind,
     CounterKind, DamageDivision, DamagePreventionAdditionalEffect, DamagePreventionSubject,
-    EffectDuration, EffectSubject, Evasion, FaceChangeAction, InterveningIf, Keyword, LifeAmount,
-    PlayerRecipient, PreventionAmountBasis, RelativePlayerSet, SearchDestination, SpellEffectKind,
-    SpellTypeFilter, StaticAbilityDef, StaticDamagePreventionAmount, TargetFilter, TargetKind,
-    TokenController, TriggerCondition,
+    EffectDuration, EffectSubject, EntersTappedAffected, Evasion, FaceChangeAction, InterveningIf,
+    Keyword, LifeAmount, PlayerRecipient, PreventionAmountBasis, RelativePlayerSet,
+    SearchDestination, SpellEffectKind, SpellTypeFilter, StaticAbilityDef,
+    StaticDamagePreventionAmount, TargetFilter, TargetKind, TokenController, TriggerCondition,
 };
 use tricerules_cards::{CardRegistry, FaceRef, Layout};
 use tricerules_proto::ruled::v1 as rv1;
@@ -46,6 +48,7 @@ mod events;
 mod legal_actions;
 mod opening;
 mod priority;
+pub(crate) mod replacement;
 mod resolution;
 mod state_based;
 mod targeting;
@@ -507,12 +510,12 @@ impl GameEngine {
             staged_trigger_groups: VecDeque::new(),
             pending_trigger_order: None,
             pending_resolution: None,
-            pending_damage_batch: None,
+            pending_replacement_event: None,
             continuous_effects: Vec::new(),
             damage_prevention_effects: Vec::new(),
             damage_prevention_prohibitions: Vec::new(),
             next_damage_prevention_effect_id: 1,
-            next_damage_prevention_application_id: 1,
+            next_replacement_application_id: 1,
             undoable_mana_abilities: Vec::new(),
             untapped_this_command: Vec::new(),
         };

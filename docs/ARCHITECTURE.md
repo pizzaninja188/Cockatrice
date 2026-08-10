@@ -258,8 +258,12 @@ Do not re-derive this per card.
   they run when it completes.
 - **Continuous-effect lifecycle** (creation on ETB, expiry, LTB drain) lives in
   `engine/continuous.rs` — separate from evaluation on purpose.
-- **Replacement effects.** Prevention shields (CR 614.1a) and regeneration are modeled; CR 616
-  ordering *choice* is deferred (backlog) — the slot exists.
+- **Replacement effects.** `engine/replacement.rs` owns the shared proposed-event choice channel:
+  applicable replacement/prevention applications use opaque ids, the CR 616 affected
+  controller/owner chooses, and the engine applies one effect then re-evaluates. Damage prevention
+  and battlefield entry use that channel today. Entry state is committed before CR 603 triggers,
+  so "enters tapped" is never emitted as a later tap event. Regeneration remains a specialized
+  destruction-replacement path until it first overlaps another applicable effect.
 - **Resolution.** `engine/resolution/mod.rs` owns stack setup, the fizzle check, the custom
   (tier-3) handoff, and the **single exhaustive `SpellEffectKind` match**. Arms contain no logic:
   each delegates to a domain submodule (`damage`, `life`, `zones`, `pump_counters`, `mass`,

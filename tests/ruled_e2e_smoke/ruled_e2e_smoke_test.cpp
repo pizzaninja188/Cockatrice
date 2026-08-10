@@ -252,6 +252,10 @@ public:
     bool devBorosCharmSent = false;
     bool devManaSent = false;
     bool devAntiVenomSent = false;
+    bool devOrbSent = false;
+    bool devDiregrafSent = false;
+    bool devDiregrafRemoved = false;
+    bool devBorosCharmManaSent = false;
     bool devPreventionSalveSent = false;
     bool devPreventionBlazeSent = false;
     bool devPreventionManaSent = false;
@@ -270,6 +274,10 @@ public:
     bool sawBrainstormResolved = false;
     bool sawDamagePreventionChoice = false;
     bool submittedDamagePreventionChoice = false;
+    bool sawEntryReplacementChoice = false;
+    bool submittedEntryReplacementChoice = false;
+    bool sawDiregrafEnterTapped = false;
+    bool sawOpponentCleanupDiscard = false;
     bool sawCleanupDiscardActions = false;
     bool sentCleanupDiscard = false;
     bool sawBottomAction = false;
@@ -692,7 +700,12 @@ public:
                     myPool.c = mp.c();
                 }
             } else if (ev.has_log()) {
-                log(QStringLiteral("gamelog: %1").arg(QString::fromStdString(ev.log().text()).left(160)));
+                const QString text = QString::fromStdString(ev.log().text());
+                if (oppId >= 0 && text.startsWith(QStringLiteral("P%1 discards ").arg(oppId)) &&
+                    text.endsWith(QStringLiteral(" (cleanup)"))) {
+                    sawOpponentCleanupDiscard = true;
+                }
+                log(QStringLiteral("gamelog: %1").arg(text.left(160)));
             }
         }
         if ((previousPhase == ruled::v1::PHASE_ID_OPENING_CHOOSE_FIRST ||
@@ -1101,12 +1114,18 @@ public:
         // --- Tier-3 resolution choice (may target either player at any point) ---
         if (pendingChoice) {
             const auto &rcr = *pendingChoice;
-            const bool isDamagePrevention = rcr.choice_kind() == ruled::v1::CHOICE_KIND_DAMAGE_PREVENTION;
+            const bool isReplacement = rcr.choice_kind() == ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT;
+            const QString prompt = QString::fromStdString(rcr.prompt_text());
+            const bool isEntryReplacement = isReplacement && prompt.contains(QStringLiteral("entering the battlefield"));
+            const bool isDamagePrevention = isReplacement && !isEntryReplacement;
             if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_HAND_CARDS && rcr.ordered()) {
                 sawBrainstormChoice = true;
             }
             if (isDamagePrevention) {
                 sawDamagePreventionChoice = true;
+            }
+            if (isEntryReplacement) {
+                sawEntryReplacementChoice = true;
             }
             ruled::v1::RuledCommand cmd;
             auto *choice = cmd.mutable_submit_resolution_choice();
@@ -1117,6 +1136,8 @@ public:
             pendingChoice.reset();
             if (isDamagePrevention) {
                 submittedDamagePreventionChoice = true;
+            } else if (isEntryReplacement) {
+                submittedEntryReplacementChoice = true;
             } else {
                 submittedBrainstormChoice = true;
             }
@@ -1179,6 +1200,14 @@ public:
         if (devManaSent && myPool.g >= 2) {
             sawDevMana = true;
         }
+        const auto ownBattlefield = battlefieldByPlayer.find(myId);
+        if (ownBattlefield != battlefieldByPlayer.end()) {
+            sawDiregrafEnterTapped =
+                sawDiregrafEnterTapped ||
+                std::any_of(ownBattlefield->second.begin(), ownBattlefield->second.end(), [](const Permanent &permanent) {
+                    return permanent.cardId == QStringLiteral("diregraf_ghoul") && permanent.tapped;
+                });
+        }
 
         // --- Priority-gated actions ---
         if (priorityPlayer != myId) {
@@ -1192,6 +1221,42 @@ public:
                 return;
             }
             if (tryAdventureSequence()) {
+                return;
+            }
+            if (!devOrbSent) {
+                devOrbSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                auto *put = dev->mutable_put_card_in_zone();
+                put->set_card_name("Orb of Dreams");
+                put->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+                sendRuled(cmd, QStringLiteral("dev: conjure Orb of Dreams onto the battlefield"));
+                return;
+            }
+            if (!devDiregrafSent && countOwn(QStringLiteral("orb_of_dreams"), false) > 0) {
+                devDiregrafSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                auto *put = dev->mutable_put_card_in_zone();
+                put->set_card_name("Diregraf Ghoul");
+                put->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+                sendRuled(cmd, QStringLiteral("dev: propose Diregraf Ghoul battlefield entry"));
+                return;
+            }
+            if (sawDiregrafEnterTapped && !devDiregrafRemoved) {
+                devDiregrafRemoved = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                auto *move = dev->mutable_move_card();
+                move->set_card_name("Diregraf Ghoul");
+                move->set_zone(ruled::v1::DEV_ZONE_HAND);
+                sendRuled(cmd, QStringLiteral("dev: remove Diregraf Ghoul after entry calibration"));
+                return;
+            }
+            if (devDiregrafSent && !devDiregrafRemoved) {
                 return;
             }
             if (!devAntiVenomSent) {
@@ -1334,6 +1399,16 @@ public:
                 ruled::v1::RuledCommand cmd;
                 cmd.mutable_play_land()->set_hand_card_index(land->hand_index());
                 sendRuled(cmd, QStringLiteral("play Mountain (idx %1)").arg(land->hand_index()));
+                return;
+            }
+            if (sawOpponentCleanupDiscard && boltCast && !borosCharmCast && !devBorosCharmManaSent) {
+                devBorosCharmManaSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                dev->mutable_add_mana()->set_r(1);
+                dev->mutable_add_mana()->set_w(1);
+                sendRuled(cmd, QStringLiteral("dev: add {R}{W} for post-combat Boros Charm"));
                 return;
             }
             if (const auto *bolt =
@@ -1659,6 +1734,7 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
                p1.sawWaifBackPt && p2.sawWaifBackPt &&
                p1.sawFlashbackGraveToStack && p1.sawFlashbackStackToExile &&
                p1.sawAdventureStackToExile && p1.sawAdventureExileToStack && p1.sawAdventureStackToBattlefield &&
+               p1.sawEntryReplacementChoice && p1.submittedEntryReplacementChoice && p1.sawDiregrafEnterTapped &&
                p1.sawDamagePreventionChoice && p1.submittedDamagePreventionChoice &&
                p2.sawFlashbackGraveToStack && p2.sawFlashbackStackToExile && p2.handSizeByPlayer.count(p2.myId) &&
                p2.handSizeByPlayer[p2.myId] <= 7;
@@ -1706,6 +1782,10 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     EXPECT_TRUE(p2.sawBrainstormResolved) << "Brainstorm never finished resolving after the choice";
     EXPECT_TRUE(p1.sawDamagePreventionChoice) << "damage-prevention ordering choice never arrived";
     EXPECT_TRUE(p1.submittedDamagePreventionChoice) << "damage-prevention ordering choice was never submitted";
+    EXPECT_TRUE(p1.sawEntryReplacementChoice) << "battlefield-entry replacement ordering choice never arrived";
+    EXPECT_TRUE(p1.submittedEntryReplacementChoice)
+        << "battlefield-entry replacement ordering choice was never submitted";
+    EXPECT_TRUE(p1.sawDiregrafEnterTapped) << "Diregraf Ghoul did not physically enter tapped";
     EXPECT_TRUE(p1.flashbackCast) << "seat 1 never sent its flashback cast";
     EXPECT_TRUE(p2.flashbackCast) << "seat 2 never sent its flashback cast";
     // One of these two seats does not own the canonical stack, so its cast crosses players.
