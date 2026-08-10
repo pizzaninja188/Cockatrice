@@ -696,9 +696,9 @@ enum ChoiceKind {
   // arrange the rest. Private, and rendered by the client like CHOICE_KIND_LIBRARY_SEARCH: the
   // relay has no Server_Card ids for library cards and substitutes sequential indices.
   CHOICE_KIND_LIBRARY_TOP = 6;
-  // CR 616 ordering among applicable damage-prevention effects. Candidate ids are opaque
-  // prevention-application ids, not game objects. Public; candidate_names carry descriptions.
-  CHOICE_KIND_DAMAGE_PREVENTION = 7;
+  // CR 616 ordering among applicable replacement and prevention effects. Candidate ids are
+  // opaque application ids, not game objects. Public; candidate_names carry descriptions.
+  CHOICE_KIND_REPLACEMENT_EFFECT = 7;
 }
 
 // A parked custom resolution (CR 608) requesting input from one player. Reused by every tier-3

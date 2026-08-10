@@ -1,0 +1,9 @@
+(
+  id: "thornwood_falls",
+  name: "Thornwood Falls",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [(cost: Tap, effect: [ProduceMana(options: [(g: 1), (u: 1)])], text: "{T}: Add {G} or {U}.")],
+  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)], text: "When Thornwood Falls enters, you gain 1 life.")],
+  static_abilities: [EntersTapped(affected: Self_)],
+)

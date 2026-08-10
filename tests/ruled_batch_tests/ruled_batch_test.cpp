@@ -665,17 +665,17 @@ TEST_F(RuledBatchTest, ZoneViewBuildsOidMapAndPropagatesTapState)
     EXPECT_EQ(findCardByEngineOid(p1, 999u), nullptr);
 }
 
-TEST_F(RuledBatchTest, DamagePreventionChoiceSurvivesRedactionForEveryParticipant)
+TEST_F(RuledBatchTest, ReplacementEffectChoiceSurvivesRedactionForEveryParticipant)
 {
     ruled::v1::RuledEventBatch batch;
     auto *choice = batch.add_events()->mutable_resolution_choice_required();
     choice->set_deciding_player_id(1);
-    choice->set_choice_kind(ruled::v1::CHOICE_KIND_DAMAGE_PREVENTION);
-    choice->set_prompt_text("Choose the next damage-prevention effect to apply.");
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT);
+    choice->set_prompt_text("Choose the next replacement effect for Diregraf Ghoul entering the battlefield.");
     choice->add_candidate_object_ids(7001);
     choice->add_candidate_object_ids(7002);
-    choice->add_candidate_names("Anti-Venom prevention");
-    choice->add_candidate_names("Healing Salve shield");
+    choice->add_candidate_names("Diregraf Ghoul - enters tapped");
+    choice->add_candidate_names("Orb of Dreams - permanents enter tapped");
 
     for (auto *participant : {p1, p2}) {
         const auto redacted = redactFor(batch, participant);
@@ -683,10 +683,10 @@ TEST_F(RuledBatchTest, DamagePreventionChoiceSurvivesRedactionForEveryParticipan
                                      [](const auto &event) { return event.has_resolution_choice_required(); });
         ASSERT_NE(it, redacted.events().end());
         const auto &kept = it->resolution_choice_required();
-        EXPECT_EQ(kept.choice_kind(), ruled::v1::CHOICE_KIND_DAMAGE_PREVENTION);
+        EXPECT_EQ(kept.choice_kind(), ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT);
         ASSERT_EQ(kept.candidate_object_ids_size(), 2);
         EXPECT_EQ(kept.candidate_object_ids(0), 7001u);
-        EXPECT_EQ(kept.candidate_names(1), "Healing Salve shield");
+        EXPECT_EQ(kept.candidate_names(1), "Orb of Dreams - permanents enter tapped");
     }
 }
 

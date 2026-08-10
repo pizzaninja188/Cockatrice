@@ -3,7 +3,7 @@ use tricerules_cards::primitives::{
     Color, ContinuousEffectKind, CounterKind, DamagePreventionAdditionalEffect, EffectDuration,
     Keyword, ManaAmount, SearchDestination,
 };
-use tricerules_proto::ruled::v1::ChoiceKind;
+use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
 
 pub type PlayerId = i32;
 pub type ObjectId = u32;
@@ -381,6 +381,93 @@ pub struct PendingResolution {
     pub resume_effect_index: Option<u32>,
 }
 
+/// CR 616.1 priority groups. The current card set exercises `Other`; the complete ordering
+/// vocabulary keeps entry-copy/control work from inventing a second chooser later.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[allow(dead_code)] // The non-Other classes are the CR 616 slots for tracked entry-copy/control work.
+pub(crate) enum ReplacementPriority {
+    SelfReplacement,
+    EntryControl,
+    EntryCopy,
+    EntryBackFace,
+    Other,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum EntryReplacementEffectId {
+    Intrinsic {
+        object_id: ObjectId,
+        ability_index: usize,
+    },
+    Battlefield {
+        source_id: ObjectId,
+        source_generation: u64,
+        ability_index: usize,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct BattlefieldEntryEvent {
+    pub object_id: ObjectId,
+    /// CR 616.1 decider: current controller, or owner when the object has no controller.
+    pub deciding_player: PlayerId,
+    pub destination_controller: PlayerId,
+    pub face_index: usize,
+    pub tapped: bool,
+    pub applied_effects: Vec<EntryReplacementEffectId>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct EntryReplacementApplication {
+    pub application_id: u32,
+    pub effect_id: EntryReplacementEffectId,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct TokenBattlefieldEntry {
+    pub event: BattlefieldEntryEvent,
+    pub created: TokenCreated,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum BattlefieldEntryCompletion {
+    LandPlay {
+        player: PlayerId,
+        land_name: String,
+    },
+    PermanentSpell {
+        attached_to: Option<ObjectId>,
+    },
+    ResolutionEffect {
+        owner: PlayerId,
+        spell_label: String,
+        object_label: String,
+    },
+    TokenBatch {
+        current_created: TokenCreated,
+        ready: Vec<TokenBattlefieldEntry>,
+        remaining: Vec<TokenBattlefieldEntry>,
+        logs: Vec<String>,
+    },
+    DevPlacement {
+        target: PlayerId,
+        ready: bool,
+        name: String,
+        verb: String,
+        deferred_events: Vec<RuledEvent>,
+        announce_move: bool,
+    },
+}
+
+/// A proposed battlefield entry parked before any zone mutation. The parallel
+/// `pending_resolution` owns the public prompt and command validation.
+#[derive(Debug, Clone)]
+pub(crate) struct PendingBattlefieldEntry {
+    pub event: BattlefieldEntryEvent,
+    pub applications: Vec<EntryReplacementApplication>,
+    pub completion: BattlefieldEntryCompletion,
+}
+
 #[derive(Debug, Clone)]
 pub struct ChosenSpellMode {
     pub mode_index: usize,
@@ -630,9 +717,10 @@ pub struct GameState {
     /// At most one at a time; while set it blocks priority (like a [`PendingTrigger`]) until the
     /// deciding player submits their choice. See [`PendingResolution`] and the `custom` module.
     pub pending_resolution: Option<PendingResolution>,
-    /// Damage processing parked behind a public CR 616 prevention-order choice. The parallel
-    /// `pending_resolution` owns the generic prompt/continuation metadata.
-    pub(crate) pending_damage_batch: Option<crate::engine::damage::PendingDamageBatch>,
+    /// Damage or battlefield-entry processing parked behind a public CR 616 ordering choice. The
+    /// parallel `pending_resolution` owns the generic prompt/continuation metadata.
+    pub(crate) pending_replacement_event:
+        Option<crate::engine::replacement::PendingReplacementEvent>,
     /// Active continuous effects (CR 611/613). Effects are pushed here at resolution and drained
     /// at cleanup or when their source leaves the battlefield. P/T and other characteristics are
     /// recomputed from base + this list on demand — `GameObject.power/toughness` always hold the
@@ -644,7 +732,9 @@ pub struct GameState {
     /// Active CR 615.12 prohibitions, deliberately separate from prevention effects.
     pub damage_prevention_prohibitions: Vec<DamagePreventionProhibition>,
     pub next_damage_prevention_effect_id: u32,
-    pub next_damage_prevention_application_id: u32,
+    /// Opaque ids exposed by replacement-order prompts. Separate from effect identities so stale
+    /// submissions cannot name a newly-applicable effect after recomputation.
+    pub next_replacement_application_id: u32,
     /// Mana abilities the priority player has activated this priority window that are still
     /// inconsequential and may be rewound by `UndoManaAbility` (CR 605 float courtesy). Newest
     /// last. Cleared by any consequential action (see [`UndoableManaAbility`]); empty whenever no

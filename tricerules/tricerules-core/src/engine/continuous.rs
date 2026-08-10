@@ -49,6 +49,10 @@ impl GameEngine {
 
         for static_ability in statics {
             match static_ability {
+                StaticAbilityDef::EntersTapped { .. } => {
+                    // CR 614.12 entry replacements are evaluated against the proposed event in
+                    // `engine::replacement`; there is no post-entry continuous effect to emit.
+                }
                 StaticAbilityDef::PreventDamage {
                     subject,
                     amount,

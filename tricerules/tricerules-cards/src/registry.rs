@@ -411,7 +411,10 @@ include!(concat!(env!("OUT_DIR"), "/embedded_cards.rs"));
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::primitives::{Amount, SpellEffectKind, TargetFilter, TargetKind};
+    use crate::primitives::{
+        Amount, EntersTappedAffected, SpellEffectKind, StaticAbilityDef, TargetFilter, TargetKind,
+        TriggerCondition,
+    };
 
     #[test]
     fn embedded_registry_loads() {
@@ -973,6 +976,77 @@ mod tests {
         assert!(
             matches!(err, RegistryError::InvalidCard { ref reason, .. } if reason.contains("one resolution owner"))
         );
+    }
+
+    #[test]
+    fn issue_50_enters_tapped_card_cohort_has_the_shared_data_shape() {
+        let reg = CardRegistry::from_embedded().unwrap();
+        let gainlands = [
+            "blossoming_sands",
+            "dismal_backwater",
+            "jungle_hollow",
+            "rugged_highlands",
+            "swiftwater_cliffs",
+            "thornwood_falls",
+            "tranquil_cove",
+            "wind-scarred_crag",
+        ];
+        let simple_duals = [
+            "forsaken_sanctuary",
+            "foul_orchard",
+            "meandering_river",
+            "submerged_boneyard",
+            "tranquil_expanse",
+            "woodland_stream",
+        ];
+
+        for id in gainlands.into_iter().chain(simple_duals) {
+            let face = reg.get(id).unwrap().primary_face();
+            assert!(face.static_abilities.iter().any(|ability| matches!(
+                ability,
+                StaticAbilityDef::EntersTapped {
+                    affected: EntersTappedAffected::Self_
+                }
+            )));
+            assert_eq!(face.activated_abilities.len(), 1, "{id}");
+            assert_eq!(
+                face.activated_abilities[0]
+                    .mana_options()
+                    .expect("dual-land mana ability")
+                    .len(),
+                2,
+                "{id}"
+            );
+        }
+
+        for id in gainlands {
+            let face = reg.get(id).unwrap().primary_face();
+            assert!(
+                face.triggered_abilities.iter().any(|ability| {
+                    ability.trigger == TriggerCondition::WhenSelfEntersBattlefield
+                        && ability.effect
+                            == [SpellEffectKind::GainLife {
+                                amount: Amount::Fixed(1),
+                            }]
+                }),
+                "{id}"
+            );
+        }
+
+        let ghoul = reg.get("diregraf_ghoul").unwrap().primary_face();
+        assert!(ghoul.static_abilities.iter().any(|ability| matches!(
+            ability,
+            StaticAbilityDef::EntersTapped {
+                affected: EntersTappedAffected::Self_
+            }
+        )));
+        let orb = reg.get("orb_of_dreams").unwrap().primary_face();
+        assert!(orb.static_abilities.iter().any(|ability| matches!(
+            ability,
+            StaticAbilityDef::EntersTapped {
+                affected: EntersTappedAffected::Permanents
+            }
+        )));
     }
 
     #[test]

@@ -12,12 +12,25 @@ pub(super) fn create_tokens(
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    let item = cx.top.clone();
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let controller = cx.controller;
     let spell_label = cx.spell_label;
 
-    engine.create_tokens(&token, count, who, controller, spell_label, events);
+    if engine.create_tokens(
+        TokenCreationRequest {
+            token_id: &token,
+            count,
+            recipients: who,
+            spell_controller: controller,
+            spell_label,
+            item: &item,
+        },
+        events,
+    )? {
+        return Ok(EffectOutcome::Suspended);
+    }
 
     Ok(EffectOutcome::Continue)
 }

@@ -1,0 +1,9 @@
+(
+  id: "swiftwater_cliffs",
+  name: "Swiftwater Cliffs",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [(cost: Tap, effect: [ProduceMana(options: [(u: 1), (r: 1)])], text: "{T}: Add {U} or {R}.")],
+  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)], text: "When Swiftwater Cliffs enters, you gain 1 life.")],
+  static_abilities: [EntersTapped(affected: Self_)],
+)

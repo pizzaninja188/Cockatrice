@@ -1089,24 +1089,56 @@ impl GameEngine {
             def.name.clone()
         };
         self.state.lands_played_this_turn += 1;
-        self.state.players[idx].hand.retain(|&x| x != oid);
-        self.state.players[idx].battlefield.push(oid);
-        if let Some(o) = self.state.objects.get_mut(&oid) {
-            o.zone = Zone::Battlefield;
-            // CR 305.1: the player who plays a land controls it. Same seat as the owner here —
-            // you may only play a land from your own hand — but the battlefield list is keyed by
-            // controller, so the field has to agree with the list it was pushed onto.
-            o.controller = player;
-            // CR 712.4: set the active face from the chosen face so characteristics (mana
-            // abilities, types) are read from the correct face on the battlefield.
-            o.face_up_index = face_index;
+        let mut batch = RuledEventBatch::default();
+        let item = StackItem {
+            id: oid,
+            controller: player,
+            card_id,
+            targets: Vec::new(),
+            ability_text: Some("land play".to_string()),
+            source_permanent_id: None,
+            source_zone_change: self
+                .state
+                .zone_change_generation
+                .get(&oid)
+                .copied()
+                .unwrap_or(0),
+            source_face_change: 0,
+            ability_index: None,
+            is_triggered: false,
+            is_copy: false,
+            face_index,
+            flashback: false,
+            chosen_x: 0,
+            target_damage: Vec::new(),
+            chosen_modes: Vec::new(),
+            trigger_player: None,
+        };
+        match self.begin_battlefield_entry(
+            item,
+            BattlefieldEntryEvent {
+                object_id: oid,
+                deciding_player: player,
+                destination_controller: player,
+                face_index,
+                tapped: false,
+                applied_effects: Vec::new(),
+            },
+            BattlefieldEntryCompletion::LandPlay {
+                player,
+                land_name: land_name.clone(),
+            },
+            &mut batch.events,
+        ) {
+            super::replacement::BattlefieldEntryProgress::Parked => return Ok(batch),
+            super::replacement::BattlefieldEntryProgress::Ready(entry) => {
+                self.commit_battlefield_entry(entry, None)?;
+            }
         }
         self.state.passes_since_stack_change = 0;
-        let mut batch = RuledEventBatch::default();
         batch
             .events
-            .push(ev_log(format!("P{} played {}", player, land_name)));
-        self.fire_triggers(&[GameEvent::EntersBattlefield { object_id: oid }]);
+            .push(ev_log(format!("P{player} played {land_name}")));
         fill_legal(&mut batch, self);
         Ok(batch)
     }

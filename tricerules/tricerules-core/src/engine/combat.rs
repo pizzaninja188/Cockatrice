@@ -804,7 +804,10 @@ impl GameEngine {
             events.push(ev_log("First strike combat damage dealt.".to_string()));
             events.push(ev_phase(self, rv1::PhaseId::FirstStrikeDamage));
             self.resolve_combat_damage(&c2, DamagePass::FirstStrike, events)?;
-            if self.state.pending_damage_batch.is_some() {
+            if matches!(
+                self.state.pending_replacement_event,
+                Some(super::replacement::PendingReplacementEvent::Damage(_))
+            ) {
                 return Ok(());
             }
             // CR 510.2 + 704: SBAs run between damage steps so creatures with lethal damage are
@@ -824,7 +827,10 @@ impl GameEngine {
             events.push(ev_log("Combat damage dealt.".to_string()));
             events.push(ev_phase(self, rv1::PhaseId::CombatDamage));
             self.resolve_combat_damage(&c_init, DamagePass::Normal, events)?;
-            if self.state.pending_damage_batch.is_some() {
+            if matches!(
+                self.state.pending_replacement_event,
+                Some(super::replacement::PendingReplacementEvent::Damage(_))
+            ) {
                 return Ok(());
             }
             self.apply_sbas(events)?;

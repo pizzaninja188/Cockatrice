@@ -570,8 +570,7 @@ modeled. The gaps are the ones that turn into rewrites if retrofitted late:
 - No single characteristics pipeline — P/T and keyword queries are separate helpers
   (`effective_power/toughness`, `has_keyword`), each re-walking effects.
 - Layers 1–5 (copy, control-change, text-change, type-change, color-change) absent.
-- No CR 613.8 dependency ordering, no CR 613.3 CDA handling, no CR 616 replacement-effect
-  ordering.
+- No CR 613.8 dependency ordering or CR 613.3 CDA handling.
 
 **Act now:** introduce one entry point `characteristics(oid) -> Characteristics` computing all
 derived characteristics through an explicit ordered layer pipeline — layers 1–5 as identity
@@ -582,8 +581,8 @@ the module header. While doing this, split `continuous.rs` (736 lines, three con
 pipeline becomes `characteristics.rs`, the SBA loop `state_based.rs`, following the same
 domain-file pattern as the rest of `engine/`.
 
-**Defer with triggers** (see backlog): CR 613.8 dependency ordering; CR 616 replacement
-ordering. The pipeline is built with slots for both.
+**Defer with triggers** (see backlog): CR 613.8 dependency ordering. The pipeline has its slot;
+the shared CR 616 replacement/prevention choice coordinator shipped with Issue #50.
 
 ### Step 11 — `CardDefinition` → faces-only (2 PRs, ~2–3 days; before mass per-card attributes)
 
@@ -730,8 +729,11 @@ Unscheduled by design. Each entry fires on its trigger, not before.
   profiling exactly reproducible.
 - **CR 613.8 dependency ordering** — *trigger: first card whose layers interact by dependency
   (Humility-class).* The Step 10 pipeline is built with a slot for it.
-- **CR 616 replacement-effect ordering** — *trigger: first time two replacement effects can
-  apply to one event.* Same: slot exists, machinery deferred.
+- **CR 616 replacement-effect ordering** — **done 2026-08-10 with Issue #50.** Damage prevention
+  and battlefield entry share one affected-player choice channel with opaque application ids,
+  re-evaluation after each application, and the CR 616.1a–e priority vocabulary. Current entry
+  cards exercise the final "other" class; control, copy, and back-face priorities remain named
+  extension points for their first cards.
 - **Dev-loop tooling** — *trigger: when manual-testing pain outweighs ~3–4 days.* Three
   pieces, impact order: (1) **one-command game launch** — **done 2026-07-27**, see below.
   (2) **Dev console + `DevCommand`** — **done 2026-07-27**, see below.

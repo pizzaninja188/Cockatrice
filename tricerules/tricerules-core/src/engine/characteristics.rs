@@ -14,8 +14,8 @@
 //!
 //! Layers 1-5 and the unimplemented layer-7 sublayers are explicit identity stages today.
 //! CR 613.8 dependency ordering is intentionally deferred until the first effect that needs it;
-//! the `ordered_effects` boundary is the insertion point. Replacement-effect choice ordering
-//! (CR 616) is a separate pipeline and is likewise deferred.
+//! the `ordered_effects` boundary is the insertion point. Replacement/prevention choice ordering
+//! (CR 616) is the separate shared pipeline in `engine/replacement.rs`.
 //!
 //! The calculation is side-effect-free and depends only on `GameState`, the registry, and the
 //! queried object id. Its owned result and single ordered-effect pass make it straightforward

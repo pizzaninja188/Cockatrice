@@ -440,6 +440,7 @@ pub(super) fn return_from_graveyard(
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    let item = cx.top.clone();
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let targets = cx.targets;
@@ -485,14 +486,35 @@ pub(super) fn return_from_graveyard(
             // of that effect ("under your control"), not under its owner's control. Irrelevant
             // for `GraveyardOwner::Controller` cards (Zombify), load-bearing for `AnyPlayer`
             // reanimation out of an opponent's graveyard.
-            let enters_under = (dest_zone == Zone::Battlefield).then_some(controller);
-            move_object_to_zone(
-                &mut engine.state,
-                engine.registry,
-                tid,
-                dest_zone,
-                enters_under,
-            )?;
+            if dest_zone == Zone::Battlefield {
+                let deciding_player = owner.unwrap_or(controller);
+                match engine.begin_battlefield_entry(
+                    item,
+                    BattlefieldEntryEvent {
+                        object_id: tid,
+                        deciding_player,
+                        destination_controller: controller,
+                        face_index: 0,
+                        tapped: false,
+                        applied_effects: Vec::new(),
+                    },
+                    BattlefieldEntryCompletion::ResolutionEffect {
+                        owner: deciding_player,
+                        spell_label: spell_label.to_string(),
+                        object_label: tgt.clone(),
+                    },
+                    events,
+                ) {
+                    super::super::replacement::BattlefieldEntryProgress::Parked => {
+                        return Ok(EffectOutcome::Suspended);
+                    }
+                    super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
+                        engine.commit_battlefield_entry(entry, None)?;
+                    }
+                }
+            } else {
+                move_object_to_zone(&mut engine.state, engine.registry, tid, dest_zone, None)?;
+            }
             let dest_name = match destination {
                 GraveyardDestination::Hand => "hand",
                 GraveyardDestination::Battlefield => "battlefield",
@@ -507,9 +529,6 @@ pub(super) fn return_from_graveyard(
                     owner_id,
                     dest_proto,
                 ));
-            }
-            if dest_zone == Zone::Battlefield {
-                engine.fire_triggers(&[GameEvent::EntersBattlefield { object_id: tid }]);
             }
         }
     }

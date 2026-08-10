@@ -302,11 +302,25 @@ pub enum DamagePreventionAdditionalEffect {
     },
 }
 
-/// One static ability on a permanent (CR 604) — a continuous effect that exists only while the
-/// permanent is on the battlefield. Distinct from triggered/activated abilities (which use the
-/// stack); the engine emits the corresponding continuous effect on ETB and drains it at LTB.
+/// Which permanents an enters-tapped replacement ability affects. `Self_` abilities are the
+/// CR 614.12 exception that function on the card before it reaches the battlefield; `Permanents`
+/// abilities function only from an existing battlefield source (Orb of Dreams).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EntersTappedAffected {
+    Self_,
+    Permanents,
+}
+
+/// One static ability on a permanent (CR 604). Most entries generate a continuous effect while
+/// its source is on the battlefield. An ability that modifies how its own object enters is the
+/// CR 113.6h/614.12 exception and is inspected during the proposed entry event. Static abilities
+/// do not use the stack, unlike triggered and activated abilities.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StaticAbilityDef {
+    /// CR 614.1d: modify a proposed battlefield-entry event rather than tapping the permanent
+    /// after it enters. Intrinsic examples include Diregraf Ghoul and the gainland cycle;
+    /// `Permanents` is the global Orb of Dreams form.
+    EntersTapped { affected: EntersTappedAffected },
     /// CR 615: a prevention effect generated continuously while this permanent is on the
     /// battlefield. Anti-Venom protects itself and counts attempted damage; Vigor protects other
     /// creatures its controller controls and counts damage actually prevented.

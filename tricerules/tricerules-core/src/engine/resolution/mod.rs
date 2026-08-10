@@ -41,6 +41,15 @@ struct EffectCx<'a> {
     spell_label: &'a str,
 }
 
+struct TokenCreationRequest<'a> {
+    token_id: &'a str,
+    count: u32,
+    recipients: TokenController,
+    spell_controller: PlayerId,
+    spell_label: &'a str,
+    item: &'a StackItem,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum EffectOutcome {
     Continue,
@@ -169,28 +178,51 @@ impl GameEngine {
             } else {
                 rv1::StackResolveDestination::Graveyard as i32
             };
-            events.push(rv1::RuledEvent {
-                ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
-                    object_id: top.id,
-                    destination,
-                })),
-            });
-            move_object_to_zone(
-                &mut self.state,
-                self.registry,
-                top.id,
-                if resolves_to_battlefield {
-                    Zone::Battlefield
-                } else if top.flashback || adventure_resolves_to_exile {
-                    Zone::Exile
-                } else {
-                    Zone::Graveyard
-                },
-                // CR 110.2a: a permanent spell's controller becomes the permanent's controller.
-                // Identical to the owner for a spell cast from its owner's hand, which is every
-                // case today, but it is the spell's controller that is authoritative.
-                Some(top.controller),
-            )?;
+            if resolves_to_battlefield {
+                let attached_to = is_aura.then(|| targets.first().copied()).flatten();
+                match self.begin_battlefield_entry(
+                    top.clone(),
+                    BattlefieldEntryEvent {
+                        object_id: top.id,
+                        deciding_player: top.controller,
+                        destination_controller: top.controller,
+                        face_index: top.face_index,
+                        tapped: false,
+                        applied_effects: Vec::new(),
+                    },
+                    BattlefieldEntryCompletion::PermanentSpell { attached_to },
+                    events,
+                ) {
+                    super::replacement::BattlefieldEntryProgress::Parked => return Ok(()),
+                    super::replacement::BattlefieldEntryProgress::Ready(entry) => {
+                        events.push(rv1::RuledEvent {
+                            ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
+                                object_id: top.id,
+                                destination,
+                            })),
+                        });
+                        self.commit_battlefield_entry(entry, attached_to)?;
+                    }
+                }
+            } else {
+                events.push(rv1::RuledEvent {
+                    ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
+                        object_id: top.id,
+                        destination,
+                    })),
+                });
+                move_object_to_zone(
+                    &mut self.state,
+                    self.registry,
+                    top.id,
+                    if top.flashback || adventure_resolves_to_exile {
+                        Zone::Exile
+                    } else {
+                        Zone::Graveyard
+                    },
+                    None,
+                )?;
+            }
             if adventure_resolves_to_exile {
                 if let Some(object) = self.state.objects.get_mut(&top.id) {
                     object.adventure_cast_permission = Some(AdventureCastPermission {
@@ -199,23 +231,7 @@ impl GameEngine {
                     });
                 }
             }
-            if resolves_to_battlefield {
-                // CR 712.4: a permanent enters the battlefield showing the face that was cast.
-                // Set face_up_index from the stack item so characteristic queries (types, keywords,
-                // P/T, mana abilities) read from the correct face while on the battlefield.
-                if let Some(o) = self.state.objects.get_mut(&top.id) {
-                    o.face_up_index = top.face_index;
-                }
-                // Set attached_to before ETB triggers so emit_static_abilities_on_enter can read it.
-                if is_aura {
-                    if let (Some(aura_obj), Some(&enchanted_oid)) =
-                        (self.state.objects.get_mut(&top.id), targets.first())
-                    {
-                        aura_obj.attached_to = Some(enchanted_oid);
-                    }
-                }
-                self.fire_triggers(&[GameEvent::EntersBattlefield { object_id: top.id }]);
-            } else if is_aura {
+            if !resolves_to_battlefield && is_aura {
                 let aura_name = self
                     .registry
                     .get(&card_id)
@@ -559,15 +575,19 @@ impl GameEngine {
     /// triggers (CR 603.6) through the same hook as a resolved creature spell, so Soul Warden et al.
     /// see them. A [`TokenCreated`](rv1::TokenCreated) event carries the self-describing identity
     /// the relay needs (tokens have no deck card / Oracle entry).
-    pub(super) fn create_tokens(
+    fn create_tokens(
         &mut self,
-        token_id: &str,
-        count: u32,
-        who: TokenController,
-        spell_controller: PlayerId,
-        spell_label: &str,
+        request: TokenCreationRequest<'_>,
         events: &mut Vec<rv1::RuledEvent>,
-    ) {
+    ) -> Result<bool, EngineError> {
+        let TokenCreationRequest {
+            token_id,
+            count,
+            recipients: who,
+            spell_controller,
+            spell_label,
+            item,
+        } = request;
         let registry = self.registry;
         let Some(def) = registry.get(token_id) else {
             // Registry load validates every CreateTokens reference, so this is unreachable;
@@ -575,7 +595,7 @@ impl GameEngine {
             events.push(ev_log(format!(
                 "{spell_label} could not create unknown token '{token_id}'."
             )));
-            return;
+            return Ok(false);
         };
         let name = def.name.clone();
         // A token definition is always single-face (CR 111.4 identity is one characteristic tuple).
@@ -608,11 +628,12 @@ impl GameEngine {
                 .collect(),
         };
 
-        let mut trigger_events = Vec::new();
+        let mut entries = Vec::new();
+        let mut logs = Vec::new();
         for pid in recipients {
-            let Some(pidx) = self.state.player_idx(pid) else {
+            if self.state.player_idx(pid).is_none() {
                 continue;
-            };
+            }
             for _ in 0..count {
                 let oid = self.state.next_object_id;
                 self.state.next_object_id += 1;
@@ -625,7 +646,8 @@ impl GameEngine {
                         owner: pid,
                         controller: pid,
                         card_id: token_id.to_string(),
-                        zone: Zone::Battlefield,
+                        // Proposed tokens live in no player's zone until entry replacements finish.
+                        zone: Zone::Stack,
                         tapped: false,
                         summoning_sick: is_creature,
                         power,
@@ -641,32 +663,39 @@ impl GameEngine {
                         adventure_cast_permission: None,
                     },
                 );
-                self.state.players[pidx].battlefield.push(oid);
-                events.push(rv1::RuledEvent {
-                    ev: Some(rv1::ruled_event::Ev::TokenCreated(rv1::TokenCreated {
+                let created = rv1::TokenCreated {
+                    object_id: oid,
+                    controller_player_id: pid,
+                    card_id: token_id.to_string(),
+                    identity: Some(rv1::TokenIdentity {
+                        name: name.clone(),
+                        pt: pt.clone(),
+                        color: color.clone(),
+                        types: types.clone(),
+                        is_creature,
+                        keywords: keywords.clone(),
+                    }),
+                };
+                entries.push(TokenBattlefieldEntry {
+                    event: BattlefieldEntryEvent {
                         object_id: oid,
-                        controller_player_id: pid,
-                        card_id: token_id.to_string(),
-                        identity: Some(rv1::TokenIdentity {
-                            name: name.clone(),
-                            pt: pt.clone(),
-                            color: color.clone(),
-                            types: types.clone(),
-                            is_creature,
-                            keywords: keywords.clone(),
-                        }),
-                    })),
+                        deciding_player: pid,
+                        destination_controller: pid,
+                        face_index: 0,
+                        tapped: false,
+                        applied_effects: Vec::new(),
+                    },
+                    created,
                 });
-                trigger_events.push(GameEvent::EntersBattlefield { object_id: oid });
             }
             let noun = if count == 1 { "token" } else { "tokens" };
-            events.push(ev_log(format!(
+            logs.push(format!(
                 "P{pid} creates {count} {name} {noun} ({spell_label})."
-            )));
+            ));
         }
         // CR 603.6: one token-making instruction puts all of its tokens onto the battlefield
         // simultaneously, so every entrant exists before their ETB triggers are collected.
-        self.fire_triggers(&trigger_events);
+        self.begin_token_entry_batch(item.clone(), entries, logs, events)
     }
 }
 

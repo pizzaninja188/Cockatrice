@@ -1,0 +1,7 @@
+(
+  id: "orb_of_dreams",
+  name: "Orb of Dreams",
+  mana_cost: "{3}",
+  types: ["Artifact"],
+  static_abilities: [EntersTapped(affected: Permanents)],
+)

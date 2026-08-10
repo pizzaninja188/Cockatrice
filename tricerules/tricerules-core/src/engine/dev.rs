@@ -79,7 +79,8 @@ impl GameEngine {
                 verb: "conjures",
             },
             ev,
-        );
+            false,
+        )?;
         Ok(())
     }
 
@@ -114,13 +115,15 @@ impl GameEngine {
         // `move <seat> bf <card>` relocates a card the seat owns onto the battlefield, so the
         // seat is both owner and controller here. Passed explicitly rather than defaulted so the
         // dev path stays correct if a "give control" verb is ever added.
-        move_object_to_zone(&mut self.state, self.registry, oid, zone, Some(target))?;
-        ev.push(permanent_moved_event(
-            &self.state,
-            oid,
-            target,
-            zone_to_destination(zone),
-        ));
+        if zone != Zone::Battlefield {
+            move_object_to_zone(&mut self.state, self.registry, oid, zone, Some(target))?;
+            ev.push(permanent_moved_event(
+                &self.state,
+                oid,
+                target,
+                zone_to_destination(zone),
+            ));
+        }
         self.finish_dev_placement(
             Placement {
                 target,
@@ -131,12 +134,18 @@ impl GameEngine {
                 verb: "moves",
             },
             ev,
-        );
+            zone == Zone::Battlefield,
+        )?;
         Ok(())
     }
 
-    /// The tail both placement verbs share: apply `ready`, log, and announce a battlefield entry.
-    fn finish_dev_placement(&mut self, p: Placement<'_>, ev: &mut Vec<RuledEvent>) {
+    /// The tail both placement verbs share: preprocess battlefield entry, apply `ready`, and log.
+    fn finish_dev_placement(
+        &mut self,
+        p: Placement<'_>,
+        ev: &mut Vec<RuledEvent>,
+        announce_move: bool,
+    ) -> Result<(), EngineError> {
         let Placement {
             target,
             oid,
@@ -145,32 +154,89 @@ impl GameEngine {
             name,
             verb,
         } = p;
-        // CR 302.6 says a permanent that has not been controlled since its controller's turn began
-        // is summoning sick, and both placement paths assert exactly that on battlefield entry.
-        // Clearing it must therefore come *after* the placement, or it is immediately overwritten.
-        // Deliberately not implemented as "grant haste": haste is a real keyword with layer-6
-        // semantics a test may be trying to observe, so the cheat must not fake it.
-        let readied = ready && zone == Zone::Battlefield;
-        if readied {
-            if let Some(o) = self.state.objects.get_mut(&oid) {
-                o.summoning_sick = false;
-            }
+        if zone == Zone::Battlefield {
+            let deferred_events = std::mem::take(ev);
+            let item = dev_entry_item(target, oid, &self.state.objects[&oid].card_id);
+            let completion = BattlefieldEntryCompletion::DevPlacement {
+                target,
+                ready,
+                name: name.to_string(),
+                verb: verb.to_string(),
+                deferred_events: deferred_events.clone(),
+                announce_move,
+            };
+            return match self.begin_battlefield_entry(
+                item,
+                BattlefieldEntryEvent {
+                    object_id: oid,
+                    deciding_player: target,
+                    destination_controller: target,
+                    face_index: 0,
+                    tapped: false,
+                    applied_effects: Vec::new(),
+                },
+                completion,
+                ev,
+            ) {
+                super::replacement::BattlefieldEntryProgress::Parked => Ok(()),
+                super::replacement::BattlefieldEntryProgress::Ready(entry) => self
+                    .complete_dev_battlefield_placement(
+                        entry,
+                        target,
+                        ready,
+                        name,
+                        verb,
+                        deferred_events,
+                        announce_move,
+                        ev,
+                    ),
+            };
         }
 
-        let suffix = if readied { ", ready" } else { "" };
         ev.push(ev_log(format!(
-            "[dev] P{target} {verb} {name} into {}{suffix}.",
+            "[dev] P{target} {verb} {name} into {}.",
             zone_label(zone)
         )));
+        Ok(())
+    }
 
-        // CR 603.6a: entering the battlefield fires ETB triggers however the permanent arrived.
-        // This call is also the only path to `emit_static_abilities_on_enter`, so skipping it
-        // would leave a conjured anthem on the battlefield granting nothing at all — silently.
-        // No SpellCast event is fired: nothing was cast (CR 601), so cast triggers correctly stay
-        // silent, matching every real put-onto-the-battlefield effect.
-        if zone == Zone::Battlefield {
-            self.fire_triggers(&[GameEvent::EntersBattlefield { object_id: oid }]);
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn complete_dev_battlefield_placement(
+        &mut self,
+        entry: BattlefieldEntryEvent,
+        target: PlayerId,
+        ready: bool,
+        name: &str,
+        verb: &str,
+        mut deferred_events: Vec<RuledEvent>,
+        announce_move: bool,
+        ev: &mut Vec<RuledEvent>,
+    ) -> Result<(), EngineError> {
+        ev.append(&mut deferred_events);
+        let oid = entry.object_id;
+        self.commit_battlefield_entry(entry, None)?;
+        if announce_move {
+            ev.push(permanent_moved_event(
+                &self.state,
+                oid,
+                target,
+                rv1::permanent_moved::Destination::Battlefield,
+            ));
         }
+        // CR 302.6 says a newly controlled creature is summoning sick. Clear that state only
+        // after entry; granting haste would change characteristics and test a different mechanic.
+        if ready {
+            if let Some(object) = self.state.objects.get_mut(&oid) {
+                object.summoning_sick = false;
+            }
+        }
+        let suffix = if ready { ", ready" } else { "" };
+        ev.push(ev_log(format!(
+            "[dev] P{target} {verb} {name} into the battlefield{suffix}."
+        )));
+        // `commit_battlefield_entry` already fired CR 603.6a ETB triggers. It deliberately did
+        // not fire SpellCast: a dev placement was not cast under CR 601.
+        Ok(())
     }
 
     /// Oracle name -> engine card id. The name is engine-owned identity, never a client slug.
@@ -183,7 +249,6 @@ impl GameEngine {
 
     /// Mint a brand-new object for `card_id` from outside the game (CR 400.11-shaped, though it
     /// obeys none of the restrictions real wishes do).
-    ///
     /// Restricted to hand and battlefield because those are the two zones Servatrice can mint a
     /// backing `Server_Card` into; graveyard, exile and library keep separate physical binding
     /// maps and are reachable in two steps (conjure to hand, then move).
@@ -213,16 +278,22 @@ impl GameEngine {
 
         let oid = self.state.next_object_id;
         self.state.next_object_id += 1;
-        self.state
-            .objects
-            .insert(oid, new_object_from_card(oid, target, card_id, zone, face));
+        let initial_zone = if zone == Zone::Battlefield {
+            Zone::Stack
+        } else {
+            zone
+        };
+        self.state.objects.insert(
+            oid,
+            new_object_from_card(oid, target, card_id, initial_zone, face),
+        );
         let idx = self
             .state
             .player_idx(target)
             .ok_or(EngineError::UnknownPlayer(target))?;
         match zone {
             Zone::Hand => self.state.players[idx].hand.push(oid),
-            Zone::Battlefield => self.state.players[idx].battlefield.push(oid),
+            Zone::Battlefield => {}
             _ => unreachable!("conjure zone restricted above"),
         }
 
@@ -350,6 +421,28 @@ fn zone_label(z: Zone) -> &'static str {
         Zone::Exile => "exile",
         Zone::Library => "the library",
         Zone::Stack => "the stack",
+    }
+}
+
+fn dev_entry_item(controller: PlayerId, object_id: ObjectId, card_id: &str) -> StackItem {
+    StackItem {
+        id: object_id,
+        controller,
+        card_id: card_id.to_string(),
+        targets: Vec::new(),
+        ability_text: Some("Dev battlefield placement".to_string()),
+        source_permanent_id: None,
+        source_zone_change: 0,
+        source_face_change: 0,
+        ability_index: None,
+        is_triggered: false,
+        is_copy: false,
+        face_index: 0,
+        flashback: false,
+        chosen_x: 0,
+        target_damage: Vec::new(),
+        chosen_modes: Vec::new(),
+        trigger_player: None,
     }
 }
 

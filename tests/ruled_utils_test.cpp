@@ -43,7 +43,7 @@ TEST(RuledUtilsTest, PrivateChoiceKindsAreTheConcealedZoneOnes)
     EXPECT_FALSE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_REVEALED));
     EXPECT_FALSE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_TARGET_OBJECTS));
     EXPECT_FALSE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_LEGEND_KEEP));
-    EXPECT_FALSE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_DAMAGE_PREVENTION));
+    EXPECT_FALSE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT));
     // A kind this build does not know about is treated as concealing something.
     EXPECT_TRUE(isPrivateChoiceKind(static_cast<ruled::v1::ChoiceKind>(99)));
 }
