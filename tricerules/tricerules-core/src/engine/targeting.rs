@@ -1,8 +1,6 @@
 use super::combat::is_attacking_or_blocking;
 use super::*;
-use tricerules_cards::primitives::{
-    GraveyardCardType, GraveyardFilter, GraveyardOwner, PermanentTypeFilter,
-};
+use tricerules_cards::primitives::{GraveyardFilter, GraveyardOwner, PermanentTypeFilter};
 
 /// The object that sourced a targeted spell or ability, captured at the moment targets are
 /// chosen. Object ids are stable across zone changes in this engine, so CR 400.7 identity also
@@ -138,13 +136,8 @@ pub(super) fn graveyard_target_legal(
         let Some(def) = engine.registry.get(&obj.card_id) else {
             return false;
         };
-        match card_type {
-            GraveyardCardType::Creature => {
-                // A card is a creature card if it has "Creature" in its type line on any face.
-                if !def.any_face(|f| f.is_creature) {
-                    return false;
-                }
-            }
+        if !def.matches_card_type_outside_stack(card_type) {
+            return false;
         }
     }
     true
@@ -408,7 +401,7 @@ fn stack_spell_target_legal(
     state: &GameState,
     registry: &CardRegistry,
     tid: ObjectId,
-    spell_filter: Option<SpellTypeFilter>,
+    spell_filter: Option<CardTypeFilter>,
 ) -> bool {
     let Some(item) = state
         .stack
@@ -426,15 +419,7 @@ fn stack_spell_target_legal(
     else {
         return false;
     };
-    match filter {
-        SpellTypeFilter::Creature => face.is_creature,
-        SpellTypeFilter::Instant => face.is_instant,
-        SpellTypeFilter::Sorcery => face.is_sorcery,
-        SpellTypeFilter::InstantOrSorcery => face.is_instant || face.is_sorcery,
-        SpellTypeFilter::Enchantment => face.is_enchantment,
-        SpellTypeFilter::Artifact => face.is_artifact,
-        SpellTypeFilter::Noncreature => !face.is_creature,
-    }
+    face.matches_card_type(filter)
 }
 
 pub(super) fn effect_has_legal_target_at_resolution(

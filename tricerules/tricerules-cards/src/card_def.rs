@@ -15,8 +15,8 @@
 
 use crate::mana::ManaCost;
 use crate::primitives::{
-    ActivatedAbilityDef, Color, Evasion, Keyword, PermanentTypeFilter, SpellEffectKind,
-    StaticAbilityDef, TriggeredAbilityDef,
+    ActivatedAbilityDef, CardTypeFilter, Color, Evasion, Keyword, PermanentTypeFilter,
+    SpellEffectKind, StaticAbilityDef, TriggeredAbilityDef,
 };
 use serde::{Deserialize, Serialize};
 
@@ -206,6 +206,21 @@ impl CardFace {
             PermanentTypeFilter::Land => self.is_land,
         }
     }
+
+    /// Whether this face has the card type selected by `filter`. Stack objects use the face that
+    /// was cast; cards in other zones first select their applicable face set through
+    /// [`CardDefinition::matches_card_type_outside_stack`].
+    pub fn matches_card_type(&self, filter: CardTypeFilter) -> bool {
+        match filter {
+            CardTypeFilter::Enchantment => self.is_enchantment,
+            CardTypeFilter::Instant => self.is_instant,
+            CardTypeFilter::Sorcery => self.is_sorcery,
+            CardTypeFilter::InstantOrSorcery => self.is_instant || self.is_sorcery,
+            CardTypeFilter::Creature => self.is_creature,
+            CardTypeFilter::Artifact => self.is_artifact,
+            CardTypeFilter::Noncreature => !self.is_creature,
+        }
+    }
 }
 
 /// A read-only view of one face. Kept as a named alias because the engine reads faces constantly
@@ -380,6 +395,20 @@ impl CardDefinition {
         self.faces.len() > 1
     }
 
+    /// Whether this physical card matches `filter` in a zone other than the battlefield or stack.
+    /// Split cards combine both halves (CR 709.4). Flip, double-faced, and adventurer cards use
+    /// only their normal/front characteristics there (CR 710.2, 712.8a, 715.4).
+    pub fn matches_card_type_outside_stack(&self, filter: CardTypeFilter) -> bool {
+        if self.layout != Layout::Split {
+            return self.primary_face().matches_card_type(filter);
+        }
+
+        match filter {
+            CardTypeFilter::Noncreature => self.faces_iter().all(|face| !face.is_creature),
+            _ => self.faces_iter().any(|face| face.matches_card_type(filter)),
+        }
+    }
+
     /// Whether `face_index` is a face the player may choose while playing this card from hand.
     /// Split cards, modal DFCs, and Adventures expose both authored spell/land choices there;
     /// transforming DFCs and flip cards expose only their front/top face. This is a layout rule,
@@ -390,15 +419,48 @@ impl CardDefinition {
             Layout::Split | Layout::ModalDfc | Layout::Adventure => face_index < self.face_count(),
         }
     }
+}
 
-    /// True if *any* face satisfies `pred` — the "is this a creature card?" question asked of a
-    /// card sitting in a library or graveyard, where no face is up.
-    ///
-    /// CR 709.4: a split card has the combined characteristics of both halves in every zone but
-    /// the stack, so any-face is exactly right there. CR 712.4a: a double-faced card shows only
-    /// its front face outside the battlefield/stack, so this deliberately over-approximates for
-    /// DFCs; tighten it when a DFC's back face carries a type the front one lacks.
-    pub fn any_face(&self, pred: impl Fn(FaceRef<'_>) -> bool) -> bool {
-        self.faces_iter().any(pred)
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn face(types: &[&str]) -> CardFace {
+        let mut face = CardFace {
+            types: types.iter().map(|value| (*value).to_owned()).collect(),
+            ..CardFace::default()
+        };
+        face.derive_type_flags();
+        face
+    }
+
+    fn definition(layout: Layout, faces: Vec<CardFace>) -> CardDefinition {
+        CardDefinition {
+            id: "test_card".to_owned(),
+            name: "Test Card".to_owned(),
+            layout,
+            faces,
+            partial: None,
+        }
+    }
+
+    #[test]
+    fn nonstack_card_types_follow_multiface_layout_rules() {
+        let split = definition(Layout::Split, vec![face(&["Instant"]), face(&["Creature"])]);
+        assert!(split.matches_card_type_outside_stack(CardTypeFilter::Instant));
+        assert!(split.matches_card_type_outside_stack(CardTypeFilter::Creature));
+        assert!(!split.matches_card_type_outside_stack(CardTypeFilter::Noncreature));
+
+        for layout in [
+            Layout::Adventure,
+            Layout::Flip,
+            Layout::Transform,
+            Layout::ModalDfc,
+        ] {
+            let card = definition(layout, vec![face(&["Creature"]), face(&["Instant"])]);
+            assert!(card.matches_card_type_outside_stack(CardTypeFilter::Creature));
+            assert!(!card.matches_card_type_outside_stack(CardTypeFilter::Instant));
+            assert!(!card.matches_card_type_outside_stack(CardTypeFilter::InstantOrSorcery));
+        }
     }
 }

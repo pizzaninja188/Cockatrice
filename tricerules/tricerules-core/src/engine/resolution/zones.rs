@@ -449,24 +449,7 @@ pub(super) fn return_from_graveyard(
 
     if let Some(&tid) = targets.first() {
         let tgt = object_display_name(&engine.state, engine.registry, tid);
-        let is_legal = {
-            use tricerules_cards::primitives::{GraveyardCardType, GraveyardOwner};
-            let obj = engine.state.objects.get(&tid);
-            let in_graveyard = obj.is_some_and(|o| o.zone == Zone::Graveyard);
-            let owner_ok = obj.is_some_and(|o| match filter.owner {
-                GraveyardOwner::Controller => o.owner == controller,
-                GraveyardOwner::AnyPlayer => true,
-            });
-            let type_ok = if let Some(ct) = filter.card_type {
-                obj.and_then(|o| engine.registry.get(&o.card_id))
-                    .is_some_and(|def| match ct {
-                        GraveyardCardType::Creature => def.any_face(|f| f.is_creature),
-                    })
-            } else {
-                true
-            };
-            in_graveyard && owner_ok && type_ok
-        };
+        let is_legal = graveyard_target_legal(engine, &filter, tid, controller);
         if !is_legal {
             events.push(ev_log(format!(
                 "{spell_label} fizzles: {tgt} is no longer a legal graveyard target."
@@ -672,7 +655,7 @@ pub(super) fn search_library(
         None => format!("P{controller}: search your library for a card."),
         Some(f) => format!(
             "P{controller}: search your library for a {} card.",
-            spell_type_filter_desc(f)
+            card_type_filter_desc(f)
         ),
     };
     let (candidate_card_ids, candidate_names) = candidate_identities(engine, &candidates);

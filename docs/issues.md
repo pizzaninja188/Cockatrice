@@ -101,10 +101,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Generalize target schemas beyond one homogeneous required target to support independently filtered slots, distinctness constraints, and "up to N" cardinality. Calibration evidence: Soul Salvage, optional targets on Frost Breath and Ghostform, and Hunter's Edge's secondary `multiple_distinct_targets` gap. Legal actions must enumerate or validate complete assignments without Cartesian explosion, and stale, duplicate, missing, or overfilled submissions must be rejected before costs are paid.
   - Priority: Low
 
-- [ ] #74 [feature] Graveyard card-type filters
-  - Details: Extend zone-aware target filters to query card types for objects in graveyards using engine-owned characteristics appropriate to that zone. Calibration evidence: Salvager of Secrets and Trusty Packbeast. Preserve owner/controller semantics, hidden-zone boundaries, and target revalidation on resolution.
-  - Priority: Low
-
 - [ ] #75 [feature] Opponent-only mass effect scopes
   - Details: Add a controller-relative scope for all creatures or permanents controlled by opponents, distinct from targeting. Calibration evidence: Uncomfortable Chill. Support multiplayer opponent sets, snapshot or recompute the affected set according to effect duration, and satisfy the two-card-or-mechanic reuse gate before adding the scope.
   - Priority: Low

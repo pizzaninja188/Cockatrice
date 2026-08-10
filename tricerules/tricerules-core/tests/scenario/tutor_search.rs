@@ -339,3 +339,36 @@ fn mystical_tutor_finds_a_split_card_by_face_type() {
         "Fire // Ice is now on top of the library"
     );
 }
+
+/// CR 715.4: outside the stack an adventurer card has only its normal characteristics. Stomp is
+/// an instant only while Bonecrusher Giant is cast as an Adventure, so Mystical Tutor cannot find
+/// the physical card in a library.
+#[test]
+fn mystical_tutor_excludes_an_adventure_spell_face_in_library() {
+    let decks = Some(vec![
+        deck_with("island", &["mystical_tutor"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(5, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    ensure_in_hand(&mut e, 0, "mystical_tutor");
+
+    let bonecrusher_oid = inject_library_card(&mut e, 0, "bonecrusher_giant_stomp");
+    let batch = cast_instant_and_resolve(
+        &mut e,
+        0,
+        "mystical_tutor",
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+
+    let req = find_resolution_choice(&batch).expect("resolution choice required");
+    assert!(
+        !req.candidate_object_ids.contains(&bonecrusher_oid),
+        "Stomp's instant type does not exist while Bonecrusher Giant is in the library"
+    );
+    e.apply_command(0, &submit_resolution_choice(vec![]))
+        .expect("fail to find");
+}

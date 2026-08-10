@@ -1,0 +1,15 @@
+(
+  id: "trusty_packbeast",
+  name: "Trusty Packbeast",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Beast"],
+  power: 2,
+  toughness: 3,
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [ReturnFromGraveyard(filter: (owner: Controller, card_type: Some(Artifact)), destination: Hand)],
+      text: "When this creature enters, return target artifact card from your graveyard to your hand.",
+    ),
+  ],
+)

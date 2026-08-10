@@ -19,6 +19,21 @@ pub enum TargetKind {
     AnyPermanent,
 }
 
+/// Card-type predicate shared by spells on the stack and cards in other zones. `None` on a
+/// containing field means no type restriction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CardTypeFilter {
+    Enchantment,
+    Instant,
+    Sorcery,
+    /// Matches instants and sorceries (Talrand, Young Pyromancer, Mystical Tutor).
+    InstantOrSorcery,
+    Creature,
+    Artifact,
+    /// Matches any object that does not have the creature card type.
+    Noncreature,
+}
+
 /// Controller relationship required of a permanent target, relative to the spell or ability
 /// controller. This remains independently composable with the other `TargetFilter` predicates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -42,14 +57,6 @@ pub enum GraveyardOwner {
     AnyPlayer,
 }
 
-/// Which card types in a graveyard qualify for [`ReturnFromGraveyard`][SpellEffectKind::ReturnFromGraveyard].
-/// `None` means any card type (no type restriction).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum GraveyardCardType {
-    /// Only creature cards (Raise Dead, Disentomb, Gravedigger ETB).
-    Creature,
-}
-
 /// Filter for graveyard-zone targets (cards in a graveyard, not battlefield permanents).
 /// Parallel to [`TargetFilter`] but for a different zone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -59,7 +66,7 @@ pub struct GraveyardFilter {
     pub owner: GraveyardOwner,
     /// Optional card-type restriction. `None` = any card.
     #[serde(default)]
-    pub card_type: Option<GraveyardCardType>,
+    pub card_type: Option<CardTypeFilter>,
 }
 
 /// Where a card returned from the graveyard lands (CR 400.1).

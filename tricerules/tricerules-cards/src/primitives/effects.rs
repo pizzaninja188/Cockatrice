@@ -1,8 +1,8 @@
 //! Spell and continuous-effect vocabulary plus shared effect parameters.
 
 use super::{
-    AnthemFilter, GraveyardDestination, GraveyardFilter, Keyword, SpellTypeFilter,
-    TargetController, TargetFilter, TargetKind,
+    AnthemFilter, CardTypeFilter, GraveyardDestination, GraveyardFilter, Keyword, TargetController,
+    TargetFilter, TargetKind,
 };
 use serde::de::{EnumAccess, MapAccess, SeqAccess, VariantAccess};
 use serde::ser::SerializeStructVariant;
@@ -450,11 +450,11 @@ pub enum SpellEffectKind {
     },
     /// CR 701.5: counter target spell on the stack. `spell_filter` narrows which spells are legal
     /// targets — `None` is unrestricted (Counterspell), `Some(Creature)` is Essence Scatter,
-    /// `Some(Noncreature)` is Negate. Reuses [`SpellTypeFilter`] so any future "counter target
+    /// `Some(Noncreature)` is Negate. Reuses [`CardTypeFilter`] so any future "counter target
     /// X spell" needs no new variant.
     CounterTargetSpell {
         #[serde(default)]
-        spell_filter: Option<SpellTypeFilter>,
+        spell_filter: Option<CardTypeFilter>,
     },
     /// CR 707.10: put `count` copies of target spell on the stack, each controlled by this
     /// spell's controller. A copy is **not cast** (no mana, no cast triggers, no storm count) and
@@ -468,7 +468,7 @@ pub enum SpellEffectKind {
         #[serde(default = "one")]
         count: u32,
         #[serde(default)]
-        spell_filter: Option<SpellTypeFilter>,
+        spell_filter: Option<CardTypeFilter>,
     },
     /// CR 613.4 layer 7c: give every creature matching `filter` +power/+toughness until end of
     /// turn (the mass, one-shot sibling of [`Self::PumpTarget`]). Untargeted — `filter` selects
@@ -644,7 +644,7 @@ pub enum SpellEffectKind {
     SearchLibrary {
         /// `None` = any card is valid; `Some(f)` = only cards of this type qualify.
         #[serde(default)]
-        filter: Option<SpellTypeFilter>,
+        filter: Option<CardTypeFilter>,
         /// Where the found card goes. Default: Hand.
         #[serde(default)]
         destination: SearchDestination,

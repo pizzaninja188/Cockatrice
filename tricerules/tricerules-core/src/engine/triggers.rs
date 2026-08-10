@@ -557,11 +557,6 @@ impl GameEngine {
                     .registry
                     .get(cast_card_id)
                     .and_then(|d| d.face(*face_index));
-                let is_enchantment = cast_face.is_some_and(|f| f.is_enchantment);
-                let is_instant = cast_face.is_some_and(|f| f.is_instant);
-                let is_sorcery = cast_face.is_some_and(|f| f.is_sorcery);
-                let is_creature = cast_face.is_some_and(|f| f.is_creature);
-                let is_artifact = cast_face.is_some_and(|f| f.is_artifact);
 
                 sources
                     .iter()
@@ -589,15 +584,8 @@ impl GameEngine {
                                 }
                                 match spell_type {
                                     None => true,
-                                    Some(SpellTypeFilter::Enchantment) => is_enchantment,
-                                    Some(SpellTypeFilter::Instant) => is_instant,
-                                    Some(SpellTypeFilter::Sorcery) => is_sorcery,
-                                    Some(SpellTypeFilter::InstantOrSorcery) => {
-                                        is_instant || is_sorcery
-                                    }
-                                    Some(SpellTypeFilter::Creature) => is_creature,
-                                    Some(SpellTypeFilter::Artifact) => is_artifact,
-                                    Some(SpellTypeFilter::Noncreature) => !is_creature,
+                                    Some(filter) => cast_face
+                                        .is_some_and(|face| face.matches_card_type(*filter)),
                                 }
                             },
                         )

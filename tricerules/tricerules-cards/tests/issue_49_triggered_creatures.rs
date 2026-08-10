@@ -1,6 +1,6 @@
 use tricerules_cards::primitives::{
-    AnthemController, AnthemFilter, EffectSubject, LifeAmount, PlayerRecipient, SpellEffectKind,
-    SpellTypeFilter, TargetController, TargetFilter, TargetKind,
+    AnthemController, AnthemFilter, CardTypeFilter, EffectSubject, LifeAmount, PlayerRecipient,
+    SpellEffectKind, TargetController, TargetFilter, TargetKind,
 };
 use tricerules_cards::{
     AbilityCost, Amount, CardRegistry, CastTriggerPlayer, CounterKind, Keyword, ManaAmount,
@@ -286,7 +286,7 @@ fn issue_49_cast_trigger_cards_use_existing_filters_and_source_effects() {
         spellgorger.trigger,
         TriggerCondition::WheneverPlayerCastsSpell {
             caster: CastTriggerPlayer::Controller,
-            spell_type: Some(SpellTypeFilter::Noncreature),
+            spell_type: Some(CardTypeFilter::Noncreature),
         }
     );
     assert_eq!(
@@ -301,9 +301,9 @@ fn issue_49_cast_trigger_cards_use_existing_filters_and_source_effects() {
     for id in ["mistral_singer", "aven_wind_mage"] {
         let ability = trigger(id);
         let spell_type = if id == "mistral_singer" {
-            SpellTypeFilter::Noncreature
+            CardTypeFilter::Noncreature
         } else {
-            SpellTypeFilter::InstantOrSorcery
+            CardTypeFilter::InstantOrSorcery
         };
         assert_eq!(
             ability.trigger,

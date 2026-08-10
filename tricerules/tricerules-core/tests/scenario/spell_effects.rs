@@ -1638,6 +1638,201 @@ fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
     assert!(gd_on_bf, "Gravedigger must be on P0's battlefield");
 }
 
+fn cast_graveyard_return_creature(
+    engine: &mut GameEngine,
+    card_id: &str,
+    mana: ManaGift,
+) -> RuledEventBatch {
+    ensure_in_hand(engine, 0, card_id);
+    give_mana(engine, 0, mana);
+    let hand_index = hand_index_for_card(engine, 0, card_id);
+    engine
+        .apply_command(0, &cast_spell(hand_index, vec![]))
+        .expect("cast graveyard-return creature");
+    engine.apply_command(0, &pass()).expect("P0 pass");
+    engine
+        .apply_command(1, &pass())
+        .expect("P1 pass resolves graveyard-return creature")
+}
+
+fn choose_graveyard_return_target(engine: &mut GameEngine, object_id: u32) {
+    engine
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                    target_object_id: object_id,
+                    decline: false,
+                })),
+            },
+        )
+        .expect("choose graveyard-return target");
+}
+
+fn pending_graveyard_targets(engine: &GameEngine, batch: &RuledEventBatch) -> Vec<u32> {
+    let pending = engine
+        .state
+        .pending_triggers
+        .front()
+        .expect("graveyard-return trigger pending");
+    let key = (pending.source_permanent_id as u64) << 32 | pending.ability_index as u64;
+    batch.legal_by_player[&0].valid_targets_by_ability[&key]
+        .valid_graveyard_ids
+        .clone()
+}
+
+/// CR 205.2, 709.4, and 715.4: Salvager accepts the controller's instant and sorcery cards,
+/// including a split card's combined types, but not an adventurer card's alternative face.
+#[test]
+fn graveyard_card_type_salvager_targets_only_own_instants_and_sorceries() {
+    let decks = Some(vec![
+        deck_with("island", &["salvager_of_secrets"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut engine = GameEngine::new(74_001, &[0, 1], 20, decks, true).expect("new engine");
+    advance_to_main1_from_game_start(&mut engine);
+
+    let instant = inject_graveyard_card(&mut engine, 0, "lightning_bolt");
+    let sorcery = inject_graveyard_card(&mut engine, 0, "divination");
+    let artifact = inject_graveyard_card(&mut engine, 0, "bonesplitter");
+    let creature = inject_graveyard_card(&mut engine, 0, "grizzly_bears");
+    let adventure = inject_graveyard_card(&mut engine, 0, "bonecrusher_giant_stomp");
+    let split = inject_graveyard_card(&mut engine, 0, "fire_ice");
+    let opponent_instant = inject_graveyard_card(&mut engine, 1, "counterspell");
+
+    let batch = cast_graveyard_return_creature(
+        &mut engine,
+        "salvager_of_secrets",
+        ManaGift {
+            u: 2,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    let candidates = pending_graveyard_targets(&engine, &batch);
+    assert_eq!(candidates, vec![instant, sorcery, split]);
+    assert!(!candidates.contains(&artifact));
+    assert!(!candidates.contains(&creature));
+    assert!(!candidates.contains(&adventure));
+    assert!(!candidates.contains(&opponent_instant));
+
+    let err = engine
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                    target_object_id: artifact,
+                    decline: false,
+                })),
+            },
+        )
+        .expect_err("an artifact is not a legal Salvager target");
+    assert!(matches!(err, tricerules_core::EngineError::Illegal(_)));
+    assert_eq!(engine.state.pending_triggers.len(), 1);
+
+    choose_graveyard_return_target(&mut engine, split);
+    resolve_entire_stack_two_player(&mut engine);
+    assert!(engine.state.players[0].hand.contains(&split));
+    assert_eq!(engine.state.objects[&split].zone, Zone::Hand);
+}
+
+/// CR 205.2b: a multi-type artifact creature is an artifact card and is a legal Packbeast target.
+#[test]
+fn graveyard_card_type_packbeast_targets_only_own_artifacts() {
+    let decks = Some(vec![
+        deck_with("plains", &["trusty_packbeast"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut engine = GameEngine::new(74_002, &[0, 1], 20, decks, true).expect("new engine");
+    advance_to_main1_from_game_start(&mut engine);
+
+    let artifact_creature = inject_graveyard_card(&mut engine, 0, "bottle_gnomes");
+    let artifact = inject_graveyard_card(&mut engine, 0, "bonesplitter");
+    let creature = inject_graveyard_card(&mut engine, 0, "grizzly_bears");
+    let opponent_artifact = inject_graveyard_card(&mut engine, 1, "bottle_gnomes");
+
+    let batch = cast_graveyard_return_creature(
+        &mut engine,
+        "trusty_packbeast",
+        ManaGift {
+            w: 1,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    let candidates = pending_graveyard_targets(&engine, &batch);
+    assert_eq!(candidates, vec![artifact_creature, artifact]);
+    assert!(!candidates.contains(&creature));
+    assert!(!candidates.contains(&opponent_artifact));
+
+    choose_graveyard_return_target(&mut engine, artifact_creature);
+    resolve_entire_stack_two_player(&mut engine);
+    assert!(engine.state.players[0].hand.contains(&artifact_creature));
+    assert_eq!(engine.state.objects[&artifact_creature].zone, Zone::Hand);
+}
+
+/// CR 603.3d: these triggers are mandatory, but they are removed when no legal target exists.
+#[test]
+fn graveyard_card_type_mandatory_trigger_is_removed_without_a_legal_target() {
+    let decks = Some(vec![
+        deck_with("plains", &["trusty_packbeast"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut engine = GameEngine::new(74_003, &[0, 1], 20, decks, true).expect("new engine");
+    advance_to_main1_from_game_start(&mut engine);
+    inject_graveyard_card(&mut engine, 0, "grizzly_bears");
+
+    cast_graveyard_return_creature(
+        &mut engine,
+        "trusty_packbeast",
+        ManaGift {
+            w: 1,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    assert!(engine.state.pending_triggers.is_empty());
+    assert!(engine.state.stack.is_empty());
+}
+
+/// CR 608.2b: the chosen card must still be a matching graveyard object at resolution.
+#[test]
+fn graveyard_card_type_target_is_revalidated_at_resolution() {
+    let decks = Some(vec![
+        deck_with("plains", &["trusty_packbeast"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut engine = GameEngine::new(74_004, &[0, 1], 20, decks, true).expect("new engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let artifact = inject_graveyard_card(&mut engine, 0, "bonesplitter");
+
+    cast_graveyard_return_creature(
+        &mut engine,
+        "trusty_packbeast",
+        ManaGift {
+            w: 1,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    choose_graveyard_return_target(&mut engine, artifact);
+
+    engine.state.players[0]
+        .graveyard
+        .retain(|object_id| *object_id != artifact);
+    engine.state.players[0].exile.push(artifact);
+    engine
+        .state
+        .objects
+        .get_mut(&artifact)
+        .expect("artifact")
+        .zone = Zone::Exile;
+
+    resolve_entire_stack_two_player(&mut engine);
+    assert!(!engine.state.players[0].hand.contains(&artifact));
+    assert_eq!(engine.state.objects[&artifact].zone, Zone::Exile);
+}
+
 /// Regression: a Draw spell that empties the library must NOT error out of resolution (the old
 /// `draw_card(...)?` aborted mid-resolution and left the stack half-mutated). CR 120.3 / 104.3c:
 /// draw as many as possible, then the player loses as a state-based action.
@@ -2006,7 +2201,7 @@ fn zombify_returns_creature_from_graveyard_to_battlefield() {
 }
 
 /// A noncreature card in the graveyard is not a legal Zombify target
-/// (`GraveyardCardType::Creature`), and the engine rejects the cast rather than fizzling later.
+/// (`CardTypeFilter::Creature`), and the engine rejects the cast rather than fizzling later.
 #[test]
 fn zombify_cannot_target_a_noncreature_graveyard_card() {
     let decks = Some(vec![

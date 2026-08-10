@@ -7,8 +7,8 @@
 use super::events::{color_string, ev_log, object_display_name};
 use super::targeting::{
     battlefield_objects_matching, compute_spell_targets, effect_has_legal_target_at_resolution,
-    object_matches_mass_filter, spell_effect_kind_needs_target, target_filter_legal_at_resolution,
-    TargetSourceIdentity,
+    graveyard_target_legal, object_matches_mass_filter, spell_effect_kind_needs_target,
+    target_filter_legal_at_resolution, TargetSourceIdentity,
 };
 use super::*;
 use rand::seq::SliceRandom;
@@ -1066,14 +1066,13 @@ fn counter_label(kind: CounterKind) -> &'static str {
     }
 }
 
-/// Return true if the library card `oid` satisfies `filter` (None = any card).
-/// A card in the library shows no face, so any face may satisfy the filter (see
-/// [`CardDefinition::any_face`](tricerules_cards::CardDefinition::any_face)).
+/// Return true if the library card `oid` satisfies `filter` (None = any card). The definition
+/// chooses the rules-correct characteristics for its physical layout in this non-stack zone.
 pub(super) fn library_card_matches_filter(
     state: &GameState,
     registry: &'static CardRegistry,
     oid: ObjectId,
-    filter: Option<&SpellTypeFilter>,
+    filter: Option<&CardTypeFilter>,
 ) -> bool {
     let Some(filter) = filter else {
         return true;
@@ -1084,27 +1083,19 @@ pub(super) fn library_card_matches_filter(
     let Some(def) = registry.get(&obj.card_id) else {
         return false;
     };
-    match filter {
-        SpellTypeFilter::Instant => def.any_face(|f| f.is_instant),
-        SpellTypeFilter::Sorcery => def.any_face(|f| f.is_sorcery),
-        SpellTypeFilter::InstantOrSorcery => def.any_face(|f| f.is_instant || f.is_sorcery),
-        SpellTypeFilter::Creature => def.any_face(|f| f.is_creature),
-        SpellTypeFilter::Artifact => def.any_face(|f| f.is_artifact),
-        SpellTypeFilter::Enchantment => def.any_face(|f| f.is_enchantment),
-        SpellTypeFilter::Noncreature => !def.any_face(|f| f.is_creature),
-    }
+    def.matches_card_type_outside_stack(*filter)
 }
 
-/// Human-readable description of a [`SpellTypeFilter`] for prompt text.
-fn spell_type_filter_desc(f: &SpellTypeFilter) -> &'static str {
+/// Human-readable description of a [`CardTypeFilter`] for prompt text.
+fn card_type_filter_desc(f: &CardTypeFilter) -> &'static str {
     match f {
-        SpellTypeFilter::Instant => "instant",
-        SpellTypeFilter::Sorcery => "sorcery",
-        SpellTypeFilter::InstantOrSorcery => "instant or sorcery",
-        SpellTypeFilter::Creature => "creature",
-        SpellTypeFilter::Artifact => "artifact",
-        SpellTypeFilter::Enchantment => "enchantment",
-        SpellTypeFilter::Noncreature => "noncreature",
+        CardTypeFilter::Instant => "instant",
+        CardTypeFilter::Sorcery => "sorcery",
+        CardTypeFilter::InstantOrSorcery => "instant or sorcery",
+        CardTypeFilter::Creature => "creature",
+        CardTypeFilter::Artifact => "artifact",
+        CardTypeFilter::Enchantment => "enchantment",
+        CardTypeFilter::Noncreature => "noncreature",
     }
 }
 

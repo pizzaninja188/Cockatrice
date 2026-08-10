@@ -1,6 +1,6 @@
 //! Activated, triggered, and static ability definitions.
 
-use super::{AbilityCost, Amount, Color, CounterKind, Keyword, SpellEffectKind};
+use super::{AbilityCost, Amount, CardTypeFilter, Color, CounterKind, Keyword, SpellEffectKind};
 use crate::ManaAmount;
 use serde::{Deserialize, Serialize};
 
@@ -98,7 +98,7 @@ pub enum TriggerCondition {
         caster: CastTriggerPlayer,
         /// If `Some`, only spells of this type fire the trigger. `None` matches any spell.
         #[serde(default)]
-        spell_type: Option<SpellTypeFilter>,
+        spell_type: Option<CardTypeFilter>,
     },
     /// Whenever this permanent becomes the target of the selected kind of stack object. The
     /// targeting object has already been legally cast, activated, copied, or put on the stack;
@@ -181,7 +181,7 @@ fn any_player_trigger() -> CastTriggerPlayer {
 
 /// Permanent card-type filter for [`TriggerCondition::WheneverPermanentEntersBattlefield`].
 /// Only types that can exist on the battlefield (CR 110.4) — instants/sorceries are excluded
-/// by construction, unlike [`SpellTypeFilter`].
+/// by construction, unlike [`CardTypeFilter`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PermanentTypeFilter {
     Creature,
@@ -213,20 +213,6 @@ pub enum TargetingSourceFilter {
     Spell,
     Ability,
     SpellOrAbility,
-}
-
-/// Spell type filter for `WheneverPlayerCastsSpell`. `None` on the field means any type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SpellTypeFilter {
-    Enchantment,
-    Instant,
-    Sorcery,
-    /// Matches instants and sorceries (the most common pairing — Talrand, Young Pyromancer, etc.).
-    InstantOrSorcery,
-    Creature,
-    Artifact,
-    /// Matches any non-creature spell.
-    Noncreature,
 }
 
 /// CR 603.4 intervening-"if" clause — the `if …` between the trigger event and the effect

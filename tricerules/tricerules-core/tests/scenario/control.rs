@@ -385,7 +385,7 @@ fn reanimated_static_ability_serves_its_new_controller() {
     );
 }
 
-/// Reanimate only takes creature cards (`GraveyardCardType::Creature`), so a noncreature card in
+/// Reanimate only takes creature cards (`CardTypeFilter::Creature`), so a noncreature card in
 /// a graveyard is rejected at cast time rather than fizzling later.
 #[test]
 fn reanimate_cannot_target_a_noncreature_card() {

@@ -18,14 +18,14 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use thiserror::Error;
 use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
-    AbilityCost, Amount, AnthemController, AnthemFilter, CastTriggerPlayer, Color,
+    AbilityCost, Amount, AnthemController, AnthemFilter, CardTypeFilter, CastTriggerPlayer, Color,
     ContinuousEffectKind, CountExpression, CounterKind, DamageDivision,
     DamagePreventionAdditionalEffect, DamagePreventionSubject, EffectDuration, EffectSubject,
     EntersTappedAffected, Evasion, FaceChangeAction, GameCondition, InterveningIf, Keyword,
     LifeAmount, PermanentTypeFilter, PlayerRecipient, PreventionAmountBasis, RelativePlayerSet,
-    SearchDestination, SpellEffectKind, SpellTypeFilter, StaticAbilityDef,
-    StaticDamagePreventionAmount, TargetController, TargetFilter, TargetKind,
-    TargetingSourceFilter, TokenController, TriggerCondition,
+    SearchDestination, SpellEffectKind, StaticAbilityDef, StaticDamagePreventionAmount,
+    TargetController, TargetFilter, TargetKind, TargetingSourceFilter, TokenController,
+    TriggerCondition,
 };
 use tricerules_cards::{CardRegistry, FaceRef, Layout};
 use tricerules_proto::ruled::v1 as rv1;
