@@ -4,7 +4,7 @@ use super::{
     AnthemFilter, GraveyardDestination, GraveyardFilter, Keyword, SpellTypeFilter,
     TargetController, TargetFilter, TargetKind,
 };
-use serde::de::{EnumAccess, MapAccess, VariantAccess};
+use serde::de::{EnumAccess, MapAccess, SeqAccess, VariantAccess};
 use serde::ser::SerializeStructVariant;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -52,6 +52,21 @@ impl GameCondition {
     }
 }
 
+/// A public game-state count usable by any [`Amount`] consumer. Keeping the counted quantity
+/// separate from the effect lets Squad Captain's entry replacement and Dwarven Priest's life-gain
+/// trigger share one authoritative evaluator.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CountExpression {
+    /// Count battlefield creatures matching the shared untargeted creature filter. The
+    /// `YouControl` relation is evaluated from the amount context's controller, while
+    /// `exclude_self` uses its source object. Squad Captain and Dwarven Priest are the first
+    /// entry-replacement and resolution-effect consumers of the same expression.
+    BattlefieldCreatures { filter: AnthemFilter },
+    /// The committed, identity-free number of creatures that died during the current turn.
+    /// Bloodcrazed Paladin shares this watcher with `GameCondition::CreatureDeathsThisTurn`.
+    CreatureDeathsThisTurn,
+}
+
 /// An effect amount that is a fixed literal, the spell's cast-time X (CR 107.3), or a value
 /// selected from public game state when the effect resolves.
 ///
@@ -61,7 +76,7 @@ impl GameCondition {
 /// `X` identifier as an ambiguous unit value, so the quoted form is used). Applied to the
 /// amount-bearing effects that can legally scale with X — the "name two cards" pair is Fireball
 /// (`DamageTarget { amount: "X" }`) and Blue Sun's Zenith (`Draw { count: "X" }`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Amount {
     /// A literal count baked into the card data.
     Fixed(u32),
@@ -74,32 +89,35 @@ pub enum Amount {
         when_true: u32,
         otherwise: u32,
     },
+    /// Count public game state using an engine-owned context. This is shared by entry
+    /// replacements and ordinary resolving effects rather than being an entry-only mini-language.
+    Count(CountExpression),
 }
 
 impl Amount {
-    /// Resolve an amount that needs no game-state query. Conditional amounts return `None` so a
+    /// Resolve an amount that needs no game-state query. Dynamic amounts return `None` so a
     /// caller cannot accidentally choose a branch without consulting the authoritative engine.
-    pub fn resolve_unconditional(self, x: u32) -> Option<u32> {
+    pub fn resolve_unconditional(&self, x: u32) -> Option<u32> {
         match self {
-            Amount::Fixed(n) => Some(n),
+            Amount::Fixed(n) => Some(*n),
             Amount::X => Some(x),
-            Amount::Conditional { .. } => None,
+            Amount::Conditional { .. } | Amount::Count(_) => None,
         }
     }
 
     /// True if this amount depends on the cast-time X.
-    pub fn is_x(self) -> bool {
+    pub fn is_x(&self) -> bool {
         matches!(self, Amount::X)
     }
 
-    pub fn is_conditional(self) -> bool {
-        matches!(self, Amount::Conditional { .. })
+    pub fn requires_game_state(&self) -> bool {
+        matches!(self, Amount::Conditional { .. } | Amount::Count(_))
     }
 
-    pub fn validate(self) -> Result<(), String> {
+    pub fn validate(&self) -> Result<(), String> {
         match self {
-            Amount::Conditional { condition, .. } => condition.validate(),
-            Amount::Fixed(_) | Amount::X => Ok(()),
+            Amount::Conditional { condition, .. } => (*condition).validate(),
+            Amount::Fixed(_) | Amount::X | Amount::Count(_) => Ok(()),
         }
     }
 }
@@ -126,6 +144,9 @@ impl Serialize for Amount {
                 variant.serialize_field("otherwise", otherwise)?;
                 variant.end()
             }
+            Amount::Count(expression) => {
+                s.serialize_newtype_variant("Amount", 1, "Count", expression)
+            }
         }
     }
 }
@@ -133,6 +154,7 @@ impl Serialize for Amount {
 #[derive(Deserialize)]
 enum AmountVariant {
     Conditional,
+    Count,
 }
 
 #[derive(Deserialize)]
@@ -192,7 +214,9 @@ impl<'de> Deserialize<'de> for Amount {
         impl<'de> serde::de::Visitor<'de> for AmountVisitor {
             type Value = Amount;
             fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                f.write_str("a non-negative integer, the string \"X\", or Conditional(...)")
+                f.write_str(
+                    "a non-negative integer, the string \"X\", Conditional(...), or Count(...)",
+                )
             }
             fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<Amount, E> {
                 Ok(Amount::Fixed(v as u32))
@@ -212,6 +236,15 @@ impl<'de> Deserialize<'de> for Amount {
             fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Amount, A::Error> {
                 ConditionalAmountVisitor.visit_map(map)
             }
+            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Amount, A::Error> {
+                let expression = seq
+                    .next_element::<CountExpression>()?
+                    .ok_or_else(|| serde::de::Error::invalid_length(0, &self))?;
+                if seq.next_element::<serde::de::IgnoredAny>()?.is_some() {
+                    return Err(serde::de::Error::invalid_length(2, &self));
+                }
+                Ok(Amount::Count(expression))
+            }
             fn visit_enum<A: EnumAccess<'de>>(self, data: A) -> Result<Amount, A::Error> {
                 let (variant, access) = data.variant::<AmountVariant>()?;
                 match variant {
@@ -219,6 +252,10 @@ impl<'de> Deserialize<'de> for Amount {
                         &["condition", "when_true", "otherwise"],
                         ConditionalAmountVisitor,
                     ),
+                    AmountVariant::Count => {
+                        let expression: CountExpression = access.newtype_variant()?;
+                        Ok(Amount::Count(expression))
+                    }
                 }
             }
         }
@@ -825,9 +862,9 @@ impl SpellEffectKind {
             | SpellEffectKind::GainLife { amount } => amount.validate()?,
             SpellEffectKind::DamageTargets { amount, .. } => {
                 amount.validate()?;
-                if amount.is_conditional() {
+                if amount.requires_game_state() {
                     return Err(
-                        "DamageTargets cannot use a conditional amount because its allocation is chosen at cast time"
+                        "DamageTargets cannot use a game-state amount because its allocation is chosen at cast time"
                             .into(),
                     );
                 }

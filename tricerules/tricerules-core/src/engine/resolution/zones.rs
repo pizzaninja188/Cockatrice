@@ -18,7 +18,7 @@ pub(super) fn draw(
     let spell_label = cx.spell_label;
 
     // Blue Sun's Zenith / Braingeyser: `count` may be the cast-time X.
-    let count = engine.resolve_amount(count, top.chosen_x);
+    let count = engine.resolve_amount(&count, AmountContext::for_stack_item(top, cx.controller));
     let idx = engine.state.player_idx(drawer).unwrap();
     // CR 120.3 / 104.3c: drawing from an empty library does NOT fail the spell —
     // draw as many as possible, then the player loses as a state-based action
@@ -495,7 +495,9 @@ pub(super) fn return_from_graveyard(
                         deciding_player,
                         destination_controller: controller,
                         face_index: 0,
+                        chosen_x: 0,
                         tapped: false,
+                        entry_counters: BTreeMap::new(),
                         applied_effects: Vec::new(),
                     },
                     BattlefieldEntryCompletion::ResolutionEffect {

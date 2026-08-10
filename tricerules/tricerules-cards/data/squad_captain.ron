@@ -1,0 +1,17 @@
+(
+  id: "squad_captain",
+  name: "Squad Captain",
+  mana_cost: "{4}{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 2,
+  toughness: 2,
+  keywords: [Vigilance],
+  static_abilities: [
+    EntersWithCounters(
+      counter: PlusOnePlusOne,
+      amount: Count(BattlefieldCreatures(
+        filter: (controller: Some(YouControl)),
+      )),
+    ),
+  ],
+)

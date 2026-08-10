@@ -1,0 +1,11 @@
+(
+  id: "endless_one",
+  name: "Endless One",
+  mana_cost: "{X}",
+  types: ["Creature", "Eldrazi"],
+  power: 0,
+  toughness: 0,
+  static_abilities: [
+    EntersWithCounters(counter: PlusOnePlusOne, amount: "X"),
+  ],
+)

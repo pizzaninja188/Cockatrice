@@ -418,7 +418,11 @@ pub(crate) struct BattlefieldEntryEvent {
     pub deciding_player: PlayerId,
     pub destination_controller: PlayerId,
     pub face_index: usize,
+    /// X chosen for the entering permanent spell. Non-spell entry paths carry zero.
+    pub chosen_x: u32,
     pub tapped: bool,
+    /// Counter state accumulated by entry replacement effects before zone commitment.
+    pub entry_counters: BTreeMap<CounterKind, u32>,
     pub applied_effects: Vec<EntryReplacementEffectId>,
 }
 

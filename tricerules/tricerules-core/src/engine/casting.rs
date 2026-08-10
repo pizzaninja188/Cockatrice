@@ -1173,7 +1173,9 @@ impl GameEngine {
                 deciding_player: player,
                 destination_controller: player,
                 face_index,
+                chosen_x: 0,
                 tapped: false,
+                entry_counters: BTreeMap::new(),
                 applied_effects: Vec::new(),
             },
             BattlefieldEntryCompletion::LandPlay {

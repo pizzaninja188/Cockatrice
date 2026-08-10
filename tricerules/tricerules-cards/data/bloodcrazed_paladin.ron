@@ -1,0 +1,15 @@
+(
+  id: "bloodcrazed_paladin",
+  name: "Bloodcrazed Paladin",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Vampire", "Knight"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flash],
+  static_abilities: [
+    EntersWithCounters(
+      counter: PlusOnePlusOne,
+      amount: Count(CreatureDeathsThisTurn),
+    ),
+  ],
+)

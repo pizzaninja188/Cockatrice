@@ -34,6 +34,19 @@ mod tests {
         };
         let encoded = ron::to_string(&amount).unwrap();
         assert_eq!(ron::from_str::<Amount>(&encoded).unwrap(), amount);
+
+        for amount in [
+            Amount::Count(CountExpression::BattlefieldCreatures {
+                filter: AnthemFilter {
+                    controller: Some(AnthemController::YouControl),
+                    ..AnthemFilter::default()
+                },
+            }),
+            Amount::Count(CountExpression::CreatureDeathsThisTurn),
+        ] {
+            let encoded = ron::to_string(&amount).unwrap();
+            assert_eq!(ron::from_str::<Amount>(&encoded).unwrap(), amount);
+        }
     }
 
     #[test]

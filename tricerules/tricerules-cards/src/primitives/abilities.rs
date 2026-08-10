@@ -1,6 +1,6 @@
 //! Activated, triggered, and static ability definitions.
 
-use super::{AbilityCost, Color, CounterKind, Keyword, SpellEffectKind};
+use super::{AbilityCost, Amount, Color, CounterKind, Keyword, SpellEffectKind};
 use crate::ManaAmount;
 use serde::{Deserialize, Serialize};
 
@@ -362,6 +362,14 @@ pub enum StaticAbilityDef {
     /// after it enters. Intrinsic examples include Diregraf Ghoul and the gainland cycle;
     /// `Permanents` is the global Orb of Dreams form.
     EntersTapped { affected: EntersTappedAffected },
+    /// CR 614.1c / 122.6: modify the proposed battlefield-entry event so this permanent starts
+    /// with `amount` counters of `counter`. `Amount` keeps fixed, X, conditional, and counted
+    /// values on the same numeric vocabulary used by resolving effects. Endless One, Squad
+    /// Captain, and Bloodcrazed Paladin exercise three distinct amount sources.
+    EntersWithCounters {
+        counter: CounterKind,
+        amount: Amount,
+    },
     /// CR 615: a prevention effect generated continuously while this permanent is on the
     /// battlefield. Anti-Venom protects itself and counts attempted damage; Vigor protects other
     /// creatures its controller controls and counts damage actually prevented.

@@ -1,0 +1,21 @@
+(
+  id: "dwarven_priest",
+  name: "Dwarven Priest",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Dwarf", "Cleric"],
+  power: 2,
+  toughness: 4,
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [
+        GainLife(
+          amount: Count(BattlefieldCreatures(
+            filter: (controller: Some(YouControl)),
+          )),
+        ),
+      ],
+      text: "When this creature enters, you gain 1 life for each creature you control.",
+    ),
+  ],
+)

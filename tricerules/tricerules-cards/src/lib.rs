@@ -11,8 +11,8 @@ pub use card_def::{CardDefinition, CardFace, FaceRef, Layout, ModalSpellDef, Spe
 pub use mana::{ColorPip, ManaCost, ManaSymbol};
 pub use primitives::{
     AbilityCost, ActivatedAbilityDef, Amount, CastTriggerPlayer, Color, ContinuousEffectKind,
-    CounterKind, EffectContext, EffectDuration, Evasion, GameCondition, Keyword, ManaAmount,
-    PermanentTypeFilter, TokenController, TriggerCondition, TriggeredAbilityDef,
+    CountExpression, CounterKind, EffectContext, EffectDuration, Evasion, GameCondition, Keyword,
+    ManaAmount, PermanentTypeFilter, TokenController, TriggerCondition, TriggeredAbilityDef,
 };
 pub use registry::CardRegistry;
 pub use slug::slugify;

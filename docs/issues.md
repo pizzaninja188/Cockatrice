@@ -25,10 +25,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
 
 ## Open
 
-- [ ] #51 [feature] Dynamic enters-with counters
-  - Details: Extend the shared battlefield-entry replacement event so a permanent can enter with a counter count computed from the pre-entry game state. Calibration evidence: Squad Captain. Add the counter mutation to the proposed event and reuse its CR 616 affected-player choice/re-evaluation path; preserve replacement timing, clamp or reject invalid computed amounts, and cover zero and multiplayer counts. Before adding a new amount expression, satisfy the two-card-or-mechanic reuse gate.
-  - Priority: Low
-
 - [ ] #52 [feature] Composable activated-ability costs and sacrifice filters
   - Details: Replace single-shape activated costs with an ordered, atomic cost list supporting tap, mana, discard, self-sacrifice, and filtered sacrifice of another permanent. Calibration evidence: Evolving Wilds, Explosive Apparatus, Vial of Dragonfire, Portcullis Vine, Liliana's Steward, and Silent Dart; Portcullis Vine also requires the secondary `sacrifice_filter` capability. Validate all choices before paying anything, reject reuse of one object for two cost components, and cover rollback-free illegal submissions.
   - Priority: Low
@@ -146,7 +142,7 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Priority: Low
 
 - [ ] #84 [feature] Dynamic amounts from counted game objects
-  - Details: Add a parameterized amount expression that counts objects matching a shared filter, including creatures, creatures with flying, a subtype, and cards with the same name. Calibration evidence: Aerial Assault, Dwarven Priest, Growth Cycle, Lavakin Brawler, and Undead Servant. Define the zone, controller/owner relation, and evaluation time explicitly, and reuse the expression across life, damage, and power/toughness effects.
+  - Details: Extend the shipped battlefield-creature count with filters for flying, subtype, and same name, then reuse counted amounts across damage and power/toughness effects. Calibration evidence: Aerial Assault, Growth Cycle, Lavakin Brawler, and Undead Servant. Dwarven Priest's controlled-creature life count shipped with Issue #51. Define the zone, controller/owner relation, and evaluation time explicitly for each added filter.
   - Priority: Low
 
 - [ ] #85 [feature] Creature-deals-damage-equal-to-power effects

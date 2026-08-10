@@ -19,12 +19,13 @@ use thiserror::Error;
 use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
     AbilityCost, Amount, AnthemController, AnthemFilter, CastTriggerPlayer, Color,
-    ContinuousEffectKind, CounterKind, DamageDivision, DamagePreventionAdditionalEffect,
-    DamagePreventionSubject, EffectDuration, EffectSubject, EntersTappedAffected, Evasion,
-    FaceChangeAction, GameCondition, InterveningIf, Keyword, LifeAmount, PermanentTypeFilter,
-    PlayerRecipient, PreventionAmountBasis, RelativePlayerSet, SearchDestination, SpellEffectKind,
-    SpellTypeFilter, StaticAbilityDef, StaticDamagePreventionAmount, TargetController,
-    TargetFilter, TargetKind, TargetingSourceFilter, TokenController, TriggerCondition,
+    ContinuousEffectKind, CountExpression, CounterKind, DamageDivision,
+    DamagePreventionAdditionalEffect, DamagePreventionSubject, EffectDuration, EffectSubject,
+    EntersTappedAffected, Evasion, FaceChangeAction, GameCondition, InterveningIf, Keyword,
+    LifeAmount, PermanentTypeFilter, PlayerRecipient, PreventionAmountBasis, RelativePlayerSet,
+    SearchDestination, SpellEffectKind, SpellTypeFilter, StaticAbilityDef,
+    StaticDamagePreventionAmount, TargetController, TargetFilter, TargetKind,
+    TargetingSourceFilter, TokenController, TriggerCondition,
 };
 use tricerules_cards::{CardRegistry, FaceRef, Layout};
 use tricerules_proto::ruled::v1 as rv1;
@@ -37,6 +38,23 @@ const MAX_HAND_SIZE: usize = 7;
 /// A malformed or future policy must never make one command spin forever. Reaching the cap leaves
 /// the engine at its current valid priority window and publishes that settled state.
 const MAX_AUTOMATIC_PRIORITY_PASSES: usize = 128;
+
+#[derive(Clone, Copy)]
+struct AmountContext {
+    controller: PlayerId,
+    source_object_id: ObjectId,
+    chosen_x: u32,
+}
+
+impl AmountContext {
+    fn for_stack_item(item: &StackItem, controller: PlayerId) -> Self {
+        Self {
+            controller,
+            source_object_id: item.source_permanent_id.unwrap_or(item.id),
+            chosen_x: item.chosen_x,
+        }
+    }
+}
 
 mod casting;
 mod characteristics;

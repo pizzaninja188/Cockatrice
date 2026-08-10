@@ -1,5 +1,9 @@
 use super::*;
 
+fn clamp_public_count(count: usize) -> u32 {
+    u32::try_from(count).unwrap_or(u32::MAX)
+}
+
 impl GameEngine {
     /// Record a committed simultaneous event set. This is deliberately separate from trigger
     /// matching: transactional cast/activation checks may collect prospective triggers, but turn
@@ -42,21 +46,47 @@ impl GameEngine {
         }
     }
 
-    pub(super) fn resolve_amount(&self, amount: Amount, chosen_x: u32) -> u32 {
+    pub(super) fn resolve_amount(&self, amount: &Amount, context: AmountContext) -> u32 {
         match amount {
-            Amount::Fixed(value) => value,
-            Amount::X => chosen_x,
+            Amount::Fixed(value) => *value,
+            Amount::X => context.chosen_x,
             Amount::Conditional {
                 condition,
                 when_true,
                 otherwise,
             } => {
-                if self.condition_holds(condition) {
-                    when_true
+                if self.condition_holds(*condition) {
+                    *when_true
                 } else {
-                    otherwise
+                    *otherwise
                 }
             }
+            Amount::Count(CountExpression::BattlefieldCreatures { filter }) => {
+                let count = super::resolution::snapshot_anthem_scope(
+                    self,
+                    filter,
+                    context.controller,
+                    context.source_object_id,
+                )
+                .len();
+                clamp_public_count(count)
+            }
+            Amount::Count(CountExpression::CreatureDeathsThisTurn) => {
+                self.state.turn_history.current.creatures_died
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::clamp_public_count;
+
+    #[test]
+    fn public_counts_saturate_at_the_wire_sized_amount_limit() {
+        assert_eq!(clamp_public_count(7), 7);
+        if usize::BITS > u32::BITS {
+            assert_eq!(clamp_public_count(usize::MAX), u32::MAX);
         }
     }
 }

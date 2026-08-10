@@ -23,8 +23,12 @@ mod custom_resolution;
 mod damage_prevention;
 #[path = "scenario/dev_commands.rs"]
 mod dev_commands;
+#[path = "scenario/dynamic_amounts.rs"]
+mod dynamic_amounts;
 #[path = "scenario/enters_tapped.rs"]
 mod enters_tapped;
+#[path = "scenario/enters_with_counters.rs"]
+mod enters_with_counters;
 #[path = "scenario/equipment.rs"]
 mod equipment;
 #[path = "scenario/helpers.rs"]

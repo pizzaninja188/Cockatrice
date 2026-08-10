@@ -4,6 +4,18 @@ use super::events::{ev_log, finish_with_events};
 use super::resolution::{move_object_to_zone, permanent_moved_event};
 use super::*;
 
+fn accumulate_entry_counters(
+    counters: &mut BTreeMap<CounterKind, u32>,
+    counter: CounterKind,
+    count: u32,
+) {
+    if count == 0 {
+        return;
+    }
+    let total = counters.entry(counter).or_insert(0);
+    *total = total.saturating_add(count);
+}
+
 /// The event domain currently parked behind the one shared CR 616 choice channel.
 #[derive(Debug, Clone)]
 pub(crate) enum PendingReplacementEvent {
@@ -21,10 +33,6 @@ impl GameEngine {
         &self,
         event: &BattlefieldEntryEvent,
     ) -> Vec<(EntryReplacementEffectId, ReplacementPriority, String)> {
-        if event.tapped {
-            return Vec::new();
-        }
-
         let Some(entering) = self.state.objects.get(&event.object_id) else {
             return Vec::new();
         };
@@ -35,23 +43,24 @@ impl GameEngine {
             .and_then(|definition| definition.face(event.face_index))
         {
             for (ability_index, ability) in face.static_abilities.iter().enumerate() {
-                if matches!(
-                    ability,
+                let label = match ability {
                     StaticAbilityDef::EntersTapped {
-                        affected: EntersTappedAffected::Self_
+                        affected: EntersTappedAffected::Self_,
+                    } if !event.tapped => Some(format!("{} — enters tapped", face.name)),
+                    StaticAbilityDef::EntersWithCounters { .. } => {
+                        Some(format!("{} — enters with counters", face.name))
                     }
-                ) {
-                    let effect_id = EntryReplacementEffectId::Intrinsic {
-                        object_id: event.object_id,
-                        ability_index,
-                    };
-                    if !event.applied_effects.contains(&effect_id) {
-                        candidates.push((
-                            effect_id,
-                            ReplacementPriority::Other,
-                            format!("{} — enters tapped", face.name),
-                        ));
-                    }
+                    _ => None,
+                };
+                let Some(label) = label else {
+                    continue;
+                };
+                let effect_id = EntryReplacementEffectId::Intrinsic {
+                    object_id: event.object_id,
+                    ability_index,
+                };
+                if !event.applied_effects.contains(&effect_id) {
+                    candidates.push((effect_id, ReplacementPriority::Other, label));
                 }
             }
         }
@@ -77,7 +86,8 @@ impl GameEngine {
                     StaticAbilityDef::EntersTapped {
                         affected: EntersTappedAffected::Permanents
                     }
-                ) {
+                ) && !event.tapped
+                {
                     let effect_id = EntryReplacementEffectId::Battlefield {
                         source_id: source.id,
                         source_generation: self
@@ -112,10 +122,43 @@ impl GameEngine {
     }
 
     fn apply_entry_replacement(
+        &self,
         event: &mut BattlefieldEntryEvent,
         effect_id: EntryReplacementEffectId,
     ) {
-        event.tapped = true;
+        match &effect_id {
+            EntryReplacementEffectId::Intrinsic {
+                object_id,
+                ability_index,
+            } => {
+                debug_assert_eq!(*object_id, event.object_id);
+                let ability = self
+                    .state
+                    .objects
+                    .get(object_id)
+                    .and_then(|object| self.registry.get(&object.card_id))
+                    .and_then(|definition| definition.face(event.face_index))
+                    .and_then(|face| face.static_abilities.get(*ability_index));
+                match ability {
+                    Some(StaticAbilityDef::EntersTapped {
+                        affected: EntersTappedAffected::Self_,
+                    }) => event.tapped = true,
+                    Some(StaticAbilityDef::EntersWithCounters { counter, amount }) => {
+                        let count = self.resolve_amount(
+                            amount,
+                            AmountContext {
+                                controller: event.destination_controller,
+                                source_object_id: event.object_id,
+                                chosen_x: event.chosen_x,
+                            },
+                        );
+                        accumulate_entry_counters(&mut event.entry_counters, *counter, count);
+                    }
+                    _ => debug_assert!(false, "stale intrinsic entry replacement"),
+                }
+            }
+            EntryReplacementEffectId::Battlefield { .. } => event.tapped = true,
+        }
         event.applied_effects.push(effect_id);
     }
 
@@ -141,7 +184,7 @@ impl GameEngine {
             match candidates.as_slice() {
                 [] => return BattlefieldEntryProgress::Ready(event),
                 [(effect_id, _, _)] => {
-                    Self::apply_entry_replacement(&mut event, effect_id.clone());
+                    self.apply_entry_replacement(&mut event, effect_id.clone());
                 }
                 _ => {
                     let mut applications = Vec::new();
@@ -246,6 +289,7 @@ impl GameEngine {
         if let Some(object) = self.state.objects.get_mut(&event.object_id) {
             object.face_up_index = event.face_index;
             object.tapped = event.tapped;
+            object.counters = event.entry_counters;
             object.attached_to = attached_to;
         }
         Ok(())
@@ -380,7 +424,7 @@ impl GameEngine {
             return Err(EngineError::Illegal("replacement application is stale"));
         };
 
-        Self::apply_entry_replacement(&mut entry.event, application.effect_id);
+        self.apply_entry_replacement(&mut entry.event, application.effect_id);
         let mut events = Vec::new();
         let event = match self.advance_or_park_battlefield_entry(
             pending.item.clone(),
@@ -470,5 +514,21 @@ impl GameEngine {
                 Ok(finish_with_events(self, events))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn entry_counter_accumulation_saturates_and_omits_zero_entries() {
+        let mut counters = BTreeMap::new();
+        accumulate_entry_counters(&mut counters, CounterKind::PlusOnePlusOne, 0);
+        assert!(counters.is_empty());
+
+        accumulate_entry_counters(&mut counters, CounterKind::PlusOnePlusOne, u32::MAX - 1);
+        accumulate_entry_counters(&mut counters, CounterKind::PlusOnePlusOne, 4);
+        assert_eq!(counters[&CounterKind::PlusOnePlusOne], u32::MAX);
     }
 }

@@ -225,6 +225,14 @@ impl CardRegistry {
                 }
                 let attachment_source = face.is_aura || face.types.iter().any(|t| t == "Equipment");
                 for ability in &face.static_abilities {
+                    if let StaticAbilityDef::EntersWithCounters { amount, .. } = ability {
+                        amount
+                            .validate()
+                            .map_err(|reason| RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason,
+                            })?;
+                    }
                     if let StaticAbilityDef::AttachedModifier {
                         delta_power,
                         delta_toughness,
@@ -412,8 +420,8 @@ include!(concat!(env!("OUT_DIR"), "/embedded_cards.rs"));
 mod tests {
     use super::*;
     use crate::primitives::{
-        Amount, EntersTappedAffected, SpellEffectKind, StaticAbilityDef, TargetFilter, TargetKind,
-        TriggerCondition,
+        Amount, AnthemController, AnthemFilter, CountExpression, CounterKind, EntersTappedAffected,
+        SpellEffectKind, StaticAbilityDef, TargetFilter, TargetKind, TriggerCondition,
     };
 
     #[test]
@@ -1047,6 +1055,50 @@ mod tests {
                 affected: EntersTappedAffected::Permanents
             }
         )));
+    }
+
+    #[test]
+    fn issue_51_dynamic_entry_counter_cards_share_the_amount_vocabulary() {
+        let reg = CardRegistry::from_embedded().unwrap();
+        let controlled_creatures = Amount::Count(CountExpression::BattlefieldCreatures {
+            filter: AnthemFilter {
+                controller: Some(AnthemController::YouControl),
+                ..Default::default()
+            },
+        });
+
+        let entry_amount = |id: &str| {
+            reg.get(id)
+                .unwrap()
+                .primary_face()
+                .static_abilities
+                .iter()
+                .find_map(|ability| match ability {
+                    StaticAbilityDef::EntersWithCounters { counter, amount }
+                        if *counter == CounterKind::PlusOnePlusOne =>
+                    {
+                        Some(amount.clone())
+                    }
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("{id} lacks its entry-counter ability"))
+        };
+
+        assert_eq!(entry_amount("endless_one"), Amount::X);
+        assert_eq!(entry_amount("squad_captain"), controlled_creatures);
+        assert_eq!(
+            entry_amount("bloodcrazed_paladin"),
+            Amount::Count(CountExpression::CreatureDeathsThisTurn)
+        );
+
+        let priest = reg.get("dwarven_priest").unwrap().primary_face();
+        assert!(priest.triggered_abilities.iter().any(|ability| {
+            ability.trigger == TriggerCondition::WhenSelfEntersBattlefield
+                && ability.effect
+                    == [SpellEffectKind::GainLife {
+                        amount: controlled_creatures.clone(),
+                    }]
+        }));
     }
 
     #[test]
