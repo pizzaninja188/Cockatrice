@@ -12,9 +12,9 @@ pub use mana::{ColorPip, ManaCost, ManaSymbol};
 pub use primitives::{
     AbilityCost, ActivatedAbilityDef, ActivationCondition, ActivationTiming, Amount,
     BattlefieldCreatureCountFilter, CastTriggerPlayer, Color, ContinuousEffectKind,
-    CountExpression, CounterKind, EffectContext, EffectDuration, Evasion, GameCondition, Keyword,
-    ManaAmount, PermanentTypeFilter, PtScale, RelativePlayerSet, TokenController, TriggerCondition,
-    TriggeredAbilityDef,
+    ControllerReference, CountExpression, CounterKind, EffectContext, EffectDuration, Evasion,
+    GameCondition, Keyword, ManaAmount, PermanentTypeFilter, PtScale, RelativePlayerSet,
+    TokenController, TriggerCondition, TriggeredAbilityDef,
 };
 pub use registry::CardRegistry;
 pub use slug::slugify;

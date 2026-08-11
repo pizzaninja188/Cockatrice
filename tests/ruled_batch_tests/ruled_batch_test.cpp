@@ -1083,6 +1083,102 @@ TEST_F(RuledBatchTest, ForeignControlledPermanentIsAnnotatedWithItsOwner)
         << "annotation was: " << bear->getAnnotation().toStdString();
 }
 
+TEST_F(RuledBatchTest, FullSnapshotMovesControlledPermanentBetweenPlayerTablesWithoutChangingIdentity)
+{
+    Server_Card *bear = addCardToTable(p1, "Grizzly Bears");
+
+    {
+        ruled::v1::IpcResponse seed;
+        seed.set_ok(true);
+        auto *zoneView = seed.mutable_batch()->add_events()->mutable_zone_view();
+        *zoneView->add_per_player() = buildPerPlayerView(p1, {904u}, {false});
+        *zoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+        callBatchApply(seed);
+    }
+    ASSERT_EQ(findCardByEngineOid(p1, 904u), bear);
+
+    {
+        ruled::v1::IpcResponse stolen;
+        stolen.set_ok(true);
+        auto *zoneView = stolen.mutable_batch()->add_events()->mutable_zone_view();
+        auto *p1View = zoneView->add_per_player();
+        p1View->set_player_id(p1->getPlayerId());
+        auto *p2View = zoneView->add_per_player();
+        p2View->set_player_id(p2->getPlayerId());
+        auto *object = p2View->add_battlefield_objects();
+        object->set_object_id(904u);
+        object->set_card_id("grizzly_bears");
+        object->set_owner_player_id(p1->getPlayerId());
+        callBatchApply(stolen);
+    }
+
+    ASSERT_EQ(findCardByEngineOid(p2, 904u), bear);
+    ASSERT_NE(bear->getZone(), nullptr);
+    EXPECT_EQ(bear->getZone()->getPlayer(), p2);
+    EXPECT_TRUE(bear->getAnnotation().contains(QStringLiteral("Owner: ")));
+
+    {
+        ruled::v1::IpcResponse restored;
+        restored.set_ok(true);
+        auto *zoneView = restored.mutable_batch()->add_events()->mutable_zone_view();
+        auto *p1View = zoneView->add_per_player();
+        p1View->set_player_id(p1->getPlayerId());
+        auto *object = p1View->add_battlefield_objects();
+        object->set_object_id(904u);
+        object->set_card_id("grizzly_bears");
+        object->set_owner_player_id(p1->getPlayerId());
+        auto *p2View = zoneView->add_per_player();
+        p2View->set_player_id(p2->getPlayerId());
+        callBatchApply(restored);
+    }
+
+    EXPECT_EQ(findCardByEngineOid(p1, 904u), bear);
+    EXPECT_EQ(bear->getZone()->getPlayer(), p1);
+    EXPECT_FALSE(bear->getAnnotation().contains(QStringLiteral("Owner: ")));
+}
+
+TEST_F(RuledBatchTest, ControlTransferRestoresAttachmentAcrossPlayerTables)
+{
+    Server_Card *bear = addCardToTable(p1, "Grizzly Bears");
+    Server_Card *aura = addCardToTable(p1, "Timber Wolves");
+
+    {
+        ruled::v1::IpcResponse seed;
+        seed.set_ok(true);
+        auto *zoneView = seed.mutable_batch()->add_events()->mutable_zone_view();
+        auto p1View = buildPerPlayerView(p1, {905u, 906u}, {false, false});
+        p1View.mutable_battlefield_objects(1)->set_attached_to_oid(905u);
+        *zoneView->add_per_player() = p1View;
+        *zoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+        callBatchApply(seed);
+    }
+    ASSERT_EQ(aura->getParentCard(), bear);
+
+    ruled::v1::IpcResponse stolen;
+    stolen.set_ok(true);
+    auto *zoneView = stolen.mutable_batch()->add_events()->mutable_zone_view();
+    auto *p1View = zoneView->add_per_player();
+    p1View->set_player_id(p1->getPlayerId());
+    auto *auraObject = p1View->add_battlefield_objects();
+    auraObject->set_object_id(906u);
+    auraObject->set_card_id("timber_wolves");
+    auraObject->set_owner_player_id(p1->getPlayerId());
+    auraObject->set_attached_to_oid(905u);
+    auto *p2View = zoneView->add_per_player();
+    p2View->set_player_id(p2->getPlayerId());
+    auto *bearObject = p2View->add_battlefield_objects();
+    bearObject->set_object_id(905u);
+    bearObject->set_card_id("grizzly_bears");
+    bearObject->set_owner_player_id(p1->getPlayerId());
+    callBatchApply(stolen);
+
+    EXPECT_EQ(findCardByEngineOid(p1, 906u), aura);
+    EXPECT_EQ(findCardByEngineOid(p2, 905u), bear);
+    EXPECT_EQ(aura->getZone()->getPlayer(), p1);
+    EXPECT_EQ(bear->getZone()->getPlayer(), p2);
+    EXPECT_EQ(aura->getParentCard(), bear);
+}
+
 // Ability labels are attached to the physical card bound to the engine OID, coexist with other
 // annotation text, and are removed on the next authoritative sync or zone transition.
 TEST_F(RuledBatchTest, GrantedAbilitiesAnnotateOnlyTheBoundBattlefieldCardAndClearCleanly)

@@ -533,7 +533,8 @@ rename, not a redesign.
 ### Step 10 — Characteristics pipeline + `continuous.rs` split (with or right after 9a; strictly before any clone / control-change / type-change card)
 
 > **Layer-2 slot filled 2026-07-29 (entry-time control only), by issue #20 / Reanimate.**
-> `GameObject::controller` is now the CR 110.2 base value that `characteristics()` reads, and the
+> `GameObject::base_controller` is the CR 110.2 entry-time value that `characteristics()` reads,
+> while `GameObject::controller` materializes the derived current value. The
 > per-player `battlefield` list became the control index (invariant asserted in `apply_sbas`). The
 > sweep converted every `owner`-means-controller read — combat attack/block legality and lifelink
 > attribution, trigger controllers and APNAP ordering, `emit_static_abilities_on_enter`'s anthem
@@ -542,15 +543,17 @@ rename, not a redesign.
 > the relay, which moves the physical card to the controller's table and annotates it
 > `Owner: <name>`.
 >
-> **Still deferred:** layer-2 *continuous* control-change effects (Mind Control, Threaten,
-> Confiscate). `apply_layer_2_control` remains an empty stub and documents the two traps its first
-> implementation faces: it cannot use `ordered_effects` (circular via `pre_layer_6.controller` —
-> CR 613.8), and once the derived controller can diverge from the field, the battlefield lists stop
-> being a valid control index and need rebuilding. **Trigger: the first control-change card.**
+> **Layer-2 continuous control completed 2026-08-11, by issue #37.** `base_controller` preserves
+> the entry-time value while `controller` materializes the current layer-2 result. Fixed-player and
+> source-controller effects cover Act of Treason / Threaten and Mind Control / Confiscate;
+> source-controller dependencies resolve before stable timestamp order. The SBA boundary rebuilds
+> the battlefield control index, applies summoning sickness, removes transitioned permanents from
+> combat, and rechecks Aura/Equipment legality. Servatrice moves the same physical card between
+> controller TABLE zones and restores cross-player attachments from the authoritative zone view.
 
 > **Completed 2026-07-26.** `GameEngine::characteristics(oid)` now returns one owned
 > `Characteristics` snapshot for controller, types/supertypes, colors, keywords, and P/T through
-> explicit CR 613 layer slots. Layers 1–5 and the not-yet-needed layer-7 sublayers are named
+> explicit CR 613 layer slots. The then-unused early layers and layer-7 sublayers were named
 > identity stages; layer 6 keyword grants and layer 7c/7d modifiers/counters moved into the
 > pipeline in timestamp order. The ordered-effect boundary is the documented insertion point for
 > deferred CR 613.8 dependency ordering, and the pure state/registry calculation is ready for
@@ -569,12 +572,11 @@ timestamps, layers 6/7c/7d apply in explicit order, a CR 704.4 fixed-point SBA l
 per-rule passes (704.5f/g/h/j/m/p), and prevention shields (CR 614.1a) and regeneration are
 modeled. The gaps are the ones that turn into rewrites if retrofitted late:
 
-- No single characteristics pipeline — P/T and keyword queries are separate helpers
-  (`effective_power/toughness`, `has_keyword`), each re-walking effects.
-- Layers 1–5 (copy, control-change, text-change, type-change, color-change) absent.
-- No CR 613.8 dependency ordering or CR 613.3 CDA handling.
+- Layers 3–5 (text-change, type-change, color-change) remain identity stages.
+- Generic CR 613.8 dependency ordering outside the shipped source-controller layer-2 dependency
+  and CR 613.3 CDA handling remain deferred.
 
-**Act now:** introduce one entry point `characteristics(oid) -> Characteristics` computing all
+**Historical action (completed):** introduce one entry point `characteristics(oid) -> Characteristics` computing all
 derived characteristics through an explicit ordered layer pipeline — layers 1–5 as identity
 functions today, layers 6/7 moved in from the existing helpers — and make it the **only** way
 engine code reads derived P/T/types/colors/keywords. Build it memoization-friendly (this is

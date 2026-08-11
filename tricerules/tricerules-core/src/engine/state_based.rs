@@ -64,7 +64,7 @@ impl GameEngine {
         &mut self,
         out: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
-        let mut changed = false;
+        let mut changed = self.reindex_battlefield_control(out);
         let mut dies = Vec::new();
         // CR 122.3: counter annihilation (+1/+1 and -1/-1 pairs cancel).
         for o in self.state.objects.values_mut() {
@@ -202,7 +202,7 @@ impl GameEngine {
             self.fire_triggers(&trigger_events);
         }
 
-        // CR 704.5p: Equipment attached to an illegal permanent becomes unattached but remains on
+        // CR 704.5n: Equipment attached to an illegal permanent becomes unattached but remains on
         // the battlefield. Use derived characteristics so future type-changing effects feed the
         // same SBA rather than teaching attachment state about those effects.
         let equipment_to_unattach: Vec<ObjectId> = self
@@ -328,6 +328,97 @@ impl GameEngine {
             changed = true;
         }
         Ok(changed)
+    }
+
+    /// Materialize CR 613 layer-2 control into the battlefield control index. Characteristics
+    /// remain the authority; `GameObject::controller` is the settled cache used by hot paths.
+    pub(super) fn reindex_battlefield_control(&mut self, out: &mut Vec<rv1::RuledEvent>) -> bool {
+        let mut ordered = Vec::new();
+        for player in &self.state.players {
+            for &oid in &player.battlefield {
+                if !ordered.contains(&oid) {
+                    ordered.push(oid);
+                }
+            }
+        }
+        let mut missing: Vec<_> = self
+            .state
+            .objects
+            .iter()
+            .filter(|(oid, object)| object.zone == Zone::Battlefield && !ordered.contains(oid))
+            .map(|(oid, _)| *oid)
+            .collect();
+        missing.sort_unstable();
+        ordered.extend(missing);
+
+        let desired: Vec<_> = ordered
+            .iter()
+            .filter_map(|&oid| {
+                self.state
+                    .objects
+                    .get(&oid)
+                    .filter(|object| object.zone == Zone::Battlefield)
+                    .and_then(|_| {
+                        self.characteristics(oid)
+                            .map(|value| (oid, value.controller))
+                    })
+            })
+            .collect();
+        let mut changed_ids = Vec::new();
+        for &(oid, controller) in &desired {
+            if self.state.player_idx(controller).is_none() {
+                continue;
+            }
+            if let Some(object) = self.state.objects.get_mut(&oid) {
+                if object.controller != controller {
+                    object.controller = controller;
+                    object.summoning_sick = true;
+                    changed_ids.push(oid);
+                }
+            }
+        }
+        if changed_ids.is_empty() {
+            return false;
+        }
+
+        for player in &mut self.state.players {
+            player.battlefield.clear();
+        }
+        for (oid, controller) in desired {
+            if let Some(index) = self.state.player_idx(controller) {
+                self.state.players[index].battlefield.push(oid);
+            }
+        }
+
+        if let Some(combat) = self.state.combat.as_mut() {
+            let mut removed = Vec::new();
+            for &oid in &changed_ids {
+                let was_in_combat = combat.attacking.contains(&oid)
+                    || combat.blockers.contains_key(&oid)
+                    || combat
+                        .blockers
+                        .values()
+                        .any(|blockers| blockers.contains(&oid));
+                combat.attacking.retain(|&candidate| candidate != oid);
+                combat.blockers.remove(&oid);
+                for blockers in combat.blockers.values_mut() {
+                    blockers.retain(|&candidate| candidate != oid);
+                }
+                if was_in_combat {
+                    removed.push(oid);
+                }
+            }
+            if !removed.is_empty() {
+                out.push(rv1::RuledEvent {
+                    ev: Some(rv1::ruled_event::Ev::RemovedFromCombat(
+                        rv1::CreaturesRemovedFromCombat {
+                            object_ids: removed,
+                        },
+                    )),
+                });
+            }
+        }
+        true
     }
 
     /// CR 704.5j: if a player controls two or more legendary permanents with the same name,
@@ -465,6 +556,7 @@ mod sba_tests {
             GameObject {
                 id,
                 owner,
+                base_controller: owner,
                 controller: owner,
                 card_id: "walking_corpse".to_string(),
                 copiable_values: None,
@@ -537,6 +629,75 @@ mod sba_tests {
         });
         move_object_to_zone(&mut e.state, e.registry, src, Zone::Graveyard, None).unwrap();
         assert_eq!(e.effective_toughness(target), Some(3)); // still buffed
+    }
+
+    #[test]
+    fn continuous_control_reindexes_the_battlefield_and_marks_the_permanent_sick() {
+        let mut e = engine();
+        let target = add_creature(&mut e, 0, 2, 0);
+        e.state.continuous_effects.push(ContinuousEffect {
+            source_id: None,
+            affected: AffectedScope::Single(target),
+            kind: ContinuousEffectKind::Layer2Control {
+                controller: ControllerReference::Fixed(1),
+            },
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 1,
+        });
+
+        let mut out = vec![];
+        e.apply_sbas(&mut out).expect("state-based actions");
+
+        let object = e.state.objects.get(&target).expect("target");
+        assert_eq!(object.base_controller, 0);
+        assert_eq!(object.controller, 1);
+        assert!(object.summoning_sick);
+        assert!(!e.state.players[0].battlefield.contains(&target));
+        assert!(e.state.players[1].battlefield.contains(&target));
+    }
+
+    #[test]
+    fn control_change_removes_the_permanent_from_combat() {
+        let mut e = engine();
+        let target = add_creature(&mut e, 0, 2, 0);
+        e.state.combat = Some(CombatState {
+            attacking: vec![target],
+            blockers: HashMap::new(),
+            damage_assignments: HashMap::new(),
+            trample_player_damage: HashMap::new(),
+            damage_assignment_needed: false,
+            attackers_declared: true,
+            blockers_declared: false,
+            assign_combat_damage_phase: false,
+            first_strike_attackers: vec![],
+            first_strike_blockers: HashMap::new(),
+            first_strike_damage_done: false,
+        });
+        e.state.continuous_effects.push(ContinuousEffect {
+            source_id: None,
+            affected: AffectedScope::Single(target),
+            kind: ContinuousEffectKind::Layer2Control {
+                controller: ControllerReference::Fixed(1),
+            },
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 1,
+        });
+
+        let mut out = vec![];
+        e.apply_sbas(&mut out).expect("state-based actions");
+
+        assert!(!e
+            .state
+            .combat
+            .as_ref()
+            .expect("combat")
+            .attacking
+            .contains(&target));
+        assert!(out.iter().any(|event| matches!(
+            &event.ev,
+            Some(rv1::ruled_event::Ev::RemovedFromCombat(removed))
+                if removed.object_ids == [target]
+        )));
     }
 
     #[test]

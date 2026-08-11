@@ -651,6 +651,7 @@ fn haste_creature_can_attack_same_turn_it_enters() {
         tricerules_core::state::GameObject {
             id: goblin,
             owner: pid,
+            base_controller: pid,
             controller: pid,
             card_id: "raging_goblin".to_string(),
             copiable_values: None,
@@ -698,6 +699,7 @@ fn non_haste_summoning_sick_creature_cannot_attack() {
         tricerules_core::state::GameObject {
             id: bears,
             owner: pid,
+            base_controller: pid,
             controller: pid,
             card_id: "grizzly_bears".to_string(),
             copiable_values: None,

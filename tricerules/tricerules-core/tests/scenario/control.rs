@@ -10,6 +10,7 @@
 //! exercise static abilities (`emit_static_abilities_on_enter`) under a changed controller.
 
 use crate::helpers::*;
+use tricerules_core::Zone;
 
 /// CR 506.2: a creature is declared as an attacker by the player who controls it. The owner has
 /// no say — the creature is not even on their battlefield list.
@@ -421,4 +422,392 @@ fn reanimate_cannot_target_a_noncreature_card() {
         .is_err(),
         "an enchantment in a graveyard is not a legal Reanimate target"
     );
+}
+
+#[test]
+fn mind_control_tracks_its_auras_controller_and_restores_control_when_bounced() {
+    let decks = Some(vec![
+        deck_with("island", &["mind_control"]),
+        deck_with("island", &["boomerang"]),
+    ]);
+    let mut e = GameEngine::new(4200, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let bear = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    relocate_to_hand(&mut e, 0, "mind_control");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            u: 5,
+            ..Default::default()
+        },
+    );
+    let mind_control = hand_index_for_card(&e, 0, "mind_control");
+    e.apply_command(
+        0,
+        &cast_spell(
+            mind_control,
+            vec![tricerules_proto::ruled::v1::TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast Mind Control");
+    resolve_entire_stack_two_player(&mut e);
+
+    let aura = battlefield_object_for_card(&e, 0, "mind_control");
+    assert_eq!(e.state.objects[&aura].attached_to, Some(bear));
+    assert_eq!(e.state.objects[&bear].owner, 1);
+    assert_eq!(e.state.objects[&bear].base_controller, 1);
+    assert_eq!(e.state.objects[&bear].controller, 0);
+    assert!(e.state.players[0].battlefield.contains(&bear));
+
+    relocate_to_hand(&mut e, 1, "boomerang");
+    give_mana(
+        &mut e,
+        1,
+        ManaGift {
+            u: 2,
+            ..Default::default()
+        },
+    );
+    e.apply_command(0, &pass()).expect("active player passes");
+    let boomerang = hand_index_for_card(&e, 1, "boomerang");
+    e.apply_command(
+        1,
+        &cast_spell(
+            boomerang,
+            vec![tricerules_proto::ruled::v1::TargetRef {
+                object_id: aura,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast Boomerang");
+    resolve_entire_stack_two_player(&mut e);
+
+    assert_eq!(e.state.objects[&aura].zone, Zone::Hand);
+    assert_eq!(e.state.objects[&bear].controller, 1);
+    assert!(e.state.players[1].battlefield.contains(&bear));
+}
+
+#[test]
+fn act_of_treason_untaps_grants_haste_and_returns_control_at_cleanup() {
+    let decks = Some(vec![
+        deck_with("mountain", &["act_of_treason"]),
+        island_only_deck(),
+    ]);
+    let mut e = GameEngine::new(4201, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let bear = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    e.state.objects.get_mut(&bear).expect("bear").tapped = true;
+    relocate_to_hand(&mut e, 0, "act_of_treason");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 3,
+            ..Default::default()
+        },
+    );
+    let act = hand_index_for_card(&e, 0, "act_of_treason");
+    e.apply_command(
+        0,
+        &cast_spell(
+            act,
+            vec![tricerules_proto::ruled::v1::TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast Act of Treason");
+    resolve_entire_stack_two_player(&mut e);
+
+    assert_eq!(e.state.objects[&bear].controller, 0);
+    assert!(!e.state.objects[&bear].tapped);
+    assert!(e.effective_has_keyword(bear, tricerules_cards::Keyword::Haste));
+
+    end_active_turn(&mut e, 0);
+    assert_eq!(e.state.objects[&bear].controller, 1);
+    assert!(
+        !e.state.objects[&bear].summoning_sick,
+        "control returns before P1's untap, which immediately clears sickness"
+    );
+    assert!(!e.effective_has_keyword(bear, tricerules_cards::Keyword::Haste));
+}
+
+#[test]
+fn stolen_static_ability_serves_the_current_controller() {
+    let decks = Some(vec![
+        deck_with("plains", &["captain_of_the_watch"]),
+        deck_with("mountain", &["act_of_treason"]),
+    ]);
+    let mut e = GameEngine::new(4205, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let p0_soldier = inject_creature_on_battlefield(&mut e, 0, "fencing_ace");
+    let p1_soldier = inject_creature_on_battlefield(&mut e, 1, "fencing_ace");
+    for oid in [p0_soldier, p1_soldier] {
+        let object = e.state.objects.get_mut(&oid).expect("soldier");
+        object.power = None;
+        object.toughness = None;
+    }
+    let base_power = e.effective_power(p0_soldier).expect("power");
+
+    relocate_to_hand(&mut e, 0, "captain_of_the_watch");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            w: 3,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    let captain_index = hand_index_for_card(&e, 0, "captain_of_the_watch");
+    e.apply_command(0, &cast_spell(captain_index, vec![]))
+        .expect("cast Captain of the Watch");
+    resolve_entire_stack_two_player(&mut e);
+    let captain = battlefield_object_for_card(&e, 0, "captain_of_the_watch");
+    assert_eq!(e.effective_power(p0_soldier), Some(base_power + 1));
+    assert_eq!(e.effective_power(p1_soldier), Some(base_power));
+
+    end_active_turn(&mut e, 0);
+    pass_both_players(&mut e);
+    pass_both_players(&mut e);
+    relocate_to_hand(&mut e, 1, "act_of_treason");
+    give_mana(
+        &mut e,
+        1,
+        ManaGift {
+            r: 3,
+            ..Default::default()
+        },
+    );
+    let act = hand_index_for_card(&e, 1, "act_of_treason");
+    e.apply_command(
+        1,
+        &cast_spell(
+            act,
+            vec![tricerules_proto::ruled::v1::TargetRef {
+                object_id: captain,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast Act of Treason");
+    resolve_entire_stack_two_player(&mut e);
+
+    assert_eq!(e.state.objects[&captain].controller, 1);
+    assert_eq!(e.effective_power(p0_soldier), Some(base_power));
+    assert_eq!(e.effective_power(p1_soldier), Some(base_power + 1));
+}
+
+#[test]
+fn controller_restricted_aura_goes_to_graveyard_when_creature_is_stolen() {
+    let decks = Some(vec![
+        deck_with("island", &["cartouche_of_knowledge"]),
+        deck_with("mountain", &["act_of_treason"]),
+    ]);
+    let mut e = GameEngine::new(4202, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    relocate_to_hand(&mut e, 0, "cartouche_of_knowledge");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            u: 2,
+            ..Default::default()
+        },
+    );
+    let cartouche = hand_index_for_card(&e, 0, "cartouche_of_knowledge");
+    e.apply_command(
+        0,
+        &cast_spell(
+            cartouche,
+            vec![tricerules_proto::ruled::v1::TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast Cartouche");
+    resolve_entire_stack_two_player(&mut e);
+    let aura = battlefield_object_for_card(&e, 0, "cartouche_of_knowledge");
+    assert_eq!(e.state.objects[&aura].attached_to, Some(bear));
+
+    end_active_turn(&mut e, 0);
+    pass_both_players(&mut e); // upkeep -> draw
+    pass_both_players(&mut e); // draw -> main1
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main1);
+    relocate_to_hand(&mut e, 1, "act_of_treason");
+    give_mana(
+        &mut e,
+        1,
+        ManaGift {
+            r: 3,
+            ..Default::default()
+        },
+    );
+    let act = hand_index_for_card(&e, 1, "act_of_treason");
+    e.apply_command(
+        1,
+        &cast_spell(
+            act,
+            vec![tricerules_proto::ruled::v1::TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast Act of Treason");
+    resolve_entire_stack_two_player(&mut e);
+
+    assert_eq!(e.state.objects[&bear].controller, 1);
+    assert_eq!(e.state.objects[&aura].zone, Zone::Graveyard);
+    assert!(e.state.players[0].graveyard.contains(&aura));
+}
+
+#[test]
+fn unrestricted_aura_stays_attached_when_creature_is_stolen() {
+    let decks = Some(vec![
+        deck_with("island", &["flight"]),
+        deck_with("mountain", &["act_of_treason"]),
+    ]);
+    let mut e = GameEngine::new(4203, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    relocate_to_hand(&mut e, 0, "flight");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    let flight = hand_index_for_card(&e, 0, "flight");
+    e.apply_command(
+        0,
+        &cast_spell(
+            flight,
+            vec![tricerules_proto::ruled::v1::TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast Flight");
+    resolve_entire_stack_two_player(&mut e);
+    let aura = battlefield_object_for_card(&e, 0, "flight");
+
+    end_active_turn(&mut e, 0);
+    pass_both_players(&mut e);
+    pass_both_players(&mut e);
+    relocate_to_hand(&mut e, 1, "act_of_treason");
+    give_mana(
+        &mut e,
+        1,
+        ManaGift {
+            r: 3,
+            ..Default::default()
+        },
+    );
+    let act = hand_index_for_card(&e, 1, "act_of_treason");
+    e.apply_command(
+        1,
+        &cast_spell(
+            act,
+            vec![tricerules_proto::ruled::v1::TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast Act of Treason");
+    resolve_entire_stack_two_player(&mut e);
+
+    assert_eq!(e.state.objects[&bear].controller, 1);
+    assert_eq!(e.state.objects[&aura].zone, Zone::Battlefield);
+    assert_eq!(e.state.objects[&aura].attached_to, Some(bear));
+}
+
+#[test]
+fn equipment_stays_attached_when_equipped_creature_is_stolen() {
+    let decks = Some(vec![
+        deck_with("mountain", &["bonesplitter"]),
+        deck_with("mountain", &["act_of_treason"]),
+    ]);
+    let mut e = GameEngine::new(4204, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    relocate_to_hand(&mut e, 0, "bonesplitter");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let hand_index = hand_index_for_card(&e, 0, "bonesplitter");
+    e.apply_command(0, &cast_spell(hand_index, vec![]))
+        .expect("cast Bonesplitter");
+    resolve_entire_stack_two_player(&mut e);
+    let equipment = battlefield_object_for_card(&e, 0, "bonesplitter");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            c: 1,
+            ..Default::default()
+        },
+    );
+    e.apply_command(
+        0,
+        &activate_ability(
+            equipment,
+            0,
+            vec![tricerules_proto::ruled::v1::TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("equip Bonesplitter");
+    pass_both_players(&mut e);
+    assert_eq!(e.state.objects[&equipment].attached_to, Some(bear));
+
+    end_active_turn(&mut e, 0);
+    pass_both_players(&mut e);
+    pass_both_players(&mut e);
+    relocate_to_hand(&mut e, 1, "act_of_treason");
+    give_mana(
+        &mut e,
+        1,
+        ManaGift {
+            r: 3,
+            ..Default::default()
+        },
+    );
+    let act = hand_index_for_card(&e, 1, "act_of_treason");
+    e.apply_command(
+        1,
+        &cast_spell(
+            act,
+            vec![tricerules_proto::ruled::v1::TargetRef {
+                object_id: bear,
+                damage_amount: 0,
+            }],
+        ),
+    )
+    .expect("cast Act of Treason");
+    resolve_entire_stack_two_player(&mut e);
+
+    assert_eq!(e.state.objects[&bear].controller, 1);
+    assert_eq!(e.state.objects[&equipment].zone, Zone::Battlefield);
+    assert_eq!(e.state.objects[&equipment].controller, 0);
+    assert_eq!(e.state.objects[&equipment].attached_to, Some(bear));
 }

@@ -509,6 +509,12 @@ pub enum SpellEffectKind {
         #[serde(default = "TargetFilter::default_creature")]
         filter: TargetFilter,
     },
+    /// CR 611.2a / 613.1b: the resolving spell's controller gains control of target permanent
+    /// until cleanup. Act of Treason and Threaten compose this with Untap and GrantKeywords.
+    GainControlUntilEndOfTurn {
+        #[serde(default = "TargetFilter::default_creature")]
+        target: TargetFilter,
+    },
     /// CR 701.5: counter target spell on the stack. `spell_filter` narrows which spells are legal
     /// targets — `None` is unrestricted (Counterspell), `Some(Creature)` is Essence Scatter,
     /// `Some(Noncreature)` is Negate. Reuses [`CardTypeFilter`] so any future "counter target
@@ -853,6 +859,7 @@ impl SpellEffectKind {
             | SpellEffectKind::DamageTargets { target, .. }
             | SpellEffectKind::DestroyTarget { target }
             | SpellEffectKind::TapTarget { target }
+            | SpellEffectKind::GainControlUntilEndOfTurn { target }
             | SpellEffectKind::TargetPlayerGainsLife { target, .. }
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
             | SpellEffectKind::DrainTarget { target, .. }
@@ -992,6 +999,7 @@ impl SpellEffectKind {
             // CR 701.19/701.20: tapping and chosen-subject untapping act on permanents, never
             // players. A source subject is already constrained to a permanent ability above.
             SpellEffectKind::TapTarget { target }
+            | SpellEffectKind::GainControlUntilEndOfTurn { target }
             | SpellEffectKind::Untap {
                 subject: EffectSubject::Chosen(target),
             } => {
@@ -1204,8 +1212,20 @@ pub enum EffectDuration {
 }
 
 /// The kind of modification a continuous effect applies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ControllerReference {
+    /// A controller fixed when a resolving spell or ability creates the effect.
+    Fixed(i32),
+    /// The current layer-2 controller of the continuous effect's battlefield source.
+    SourceController,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ContinuousEffectKind {
+    /// CR 613.1b layer 2 — change control of the affected permanent.
+    Layer2Control {
+        controller: ControllerReference,
+    },
     /// CR 613 layer 7c — modifying effects (+N/+N, -N/-N).
     PtModify {
         delta_power: i32,

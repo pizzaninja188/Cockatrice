@@ -1040,6 +1040,77 @@ void RuledGameDriver::applyPermanentMoves(const ruled::v1::RuledEventBatch &batc
     }
 }
 
+// A full authoritative battlefield snapshot assigns each permanent to its current controller's
+// per-player view. When layer 2 changes control without changing zones, move the already-bound
+// physical card between those players' TABLE zones before either binding reconciles its list.
+// This preserves the Server_Card identity while letting the ordinary zone-view pass rebuild both
+// seats' oid maps against their new physical contents.
+void RuledGameDriver::applyBattlefieldControllerTransfers(const ruled::v1::ZoneViewSync &zoneView,
+                                                          RuledBatchApplyResult &result)
+{
+    if (zoneView.battlefields_unchanged()) {
+        return;
+    }
+
+    GameEventStorage moveGes;
+    bool moveGesHasEvents = false;
+    for (const auto &view : zoneView.per_player()) {
+        Server_AbstractPlayer *targetPlayer = game->getPlayer(view.player_id());
+        Server_CardZone *targetTable = targetPlayer ? targetPlayer->getZones().value(ZoneNames::TABLE) : nullptr;
+        if (!targetPlayer || !targetTable) {
+            continue;
+        }
+
+        for (const auto &object : view.battlefield_objects()) {
+            const quint32 oid = static_cast<quint32>(object.object_id());
+            Server_Card *card = findBattlefieldCardByEngineOid(oid, view.player_id());
+            if (!card || !card->getZone() || card->getZone()->getName() != ZoneNames::TABLE ||
+                !card->getZone()->getPlayer()) {
+                continue;
+            }
+            Server_CardZone *startTable = card->getZone();
+            Server_AbstractPlayer *mover = startTable->getPlayer();
+            if (mover == targetPlayer) {
+                continue;
+            }
+
+            // moveCard rejects an attached card moving onto a table. Temporarily clear every
+            // relationship touched by the transfer so the post-zone-view attachment pass emits
+            // fresh cross-player Event_AttachCard identities for both clients.
+            Server_Card *oldParent = card->getParentCard();
+            const QList<Server_Card *> oldChildren = card->getAttachedCards();
+            if (oldParent) {
+                card->setParentCard(nullptr);
+            }
+            for (Server_Card *child : oldChildren) {
+                child->setParentCard(nullptr);
+            }
+
+            const int y = card->getY();
+            const int x = targetTable->getFreeGridColumn(-1, y, card->getName(), y != 2);
+            CardToMove cardToMove;
+            cardToMove.set_card_id(card->getId());
+            if (!ruledApplyMove(mover, moveGes, startTable, targetTable, cardToMove, x, y,
+                                "battlefieldControllerChanged")) {
+                if (oldParent) {
+                    card->setParentCard(oldParent);
+                }
+                for (Server_Card *child : oldChildren) {
+                    child->setParentCard(card);
+                }
+                continue;
+            }
+
+            playerBinding(targetPlayer->getPlayerId()).registerEngineOid(oid, card->getId());
+            moveGesHasEvents = true;
+            result.battlefieldOrderChanged = true;
+        }
+    }
+    if (moveGesHasEvents) {
+        moveGes.sendToGame(game);
+    }
+}
+
 // Phase / priority / stack push+resolve / zone view + tap sync.
 // Tap state propagates from the engine on every batch — declare attackers, mana
 // payment, and untap all use this path (no longer gated on an explicit untap event).
@@ -1195,6 +1266,7 @@ void RuledGameDriver::applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBat
             }
             continue;
         }
+        applyBattlefieldControllerTransfers(e.zone_view(), result);
         for (const auto &p : e.zone_view().per_player()) {
             // Untap-step "reset" applies only to the active player's view; NAP may stay tapped.
             // Every other legitimate mid-turn untap arrives as an explicit PermanentsUntapped oid

@@ -478,6 +478,9 @@ pub enum StaticAbilityDef {
         #[serde(default)]
         cant_block: bool,
     },
+    /// CR 613.1b: the controller of this Aura controls the permanent it is attached to.
+    /// Mind Control and Confiscate share this source-relative layer-2 ability.
+    ControlsAttached,
     /// CR 613 layer 6: every creature matching `filter` gains `keyword` while the source is on the
     /// battlefield. Covers lords (Goblin Chieftain, Captain of the Watch) and keyword-granting
     /// enchantments. Pairs with `AnthemPt` on the same card for combined "+1/+1 and haste" effects.

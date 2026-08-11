@@ -281,6 +281,12 @@ impl CardRegistry {
                             });
                         }
                     }
+                    if matches!(ability, StaticAbilityDef::ControlsAttached) && !face.is_aura {
+                        return Err(RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason: "ControlsAttached requires an Aura source".into(),
+                        });
+                    }
                 }
                 for ability in &face.triggered_abilities {
                     if let Some(InterveningIf::GameCondition(condition)) = ability.intervening_if {

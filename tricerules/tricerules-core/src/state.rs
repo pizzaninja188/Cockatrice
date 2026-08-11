@@ -57,23 +57,15 @@ pub struct GameObject {
     /// battlefield (CR 400.3), which player's hand/library/graveyard/exile it belongs to, and
     /// therefore what the hidden-info redaction is allowed to show whom.
     pub owner: PlayerId,
-    /// CR 110.2: the player who currently controls this permanent. Equal to [`Self::owner`]
-    /// except while a permanent is on the battlefield under someone else's control (reanimation
-    /// today; Mind Control / Threaten when layer-2 *continuous* control lands). Decides untap and
-    /// summoning sickness (CR 302.6/502), attack and block legality, ability control and APNAP
-    /// order (CR 603.3), and anthem / "you control" scoping.
-    ///
-    /// This is the CR 613 layer-2 **base value**: `GameEngine::characteristics()` reads it and
-    /// then applies control-changing continuous effects on top (none exist yet).
-    /// Reset to `owner` whenever the object leaves the battlefield (CR 400.7 — new object).
-    ///
-    /// **Invariant**, asserted at the end of `apply_sbas`:
-    /// ```text
-    /// oid ∈ players[i].battlefield  ⟺  objects[oid].zone == Battlefield
-    ///                               &&  objects[oid].controller == players[i].id
-    /// ```
-    /// i.e. `PlayerState::battlefield` is the *control* list, while `hand`/`library`/`graveyard`/
-    /// `exile` are *owner* lists.
+    /// CR 613 layer-2 base controller before continuous effects. Reanimation and other
+    /// battlefield-entry instructions set this value; it resets to `owner` whenever the object
+    /// leaves the battlefield (CR 400.7 — new object).
+    pub base_controller: PlayerId,
+    /// CR 110.2 current controller, materialized from layer 2 so turn, combat, trigger,
+    /// legal-action, and per-player zone indexes all consume one authoritative value.
+    /// `reindex_battlefield_control` updates this cache after continuous effects change and marks
+    /// a creature summoning sick when the value changes (CR 302.6). `PlayerState::battlefield` is
+    /// the corresponding control index; other per-player zone lists are ownership indexes.
     pub controller: PlayerId,
     pub card_id: String,
     /// CR 707.2 layer-1 values replacing the physical card's printed face while this object

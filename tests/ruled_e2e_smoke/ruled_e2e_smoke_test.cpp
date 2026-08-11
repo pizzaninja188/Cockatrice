@@ -22,6 +22,8 @@
 //   * dev commands (backlog dev-loop piece 2): a conjured Serra Angel — in neither decklist, so
 //     it drives the mid-game catalog refresh and the minted Server_Card — and added mana. This
 //     is the only cross-language check that a C++-built DevCommand decodes and applies in Rust.
+//   * continuous control change: Act of Treason moves one physical permanent to the caster's
+//     TABLE for the turn, grants haste, then returns it to the owner's TABLE at cleanup
 //
 // Scope: engine + relay + protocol wiring only — no Qt client UI logic (that arrives with the
 // Step 5 headless client-core suite).
@@ -261,6 +263,15 @@ public:
     bool devPreventionManaSent = false;
     bool preventionSalveCast = false;
     bool preventionBlazeCast = false;
+    bool devControlTargetSent = false;
+    bool devActOfTreasonSent = false;
+    bool devControlManaSent = false;
+    bool actOfTreasonCast = false;
+    quint32 controlTargetOid = 0;
+    bool sawControlTransfer = false;
+    bool sawControlReturn = false;
+    bool sawPhysicalControlTransfer = false;
+    bool sawPhysicalControlReturn = false;
 
     // Milestone observations (asserted by the fixture)
     bool sawBoltPushWithTarget = false;
@@ -485,9 +496,17 @@ public:
                 const QLatin1String grave(ZoneNames::GRAVE);
                 const QLatin1String stack(ZoneNames::STACK);
                 const QLatin1String exile(ZoneNames::EXILE);
+                const QLatin1String table(ZoneNames::TABLE);
+                if (name == QLatin1String("Grizzly Bears") && from == table && to == table) {
+                    if (mc.start_player_id() == oppId && mc.target_player_id() == myId) {
+                        sawPhysicalControlTransfer = true;
+                    }
+                    if (sawPhysicalControlTransfer && mc.start_player_id() == myId && mc.target_player_id() == oppId) {
+                        sawPhysicalControlReturn = true;
+                    }
+                }
                 if (name.contains(QLatin1String("Bonecrusher Giant"))) {
                     const QLatin1String hand(ZoneNames::HAND);
-                    const QLatin1String table(ZoneNames::TABLE);
                     auto followPhysicalCard = [&] {
                         if (adventurePhysicalCardId >= 0 && mc.card_id() != adventurePhysicalCardId) {
                             adventurePhysicalIdentityContinuous = false;
@@ -713,6 +732,18 @@ public:
             phase == ruled::v1::PHASE_ID_MAIN1 && phaseEvents == 1) {
             sawDirectOpeningToMain1 = true;
             directSettledActivePlayer = activePlayer;
+        }
+        const auto playerHasControlTarget = [this](int playerId) {
+            const auto playerBattlefield = battlefieldByPlayer.find(playerId);
+            return playerBattlefield != battlefieldByPlayer.end() &&
+                   std::any_of(playerBattlefield->second.begin(), playerBattlefield->second.end(),
+                               [this](const Permanent &permanent) { return permanent.oid == controlTargetOid; });
+        };
+        if (actOfTreasonCast && controlTargetOid != 0 && playerHasControlTarget(myId)) {
+            sawControlTransfer = true;
+        }
+        if (sawControlTransfer && playerHasControlTarget(oppId)) {
+            sawControlReturn = true;
         }
         EXPECT_LE(phaseEvents, 1) << "one settled ruled batch published multiple phase states";
         const auto it = batch.legal_by_player().find(myId);
@@ -1339,6 +1370,63 @@ public:
                     return;
                 }
             }
+            if (preventionBlazeCast && !devControlTargetSent) {
+                devControlTargetSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(oppId);
+                auto *put = dev->mutable_put_card_in_zone();
+                put->set_card_name("Grizzly Bears");
+                put->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+                put->set_ready(true);
+                sendRuled(cmd, QStringLiteral("dev: conjure control target for player %1").arg(oppId));
+                return;
+            }
+            if (devControlTargetSent && controlTargetOid == 0) {
+                const auto opponentBattlefield = battlefieldByPlayer.find(oppId);
+                if (opponentBattlefield != battlefieldByPlayer.end()) {
+                    const auto target = std::find_if(
+                        opponentBattlefield->second.begin(), opponentBattlefield->second.end(),
+                        [](const Permanent &permanent) { return permanent.cardId == QStringLiteral("grizzly_bears"); });
+                    if (target != opponentBattlefield->second.end()) {
+                        controlTargetOid = target->oid;
+                    }
+                }
+            }
+            if (controlTargetOid != 0 && !devActOfTreasonSent) {
+                devActOfTreasonSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                auto *put = dev->mutable_put_card_in_zone();
+                put->set_card_name("Act of Treason");
+                put->set_zone(ruled::v1::DEV_ZONE_HAND);
+                sendRuled(cmd, QStringLiteral("dev: conjure Act of Treason into hand"));
+                return;
+            }
+            if (devActOfTreasonSent && !devControlManaSent) {
+                devControlManaSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                dev->mutable_add_mana()->set_r(1);
+                dev->mutable_add_mana()->set_c(2);
+                sendRuled(cmd, QStringLiteral("dev: add {2}{R} for Act of Treason"));
+                return;
+            }
+            if (devControlManaSent && !actOfTreasonCast) {
+                if (const auto *act = handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Act of Treason"))) {
+                    if (myPool.r >= 1 && myPool.total() >= 3) {
+                        ruled::v1::RuledCommand cmd;
+                        auto *cast = cmd.mutable_cast_spell();
+                        cast->mutable_source()->set_hand_index(act->hand_index());
+                        cast->add_targets()->set_object_id(controlTargetOid);
+                        actOfTreasonCast = true;
+                        sendRuled(cmd, QStringLiteral("cast Act of Treason on oid %1").arg(controlTargetOid));
+                        return;
+                    }
+                }
+            }
             // --- Dev commands (roadmap backlog dev-loop piece 2) ---------------------------
             // The only cross-language check that a C++-built DevCommand decodes and applies in
             // Rust; the behaviour itself is covered by the engine's scenario suite. Serra Angel
@@ -1725,17 +1813,16 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
 
     // --- Drive the scripted game until every milestone is observed ---
     const auto milestonesDone = [&] {
-        return p2.sentBottom && p1.sawBattlefieldOmission && p2.sawBattlefieldOmission &&
-               p1.sawBoltPushWithTarget && p1.sawBoltLifeLoss &&
-               p1.sawBorosCharmPushWithMode && p1.sawBorosCharmLifeLoss &&
+        return p2.sentBottom && p1.sawBattlefieldOmission && p2.sawBattlefieldOmission && p1.sawBoltPushWithTarget &&
+               p1.sawBoltLifeLoss && p1.sawBorosCharmPushWithMode && p1.sawBorosCharmLifeLoss &&
                p1.sawAttackersDeclared && p1.sawCombatLifeLoss && p2.sawBrainstormChoice &&
                p2.submittedBrainstormChoice && p2.sawBrainstormResolved && p2.sentCleanupDiscard &&
                p1.sawDevConjuredPermanent && p1.sawDevMana && p1.sawWaifFaceChanged && p2.sawWaifFaceChanged &&
-               p1.sawWaifBackPt && p2.sawWaifBackPt &&
-               p1.sawFlashbackGraveToStack && p1.sawFlashbackStackToExile &&
+               p1.sawWaifBackPt && p2.sawWaifBackPt && p1.sawFlashbackGraveToStack && p1.sawFlashbackStackToExile &&
                p1.sawAdventureStackToExile && p1.sawAdventureExileToStack && p1.sawAdventureStackToBattlefield &&
                p1.sawEntryReplacementChoice && p1.submittedEntryReplacementChoice && p1.sawDiregrafEnterTapped &&
-               p1.sawDamagePreventionChoice && p1.submittedDamagePreventionChoice &&
+               p1.sawDamagePreventionChoice && p1.submittedDamagePreventionChoice && p1.sawControlTransfer &&
+               p1.sawControlReturn && p1.sawPhysicalControlTransfer && p1.sawPhysicalControlReturn &&
                p2.sawFlashbackGraveToStack && p2.sawFlashbackStackToExile && p2.handSizeByPlayer.count(p2.myId) &&
                p2.handSizeByPlayer[p2.myId] <= 7;
     };
@@ -1786,6 +1873,11 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     EXPECT_TRUE(p1.submittedEntryReplacementChoice)
         << "battlefield-entry replacement ordering choice was never submitted";
     EXPECT_TRUE(p1.sawDiregrafEnterTapped) << "Diregraf Ghoul did not physically enter tapped";
+    EXPECT_TRUE(p1.actOfTreasonCast) << "Act of Treason was never cast";
+    EXPECT_TRUE(p1.sawControlTransfer) << "the control target never entered the caster's battlefield view";
+    EXPECT_TRUE(p1.sawPhysicalControlTransfer) << "the physical control target never crossed TABLE zones";
+    EXPECT_TRUE(p1.sawControlReturn) << "the control target did not return at cleanup";
+    EXPECT_TRUE(p1.sawPhysicalControlReturn) << "the physical control target did not return to its owner's TABLE";
     EXPECT_TRUE(p1.flashbackCast) << "seat 1 never sent its flashback cast";
     EXPECT_TRUE(p2.flashbackCast) << "seat 2 never sent its flashback cast";
     // One of these two seats does not own the canonical stack, so its cast crosses players.

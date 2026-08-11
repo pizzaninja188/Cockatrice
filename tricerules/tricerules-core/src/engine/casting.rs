@@ -1432,6 +1432,7 @@ mod mana_payment_tests {
         e.state.players[0].battlefield.push(oid);
         let object = e.state.objects.get_mut(&oid).expect("object");
         object.zone = Zone::Battlefield;
+        object.base_controller = 0;
         object.controller = 0;
         let filter = TargetFilter {
             kind: TargetKind::AnyPermanent,

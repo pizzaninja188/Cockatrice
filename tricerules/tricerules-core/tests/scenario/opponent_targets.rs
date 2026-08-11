@@ -159,11 +159,9 @@ fn opponent_controlled_target_becomes_illegal_after_control_changes() {
         .battlefield
         .retain(|oid| *oid != artifact);
     e.state.players[0].battlefield.push(artifact);
-    e.state
-        .objects
-        .get_mut(&artifact)
-        .expect("artifact")
-        .controller = 0;
+    let artifact_object = e.state.objects.get_mut(&artifact).expect("artifact");
+    artifact_object.base_controller = 0;
+    artifact_object.controller = 0;
 
     pass_both_players(&mut e);
     assert_eq!(

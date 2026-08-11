@@ -492,6 +492,7 @@ fn effect_target_legal_at_resolution(
         | SpellEffectKind::DiscardCards { target, .. }
         | SpellEffectKind::TargetPlayerSacrifices { target, .. }
         | SpellEffectKind::TapTarget { target }
+        | SpellEffectKind::GainControlUntilEndOfTurn { target }
         | SpellEffectKind::PreventNextDamage { target, .. } => {
             target_filter_legal(engine, target, tid, caster, source)
         }
@@ -585,6 +586,7 @@ pub(super) fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
         | SpellEffectKind::MillTargetPlayer { .. }
         | SpellEffectKind::DiscardCards { .. }
         | SpellEffectKind::TapTarget { .. }
+        | SpellEffectKind::GainControlUntilEndOfTurn { .. }
         | SpellEffectKind::CounterTargetSpell { .. }
         | SpellEffectKind::CopyTargetSpell { .. }
         | SpellEffectKind::AuraAttach { .. }
@@ -616,6 +618,7 @@ pub(super) fn validate_effect_targets(
             }
         }
         SpellEffectKind::TapTarget { target: filter }
+        | SpellEffectKind::GainControlUntilEndOfTurn { target: filter }
         | SpellEffectKind::Untap {
             subject: EffectSubject::Chosen(filter),
         } => {
@@ -903,6 +906,7 @@ pub(super) fn spell_target_legality_error(
         | SpellEffectKind::DamageTarget { target: filter, .. }
         | SpellEffectKind::DamageTargets { target: filter, .. }
         | SpellEffectKind::TapTarget { target: filter }
+        | SpellEffectKind::GainControlUntilEndOfTurn { target: filter }
         | SpellEffectKind::Untap {
             subject: EffectSubject::Chosen(filter),
         }
@@ -1227,6 +1231,12 @@ mod tests {
             .battlefield
             .retain(|oid| *oid != bear);
         engine.state.players[1].battlefield.push(bear);
+        engine
+            .state
+            .objects
+            .get_mut(&bear)
+            .expect("bear")
+            .base_controller = 1;
         engine
             .state
             .objects

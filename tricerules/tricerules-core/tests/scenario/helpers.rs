@@ -500,6 +500,7 @@ pub(crate) fn inject_creature_on_battlefield(
         tricerules_core::state::GameObject {
             id,
             owner: player_id,
+            base_controller: player_id,
             controller: player_id,
             card_id: card_id.to_string(),
             copiable_values: None,
@@ -539,6 +540,7 @@ pub(crate) fn inject_permanent_on_battlefield(
         tricerules_core::state::GameObject {
             id,
             owner: player_id,
+            base_controller: player_id,
             controller: player_id,
             card_id: card_id.to_string(),
             copiable_values: None,
@@ -574,6 +576,7 @@ pub(crate) fn inject_library_card(e: &mut GameEngine, player: usize, card_id: &s
         tricerules_core::state::GameObject {
             id,
             owner: player_id,
+            base_controller: player_id,
             controller: player_id,
             card_id: card_id.to_string(),
             copiable_values: None,
@@ -616,6 +619,7 @@ pub(crate) fn inject_creature_under_foreign_control(
         tricerules_core::state::GameObject {
             id,
             owner: owner_id,
+            base_controller: controller_id,
             controller: controller_id,
             card_id: card_id.to_string(),
             copiable_values: None,
@@ -653,6 +657,7 @@ pub(crate) fn inject_graveyard_card(e: &mut GameEngine, player: usize, card_id: 
         tricerules_core::state::GameObject {
             id,
             owner: player_id,
+            base_controller: player_id,
             controller: player_id,
             card_id: card_id.to_string(),
             copiable_values: None,
@@ -862,6 +867,7 @@ pub(crate) fn inject_creature_with_stats(
         tricerules_core::state::GameObject {
             id,
             owner: player_id,
+            base_controller: player_id,
             controller: player_id,
             card_id: card_id.to_string(),
             copiable_values: None,

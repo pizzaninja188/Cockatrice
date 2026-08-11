@@ -802,6 +802,7 @@ fn mind_sculpt_rejects_self_target() {
             tricerules_core::state::GameObject {
                 id,
                 owner: 0,
+                base_controller: 0,
                 controller: 0,
                 card_id: "mind_sculpt".into(),
                 copiable_values: None,

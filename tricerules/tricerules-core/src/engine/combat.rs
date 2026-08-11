@@ -24,7 +24,13 @@ impl GameEngine {
             .continuous_effects
             .iter()
             .filter(|effect| {
-                super::characteristics::effect_affects(&self.state, effect, oid, &characteristics)
+                super::characteristics::effect_affects(
+                    &self.state,
+                    self.registry,
+                    effect,
+                    oid,
+                    &characteristics,
+                )
             })
             .fold((false, false), |(cant_attack, cant_block), effect| {
                 if let ContinuousEffectKind::CombatRestriction {

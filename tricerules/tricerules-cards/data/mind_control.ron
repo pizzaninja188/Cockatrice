@@ -1,0 +1,9 @@
+(
+  id: "mind_control",
+  name: "Mind Control",
+  mana_cost: "{3}{U}{U}",
+  // Oracle: Enchant creature. You control enchanted creature.
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach(target: (kind: Creature))],
+  static_abilities: [ControlsAttached],
+)

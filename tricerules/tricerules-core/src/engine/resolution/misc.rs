@@ -151,6 +151,42 @@ pub(super) fn untap(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn gain_control_until_end_of_turn(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::GainControlUntilEndOfTurn { .. } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let Some(&target) = cx.targets.first() else {
+        return Ok(EffectOutcome::Continue);
+    };
+    if !cx
+        .engine
+        .state
+        .objects
+        .get(&target)
+        .is_some_and(|object| object.zone == Zone::Battlefield)
+    {
+        return Ok(EffectOutcome::Continue);
+    }
+    cx.engine.state.continuous_effects.push(ContinuousEffect {
+        source_id: Some(cx.top.id),
+        affected: AffectedScope::Single(target),
+        kind: ContinuousEffectKind::Layer2Control {
+            controller: ControllerReference::Fixed(cx.controller),
+        },
+        duration: EffectDuration::UntilEndOfTurn,
+        timestamp: cx.engine.state.command_index,
+    });
+    cx.engine.reindex_battlefield_control(cx.events);
+    cx.events.push(ev_log(format!(
+        "{} changes control of {target} until end of turn",
+        cx.spell_label
+    )));
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn tap_all_creatures(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

@@ -1,0 +1,11 @@
+(
+  id: "threaten",
+  name: "Threaten",
+  mana_cost: "{2}{R}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Untap(subject: Chosen((kind: Creature))),
+    GainControlUntilEndOfTurn(target: (kind: Creature)),
+    GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Haste]),
+  ],
+)

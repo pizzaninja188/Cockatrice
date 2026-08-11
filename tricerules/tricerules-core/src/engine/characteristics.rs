@@ -85,9 +85,9 @@ impl CharacteristicsEvaluator<'_> {
             .or_else(|| definition.face(object.face_up_index))?;
 
         let mut result = Characteristics {
-            // CR 110.2 base value: the controller recorded on the object, set when it entered the
-            // battlefield. Layer 2 below applies control-*changing* continuous effects on top.
-            controller: object.controller,
+            // CR 110.2 base value set by the instruction that put the object onto the battlefield.
+            // Layer 2 below applies control-changing continuous effects on top.
+            controller: object.base_controller,
             types: face.types.to_vec(),
             supertypes: face.supertypes.to_vec(),
             colors: if copied.is_none()
@@ -115,7 +115,7 @@ impl CharacteristicsEvaluator<'_> {
         };
 
         self.apply_layer_1_copy(&mut result);
-        self.apply_layer_2_control(&mut result);
+        self.apply_layer_2_control(oid, &mut result);
         self.apply_layer_3_text(&mut result);
         self.apply_layer_4_type(&mut result);
         self.apply_layer_5_color(&mut result);
@@ -133,22 +133,66 @@ impl CharacteristicsEvaluator<'_> {
         // stage makes the CR 613 order explicit while avoiding a second characteristics path.
     }
 
-    /// CR 613 layer 2 — control-changing *continuous* effects (Mind Control, Threaten,
-    /// Confiscate). Still empty: the only control changes modelled so far are decided when a
-    /// permanent enters the battlefield, and those live in `GameObject::controller`, which is
-    /// this layer's base value.
-    ///
-    /// When the first such card lands, note two things this slot cannot do naively:
-    /// 1. it must **not** use [`GameEngine::ordered_effects`] — that is computed after layer 5 and
-    ///    its `effect_affects` reads `pre_layer_6.controller`, which is circular for a
-    ///    `CreaturesMatching { controller }` scope (this is exactly CR 613.8 dependency
-    ///    ordering). It needs its own earlier pass over `AffectedScope::Single` effects, sorted by
-    ///    the same `(timestamp, index)` key;
-    /// 2. once the derived controller can differ from `GameObject::controller`, the battlefield
-    ///    lists stop being a valid control index, so they must be rebuilt whenever
-    ///    `continuous_effects` changes. Until then the `debug_assert` in `apply_sbas` holds the
-    ///    two in sync.
-    fn apply_layer_2_control(&self, _result: &mut Characteristics) {}
+    /// CR 613 layer 2 — control-changing continuous effects. This pass is deliberately earlier
+    /// than `ordered_effects`: source-relative effects such as Mind Control may depend on the
+    /// source Aura's own derived controller. Resolve that dependency recursively, then apply
+    /// otherwise independent effects in stable `(timestamp, index)` order (CR 613.7–613.8).
+    fn apply_layer_2_control(&self, oid: ObjectId, result: &mut Characteristics) {
+        result.controller = self.layer_2_controller(oid, &mut Vec::new());
+    }
+
+    fn layer_2_controller(&self, oid: ObjectId, visiting: &mut Vec<ObjectId>) -> PlayerId {
+        let Some(object) = self.state.objects.get(&oid) else {
+            return 0;
+        };
+        let base = object.base_controller;
+        if visiting.contains(&oid) {
+            return base;
+        }
+        visiting.push(oid);
+        let mut controller = base;
+        let mut effects: Vec<(usize, &ContinuousEffect)> = self
+            .state
+            .continuous_effects
+            .iter()
+            .enumerate()
+            .filter(|(_, effect)| {
+                matches!(effect.kind, ContinuousEffectKind::Layer2Control { .. })
+                    && match effect.affected {
+                        AffectedScope::Single(id) => id == oid,
+                        AffectedScope::AttachedTo(source_id) => {
+                            self.state.objects.get(&source_id).is_some_and(|source| {
+                                source.zone == Zone::Battlefield && source.attached_to == Some(oid)
+                            })
+                        }
+                        _ => false,
+                    }
+            })
+            .collect();
+        effects.sort_by_key(|(index, effect)| (effect.timestamp, *index));
+        for (_, effect) in effects {
+            if let ContinuousEffectKind::Layer2Control {
+                controller: reference,
+            } = effect.kind
+            {
+                controller = match reference {
+                    ControllerReference::Fixed(player) => player,
+                    ControllerReference::SourceController => effect
+                        .source_id
+                        .and_then(|source| {
+                            self.state
+                                .objects
+                                .get(&source)
+                                .filter(|object| object.zone == Zone::Battlefield)
+                                .map(|_| self.layer_2_controller(source, visiting))
+                        })
+                        .unwrap_or(controller),
+                };
+            }
+        }
+        visiting.pop();
+        controller
+    }
 
     fn apply_layer_3_text(&self, _result: &mut Characteristics) {}
 
@@ -157,7 +201,8 @@ impl CharacteristicsEvaluator<'_> {
     fn apply_layer_5_color(&self, _result: &mut Characteristics) {}
 
     /// Active effects in CR 613.7 timestamp order. The original vector index makes equal
-    /// timestamps deterministic. CR 613.8 dependency ordering will be inserted here.
+    /// timestamps deterministic. Layer-2 source-controller dependencies are handled by
+    /// `layer_2_controller` before this later-layer pass.
     fn ordered_effects<'a>(
         &'a self,
         oid: ObjectId,
@@ -168,7 +213,9 @@ impl CharacteristicsEvaluator<'_> {
             .continuous_effects
             .iter()
             .enumerate()
-            .filter(|(_, effect)| effect_affects(self.state, effect, oid, pre_layer_6))
+            .filter(|(_, effect)| {
+                effect_affects(self.state, self.registry, effect, oid, pre_layer_6)
+            })
             .collect();
         effects.sort_by_key(|(index, effect)| (effect.timestamp, *index));
         effects.into_iter().map(|(_, effect)| effect).collect()
@@ -180,6 +227,7 @@ impl CharacteristicsEvaluator<'_> {
 /// Dependency ordering becomes necessary once scopes can depend on values changed in their layer.
 pub(super) fn effect_affects(
     state: &GameState,
+    registry: &'static CardRegistry,
     effect: &ContinuousEffect,
     oid: ObjectId,
     characteristics: &Characteristics,
@@ -198,8 +246,21 @@ pub(super) fn effect_affects(
             color,
             exclude,
         } => {
+            let expected_controller = if controller.is_some()
+                && effect.duration == EffectDuration::WhileSourceOnBattlefield
+            {
+                effect
+                    .source_id
+                    .map(|source| {
+                        CharacteristicsEvaluator { state, registry }
+                            .layer_2_controller(source, &mut Vec::new())
+                    })
+                    .or(*controller)
+            } else {
+                *controller
+            };
             *exclude != Some(oid)
-                && controller.is_none_or(|pid| characteristics.controller == pid)
+                && expected_controller.is_none_or(|pid| characteristics.controller == pid)
                 && characteristics.is_creature()
                 && subtype
                     .as_ref()
@@ -311,6 +372,7 @@ mod tests {
             GameObject {
                 id: oid,
                 owner: 0,
+                base_controller: 0,
                 controller: 0,
                 card_id: "grizzly_bears".to_string(),
                 copiable_values: None,
@@ -359,5 +421,169 @@ mod tests {
         assert!(characteristics.has_keyword(Keyword::Haste));
         assert_eq!(characteristics.power, Some(5));
         assert_eq!(characteristics.toughness, Some(4));
+    }
+
+    #[test]
+    fn layer_2_control_changes_the_derived_controller() {
+        let mut engine = GameEngine::new_with_default_decks(614, &[0, 1], 20).expect("new engine");
+        let oid = engine.state.next_object_id;
+        engine.state.next_object_id += 1;
+        engine.state.objects.insert(
+            oid,
+            GameObject {
+                id: oid,
+                owner: 0,
+                base_controller: 0,
+                controller: 0,
+                card_id: "grizzly_bears".to_string(),
+                copiable_values: None,
+                copy_revision: 0,
+                zone: Zone::Battlefield,
+                tapped: false,
+                summoning_sick: false,
+                power: Some(2),
+                toughness: Some(2),
+                damage: 0,
+                deathtouch_damage: false,
+                counters: BTreeMap::new(),
+                attached_to: None,
+                regeneration_shields: 0,
+                must_attack_if_able: false,
+                must_block_if_able: false,
+                face_up_index: 0,
+                adventure_cast_permission: None,
+            },
+        );
+        engine.state.continuous_effects.push(ContinuousEffect {
+            source_id: None,
+            affected: AffectedScope::Single(oid),
+            kind: ContinuousEffectKind::Layer2Control {
+                controller: ControllerReference::Fixed(1),
+            },
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 0,
+        });
+
+        assert_eq!(
+            engine
+                .characteristics(oid)
+                .expect("characteristics")
+                .controller,
+            1
+        );
+    }
+
+    #[test]
+    fn source_controller_dependency_is_evaluated_before_attached_control() {
+        let mut engine = GameEngine::new_with_default_decks(615, &[0, 1], 20).expect("new engine");
+        let make_object = |id, owner, attached_to| GameObject {
+            id,
+            owner,
+            base_controller: owner,
+            controller: owner,
+            card_id: "grizzly_bears".to_string(),
+            copiable_values: None,
+            copy_revision: 0,
+            zone: Zone::Battlefield,
+            tapped: false,
+            summoning_sick: false,
+            power: Some(2),
+            toughness: Some(2),
+            damage: 0,
+            deathtouch_damage: false,
+            counters: BTreeMap::new(),
+            attached_to,
+            regeneration_shields: 0,
+            must_attack_if_able: false,
+            must_block_if_able: false,
+            face_up_index: 0,
+            adventure_cast_permission: None,
+        };
+        let target = engine.state.next_object_id;
+        let control_aura = target + 1;
+        let aura_thief = target + 2;
+        engine.state.next_object_id += 3;
+        engine
+            .state
+            .objects
+            .insert(target, make_object(target, 0, None));
+        engine
+            .state
+            .objects
+            .insert(control_aura, make_object(control_aura, 0, Some(target)));
+        engine
+            .state
+            .objects
+            .insert(aura_thief, make_object(aura_thief, 1, Some(control_aura)));
+        engine.state.continuous_effects.extend([
+            ContinuousEffect {
+                source_id: Some(control_aura),
+                affected: AffectedScope::AttachedTo(control_aura),
+                kind: ContinuousEffectKind::Layer2Control {
+                    controller: ControllerReference::SourceController,
+                },
+                duration: EffectDuration::WhileSourceOnBattlefield,
+                timestamp: 1,
+            },
+            ContinuousEffect {
+                source_id: Some(aura_thief),
+                affected: AffectedScope::AttachedTo(aura_thief),
+                kind: ContinuousEffectKind::Layer2Control {
+                    controller: ControllerReference::SourceController,
+                },
+                duration: EffectDuration::WhileSourceOnBattlefield,
+                timestamp: 2,
+            },
+        ]);
+
+        assert_eq!(engine.controller_of(control_aura), Some(1));
+        assert_eq!(engine.controller_of(target), Some(1));
+    }
+
+    #[test]
+    fn later_layer_2_effect_wins_and_earlier_effect_resumes() {
+        let mut engine = GameEngine::new_with_default_decks(616, &[0, 1], 20).expect("new engine");
+        let oid = engine.state.next_object_id;
+        engine.state.next_object_id += 1;
+        engine.state.objects.insert(
+            oid,
+            GameObject {
+                id: oid,
+                owner: 0,
+                base_controller: 0,
+                controller: 0,
+                card_id: "grizzly_bears".to_string(),
+                copiable_values: None,
+                copy_revision: 0,
+                zone: Zone::Battlefield,
+                tapped: false,
+                summoning_sick: false,
+                power: Some(2),
+                toughness: Some(2),
+                damage: 0,
+                deathtouch_damage: false,
+                counters: BTreeMap::new(),
+                attached_to: None,
+                regeneration_shields: 0,
+                must_attack_if_able: false,
+                must_block_if_able: false,
+                face_up_index: 0,
+                adventure_cast_permission: None,
+            },
+        );
+        for (timestamp, controller) in [(1, 1), (2, 0)] {
+            engine.state.continuous_effects.push(ContinuousEffect {
+                source_id: None,
+                affected: AffectedScope::Single(oid),
+                kind: ContinuousEffectKind::Layer2Control {
+                    controller: ControllerReference::Fixed(controller),
+                },
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp,
+            });
+        }
+        assert_eq!(engine.controller_of(oid), Some(0));
+        engine.state.continuous_effects.pop();
+        assert_eq!(engine.controller_of(oid), Some(1));
     }
 }

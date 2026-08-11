@@ -19,7 +19,7 @@ use thiserror::Error;
 use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
     AbilityCost, Amount, AnthemController, AnthemFilter, CardTypeFilter, CastTriggerPlayer, Color,
-    ContinuousEffectKind, CountExpression, CounterKind, DamageDivision,
+    ContinuousEffectKind, ControllerReference, CountExpression, CounterKind, DamageDivision,
     DamagePreventionAdditionalEffect, DamagePreventionSubject, EffectDuration, EffectSubject,
     EntersTappedAffected, Evasion, FaceChangeAction, GameCondition, InterveningIf, Keyword,
     LifeAmount, PermanentTypeFilter, PlayerRecipient, PreventionAmountBasis, RelativePlayerSet,
@@ -414,6 +414,7 @@ fn new_object_from_card(
         // CR 110.2: a card outside the battlefield has no controller; seeding it to the owner
         // keeps the base value meaningful the moment it enters. `move_object_to_zone` sets the
         // real controller on battlefield entry.
+        base_controller: owner,
         controller: owner,
         card_id: card_id.to_string(),
         copiable_values: None,

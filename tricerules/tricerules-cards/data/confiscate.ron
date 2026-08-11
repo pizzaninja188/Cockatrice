@@ -1,0 +1,9 @@
+(
+  id: "confiscate",
+  name: "Confiscate",
+  mana_cost: "{4}{U}{U}",
+  // Oracle: Enchant permanent. You control enchanted permanent.
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach(target: (kind: AnyPermanent))],
+  static_abilities: [ControlsAttached],
+)

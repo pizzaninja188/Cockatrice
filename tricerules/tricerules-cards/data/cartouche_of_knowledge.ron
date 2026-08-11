@@ -1,0 +1,19 @@
+(
+  id: "cartouche_of_knowledge",
+  name: "Cartouche of Knowledge",
+  mana_cost: "{1}{U}",
+  // Oracle: Enchant creature you control. When this Aura enters, draw a card.
+  // Enchanted creature gets +1/+1 and has flying.
+  types: ["Enchantment", "Aura", "Cartouche"],
+  spell_effect: [AuraAttach(target: (kind: Creature, controller: You))],
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Draw(count: 1)],
+      text: "When this Aura enters, draw a card.",
+    ),
+  ],
+  static_abilities: [
+    AttachedModifier(delta_power: 1, delta_toughness: 1, keywords: [Flying]),
+  ],
+)

@@ -235,18 +235,21 @@ Do not re-derive this per card.
 - **Owner vs controller.** A permanent carries both at once and they can differ (reanimation).
   `GameObject::owner` is fixed for the object's life and decides which zone a card returns to
   (CR 400.3), zone membership everywhere off the battlefield, and hidden-info redaction.
-  `GameObject::controller` is the CR 110.2 layer-2 **base** value and decides untap and summoning
-  sickness, attack/block legality, ability control and APNAP order, and anthem scoping. The
-  per-player `battlefield` list is the **control index** — `oid ∈ players[i].battlefield` iff
+  `GameObject::base_controller` is the CR 613 layer-2 base value; `GameObject::controller` is the
+  materialized CR 110.2 current controller after continuous effects and decides untap and
+  summoning sickness, attack/block legality, ability control and APNAP order, and anthem scoping.
+  The per-player `battlefield` list is the **control index** — `oid ∈ players[i].battlefield` iff
   `objects[oid].controller == players[i].id` (asserted in `apply_sbas`). Continuous
-  control-change effects (Mind Control, Threaten) are still deferred; `apply_layer_2_control`
-  documents what its first implementation must not do naively.
+  control-change effects are evaluated in layer 2, then the SBA boundary rebuilds that index,
+  applies summoning sickness, and removes transitioned permanents from combat. Servatrice mirrors
+  the same authoritative membership by moving the existing physical card between player TABLE zones.
 - **Characteristics.** `GameEngine::characteristics(oid)` (`engine/characteristics.rs`) is the
   **single** entry point for derived controller, types, supertypes, colors, keywords, and P/T. It
   walks the CR 613 layers explicitly: 1 copy → 2 control → 3 text → 4 type → 5 color → 6
   ability adding/removing → 7 P/T (CDA, setters, modifiers, counters, switches). Layers 1–5 and
-  the unused layer-7 sublayers are **named identity stages** — implementing the first effect in a
-  layer means filling its slot, not adding another characteristics path. The calculation is pure
+  the unused layer-7 sublayers are explicit stages (layers 1 and 2 are implemented; 3–5 remain
+  named identity stages) — implementing the first effect in a layer means filling its slot, not
+  adding another characteristics path. The calculation is pure
   (state + registry + oid), so it can be memoized without touching callers.
 - **Timestamps.** Continuous effects carry CR 613.7 timestamps stamped from `command_index`;
   `ordered_effects` sorts by timestamp with the vector index as a deterministic tiebreak. That

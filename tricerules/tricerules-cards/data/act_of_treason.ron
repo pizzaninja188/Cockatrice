@@ -1,0 +1,11 @@
+(
+  id: "act_of_treason",
+  name: "Act of Treason",
+  mana_cost: "{2}{R}",
+  types: ["Sorcery"],
+  spell_effect: [
+    GainControlUntilEndOfTurn(target: (kind: Creature)),
+    Untap(subject: Chosen((kind: Creature))),
+    GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Haste]),
+  ],
+)

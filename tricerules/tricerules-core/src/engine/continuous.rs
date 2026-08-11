@@ -14,6 +14,15 @@ impl GameEngine {
             .iter()
             .filter_map(|effect| {
                 if let AffectedScope::Player(affected_player) = effect.affected {
+                    let affected_player =
+                        if effect.duration == EffectDuration::WhileSourceOnBattlefield {
+                            effect
+                                .source_id
+                                .and_then(|source| self.controller_of(source))
+                                .unwrap_or(affected_player)
+                        } else {
+                            affected_player
+                        };
                     if affected_player == pid {
                         if let ContinuousEffectKind::ExtraLandPlays(count) = effect.kind {
                             return Some(count);
@@ -153,6 +162,17 @@ impl GameEngine {
                         });
                     }
                 }
+                StaticAbilityDef::ControlsAttached => {
+                    self.state.continuous_effects.push(ContinuousEffect {
+                        source_id: Some(object_id),
+                        affected: AffectedScope::AttachedTo(object_id),
+                        kind: ContinuousEffectKind::Layer2Control {
+                            controller: ControllerReference::SourceController,
+                        },
+                        duration: EffectDuration::WhileSourceOnBattlefield,
+                        timestamp,
+                    });
+                }
                 StaticAbilityDef::AnthemKeyword { filter, keyword } => {
                     self.state.continuous_effects.push(ContinuousEffect {
                         source_id: Some(object_id),
@@ -176,7 +196,7 @@ impl GameEngine {
     }
 
     /// CR 514.2: drain all until-end-of-turn continuous effects.
-    pub(super) fn cleanup_until_end_of_turn_creature_pt(&mut self) {
+    pub(super) fn cleanup_until_end_of_turn_effects(&mut self) {
         self.state
             .continuous_effects
             .retain(|effect| effect.duration != EffectDuration::UntilEndOfTurn);

@@ -555,7 +555,8 @@ impl GameEngine {
         mut ev: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
         self.state.cleanup_discard_player = None;
-        self.cleanup_until_end_of_turn_creature_pt();
+        self.cleanup_until_end_of_turn_effects();
+        self.reindex_battlefield_control(&mut ev);
         self.cleanup_marked_damage();
         self.clear_all_mana_pools();
         self.state.lands_played_this_turn = 0;

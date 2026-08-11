@@ -250,7 +250,7 @@ fn equipment_falls_off_when_creature_dies() {
         Some(tricerules_core::Zone::Graveyard),
         "bear dies to lethal damage"
     );
-    // Equipment should have unattached (SBA: CR 704.5p analogue — equipment falls off).
+    // Equipment should have unattached (SBA: CR 704.5n — equipment falls off).
     assert_eq!(
         e.state
             .objects

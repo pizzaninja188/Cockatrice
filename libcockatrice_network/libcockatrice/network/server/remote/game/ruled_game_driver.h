@@ -169,6 +169,7 @@ private:
     void applyTokenCreations(const ruled::v1::RuledEventBatch &batch);
     void applyPermanentMoves(const ruled::v1::RuledEventBatch &batch,
                              const QHash<int, QHash<quint32, int>> &preBatchOidMaps);
+    void applyBattlefieldControllerTransfers(const ruled::v1::ZoneViewSync &zoneView, RuledBatchApplyResult &result);
     void applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBatch &batch, RuledBatchApplyResult &result);
     void applyFaceDisplays(const ruled::v1::RuledEventBatch &batch, RuledBatchApplyResult &result);
     Server_Card *findBattlefieldCardByEngineOid(quint32 oid, int preferredControllerId = -1);

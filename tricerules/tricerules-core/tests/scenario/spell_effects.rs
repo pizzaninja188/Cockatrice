@@ -719,6 +719,7 @@ fn tome_scour_mills_five_cards_from_target_player() {
             tricerules_core::state::GameObject {
                 id,
                 owner: 0,
+                base_controller: 0,
                 controller: 0,
                 card_id: "tome_scour".into(),
                 copiable_values: None,
@@ -803,6 +804,7 @@ fn tome_scour_caps_at_library_size() {
             tricerules_core::state::GameObject {
                 id,
                 owner: 0,
+                base_controller: 0,
                 controller: 0,
                 card_id: "tome_scour".into(),
                 copiable_values: None,
@@ -861,6 +863,7 @@ fn tome_scour_can_target_controller() {
             tricerules_core::state::GameObject {
                 id,
                 owner: 0,
+                base_controller: 0,
                 controller: 0,
                 card_id: "tome_scour".into(),
                 copiable_values: None,
@@ -924,6 +927,7 @@ fn tome_scour_self_mill_puts_the_spell_under_the_milled_cards() {
             tricerules_core::state::GameObject {
                 id,
                 owner: 0,
+                base_controller: 0,
                 controller: 0,
                 card_id: "tome_scour".into(),
                 copiable_values: None,
@@ -1252,6 +1256,7 @@ fn disentomb_returns_creature_from_graveyard_to_hand() {
             tricerules_core::state::GameObject {
                 id,
                 owner: 0,
+                base_controller: 0,
                 controller: 0,
                 card_id: "grizzly_bears".into(),
                 copiable_values: None,
@@ -1283,6 +1288,7 @@ fn disentomb_returns_creature_from_graveyard_to_hand() {
             tricerules_core::state::GameObject {
                 id,
                 owner: 0,
+                base_controller: 0,
                 controller: 0,
                 card_id: "disentomb".into(),
                 copiable_values: None,
@@ -1379,6 +1385,7 @@ fn return_from_graveyard_fizzles_when_target_removed_before_resolution() {
             tricerules_core::state::GameObject {
                 id,
                 owner: 0,
+                base_controller: 0,
                 controller: 0,
                 card_id: "disentomb".into(),
                 copiable_values: None,
@@ -1412,6 +1419,7 @@ fn return_from_graveyard_fizzles_when_target_removed_before_resolution() {
             tricerules_core::state::GameObject {
                 id,
                 owner: 0,
+                base_controller: 0,
                 controller: 0,
                 card_id: "grizzly_bears".into(),
                 copiable_values: None,
@@ -1505,6 +1513,7 @@ fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
             tricerules_core::state::GameObject {
                 id,
                 owner: 0,
+                base_controller: 0,
                 controller: 0,
                 card_id: "grizzly_bears".into(),
                 copiable_values: None,
@@ -1536,6 +1545,7 @@ fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
             tricerules_core::state::GameObject {
                 id,
                 owner: 0,
+                base_controller: 0,
                 controller: 0,
                 card_id: "gravedigger".into(),
                 copiable_values: None,
@@ -1940,6 +1950,7 @@ fn inject_card_into_hand(e: &mut GameEngine, player: usize, player_id: i32, card
         tricerules_core::state::GameObject {
             id,
             owner: player_id,
+            base_controller: player_id,
             controller: player_id,
             card_id: card_id.to_string(),
             copiable_values: None,

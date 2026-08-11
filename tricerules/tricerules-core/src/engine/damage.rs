@@ -187,6 +187,7 @@ impl GameEngine {
                 controller,
             } => match event.recipient {
                 DamageRecipient::Permanent(recipient) => {
+                    let controller = self.controller_of(source_id).unwrap_or(controller);
                     recipient != source_id
                         && self
                             .state

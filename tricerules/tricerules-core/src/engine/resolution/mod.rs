@@ -517,6 +517,9 @@ impl GameEngine {
                         misc::tap_target(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::Untap { .. } => misc::untap(&mut cx, effect)?,
+                    effect @ SpellEffectKind::GainControlUntilEndOfTurn { .. } => {
+                        misc::gain_control_until_end_of_turn(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::TapAllCreatures { .. } => {
                         misc::tap_all_creatures(&mut cx, effect)?
                     }
@@ -658,6 +661,7 @@ impl GameEngine {
                         // CR 111.3: a token's owner is the player who controlled the effect that
                         // created it, so owner and controller coincide at creation.
                         owner: pid,
+                        base_controller: pid,
                         controller: pid,
                         card_id: token_id.to_string(),
                         copiable_values: None,
@@ -992,11 +996,13 @@ pub(crate) fn move_object_to_zone(
         o.zone = z;
         // CR 110.2 / 400.7: control is a battlefield-only property, and a zone change makes this a
         // new object — so entering sets the new controller and leaving resets it to the owner.
-        o.controller = if z == Zone::Battlefield {
+        let controller = if z == Zone::Battlefield {
             holder
         } else {
             o.owner
         };
+        o.base_controller = controller;
+        o.controller = controller;
         // CR 302.6: a permanent entering the battlefield has not been controlled continuously
         // since its controller's most recent turn began, so it is summoning sick. Assert this on
         // entry rather than trusting a persisted flag — a prior bounce/leave clears transient
@@ -1208,6 +1214,7 @@ mod source_keyword_tests {
             GameObject {
                 id,
                 owner: controller,
+                base_controller: controller,
                 controller,
                 card_id: "hill_giant".to_string(),
                 copiable_values: None,
@@ -1243,6 +1250,7 @@ mod source_keyword_tests {
             GameObject {
                 id: source,
                 owner: 0,
+                base_controller: 0,
                 controller: 0,
                 card_id: "prodigal_sorcerer".to_string(),
                 copiable_values: None,
