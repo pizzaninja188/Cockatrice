@@ -1943,6 +1943,52 @@ TEST_F(RuledClientTest, TargetObjectAndLegendKeepChoicesUseClickToSelect)
     }
 }
 
+TEST_F(RuledClientTest, CopySourceChoiceUsesBoardSelectionAndEmptyResolutionChoiceDeclines)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+    rcr->set_deciding_player_id(kLocalPlayer);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_COPY_SOURCE);
+    rcr->set_min(0);
+    rcr->set_max(1);
+    rcr->set_prompt_text("Choose a creature for Clone to copy, or Decline to enter as Clone.");
+    rcr->add_candidate_object_ids(100);
+    rcr->add_candidate_object_ids(101);
+    apply(batch);
+
+    ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopySource));
+    EXPECT_TRUE(state->isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopySource, 100));
+    EXPECT_FALSE(state->isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopySource, 102));
+    EXPECT_TRUE(state->pendingClickChoiceMayDecline());
+    EXPECT_EQ(state->pendingChoicePromptText(RuledClientState::ChoiceKind::CopySource),
+              QStringLiteral("Choose a creature for Clone to copy, or Decline to enter as Clone."));
+
+    host.sentCommands.clear();
+    state->declinePendingClickChoice();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    EXPECT_TRUE(host.sentCommands[0].has_submit_resolution_choice());
+    EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().chosen_object_ids_size(), 0);
+    EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopySource));
+}
+
+TEST_F(RuledClientTest, CopySourceChoiceIsInteractiveOnlyForTheDecidingPlayer)
+{
+    QSignalSpy promptFeed(state, &RuledClientState::enginePromptFeed);
+    ruled::v1::RuledEventBatch batch;
+    auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+    rcr->set_deciding_player_id(kLocalPlayer + 1);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_COPY_SOURCE);
+    rcr->set_min(0);
+    rcr->set_max(1);
+    rcr->set_prompt_text("Choose a creature for Clone to copy, or Decline to enter as Clone.");
+    rcr->add_candidate_object_ids(100);
+    apply(batch);
+
+    EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopySource));
+    ASSERT_EQ(promptFeed.count(), 1);
+    EXPECT_TRUE(promptFeed.at(0).at(0).toString().contains(QStringLiteral("Choose a creature for Clone to copy")));
+}
+
 // The engine parks one choice at a time, so the holder is exclusive: installing a new choice
 // tears the previous one down — including the revealed-cards popup a pick had opened.
 TEST_F(RuledClientTest, InstallingAChoiceTearsDownTheOneItReplaces)

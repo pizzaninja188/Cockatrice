@@ -47,15 +47,10 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 }
             }
             for &poid in &eng.state.players[idx].battlefield {
-                let Some(pobj) = eng.state.objects.get(&poid) else {
+                if !eng.state.objects.contains_key(&poid) {
                     continue;
-                };
-                let Some(pdef) = eng.registry.get(&pobj.card_id) else {
-                    continue;
-                };
-                // CR 712.4: read abilities from the active face (face_up_index) so multi-face
-                // permanents expose the correct ability set when on the battlefield.
-                let Some(face) = pdef.face(pobj.face_up_index) else {
+                }
+                let Some(face) = eng.effective_face(poid) else {
                     continue;
                 };
                 for (ai, ability) in face.activated_abilities.iter().enumerate() {

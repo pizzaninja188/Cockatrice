@@ -660,6 +660,8 @@ impl GameEngine {
                         owner: pid,
                         controller: pid,
                         card_id: token_id.to_string(),
+                        copiable_values: None,
+                        copy_revision: 0,
                         // Proposed tokens live in no player's zone until entry replacements finish.
                         zone: Zone::Stack,
                         tapped: false,
@@ -930,6 +932,8 @@ pub(crate) fn move_object_to_zone(
             o.attached_to = None;
             o.regeneration_shields = 0;
             o.face_up_index = 0;
+            o.copiable_values = None;
+            o.copy_revision = 0;
             if let Some((power, toughness, must_attack, must_block)) = front_face_values {
                 o.power = power;
                 o.toughness = toughness;
@@ -1206,6 +1210,8 @@ mod source_keyword_tests {
                 owner: controller,
                 controller,
                 card_id: "hill_giant".to_string(),
+                copiable_values: None,
+                copy_revision: 0,
                 zone: Zone::Battlefield,
                 tapped: false,
                 summoning_sick: false,
@@ -1239,6 +1245,8 @@ mod source_keyword_tests {
                 owner: 0,
                 controller: 0,
                 card_id: "prodigal_sorcerer".to_string(),
+                copiable_values: None,
+                copy_revision: 0,
                 zone: Zone::Battlefield,
                 tapped: false,
                 summoning_sick: false,

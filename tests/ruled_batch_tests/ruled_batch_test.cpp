@@ -1559,6 +1559,125 @@ TEST_F(RuledBatchTest, FullSnapshotRestoresControlledPermanentActiveFace)
     EXPECT_EQ(findCardByEngineOid(p1, 702u), card);
 }
 
+TEST_F(RuledBatchTest, CopySourceChoiceAndCandidatesSurviveRedactionForEveryParticipant)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(1);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_COPY_SOURCE);
+    choice->set_prompt_text("Choose a creature for Clone to copy, or Decline to enter as Clone.");
+    choice->set_min(0);
+    choice->set_max(1);
+    choice->add_candidate_object_ids(101);
+    choice->add_candidate_object_ids(202);
+    choice->add_candidate_names("Grizzly Bears");
+    choice->add_candidate_names("Serra Angel");
+
+    for (auto *participant : {p1, p2}) {
+        const auto redacted = redactFor(batch, participant);
+        const auto it = std::find_if(redacted.events().begin(), redacted.events().end(),
+                                     [](const auto &event) { return event.has_resolution_choice_required(); });
+        ASSERT_NE(it, redacted.events().end());
+        const auto &kept = it->resolution_choice_required();
+        EXPECT_EQ(kept.choice_kind(), ruled::v1::CHOICE_KIND_COPY_SOURCE);
+        ASSERT_EQ(kept.candidate_object_ids_size(), 2);
+        EXPECT_EQ(kept.candidate_object_ids(0), 101u);
+        EXPECT_EQ(kept.candidate_names(1), "Serra Angel");
+    }
+}
+
+TEST_F(RuledBatchTest, CopySnapshotRepaintsAndAnnotatesTheExistingPhysicalCard)
+{
+    seedCardCatalog({"Clone", "Serra Angel"});
+    Server_Card *card = addCardToTable(p1, "Clone");
+    const int serverId = card->getId();
+    card->setCoords(4, 1);
+    card->setAnnotation(QStringLiteral("Keep me"));
+
+    ruled::v1::IpcResponse copied;
+    copied.set_ok(true);
+    auto *zoneView = copied.mutable_batch()->add_events()->mutable_zone_view();
+    auto view = buildPerPlayerView(p1, {745u}, {false}, {4});
+    auto *object = view.mutable_battlefield_objects(0);
+    object->set_card_id("clone");
+    object->set_effective_display_name("Serra Angel");
+    object->set_copy_annotation("Copy: Clone");
+    *zoneView->add_per_player() = view;
+    *zoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+
+    const BatchOutcome copiedOutcome = callBatchApply(copied);
+    EXPECT_TRUE(copiedOutcome.battlefieldDisplayChanged);
+    EXPECT_EQ(card->getName(), QStringLiteral("Serra Angel"));
+    EXPECT_EQ(card->getAnnotation(), QStringLiteral("Keep me\nCopy: Clone"));
+    EXPECT_EQ(card->getId(), serverId);
+    EXPECT_EQ(card->getX(), 4);
+    EXPECT_EQ(card->getY(), 1);
+    EXPECT_EQ(findCardByEngineOid(p1, 745u), card);
+
+    ruled::v1::IpcResponse restored;
+    restored.set_ok(true);
+    auto *restoredZoneView = restored.mutable_batch()->add_events()->mutable_zone_view();
+    auto restoredView = buildPerPlayerView(p1, {745u}, {false}, {4});
+    auto *restoredObject = restoredView.mutable_battlefield_objects(0);
+    restoredObject->set_card_id("clone");
+    restoredObject->set_effective_display_name("Clone");
+    *restoredZoneView->add_per_player() = restoredView;
+    *restoredZoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+
+    const BatchOutcome restoredOutcome = callBatchApply(restored);
+    EXPECT_TRUE(restoredOutcome.battlefieldDisplayChanged);
+    EXPECT_EQ(card->getName(), QStringLiteral("Clone"));
+    EXPECT_EQ(card->getAnnotation(), QStringLiteral("Keep me"));
+    EXPECT_EQ(card->getId(), serverId);
+}
+
+TEST_F(RuledBatchTest, CopiedPermanentLeavesAsItsPhysicalCardWithoutMovingTheSource)
+{
+    seedCardCatalog({"Clone", "Serra Angel"});
+    Server_Card *clone = addCardToTable(p1, "Clone");
+    Server_Card *angel = addCardToTable(p2, "Serra Angel");
+    const int cloneServerId = clone->getId();
+
+    ruled::v1::IpcResponse copied;
+    copied.set_ok(true);
+    auto *copiedZoneView = copied.mutable_batch()->add_events()->mutable_zone_view();
+    auto cloneView = buildPerPlayerView(p1, {745u}, {false});
+    auto *cloneObject = cloneView.mutable_battlefield_objects(0);
+    cloneObject->set_card_id("clone");
+    cloneObject->set_effective_display_name("Serra Angel");
+    cloneObject->set_copy_annotation("Copy: Clone");
+    auto angelView = buildPerPlayerView(p2, {846u}, {false});
+    angelView.mutable_battlefield_objects(0)->set_card_id("serra_angel");
+    angelView.mutable_battlefield_objects(0)->set_effective_display_name("Serra Angel");
+    *copiedZoneView->add_per_player() = cloneView;
+    *copiedZoneView->add_per_player() = angelView;
+    callBatchApply(copied);
+    ASSERT_EQ(clone->getName(), QStringLiteral("Serra Angel"));
+
+    ruled::v1::IpcResponse movedResponse;
+    movedResponse.set_ok(true);
+    auto *moved = movedResponse.mutable_batch()->add_events()->mutable_permanent_moved();
+    moved->set_object_id(745u);
+    moved->set_owner_player_id(p1->getPlayerId());
+    moved->set_controller_player_id(p1->getPlayerId());
+    moved->set_card_id("clone");
+    moved->set_destination(ruled::v1::PermanentMoved::DESTINATION_GRAVEYARD);
+    auto *finalZoneView = movedResponse.mutable_batch()->add_events()->mutable_zone_view();
+    auto finalP1 = buildPerPlayerView(p1, {}, {});
+    finalP1.add_graveyard_object_ids(745u);
+    *finalZoneView->add_per_player() = finalP1;
+    *finalZoneView->add_per_player() = angelView;
+    callBatchApply(movedResponse);
+
+    ASSERT_EQ(p1->getZones().value(ZoneNames::GRAVE)->getCards().size(), 1);
+    EXPECT_EQ(p1->getZones().value(ZoneNames::GRAVE)->getCards().first(), clone);
+    EXPECT_EQ(clone->getId(), cloneServerId);
+    EXPECT_EQ(clone->getName(), QStringLiteral("Clone"));
+    EXPECT_FALSE(clone->getAnnotation().contains(QStringLiteral("Copy: ")));
+    ASSERT_EQ(p2->getZones().value(ZoneNames::TABLE)->getCards().size(), 1);
+    EXPECT_EQ(p2->getZones().value(ZoneNames::TABLE)->getCards().first(), angel);
+}
+
 TEST_F(RuledBatchTest, LeavingBattlefieldRestoresFrontFaceDisplay)
 {
     const QString cardId = "reckless_waif_merciless_predator";

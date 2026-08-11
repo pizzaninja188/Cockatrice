@@ -247,6 +247,9 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
                 // may not have arrived yet — draw a faint marker.
                 outlineColor = QColor(255, 80, 80, 200); // red-ish
             }
+            if (ruledHandler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopySource, ruledOid)) {
+                outlineColor = QColor(80, 200, 255); // cyan for an eligible untargeted copy source
+            }
             if (RuledActions::isSelectedSpellTarget(ruledGame, ruledOid)) {
                 outlineColor = QColor(220, 40, 40);
             }

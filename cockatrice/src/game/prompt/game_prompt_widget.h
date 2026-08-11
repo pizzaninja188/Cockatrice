@@ -66,7 +66,7 @@ public:
         QString text;
         /// OpeningChooseFirst only: [local seat id, opponent seat id].
         QVector<int> openingPickSeatIds;
-        /// ClickChoice only: CR 603.5 "you may" trigger, so the prompt offers Decline.
+        /// ClickChoice only: the engine permits an empty answer, so the prompt offers Decline.
         /// New fields go at the *end* — callers and tests use positional aggregate init, so
         /// inserting in the middle silently rebinds their arguments (or fails to compile).
         bool canDecline = false;
@@ -145,7 +145,7 @@ signals:
     void confirmCombatDamageRequested();
     void confirmSpellDamageRequested();
     void cancelTargetingRequested();
-    void declineTriggerRequested();
+    void declineClickChoiceRequested();
     void confirmTargetsRequested();
     void ruledOpeningPickSeatRequested(int seatId);
     void ruledOpeningMulliganKeepRequested();
@@ -173,7 +173,7 @@ private:
     QPushButton *confirmCombatDamageButton;
     QPushButton *confirmSpellDamageButton = nullptr;
     QPushButton *cancelTargetingButton;
-    QPushButton *declineTriggerButton = nullptr;
+    QPushButton *declineClickChoiceButton = nullptr;
     QPushButton *confirmTargetsButton = nullptr;
     QPushButton *undoLandTapButton;
     /// The exclusive mode + payload, and the OR-set that derives PromptMode::Targeting.

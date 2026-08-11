@@ -2,6 +2,7 @@
 
 use super::events::{ev_log, finish_with_events};
 use super::resolution::{move_object_to_zone, permanent_moved_event};
+use super::targeting::{battlefield_objects_matching, object_matches_mass_filter};
 use super::*;
 
 fn accumulate_entry_counters(
@@ -37,30 +38,35 @@ impl GameEngine {
             return Vec::new();
         };
         let mut candidates = Vec::new();
-        if let Some(face) = self
-            .registry
-            .get(&entering.card_id)
-            .and_then(|definition| definition.face(event.face_index))
-        {
+        if let Some(face) = self.effective_face(event.object_id) {
             for (ability_index, ability) in face.static_abilities.iter().enumerate() {
-                let label = match ability {
+                let (priority, label) = match ability {
+                    StaticAbilityDef::EntersAsCopy { .. } => (
+                        ReplacementPriority::EntryCopy,
+                        Some(format!("{} — enters as a copy", face.name)),
+                    ),
                     StaticAbilityDef::EntersTapped {
                         affected: EntersTappedAffected::Self_,
-                    } if !event.tapped => Some(format!("{} — enters tapped", face.name)),
-                    StaticAbilityDef::EntersWithCounters { .. } => {
-                        Some(format!("{} — enters with counters", face.name))
-                    }
-                    _ => None,
+                    } if !event.tapped => (
+                        ReplacementPriority::Other,
+                        Some(format!("{} — enters tapped", face.name)),
+                    ),
+                    StaticAbilityDef::EntersWithCounters { .. } => (
+                        ReplacementPriority::Other,
+                        Some(format!("{} — enters with counters", face.name)),
+                    ),
+                    _ => (ReplacementPriority::Other, None),
                 };
                 let Some(label) = label else {
                     continue;
                 };
                 let effect_id = EntryReplacementEffectId::Intrinsic {
                     object_id: event.object_id,
+                    copy_revision: entering.copy_revision,
                     ability_index,
                 };
                 if !event.applied_effects.contains(&effect_id) {
-                    candidates.push((effect_id, ReplacementPriority::Other, label));
+                    candidates.push((effect_id, priority, label));
                 }
             }
         }
@@ -73,11 +79,7 @@ impl GameEngine {
             .collect();
         battlefield_sources.sort_by_key(|object| object.id);
         for source in battlefield_sources {
-            let Some(face) = self
-                .registry
-                .get(&source.card_id)
-                .and_then(|definition| definition.face(source.face_up_index))
-            else {
+            let Some(face) = self.effective_face(source.id) else {
                 continue;
             };
             for (ability_index, ability) in face.static_abilities.iter().enumerate() {
@@ -121,6 +123,127 @@ impl GameEngine {
             .collect()
     }
 
+    fn entry_copy_filter(
+        &self,
+        event: &BattlefieldEntryEvent,
+        effect_id: &EntryReplacementEffectId,
+    ) -> Option<TargetFilter> {
+        let EntryReplacementEffectId::Intrinsic {
+            object_id,
+            copy_revision,
+            ability_index,
+        } = effect_id
+        else {
+            return None;
+        };
+        if *object_id != event.object_id {
+            return None;
+        }
+        let object = self.state.objects.get(object_id)?;
+        if object.copy_revision != *copy_revision {
+            return None;
+        }
+        match self
+            .effective_face(*object_id)?
+            .static_abilities
+            .get(*ability_index)?
+        {
+            StaticAbilityDef::EntersAsCopy { filter } => Some(filter.clone()),
+            _ => None,
+        }
+    }
+
+    fn copy_source_candidates(
+        &self,
+        event: &BattlefieldEntryEvent,
+        filter: &TargetFilter,
+    ) -> Vec<ObjectId> {
+        battlefield_objects_matching(self, filter)
+            .into_iter()
+            .filter(|oid| *oid != event.object_id)
+            .collect()
+    }
+
+    fn park_copy_source_choice(
+        &mut self,
+        item: StackItem,
+        event: BattlefieldEntryEvent,
+        completion: BattlefieldEntryCompletion,
+        effect_id: EntryReplacementEffectId,
+        candidates: Vec<ObjectId>,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) {
+        let physical_name = self
+            .state
+            .objects
+            .get(&event.object_id)
+            .and_then(|object| self.registry.get(&object.card_id))
+            .map(|definition| definition.name.clone())
+            .unwrap_or_else(|| "this creature".to_string());
+        let prompt = format!(
+            "Choose a creature for {physical_name} to copy, or Decline to enter as {physical_name}."
+        );
+        let candidate_card_ids = candidates
+            .iter()
+            .map(|oid| {
+                self.effective_card_identity(*oid)
+                    .map(|(card_id, _)| card_id.to_string())
+                    .unwrap_or_default()
+            })
+            .collect();
+        let candidate_names = candidates
+            .iter()
+            .map(|oid| super::events::object_display_name(&self.state, self.registry, *oid))
+            .collect();
+        events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    deciding_player_id: event.deciding_player,
+                    source_object_id: event.object_id,
+                    prompt_text: prompt.clone(),
+                    choice_kind: rv1::ChoiceKind::CopySource as i32,
+                    candidate_object_ids: candidates.clone(),
+                    candidate_card_ids,
+                    min: 0,
+                    max: 1,
+                    ordered: false,
+                    candidate_names,
+                    candidate_server_card_ids: Vec::new(),
+                    unique_names: false,
+                },
+            )),
+        });
+        events.push(ev_log(prompt.clone()));
+        let deciding_player = event.deciding_player;
+        self.state.pending_replacement_event = Some(PendingReplacementEvent::BattlefieldEntry(
+            Box::new(PendingBattlefieldEntry {
+                event,
+                applications: Vec::new(),
+                copy_source_effect: Some(effect_id),
+                completion,
+            }),
+        ));
+        self.state.pending_resolution = Some(PendingResolution {
+            item,
+            custom_key: "__entry_copy_source".to_string(),
+            step: 1,
+            scratch: Vec::new(),
+            deciding_player,
+            candidates,
+            min: 0,
+            max: 1,
+            ordered: false,
+            prompt,
+            choice_kind: rv1::ChoiceKind::CopySource,
+            unique_names: false,
+            copy_source_object_id: 0,
+            search_destination: SearchDestination::Hand,
+            search_shuffle: false,
+            search_reveal: false,
+            resume_effect_index: None,
+        });
+    }
+
     fn apply_entry_replacement(
         &self,
         event: &mut BattlefieldEntryEvent,
@@ -129,6 +252,7 @@ impl GameEngine {
         match &effect_id {
             EntryReplacementEffectId::Intrinsic {
                 object_id,
+                copy_revision,
                 ability_index,
             } => {
                 debug_assert_eq!(*object_id, event.object_id);
@@ -136,10 +260,13 @@ impl GameEngine {
                     .state
                     .objects
                     .get(object_id)
-                    .and_then(|object| self.registry.get(&object.card_id))
-                    .and_then(|definition| definition.face(event.face_index))
+                    .filter(|object| object.copy_revision == *copy_revision)
+                    .and_then(|_| self.effective_face(*object_id))
                     .and_then(|face| face.static_abilities.get(*ability_index));
                 match ability {
+                    Some(StaticAbilityDef::EntersAsCopy { .. }) => {
+                        debug_assert!(false, "copy source choice must be completed before apply")
+                    }
                     Some(StaticAbilityDef::EntersTapped {
                         affected: EntersTappedAffected::Self_,
                     }) => event.tapped = true,
@@ -185,6 +312,22 @@ impl GameEngine {
             match candidates.as_slice() {
                 [] => return BattlefieldEntryProgress::Ready(event),
                 [(effect_id, _, _)] => {
+                    if let Some(filter) = self.entry_copy_filter(&event, effect_id) {
+                        let sources = self.copy_source_candidates(&event, &filter);
+                        if sources.is_empty() {
+                            event.applied_effects.push(effect_id.clone());
+                            continue;
+                        }
+                        self.park_copy_source_choice(
+                            item,
+                            event,
+                            completion,
+                            effect_id.clone(),
+                            sources,
+                            events,
+                        );
+                        return BattlefieldEntryProgress::Parked;
+                    }
                     self.apply_entry_replacement(&mut event, effect_id.clone());
                 }
                 _ => {
@@ -236,6 +379,7 @@ impl GameEngine {
                             PendingBattlefieldEntry {
                                 event,
                                 applications,
+                                copy_source_effect: None,
                                 completion,
                             },
                         )));
@@ -392,52 +536,14 @@ impl GameEngine {
         Ok(())
     }
 
-    pub(super) fn finish_battlefield_entry_replacement_choice(
+    fn complete_pending_battlefield_entry(
         &mut self,
         pending: PendingResolution,
-        application_id: u32,
+        event: BattlefieldEntryEvent,
+        completion: BattlefieldEntryCompletion,
+        mut events: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
-        let Some(pending_event) = self.state.pending_replacement_event.take() else {
-            self.state.pending_resolution = Some(pending);
-            return Err(EngineError::Illegal(
-                "battlefield-entry replacement choice is stale",
-            ));
-        };
-        let mut entry = match pending_event {
-            PendingReplacementEvent::BattlefieldEntry(entry) => *entry,
-            other => {
-                self.state.pending_replacement_event = Some(other);
-                self.state.pending_resolution = Some(pending);
-                return Err(EngineError::Illegal(
-                    "battlefield-entry replacement choice is stale",
-                ));
-            }
-        };
-        let Some(application) = entry
-            .applications
-            .iter()
-            .find(|application| application.application_id == application_id)
-            .cloned()
-        else {
-            self.state.pending_replacement_event =
-                Some(PendingReplacementEvent::BattlefieldEntry(Box::new(entry)));
-            self.state.pending_resolution = Some(pending);
-            return Err(EngineError::Illegal("replacement application is stale"));
-        };
-
-        self.apply_entry_replacement(&mut entry.event, application.effect_id);
-        let mut events = Vec::new();
-        let event = match self.advance_or_park_battlefield_entry(
-            pending.item.clone(),
-            entry.event,
-            entry.completion.clone(),
-            &mut events,
-        ) {
-            BattlefieldEntryProgress::Parked => return Ok(finish_with_events(self, events)),
-            BattlefieldEntryProgress::Ready(event) => event,
-        };
-
-        match entry.completion {
+        match completion {
             BattlefieldEntryCompletion::LandPlay { player, land_name } => {
                 self.commit_battlefield_entry(event, None)?;
                 self.state.passes_since_stack_change = 0;
@@ -515,6 +621,145 @@ impl GameEngine {
                 Ok(finish_with_events(self, events))
             }
         }
+    }
+
+    pub(super) fn finish_entry_copy_source_choice(
+        &mut self,
+        pending: PendingResolution,
+        chosen: &[ObjectId],
+    ) -> Result<RuledEventBatch, EngineError> {
+        let Some(pending_event) = self.state.pending_replacement_event.take() else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("copy source choice is stale"));
+        };
+        let mut entry = match pending_event {
+            PendingReplacementEvent::BattlefieldEntry(entry) => *entry,
+            other => {
+                self.state.pending_replacement_event = Some(other);
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("copy source choice is stale"));
+            }
+        };
+        let Some(effect_id) = entry.copy_source_effect.take() else {
+            self.state.pending_replacement_event =
+                Some(PendingReplacementEvent::BattlefieldEntry(Box::new(entry)));
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("copy source choice is stale"));
+        };
+        let Some(filter) = self.entry_copy_filter(&entry.event, &effect_id) else {
+            entry.copy_source_effect = Some(effect_id);
+            self.state.pending_replacement_event =
+                Some(PendingReplacementEvent::BattlefieldEntry(Box::new(entry)));
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("copy replacement is stale"));
+        };
+
+        if let Some(&source_id) = chosen.first() {
+            if source_id == entry.event.object_id
+                || !object_matches_mass_filter(self, source_id, &filter)
+            {
+                entry.copy_source_effect = Some(effect_id);
+                self.state.pending_replacement_event =
+                    Some(PendingReplacementEvent::BattlefieldEntry(Box::new(entry)));
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("copy source is stale"));
+            }
+            let Some(values) = self.copiable_values_for(source_id) else {
+                entry.copy_source_effect = Some(effect_id);
+                self.state.pending_replacement_event =
+                    Some(PendingReplacementEvent::BattlefieldEntry(Box::new(entry)));
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("copy source is stale"));
+            };
+            let Some(object) = self.state.objects.get_mut(&entry.event.object_id) else {
+                entry.copy_source_effect = Some(effect_id);
+                self.state.pending_replacement_event =
+                    Some(PendingReplacementEvent::BattlefieldEntry(Box::new(entry)));
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("entering copy object is stale"));
+            };
+            object.must_attack_if_able = values.face.must_attack_if_able;
+            object.must_block_if_able = values.face.must_block_if_able;
+            object.copiable_values = Some(values);
+            object.copy_revision = object.copy_revision.saturating_add(1);
+        }
+        entry.event.applied_effects.push(effect_id);
+
+        let mut events = Vec::new();
+        let event = match self.advance_or_park_battlefield_entry(
+            pending.item.clone(),
+            entry.event,
+            entry.completion.clone(),
+            &mut events,
+        ) {
+            BattlefieldEntryProgress::Parked => return Ok(finish_with_events(self, events)),
+            BattlefieldEntryProgress::Ready(event) => event,
+        };
+        self.complete_pending_battlefield_entry(pending, event, entry.completion, events)
+    }
+
+    pub(super) fn finish_battlefield_entry_replacement_choice(
+        &mut self,
+        pending: PendingResolution,
+        application_id: u32,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let Some(pending_event) = self.state.pending_replacement_event.take() else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "battlefield-entry replacement choice is stale",
+            ));
+        };
+        let mut entry = match pending_event {
+            PendingReplacementEvent::BattlefieldEntry(entry) => *entry,
+            other => {
+                self.state.pending_replacement_event = Some(other);
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "battlefield-entry replacement choice is stale",
+                ));
+            }
+        };
+        let Some(application) = entry
+            .applications
+            .iter()
+            .find(|application| application.application_id == application_id)
+            .cloned()
+        else {
+            self.state.pending_replacement_event =
+                Some(PendingReplacementEvent::BattlefieldEntry(Box::new(entry)));
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("replacement application is stale"));
+        };
+
+        let mut events = Vec::new();
+        if let Some(filter) = self.entry_copy_filter(&entry.event, &application.effect_id) {
+            let sources = self.copy_source_candidates(&entry.event, &filter);
+            if !sources.is_empty() {
+                self.park_copy_source_choice(
+                    pending.item,
+                    entry.event,
+                    entry.completion,
+                    application.effect_id,
+                    sources,
+                    &mut events,
+                );
+                return Ok(finish_with_events(self, events));
+            }
+            entry.event.applied_effects.push(application.effect_id);
+        } else {
+            self.apply_entry_replacement(&mut entry.event, application.effect_id);
+        }
+        let event = match self.advance_or_park_battlefield_entry(
+            pending.item.clone(),
+            entry.event,
+            entry.completion.clone(),
+            &mut events,
+        ) {
+            BattlefieldEntryProgress::Parked => return Ok(finish_with_events(self, events)),
+            BattlefieldEntryProgress::Ready(event) => event,
+        };
+
+        self.complete_pending_battlefield_entry(pending, event, entry.completion, events)
     }
 }
 

@@ -133,6 +133,28 @@ QString mergeRuledGrantedAbilitiesIntoAnnotation(const QString &baseAnn, const Q
     }
     return without + QLatin1Char('\n') + grantedLine;
 }
+
+// CR 707 display aid. This line is authoritative and replaceable so a copied permanent can
+// return to its physical identity without retaining stale copy text.
+QString mergeRuledCopyIntoAnnotation(const QString &baseAnn, const QString &copyAnnotation)
+{
+    const QString marker = QStringLiteral("Copy: ");
+    QStringList kept;
+    for (const QString &line : baseAnn.split(QLatin1Char('\n'))) {
+        if (line.trimmed().startsWith(marker)) {
+            continue;
+        }
+        kept.append(line);
+    }
+    const QString without = kept.join(QLatin1Char('\n')).trimmed();
+    if (copyAnnotation.isEmpty()) {
+        return without;
+    }
+    if (without.isEmpty()) {
+        return copyAnnotation;
+    }
+    return without + QLatin1Char('\n') + copyAnnotation;
+}
 } // namespace
 
 RuledPlayerBinding::RuledZoneSyncResult
@@ -492,6 +514,8 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                     QString mergedAnn = mergeRuledDamageIntoAnnotation(card->getAnnotation(), isCreature ? dmg : 0);
                     mergedAnn = mergeRuledCountersIntoAnnotation(mergedAnn, counterAnn);
                     mergedAnn = mergeRuledOwnerIntoAnnotation(mergedAnn, ownerName);
+                    mergedAnn = mergeRuledCopyIntoAnnotation(
+                        mergedAnn, QString::fromStdString(battlefieldObject.copy_annotation()));
                     QStringList grantedAbilityLabels;
                     grantedAbilityLabels.reserve(battlefieldObject.granted_ability_labels_size());
                     for (const std::string &label : battlefieldObject.granted_ability_labels()) {

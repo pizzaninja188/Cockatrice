@@ -17,7 +17,8 @@ use tricerules_cards::CardRegistry;
 use tricerules_core::{GameEngine, TurnStep, Zone};
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
 use tricerules_proto::ruled::v1::{
-    ActivateAbility, CastSource, CastSpell, PassPriority, PlayLand, RuledCommand, TargetRef,
+    ActivateAbility, CastSource, CastSpell, PassPriority, PlayLand, RuledCommand,
+    SubmitResolutionChoice, TargetRef,
 };
 
 fn pass() -> RuledCommand {
@@ -149,6 +150,27 @@ fn grant_ample_mana(e: &mut GameEngine) {
 /// Resolve whatever sits on the stack, bounded so a target-prompt stall can't hang the test.
 fn try_drain_stack(e: &mut GameEngine) {
     for _ in 0..40 {
+        if let Some(pending) = e.state.pending_resolution.as_ref() {
+            let deciding_player = pending.deciding_player;
+            let pick_count = (pending.min.max(u32::from(!pending.candidates.is_empty())))
+                .min(pending.max)
+                .min(pending.candidates.len() as u32) as usize;
+            let chosen_object_ids = pending
+                .candidates
+                .iter()
+                .copied()
+                .take(pick_count)
+                .collect();
+            let answer = RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    chosen_object_ids,
+                })),
+            };
+            if e.apply_command(deciding_player, &answer).is_err() {
+                break;
+            }
+            continue;
+        }
         if e.state.stack.is_empty() {
             break;
         }

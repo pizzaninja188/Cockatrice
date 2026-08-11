@@ -79,7 +79,10 @@ impl CharacteristicsEvaluator<'_> {
     fn characteristics(&self, oid: ObjectId) -> Option<Characteristics> {
         let object = self.state.objects.get(&oid)?;
         let definition = self.registry.get(&object.card_id)?;
-        let face = definition.face(object.face_up_index)?;
+        let copied = object.copiable_values.as_ref();
+        let face = copied
+            .map(|values| &values.face)
+            .or_else(|| definition.face(object.face_up_index))?;
 
         let mut result = Characteristics {
             // CR 110.2 base value: the controller recorded on the object, set when it entered the
@@ -87,7 +90,10 @@ impl CharacteristicsEvaluator<'_> {
             controller: object.controller,
             types: face.types.to_vec(),
             supertypes: face.supertypes.to_vec(),
-            colors: if definition.layout == Layout::Flip && object.face_up_index > 0 {
+            colors: if copied.is_none()
+                && definition.layout == Layout::Flip
+                && object.face_up_index > 0
+            {
                 definition.primary_face().colors()
             } else {
                 face.colors()
@@ -96,8 +102,16 @@ impl CharacteristicsEvaluator<'_> {
             evasions: face.evasions.to_vec(),
             // Object snapshots take precedence for tokens and scenario overrides. Multi-face
             // objects leave these unset and read the active face.
-            power: object.power.or(face.power),
-            toughness: object.toughness.or(face.toughness),
+            power: if copied.is_some() {
+                face.power
+            } else {
+                object.power.or(face.power)
+            },
+            toughness: if copied.is_some() {
+                face.toughness
+            } else {
+                object.toughness.or(face.toughness)
+            },
         };
 
         self.apply_layer_1_copy(&mut result);
@@ -114,7 +128,10 @@ impl CharacteristicsEvaluator<'_> {
 
     // These identity stages are intentionally separate: adding the first effect in a layer must
     // fill its existing slot rather than creating another characteristics path.
-    fn apply_layer_1_copy(&self, _result: &mut Characteristics) {}
+    fn apply_layer_1_copy(&self, _result: &mut Characteristics) {
+        // The owned snapshot was selected above as the base printed face. Keeping this named
+        // stage makes the CR 613 order explicit while avoiding a second characteristics path.
+    }
 
     /// CR 613 layer 2 — control-changing *continuous* effects (Mind Control, Threaten,
     /// Confiscate). Still empty: the only control changes modelled so far are decided when a
@@ -296,6 +313,8 @@ mod tests {
                 owner: 0,
                 controller: 0,
                 card_id: "grizzly_bears".to_string(),
+                copiable_values: None,
+                copy_revision: 0,
                 zone: Zone::Battlefield,
                 tapped: false,
                 summoning_sick: false,

@@ -3,6 +3,7 @@ use tricerules_cards::primitives::{
     Color, ContinuousEffectKind, CounterKind, DamagePreventionAdditionalEffect, EffectDuration,
     Keyword, ManaAmount, SearchDestination,
 };
+use tricerules_cards::CardFace;
 use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
 
 pub type PlayerId = i32;
@@ -75,6 +76,12 @@ pub struct GameObject {
     /// `exile` are *owner* lists.
     pub controller: PlayerId,
     pub card_id: String,
+    /// CR 707.2 layer-1 values replacing the physical card's printed face while this object
+    /// remains on the battlefield. Physical identity stays in `card_id`.
+    pub copiable_values: Option<CopiableValues>,
+    /// Incremented whenever a copy snapshot is installed. Intrinsic replacement identity uses
+    /// this revision so abilities acquired from the copied face are evaluated once.
+    pub copy_revision: u64,
     pub zone: Zone,
     pub tapped: bool,
     pub summoning_sick: bool,
@@ -111,6 +118,16 @@ pub struct GameObject {
     pub face_up_index: usize,
     /// Present only while this exact object remains exiled after its Adventure face resolved.
     pub adventure_cast_permission: Option<AdventureCastPermission>,
+}
+
+/// Owned CR 707.2 copiable values. Registry identity remains available for resolving copied
+/// abilities, while the cloned face also represents registry-backed token definitions directly.
+#[derive(Debug, Clone)]
+pub struct CopiableValues {
+    pub source_card_id: String,
+    pub source_face_index: usize,
+    pub face: CardFace,
+    pub display_name: String,
 }
 
 /// Runtime scope of one damage-prevention effect. Player ids use the engine's existing widened
@@ -402,6 +419,7 @@ pub(crate) enum ReplacementPriority {
 pub(crate) enum EntryReplacementEffectId {
     Intrinsic {
         object_id: ObjectId,
+        copy_revision: u64,
         ability_index: usize,
     },
     Battlefield {
@@ -474,6 +492,8 @@ pub(crate) enum BattlefieldEntryCompletion {
 pub(crate) struct PendingBattlefieldEntry {
     pub event: BattlefieldEntryEvent,
     pub applications: Vec<EntryReplacementApplication>,
+    /// Present while an `EntersAsCopy` application is waiting for its source selection.
+    pub copy_source_effect: Option<EntryReplacementEffectId>,
     pub completion: BattlefieldEntryCompletion,
 }
 

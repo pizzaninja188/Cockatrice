@@ -244,6 +244,19 @@ TEST_F(GamePromptWidgetTest, TargetingOutranksAParkedClickChoice)
     EXPECT_EQ(widget->effectiveMode(), PromptMode::ClickChoice);
 }
 
+TEST_F(GamePromptWidgetTest, OptionalClickChoiceUsesTheGenericDeclineControl)
+{
+    QSignalSpy spy(widget.get(), &GamePromptWidget::declineClickChoiceRequested);
+    widget->setRuledPromptState(
+        {PromptMode::ClickChoice, 0, 0, "Choose a creature for Clone to copy, or Decline to enter as Clone.", {}, true});
+
+    auto *decline = btn("declineClickChoiceButton");
+    ASSERT_NE(decline, nullptr);
+    EXPECT_FALSE(decline->isHidden());
+    decline->click();
+    EXPECT_EQ(spy.count(), 1);
+}
+
 TEST_F(GamePromptWidgetTest, ResolutionPickShowsConfirmEnabledOnlyWhenSatisfied)
 {
     widget->setLocalPlayerHasPriority(true);
@@ -282,7 +295,7 @@ TEST_F(GamePromptWidgetTest, TriggerOrderHidesPriorityAndCombatButtons)
     // Picking happens by clicking a card in the ordering popup — this mode owns no button.
     EXPECT_TRUE(btn("passPriorityButton")->isHidden());
     EXPECT_TRUE(btn("resolutionHandPickConfirmButton")->isHidden());
-    EXPECT_TRUE(btn("declineTriggerButton")->isHidden());
+    EXPECT_TRUE(btn("declineClickChoiceButton")->isHidden());
 
     widget->setRuledPromptState({});
     EXPECT_EQ(widget->effectiveMode(), PromptMode::Normal);

@@ -2,7 +2,7 @@
 
 use super::{
     AbilityCost, Amount, CardTypeFilter, Color, CounterKind, GameCondition, Keyword,
-    SpellEffectKind,
+    SpellEffectKind, TargetFilter,
 };
 use crate::ManaAmount;
 use serde::{Deserialize, Serialize};
@@ -358,6 +358,13 @@ pub enum EntersTappedAffected {
 /// do not use the stack, unlike triggered and activated abilities.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StaticAbilityDef {
+    /// CR 614.12 / 707.5: as this permanent enters, its controller may replace its copiable
+    /// values with those of a live battlefield permanent matching `filter`. This is a selection,
+    /// not a target; Clone and Stunt Double therefore ignore hexproof and shroud.
+    EntersAsCopy {
+        #[serde(default = "TargetFilter::default_creature")]
+        filter: TargetFilter,
+    },
     /// CR 614.1d: modify a proposed battlefield-entry event rather than tapping the permanent
     /// after it enters. Intrinsic examples include Diregraf Ghoul and the gainland cycle;
     /// `Permanents` is the global Orb of Dreams form.

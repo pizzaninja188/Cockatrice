@@ -653,6 +653,8 @@ fn haste_creature_can_attack_same_turn_it_enters() {
             owner: pid,
             controller: pid,
             card_id: "raging_goblin".to_string(),
+            copiable_values: None,
+            copy_revision: 0,
             zone: tricerules_core::Zone::Battlefield,
             tapped: false,
             summoning_sick: true, // still sick — haste should bypass this
@@ -698,6 +700,8 @@ fn non_haste_summoning_sick_creature_cannot_attack() {
             owner: pid,
             controller: pid,
             card_id: "grizzly_bears".to_string(),
+            copiable_values: None,
+            copy_revision: 0,
             zone: tricerules_core::Zone::Battlefield,
             tapped: false,
             summoning_sick: true,

@@ -122,6 +122,9 @@ pub(super) fn lose_life(
             .and_then(|tid| engine.state.objects.get(tid))
             .and_then(|o| {
                 let def = engine.registry.get(&o.card_id)?;
+                if let Some(values) = &o.copiable_values {
+                    return Some(values.face.mana_cost.mana_value());
+                }
                 // CR 202.3b: a face with no printed cost (a transforming DFC's back face) has
                 // the mana value of the front face, so fall back rather than reading 0.
                 let face = def

@@ -218,7 +218,8 @@ public:
     /// decision at a time and blocks until it is answered, so at most one of these is live —
     /// installing a new one tears the previous one down (see setPendingChoice).
     ///
-    /// The kinds differ only in how they are *rendered*: TriggerTarget / CopyTarget / LegendKeep
+    /// The kinds differ only in how they are *rendered*: TriggerTarget / CopyTarget / CopySource /
+    /// LegendKeep
     /// are answered by clicking a permanent on the battlefield, ResolutionPick by clicking cards in
     /// a zone (hand, deck view, or a revealed popup). The state, the clearing and — for everything
     /// but TriggerTarget — the SubmitResolutionChoice submission are shared.
@@ -231,6 +232,8 @@ public:
             TriggerTarget,
             /// CR 707.10c: the controller of a spell copy may redirect its targets.
             CopyTarget,
+            /// CR 614.12 / 707.5: an entering permanent chooses an untargeted copy source.
+            CopySource,
             /// CR 704.5j: which of two-or-more same-name legends the controller keeps.
             LegendKeep,
             /// Tier-3 mid-resolution pick over cards in a zone (Brainstorm, Gifts Ungiven, …).
@@ -243,7 +246,7 @@ public:
         Kind kind = Kind::TriggerTarget;
         QString promptText;
         bool mayDecline = false;
-        /// Click-to-select candidates on the battlefield (CopyTarget, LegendKeep).
+        /// Click-to-select candidates on the battlefield (CopyTarget, CopySource, LegendKeep).
         QVector<quint32> candidateOids;
 
         // --- ResolutionPick payload ---------------------------------------------------
@@ -956,10 +959,18 @@ public:
     {
         return hasPendingChoiceOfKind(kind) && pendingChoice->candidateOids.contains(oid);
     }
-    /// Answer a click-to-select choice (CopyTarget, LegendKeep) with the clicked permanent.
+    /// Answer a click-to-select choice (CopyTarget, CopySource, LegendKeep) with the clicked permanent.
     /// For LegendKeep the chosen permanent is the one KEPT (CR 704.5j); the engine sacrifices
     /// the rest. Clears the choice and sends SubmitResolutionChoice.
     void submitPendingChoiceObject(quint32 oid);
+
+    [[nodiscard]] bool pendingClickChoiceMayDecline() const
+    {
+        return pendingChoice.has_value() && pendingChoice->mayDecline;
+    }
+    /// Decline the current optional click choice. Trigger targets use ChooseTriggerTarget; copy
+    /// sources use an empty SubmitResolutionChoice.
+    void declinePendingClickChoice();
 
     [[nodiscard]] bool hasPendingTriggerTarget() const
     {
@@ -970,7 +981,6 @@ public:
         return hasPendingTriggerTarget() && pendingChoice->mayDecline;
     }
     /// Decline an optional triggered ability (CR 603.5).
-    void declinePendingTrigger();
     [[nodiscard]] QString pendingTriggerText() const
     {
         return pendingChoicePromptText(ChoiceKind::TriggerTarget);

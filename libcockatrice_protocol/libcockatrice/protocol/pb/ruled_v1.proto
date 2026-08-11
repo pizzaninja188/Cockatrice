@@ -724,6 +724,9 @@ enum ChoiceKind {
   // CR 616 ordering among applicable replacement and prevention effects. Candidate ids are
   // opaque application ids, not game objects. Public; candidate_names carry descriptions.
   CHOICE_KIND_REPLACEMENT_EFFECT = 7;
+  // A live battlefield permanent selected for an untargeted "enters as a copy" replacement
+  // effect (Clone, Stunt Double). Public; zero selections means decline.
+  CHOICE_KIND_COPY_SOURCE = 8;
 }
 
 // A parked custom resolution (CR 608) requesting input from one player. Reused by every tier-3
@@ -988,6 +991,11 @@ message BattlefieldObject {
   // from the active intrinsic face (e.g. ["Deathtouch"] after Bladebrand resolves). The engine
   // owns this delta; relay and client code must not infer it from the Oracle display database.
   repeated string granted_ability_labels = 15 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Engine-owned effective display identity after CR 613 layer 1. The relay may use cards.xml to
+  // render this name, but must not infer rules characteristics from it.
+  string effective_display_name = 16 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Replaceable compact annotation describing the underlying physical object (e.g. "Copy: Clone").
+  string copy_annotation = 17 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message HandCard {

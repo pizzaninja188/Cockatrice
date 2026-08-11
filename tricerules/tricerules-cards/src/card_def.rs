@@ -361,6 +361,16 @@ pub struct CardDefinition {
 }
 
 impl CardDefinition {
+    /// Display-database identity for `face_index`. Cockatrice stores transform, flip, and MDFC
+    /// faces as separate entries, while split and Adventure cards retain the whole-card entry.
+    pub fn face_display_name(&self, face_index: usize) -> Option<&str> {
+        let face = self.face(face_index)?;
+        Some(match self.layout {
+            Layout::Transform | Layout::Flip | Layout::ModalDfc => face.name.as_str(),
+            Layout::Normal | Layout::Split | Layout::Adventure => self.name.as_str(),
+        })
+    }
+
     /// Populate every face's derived type/supertype flags. Called once per card at registry
     /// load; the flags are never authored in RON. Idempotent.
     pub(crate) fn derive_type_flags(&mut self) {

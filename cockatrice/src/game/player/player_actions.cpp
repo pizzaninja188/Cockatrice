@@ -4046,7 +4046,9 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         // ability waiting on mana) is intentionally NOT blocked here: tapping a mana land floats mana
         // that autoApplyFloatedManaToPendingCost routes into the pending cost. The full ability menu is
         // still suppressed during ability payment further below, to avoid clobbering it.
-        if (handler->hasPendingTriggerTarget() || pendingActivatedAbility.waitingForTarget ||
+        if (handler->hasPendingTriggerTarget() ||
+            handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopySource) ||
+            pendingActivatedAbility.waitingForTarget ||
             pendingRuledSpellCast.waitingForTarget) {
             return false;
         }
@@ -4190,6 +4192,27 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
 {
     RuledClientState *handler = player->getGame()->getGameEventHandler()->ruled();
     if (handler && handler->isEngineCommandPending()) {
+        return true;
+    }
+
+    // CR 614.12 / 707.5: Clone's entering-as-copy choice is untargeted but uses the existing
+    // engine-authoritative board click path.
+    if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopySource)) {
+        if (!card || !card->getZone()) {
+            return false;
+        }
+        if (card->getZone()->getName() != ZoneNames::TABLE) {
+            handler->emitLocalLog(tr("Choose a creature on the battlefield for Clone to copy."));
+            return true;
+        }
+        const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
+        const quint32 sourceOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
+        if (sourceOid == 0 ||
+            !handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopySource, sourceOid)) {
+            handler->emitLocalLog(tr("That is not a creature Clone can copy."));
+            return true;
+        }
+        handler->submitPendingChoiceObject(sourceOid);
         return true;
     }
 

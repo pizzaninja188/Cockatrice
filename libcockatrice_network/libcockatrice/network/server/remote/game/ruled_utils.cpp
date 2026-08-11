@@ -102,6 +102,7 @@ bool isPrivateChoiceKind(ruled::v1::ChoiceKind kind)
         case ruled::v1::CHOICE_KIND_TARGET_OBJECTS:
         case ruled::v1::CHOICE_KIND_LEGEND_KEEP:
         case ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT:
+        case ruled::v1::CHOICE_KIND_COPY_SOURCE:
             return false;
         default:
             // Unknown kind from a newer engine: assume it conceals something.

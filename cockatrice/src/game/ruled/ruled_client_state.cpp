@@ -370,14 +370,23 @@ void RuledClientState::submitPendingChoiceObject(quint32 oid)
     sendResolutionChoice({oid});
 }
 
-void RuledClientState::declinePendingTrigger()
+void RuledClientState::declinePendingClickChoice()
 {
-    if (!pendingTriggerMayDecline()) {
+    if (!pendingClickChoiceMayDecline()) {
+        return;
+    }
+    const ChoiceKind kind = pendingChoice->kind;
+    if (kind == ChoiceKind::CopySource) {
+        clearPendingChoiceOfKind(kind);
+        sendResolutionChoice({});
+        return;
+    }
+    if (kind != ChoiceKind::TriggerTarget) {
         return;
     }
     ruled::v1::RuledCommand command;
     command.mutable_choose_trigger_target()->set_decline(true);
-    clearPendingChoiceOfKind(ChoiceKind::TriggerTarget);
+    clearPendingChoiceOfKind(kind);
     host->sendRuledCommand(command);
 }
 

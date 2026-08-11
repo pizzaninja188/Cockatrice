@@ -37,18 +37,19 @@ impl GameEngine {
         // here would make a reanimated Glorious Anthem pump its *former* controller's creatures.
         let controller = object.controller;
         let card_id = object.card_id.clone();
-        let face_up_index = object.face_up_index;
-        let statics: Vec<StaticAbilityDef> = match self.registry.get(&card_id) {
-            Some(definition) => definition
-                .face(face_up_index)
-                .map(|face| face.static_abilities.to_vec())
-                .unwrap_or_default(),
-            None => return,
-        };
+        let effective_name = self.effective_face(object_id).map(|face| face.name.clone());
+        let statics: Vec<StaticAbilityDef> = self
+            .effective_face(object_id)
+            .map(|face| face.static_abilities.to_vec())
+            .unwrap_or_default();
         let timestamp = self.state.command_index;
 
         for static_ability in statics {
             match static_ability {
+                StaticAbilityDef::EntersAsCopy { .. } => {
+                    // CR 614.12 / 707.5 entry replacement, handled before zone commitment in
+                    // `engine::replacement`; there is no post-entry continuous effect to emit.
+                }
                 StaticAbilityDef::EntersTapped { .. } => {
                     // CR 614.12 entry replacements are evaluated against the proposed event in
                     // `engine::replacement`; there is no post-entry continuous effect to emit.
@@ -81,11 +82,7 @@ impl GameEngine {
                     };
                     let id = self.state.next_damage_prevention_effect_id;
                     self.state.next_damage_prevention_effect_id = id.saturating_add(1);
-                    let source_label = self
-                        .registry
-                        .get(&card_id)
-                        .map(|definition| definition.name.clone())
-                        .unwrap_or_else(|| card_id.clone());
+                    let source_label = effective_name.clone().unwrap_or_else(|| card_id.clone());
                     self.state
                         .damage_prevention_effects
                         .push(ActiveDamagePrevention {

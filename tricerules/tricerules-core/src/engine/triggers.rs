@@ -223,11 +223,15 @@ impl GameEngine {
         for pi in ordered {
             for &source_id in &self.state.players[pi].battlefield {
                 if let Some(object) = self.state.objects.get(&source_id) {
+                    let (card_id, face_index) = self
+                        .effective_card_identity(source_id)
+                        .map(|(card_id, face_index)| (card_id.to_string(), face_index))
+                        .unwrap_or_else(|| (object.card_id.clone(), object.face_up_index));
                     sources.push(TriggerSourceSnapshot {
                         object_id: source_id,
-                        card_id: object.card_id.clone(),
+                        card_id,
                         controller: object.controller,
-                        face_index: object.face_up_index,
+                        face_index,
                     });
                 }
             }
@@ -247,7 +251,10 @@ impl GameEngine {
                     return vec![];
                 };
                 let entering_id = *object_id;
-                let entering_card_id = obj.card_id.clone();
+                let (entering_card_id, entering_face_index) = self
+                    .effective_card_identity(entering_id)
+                    .map(|(card_id, face_index)| (card_id.to_string(), face_index))
+                    .unwrap_or_else(|| (obj.card_id.clone(), obj.face_up_index));
                 let Some(entering_characteristics) = self.characteristics(entering_id) else {
                     return vec![];
                 };
@@ -258,7 +265,7 @@ impl GameEngine {
                     &entering_card_id,
                     entering_id,
                     entering_controller,
-                    obj.face_up_index,
+                    entering_face_index,
                     |tc| *tc == TriggerCondition::WhenSelfEntersBattlefield,
                 ));
 
@@ -356,11 +363,15 @@ impl GameEngine {
                 let Some(obj) = self.state.objects.get(attacker_id) else {
                     return vec![];
                 };
+                let (card_id, face_index) = self
+                    .effective_card_identity(*attacker_id)
+                    .map(|(card_id, face_index)| (card_id.to_string(), face_index))
+                    .unwrap_or_else(|| (obj.card_id.clone(), obj.face_up_index));
                 self.matching_triggered_abilities(
-                    &obj.card_id,
+                    &card_id,
                     *attacker_id,
                     obj.controller,
-                    obj.face_up_index,
+                    face_index,
                     |tc| *tc == TriggerCondition::WheneverSelfAttacks,
                 )
             }
@@ -371,14 +382,17 @@ impl GameEngine {
                 let Some(obj) = self.state.objects.get(attacker_id) else {
                     return vec![];
                 };
-                let card_id = obj.card_id.clone();
+                let (card_id, face_index) = self
+                    .effective_card_identity(*attacker_id)
+                    .map(|(card_id, face_index)| (card_id.to_string(), face_index))
+                    .unwrap_or_else(|| (obj.card_id.clone(), obj.face_up_index));
                 let controller = obj.controller;
                 let defender = *defender_id;
                 self.matching_triggered_abilities(
                     &card_id,
                     *attacker_id,
                     controller,
-                    obj.face_up_index,
+                    face_index,
                     |tc| match tc {
                         TriggerCondition::WheneverSelfDealsCombatDamageToPlayer => true,
                         TriggerCondition::WheneverSelfDealsDamageToOpponent => {

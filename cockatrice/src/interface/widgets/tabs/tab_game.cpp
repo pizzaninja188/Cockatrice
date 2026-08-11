@@ -506,8 +506,8 @@ void TabGame::connectToGameEventHandler()
             localPlayer->getPlayerActions()->cancelPendingRuledSpellCast();
             localPlayer->getPlayerActions()->cancelPendingActivatedAbility();
         });
-        connect(gamePromptWidget, &GamePromptWidget::declineTriggerRequested, game->getGameEventHandler()->ruled(),
-                &RuledClientState::declinePendingTrigger);
+        connect(gamePromptWidget, &GamePromptWidget::declineClickChoiceRequested, game->getGameEventHandler()->ruled(),
+                &RuledClientState::declinePendingClickChoice);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::stackHasItemsChanged, gamePromptWidget,
                 &GamePromptWidget::setRuledStackHasItems);
         gamePromptWidget->setRuledStackHasItems(game->getGameEventHandler()->ruled()->hasStackItems());
@@ -691,6 +691,10 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.mode = PromptMode::ClickChoice;
         state.text = h->pendingChoicePromptText(ChoiceKind::CopyTarget) +
                      tr("\nClick a target, or click the original target to keep it.");
+    } else if (h->hasPendingChoiceOfKind(ChoiceKind::CopySource)) {
+        state.mode = PromptMode::ClickChoice;
+        state.canDecline = h->pendingClickChoiceMayDecline();
+        state.text = h->pendingChoicePromptText(ChoiceKind::CopySource);
     } else if (h->hasPendingChoiceOfKind(ChoiceKind::LegendKeep)) {
         // CR 704.5j: which duplicate legend to keep, chosen on the battlefield.
         state.mode = PromptMode::ClickChoice;

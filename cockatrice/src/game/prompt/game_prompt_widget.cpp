@@ -190,10 +190,10 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     cancelTargetingButton->setObjectName("cancelTargetingButton");
     connect(cancelTargetingButton, &QPushButton::clicked, this, &GamePromptWidget::cancelTargetingRequested);
 
-    declineTriggerButton = new QPushButton(this);
-    declineTriggerButton->setObjectName("declineTriggerButton");
-    declineTriggerButton->hide();
-    connect(declineTriggerButton, &QPushButton::clicked, this, &GamePromptWidget::declineTriggerRequested);
+    declineClickChoiceButton = new QPushButton(this);
+    declineClickChoiceButton->setObjectName("declineClickChoiceButton");
+    declineClickChoiceButton->hide();
+    connect(declineClickChoiceButton, &QPushButton::clicked, this, &GamePromptWidget::declineClickChoiceRequested);
 
     confirmSpellDamageButton = new QPushButton(this);
     confirmSpellDamageButton->setObjectName("confirmSpellDamageButton");
@@ -212,7 +212,7 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     actionRow->setContentsMargins(0, 0, 0, 0);
     actionRow->setSpacing(4);
     actionRow->addWidget(cancelTargetingButton);
-    actionRow->addWidget(declineTriggerButton);
+    actionRow->addWidget(declineClickChoiceButton);
     actionRow->addWidget(confirmTargetsButton);
     actionRow->addWidget(confirmSpellDamageButton);
     actionRow->addWidget(undoLandTapButton);
@@ -237,7 +237,7 @@ void GamePromptWidget::retranslateUi()
     resetBlockersButton->setText(tr("Reset Blockers"));
     confirmCombatDamageButton->setText(tr("OK"));
     cancelTargetingButton->setText(tr("Cancel"));
-    declineTriggerButton->setText(tr("Decline"));
+    declineClickChoiceButton->setText(tr("Decline"));
     confirmTargetsButton->setText(tr("Confirm Targets"));
     confirmSpellDamageButton->setText(tr("Confirm Damage"));
     undoLandTapButton->setText(tr("Undo"));
@@ -550,7 +550,7 @@ void GamePromptWidget::hideActionAndCombatButtons()
     resetBlockersButton->setVisible(false);
     confirmCombatDamageButton->setVisible(false);
     cancelTargetingButton->setVisible(false);
-    declineTriggerButton->setVisible(false);
+    declineClickChoiceButton->setVisible(false);
     confirmTargetsButton->setVisible(false);
     undoLandTapButton->setVisible(false);
 }
@@ -571,7 +571,7 @@ void GamePromptWidget::updateCombatButtonsVisibility()
     openingBottomDoneButton->setVisible(mode == PromptMode::OpeningBottom && promptState.required > 0 &&
                                         promptState.selected == promptState.required);
     resolutionHandPickConfirmButton->setVisible(mode == PromptMode::ResolutionPick);
-    declineTriggerButton->setVisible(mode == PromptMode::ClickChoice && promptState.canDecline);
+    declineClickChoiceButton->setVisible(mode == PromptMode::ClickChoice && promptState.canDecline);
     if (mode == PromptMode::ResolutionPick) {
         resolutionHandPickConfirmButton->setEnabled(promptState.selected >= promptState.required);
     }
@@ -579,7 +579,7 @@ void GamePromptWidget::updateCombatButtonsVisibility()
     // Every take-over mode suppresses the priority / combat / targeting controls.
     if (mode != PromptMode::Normal && mode != PromptMode::Targeting) {
         hideActionAndCombatButtons();
-        declineTriggerButton->setVisible(mode == PromptMode::ClickChoice && promptState.canDecline);
+        declineClickChoiceButton->setVisible(mode == PromptMode::ClickChoice && promptState.canDecline);
         return;
     }
 

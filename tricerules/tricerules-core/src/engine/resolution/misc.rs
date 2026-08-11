@@ -52,13 +52,9 @@ pub(super) fn destroy_target(
             events.push(ev_log(format!("{spell_label} destroys {tgt}")));
             let owner = engine.state.objects.get(&tid).map(|o| o.owner);
             let controller = engine.state.objects.get(&tid).map(|o| o.controller);
-            let card_id_t = engine.state.objects.get(&tid).map(|o| o.card_id.clone());
-            let face_index = engine
-                .state
-                .objects
-                .get(&tid)
-                .map(|o| o.face_up_index)
-                .unwrap_or(0);
+            let effective_identity = engine
+                .effective_card_identity(tid)
+                .map(|(card_id, face_index)| (card_id.to_string(), face_index));
             let was_creature = engine
                 .characteristics(tid)
                 .is_some_and(|value| value.is_creature());
@@ -71,7 +67,7 @@ pub(super) fn destroy_target(
                     rv1::permanent_moved::Destination::Graveyard,
                 ));
             }
-            if let (Some(cid), Some(ctrl)) = (card_id_t, controller) {
+            if let (Some((cid, face_index)), Some(ctrl)) = (effective_identity, controller) {
                 engine.fire_triggers(&[GameEvent::Dies {
                     source: TriggerSourceSnapshot {
                         object_id: tid,

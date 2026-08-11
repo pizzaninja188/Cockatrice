@@ -1,0 +1,9 @@
+(
+  id: "clone",
+  name: "Clone",
+  mana_cost: "{3}{U}",
+  types: ["Creature", "Shapeshifter"],
+  power: 0,
+  toughness: 0,
+  static_abilities: [EntersAsCopy(filter: (kind: Creature))],
+)

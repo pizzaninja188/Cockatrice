@@ -228,6 +228,18 @@ impl CardRegistry {
                 }
                 let attachment_source = face.is_aura || face.types.iter().any(|t| t == "Equipment");
                 for ability in &face.static_abilities {
+                    if let StaticAbilityDef::EntersAsCopy { filter } = ability {
+                        if !matches!(filter.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+                            || filter.controller != TargetController::Any
+                            || filter.exclude_source
+                        {
+                            return Err(RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason: "EntersAsCopy requires an untargeted Creature or AnyPermanent filter"
+                                    .into(),
+                            });
+                        }
+                    }
                     if let StaticAbilityDef::EntersWithCounters { amount, .. } = ability {
                         amount
                             .validate()

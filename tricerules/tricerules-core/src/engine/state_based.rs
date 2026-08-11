@@ -130,13 +130,9 @@ impl GameEngine {
         for id in to_destroy_t0 {
             let owner = self.state.objects.get(&id).map(|o| o.owner);
             let controller = self.state.objects.get(&id).map(|o| o.controller);
-            let card_id_for_trigger = self.state.objects.get(&id).map(|o| o.card_id.clone());
-            let face_index = self
-                .state
-                .objects
-                .get(&id)
-                .map(|o| o.face_up_index)
-                .unwrap_or(0);
+            let effective_identity = self
+                .effective_card_identity(id)
+                .map(|(card_id, face_index)| (card_id.to_string(), face_index));
             let was_creature = self
                 .characteristics(id)
                 .is_some_and(|value| value.is_creature());
@@ -150,7 +146,7 @@ impl GameEngine {
                         rv1::permanent_moved::Destination::Graveyard,
                     ));
                 }
-                if let (Some(cid), Some(ctrl)) = (card_id_for_trigger, controller) {
+                if let (Some((cid, face_index)), Some(ctrl)) = (effective_identity, controller) {
                     dies.push((id, cid, ctrl, face_index, was_creature));
                 }
             }
@@ -159,19 +155,18 @@ impl GameEngine {
         for id in to_destroy_lethal {
             let owner = self.state.objects.get(&id).map(|o| o.owner);
             let controller = self.state.objects.get(&id).map(|o| o.controller);
-            let card_id_for_trigger = self.state.objects.get(&id).map(|o| o.card_id.clone());
-            let face_index = self
-                .state
-                .objects
-                .get(&id)
-                .map(|o| o.face_up_index)
-                .unwrap_or(0);
+            let effective_identity = self
+                .effective_card_identity(id)
+                .map(|(card_id, face_index)| (card_id.to_string(), face_index));
             let was_creature = self
                 .characteristics(id)
                 .is_some_and(|value| value.is_creature());
             if consume_regen_shield(&mut self.state, id, out) {
                 changed = true;
-                let name = card_id_for_trigger.as_deref().unwrap_or("creature");
+                let name = effective_identity
+                    .as_ref()
+                    .map(|(card_id, _)| card_id.as_str())
+                    .unwrap_or("creature");
                 out.push(super::events::ev_log(format!("{name} regenerates.")));
             } else if destroy_permanent(&mut self.state, self.registry, id).is_ok() {
                 changed = true;
@@ -183,7 +178,7 @@ impl GameEngine {
                         rv1::permanent_moved::Destination::Graveyard,
                     ));
                 }
-                if let (Some(cid), Some(ctrl)) = (card_id_for_trigger, controller) {
+                if let (Some((cid, face_index)), Some(ctrl)) = (effective_identity, controller) {
                     dies.push((id, cid, ctrl, face_index, was_creature));
                 }
             }
@@ -277,16 +272,12 @@ impl GameEngine {
                         .characteristics(o.id)
                         .is_some_and(|value| value.is_aura())
                     && o.attached_to.is_none_or(|enchanted_id| {
-                        let enchant_filter = self
-                            .registry
-                            .get(&o.card_id)
-                            .and_then(|definition| definition.face(o.face_up_index))
-                            .and_then(|face| {
-                                face.spell_effect.iter().find_map(|effect| match effect {
-                                    SpellEffectKind::AuraAttach { target } => Some(target),
-                                    _ => None,
-                                })
-                            });
+                        let enchant_filter = self.effective_face(o.id).and_then(|face| {
+                            face.spell_effect.iter().find_map(|effect| match effect {
+                                SpellEffectKind::AuraAttach { target } => Some(target),
+                                _ => None,
+                            })
+                        });
                         enchant_filter.is_none_or(|filter| {
                             !super::targeting::attachment_filter_legal(
                                 self,
@@ -303,13 +294,9 @@ impl GameEngine {
         for id in orphaned_auras {
             let owner = self.state.objects.get(&id).map(|o| o.owner);
             let controller = self.state.objects.get(&id).map(|o| o.controller);
-            let card_id_for_trigger = self.state.objects.get(&id).map(|o| o.card_id.clone());
-            let face_index = self
-                .state
-                .objects
-                .get(&id)
-                .map(|o| o.face_up_index)
-                .unwrap_or(0);
+            let effective_identity = self
+                .effective_card_identity(id)
+                .map(|(card_id, face_index)| (card_id.to_string(), face_index));
             let was_creature = self
                 .characteristics(id)
                 .is_some_and(|value| value.is_creature());
@@ -323,7 +310,7 @@ impl GameEngine {
                         rv1::permanent_moved::Destination::Graveyard,
                     ));
                 }
-                if let (Some(cid), Some(ctrl)) = (card_id_for_trigger, controller) {
+                if let (Some((cid, face_index)), Some(ctrl)) = (effective_identity, controller) {
                     self.fire_triggers(&[GameEvent::Dies {
                         source: TriggerSourceSnapshot {
                             object_id: id,
@@ -362,12 +349,7 @@ impl GameEngine {
             if !characteristics.is_legendary() {
                 continue;
             }
-            let Some(n) = self
-                .registry
-                .get(&o.card_id)
-                .and_then(|def| def.face(o.face_up_index))
-                .map(|face| face.name.clone())
-            else {
+            let Some(n) = self.effective_face(id).map(|face| face.name.clone()) else {
                 continue;
             };
             by_controller_name
@@ -485,6 +467,8 @@ mod sba_tests {
                 owner,
                 controller: owner,
                 card_id: "walking_corpse".to_string(),
+                copiable_values: None,
+                copy_revision: 0,
                 zone: Zone::Battlefield,
                 tapped: false,
                 summoning_sick: false,

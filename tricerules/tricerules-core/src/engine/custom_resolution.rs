@@ -328,6 +328,9 @@ impl GameEngine {
         if pending.custom_key == "__sacrifice_chosen" {
             return self.finish_sacrifice_chosen(pending, chosen);
         }
+        if pending.custom_key == "__entry_copy_source" {
+            return self.finish_entry_copy_source_choice(pending, chosen);
+        }
         if pending.custom_key == "__replacement_effect" {
             return match self.state.pending_replacement_event.as_ref() {
                 Some(super::replacement::PendingReplacementEvent::Damage(_)) => {
@@ -584,11 +587,9 @@ impl GameEngine {
             .get(&oid)
             .map(|o| o.owner)
             .ok_or(EngineError::Illegal("sacrificed object missing"))?;
-        let card_id = self
-            .state
-            .objects
-            .get(&oid)
-            .map(|o| o.card_id.clone())
+        let (card_id, face_index) = self
+            .effective_card_identity(oid)
+            .map(|(card_id, face_index)| (card_id.to_string(), face_index))
             .unwrap_or_default();
         let controller = self
             .state
@@ -596,12 +597,6 @@ impl GameEngine {
             .get(&oid)
             .map(|o| o.controller)
             .ok_or(EngineError::Illegal("sacrificed object missing"))?;
-        let face_index = self
-            .state
-            .objects
-            .get(&oid)
-            .map(|o| o.face_up_index)
-            .unwrap_or(0);
         let was_creature = self
             .characteristics(oid)
             .is_some_and(|value| value.is_creature());
@@ -651,13 +646,9 @@ impl GameEngine {
             }
             let owner = self.state.objects.get(&oid).map(|o| o.owner);
             let controller = self.state.objects.get(&oid).map(|o| o.controller);
-            let card_id = self.state.objects.get(&oid).map(|o| o.card_id.clone());
-            let face_index = self
-                .state
-                .objects
-                .get(&oid)
-                .map(|o| o.face_up_index)
-                .unwrap_or(0);
+            let effective_identity = self
+                .effective_card_identity(oid)
+                .map(|(card_id, face_index)| (card_id.to_string(), face_index));
             let was_creature = self
                 .characteristics(oid)
                 .is_some_and(|value| value.is_creature());
@@ -670,7 +661,7 @@ impl GameEngine {
                         rv1::permanent_moved::Destination::Graveyard,
                     ));
                 }
-                if let (Some(cid), Some(ctrl)) = (card_id, controller) {
+                if let (Some((cid, face_index)), Some(ctrl)) = (effective_identity, controller) {
                     trigger_events.push(GameEvent::Dies {
                         source: TriggerSourceSnapshot {
                             object_id: oid,

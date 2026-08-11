@@ -680,26 +680,21 @@ impl GameEngine {
             .player_idx(player)
             .ok_or(EngineError::UnknownPlayer(player))?;
 
-        let (card_id, face_up_index) = self
-            .state
+        self.state
             .objects
             .get(&permanent_id)
             .filter(|o| o.zone == Zone::Battlefield)
-            .map(|o| (o.card_id.clone(), o.face_up_index))
             .ok_or(EngineError::Illegal("permanent not on battlefield"))?;
         if !self.state.players[idx].battlefield.contains(&permanent_id) {
             return Err(EngineError::Illegal("not your permanent"));
         }
 
-        let def = self
-            .registry
-            .get(&card_id)
-            .ok_or_else(|| EngineError::MissingCard(card_id.clone()))?;
-
-        // CR 712.4: read activated abilities from the active face so multi-face permanents
-        // (e.g. MDFC lands) expose the correct ability when activated.
-        let ability = def
-            .face(face_up_index)
+        let (card_id, face_up_index) = self
+            .effective_card_identity(permanent_id)
+            .map(|(card_id, face_index)| (card_id.to_string(), face_index))
+            .ok_or(EngineError::Illegal("bad face index on permanent"))?;
+        let ability = self
+            .effective_face(permanent_id)
             .ok_or(EngineError::Illegal("bad face index on permanent"))?
             .activated_abilities
             .get(ability_index)
@@ -1031,11 +1026,15 @@ impl GameEngine {
     /// already in the graveyard (controller reset, characteristics gone) by the time it fires.
     fn sacrifice_snapshot(&self, permanent_id: ObjectId) -> Option<SacrificeSnapshot> {
         let object = self.state.objects.get(&permanent_id)?;
+        let (card_id, face_index) = self
+            .effective_card_identity(permanent_id)
+            .map(|(card_id, face_index)| (card_id.to_string(), face_index))
+            .unwrap_or_else(|| (object.card_id.clone(), object.face_up_index));
         Some(SacrificeSnapshot {
             object_id: permanent_id,
-            card_id: object.card_id.clone(),
+            card_id,
             controller: object.controller,
-            face_index: object.face_up_index,
+            face_index,
             was_creature: self
                 .characteristics(permanent_id)
                 .is_some_and(|value| value.is_creature()),

@@ -804,6 +804,8 @@ fn mind_sculpt_rejects_self_target() {
                 owner: 0,
                 controller: 0,
                 card_id: "mind_sculpt".into(),
+                copiable_values: None,
+                copy_revision: 0,
                 zone: tricerules_core::Zone::Hand,
                 tapped: false,
                 summoning_sick: false,

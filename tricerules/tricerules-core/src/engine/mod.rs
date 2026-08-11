@@ -4,7 +4,7 @@ use crate::custom::{self, ResolutionChoice, ResolutionCtx, ResolutionStep};
 use crate::state::{
     ActiveDamagePrevention, AdventureCastPermission, AffectedScope, BattlefieldEntryCompletion,
     BattlefieldEntryEvent, BlockingChoice, ChosenSpellMode, CombatState, ContinuousEffect,
-    DamagePreventionAmount, DamagePreventionProhibition, DamagePreventionScope,
+    CopiableValues, DamagePreventionAmount, DamagePreventionProhibition, DamagePreventionScope,
     EntryReplacementApplication, EntryReplacementEffectId, GameObject, GameState, ObjectId,
     OpeningSequence, PendingBattlefieldEntry, PendingResolution, PendingTrigger,
     PendingTriggerOrder, PlayerId, PlayerState, ReplacementPriority, StackItem, StagedTrigger,
@@ -27,7 +27,7 @@ use tricerules_cards::primitives::{
     TargetController, TargetFilter, TargetKind, TargetingSourceFilter, TokenController,
     TriggerCondition,
 };
-use tricerules_cards::{CardRegistry, FaceRef, Layout};
+use tricerules_cards::{CardFace, CardRegistry, FaceRef, Layout};
 use tricerules_proto::ruled::v1 as rv1;
 use tricerules_proto::ruled::v1::{
     IpcResponse, LegalActions, RuledCommand, RuledEvent, RuledEventBatch,
@@ -357,6 +357,7 @@ struct BattlefieldObjectSnapshot {
     counters: BTreeMap<CounterKind, u32>,
     attached_to: Option<ObjectId>,
     face_up_index: usize,
+    copy_revision: u64,
 }
 
 /// CR 701.19 / 701.20: set `oid`'s tap status, returning whether it actually changed.
@@ -414,6 +415,8 @@ fn new_object_from_card(
         // real controller on battlefield entry.
         controller: owner,
         card_id: card_id.to_string(),
+        copiable_values: None,
+        copy_revision: 0,
         zone,
         tapped: false,
         summoning_sick: face.is_creature,
@@ -598,6 +601,50 @@ impl GameEngine {
     /// so the gate cannot be flipped from the wire.
     pub fn enable_dev_commands(&mut self) {
         self.dev_commands_enabled = true;
+    }
+
+    /// The face whose printed characteristics and abilities this permanent currently has after
+    /// CR 613 layer 1. The physical `card_id` deliberately remains unchanged.
+    pub(super) fn effective_face(&self, oid: ObjectId) -> Option<&CardFace> {
+        let object = self.state.objects.get(&oid)?;
+        if let Some(values) = &object.copiable_values {
+            return Some(&values.face);
+        }
+        self.registry
+            .get(&object.card_id)?
+            .face(object.face_up_index)
+    }
+
+    /// Registry identity corresponding to [`Self::effective_face`]. Stack items use this to
+    /// resolve copied activated and triggered abilities after the physical Clone has left play.
+    pub(super) fn effective_card_identity(&self, oid: ObjectId) -> Option<(&str, usize)> {
+        let object = self.state.objects.get(&oid)?;
+        if let Some(values) = &object.copiable_values {
+            return Some((&values.source_card_id, values.source_face_index));
+        }
+        Some((&object.card_id, object.face_up_index))
+    }
+
+    /// Capture the source's CR 707.2 values. Existing copy-layer values are copied directly;
+    /// counters, damage, attachments, status, and later continuous effects live outside this data.
+    pub(super) fn copiable_values_for(&self, oid: ObjectId) -> Option<CopiableValues> {
+        let object = self.state.objects.get(&oid)?;
+        if let Some(values) = &object.copiable_values {
+            return Some(values.clone());
+        }
+        let definition = self.registry.get(&object.card_id)?;
+        let mut face = definition.face(object.face_up_index)?.clone();
+        if definition.layout == Layout::Flip && object.face_up_index > 0 {
+            face.colors_override = Some(definition.primary_face().colors());
+        }
+        Some(CopiableValues {
+            source_card_id: object.card_id.clone(),
+            source_face_index: object.face_up_index,
+            face,
+            display_name: definition
+                .face_display_name(object.face_up_index)?
+                .to_string(),
+        })
     }
 
     /// CR 400.7: determine whether a stack item's source is still the same game object. The

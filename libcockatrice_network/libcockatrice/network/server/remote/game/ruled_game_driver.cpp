@@ -39,6 +39,17 @@ QString normalizeRuledCardName(const QString &name)
     return name.trimmed().toLower().replace(QLatin1Char('_'), QLatin1Char(' '));
 }
 
+QString withoutRuledCopyAnnotation(const QString &annotation)
+{
+    QStringList kept;
+    for (const QString &line : annotation.split(QLatin1Char('\n'))) {
+        if (!line.trimmed().startsWith(QStringLiteral("Copy: "))) {
+            kept.append(line);
+        }
+    }
+    return kept.join(QLatin1Char('\n')).trimmed();
+}
+
 Server_CardZone *ruledCanonicalStackZone(Server_Game *game)
 {
     if (!game) {
@@ -978,29 +989,21 @@ void RuledGameDriver::applyPermanentMoves(const ruled::v1::RuledEventBatch &batc
         if (!targetZone) {
             continue;
         }
-        // Transform/flip status and the chosen MDFC face do not carry to another zone. If this
-        // physical card is displaying an alternate face, rename it before moveCard serializes it
-        // so every client receives the front-face image and hover details. Do not normalize every
-        // multiface card: split cards keep their combined name outside the stack.
+        // CR 400.7: transform/flip status, a chosen MDFC face, and a copy snapshot do not carry to
+        // another zone. Restore the physical catalog display before moveCard serializes the event
+        // so every client receives the underlying card's name, image, hover details, and no stale
+        // copy annotation. face_display_names[0] already preserves whole-card display for split and
+        // Adventure cards, so this normalization is safe for every layout.
         if (pm.destination() != ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD) {
             const QString cardId = QString::fromStdString(pm.card_id());
             const QString resolvedCardId = cardId.isEmpty() ? ruledCardIdForName(card->getName()) : cardId;
-            const auto catalogIt = ruledCardCatalogById.constFind(resolvedCardId);
-            bool displaysAlternateFace = false;
-            if (catalogIt != ruledCardCatalogById.constEnd()) {
-                for (int faceIndex = 1; faceIndex < catalogIt->face_names_size(); ++faceIndex) {
-                    const QString faceName = QString::fromStdString(catalogIt->face_names(faceIndex));
-                    if (faceName.trimmed().compare(card->getName().trimmed(), Qt::CaseInsensitive) == 0) {
-                        displaysAlternateFace = true;
-                        break;
-                    }
-                }
+            const QString physicalDisplayName = ruledFaceDisplayName(resolvedCardId, 0);
+            if (!physicalDisplayName.isEmpty() && physicalDisplayName != card->getName()) {
+                card->setCardRef(CardRef{physicalDisplayName});
             }
-            if (displaysAlternateFace) {
-                const QString frontName = ruledFaceDisplayName(resolvedCardId, 0);
-                if (!frontName.isEmpty() && frontName != card->getName()) {
-                    card->setCardRef(CardRef{frontName});
-                }
+            const QString annotationWithoutCopy = withoutRuledCopyAnnotation(card->getAnnotation());
+            if (annotationWithoutCopy != card->getAnnotation()) {
+                card->setAnnotation(annotationWithoutCopy);
             }
         }
         // Hidden zones (the library) address cards by position index in moveCard/getCard, not by
@@ -1246,13 +1249,16 @@ void RuledGameDriver::applyFaceDisplays(const ruled::v1::RuledEventBatch &batch,
     const auto applyName = [this, &result](quint32 oid,
                                            int controllerId,
                                            const QString &cardId,
-                                           int faceIndex) {
+                                           int faceIndex,
+                                           const QString &effectiveDisplayName) {
         Server_Card *card = findBattlefieldCardByEngineOid(oid, controllerId);
         if (!card) {
             return;
         }
         const QString resolvedCardId = cardId.isEmpty() ? ruledCardIdForName(card->getName()) : cardId;
-        const QString activeName = ruledFaceDisplayName(resolvedCardId, faceIndex);
+        const QString activeName = effectiveDisplayName.isEmpty()
+                                       ? ruledFaceDisplayName(resolvedCardId, faceIndex)
+                                       : effectiveDisplayName;
         if (!activeName.isEmpty() && activeName != card->getName()) {
             card->setCardRef(CardRef{activeName});
             result.battlefieldDisplayChanged = true;
@@ -1265,7 +1271,8 @@ void RuledGameDriver::applyFaceDisplays(const ruled::v1::RuledEventBatch &batch,
             applyName(static_cast<quint32>(changed.object_id()),
                       changed.controller_player_id(),
                       QString(),
-                      static_cast<int>(changed.face_up_index()));
+                      static_cast<int>(changed.face_up_index()),
+                      QString());
         }
         if (!event.has_zone_view() || event.zone_view().battlefields_unchanged()) {
             continue;
@@ -1275,7 +1282,8 @@ void RuledGameDriver::applyFaceDisplays(const ruled::v1::RuledEventBatch &batch,
                 applyName(static_cast<quint32>(object.object_id()),
                           view.player_id(),
                           QString::fromStdString(object.card_id()),
-                          static_cast<int>(object.face_up_index()));
+                          static_cast<int>(object.face_up_index()),
+                          QString::fromStdString(object.effective_display_name()));
             }
         }
     }

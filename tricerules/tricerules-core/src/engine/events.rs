@@ -256,10 +256,7 @@ impl GameEngine {
                         let is_creature = characteristics
                             .as_ref()
                             .is_some_and(Characteristics::is_creature);
-                        let face = self
-                            .registry
-                            .get(&object.card_id)
-                            .and_then(|definition| definition.face(object.face_up_index));
+                        let face = self.effective_face(oid);
                         let granted_ability_labels = characteristics
                             .as_ref()
                             .zip(face)
@@ -355,6 +352,24 @@ impl GameEngine {
                             _ => keyword.as_str().to_string(),
                         })
                         .collect();
+                        let effective_display_name = object
+                            .copiable_values
+                            .as_ref()
+                            .map(|values| values.display_name.clone())
+                            .or_else(|| {
+                                self.registry.get(&object.card_id).and_then(|definition| {
+                                    definition
+                                        .face_display_name(object.face_up_index)
+                                        .map(str::to_string)
+                                })
+                            })
+                            .unwrap_or_default();
+                        let copy_annotation = object
+                            .copiable_values
+                            .as_ref()
+                            .and_then(|_| self.registry.get(&object.card_id))
+                            .map(|definition| format!("Copy: {}", definition.name))
+                            .unwrap_or_default();
                         rv1::BattlefieldObject {
                             object_id: oid,
                             card_id: object.card_id.clone(),
@@ -389,6 +404,8 @@ impl GameEngine {
                             // the card home when it leaves the battlefield.
                             owner_player_id: object.owner,
                             granted_ability_labels,
+                            effective_display_name,
+                            copy_annotation,
                         }
                     })
                     .collect()
@@ -431,6 +448,7 @@ impl GameEngine {
                         counters: object.counters.clone(),
                         attached_to: object.attached_to,
                         face_up_index: object.face_up_index,
+                        copy_revision: object.copy_revision,
                     })
                     .collect(),
             })
@@ -493,8 +511,13 @@ pub(super) fn object_display_name(
     state
         .objects
         .get(&oid)
-        .and_then(|o| registry.get(&o.card_id))
-        .map(|d| d.name.clone())
+        .and_then(|object| {
+            object
+                .copiable_values
+                .as_ref()
+                .map(|values| values.display_name.clone())
+                .or_else(|| registry.get(&object.card_id).map(|d| d.name.clone()))
+        })
         .unwrap_or_else(|| format!("[object {}]", oid))
 }
 

@@ -17,6 +17,8 @@ mod combat_keywords;
 mod composite_activated_costs;
 #[path = "scenario/control.rs"]
 mod control;
+#[path = "scenario/copy_effects.rs"]
+mod copy_effects;
 #[path = "scenario/counters_and_pump.rs"]
 mod counters_and_pump;
 #[path = "scenario/custom_resolution.rs"]
