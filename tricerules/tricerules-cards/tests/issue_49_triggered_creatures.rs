@@ -330,8 +330,8 @@ fn issue_49_cast_trigger_cards_use_existing_filters_and_source_effects() {
 fn issue_49_targeted_etbs_use_one_existing_target_group() {
     assert_eq!(
         trigger("gale_swooper").effect,
-        [SpellEffectKind::GrantKeywordsTarget {
-            target: creature_target(TargetController::Any),
+        [SpellEffectKind::GrantKeywords {
+            subject: EffectSubject::Chosen(creature_target(TargetController::Any)),
             keywords: vec![Keyword::Flying],
         }]
     );
@@ -363,8 +363,8 @@ fn issue_49_targeted_etbs_use_one_existing_target_group() {
                 scale: None,
                 subject: EffectSubject::Chosen(creature_target(TargetController::Any)),
             },
-            SpellEffectKind::GrantKeywordsTarget {
-                target: creature_target(TargetController::Any),
+            SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::Chosen(creature_target(TargetController::Any)),
                 keywords: vec![Keyword::FirstStrike],
             },
         ]

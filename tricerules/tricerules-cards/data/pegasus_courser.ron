@@ -9,12 +9,12 @@
   triggered_abilities: [
     (
       trigger: WheneverSelfAttacks,
-      effect: [GrantKeywordsTarget(
-        target: (
+      effect: [GrantKeywords(
+        subject: Chosen((
           kind: Creature,
           attacking_or_blocking: true,
           exclude_source: true,
-        ),
+        )),
         keywords: [Flying],
       )],
       text: "Whenever this creature attacks, another target attacking creature gains flying until end of turn.",

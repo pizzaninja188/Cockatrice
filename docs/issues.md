@@ -29,10 +29,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Model discard and sacrifice as composable additional costs paid atomically with mana during casting, rather than as resolution effects. Calibration evidence: Bone Splinters, Thrill of Possibility, Tormenting Voice, and Village Rites. Legal actions must expose valid payable combinations, and an illegal or stale choice must leave mana, hand, and battlefield unchanged. This is the `PendingRuledSpellCast` extraction trigger recorded in `docs/REFACTOR-ROADMAP.md`: first land a characterized, behavior-preserving extraction of the remaining ruled cast/payment orchestration from upstream `player_actions.{h,cpp}` into `cockatrice/src/game/ruled/ruled_pending_cast.{h,cpp}`, leaving `PlayerActions` with a member pointer and thin ruled guards; then add the additional-cost behavior as a separate green increment. Fold the spell, activated-ability, and new additional-cost pending state into the existing exclusive pending-choice model instead of adding another parallel pending family. The engine remains authoritative over payable combinations and atomic command validation; the client only stages engine-published choices, and freeform behavior must remain unchanged.
   - Priority: Low
 
-- [ ] #54 [feature] Activated-ability timing and board-state restrictions
-  - Details: Add reusable activation predicates for sorcery-speed timing and conditions over controlled permanents or keywords. Calibration evidence: Celestial Enforcer, Goblin Bird-Grabber, and Liliana's Steward's secondary `activation_timing_and_discard_choice` gap. Issue #52 shipped Liliana's tap plus self-sacrifice cost shape; its sorcery-speed restriction remains here and its opponent discard resolution remains in Issue #58. Integrate the predicates into authoritative legal actions and command validation. Caged Zombie can reuse the shipped `GameCondition::CreatureDeathsThisTurn`; its tap-and-mana cost is already supported and its untargeted each-opponent life-loss effect shipped with Issue #87, so the activation predicate is its only remaining gap.
-  - Priority: Low
-
 - [ ] #55 [feature] Conditional mana output and restricted mana spending
   - Details: Represent mana abilities whose output depends on current battlefield state and mana whose spending is restricted by spell or ability characteristics. Calibration evidence: Leafkin Druid, Chandra's Embercat, and Vodalian Arcanist. Track restrictions on individual mana contributions through payment selection, reject illegal mixed payments, and keep unrestricted mana behavior unchanged.
   - Priority: Low
@@ -46,7 +42,7 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Priority: Low
 
 - [ ] #58 [feature] Non-targeted discard and loot choices
-  - Details: Generalize discard effects so the affected player chooses cards from their own hand and optional discard-then-draw sequences can branch without turning discard into targeting. Calibration evidence: Mind Rot, Rousing Read, Teferi's Protege, and Keldon Raider; Liliana's Steward still depends on this resolution-time discard choice after Issue #52 shipped its composite activation cost. Reuse resumable resolution choices, enforce exact cardinality, and preserve hidden information in multiplayer views.
+  - Details: Generalize discard effects so the affected player chooses cards from their own hand and optional discard-then-draw sequences can branch without turning discard into targeting. Calibration evidence: Mind Rot, Rousing Read, Teferi's Protege, and Keldon Raider. The shared composite activated-cost and sorcery-speed timing paths are shipped; Liliana's Steward remains blocked here only on its opponent-controlled resolution-time discard choice. Reuse resumable resolution choices, enforce exact cardinality, and preserve hidden information in multiplayer views.
   - Priority: Low
 
 - [ ] #59 [feature] Resolution-time modes, optional payments, and costs

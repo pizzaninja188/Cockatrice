@@ -291,6 +291,14 @@ impl CardRegistry {
                 // together, so a cross-effect requirement like `LoseLife(TargetManaValue)` must
                 // find its object-targeting sibling inside this one ability).
                 for ability in &face.activated_abilities {
+                    for condition in &ability.conditions {
+                        condition
+                            .validate()
+                            .map_err(|reason| RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason,
+                            })?;
+                    }
                     let mana_components = ability
                         .costs
                         .iter()

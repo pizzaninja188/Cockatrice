@@ -121,6 +121,46 @@ mod tests {
     }
 
     #[test]
+    fn activation_conditions_require_valid_count_bounds() {
+        let condition = |min, max| ActivationCondition::BattlefieldCreatureCount {
+            filter: BattlefieldCreatureCountFilter {
+                controllers: RelativePlayerSet::Controller,
+                subtype: None,
+                required_keywords: vec![Keyword::Flying],
+                exclude_source: false,
+            },
+            min,
+            max,
+        };
+        assert!(condition(None, None).validate().is_err());
+        assert!(condition(Some(2), Some(1)).validate().is_err());
+        assert!(condition(Some(1), None).validate().is_ok());
+    }
+
+    #[test]
+    fn explicit_and_intrinsic_sorcery_speed_share_one_query() {
+        let explicit = ActivatedAbilityDef {
+            costs: vec![],
+            effect: vec![],
+            timing: ActivationTiming::SorcerySpeed,
+            conditions: vec![],
+            text: String::new(),
+        };
+        assert!(explicit.requires_sorcery_speed());
+
+        let equip = ActivatedAbilityDef {
+            costs: vec![],
+            effect: vec![SpellEffectKind::Equip {
+                target: TargetFilter::default(),
+            }],
+            timing: ActivationTiming::Normal,
+            conditions: vec![],
+            text: String::new(),
+        };
+        assert!(equip.requires_sorcery_speed());
+    }
+
+    #[test]
     fn damage_targets_rejects_conditional_amounts() {
         let effect = SpellEffectKind::DamageTargets {
             amount: Amount::Conditional {

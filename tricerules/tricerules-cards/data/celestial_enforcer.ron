@@ -1,0 +1,20 @@
+(
+  id: "celestial_enforcer",
+  name: "Celestial Enforcer",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Human", "Cleric"],
+  power: 2,
+  toughness: 3,
+  activated_abilities: [
+    (
+      costs: [Mana("{1}{W}"), Tap],
+      effect: [TapTarget(target: (kind: Creature))],
+      conditions: [BattlefieldCreatureCount(
+        filter: (controllers: Controller, required_keywords: [Flying]),
+        min: Some(1),
+        max: None,
+      )],
+      text: "{1}{W}, {T}: Tap target creature. Activate only if you control a creature with flying.",
+    ),
+  ],
+)

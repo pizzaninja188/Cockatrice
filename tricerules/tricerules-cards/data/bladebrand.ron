@@ -4,8 +4,8 @@
   mana_cost: "{1}{B}",
   types: ["Instant"],
   spell_effect: [
-    GrantKeywordsTarget(
-      target: (kind: Creature),
+    GrantKeywords(
+      subject: Chosen((kind: Creature)),
       keywords: [Deathtouch],
     ),
     Draw(count: 1),

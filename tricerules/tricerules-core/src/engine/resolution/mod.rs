@@ -464,8 +464,8 @@ impl GameEngine {
                     effect @ SpellEffectKind::GrantKeywordsAll { .. } => {
                         pump_counters::grant_keywords_all(&mut cx, effect)?
                     }
-                    effect @ SpellEffectKind::GrantKeywordsTarget { .. } => {
-                        pump_counters::grant_keywords_target(&mut cx, effect)?
+                    effect @ SpellEffectKind::GrantKeywords { .. } => {
+                        pump_counters::grant_keywords(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::GrantKeywordsAllPermanents { .. } => {
                         pump_counters::grant_keywords_all_permanents(&mut cx, effect)?

@@ -59,6 +59,39 @@ impl GameEngine {
         }
     }
 
+    pub(super) fn battlefield_creature_count(
+        &self,
+        filter: &tricerules_cards::BattlefieldCreatureCountFilter,
+        controller: PlayerId,
+        source_object_id: ObjectId,
+    ) -> u32 {
+        let count = self
+            .state
+            .players
+            .iter()
+            .flat_map(|player| player.battlefield.iter().copied())
+            .filter(|oid| !filter.exclude_source || *oid != source_object_id)
+            .filter_map(|oid| self.characteristics(oid))
+            .filter(|characteristics| {
+                relative_player_set_contains(
+                    &self.state,
+                    filter.controllers,
+                    controller,
+                    characteristics.controller,
+                ) && characteristics.is_creature()
+                    && filter
+                        .subtype
+                        .as_ref()
+                        .is_none_or(|subtype| characteristics.has_type(subtype))
+                    && filter
+                        .required_keywords
+                        .iter()
+                        .all(|keyword| characteristics.has_keyword(*keyword))
+            })
+            .count();
+        clamp_public_count(count)
+    }
+
     pub(super) fn resolve_amount(&self, amount: &Amount, context: AmountContext) -> u32 {
         match amount {
             Amount::Fixed(value) => *value,
@@ -74,33 +107,8 @@ impl GameEngine {
                     *otherwise
                 }
             }
-            Amount::Count(CountExpression::BattlefieldCreatures { filter }) => {
-                let count = self
-                    .state
-                    .players
-                    .iter()
-                    .flat_map(|player| player.battlefield.iter().copied())
-                    .filter(|oid| !filter.exclude_source || *oid != context.source_object_id)
-                    .filter_map(|oid| self.characteristics(oid))
-                    .filter(|characteristics| {
-                        relative_player_set_contains(
-                            &self.state,
-                            filter.controllers,
-                            context.controller,
-                            characteristics.controller,
-                        ) && characteristics.is_creature()
-                            && filter
-                                .subtype
-                                .as_ref()
-                                .is_none_or(|subtype| characteristics.has_type(subtype))
-                            && filter
-                                .required_keywords
-                                .iter()
-                                .all(|keyword| characteristics.has_keyword(*keyword))
-                    })
-                    .count();
-                clamp_public_count(count)
-            }
+            Amount::Count(CountExpression::BattlefieldCreatures { filter }) => self
+                .battlefield_creature_count(filter, context.controller, context.source_object_id),
             Amount::Count(CountExpression::GraveyardCardsNamed { owners, name }) => {
                 let count = self
                     .state

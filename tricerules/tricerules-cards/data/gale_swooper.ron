@@ -9,7 +9,7 @@
   triggered_abilities: [
     (
       trigger: WhenSelfEntersBattlefield,
-      effect: [GrantKeywordsTarget(target: (kind: Creature), keywords: [Flying])],
+      effect: [GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Flying])],
       text: "When this creature enters, target creature gains flying until end of turn.",
     ),
   ],

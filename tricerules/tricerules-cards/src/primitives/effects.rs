@@ -71,7 +71,7 @@ pub struct BattlefieldCreatureCountFilter {
 }
 
 impl BattlefieldCreatureCountFilter {
-    fn validate(&self) -> Result<(), String> {
+    pub(crate) fn validate(&self) -> Result<(), String> {
         if self
             .subtype
             .as_ref()
@@ -559,11 +559,12 @@ pub enum SpellEffectKind {
         filter: AnthemFilter,
         keywords: Vec<Keyword>,
     },
-    /// CR 613 layer 6: grant one or more keyword abilities to target permanent until end of
-    /// turn. Covers Boros Charm (Double Strike) and Temur Battle Rage (Double Strike + Trample).
-    GrantKeywordsTarget {
-        #[serde(default = "TargetFilter::default_creature")]
-        target: TargetFilter,
+    /// CR 613 layer 6: grant one or more keyword abilities until end of turn. `Chosen` is an
+    /// ordinary permanent target (Boros Charm); `Source` auto-binds an activated or triggered
+    /// ability to its own permanent without using the targeting path (Goblin Bird-Grabber).
+    GrantKeywords {
+        #[serde(default)]
+        subject: EffectSubject,
         keywords: Vec<Keyword>,
     },
     /// CR 613 layer 6: grant keywords until end of turn to the permanents matching `filter`.
@@ -851,7 +852,6 @@ impl SpellEffectKind {
             SpellEffectKind::DamageTarget { target, .. }
             | SpellEffectKind::DamageTargets { target, .. }
             | SpellEffectKind::DestroyTarget { target }
-            | SpellEffectKind::GrantKeywordsTarget { target, .. }
             | SpellEffectKind::TapTarget { target }
             | SpellEffectKind::TargetPlayerGainsLife { target, .. }
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
@@ -875,6 +875,10 @@ impl SpellEffectKind {
             }
             | SpellEffectKind::Regenerate {
                 subject: EffectSubject::Chosen(target),
+            }
+            | SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::Chosen(target),
+                ..
             } => vec![target],
             _ => vec![],
         }
@@ -953,6 +957,9 @@ impl SpellEffectKind {
                 subject: EffectSubject::Source,
                 ..
             } | SpellEffectKind::PutCounters {
+                subject: EffectSubject::Source,
+                ..
+            } | SpellEffectKind::GrantKeywords {
                 subject: EffectSubject::Source,
                 ..
             } | SpellEffectKind::Regenerate {
@@ -1066,14 +1073,17 @@ impl SpellEffectKind {
                 }
                 Ok(())
             }
-            SpellEffectKind::GrantKeywordsTarget { target, keywords } => {
-                if target.is_player() {
-                    Err(format!(
-                        "GrantKeywordsTarget cannot target players, got {:?}",
-                        target.kind
-                    ))
-                } else if keywords.is_empty() {
-                    Err("GrantKeywordsTarget requires at least one keyword".into())
+            SpellEffectKind::GrantKeywords { subject, keywords } => {
+                if let EffectSubject::Chosen(target) = subject {
+                    if target.is_player() {
+                        return Err(format!(
+                            "GrantKeywords cannot target players, got {:?}",
+                            target.kind
+                        ));
+                    }
+                }
+                if keywords.is_empty() {
+                    Err("GrantKeywords requires at least one keyword".into())
                 } else {
                     Ok(())
                 }

@@ -110,7 +110,7 @@ fn boros_charm_keyword_modes_apply_to_the_correct_snapshot() {
 }
 
 /// Issue #42 through the modal path: mode 2 ("Target creature gains double strike until end of
-/// turn") is a `GrantKeywordsTarget`, so it must reject non-battlefield targets at cast time and
+/// turn") is a targeted `GrantKeywords`, so it must reject non-battlefield targets at cast time and
 /// must not advertise them in the mode's own target group (CR 115.1).
 #[test]
 fn boros_charm_double_strike_mode_rejects_targets_outside_the_battlefield() {

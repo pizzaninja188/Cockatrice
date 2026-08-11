@@ -1,8 +1,8 @@
 //! Activated, triggered, and static ability definitions.
 
 use super::{
-    AbilityCost, Amount, CardTypeFilter, Color, CounterKind, GameCondition, Keyword,
-    SpellEffectKind, TargetFilter,
+    AbilityCost, Amount, BattlefieldCreatureCountFilter, CardTypeFilter, Color, CounterKind,
+    GameCondition, Keyword, SpellEffectKind, TargetFilter,
 };
 use crate::ManaAmount;
 use serde::{Deserialize, Serialize};
@@ -15,8 +15,70 @@ pub struct ActivatedAbilityDef {
     /// CR 608.2: the ability's effects, resolved in the order written — the same shape and the
     /// same semantics as a spell's `spell_effect`. A single-effect ability is a one-element list.
     pub effect: Vec<SpellEffectKind>,
+    /// Additional timing instruction printed after the ability's effect (CR 602.1b). Normal
+    /// activated abilities already require priority; this dimension records stricter timing.
+    #[serde(default)]
+    pub timing: ActivationTiming,
+    /// Public conditions that must all hold when activation begins. They are activation
+    /// instructions, not intervening-if clauses, and are not checked again on resolution.
+    #[serde(default)]
+    pub conditions: Vec<ActivationCondition>,
     /// Oracle-style ability text shown as annotation on the stack card.
     pub text: String,
+}
+
+/// Extra timing imposed by an activated ability's instructions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum ActivationTiming {
+    /// The ordinary CR 117.1b timing: activate while the player has priority.
+    #[default]
+    Normal,
+    /// CR 307.5 / 602.5d: controller's main phase, with priority and an empty stack.
+    SorcerySpeed,
+}
+
+/// A public predicate checked exactly when an activated ability begins activation (CR 602.1b).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ActivationCondition {
+    /// Reuse an engine-owned public turn-history fact such as "a creature died this turn."
+    GameCondition(GameCondition),
+    /// Require the bounded number of battlefield creatures matching the shared derived filter.
+    /// Celestial Enforcer and Goblin Bird-Grabber use `min: Some(1)` plus Flying.
+    BattlefieldCreatureCount {
+        filter: BattlefieldCreatureCountFilter,
+        #[serde(default)]
+        min: Option<u32>,
+        #[serde(default)]
+        max: Option<u32>,
+    },
+}
+
+impl ActivationCondition {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        match self {
+            ActivationCondition::GameCondition(condition) => condition.validate(),
+            ActivationCondition::BattlefieldCreatureCount { filter, min, max } => {
+                filter.validate()?;
+                if min.is_none() && max.is_none() {
+                    return Err(
+                        "BattlefieldCreatureCount activation condition requires at least one of min or max"
+                            .into(),
+                    );
+                }
+                if min
+                    .as_ref()
+                    .zip(max.as_ref())
+                    .is_some_and(|(minimum, maximum)| minimum > maximum)
+                {
+                    return Err(
+                        "BattlefieldCreatureCount activation condition min cannot exceed max"
+                            .into(),
+                    );
+                }
+                Ok(())
+            }
+        }
+    }
 }
 
 impl ActivatedAbilityDef {
@@ -36,6 +98,12 @@ impl ActivatedAbilityDef {
         self.effect
             .iter()
             .any(|e| matches!(e, SpellEffectKind::Equip { .. }))
+    }
+
+    /// Equip carries the same timing instruction intrinsically (CR 702.6a), so callers use this
+    /// one query instead of maintaining separate explicit/keyword timing paths.
+    pub fn requires_sorcery_speed(&self) -> bool {
+        self.timing == ActivationTiming::SorcerySpeed || self.is_equip()
     }
 }
 

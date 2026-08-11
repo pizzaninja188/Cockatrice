@@ -322,6 +322,7 @@ struct PrivateZoneSnapshot {
 struct BattlefieldViewSnapshot {
     players: Vec<PlayerBattlefieldSnapshot>,
     continuous_effects: Vec<ContinuousEffect>,
+    turn_history: TurnHistory,
     active_player: PlayerId,
     turn_step: TurnStep,
     stack_empty: bool,

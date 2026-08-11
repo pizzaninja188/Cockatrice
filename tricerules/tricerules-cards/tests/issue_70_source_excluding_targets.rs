@@ -1,4 +1,6 @@
-use tricerules_cards::primitives::{PlayerRecipient, SpellEffectKind, TargetFilter, TargetKind};
+use tricerules_cards::primitives::{
+    EffectSubject, PlayerRecipient, SpellEffectKind, TargetFilter, TargetKind,
+};
 use tricerules_cards::{AbilityCost, Amount, CardRegistry, Keyword, TriggerCondition};
 
 fn assert_tap_and_mana(costs: &[AbilityCost], expected: &str) {
@@ -28,13 +30,13 @@ fn pegasus_courser_has_complete_oracle_behavior() {
     );
     assert_eq!(
         face.triggered_abilities[0].effect,
-        [SpellEffectKind::GrantKeywordsTarget {
-            target: TargetFilter {
+        [SpellEffectKind::GrantKeywords {
+            subject: EffectSubject::Chosen(TargetFilter {
                 kind: TargetKind::Creature,
                 attacking_or_blocking: true,
                 exclude_source: true,
                 ..TargetFilter::default()
-            },
+            }),
             keywords: vec![Keyword::Flying],
         }]
     );

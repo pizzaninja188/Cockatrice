@@ -456,6 +456,7 @@ impl GameEngine {
         BattlefieldViewSnapshot {
             players,
             continuous_effects: self.state.continuous_effects.clone(),
+            turn_history: self.state.turn_history,
             active_player: self.state.active_player_id(),
             turn_step: self.state.turn_step,
             stack_empty: self.state.stack.is_empty(),

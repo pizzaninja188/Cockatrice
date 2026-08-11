@@ -23,8 +23,8 @@
       (
         label: "Target creature gains double strike",
         effects: [
-          GrantKeywordsTarget(
-            target: (kind: Creature),
+          GrantKeywords(
+            subject: Chosen((kind: Creature)),
             keywords: [DoubleStrike],
           ),
         ],

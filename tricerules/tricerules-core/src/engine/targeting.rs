@@ -474,9 +474,7 @@ fn effect_target_legal_at_resolution(
         | SpellEffectKind::PreventNextDamage { target, .. } => {
             target_filter_legal(engine, target, tid, caster, source)
         }
-        SpellEffectKind::DestroyTarget { target }
-        | SpellEffectKind::GrantKeywordsTarget { target, .. }
-        | SpellEffectKind::Equip { target } => {
+        SpellEffectKind::DestroyTarget { target } | SpellEffectKind::Equip { target } => {
             target_filter_legal(engine, target, tid, caster, source)
         }
         SpellEffectKind::PumpTarget {
@@ -484,6 +482,10 @@ fn effect_target_legal_at_resolution(
             ..
         }
         | SpellEffectKind::PutCounters {
+            subject: EffectSubject::Chosen(target),
+            ..
+        }
+        | SpellEffectKind::GrantKeywords {
             subject: EffectSubject::Chosen(target),
             ..
         }
@@ -498,6 +500,10 @@ fn effect_target_legal_at_resolution(
             ..
         }
         | SpellEffectKind::PutCounters {
+            subject: EffectSubject::Source,
+            ..
+        }
+        | SpellEffectKind::GrantKeywords {
             subject: EffectSubject::Source,
             ..
         }
@@ -539,6 +545,7 @@ pub(super) fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
     match kind {
         SpellEffectKind::PumpTarget { subject, .. }
         | SpellEffectKind::PutCounters { subject, .. }
+        | SpellEffectKind::GrantKeywords { subject, .. }
         | SpellEffectKind::Untap { subject }
         | SpellEffectKind::Regenerate { subject } => {
             matches!(subject, EffectSubject::Chosen(_))
@@ -546,7 +553,6 @@ pub(super) fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
         SpellEffectKind::DamageTarget { .. }
         | SpellEffectKind::DamageTargets { .. }
         | SpellEffectKind::DestroyTarget { .. }
-        | SpellEffectKind::GrantKeywordsTarget { .. }
         | SpellEffectKind::ExileTarget
         | SpellEffectKind::ExileTargetGainLifeEqualToPower
         | SpellEffectKind::ReturnTargetCreatureToHand
@@ -635,6 +641,7 @@ pub(super) fn validate_effect_targets(
         }
         SpellEffectKind::PumpTarget { subject, .. }
         | SpellEffectKind::PutCounters { subject, .. }
+        | SpellEffectKind::GrantKeywords { subject, .. }
         | SpellEffectKind::Regenerate { subject } => match subject {
             EffectSubject::Source => {
                 if !targets.is_empty() {
@@ -652,16 +659,6 @@ pub(super) fn validate_effect_targets(
                 }
             }
         },
-        SpellEffectKind::GrantKeywordsTarget { target: filter, .. } => {
-            if targets.len() != 1 {
-                return Err(EngineError::Illegal("requires exactly one target"));
-            }
-            if !target_filter_legal(engine, filter, targets[0].object_id, caster, source) {
-                return Err(EngineError::Illegal(
-                    "target must be a creature on the battlefield",
-                ));
-            }
-        }
         SpellEffectKind::ExileTarget
         | SpellEffectKind::ExileTargetGainLifeEqualToPower
         | SpellEffectKind::ReturnTargetCreatureToHand => {
@@ -870,7 +867,7 @@ pub(super) fn validate_spell_targets(
 /// so the trailing arm means "this effect has no spell-side target validation" rather than "this
 /// target is fine". A targeted primitive added without an arm here is rejected (and trips a
 /// `debug_assert` in tests) instead of silently accepting graveyard cards, players and stack
-/// objects — the CR 115.1 defect that issue #42 recorded for `GrantKeywordsTarget`.
+/// objects — the CR 115.1 defect that issue #42 recorded for targeted keyword grants.
 pub(super) fn spell_target_legality_error(
     engine: &GameEngine,
     effect: &SpellEffectKind,
@@ -892,7 +889,10 @@ pub(super) fn spell_target_legality_error(
             subject: EffectSubject::Chosen(filter),
             ..
         }
-        | SpellEffectKind::GrantKeywordsTarget { target: filter, .. }
+        | SpellEffectKind::GrantKeywords {
+            subject: EffectSubject::Chosen(filter),
+            ..
+        }
         | SpellEffectKind::PutCounters {
             subject: EffectSubject::Chosen(filter),
             ..

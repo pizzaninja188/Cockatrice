@@ -1316,7 +1316,7 @@ fn published_zone_targets_follow_apnap_and_zone_order() {
     );
 }
 
-/// Issue #42. Oracle: "Target creature gains deathtouch until end of turn." `GrantKeywordsTarget`
+/// Issue #42. Oracle: "Target creature gains deathtouch until end of turn." Targeted `GrantKeywords`
 /// was missing from the spell-side validator, so its catch-all advertised every object — graveyard
 /// cards, players and stack spells included (CR 115.1: only battlefield creatures are legal here).
 #[test]

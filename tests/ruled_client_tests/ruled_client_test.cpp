@@ -1457,6 +1457,29 @@ TEST_F(RuledClientTest, ActivatedAbilityMenuLabelsDoNotDuplicateStructuredCosts)
               QStringLiteral("{2}, {T}, Sacrifice a creature: Draw a card."));
 }
 
+TEST_F(RuledClientTest, ActivatedAbilityAvailabilityTracksTheEngineAcrossFullZoneViews)
+{
+    auto availabilityBatch = [](bool activatable) {
+        ruled::v1::RuledEventBatch batch;
+        auto *view = batch.add_events()->mutable_zone_view()->add_per_player();
+        view->set_player_id(kLocalPlayer);
+        auto *object = view->add_battlefield_objects();
+        object->set_object_id(100);
+        auto *ability = object->add_activated_abilities();
+        ability->set_text("{1}{W}, {T}: Tap target creature. Activate only if you control a creature with flying.");
+        ability->set_activatable(activatable);
+        return batch;
+    };
+
+    apply(availabilityBatch(false));
+    EXPECT_FALSE(state->abilityActivatable(100, 0));
+    EXPECT_EQ(state->activatedAbilityMenuLabel(100, 0),
+              QStringLiteral("{1}{W}, {T}: Tap target creature. Activate only if you control a creature with flying."));
+
+    apply(availabilityBatch(true));
+    EXPECT_TRUE(state->abilityActivatable(100, 0));
+}
+
 TEST_F(RuledClientTest, BattlefieldOmissionRetainsStateWhileOtherZoneViewFieldsUpdate)
 {
     ruled::v1::RuledEventBatch full;
@@ -1486,6 +1509,7 @@ TEST_F(RuledClientTest, BattlefieldOmissionRetainsStateWhileOtherZoneViewFieldsU
     EXPECT_EQ(state->combatToughnessForCreatureOid(100), 5);
     EXPECT_EQ(state->activatedAbilitiesForOid(100), QStringList({QStringLiteral("Draw a card.")}));
     EXPECT_EQ(state->activatedAbilityCostLabelsForOid(100), QStringList({QStringLiteral("{T}")}));
+    EXPECT_TRUE(state->abilityActivatable(100, 0));
     EXPECT_TRUE(state->isFirstStrikeStepPending()) << "non-battlefield fields in an omitted view still apply";
 
     ruled::v1::RuledEventBatch explicitEmpty;

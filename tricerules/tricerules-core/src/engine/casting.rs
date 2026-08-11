@@ -701,9 +701,15 @@ impl GameEngine {
             .ok_or(EngineError::Illegal("no such activated ability"))?
             .clone();
 
-        // CR 702.6a: equip abilities have "Activate only as a sorcery" built in.
-        if ability.is_equip() && !super::priority::sorcery_speed_available(&self.state, player) {
-            return Err(EngineError::Illegal("equip only at sorcery speed"));
+        // CR 602.5d / 702.6a: explicit activation instructions and equip both use the shared
+        // sorcery-speed window.
+        if ability.requires_sorcery_speed()
+            && !super::priority::sorcery_speed_available(&self.state, player)
+        {
+            return Err(EngineError::Illegal("ability only at sorcery speed"));
+        }
+        if !self.activation_conditions_hold(permanent_id, &ability) {
+            return Err(EngineError::Illegal("activation condition not met"));
         }
 
         if ability.mana_options().is_some() {
@@ -1076,9 +1082,9 @@ impl GameEngine {
     /// Deliberately ignores mana: the client floats mana *after* choosing the ability, so an
     /// unaffordable ability is still a legal thing to start. What it does mirror is every gate in
     /// [`GameEngine::activate_ability`] that no amount of mana can satisfy — the tap cost
-    /// (CR 302.6 summoning sickness, already tapped) and equip's sorcery-speed restriction
-    /// (CR 702.6a). Priority and seat ownership stay client-side; they are not properties of the
-    /// permanent, and this value is broadcast to every player.
+    /// (CR 302.6 summoning sickness, already tapped), public activation conditions, and stricter
+    /// timing instructions (CR 602.5d / 702.6a). Priority and seat ownership stay client-side;
+    /// they are not properties of the permanent, and this value is broadcast to every player.
     pub(super) fn ability_activatable(
         &self,
         permanent_id: ObjectId,
@@ -1087,9 +1093,12 @@ impl GameEngine {
         let Some(object) = self.state.objects.get(&permanent_id) else {
             return false;
         };
-        if ability.is_equip()
+        if ability.requires_sorcery_speed()
             && !super::priority::sorcery_speed_available(&self.state, object.controller)
         {
+            return false;
+        }
+        if !self.activation_conditions_hold(permanent_id, ability) {
             return false;
         }
         if ability
@@ -1101,6 +1110,35 @@ impl GameEngine {
             return false;
         }
         true
+    }
+
+    fn activation_conditions_hold(
+        &self,
+        permanent_id: ObjectId,
+        ability: &tricerules_cards::ActivatedAbilityDef,
+    ) -> bool {
+        let Some(controller) = self
+            .state
+            .objects
+            .get(&permanent_id)
+            .map(|object| object.controller)
+        else {
+            return false;
+        };
+        ability.conditions.iter().all(|condition| match condition {
+            tricerules_cards::ActivationCondition::GameCondition(condition) => {
+                self.condition_holds(*condition)
+            }
+            tricerules_cards::ActivationCondition::BattlefieldCreatureCount {
+                filter,
+                min,
+                max,
+            } => {
+                let count = self.battlefield_creature_count(filter, controller, permanent_id);
+                min.is_none_or(|minimum| count >= minimum)
+                    && max.is_none_or(|maximum| count <= maximum)
+            }
+        })
     }
 
     pub(super) fn check_tappable(

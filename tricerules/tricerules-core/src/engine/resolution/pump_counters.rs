@@ -141,31 +141,42 @@ pub(super) fn grant_keywords_all(
     Ok(EffectOutcome::Continue)
 }
 
-pub(super) fn grant_keywords_target(
+pub(super) fn grant_keywords(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::GrantKeywordsTarget { target, keywords } = effect else {
+    let SpellEffectKind::GrantKeywords { subject, keywords } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let Some(tid) = cx.targets.first().copied() else {
+    let (tid, effect_source_id) = match &subject {
+        EffectSubject::Source => (
+            cx.top
+                .source_permanent_id
+                .filter(|_| cx.engine.source_is_current_object(cx.top)),
+            cx.top.source_permanent_id,
+        ),
+        EffectSubject::Chosen(target) => {
+            let tid = cx.targets.first().copied().filter(|tid| {
+                target_filter_legal_at_resolution(
+                    cx.engine,
+                    target,
+                    *tid,
+                    cx.controller,
+                    TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
+                )
+            });
+            (tid, Some(cx.top.id))
+        }
+    };
+    let Some(tid) = tid else {
         return Ok(EffectOutcome::Continue);
     };
-    if !target_filter_legal_at_resolution(
-        cx.engine,
-        &target,
-        tid,
-        cx.controller,
-        TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
-    ) {
-        return Ok(EffectOutcome::Continue);
-    }
 
     let target_name = object_display_name(&cx.engine.state, cx.engine.registry, tid);
     let keyword_names: Vec<&str> = keywords.iter().map(|keyword| keyword.as_str()).collect();
     for keyword in keywords {
         cx.engine.state.continuous_effects.push(ContinuousEffect {
-            source_id: Some(cx.top.id),
+            source_id: effect_source_id,
             affected: AffectedScope::Single(tid),
             kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
             duration: EffectDuration::UntilEndOfTurn,
