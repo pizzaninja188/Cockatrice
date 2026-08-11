@@ -1077,6 +1077,7 @@ void RuledEventDispatcher::applyNoLegalActions()
 void RuledEventDispatcher::finishBatch(BatchContext &ctx)
 {
     state->pruneCleanupDiscardSelectionAndEmitUi();
+    emit state->legalActionsChanged();
     if (ctx.stackTrackingDirty) {
         emit state->stackHasItemsChanged(!state->stackOidOrder.isEmpty());
         emit state->stackOrderChanged(state->stackOidOrder);

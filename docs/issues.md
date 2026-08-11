@@ -77,10 +77,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Add a reusable attack trigger predicate based on the declared attacking group, not one event per creature. Calibration evidence: Makeshift Battalion. Capture the simultaneous declaration set, trigger only once when its threshold is met, and cover attacks split among multiple defending players or planeswalkers; satisfy the two-card-or-mechanic reuse gate before adding the condition.
   - Priority: Low
 
-- [ ] #71 [feature] Power and keyword predicates in target and sacrifice filters
-  - Details: Extend the shared filter vocabulary with power comparisons and keyword absence, usable for targets and selections. Issue #52 shipped derived keyword-presence matching in the shared target/mass/cost predicate for Portcullis Vine. Remaining calibration evidence: Legion's Judgment, Reckless Air Strike, Run Afoul, and Goblin Smuggler's secondary `power_target_filter` gap. Keep derived characteristics controller-aware and reusable.
-  - Priority: Low
-
 - [ ] #72 [feature] Planeswalker and battle objects as rules targets
   - Details: Add the missing nonplayer object kinds and legal target vocabulary so damage and destroy effects can include planeswalkers and battles where Oracle permits. Calibration evidence: Chandra's Magmutt, Finishing Blow, Goblin Arsonist, Pitchburn Devils, Scorch Spitter, Shock, Sorcerer of the Fang, and Viashino Pyromancer. This requires engine-owned card types, battlefield identity, damage/defeat state-based actions, proto/relay/client representation, and end-to-end target selection; do not approximate these objects as players.
   - Priority: Low
@@ -98,7 +94,7 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Priority: Low
 
 - [ ] #77 [feature] Unblockable effects and mass blocking restrictions
-  - Details: Generalize combat legality modifiers that make selected creatures unable to block or make an affected creature unable to be blocked for a duration. Calibration evidence: Destructive Tampering, Frilled Sea Serpent, Ghostform, and Goblin Smuggler. Ensure explicit blocks, must-block effects, menace, and automatic combat progression all consume the same legality predicate.
+  - Details: Generalize combat legality modifiers that make selected creatures unable to block or make an affected creature unable to be blocked for a duration. Calibration evidence: Destructive Tampering, Frilled Sea Serpent, Ghostform, and Goblin Smuggler. Issue #71 shipped the shared derived-power predicate needed by Goblin Smuggler; this issue retains its until-end-of-turn unblockable effect and card definition. Ensure explicit blocks, must-block effects, menace, and automatic combat progression all consume the same legality predicate.
   - Priority: Low
 
 - [ ] #78 [feature] Conditional continuous characteristics

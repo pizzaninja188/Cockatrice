@@ -242,12 +242,18 @@ void PlayerTarget::mousePressEvent(QGraphicsSceneMouseEvent *event)
                     event->accept();
                     return;
                 }
-                if (event->button() == Qt::LeftButton &&
-                    (actions->isInSpellDamageAllocationMode() ||
-                     actions->isAwaitingRuledPlayerTargetSelection() ||
-                     actions->isAwaitingRuledAbilityOrTriggerPlayerTarget())) {
-                    event->accept();
-                    return;
+                if (event->button() == Qt::LeftButton) {
+                    const auto eligibility = actions->ruledPlayerTargetEligibility(owner);
+                    if (eligibility != RuledTargetClickEligibility::NotTargeting) {
+                        setCursor(eligibility == RuledTargetClickEligibility::Legal ? Qt::CrossCursor
+                                                                                  : Qt::ArrowCursor);
+                        event->accept();
+                        return;
+                    }
+                    if (actions->isInSpellDamageAllocationMode()) {
+                        event->accept();
+                        return;
+                    }
                 }
             }
         }
@@ -263,6 +269,12 @@ void PlayerTarget::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
             Player *localPlayer = playerManager->getPlayers().value(playerManager->getLocalPlayerId(), nullptr);
             PlayerActions *actions = localPlayer ? localPlayer->getPlayerActions() : nullptr;
             if (event->button() == Qt::LeftButton && actions) {
+                const auto eligibility = actions->ruledPlayerTargetEligibility(owner);
+                if (eligibility == RuledTargetClickEligibility::Illegal) {
+                    setCursor(Qt::ArrowCursor);
+                    event->accept();
+                    return;
+                }
                 // Spell damage allocation takes priority: left-click increments this player's allocation.
                 if (actions->tryBumpSpellDamageAllocationForPlayer(owner, +1)) {
                     event->accept();

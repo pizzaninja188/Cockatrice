@@ -1021,6 +1021,7 @@ impl SpellEffectKind {
             // TargetPlayerSacrifices targets a player (kind must be AnyPlayer/OpponentPlayer),
             // and the sacrifice filter must select objects not players.
             SpellEffectKind::TargetPlayerSacrifices { target, filter } => {
+                filter.validate_characteristic_constraints()?;
                 if !target.is_player() {
                     return Err(format!(
                         "TargetPlayerSacrifices.target must be AnyPlayer or OpponentPlayer, got {:?}",
@@ -1051,6 +1052,7 @@ impl SpellEffectKind {
             SpellEffectKind::DestroyAll { kind, .. }
             | SpellEffectKind::DamageAll { kind, .. }
             | SpellEffectKind::UntapAll { filter: kind, .. } => {
+                kind.validate_characteristic_constraints()?;
                 if !matches!(kind.kind, TargetKind::Creature | TargetKind::AnyPermanent) {
                     return Err(format!(
                         "mass effect kind must be Creature or AnyPermanent, got {:?}",
@@ -1089,6 +1091,7 @@ impl SpellEffectKind {
                 }
             }
             SpellEffectKind::GrantKeywordsAllPermanents { filter, keywords } => {
+                filter.validate_characteristic_constraints()?;
                 if !matches!(filter.kind, TargetKind::Creature | TargetKind::AnyPermanent) {
                     Err(format!(
                         "GrantKeywordsAllPermanents filter must be Creature or AnyPermanent, got {:?}",

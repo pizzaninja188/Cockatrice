@@ -661,6 +661,34 @@ public:
                    ? validTargetsByHandSlot.value(spellTargetKey(slot, faceIndex))
                    : validTargetsByZoneObject.value(zoneSpellTargetKey(static_cast<quint32>(slot), faceIndex));
     }
+    /// Latest engine-published target group for one selected modal mode. The pending-cast UI keeps
+    /// a display snapshot, but click legality must always consult this live copy after mana or
+    /// other commands cause a fresh LegalActions batch.
+    [[nodiscard]] std::optional<SpellTargetData> modalSpellTargetData(int slot,
+                                                                      int faceIndex,
+                                                                      int modeIndex,
+                                                                      RuledCastSource source) const
+    {
+        const int key = spellTargetKey(slot, faceIndex);
+        const RuledHandActionSet *set = nullptr;
+        if (source == RuledCastSource::Hand) {
+            const auto it = handActions.constFind(ruled::v1::HAND_ACTION_CAST_SPELL);
+            if (it != handActions.constEnd()) {
+                set = &it.value();
+            }
+        } else {
+            set = &zoneCastActions;
+        }
+        if (!set) {
+            return std::nullopt;
+        }
+        const auto modes = set->modalOptionsByCastKey.value(key);
+        const auto mode = std::find_if(modes.cbegin(), modes.cend(),
+                                       [modeIndex](const RuledModalSpellOption &candidate) {
+                                           return candidate.modeIndex == modeIndex && candidate.needsTarget;
+                                       });
+        return mode == modes.cend() ? std::nullopt : std::optional<SpellTargetData>(mode->targets);
+    }
     [[nodiscard]] bool
     isValidSpellTarget(int handSlot, int faceIndex, quint32 oid, RuledCastSource source = RuledCastSource::Hand) const
     {
@@ -713,6 +741,10 @@ public:
     [[nodiscard]] bool abilityNeedsTarget(quint32 permanentOid, int abilityIndex) const
     {
         return validTargetsByAbility.contains(abilityTargetKey(permanentOid, abilityIndex));
+    }
+    [[nodiscard]] SpellTargetData abilityTargetData(quint32 permanentOid, int abilityIndex) const
+    {
+        return validTargetsByAbility.value(abilityTargetKey(permanentOid, abilityIndex));
     }
     [[nodiscard]] bool isValidAbilityTarget(quint32 permanentOid, int abilityIndex, quint32 targetOid) const
     {
@@ -1147,6 +1179,9 @@ signals:
     /// next refreshPromptLabel() call overwrites it.
     void blockerRejected();
     void combatStateChanged();
+    /// Emitted once after each settled batch rebuilds the acting player's authoritative legal
+    /// actions. Pending target UI uses it to discard selections that became stale mid-cast.
+    void legalActionsChanged();
     void spellTargetSelectionChanged();
     void spellDamageAllocationUiChanged();
     void combatDamageUiChanged();

@@ -21,6 +21,9 @@
 #include <optional>
 
 class QWidget;
+class CardItem;
+class Player;
+class PlayerActions;
 
 struct RuledFlexPip
 {
@@ -105,6 +108,159 @@ enum class RuledPendingPaymentAction
     ActivateAbility,
 };
 
+/// Physical surface the user clicked while a CR 115 target choice is pending.
+enum class RuledTargetCandidateKind
+{
+    Battlefield,
+    Stack,
+    Graveyard,
+    Player,
+};
+
+/// Tri-state result lets normal/freeform handling continue when no target choice exists, while an
+/// illegal candidate consumes the click before CardItem/PlayerTarget can perform another action.
+enum class RuledTargetClickEligibility
+{
+    NotTargeting,
+    Legal,
+    Illegal,
+};
+
+[[nodiscard]] inline bool ruledTargetDataContains(const RuledSpellTargetData &data,
+                                                  RuledTargetCandidateKind kind,
+                                                  quint32 oid,
+                                                  int localPlayerId)
+{
+    switch (kind) {
+        case RuledTargetCandidateKind::Battlefield:
+            return data.validPermanentIds.contains(oid);
+        case RuledTargetCandidateKind::Stack:
+            return data.validStackIds.contains(oid);
+        case RuledTargetCandidateKind::Graveyard:
+            return data.validGraveyardIds.contains(oid);
+        case RuledTargetCandidateKind::Player:
+            return oid == static_cast<quint32>(localPlayerId) ? data.canTargetSelf : data.canTargetOpponent;
+    }
+    return false;
+}
+
+[[nodiscard]] inline std::optional<RuledSpellTargetData>
+currentRuledSpellTargetData(const PendingRuledSpellCast &spell, const RuledClientState &state)
+{
+    if (!spell.valid) {
+        return std::nullopt;
+    }
+    if (spell.activeModePosition >= 0 && spell.activeModePosition < spell.selectedModes.size()) {
+        return state.modalSpellTargetData(spell.handIndex, spell.faceIndex,
+                                          spell.selectedModes.at(spell.activeModePosition).modeIndex, spell.source);
+    }
+    return state.spellTargetData(spell.handIndex, spell.faceIndex, spell.source);
+}
+
+/// One authoritative click predicate for every true target-selection flow. Untargeted resolution
+/// and cost choices deliberately stay out of this function.
+[[nodiscard]] inline RuledTargetClickEligibility
+ruledTargetClickEligibility(const PendingRuledSpellCast &spell,
+                            const PendingActivatedAbility &ability,
+                            const RuledClientState &state,
+                            RuledTargetCandidateKind kind,
+                            quint32 oid,
+                            int localPlayerId)
+{
+    if (state.hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget)) {
+        const bool supportedSurface = kind == RuledTargetCandidateKind::Battlefield ||
+                                      kind == RuledTargetCandidateKind::Stack ||
+                                      kind == RuledTargetCandidateKind::Player;
+        return supportedSurface && state.isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopyTarget, oid)
+                   ? RuledTargetClickEligibility::Legal
+                   : RuledTargetClickEligibility::Illegal;
+    }
+    if (state.hasPendingTriggerTarget()) {
+        const auto data = state.abilityTargetData(state.lastTriggerSourceOid,
+                                                  static_cast<int>(state.lastTriggerAbilityIndex));
+        return ruledTargetDataContains(data, kind, oid, localPlayerId) ? RuledTargetClickEligibility::Legal
+                                                                       : RuledTargetClickEligibility::Illegal;
+    }
+    if (ability.valid && ability.waitingForTarget) {
+        const auto data = state.abilityTargetData(ability.permanentOid, ability.abilityIndex);
+        return ruledTargetDataContains(data, kind, oid, localPlayerId) ? RuledTargetClickEligibility::Legal
+                                                                       : RuledTargetClickEligibility::Illegal;
+    }
+    if (spell.valid && spell.waitingForTarget) {
+        const auto data = currentRuledSpellTargetData(spell, state);
+        return data.has_value() && ruledTargetDataContains(*data, kind, oid, localPlayerId)
+                   ? RuledTargetClickEligibility::Legal
+                   : RuledTargetClickEligibility::Illegal;
+    }
+    return RuledTargetClickEligibility::NotTargeting;
+}
+
+[[nodiscard]] inline bool ruledTargetDataContainsOid(const RuledSpellTargetData &data,
+                                                     quint32 oid,
+                                                     int localPlayerId)
+{
+    return data.validPermanentIds.contains(oid) || data.validStackIds.contains(oid) ||
+           data.validGraveyardIds.contains(oid) ||
+           (oid == static_cast<quint32>(localPlayerId) ? data.canTargetSelf : data.canTargetOpponent);
+}
+
+/// Remove locally staged targets that disappeared from the newest LegalActions snapshot. Parallel
+/// damage vectors are pruned at the same indices so a later command cannot pair damage with the
+/// wrong object.
+[[nodiscard]] inline bool reconcileRuledPendingTargets(PendingRuledSpellCast &spell,
+                                                       PendingActivatedAbility &ability,
+                                                       const RuledClientState &state,
+                                                       int localPlayerId)
+{
+    bool changed = false;
+    const auto prune = [&](QVector<quint32> &oids,
+                           QVector<quint32> &damages,
+                           QVector<int> *allocations,
+                           const RuledSpellTargetData &data) {
+        for (int i = oids.size() - 1; i >= 0; --i) {
+            if (ruledTargetDataContainsOid(data, oids.at(i), localPlayerId)) {
+                continue;
+            }
+            oids.remove(i);
+            if (i < damages.size()) {
+                damages.remove(i);
+            }
+            if (allocations && i < allocations->size()) {
+                allocations->remove(i);
+            }
+            changed = true;
+        }
+    };
+
+    if (spell.valid) {
+        if (spell.selectedModes.isEmpty()) {
+            const auto data = state.spellTargetData(spell.handIndex, spell.faceIndex, spell.source);
+            prune(spell.selectedTargetOids, spell.selectedTargetDamages, &spell.targetDamageAllocations, data);
+        } else {
+            for (int modePosition = 0; modePosition < spell.selectedModes.size(); ++modePosition) {
+                auto &mode = spell.selectedModes[modePosition];
+                const auto data = state.modalSpellTargetData(spell.handIndex, spell.faceIndex, mode.modeIndex,
+                                                             spell.source);
+                const RuledSpellTargetData empty;
+                prune(mode.selectedTargetOids, mode.selectedTargetDamages, nullptr,
+                      data.has_value() ? *data : empty);
+                if (modePosition == spell.activeModePosition) {
+                    prune(spell.selectedTargetOids, spell.selectedTargetDamages,
+                          &spell.targetDamageAllocations, data.has_value() ? *data : empty);
+                }
+            }
+        }
+    }
+    if (ability.valid && ability.selectedTargetOid != 0) {
+        const auto data = state.abilityTargetData(ability.permanentOid, ability.abilityIndex);
+        if (!ruledTargetDataContainsOid(data, ability.selectedTargetOid, localPlayerId)) {
+            ability.selectedTargetOid = 0;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
 /// Identify a locally staged spell or ability whose last mana pip was consumed while another
 /// engine command (normally that mana ability) was still in flight. The caller invokes this after
 /// the command lock clears and submits the returned action.
@@ -150,6 +306,17 @@ public:
 
     PendingRuledSpellCast spell;
     PendingActivatedAbility ability;
+};
+
+/// Fork-owned bridge between PlayerActions' pending state and concrete CardItem/Player target
+/// surfaces. PlayerActions exposes only thin wrappers and one friend declaration.
+class RuledTargetUi
+{
+public:
+    static void ensureRefreshConnection(PlayerActions *actions);
+    static void reconcile(PlayerActions *actions);
+    [[nodiscard]] static RuledTargetClickEligibility cardEligibility(const PlayerActions *actions, CardItem *card);
+    [[nodiscard]] static RuledTargetClickEligibility playerEligibility(const PlayerActions *actions, Player *target);
 };
 
 #endif // COCKATRICE_RULED_PENDING_CAST_H

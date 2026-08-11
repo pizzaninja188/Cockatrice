@@ -343,6 +343,100 @@ TEST(RuledPendingPaymentTest, LastManaPipConsumedDuringEngineCommandIsReadyAfter
     EXPECT_EQ(readyRuledPendingPaymentAction({}, ability), RuledPendingPaymentAction::None);
 }
 
+TEST(RuledPendingTargetTest, ClickEligibilityUsesLatestAuthoritativeModalTargets)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    PendingRuledSpellCast spell;
+    spell.valid = true;
+    spell.waitingForTarget = true;
+    spell.handIndex = 3;
+    spell.faceIndex = 0;
+    spell.activeModePosition = 0;
+
+    RuledSpellTargetData stale;
+    stale.validPermanentIds.insert(100);
+    spell.selectedModes.append({7, QStringLiteral("mode"), true, stale, {}, {}});
+
+    RuledSpellTargetData current;
+    current.validPermanentIds.insert(200);
+    RuledModalSpellOption mode{7, QStringLiteral("mode"), true, true, current};
+    state.handActions[ruled::v1::HAND_ACTION_CAST_SPELL]
+        .modalOptionsByCastKey[RuledClientState::spellTargetKey(3, 0)] = {mode};
+
+    EXPECT_EQ(ruledTargetClickEligibility(spell, {}, state, RuledTargetCandidateKind::Battlefield, 100, 0),
+              RuledTargetClickEligibility::Illegal);
+    EXPECT_EQ(ruledTargetClickEligibility(spell, {}, state, RuledTargetCandidateKind::Battlefield, 200, 0),
+              RuledTargetClickEligibility::Legal);
+    EXPECT_EQ(ruledTargetClickEligibility(spell, {}, state, RuledTargetCandidateKind::Player, 0, 0),
+              RuledTargetClickEligibility::Illegal);
+}
+
+TEST(RuledPendingTargetTest, ClickEligibilityCoversAbilitiesTriggersAndCopyRetargeting)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    PendingActivatedAbility ability;
+    ability.valid = true;
+    ability.waitingForTarget = true;
+    ability.permanentOid = 44;
+    ability.abilityIndex = 2;
+    RuledSpellTargetData targets;
+    targets.validGraveyardIds.insert(300);
+    targets.canTargetOpponent = true;
+    state.validTargetsByAbility.insert(RuledClientState::abilityTargetKey(44, 2), targets);
+
+    EXPECT_EQ(ruledTargetClickEligibility({}, ability, state, RuledTargetCandidateKind::Graveyard, 300, 0),
+              RuledTargetClickEligibility::Legal);
+    EXPECT_EQ(ruledTargetClickEligibility({}, ability, state, RuledTargetCandidateKind::Player, 1, 0),
+              RuledTargetClickEligibility::Legal);
+    EXPECT_EQ(ruledTargetClickEligibility({}, ability, state, RuledTargetCandidateKind::Battlefield, 301, 0),
+              RuledTargetClickEligibility::Illegal);
+
+    ability = {};
+    RuledClientState::RuledPendingChoice trigger;
+    trigger.kind = RuledClientState::ChoiceKind::TriggerTarget;
+    state.setPendingChoice(trigger);
+    state.lastTriggerSourceOid = 55;
+    state.lastTriggerAbilityIndex = 4;
+    targets = {};
+    targets.validStackIds.insert(400);
+    state.validTargetsByAbility.insert(RuledClientState::abilityTargetKey(55, 4), targets);
+    EXPECT_EQ(ruledTargetClickEligibility({}, {}, state, RuledTargetCandidateKind::Stack, 400, 0),
+              RuledTargetClickEligibility::Legal);
+
+    RuledClientState::RuledPendingChoice copy;
+    copy.kind = RuledClientState::ChoiceKind::CopyTarget;
+    copy.candidateOids = {500};
+    state.setPendingChoice(copy);
+    EXPECT_EQ(ruledTargetClickEligibility({}, {}, state, RuledTargetCandidateKind::Battlefield, 500, 0),
+              RuledTargetClickEligibility::Legal);
+    EXPECT_EQ(ruledTargetClickEligibility({}, {}, state, RuledTargetCandidateKind::Graveyard, 500, 0),
+              RuledTargetClickEligibility::Illegal);
+}
+
+TEST(RuledPendingTargetTest, ReconcileDropsTargetsMissingFromLatestLegalSnapshot)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    PendingRuledSpellCast spell;
+    spell.valid = true;
+    spell.waitingForTarget = true;
+    spell.handIndex = 6;
+    spell.selectedTargetOids = {10, 20};
+    spell.selectedTargetDamages = {1, 2};
+    spell.targetDamageAllocations = {1, 2};
+    RuledSpellTargetData current;
+    current.validPermanentIds.insert(20);
+    state.validTargetsByHandSlot.insert(RuledClientState::spellTargetKey(6, 0), current);
+
+    PendingActivatedAbility ability;
+    EXPECT_TRUE(reconcileRuledPendingTargets(spell, ability, state, 0));
+    EXPECT_EQ(spell.selectedTargetOids, QVector<quint32>({20}));
+    EXPECT_EQ(spell.selectedTargetDamages, QVector<quint32>({2}));
+    EXPECT_EQ(spell.targetDamageAllocations, QVector<int>({2}));
+}
+
 TEST_F(RuledClientTest, HandSlotAndPublicZoneMapsAreQueryable)
 {
     ruled::v1::RuledEventBatch batch;

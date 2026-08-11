@@ -229,6 +229,12 @@ impl CardRegistry {
                 let attachment_source = face.is_aura || face.types.iter().any(|t| t == "Equipment");
                 for ability in &face.static_abilities {
                     if let StaticAbilityDef::EntersAsCopy { filter } = ability {
+                        filter
+                            .validate_characteristic_constraints()
+                            .map_err(|reason| RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason,
+                            })?;
                         if !matches!(filter.kind, TargetKind::Creature | TargetKind::AnyPermanent)
                             || filter.controller != TargetController::Any
                             || filter.exclude_source
@@ -313,6 +319,12 @@ impl CardRegistry {
                     }
                     for cost in &ability.costs {
                         if let AbilityCost::SacrificePermanent { filter } = cost {
+                            filter
+                                .validate_characteristic_constraints()
+                                .map_err(|reason| RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason,
+                                })?;
                             if !matches!(
                                 filter.kind,
                                 TargetKind::Creature | TargetKind::AnyPermanent
@@ -490,6 +502,27 @@ mod tests {
     #[test]
     fn embedded_registry_loads() {
         CardRegistry::from_embedded().unwrap();
+    }
+
+    #[test]
+    fn target_filter_rejects_required_and_excluded_keyword_overlap() {
+        let bad = r#"(
+            id: "contradictory_filter",
+            name: "Contradictory Filter",
+            mana_cost: "{W}",
+            types: ["Instant"],
+            spell_effect: [DestroyTarget(target: (
+                kind: Creature,
+                required_keywords: [Flying],
+                excluded_keywords: [Flying],
+            ))],
+        )"#;
+        let err = CardRegistry::from_chunks(&[bad]).expect_err("overlap must be rejected");
+        assert!(matches!(
+            err,
+            RegistryError::InvalidCard { reason, .. }
+                if reason.contains("both require and exclude keyword Flying")
+        ));
     }
 
     #[test]

@@ -28,6 +28,9 @@ class CardItem : public AbstractCardItem
 {
     Q_OBJECT
 private:
+    /// Latches a target-selection press through Qt's possible double-click event so the second
+    /// click cannot fall through to ordinary play after the first click finishes targeting.
+    bool ruledTargetPressConsumed = false;
     CardZoneLogic *zone;
     bool attacking;
     QMap<int, int> counters;
@@ -162,6 +165,7 @@ public:
     void playCard(bool faceDown);
 
 protected:
+    void mousePressEvent(QGraphicsSceneMouseEvent *event) override;
     void mouseMoveEvent(QGraphicsSceneMouseEvent *event) override;
     void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
     void mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event) override;

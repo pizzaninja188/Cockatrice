@@ -1,6 +1,8 @@
 use super::combat::is_attacking_or_blocking;
 use super::*;
-use tricerules_cards::primitives::{GraveyardFilter, GraveyardOwner, PermanentTypeFilter};
+use tricerules_cards::primitives::{
+    GraveyardFilter, GraveyardOwner, PermanentTypeFilter, PowerComparison,
+};
 
 /// The object that sourced a targeted spell or ability, captured at the moment targets are
 /// chosen. Object ids are stable across zone changes in this engine, so CR 400.7 identity also
@@ -213,6 +215,25 @@ pub(super) fn filter_characteristics_match(
         .all(|keyword| characteristics.has_keyword(*keyword))
     {
         return false;
+    }
+    if filter
+        .excluded_keywords
+        .iter()
+        .any(|keyword| characteristics.has_keyword(*keyword))
+    {
+        return false;
+    }
+    if let Some(comparison) = filter.power {
+        let Some(power) = characteristics.power else {
+            return false;
+        };
+        let matches = match comparison {
+            PowerComparison::AtLeast(minimum) => power >= minimum,
+            PowerComparison::AtMost(maximum) => power <= maximum,
+        };
+        if !matches {
+            return false;
+        }
     }
     if filter.not_artifact && characteristics.is_artifact() {
         return false;
@@ -1117,6 +1138,7 @@ pub(super) fn compute_spell_targets(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tricerules_cards::CounterKind;
 
     #[test]
     fn opponent_relation_is_state_backed_and_independent_of_loss() {
@@ -1271,5 +1293,65 @@ mod tests {
 
         assert!(!attachment_filter_legal(&engine, &filter, bear, bear, 0));
         assert!(attachment_filter_legal(&engine, &filter, bear, u32::MAX, 0,));
+    }
+
+    #[test]
+    fn shared_characteristic_filter_uses_derived_power_and_keyword_absence() {
+        let decks = Some(vec![
+            vec![
+                "grizzly_bears".into(),
+                "wind_drake".into(),
+                "forest".into(),
+                "forest".into(),
+                "forest".into(),
+                "forest".into(),
+                "forest".into(),
+            ],
+            vec!["forest".into(); 7],
+        ]);
+        let mut engine = GameEngine::new(71_001, &[0, 1], 20, decks, true).expect("new");
+        let mut deploy = |card_id: &str| {
+            let oid = engine.state.players[0]
+                .hand
+                .iter()
+                .copied()
+                .find(|oid| engine.state.objects[oid].card_id == card_id)
+                .expect("card in hand");
+            engine.state.players[0]
+                .hand
+                .retain(|candidate| *candidate != oid);
+            engine.state.players[0].battlefield.push(oid);
+            engine.state.objects.get_mut(&oid).expect("object").zone = Zone::Battlefield;
+            oid
+        };
+        let bear = deploy("grizzly_bears");
+        let drake = deploy("wind_drake");
+        engine
+            .state
+            .objects
+            .get_mut(&bear)
+            .expect("bear")
+            .counters
+            .insert(CounterKind::PlusOnePlusOne, 2);
+
+        let power_four = TargetFilter {
+            kind: TargetKind::Creature,
+            power: Some(PowerComparison::AtLeast(4)),
+            ..TargetFilter::default()
+        };
+        assert!(filter_characteristics_match(&engine, &power_four, bear));
+        assert!(!filter_characteristics_match(&engine, &power_four, drake));
+
+        let without_flying = TargetFilter {
+            kind: TargetKind::Creature,
+            excluded_keywords: vec![Keyword::Flying],
+            ..TargetFilter::default()
+        };
+        assert!(filter_characteristics_match(&engine, &without_flying, bear));
+        assert!(!filter_characteristics_match(
+            &engine,
+            &without_flying,
+            drake
+        ));
     }
 }

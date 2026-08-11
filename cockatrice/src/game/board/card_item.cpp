@@ -719,6 +719,32 @@ void CardItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
 
 static bool isTableLandSingleClickLegal(const CardItem *card);
 
+void CardItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
+{
+    ruledTargetPressConsumed = false;
+    if (event->button() == Qt::LeftButton && owner && owner->getGame()) {
+        auto *manager = owner->getGame()->getPlayerManager();
+        Player *local = manager ? manager->getPlayers().value(manager->getLocalPlayerId(), nullptr) : nullptr;
+        PlayerActions *actions = local ? local->getPlayerActions() : nullptr;
+        if (actions) {
+            const auto eligibility = actions->ruledCardTargetEligibility(this);
+            if (eligibility == RuledTargetClickEligibility::Illegal) {
+                ruledTargetPressConsumed = true;
+                setCursor(Qt::ArrowCursor);
+                event->accept();
+                return;
+            }
+            if (eligibility == RuledTargetClickEligibility::Legal) {
+                ruledTargetPressConsumed = true;
+                setCursor(Qt::CrossCursor);
+                event->accept();
+                return;
+            }
+        }
+    }
+    AbstractCardItem::mousePressEvent(event);
+}
+
 void CardItem::playCard(bool faceDown)
 {
     // Do nothing if the card belongs to another player
@@ -862,6 +888,17 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
             auto *playerManager = game ? game->getPlayerManager() : nullptr;
             auto *localPlayer = playerManager ? playerManager->getPlayers().value(playerManager->getLocalPlayerId()) : nullptr;
             auto *actions = localPlayer ? localPlayer->getPlayerActions() : nullptr;
+            if (stationaryLeft && actions) {
+                const auto eligibility = actions->ruledCardTargetEligibility(this);
+                if (eligibility == RuledTargetClickEligibility::Illegal) {
+                    setCursor(Qt::ArrowCursor);
+                    event->accept();
+                    return;
+                }
+                if (eligibility == RuledTargetClickEligibility::Legal) {
+                    setCursor(Qt::CrossCursor);
+                }
+            }
             // Tier-3 resolution pick: hand cards (Brainstorm), deck zone-view cards (Gifts Ungiven
             // search), and revealed popup cards (Gifts Ungiven opponent pick).
             if (stationaryLeft && owner->getPlayerInfo()->getLocal() && actions && zone &&
@@ -893,12 +930,16 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
             }
             // Ability target click (handles pending activation or trigger target selection).
             if (stationaryLeft && actions && actions->tryHandleRuledAbilityTargetClick(this)) {
-                setCursor(Qt::OpenHandCursor);
+                setCursor(actions->ruledCardTargetEligibility(this) == RuledTargetClickEligibility::Legal
+                              ? Qt::CrossCursor
+                              : Qt::OpenHandCursor);
                 AbstractCardItem::mouseReleaseEvent(event);
                 return;
             }
             if (stationaryLeft && actions && actions->tryHandleRuledSpellTargetClick(this)) {
-                setCursor(Qt::OpenHandCursor);
+                setCursor(actions->ruledCardTargetEligibility(this) == RuledTargetClickEligibility::Legal
+                              ? Qt::CrossCursor
+                              : Qt::OpenHandCursor);
                 AbstractCardItem::mouseReleaseEvent(event);
                 return;
             }
@@ -944,6 +985,11 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 
 void CardItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event)
 {
+    if (event->button() == Qt::LeftButton && ruledTargetPressConsumed) {
+        ruledTargetPressConsumed = false;
+        event->accept();
+        return;
+    }
     if ((event->modifiers() != Qt::AltModifier) && (event->buttons() == Qt::LeftButton) &&
         (SettingsCache::instance().getDoubleClickToPlay())) {
         handleClickedToPlay(event->modifiers().testFlag(Qt::ShiftModifier));

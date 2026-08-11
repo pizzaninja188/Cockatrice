@@ -90,6 +90,9 @@ public:
     [[nodiscard]] Command_RuledPayload *newRuledPayloadActivateManaAbilityForLand(CardItem *card, QChar desiredColor);
     bool tryHandleRuledSpellTargetClick(CardItem *card);
     bool tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer);
+    /// Exact engine-authored left-click affordance while a true target choice is pending.
+    [[nodiscard]] RuledTargetClickEligibility ruledCardTargetEligibility(CardItem *card) const;
+    [[nodiscard]] RuledTargetClickEligibility ruledPlayerTargetEligibility(Player *targetPlayer) const;
     [[nodiscard]] bool isTargetSelectedForPendingSpell(quint32 oid) const;
     [[nodiscard]] bool isPlayerSelectedAsPendingSpellTarget(int playerId) const;
     void confirmMultiTargetSelection();
@@ -269,6 +272,8 @@ public slots:
     void setRuledUndoableManaCount(int count);
 
 private:
+    friend class RuledTargetUi;
+
     struct LandTapUndoEntry
     {
         int cardId;
@@ -352,6 +357,8 @@ private:
     void continuePendingActivatedAbilityAfterChoice();
     bool tryReducePendingAbilityRemainingCostOnePip(bool colorlessMana, QChar coloredMana);
     void finishPendingAbilityManaPaymentStep();
+
+    void reconcilePendingRuledTargetSelections();
 
     int defaultNumberTopCards = 1;
     int defaultNumberTopCardsToPlaceBelow = 1;

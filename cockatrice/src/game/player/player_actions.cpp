@@ -59,6 +59,11 @@ PlayerActions::PlayerActions(Player *_player)
     connect(moveTopCardTimer, &QTimer::timeout, [this]() { actMoveTopCardToPlay(); });
 }
 
+void PlayerActions::reconcilePendingRuledTargetSelections()
+{
+    RuledTargetUi::reconcile(this);
+}
+
 QMap<QChar, int> PlayerActions::parseSimpleManaCost(const QString &manaCost)
 {
     QMap<QChar, int> parsed;
@@ -581,6 +586,7 @@ bool PlayerActions::completePendingRuledSpellCast()
     if (RuledActions::gameplayInputLocked(player->getGame())) {
         return false;
     }
+    reconcilePendingRuledTargetSelections();
     if (!pendingRuledSpellCast.valid || pendingRuledSpellCast.handIndex < 0) {
         clearPendingRuledSpellCast();
         return false;
@@ -655,6 +661,7 @@ bool PlayerActions::completeActivateAbility()
     if (RuledActions::gameplayInputLocked(player->getGame())) {
         return false;
     }
+    reconcilePendingRuledTargetSelections();
     if (!pendingActivatedAbility.valid || pendingActivatedAbility.waitingForTarget ||
         pendingActivatedAbility.waitingForCost || pendingActivatedAbility.waitingForMana) {
         return false;
@@ -1384,6 +1391,7 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
     midCastLandTapStack.clear();
     clearPendingRuledSpellCast();
     pendingRuledSpellCast.valid = true;
+    RuledTargetUi::ensureRefreshConnection(this);
     pendingRuledSpellCast.handIndex = ruledHandIndex;
     pendingRuledSpellCast.source = source;
     pendingRuledSpellCast.faceIndex = faceIndex;
@@ -1521,6 +1529,16 @@ bool PlayerActions::tryRuledSpellCastFaceMenu(CardItem *card)
     return true;
 }
 
+RuledTargetClickEligibility PlayerActions::ruledCardTargetEligibility(CardItem *card) const
+{
+    return RuledTargetUi::cardEligibility(this, card);
+}
+
+RuledTargetClickEligibility PlayerActions::ruledPlayerTargetEligibility(Player *targetPlayer) const
+{
+    return RuledTargetUi::playerEligibility(this, targetPlayer);
+}
+
 bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
 {
     if (!pendingRuledSpellCast.valid || !pendingRuledSpellCast.waitingForTarget) {
@@ -1568,18 +1586,27 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
         return true;
     }
     const bool hasModalTarget = pendingRuledSpellCast.activeModePosition >= 0;
-    const auto *modalTarget =
-        hasModalTarget ? &pendingRuledSpellCast.selectedModes.at(pendingRuledSpellCast.activeModePosition).targets
-                       : nullptr;
-    const bool valid =
-        modalTarget
-            ? (isOnBattlefield ? modalTarget->validPermanentIds.contains(targetOid)
-               : isOnGraveyard ? modalTarget->validGraveyardIds.contains(targetOid)
-                               : modalTarget->validStackIds.contains(targetOid))
-            : (isOnBattlefield ? handler->isValidSpellTarget(slot, face, targetOid, pendingRuledSpellCast.source)
-               : isOnGraveyard
-                   ? handler->isValidSpellGraveyardTarget(slot, face, targetOid, pendingRuledSpellCast.source)
-                   : handler->isValidSpellStackTarget(slot, face, targetOid, pendingRuledSpellCast.source));
+    const auto liveModalTarget =
+        hasModalTarget
+            ? handler->modalSpellTargetData(slot, face,
+                                            pendingRuledSpellCast.selectedModes
+                                                .at(pendingRuledSpellCast.activeModePosition)
+                                                .modeIndex,
+                                            pendingRuledSpellCast.source)
+            : std::nullopt;
+    const auto *modalTarget = liveModalTarget.has_value() ? &*liveModalTarget : nullptr;
+    const bool valid = hasModalTarget
+                           ? modalTarget &&
+                                 (isOnBattlefield ? modalTarget->validPermanentIds.contains(targetOid)
+                                  : isOnGraveyard ? modalTarget->validGraveyardIds.contains(targetOid)
+                                                  : modalTarget->validStackIds.contains(targetOid))
+                           : (isOnBattlefield
+                                  ? handler->isValidSpellTarget(slot, face, targetOid, pendingRuledSpellCast.source)
+                              : isOnGraveyard
+                                  ? handler->isValidSpellGraveyardTarget(slot, face, targetOid,
+                                                                        pendingRuledSpellCast.source)
+                                  : handler->isValidSpellStackTarget(slot, face, targetOid,
+                                                                    pendingRuledSpellCast.source));
     if (!valid) {
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
             tr("That is not a legal target for %1.").arg(pendingRuledSpellCast.cardName));
@@ -1657,8 +1684,10 @@ bool PlayerActions::isAwaitingRuledPlayerTargetSelection() const
     const int slot = pendingRuledSpellCast.handIndex;
     const int face = pendingRuledSpellCast.faceIndex;
     if (pendingRuledSpellCast.activeModePosition >= 0) {
-        const auto &targets = pendingRuledSpellCast.selectedModes.at(pendingRuledSpellCast.activeModePosition).targets;
-        return targets.canTargetSelf || targets.canTargetOpponent;
+        const auto targets = handler->modalSpellTargetData(
+            slot, face, pendingRuledSpellCast.selectedModes.at(pendingRuledSpellCast.activeModePosition).modeIndex,
+            pendingRuledSpellCast.source);
+        return targets.has_value() && (targets->canTargetSelf || targets->canTargetOpponent);
     }
     return handler->canSpellTargetSelf(slot, face, pendingRuledSpellCast.source) ||
            handler->canSpellTargetOpponent(slot, face, pendingRuledSpellCast.source);
@@ -1702,15 +1731,21 @@ bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
     const int slot = pendingRuledSpellCast.handIndex;
     const int face = pendingRuledSpellCast.faceIndex;
     const bool isSelf = (targetPlayerId == player->getPlayerInfo()->getId());
-    const auto *modalTarget =
-        pendingRuledSpellCast.activeModePosition >= 0
-            ? &pendingRuledSpellCast.selectedModes.at(pendingRuledSpellCast.activeModePosition).targets
-            : nullptr;
-    const bool canTargetSelf = modalTarget ? modalTarget->canTargetSelf
-                                           : handler->canSpellTargetSelf(slot, face, pendingRuledSpellCast.source);
-    const bool canTargetOpponent = modalTarget
-                                       ? modalTarget->canTargetOpponent
-                                       : handler->canSpellTargetOpponent(slot, face, pendingRuledSpellCast.source);
+    const bool hasModalTarget = pendingRuledSpellCast.activeModePosition >= 0;
+    const auto modalTarget =
+        hasModalTarget
+            ? handler->modalSpellTargetData(slot, face,
+                                            pendingRuledSpellCast.selectedModes
+                                                .at(pendingRuledSpellCast.activeModePosition)
+                                                .modeIndex,
+                                            pendingRuledSpellCast.source)
+            : std::nullopt;
+    const bool canTargetSelf = hasModalTarget ? modalTarget.has_value() && modalTarget->canTargetSelf
+                                              : handler->canSpellTargetSelf(slot, face,
+                                                                            pendingRuledSpellCast.source);
+    const bool canTargetOpponent = hasModalTarget ? modalTarget.has_value() && modalTarget->canTargetOpponent
+                                                  : handler->canSpellTargetOpponent(
+                                                        slot, face, pendingRuledSpellCast.source);
     if (isSelf && !canTargetSelf) {
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
             tr("%1 must target an opponent.").arg(pendingRuledSpellCast.cardName));
@@ -4164,6 +4199,7 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
 
     pendingActivatedAbility = {};
     pendingActivatedAbility.valid = true;
+    RuledTargetUi::ensureRefreshConnection(this);
     pendingActivatedAbility.permanentOid = oid;
     pendingActivatedAbility.abilityIndex = abilityIndex;
     pendingActivatedAbility.abilityText = chosen->text();
@@ -4275,6 +4311,16 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
         if (targetOid == 0) {
             return false;
         }
+        const RuledTargetCandidateKind kind = triggerIsGraveyard
+                                                  ? RuledTargetCandidateKind::Graveyard
+                                              : zoneName == ZoneNames::STACK
+                                                  ? RuledTargetCandidateKind::Stack
+                                                  : RuledTargetCandidateKind::Battlefield;
+        const auto targetData = handler->abilityTargetData(
+            handler->lastTriggerSourceOid, static_cast<int>(handler->lastTriggerAbilityIndex));
+        if (!ruledTargetDataContains(targetData, kind, targetOid, player->getPlayerInfo()->getId())) {
+            return true;
+        }
         ruled::v1::RuledCommand cmd;
         cmd.mutable_choose_trigger_target()->set_target_object_id(targetOid);
         std::string payload;
@@ -4343,19 +4389,23 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
         return false;
     }
     const QString zoneName = card->getZone()->getName();
-    if (zoneName != ZoneNames::TABLE && zoneName != ZoneNames::STACK) {
-        handler->emitLocalLog(tr("Select a target on the battlefield (or stack), or press Cancel."));
+    const bool isGraveyard = zoneName == ZoneNames::GRAVE;
+    if (zoneName != ZoneNames::TABLE && zoneName != ZoneNames::STACK && !isGraveyard) {
         return true;
     }
     const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
-    const quint32 targetOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
+    const quint32 targetOid = isGraveyard ? handler->graveyardEngineOidForOwnedCard(ownerPlayerId, card->getId())
+                                          : handler->engineOidForCardId(ownerPlayerId, card->getId());
     if (targetOid == 0) {
-        handler->emitLocalLog(tr("That target is not selectable yet."));
         return true;
     }
-    if (!handler->isValidAbilityTarget(pendingActivatedAbility.permanentOid, pendingActivatedAbility.abilityIndex,
-                                       targetOid)) {
-        handler->emitLocalLog(tr("That is not a legal target for: %1").arg(pendingActivatedAbility.abilityText));
+    const RuledTargetCandidateKind kind = isGraveyard
+                                              ? RuledTargetCandidateKind::Graveyard
+                                          : zoneName == ZoneNames::STACK ? RuledTargetCandidateKind::Stack
+                                                                         : RuledTargetCandidateKind::Battlefield;
+    const auto targetData =
+        handler->abilityTargetData(pendingActivatedAbility.permanentOid, pendingActivatedAbility.abilityIndex);
+    if (!ruledTargetDataContains(targetData, kind, targetOid, player->getPlayerInfo()->getId())) {
         return true;
     }
 
@@ -4392,6 +4442,12 @@ bool PlayerActions::tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer)
             return false;
         }
         const quint32 targetOid = static_cast<quint32>(targetPlayer->getPlayerInfo()->getId());
+        const auto targetData = handler->abilityTargetData(
+            handler->lastTriggerSourceOid, static_cast<int>(handler->lastTriggerAbilityIndex));
+        if (!ruledTargetDataContains(targetData, RuledTargetCandidateKind::Player, targetOid,
+                                     player->getPlayerInfo()->getId())) {
+            return true;
+        }
         ruled::v1::RuledCommand cmd;
         cmd.mutable_choose_trigger_target()->set_target_object_id(targetOid);
         std::string payload;
@@ -4410,16 +4466,10 @@ bool PlayerActions::tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer)
         return false;
     }
     const quint32 targetOid = static_cast<quint32>(targetPlayer->getPlayerInfo()->getId());
-    const quint32 selfOid = static_cast<quint32>(player->getPlayerInfo()->getId());
-    const bool isSelf = (targetOid == selfOid);
     const quint32 permOid = pendingActivatedAbility.permanentOid;
     const int abilityIdx = pendingActivatedAbility.abilityIndex;
-    if (isSelf && !handler->canAbilityTargetSelf(permOid, abilityIdx)) {
-        handler->emitLocalLog(tr("You cannot target yourself with: %1").arg(pendingActivatedAbility.abilityText));
-        return true;
-    }
-    if (!isSelf && !handler->canAbilityTargetOpponent(permOid, abilityIdx)) {
-        handler->emitLocalLog(tr("You cannot target that player with: %1").arg(pendingActivatedAbility.abilityText));
+    if (!ruledTargetDataContains(handler->abilityTargetData(permOid, abilityIdx), RuledTargetCandidateKind::Player,
+                                 targetOid, player->getPlayerInfo()->getId())) {
         return true;
     }
     pendingActivatedAbility.selectedTargetOid = targetOid;

@@ -47,6 +47,13 @@ pub enum TargetController {
     Opponent,
 }
 
+/// Inclusive comparison against a permanent's current derived power.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PowerComparison {
+    AtLeast(u32),
+    AtMost(u32),
+}
+
 /// Which player's graveyard a [`GraveyardFilter`] targets. Defaults to [`Controller`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum GraveyardOwner {
@@ -141,10 +148,18 @@ pub struct TargetFilter {
     /// restriction). Empty means no excluded subtypes.
     #[serde(default)]
     pub excluded_subtypes: Vec<String>,
+    /// Optional comparison against current derived power. A noncreature has no power and cannot
+    /// match a power-constrained filter.
+    #[serde(default)]
+    pub power: Option<PowerComparison>,
     /// Keywords every matching permanent must currently have. Shared by targeted, untargeted,
     /// and cost-selection predicates (for example Defender on Portcullis Vine / Run Afoul).
     #[serde(default)]
     pub required_keywords: Vec<Keyword>,
+    /// Keywords every matching permanent must currently lack. This is the negative counterpart
+    /// to `required_keywords` and is shared by targets and untargeted selections.
+    #[serde(default)]
+    pub excluded_keywords: Vec<Keyword>,
 }
 
 impl TargetFilter {
@@ -167,6 +182,7 @@ impl TargetFilter {
     /// is meaningful for every object-capable kind (including `AnyTarget`) but never player-only
     /// kinds.
     pub(crate) fn validate_target_constraints(&self) -> Result<(), String> {
+        self.validate_characteristic_constraints()?;
         if self.controller != TargetController::Any
             && !matches!(self.kind, TargetKind::Creature | TargetKind::AnyPermanent)
         {
@@ -179,6 +195,21 @@ impl TargetFilter {
             return Err(format!(
                 "source-excluding target filter requires an object-capable kind, got {:?}",
                 self.kind
+            ));
+        }
+        Ok(())
+    }
+
+    /// Reject contradictory characteristic predicates wherever this filter is used, including
+    /// untargeted mass effects and sacrifice selections.
+    pub(crate) fn validate_characteristic_constraints(&self) -> Result<(), String> {
+        if let Some(keyword) = self
+            .required_keywords
+            .iter()
+            .find(|keyword| self.excluded_keywords.contains(keyword))
+        {
+            return Err(format!(
+                "target filter cannot both require and exclude keyword {keyword:?}"
             ));
         }
         Ok(())

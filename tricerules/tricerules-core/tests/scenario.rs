@@ -41,6 +41,8 @@ mod enters_with_counters;
 mod equipment;
 #[path = "scenario/helpers.rs"]
 mod helpers;
+#[path = "scenario/issue_71_filters.rs"]
+mod issue_71_filters;
 #[path = "scenario/legend_rule.rs"]
 mod legend_rule;
 #[path = "scenario/mana.rs"]

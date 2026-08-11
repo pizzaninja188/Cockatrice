@@ -1,0 +1,12 @@
+(
+  id: "run_afoul",
+  name: "Run Afoul",
+  mana_cost: "{G}",
+  types: ["Instant"],
+  spell_effect: [
+    TargetPlayerSacrifices(
+      target: (kind: OpponentPlayer),
+      filter: (kind: Creature, required_keywords: [Flying]),
+    ),
+  ],
+)

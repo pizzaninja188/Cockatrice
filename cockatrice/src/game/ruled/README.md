@@ -107,6 +107,7 @@ Every signal is declared on `RuledClientState` and emitted by it or by the dispa
 | `engineTimeline(QString)` | `MessageLogWidget` | The authoritative game log line. |
 | `enginePromptFeed(QString)` | `GamePromptWidget` | The prompt panel's text (engine phase/priority plus local hints). |
 | `combatStateChanged()` | `TabGame`, `GamePromptWidget` | Combat buttons, arrows, and — via `notifyHandUiChanged()` — hand-selection UI. |
+| `legalActionsChanged()` | `RuledTargetUi` | Reconcile staged spell/ability targets against the latest settled authoritative target sets. |
 | `blockerRejected()` | `GamePromptWidget` | Sticky error label; emitted *before* `combatStateChanged` so the refresh does not overwrite it. |
 | `combatDamageUiChanged()` | `TabGame` | Assign-combat-damage prompt (attacker, assigned/power, legality). |
 | `spellTargetSelectionChanged()` | `CardItem`, `PlayerTarget` | Repaint target highlights. |
