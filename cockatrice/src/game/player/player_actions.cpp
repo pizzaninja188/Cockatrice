@@ -4128,8 +4128,7 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     QVector<QString> menuLabels;
     menuLabels.reserve(abilityTexts.size());
     for (int i = 0; i < abilityTexts.size(); ++i) {
-        const QString costLabel = costLabels.value(i);
-        const QString label = costLabel.isEmpty() ? abilityTexts[i] : tr("%1: %2").arg(costLabel, abilityTexts[i]);
+        const QString label = handler->activatedAbilityMenuLabel(oid, i);
         menuLabels.append(label);
         QAction *action = menu.addAction(label);
         // Disable rather than omit: the indices below are ability indices, and the player still

@@ -746,6 +746,13 @@ public:
     {
         return engineOidToActivatedAbilityCostLabels.value(oid);
     }
+    /// User-facing label for one entry in the ordinary activation context menu. AbilityInfo.text
+    /// already carries the complete Oracle-style "cost: effect" text; cost_label remains separate
+    /// for generated labels such as the dual-land color picker.
+    [[nodiscard]] QString activatedAbilityMenuLabel(quint32 oid, int abilityIndex) const
+    {
+        return engineOidToActivatedAbilityTexts.value(oid).value(abilityIndex);
+    }
     /// Whether the engine will currently accept activating `abilityIndex` on this permanent.
     /// Defaults to true for an ability the engine never described, so an unknown ability is
     /// still offered rather than silently disabled.

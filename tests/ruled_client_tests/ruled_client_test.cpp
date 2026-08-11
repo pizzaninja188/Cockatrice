@@ -1433,6 +1433,30 @@ TEST_F(RuledClientTest, ZoneViewParsesDamageAndPipeDelimitedAbilities)
     EXPECT_EQ(fsSpy.count(), 1);
 }
 
+TEST_F(RuledClientTest, ActivatedAbilityMenuLabelsDoNotDuplicateStructuredCosts)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *view = batch.add_events()->mutable_zone_view()->add_per_player();
+    view->set_player_id(kLocalPlayer);
+    auto *object = view->add_battlefield_objects();
+    object->set_object_id(100);
+
+    auto *manaAbility = object->add_activated_abilities();
+    manaAbility->set_text("{2}{R}: Ability text.");
+    manaAbility->set_mana_cost("2R");
+    manaAbility->set_cost_label("{2}{R}");
+
+    auto *compositeAbility = object->add_activated_abilities();
+    compositeAbility->set_text("{2}, {T}, Sacrifice a creature: Draw a card.");
+    compositeAbility->set_mana_cost("2");
+    compositeAbility->set_cost_label("{2}, {T}, Sacrifice a creature");
+    apply(batch);
+
+    EXPECT_EQ(state->activatedAbilityMenuLabel(100, 0), QStringLiteral("{2}{R}: Ability text."));
+    EXPECT_EQ(state->activatedAbilityMenuLabel(100, 1),
+              QStringLiteral("{2}, {T}, Sacrifice a creature: Draw a card."));
+}
+
 TEST_F(RuledClientTest, BattlefieldOmissionRetainsStateWhileOtherZoneViewFieldsUpdate)
 {
     ruled::v1::RuledEventBatch full;
