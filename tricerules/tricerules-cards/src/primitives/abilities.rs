@@ -347,12 +347,15 @@ pub struct TriggeredAbilityDef {
 
 /// Controller restriction for an [`AnthemFilter`]. `None` on the field means "every creature in
 /// play" (Crusade, Bad Moon — symmetrical anthems); `Some(YouControl)` means only the source's
-/// controller's creatures (Glorious Anthem, Goblin King). An opponents-only variant is added with
-/// its first card (e.g. an "opponents' creatures get -1/-1" enchantment).
+/// controller's creatures (Glorious Anthem, Goblin King); `Some(Opponents)` means creatures
+/// controlled by an opponent of the source's controller (Uncomfortable Chill, Make Obsolete).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AnthemController {
     /// Only creatures controlled by the anthem source's controller ("creatures you control").
     YouControl,
+    /// Only creatures controlled by opponents of the source's controller ("creatures your
+    /// opponents control"). Untargeted and player-set-generic.
+    Opponents,
 }
 
 /// Which creatures a static anthem or one-shot mass pump applies to (CR 613). AND-combined
@@ -363,7 +366,8 @@ pub enum AnthemController {
 /// [`StaticAbilityDef::AnthemPt`] and [`SpellEffectKind::PumpAll`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct AnthemFilter {
-    /// `None` = every creature in play; `Some(YouControl)` = only the source controller's creatures.
+    /// `None` = every creature in play; otherwise use the listed relationship to the source's
+    /// controller.
     #[serde(default)]
     pub controller: Option<AnthemController>,
     /// If `Some`, only creatures whose type line contains this subtype (e.g. "Merfolk", "Goblin").

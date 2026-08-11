@@ -85,10 +85,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Generalize target schemas beyond one homogeneous required target to support independently filtered slots, distinctness constraints, and "up to N" cardinality. Calibration evidence: Soul Salvage, optional targets on Frost Breath and Ghostform, and Hunter's Edge's secondary `multiple_distinct_targets` gap. Legal actions must enumerate or validate complete assignments without Cartesian explosion, and stale, duplicate, missing, or overfilled submissions must be rejected before costs are paid.
   - Priority: Low
 
-- [ ] #75 [feature] Opponent-only mass effect scopes
-  - Details: Add a controller-relative scope for all creatures or permanents controlled by opponents, distinct from targeting. Calibration evidence: Uncomfortable Chill. Support multiplayer opponent sets, snapshot or recompute the affected set according to effect duration, and satisfy the two-card-or-mechanic reuse gate before adding the scope.
-  - Priority: Low
-
 - [ ] #76 [feature] Attacking-creature scopes for one-shot and static effects
   - Details: Add reusable scopes for "attacking creatures" both during one-shot resolution and as a continuously evaluated static restriction or modifier. Calibration evidence: Trumpet Blast and Warded Battlements. Use authoritative combat assignments, handle attacks against multiple defenders, and stop applying the scope when an object leaves combat.
   - Priority: Low

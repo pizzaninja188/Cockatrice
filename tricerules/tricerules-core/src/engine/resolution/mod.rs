@@ -808,9 +808,12 @@ pub(super) fn resolve_anthem_scope(
     source: ObjectId,
 ) -> AffectedScope {
     AffectedScope::CreaturesMatching {
-        controller: filter
-            .controller
-            .map(|AnthemController::YouControl| controller),
+        players: match filter.controller {
+            None => RelativePlayerSet::All,
+            Some(AnthemController::YouControl) => RelativePlayerSet::Controller,
+            Some(AnthemController::Opponents) => RelativePlayerSet::Opponents,
+        },
+        reference_player: controller,
         subtype: filter.subtype.clone(),
         color: filter.color,
         exclude: if filter.exclude_self {
@@ -841,9 +844,13 @@ pub(super) fn snapshot_anthem_scope(
         .filter_map(|oid| engine.characteristics(oid).map(|value| (oid, value)))
         .filter(|(_, value)| {
             value.is_creature()
-                && filter
-                    .controller
-                    .is_none_or(|AnthemController::YouControl| value.controller == controller)
+                && match filter.controller {
+                    None => true,
+                    Some(AnthemController::YouControl) => value.controller == controller,
+                    Some(AnthemController::Opponents) => {
+                        engine.state.are_opponents(value.controller, controller)
+                    }
+                }
                 && filter
                     .subtype
                     .as_ref()
@@ -1154,6 +1161,68 @@ pub(super) fn consume_regen_shield(
         }
     }
     true
+}
+
+#[cfg(test)]
+mod anthem_scope_tests {
+    use super::*;
+
+    fn add_creature(engine: &mut GameEngine, controller: PlayerId) -> ObjectId {
+        let id = engine.state.next_object_id;
+        engine.state.next_object_id += 1;
+        engine.state.objects.insert(
+            id,
+            GameObject {
+                id,
+                owner: controller,
+                base_controller: controller,
+                controller,
+                card_id: "grizzly_bears".to_string(),
+                copiable_values: None,
+                copy_revision: 0,
+                zone: Zone::Battlefield,
+                tapped: false,
+                summoning_sick: false,
+                power: None,
+                toughness: None,
+                damage: 0,
+                deathtouch_damage: false,
+                counters: BTreeMap::new(),
+                attached_to: None,
+                regeneration_shields: 0,
+                must_attack_if_able: false,
+                must_block_if_able: false,
+                face_up_index: 0,
+                adventure_cast_permission: None,
+            },
+        );
+        let player_index = engine.state.player_idx(controller).expect("controller");
+        engine.state.players[player_index].battlefield.push(id);
+        id
+    }
+
+    #[test]
+    fn issue_75_opponent_snapshot_is_player_set_generic() {
+        let mut engine =
+            GameEngine::new(75_004, &[10, 20], 20, None, true).expect("two-player engine");
+        engine.state.players.push(PlayerState::new(30, 20));
+        let mine = add_creature(&mut engine, 10);
+        let first_opponent = add_creature(&mut engine, 20);
+        let second_opponent = add_creature(&mut engine, 30);
+
+        let affected = snapshot_anthem_scope(
+            &engine,
+            &AnthemFilter {
+                controller: Some(AnthemController::Opponents),
+                ..AnthemFilter::default()
+            },
+            10,
+            u32::MAX,
+        );
+
+        assert_eq!(affected, [first_opponent, second_opponent]);
+        assert!(!affected.contains(&mine));
+    }
 }
 
 #[cfg(test)]

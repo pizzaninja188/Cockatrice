@@ -241,12 +241,13 @@ pub(super) fn effect_affects(
             })
         }
         AffectedScope::CreaturesMatching {
-            controller,
+            players,
+            reference_player,
             subtype,
             color,
             exclude,
         } => {
-            let expected_controller = if controller.is_some()
+            let current_reference = if *players != RelativePlayerSet::All
                 && effect.duration == EffectDuration::WhileSourceOnBattlefield
             {
                 effect
@@ -255,12 +256,20 @@ pub(super) fn effect_affects(
                         CharacteristicsEvaluator { state, registry }
                             .layer_2_controller(source, &mut Vec::new())
                     })
-                    .or(*controller)
+                    .unwrap_or(*reference_player)
             } else {
-                *controller
+                *reference_player
             };
             *exclude != Some(oid)
-                && expected_controller.is_none_or(|pid| characteristics.controller == pid)
+                && match players {
+                    RelativePlayerSet::Controller => {
+                        characteristics.controller == current_reference
+                    }
+                    RelativePlayerSet::Opponents => {
+                        state.are_opponents(characteristics.controller, current_reference)
+                    }
+                    RelativePlayerSet::All => true,
+                }
                 && characteristics.is_creature()
                 && subtype
                     .as_ref()
@@ -585,5 +594,101 @@ mod tests {
         assert_eq!(engine.controller_of(oid), Some(0));
         engine.state.continuous_effects.pop();
         assert_eq!(engine.controller_of(oid), Some(1));
+    }
+
+    #[test]
+    fn issue_75_static_opponent_scope_tracks_the_sources_current_controller() {
+        let mut engine =
+            GameEngine::new_with_default_decks(75_003, &[0, 1], 20).expect("new engine");
+        let make_object = |id: ObjectId,
+                           controller: PlayerId,
+                           card_id: &str,
+                           power: Option<u32>,
+                           toughness: Option<u32>| GameObject {
+            id,
+            owner: controller,
+            base_controller: controller,
+            controller,
+            card_id: card_id.to_string(),
+            copiable_values: None,
+            copy_revision: 0,
+            zone: Zone::Battlefield,
+            tapped: false,
+            summoning_sick: false,
+            power,
+            toughness,
+            damage: 0,
+            deathtouch_damage: false,
+            counters: BTreeMap::new(),
+            attached_to: None,
+            regeneration_shields: 0,
+            must_attack_if_able: false,
+            must_block_if_able: false,
+            face_up_index: 0,
+            adventure_cast_permission: None,
+        };
+        let source = engine.state.next_object_id;
+        let mine = source + 1;
+        let theirs = source + 2;
+        let late = source + 3;
+        engine.state.next_object_id += 4;
+        engine.state.objects.insert(
+            source,
+            make_object(source, 0, "glorious_anthem", None, None),
+        );
+        engine.state.objects.insert(
+            mine,
+            make_object(mine, 0, "grizzly_bears", Some(2), Some(2)),
+        );
+        engine.state.objects.insert(
+            theirs,
+            make_object(theirs, 1, "grizzly_bears", Some(2), Some(2)),
+        );
+        engine.state.players[0].battlefield.extend([source, mine]);
+        engine.state.players[1].battlefield.push(theirs);
+        engine.state.continuous_effects.push(ContinuousEffect {
+            source_id: Some(source),
+            affected: AffectedScope::CreaturesMatching {
+                players: RelativePlayerSet::Opponents,
+                reference_player: 0,
+                subtype: None,
+                color: None,
+                exclude: None,
+            },
+            kind: ContinuousEffectKind::PtModify {
+                delta_power: -1,
+                delta_toughness: 0,
+            },
+            duration: EffectDuration::WhileSourceOnBattlefield,
+            timestamp: 0,
+        });
+
+        assert_eq!(engine.effective_power(mine), Some(2));
+        assert_eq!(engine.effective_power(theirs), Some(1));
+        engine.state.objects.insert(
+            late,
+            make_object(late, 1, "grizzly_bears", Some(2), Some(2)),
+        );
+        engine.state.players[1].battlefield.push(late);
+        assert_eq!(
+            engine.effective_power(late),
+            Some(1),
+            "static scopes include later qualifying entrants"
+        );
+
+        engine.state.players[0]
+            .battlefield
+            .retain(|oid| *oid != source);
+        engine.state.players[1].battlefield.push(source);
+        let source_object = engine.state.objects.get_mut(&source).expect("source");
+        source_object.base_controller = 1;
+        source_object.controller = 1;
+        assert_eq!(
+            engine.effective_power(mine),
+            Some(1),
+            "the old controller is now the source controller's opponent"
+        );
+        assert_eq!(engine.effective_power(theirs), Some(2));
+        assert_eq!(engine.effective_power(late), Some(2));
     }
 }

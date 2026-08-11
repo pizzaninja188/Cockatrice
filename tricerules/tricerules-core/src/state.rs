@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use tricerules_cards::primitives::{
     Color, ContinuousEffectKind, CounterKind, DamagePreventionAdditionalEffect, EffectDuration,
-    Keyword, ManaAmount, SearchDestination,
+    Keyword, ManaAmount, RelativePlayerSet, SearchDestination,
 };
 use tricerules_cards::CardFace;
 use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
@@ -592,13 +592,15 @@ pub enum AffectedScope {
     AllCreatures,
     /// Creatures matching an anthem/lord filter (CR 613) — resolved from an [`AnthemFilter`] when
     /// the source's static ability or one-shot pump fires. Evaluated dynamically each P/T query so
-    /// creatures entering *after* the effect are still affected. `controller` `None` = any player's
-    /// creatures; `Some(pid)` = only `pid`'s. `subtype`/`color` narrow by characteristics
-    /// (Lord of Atlantis = Merfolk, Bad Moon = Black). `exclude` is the source for "other ...
-    /// creatures" lords. Membership needs card characteristics, so it is evaluated in the engine
-    /// (which holds the registry), not in [`ContinuousEffect::affects`].
+    /// creatures entering *after* the effect are still affected. `players` relates each creature's
+    /// controller to `reference_player`; source-bound static effects replace that stored reference
+    /// with the source's current controller when characteristics are evaluated. `subtype`/`color`
+    /// narrow by characteristics (Lord of Atlantis = Merfolk, Bad Moon = Black). `exclude` is the
+    /// source for "other ... creatures" lords. Membership needs card characteristics, so it is
+    /// evaluated in the engine (which holds the registry), not in [`ContinuousEffect::affects`].
     CreaturesMatching {
-        controller: Option<PlayerId>,
+        players: RelativePlayerSet,
+        reference_player: PlayerId,
         subtype: Option<String>,
         color: Option<Color>,
         exclude: Option<ObjectId>,

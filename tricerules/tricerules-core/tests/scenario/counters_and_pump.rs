@@ -1048,3 +1048,135 @@ fn glorious_charge_pumps_team_until_cleanup() {
         "the until-end-of-turn pump expires at cleanup"
     );
 }
+
+/// Issue #75: an opponents-only one-shot scope snapshots the affected objects at resolution.
+/// Later entrants are unaffected, while a snapshotted object stays affected after control changes.
+#[test]
+fn issue_75_uncomfortable_chill_snapshots_opponents_and_draws() {
+    let decks = Some(vec![
+        vec![
+            "uncomfortable_chill".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+        ],
+        vec!["forest".into(); 7],
+    ]);
+    let mut e = GameEngine::new(75_001, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let mine = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let theirs = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    inject_library_card(&mut e, 0, "island");
+    let hand_before = e.state.players[0].hand.len();
+
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            u: 3,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "uncomfortable_chill");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast Uncomfortable Chill");
+    resolve_entire_stack_two_player(&mut e);
+
+    assert_eq!(
+        e.effective_power(mine),
+        Some(2),
+        "your creature is unchanged"
+    );
+    assert_eq!(
+        e.effective_power(theirs),
+        Some(0),
+        "opponent's creature gets -2/-0"
+    );
+    assert_eq!(e.effective_toughness(theirs), Some(2));
+    assert_eq!(
+        e.state.players[0].hand.len(),
+        hand_before,
+        "casting one card and drawing one card leaves the same hand size"
+    );
+
+    let late = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    assert_eq!(
+        e.effective_power(late),
+        Some(2),
+        "a creature entering after resolution was not in the snapshot"
+    );
+
+    e.state.players[1].battlefield.retain(|oid| *oid != theirs);
+    e.state.players[0].battlefield.push(theirs);
+    let changed = e.state.objects.get_mut(&theirs).expect("affected creature");
+    changed.base_controller = 0;
+    changed.controller = 0;
+    assert_eq!(
+        e.effective_power(theirs),
+        Some(0),
+        "an affected object remains affected after its controller changes"
+    );
+
+    end_active_turn(&mut e, 0);
+    assert_eq!(
+        e.effective_power(theirs),
+        Some(2),
+        "the debuff expires at cleanup"
+    );
+}
+
+/// Issue #75: the -1/-1 scope excludes the caster's creature and normal SBAs remove an opposing
+/// creature whose toughness becomes zero.
+#[test]
+fn issue_75_make_obsolete_only_kills_opposing_creatures() {
+    let decks = Some(vec![
+        vec![
+            "make_obsolete".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+            "swamp".into(),
+        ],
+        vec!["plains".into(); 7],
+    ]);
+    let mut e = GameEngine::new(75_002, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let mine = inject_creature_on_battlefield(&mut e, 0, "savannah_lions");
+    let theirs = inject_creature_on_battlefield(&mut e, 1, "savannah_lions");
+    e.state.objects.get_mut(&mine).expect("own Lion").toughness = Some(1);
+    e.state
+        .objects
+        .get_mut(&theirs)
+        .expect("opposing Lion")
+        .toughness = Some(1);
+
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 3,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "make_obsolete");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast Make Obsolete");
+    resolve_entire_stack_two_player(&mut e);
+
+    assert_eq!(
+        e.state.objects[&mine].zone,
+        tricerules_core::Zone::Battlefield
+    );
+    assert_eq!(e.effective_power(mine), Some(2));
+    assert_eq!(e.effective_toughness(mine), Some(1));
+    assert_eq!(
+        e.state.objects[&theirs].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert!(e.state.players[1].graveyard.contains(&theirs));
+}

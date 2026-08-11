@@ -1,0 +1,11 @@
+(
+  id: "uncomfortable_chill",
+  name: "Uncomfortable Chill",
+  mana_cost: "{2}{U}",
+  types: ["Instant"],
+  // CR 611.2c / 613.4c: snapshot opposing creatures as this resolves, then draw a card.
+  spell_effect: [
+    PumpAll(filter: (controller: Opponents), power: -2, toughness: 0),
+    Draw(count: 1),
+  ],
+)

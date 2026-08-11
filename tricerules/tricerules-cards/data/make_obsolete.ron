@@ -1,0 +1,8 @@
+(
+  id: "make_obsolete",
+  name: "Make Obsolete",
+  mana_cost: "{2}{B}",
+  types: ["Instant"],
+  // CR 611.2c / 613.4c: "Creatures your opponents control get -1/-1 until end of turn."
+  spell_effect: [PumpAll(filter: (controller: Opponents), power: -1, toughness: -1)],
+)
