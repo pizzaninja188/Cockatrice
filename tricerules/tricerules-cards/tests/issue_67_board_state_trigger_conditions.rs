@@ -107,7 +107,9 @@ fn issue_67_card_characteristics_and_effects_match_oracle() {
     assert!(dinosaur.keywords.contains(&Keyword::Deathtouch));
     assert_eq!(
         dinosaur.triggered_abilities[0].trigger,
-        TriggerCondition::WheneverSelfAttacks
+        TriggerCondition::WheneverSelfAttacks {
+            minimum_other_attackers: 0
+        }
     );
 
     let ogre = face("turret_ogre");

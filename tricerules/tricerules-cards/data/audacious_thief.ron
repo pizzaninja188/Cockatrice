@@ -7,7 +7,7 @@
   toughness: 2,
   triggered_abilities: [
     (
-      trigger: WheneverSelfAttacks,
+      trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
       effect: [Draw(count: 1), LoseLife(amount: Fixed(1))],
       text: "Whenever this creature attacks, you draw a card and you lose 1 life.",
     ),

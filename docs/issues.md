@@ -69,10 +69,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Let token definitions carry reusable triggered abilities that are registered immediately when the token enters. Calibration evidence: Goblin Wizardry. Cover simultaneous token creation, token LKI, zone changes and cease-to-exist behavior, plus registry/conformance validation; satisfy the two-card-or-mechanic reuse gate before widening the token schema.
   - Priority: Low
 
-- [ ] #68 [feature] Multi-attacker trigger conditions
-  - Details: Add a reusable attack trigger predicate based on the declared attacking group, not one event per creature. Calibration evidence: Makeshift Battalion. Capture the simultaneous declaration set, trigger only once when its threshold is met, and cover attacks split among multiple defending players or planeswalkers; satisfy the two-card-or-mechanic reuse gate before adding the condition.
-  - Priority: Low
-
 - [ ] #72 [feature] Planeswalker and battle objects as rules targets
   - Details: Add the missing nonplayer object kinds and legal target vocabulary so damage and destroy effects can include planeswalkers and battles where Oracle permits. Calibration evidence: Chandra's Magmutt, Finishing Blow, Goblin Arsonist, Pitchburn Devils, Scorch Spitter, Shock, Sorcerer of the Fang, and Viashino Pyromancer. This requires engine-owned card types, battlefield identity, damage/defeat state-based actions, proto/relay/client representation, and end-to-end target selection; do not approximate these objects as players.
   - Priority: Low

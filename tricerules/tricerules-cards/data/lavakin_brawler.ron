@@ -9,7 +9,7 @@
   toughness: 4,
   triggered_abilities: [
     (
-      trigger: WheneverSelfAttacks,
+      trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
       effect: [
         PumpTarget(
           power: 0,

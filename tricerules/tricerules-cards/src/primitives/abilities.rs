@@ -118,8 +118,10 @@ pub enum TriggerCondition {
     WhenSelfEntersBattlefield,
     /// When this permanent is put into a graveyard from the battlefield.
     WhenSelfDies,
-    /// Whenever this creature attacks.
-    WheneverSelfAttacks,
+    /// CR 508.1m / 508.3a: whenever this creature attacks, optionally requiring a minimum number
+    /// of *other* creatures in the same declaration group. Zero is an ordinary self-attack
+    /// trigger; two is Battalion (Makeshift Battalion, Firefist Striker, Haazda Marshal).
+    WheneverSelfAttacks { minimum_other_attackers: u32 },
     /// Whenever this creature deals combat damage to a player (e.g. Scroll Thief).
     WheneverSelfDealsCombatDamageToPlayer,
     /// Whenever this creature deals damage to an opponent, combat or non-combat (e.g. Thieving Magpie).

@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-08-11. The attack-group threshold is part of the trigger event,
+// not an intervening "if": once the ability triggers, later removing another attacker does not
+// stop it. Attackers may be attacking different players or permanents.
+(
+  id: "makeshift_battalion",
+  name: "Makeshift Battalion",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      trigger: WheneverSelfAttacks(minimum_other_attackers: 2),
+      effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+      text: "Battalion — Whenever this creature and at least two other creatures attack, put a +1/+1 counter on this creature.",
+    ),
+  ],
+)

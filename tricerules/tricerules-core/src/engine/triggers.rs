@@ -359,21 +359,41 @@ impl GameEngine {
                 }
                 out
             }
-            GameEvent::Attacks { attacker_id } => {
-                let Some(obj) = self.state.objects.get(attacker_id) else {
-                    return vec![];
-                };
-                let (card_id, face_index) = self
-                    .effective_card_identity(*attacker_id)
-                    .map(|(card_id, face_index)| (card_id.to_string(), face_index))
-                    .unwrap_or_else(|| (obj.card_id.clone(), obj.face_up_index));
-                self.matching_triggered_abilities(
-                    &card_id,
-                    *attacker_id,
-                    obj.controller,
-                    face_index,
-                    |tc| *tc == TriggerCondition::WheneverSelfAttacks,
-                )
+            GameEvent::AttackersDeclared {
+                attacking_player,
+                attacker_ids,
+            } => {
+                let other_attacker_count =
+                    u32::try_from(attacker_ids.len().saturating_sub(1)).unwrap_or(u32::MAX);
+                let mut out = Vec::new();
+                for attacker_id in attacker_ids {
+                    let Some(obj) = self.state.objects.get(attacker_id) else {
+                        continue;
+                    };
+                    if obj.controller != *attacking_player {
+                        continue;
+                    }
+                    let (card_id, face_index) = self
+                        .effective_card_identity(*attacker_id)
+                        .map(|(card_id, face_index)| (card_id.to_string(), face_index))
+                        .unwrap_or_else(|| (obj.card_id.clone(), obj.face_up_index));
+                    out.extend(self.matching_triggered_abilities(
+                        &card_id,
+                        *attacker_id,
+                        obj.controller,
+                        face_index,
+                        |tc| {
+                            let TriggerCondition::WheneverSelfAttacks {
+                                minimum_other_attackers,
+                            } = tc
+                            else {
+                                return false;
+                            };
+                            other_attacker_count >= *minimum_other_attackers
+                        },
+                    ));
+                }
+                out
             }
             GameEvent::CombatDamageToPlayer {
                 attacker_id,

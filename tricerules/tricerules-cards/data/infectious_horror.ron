@@ -7,7 +7,7 @@
   toughness: 2,
   triggered_abilities: [
     (
-      trigger: WheneverSelfAttacks,
+      trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
       effect: [LoseLife(amount: Fixed(2), who: EachOpponent)],
       text: "Whenever this creature attacks, each opponent loses 2 life.",
     ),

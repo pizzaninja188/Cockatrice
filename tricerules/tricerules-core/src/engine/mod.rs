@@ -249,8 +249,13 @@ enum GameEvent {
         source: TriggerSourceSnapshot,
         was_creature: bool,
     },
-    Attacks {
-        attacker_id: ObjectId,
+    /// CR 508.1m: one simultaneous declaration group. Keeping the attacking player and complete
+    /// member set together lets source-participating triggers count across every defending
+    /// destination, and gives future controller-wide or filtered attack predicates the same
+    /// canonical event instead of reconstructing a group from per-creature edges.
+    AttackersDeclared {
+        attacking_player: PlayerId,
+        attacker_ids: Vec<ObjectId>,
     },
     CombatDamageToPlayer {
         attacker_id: ObjectId,

@@ -8,7 +8,7 @@
   keywords: [Flying],
   triggered_abilities: [
     (
-      trigger: WheneverSelfAttacks,
+      trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
       effect: [GrantKeywords(
         subject: Chosen((
           kind: Creature,

@@ -474,7 +474,9 @@ fn issue_49_observer_and_dies_triggers_use_existing_subjects() {
 fn issue_49_attack_triggers_use_existing_ordered_effects() {
     assert_eq!(
         trigger("library_larcenist").trigger,
-        TriggerCondition::WheneverSelfAttacks
+        TriggerCondition::WheneverSelfAttacks {
+            minimum_other_attackers: 0
+        }
     );
     assert_eq!(
         trigger("library_larcenist").effect,

@@ -432,11 +432,10 @@ impl GameEngine {
             ap,
             atk_names.join(", ")
         )));
-        let trigger_events: Vec<GameEvent> = attackers_for_event
-            .into_iter()
-            .map(|attacker_id| GameEvent::Attacks { attacker_id })
-            .collect();
-        self.fire_triggers(&trigger_events);
+        self.fire_triggers(&[GameEvent::AttackersDeclared {
+            attacking_player: ap,
+            attacker_ids: attackers_for_event,
+        }]);
         b.events.push(ev_priority_changed(self));
         Ok(b)
     }

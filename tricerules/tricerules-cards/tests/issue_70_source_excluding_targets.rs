@@ -26,7 +26,9 @@ fn pegasus_courser_has_complete_oracle_behavior() {
     assert_eq!(face.triggered_abilities.len(), 1);
     assert_eq!(
         face.triggered_abilities[0].trigger,
-        TriggerCondition::WheneverSelfAttacks
+        TriggerCondition::WheneverSelfAttacks {
+            minimum_other_attackers: 0
+        }
     );
     assert_eq!(
         face.triggered_abilities[0].effect,

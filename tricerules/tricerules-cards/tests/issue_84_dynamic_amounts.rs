@@ -112,7 +112,9 @@ fn issue_84_cards_have_complete_oracle_characteristics_and_shared_amounts() {
     assert_eq!(brawler.triggered_abilities.len(), 1);
     assert_eq!(
         brawler.triggered_abilities[0].trigger,
-        TriggerCondition::WheneverSelfAttacks
+        TriggerCondition::WheneverSelfAttacks {
+            minimum_other_attackers: 0
+        }
     );
     assert_eq!(
         brawler.triggered_abilities[0].effect,

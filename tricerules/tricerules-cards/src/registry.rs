@@ -1365,7 +1365,7 @@ mod tests {
             power: 1,
             toughness: 1,
             triggered_abilities: [(
-                trigger: WheneverSelfAttacks,
+                trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
                 effect: [ChangeSourceFace(action: Flip)],
                 text: "Flip it.",
             )],

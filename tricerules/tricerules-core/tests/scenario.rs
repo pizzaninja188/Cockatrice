@@ -55,6 +55,8 @@ mod mana;
 mod mill_results;
 #[path = "scenario/modal_spells.rs"]
 mod modal_spells;
+#[path = "scenario/multi_attacker_triggers.rs"]
+mod multi_attacker_triggers;
 #[path = "scenario/multi_face.rs"]
 mod multi_face;
 #[path = "scenario/name_counter_scopes.rs"]
