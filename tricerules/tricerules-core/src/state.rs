@@ -595,15 +595,17 @@ pub enum AffectedScope {
     /// creatures entering *after* the effect are still affected. `players` relates each creature's
     /// controller to `reference_player`; source-bound static effects replace that stored reference
     /// with the source's current controller when characteristics are evaluated. `subtype`/`color`
-    /// narrow by characteristics (Lord of Atlantis = Merfolk, Bad Moon = Black). `exclude` is the
-    /// source for "other ... creatures" lords. Membership needs card characteristics, so it is
-    /// evaluated in the engine (which holds the registry), not in [`ContinuousEffect::affects`].
+    /// narrow by characteristics (Lord of Atlantis = Merfolk, Bad Moon = Black), while `attacking`
+    /// consults authoritative combat membership. `exclude` is the source for "other ... creatures"
+    /// lords. Membership needs engine state and card characteristics, so it is evaluated in the
+    /// engine (which holds the registry), not in [`ContinuousEffect::affects`].
     CreaturesMatching {
         players: RelativePlayerSet,
         reference_player: PlayerId,
         subtype: Option<String>,
         color: Option<Color>,
         exclude: Option<ObjectId>,
+        attacking: bool,
     },
     /// The permanent currently attached to the Aura or Equipment with `source_oid`. Resolved
     /// dynamically from the source object's `attached_to`, so re-equipping moves every modifier

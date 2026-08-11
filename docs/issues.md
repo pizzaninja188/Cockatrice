@@ -85,10 +85,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Generalize target schemas beyond one homogeneous required target to support independently filtered slots, distinctness constraints, and "up to N" cardinality. Calibration evidence: Soul Salvage, optional targets on Frost Breath and Ghostform, and Hunter's Edge's secondary `multiple_distinct_targets` gap. Issue #93 shipped Frost Breath's next-untap suppression; this issue retains only its up-to-two optional target selection and card definition. Legal actions must enumerate or validate complete assignments without Cartesian explosion, and stale, duplicate, missing, or overfilled submissions must be rejected before costs are paid.
   - Priority: Low
 
-- [ ] #76 [feature] Attacking-creature scopes for one-shot and static effects
-  - Details: Add reusable scopes for "attacking creatures" both during one-shot resolution and as a continuously evaluated static restriction or modifier. Calibration evidence: Trumpet Blast and Warded Battlements. Use authoritative combat assignments, handle attacks against multiple defenders, and stop applying the scope when an object leaves combat.
-  - Priority: Low
-
 - [ ] #77 [feature] Unblockable effects and mass blocking restrictions
   - Details: Generalize combat legality modifiers that make selected creatures unable to block or make an affected creature unable to be blocked for a duration. Calibration evidence: Destructive Tampering, Frilled Sea Serpent, Ghostform, and Goblin Smuggler. Issue #71 shipped the shared derived-power predicate needed by Goblin Smuggler; this issue retains its until-end-of-turn unblockable effect and card definition. Ensure explicit blocks, must-block effects, menace, and automatic combat progression all consume the same legality predicate.
   - Priority: Low

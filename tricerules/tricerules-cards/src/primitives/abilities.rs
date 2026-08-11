@@ -362,8 +362,9 @@ pub enum AnthemController {
 /// optional constraints over the creatures in play, mirroring how [`TargetFilter`] narrows a
 /// chosen target. "Name two" per field: `controller` (Glorious Anthem, Goblin King) · `subtype`
 /// (Lord of Atlantis = Merfolk, Goblin Chieftain = Goblin) · `color` (Crusade = White, Bad Moon =
-/// Black) · `exclude_self` (every "Other ... creatures" lord). Reused by both
-/// [`StaticAbilityDef::AnthemPt`] and [`SpellEffectKind::PumpAll`].
+/// Black) · `exclude_self` (every "Other ... creatures" lord) · `attacking` (Trumpet Blast,
+/// Warded Battlements). Reused by both [`StaticAbilityDef::AnthemPt`] and
+/// [`SpellEffectKind::PumpAll`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct AnthemFilter {
     /// `None` = every creature in play; otherwise use the listed relationship to the source's
@@ -380,6 +381,11 @@ pub struct AnthemFilter {
     /// pump itself). Ignored by [`SpellEffectKind::PumpAll`], which has no persistent source.
     #[serde(default)]
     pub exclude_self: bool,
+    /// If true, only creatures currently attacking in the authoritative combat assignment match.
+    /// One-shot consumers snapshot that membership as they resolve; static abilities re-evaluate
+    /// it continuously.
+    #[serde(default)]
+    pub attacking: bool,
 }
 
 /// Which creature(s) a static damage-prevention ability protects. `Source` covers Anti-Venom;

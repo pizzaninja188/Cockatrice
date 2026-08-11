@@ -7,6 +7,8 @@
 
 #[path = "scenario/activation_restrictions.rs"]
 mod activation_restrictions;
+#[path = "scenario/attacking_scopes.rs"]
+mod attacking_scopes;
 #[path = "scenario/auras.rs"]
 mod auras;
 #[path = "scenario/casting_and_lands.rs"]

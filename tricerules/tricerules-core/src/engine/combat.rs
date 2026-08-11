@@ -1244,10 +1244,18 @@ pub(super) fn combat_needs_first_strike_step(engine: &GameEngine, c: &CombatStat
         || c.blockers.values().flatten().copied().any(has_fs_or_ds)
 }
 
+/// CR 508.1k: true if `oid` is currently an attacker in the active combat.
+pub(super) fn is_attacking(state: &GameState, oid: ObjectId) -> bool {
+    state
+        .combat
+        .as_ref()
+        .is_some_and(|combat| combat.attacking.contains(&oid))
+}
+
 /// CR 508/509: true if `oid` is currently an attacker or a blocker in the active combat.
 pub(super) fn is_attacking_or_blocking(state: &GameState, oid: ObjectId) -> bool {
     let Some(combat) = &state.combat else {
         return false;
     };
-    combat.attacking.contains(&oid) || combat.blockers.values().any(|bs| bs.contains(&oid))
+    is_attacking(state, oid) || combat.blockers.values().any(|bs| bs.contains(&oid))
 }

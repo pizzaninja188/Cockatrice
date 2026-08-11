@@ -824,6 +824,7 @@ pub(super) fn resolve_anthem_scope(
         } else {
             None
         },
+        attacking: filter.attacking,
     }
 }
 
@@ -844,6 +845,7 @@ pub(super) fn snapshot_anthem_scope(
         .iter()
         .flat_map(|player| player.battlefield.iter().copied())
         .filter(|oid| !filter.exclude_self || *oid != source)
+        .filter(|oid| !filter.attacking || super::combat::is_attacking(&engine.state, *oid))
         .filter_map(|oid| engine.characteristics(oid).map(|value| (oid, value)))
         .filter(|(_, value)| {
             value.is_creature()

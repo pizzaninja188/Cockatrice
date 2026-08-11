@@ -222,9 +222,10 @@ impl CharacteristicsEvaluator<'_> {
     }
 }
 
-/// Whether an effect applies, evaluated from the relevant characteristic snapshot. Current scopes
-/// only depend on controller, types, and colors, avoiding recursive full-characteristic queries.
-/// Dependency ordering becomes necessary once scopes can depend on values changed in their layer.
+/// Whether an effect applies, evaluated from the relevant characteristic snapshot and direct
+/// combat state. Characteristic predicates only depend on controller, types, and colors, avoiding
+/// recursive full-characteristic queries. Dependency ordering becomes necessary once scopes can
+/// depend on values changed in their layer.
 pub(super) fn effect_affects(
     state: &GameState,
     registry: &'static CardRegistry,
@@ -246,6 +247,7 @@ pub(super) fn effect_affects(
             subtype,
             color,
             exclude,
+            attacking,
         } => {
             let current_reference = if *players != RelativePlayerSet::All
                 && effect.duration == EffectDuration::WhileSourceOnBattlefield
@@ -261,6 +263,7 @@ pub(super) fn effect_affects(
                 *reference_player
             };
             *exclude != Some(oid)
+                && (!attacking || super::combat::is_attacking(state, oid))
                 && match players {
                     RelativePlayerSet::Controller => {
                         characteristics.controller == current_reference
@@ -654,6 +657,7 @@ mod tests {
                 subtype: None,
                 color: None,
                 exclude: None,
+                attacking: false,
             },
             kind: ContinuousEffectKind::PtModify {
                 delta_power: -1,

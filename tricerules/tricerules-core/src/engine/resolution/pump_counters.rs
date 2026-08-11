@@ -120,18 +120,21 @@ pub(super) fn grant_keywords_all(
     let controller = cx.controller;
     let spell_label = cx.spell_label;
 
-    // CR 613 layer 6, one-shot: add a Layer6AddKeyword continuous effect for each
-    // granted keyword. Overrun → Trample; Trumpet Blast → First Strike; etc.
-    let scope = resolve_anthem_scope(&filter, controller, top.id);
+    // CR 611.2c / 613 layer 6: snapshot the filtered creature set as this one-shot effect
+    // resolves. Creatures that enter or begin matching later do not acquire the keyword.
+    let filter_source = top.source_permanent_id.unwrap_or(top.id);
+    let affected = snapshot_anthem_scope(engine, &filter, controller, filter_source);
     let kw_names: Vec<&str> = keywords.iter().map(|k| k.as_str()).collect();
-    for kw in keywords {
-        engine.state.continuous_effects.push(ContinuousEffect {
-            source_id: Some(top.id),
-            affected: scope.clone(),
-            kind: ContinuousEffectKind::Layer6AddKeyword(kw),
-            duration: EffectDuration::UntilEndOfTurn,
-            timestamp: engine.state.command_index,
-        });
+    for oid in affected {
+        for kw in &keywords {
+            engine.state.continuous_effects.push(ContinuousEffect {
+                source_id: Some(top.id),
+                affected: AffectedScope::Single(oid),
+                kind: ContinuousEffectKind::Layer6AddKeyword(*kw),
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: engine.state.command_index,
+            });
+        }
     }
     events.push(ev_log(format!(
         "{spell_label} grants {} to each affected creature until end of turn",

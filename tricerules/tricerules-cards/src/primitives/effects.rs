@@ -565,8 +565,8 @@ pub enum SpellEffectKind {
     },
     /// CR 613 layer 6: grant one or more keyword abilities to every creature matching `filter`
     /// until end of turn. Untargeted — the one-shot keyword-grant sibling of
-    /// [`StaticAbilityDef::AnthemKeyword`]. Covers Overrun (Trample to all your creatures) and
-    /// Trumpet Blast (First Strike to attacking creatures you control until EOT).
+    /// [`StaticAbilityDef::AnthemKeyword`]. Covers Overrun (Trample) and Make a Stand
+    /// (Indestructible); attacking-creature keyword grants reuse the same snapshot filter.
     GrantKeywordsAll {
         #[serde(default)]
         filter: AnthemFilter,
