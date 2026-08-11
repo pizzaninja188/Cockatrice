@@ -6,7 +6,7 @@
   supertypes: ["Basic"],
   activated_abilities: [
     (
-      cost: Tap,
+      costs: [Tap],
       effect: [ProduceMana(options: [(r: 1)])],
       text: "{T}: Add {R}.",
     ),

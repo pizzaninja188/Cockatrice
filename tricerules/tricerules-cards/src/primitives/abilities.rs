@@ -10,7 +10,8 @@ use serde::{Deserialize, Serialize};
 /// One activated ability on a permanent (RON data tier). Cost + effect compose freely.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ActivatedAbilityDef {
-    pub cost: AbilityCost,
+    /// Costs in authored order. Every component is validated before any component is paid.
+    pub costs: Vec<AbilityCost>,
     /// CR 608.2: the ability's effects, resolved in the order written — the same shape and the
     /// same semantics as a spell's `spell_effect`. A single-effect ability is a one-element list.
     pub effect: Vec<SpellEffectKind>,

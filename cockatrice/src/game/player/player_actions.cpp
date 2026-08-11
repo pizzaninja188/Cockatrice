@@ -1,8 +1,5 @@
 #include "player_actions.h"
 
-#include "../game/game_event_handler.h"
-#include "../ruled/ruled_actions.h"
-#include "../ruled/ruled_client_state.h"
 #include "../../interface/widgets/tabs/tab_game.h"
 #include "../../interface/widgets/utility/get_text_with_max.h"
 #include "../board/abstract_counter.h"
@@ -10,11 +7,20 @@
 #include "../client/settings/card_counter_settings.h"
 #include "../dialogs/dlg_move_top_cards_until.h"
 #include "../dialogs/dlg_roll_dice.h"
+#include "../game/game_event_handler.h"
+#include "../ruled/ruled_actions.h"
+#include "../ruled/ruled_client_state.h"
 #include "../zones/hand_zone.h"
 #include "../zones/logic/view_zone_logic.h"
 #include "../zones/table_zone.h"
 #include "card_menu_action_type.h"
 
+#include <QComboBox>
+#include <QHBoxLayout>
+#include <QInputDialog>
+#include <QLabel>
+#include <QMenu>
+#include <QVBoxLayout>
 #include <libcockatrice/card/database/card_database_manager.h>
 #include <libcockatrice/card/relation/card_relation.h>
 #include <libcockatrice/protocol/pb/command_attach_card.pb.h>
@@ -38,13 +44,6 @@
 #include <libcockatrice/utility/expression.h>
 #include <libcockatrice/utility/trice_limits.h>
 #include <libcockatrice/utility/zone_names.h>
-
-#include <QComboBox>
-#include <QHBoxLayout>
-#include <QInputDialog>
-#include <QLabel>
-#include <QMenu>
-#include <QVBoxLayout>
 
 // milliseconds in between triggers of the move top cards until action
 static constexpr int MOVE_TOP_CARD_UNTIL_INTERVAL = 100;
@@ -225,8 +224,8 @@ bool PlayerActions::promptFlexiblePipChoices(const QString &fullCost,
         auto *row = new QHBoxLayout;
         row->addWidget(new QLabel(pipLabel, &dialog));
         auto *combo = new QComboBox(&dialog);
-        combo->addItem(primary);       // index 0 -> primary color
-        combo->addItem(alternative);   // index 1 -> alternative
+        combo->addItem(primary);     // index 0 -> primary color
+        combo->addItem(alternative); // index 1 -> alternative
         row->addWidget(combo, 1);
         layout->addLayout(row);
         combos.append(combo);
@@ -405,9 +404,8 @@ bool PlayerActions::promptForRuledSpellXIfNeeded()
         return true;
     }
     bool ok = false;
-    const int chosenX = QInputDialog::getInt(nullptr, tr("Choose X"),
-                                             tr("Value of X for %1:").arg(pendingRuledSpellCast.cardName), 0, 0, 99, 1,
-                                             &ok);
+    const int chosenX = QInputDialog::getInt(
+        nullptr, tr("Choose X"), tr("Value of X for %1:").arg(pendingRuledSpellCast.cardName), 0, 0, 99, 1, &ok);
     if (!ok) {
         clearPendingRuledSpellCast();
         return false; // user cancelled the cast at the X prompt
@@ -427,11 +425,9 @@ bool PlayerActions::resolvePendingSpellFlexiblePips()
     if (pendingRuledSpellCast.flexPips.isEmpty()) {
         return true;
     }
-    const QString fullCost =
-        formatRemainingCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips);
+    const QString fullCost = formatRemainingCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips);
     QVector<bool> choices;
-    if (!promptFlexiblePipChoices(fullCost, pendingRuledSpellCast.cardName, pendingRuledSpellCast.flexPips,
-                                  choices)) {
+    if (!promptFlexiblePipChoices(fullCost, pendingRuledSpellCast.cardName, pendingRuledSpellCast.flexPips, choices)) {
         clearPendingRuledSpellCast();
         return false; // cancelled at the flexible-pip dialog; cast aborted
     }
@@ -484,7 +480,7 @@ void PlayerActions::cancelPendingRuledSpellCast()
 
 void PlayerActions::recordLandTapUndo(int cardId, const QString &counterName, int counterId)
 {
-    if (pendingRuledSpellCast.valid || pendingActivatedAbility.waitingForMana) {
+    if (pendingRuledSpellCast.valid || pendingActivatedAbility.valid) {
         midCastLandTapStack.append({cardId, counterName, counterId});
         return;
     }
@@ -580,7 +576,6 @@ void PlayerActions::clearLandTapUndoStack()
     emit landTapUndoAvailableChanged(false);
 }
 
-
 bool PlayerActions::completePendingRuledSpellCast()
 {
     if (RuledActions::gameplayInputLocked(player->getGame())) {
@@ -655,14 +650,13 @@ bool PlayerActions::completePendingRuledSpellCast()
     return true;
 }
 
-
 bool PlayerActions::completeActivateAbility()
 {
     if (RuledActions::gameplayInputLocked(player->getGame())) {
         return false;
     }
     if (!pendingActivatedAbility.valid || pendingActivatedAbility.waitingForTarget ||
-        pendingActivatedAbility.waitingForMana) {
+        pendingActivatedAbility.waitingForCost || pendingActivatedAbility.waitingForMana) {
         return false;
     }
 
@@ -680,6 +674,15 @@ bool PlayerActions::completeActivateAbility()
         flex->set_pip_index(pipIndex);
         flex->set_pay_life(true);
     }
+    for (const auto &selection : pendingActivatedAbility.costSelections) {
+        auto *costSelection = aa->add_cost_selections();
+        costSelection->set_cost_index(static_cast<quint32>(selection.costIndex));
+        if (selection.zone == RuledAbilityCostChoiceZone::Hand) {
+            costSelection->set_hand_index(selection.selectedId);
+        } else {
+            costSelection->set_permanent_id(selection.selectedId);
+        }
+    }
     std::string payload;
     if (!cmd.SerializeToString(&payload)) {
         pendingActivatedAbility = {};
@@ -693,8 +696,34 @@ bool PlayerActions::completeActivateAbility()
     midCastLandTapStack.clear();
     clearLandTapUndoStack();
     emit ruledAbilityActivationPendingChanged(false);
+    emit ruledAbilityCostPromptChanged();
     pendingActivatedAbility = {};
     return true;
+}
+
+void PlayerActions::continuePendingActivatedAbilityAfterChoice()
+{
+    if (!pendingActivatedAbility.valid || pendingActivatedAbility.waitingForTarget) {
+        return;
+    }
+    if (pendingActivatedAbility.nextCostChoice < pendingActivatedAbility.costChoices.size()) {
+        pendingActivatedAbility.waitingForCost = true;
+        emit ruledAbilityCostPromptChanged();
+        player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(pendingRuledAbilityCostPromptText());
+        return;
+    }
+    pendingActivatedAbility.waitingForCost = false;
+    emit ruledAbilityCostPromptChanged();
+    if (!resolvePendingAbilityFlexiblePips()) {
+        return;
+    }
+    if (totalRemainingForCost(pendingActivatedAbility.remainingCost, pendingActivatedAbility.flexPips) > 0) {
+        pendingActivatedAbility.waitingForMana = true;
+        emit ruledAbilityActivationPendingChanged(true);
+        emit ruledAbilityManaPromptChanged();
+    } else {
+        completeActivateAbility();
+    }
 }
 
 bool PlayerActions::tryReducePendingAbilityRemainingCostOnePip(bool colorlessMana, QChar coloredMana)
@@ -762,8 +791,7 @@ bool PlayerActions::tryPayRuledAbilityWithCounter(const QString &counterName)
 
     int counterId = -1;
     for (auto it = player->getCounters().constBegin(); it != player->getCounters().constEnd(); ++it) {
-        if (it.value() &&
-            it.value()->getName().trimmed().compare(counterName.trimmed(), Qt::CaseInsensitive) == 0) {
+        if (it.value() && it.value()->getName().trimmed().compare(counterName.trimmed(), Qt::CaseInsensitive) == 0) {
             counterId = it.key();
             break;
         }
@@ -811,6 +839,7 @@ void PlayerActions::cancelPendingActivatedAbility()
 
     emit ruledActivatedAbilityTargetPendingChanged(false, {});
     emit ruledAbilityActivationPendingChanged(false);
+    emit ruledAbilityCostPromptChanged();
     pendingActivatedAbility = {};
     emit landTapUndoAvailableChanged(landTapUndoCurrentlyAvailable());
     player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
@@ -964,6 +993,23 @@ void PlayerActions::autoApplyFloatedManaToPendingCost(const QString &counterName
     }
 }
 
+bool PlayerActions::isAwaitingRuledAbilityCostSelection() const
+{
+    return pendingActivatedAbility.valid && pendingActivatedAbility.waitingForCost &&
+           pendingActivatedAbility.nextCostChoice < pendingActivatedAbility.costChoices.size();
+}
+
+QString PlayerActions::pendingRuledAbilityCostPromptText() const
+{
+    if (!isAwaitingRuledAbilityCostSelection()) {
+        return {};
+    }
+    const auto &choice = pendingActivatedAbility.costChoices.at(pendingActivatedAbility.nextCostChoice);
+    return choice.zone == RuledAbilityCostChoiceZone::Hand
+               ? tr("Choose a card to discard for %1.").arg(pendingActivatedAbility.cardName)
+               : tr("Choose a permanent to sacrifice for %1.").arg(pendingActivatedAbility.cardName);
+}
+
 void PlayerActions::resumePendingRuledPaymentAfterEngineCommand()
 {
     if (RuledActions::gameplayInputLocked(player->getGame())) {
@@ -1020,8 +1066,7 @@ bool PlayerActions::tryPlayRuledLand(CardItem *card)
     }
 
     RuledClientState *const geh = player->getGame()->getGameEventHandler()->ruled();
-    const int ruledHandIndex =
-        RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_PLAY_LAND, card);
+    const int ruledHandIndex = RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_PLAY_LAND, card);
     if (ruledHandIndex < 0) {
         return false; // engine does not offer this card as a land play right now
     }
@@ -1030,8 +1075,7 @@ bool PlayerActions::tryPlayRuledLand(CardItem *card)
     // playable face for the same hand slot — front and back. Present a side-picker so the player
     // chooses which land to play; a single-face land plays its one face directly. The whole notion
     // of "which faces are lands and playable" comes from the engine (rules), not the Oracle DB.
-    const QVector<RuledFaceOption> faces =
-        geh->handActionFaceOptions(ruled::v1::HAND_ACTION_PLAY_LAND, ruledHandIndex);
+    const QVector<RuledFaceOption> faces = geh->handActionFaceOptions(ruled::v1::HAND_ACTION_PLAY_LAND, ruledHandIndex);
     if (faces.size() > 1) {
         return tryRuledLandPlayFaceMenu(card);
     }
@@ -1059,16 +1103,14 @@ bool PlayerActions::tryRuledLandPlayFaceMenu(CardItem *card)
     if (!geh) {
         return false;
     }
-    const int ruledHandIndex =
-        RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_PLAY_LAND, card);
+    const int ruledHandIndex = RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_PLAY_LAND, card);
     if (ruledHandIndex < 0) {
         return false;
     }
     // CR 712: only offer the picker when the engine exposes more than one playable face for this
     // slot (an MDFC land). A single-face land keeps its direct click-to-play and falls through so a
     // right-click still opens the normal card menu.
-    const QVector<RuledFaceOption> faces =
-        geh->handActionFaceOptions(ruled::v1::HAND_ACTION_PLAY_LAND, ruledHandIndex);
+    const QVector<RuledFaceOption> faces = geh->handActionFaceOptions(ruled::v1::HAND_ACTION_PLAY_LAND, ruledHandIndex);
     if (faces.size() < 2) {
         return false;
     }
@@ -1110,8 +1152,7 @@ bool PlayerActions::tryRuledOpeningBottomCard(CardItem *card)
     }
     const int ruledHandIndex =
         RuledActions::resolveHandActionIndex(handler, ruled::v1::HAND_ACTION_OPENING_BOTTOM, card);
-    if (ruledHandIndex < 0 ||
-        !handler->isHandActionLegal(ruled::v1::HAND_ACTION_OPENING_BOTTOM, ruledHandIndex)) {
+    if (ruledHandIndex < 0 || !handler->isHandActionLegal(ruled::v1::HAND_ACTION_OPENING_BOTTOM, ruledHandIndex)) {
         return false;
     }
     handler->toggleOpeningBottomHandIndex(ruledHandIndex);
@@ -1190,8 +1231,7 @@ bool PlayerActions::tryToggleRuledCleanupDiscard(CardItem *card)
     }
     const int ruledHandIndex =
         RuledActions::resolveHandActionIndex(handler, ruled::v1::HAND_ACTION_CLEANUP_DISCARD, card);
-    if (ruledHandIndex < 0 ||
-        !handler->isHandActionLegal(ruled::v1::HAND_ACTION_CLEANUP_DISCARD, ruledHandIndex)) {
+    if (ruledHandIndex < 0 || !handler->isHandActionLegal(ruled::v1::HAND_ACTION_CLEANUP_DISCARD, ruledHandIndex)) {
         return false;
     }
     handler->toggleCleanupDiscardHandIndex(ruledHandIndex);
@@ -1242,8 +1282,8 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
         return true;
     }
     const bool fromHand = card->getZone()->getName() == ZoneNames::HAND;
-    const bool fromPublicZone = card->getZone()->getName() == ZoneNames::GRAVE ||
-                                card->getZone()->getName() == ZoneNames::EXILE;
+    const bool fromPublicZone =
+        card->getZone()->getName() == ZoneNames::GRAVE || card->getZone()->getName() == ZoneNames::EXILE;
     if (!fromHand && !fromPublicZone) {
         return false;
     }
@@ -1270,8 +1310,7 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
                                    geh->zoneActionSource(objectId));
     }
 
-    const int ruledHandIndex =
-        RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_CAST_SPELL, card);
+    const int ruledHandIndex = RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_CAST_SPELL, card);
     if (ruledHandIndex < 0) {
         return false;
     }
@@ -1295,9 +1334,8 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
                                         RuledCastSource source)
 {
     RuledClientState *const geh = player->getGame()->getGameEventHandler()->ruled();
-    if (source == RuledCastSource::Hand
-            ? !geh->isHandActionLegal(ruled::v1::HAND_ACTION_CAST_SPELL, ruledHandIndex)
-            : !geh->isZoneActionLegal(static_cast<quint32>(ruledHandIndex))) {
+    if (source == RuledCastSource::Hand ? !geh->isHandActionLegal(ruled::v1::HAND_ACTION_CAST_SPELL, ruledHandIndex)
+                                        : !geh->isZoneActionLegal(static_cast<quint32>(ruledHandIndex))) {
         return false;
     }
     if (pendingRuledSpellCast.valid && pendingRuledSpellCast.waitingForTarget &&
@@ -1321,20 +1359,17 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
     }
     if (actionSet && actionSet->modalOptionsByCastKey.contains(castKey)) {
         const auto &modeOptions = actionSet->modalOptionsByCastKey.value(castKey);
-        const auto selected = RuledPendingCast::chooseModes(
-            player->getGame()->getTab(), castName, modeOptions,
-            actionSet->modalMinModesByCastKey.value(castKey),
-            actionSet->modalMaxModesByCastKey.value(castKey));
+        const auto selected = RuledPendingCast::chooseModes(player->getGame()->getTab(), castName, modeOptions,
+                                                            actionSet->modalMinModesByCastKey.value(castKey),
+                                                            actionSet->modalMaxModesByCastKey.value(castKey));
         if (!selected.has_value()) {
             return true;
         }
         for (const int modeIndex : *selected) {
-            const auto option =
-                std::find_if(modeOptions.cbegin(), modeOptions.cend(),
-                             [modeIndex](const auto &mode) { return mode.modeIndex == modeIndex; });
+            const auto option = std::find_if(modeOptions.cbegin(), modeOptions.cend(),
+                                             [modeIndex](const auto &mode) { return mode.modeIndex == modeIndex; });
             if (option != modeOptions.cend()) {
-                selectedModes.append(
-                    {option->modeIndex, option->label, option->needsTarget, option->targets, {}, {}});
+                selectedModes.append({option->modeIndex, option->label, option->needsTarget, option->targets, {}, {}});
             }
         }
     }
@@ -1381,7 +1416,8 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
             }
         }
     }
-    pendingRuledSpellCast.waitingForTarget = pendingRuledSpellCast.activeModePosition >= 0 ||
+    pendingRuledSpellCast.waitingForTarget =
+        pendingRuledSpellCast.activeModePosition >= 0 ||
         (selectedModes.isEmpty() &&
          (source == RuledCastSource::Hand
               ? geh->handActionNeedsTarget(ruled::v1::HAND_ACTION_CAST_SPELL, ruledHandIndex, faceIndex)
@@ -1394,16 +1430,12 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
         pendingRuledSpellCast.fixedDamage = targetData.fixedDamage;
         pendingRuledSpellCast.extraManaPerTarget = targetData.extraManaPerTarget;
     } else {
-        pendingRuledSpellCast.isDamageTargets =
-            geh->spellIsDamageTargets(ruledHandIndex, faceIndex, source);
+        pendingRuledSpellCast.isDamageTargets = geh->spellIsDamageTargets(ruledHandIndex, faceIndex, source);
         pendingRuledSpellCast.damageDividedEvenly =
             geh->spellTargetData(ruledHandIndex, faceIndex, source).damageDividedEvenly;
-        pendingRuledSpellCast.maxTargets =
-            geh->spellMaxTargets(ruledHandIndex, faceIndex, source);
-        pendingRuledSpellCast.fixedDamage =
-            geh->spellFixedDamage(ruledHandIndex, faceIndex, source);
-        pendingRuledSpellCast.extraManaPerTarget =
-            geh->spellExtraManaPerTarget(ruledHandIndex, faceIndex, source);
+        pendingRuledSpellCast.maxTargets = geh->spellMaxTargets(ruledHandIndex, faceIndex, source);
+        pendingRuledSpellCast.fixedDamage = geh->spellFixedDamage(ruledHandIndex, faceIndex, source);
+        pendingRuledSpellCast.extraManaPerTarget = geh->spellExtraManaPerTarget(ruledHandIndex, faceIndex, source);
     }
     emit landTapUndoAvailableChanged(false);
     emit ruledSpellCastPendingChanged(true);
@@ -1414,9 +1446,10 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
     }
 
     if (pendingRuledSpellCast.waitingForTarget) {
-        const QString effectText = pendingRuledSpellCast.activeModePosition >= 0
-            ? pendingRuledSpellCast.selectedModes.at(pendingRuledSpellCast.activeModePosition).label
-            : pendingRuledSpellCast.cardName;
+        const QString effectText =
+            pendingRuledSpellCast.activeModePosition >= 0
+                ? pendingRuledSpellCast.selectedModes.at(pendingRuledSpellCast.activeModePosition).label
+                : pendingRuledSpellCast.cardName;
         emit ruledSpellTargetingChanged(true, effectText);
         // Open the graveyard view(s) this spell can target, so a reanimation/regrowth target is
         // reachable without the player opening the pile by hand first.
@@ -1462,13 +1495,11 @@ bool PlayerActions::tryRuledSpellCastFaceMenu(CardItem *card)
     if (!geh) {
         return false;
     }
-    const int handIndex =
-        RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_CAST_SPELL, card);
+    const int handIndex = RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_CAST_SPELL, card);
     if (handIndex < 0) {
         return false;
     }
-    const QVector<RuledFaceOption> faces =
-        geh->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, handIndex);
+    const QVector<RuledFaceOption> faces = geh->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, handIndex);
     if (faces.isEmpty()) {
         return false;
     }
@@ -1537,20 +1568,18 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
         return true;
     }
     const bool hasModalTarget = pendingRuledSpellCast.activeModePosition >= 0;
-    const auto *modalTarget = hasModalTarget
-        ? &pendingRuledSpellCast.selectedModes.at(pendingRuledSpellCast.activeModePosition).targets
-        : nullptr;
-    const bool valid = modalTarget
-        ? (isOnBattlefield ? modalTarget->validPermanentIds.contains(targetOid)
-                           : isOnGraveyard ? modalTarget->validGraveyardIds.contains(targetOid)
-                                           : modalTarget->validStackIds.contains(targetOid))
-        : (isOnBattlefield
-               ? handler->isValidSpellTarget(slot, face, targetOid, pendingRuledSpellCast.source)
+    const auto *modalTarget =
+        hasModalTarget ? &pendingRuledSpellCast.selectedModes.at(pendingRuledSpellCast.activeModePosition).targets
+                       : nullptr;
+    const bool valid =
+        modalTarget
+            ? (isOnBattlefield ? modalTarget->validPermanentIds.contains(targetOid)
+               : isOnGraveyard ? modalTarget->validGraveyardIds.contains(targetOid)
+                               : modalTarget->validStackIds.contains(targetOid))
+            : (isOnBattlefield ? handler->isValidSpellTarget(slot, face, targetOid, pendingRuledSpellCast.source)
                : isOnGraveyard
-                   ? handler->isValidSpellGraveyardTarget(slot, face, targetOid,
-                                                          pendingRuledSpellCast.source)
-                   : handler->isValidSpellStackTarget(slot, face, targetOid,
-                                                       pendingRuledSpellCast.source));
+                   ? handler->isValidSpellGraveyardTarget(slot, face, targetOid, pendingRuledSpellCast.source)
+                   : handler->isValidSpellStackTarget(slot, face, targetOid, pendingRuledSpellCast.source));
     if (!valid) {
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
             tr("That is not a legal target for %1.").arg(pendingRuledSpellCast.cardName));
@@ -1561,9 +1590,7 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
         pendingRuledSpellCast.selectedTargetOids.removeOne(targetOid);
         const int chosen = pendingRuledSpellCast.selectedTargetOids.size();
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            tr("Target deselected. %1 target(s) chosen for %2.")
-                .arg(chosen)
-                .arg(pendingRuledSpellCast.cardName));
+            tr("Target deselected. %1 target(s) chosen for %2.").arg(chosen).arg(pendingRuledSpellCast.cardName));
         emit ruledMultiTargetSelectionUpdated(chosen, effectiveDamageTargetsMax());
         player->getGame()->getGameEventHandler()->ruled()->emitSpellTargetSelectionChanged();
         return true;
@@ -1600,8 +1627,7 @@ namespace
 
 bool PlayerActions::isTargetSelectedForPendingSpell(quint32 oid) const
 {
-    return pendingRuledSpellCast.valid &&
-           pendingRuledSpellCast.selectedTargetOids.contains(oid);
+    return pendingRuledSpellCast.valid && pendingRuledSpellCast.selectedTargetOids.contains(oid);
 }
 
 bool PlayerActions::isPlayerSelectedAsPendingSpellTarget(int playerId) const
@@ -1631,8 +1657,7 @@ bool PlayerActions::isAwaitingRuledPlayerTargetSelection() const
     const int slot = pendingRuledSpellCast.handIndex;
     const int face = pendingRuledSpellCast.faceIndex;
     if (pendingRuledSpellCast.activeModePosition >= 0) {
-        const auto &targets =
-            pendingRuledSpellCast.selectedModes.at(pendingRuledSpellCast.activeModePosition).targets;
+        const auto &targets = pendingRuledSpellCast.selectedModes.at(pendingRuledSpellCast.activeModePosition).targets;
         return targets.canTargetSelf || targets.canTargetOpponent;
     }
     return handler->canSpellTargetSelf(slot, face, pendingRuledSpellCast.source) ||
@@ -1645,7 +1670,8 @@ bool PlayerActions::isAwaitingRuledAbilityOrTriggerPlayerTarget() const
         return true;
     }
     RuledClientState *handler = player->getGame()->getGameEventHandler()->ruled();
-    return handler && (handler->hasPendingTriggerTarget() || handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget));
+    return handler && (handler->hasPendingTriggerTarget() ||
+                       handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget));
 }
 
 bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
@@ -1676,16 +1702,15 @@ bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
     const int slot = pendingRuledSpellCast.handIndex;
     const int face = pendingRuledSpellCast.faceIndex;
     const bool isSelf = (targetPlayerId == player->getPlayerInfo()->getId());
-    const auto *modalTarget = pendingRuledSpellCast.activeModePosition >= 0
-        ? &pendingRuledSpellCast.selectedModes.at(pendingRuledSpellCast.activeModePosition).targets
-        : nullptr;
-    const bool canTargetSelf = modalTarget
-        ? modalTarget->canTargetSelf
-        : handler->canSpellTargetSelf(slot, face, pendingRuledSpellCast.source);
-    const bool canTargetOpponent =
-        modalTarget
-            ? modalTarget->canTargetOpponent
-            : handler->canSpellTargetOpponent(slot, face, pendingRuledSpellCast.source);
+    const auto *modalTarget =
+        pendingRuledSpellCast.activeModePosition >= 0
+            ? &pendingRuledSpellCast.selectedModes.at(pendingRuledSpellCast.activeModePosition).targets
+            : nullptr;
+    const bool canTargetSelf = modalTarget ? modalTarget->canTargetSelf
+                                           : handler->canSpellTargetSelf(slot, face, pendingRuledSpellCast.source);
+    const bool canTargetOpponent = modalTarget
+                                       ? modalTarget->canTargetOpponent
+                                       : handler->canSpellTargetOpponent(slot, face, pendingRuledSpellCast.source);
     if (isSelf && !canTargetSelf) {
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
             tr("%1 must target an opponent.").arg(pendingRuledSpellCast.cardName));
@@ -1702,9 +1727,7 @@ bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
         pendingRuledSpellCast.selectedTargetOids.removeOne(targetOid);
         const int chosen = pendingRuledSpellCast.selectedTargetOids.size();
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            tr("Target deselected. %1 target(s) chosen for %2.")
-                .arg(chosen)
-                .arg(pendingRuledSpellCast.cardName));
+            tr("Target deselected. %1 target(s) chosen for %2.").arg(chosen).arg(pendingRuledSpellCast.cardName));
         emit ruledMultiTargetSelectionUpdated(chosen, effectiveDamageTargetsMax());
         player->getGame()->getGameEventHandler()->ruled()->emitSpellTargetSelectionChanged();
         return true;
@@ -1736,8 +1759,7 @@ bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
 
 int PlayerActions::pendingDamageTargetsTotal() const
 {
-    return pendingRuledSpellCast.fixedDamage > 0 ? pendingRuledSpellCast.fixedDamage
-                                                 : pendingRuledSpellCast.xValue;
+    return pendingRuledSpellCast.fixedDamage > 0 ? pendingRuledSpellCast.fixedDamage : pendingRuledSpellCast.xValue;
 }
 
 int PlayerActions::effectiveDamageTargetsMax() const
@@ -1816,9 +1838,8 @@ bool PlayerActions::finalizeTargetSelectionAndContinue()
 
     // DamageTargets: allocate damage among chosen targets interactively.
     if (pendingRuledSpellCast.isDamageTargets) {
-        const int total = pendingRuledSpellCast.fixedDamage > 0
-            ? pendingRuledSpellCast.fixedDamage
-            : pendingRuledSpellCast.xValue;
+        const int total =
+            pendingRuledSpellCast.fixedDamage > 0 ? pendingRuledSpellCast.fixedDamage : pendingRuledSpellCast.xValue;
         const int numTargets = pendingRuledSpellCast.selectedTargetOids.size();
         // "Divided evenly, rounded down" involves no choice, so there is nothing to allocate: the
         // engine divides on resolution among the targets still legal then and ignores whatever
@@ -1832,7 +1853,8 @@ bool PlayerActions::finalizeTargetSelectionAndContinue()
         } else if (numTargets > total) {
             player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
                 tr("Cannot assign at least 1 damage to each target (%1 targets, %2 total). Cast cancelled.")
-                    .arg(numTargets).arg(total));
+                    .arg(numTargets)
+                    .arg(total));
             clearPendingRuledSpellCast();
             return true;
         } else if (numTargets == 1) {
@@ -1850,7 +1872,8 @@ bool PlayerActions::finalizeTargetSelectionAndContinue()
             player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
                 tr("Assign %1 damage among %2 targets (min 1 each). "
                    "Click to add, right-click to reduce. Confirm when done.")
-                    .arg(total).arg(numTargets));
+                    .arg(total)
+                    .arg(numTargets));
             return true; // wait for the player to confirm via the prompt button
         }
     }
@@ -1888,9 +1911,11 @@ bool PlayerActions::isSpellDamageAllocationDisplayActive() const
 
 int PlayerActions::spellDamageAllocationForOid(quint32 oid) const
 {
-    if (!isSpellDamageAllocationDisplayActive()) return 0;
+    if (!isSpellDamageAllocationDisplayActive())
+        return 0;
     const int idx = pendingRuledSpellCast.selectedTargetOids.indexOf(oid);
-    if (idx < 0) return 0;
+    if (idx < 0)
+        return 0;
     // While interactively allocating, show the in-progress split; once confirmed (and through
     // mana payment) show the amount that will actually be sent with the cast.
     if (pendingRuledSpellCast.inDamageAllocationMode) {
@@ -1929,14 +1954,17 @@ bool PlayerActions::spellDamageAllocationIsLegal() const
 
 bool PlayerActions::tryBumpSpellDamageAllocationForOid(quint32 oid, int delta)
 {
-    if (!isInSpellDamageAllocationMode()) return false;
+    if (!isInSpellDamageAllocationMode())
+        return false;
     const int idx = pendingRuledSpellCast.selectedTargetOids.indexOf(oid);
-    if (idx < 0 || idx >= pendingRuledSpellCast.targetDamageAllocations.size()) return false;
+    if (idx < 0 || idx >= pendingRuledSpellCast.targetDamageAllocations.size())
+        return false;
     const int cur = pendingRuledSpellCast.targetDamageAllocations.at(idx);
     const int total = pendingRuledSpellCast.damageAllocationTotal;
     const int othersSum = spellDamageAllocationAssignedTotal() - cur;
     const int next = qBound(1, cur + delta, total - othersSum);
-    if (next == cur) return true; // legal target but no change possible
+    if (next == cur)
+        return true; // legal target but no change possible
     pendingRuledSpellCast.targetDamageAllocations[idx] = next;
     player->getGame()->getGameEventHandler()->ruled()->emitSpellDamageAllocationUiChanged();
     return true;
@@ -1944,32 +1972,39 @@ bool PlayerActions::tryBumpSpellDamageAllocationForOid(quint32 oid, int delta)
 
 bool PlayerActions::tryBumpSpellDamageAllocationForCard(CardItem *card, int delta)
 {
-    if (!isInSpellDamageAllocationMode() || !card) return false;
+    if (!isInSpellDamageAllocationMode() || !card)
+        return false;
     RuledClientState *handler = player->getGame()->getGameEventHandler()->ruled();
-    if (!handler) return false;
+    if (!handler)
+        return false;
     const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
     const quint32 oid = handler->engineOidForCardId(ownerPlayerId, card->getId());
-    if (oid == 0) return false;
+    if (oid == 0)
+        return false;
     return tryBumpSpellDamageAllocationForOid(oid, delta);
 }
 
 bool PlayerActions::tryBumpSpellDamageAllocationForPlayer(Player *targetPlayer, int delta)
 {
-    if (!isInSpellDamageAllocationMode() || !targetPlayer) return false;
+    if (!isInSpellDamageAllocationMode() || !targetPlayer)
+        return false;
     return tryBumpSpellDamageAllocationForOid(static_cast<quint32>(targetPlayer->getPlayerInfo()->getId()), delta);
 }
 
 void PlayerActions::confirmSpellDamageAllocation()
 {
-    if (!spellDamageAllocationIsLegal()) return;
+    if (!spellDamageAllocationIsLegal())
+        return;
     pendingRuledSpellCast.selectedTargetDamages.clear();
     for (int v : pendingRuledSpellCast.targetDamageAllocations)
         pendingRuledSpellCast.selectedTargetDamages.append(static_cast<quint32>(v));
     pendingRuledSpellCast.inDamageAllocationMode = false;
     player->getGame()->getGameEventHandler()->ruled()->emitSpellDamageAllocationUiChanged();
 
-    if (storeCurrentModalTargetsAndAdvance()) return;
-    if (!resolvePendingSpellFlexiblePips()) return;
+    if (storeCurrentModalTargetsAndAdvance())
+        return;
+    if (!resolvePendingSpellFlexiblePips())
+        return;
     if (totalRemainingForCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips) == 0) {
         completePendingRuledSpellCast();
         return;
@@ -3729,11 +3764,10 @@ void PlayerActions::cardMenuAction()
                         card->getCardInfo().getCardType().contains("Land", Qt::CaseInsensitive)) {
                         RuledClientState *handler = player->getGame()->getGameEventHandler()->ruled();
                         const auto combatPhase = handler->getCombatPhase();
-                        const bool locked =
-                            (combatPhase == RuledClientState::RuledCombatPhase::DeclareAttackers &&
-                             handler->localPlayerIsActive()) ||
-                            (combatPhase == RuledClientState::RuledCombatPhase::DeclareBlockers &&
-                             handler->localPlayerIsDefender());
+                        const bool locked = (combatPhase == RuledClientState::RuledCombatPhase::DeclareAttackers &&
+                                             handler->localPlayerIsActive()) ||
+                                            (combatPhase == RuledClientState::RuledCombatPhase::DeclareBlockers &&
+                                             handler->localPlayerIsDefender());
                         if (locked) {
                             break;
                         }
@@ -4040,7 +4074,8 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     const QStringList costLabels = handler->activatedAbilityCostLabelsForOid(oid);
     // A tapped (or summoning-sick) mana source has nothing to offer: skip the fast path rather
     // than firing an activation the engine will reject.
-    if (abilityTexts.size() == 1 && !manaProduced.value(0).isEmpty() && handler->abilityActivatable(oid, 0)) {
+    if (abilityTexts.size() == 1 && !manaProduced.value(0).isEmpty() && handler->abilityActivatable(oid, 0) &&
+        handler->abilityCostChoices(oid, 0).isEmpty()) {
         const QStringList colorOptions = manaProduced.value(0).split(QChar('/'));
         if (colorOptions.size() > 1) {
             // Dual land: show a compact color-picker on both left and right click.
@@ -4048,9 +4083,8 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
             QMenu colorMenu;
             colorMenu.setTitle(card->getName());
             for (const QString &opt : colorOptions) {
-                const QString label = costPrefix.isEmpty()
-                    ? tr("Add {%1}").arg(opt)
-                    : tr("%1: Add {%2}").arg(costPrefix, opt);
+                const QString label =
+                    costPrefix.isEmpty() ? tr("Add {%1}").arg(opt) : tr("%1: Add {%2}").arg(costPrefix, opt);
                 colorMenu.addAction(label);
             }
             QAction *chosen = colorMenu.exec(QCursor::pos());
@@ -4058,10 +4092,9 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
                 return true; // player dismissed the picker
             }
             const int sel = colorMenu.actions().indexOf(chosen);
-            const QChar desiredColor =
-                (sel >= 0 && sel < colorOptions.size() && !colorOptions.at(sel).isEmpty())
-                    ? colorOptions.at(sel).at(0).toUpper()
-                    : QChar();
+            const QChar desiredColor = (sel >= 0 && sel < colorOptions.size() && !colorOptions.at(sel).isEmpty())
+                                           ? colorOptions.at(sel).at(0).toUpper()
+                                           : QChar();
             Command_RuledPayload *activate = newRuledPayloadActivateManaAbilityForLand(card, desiredColor);
             if (!activate) {
                 return false;
@@ -4085,7 +4118,7 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     // Past the direct mana-float fast path: opening the full activation menu now would overwrite an
     // activated ability that is still mid-payment (the shared pendingActivatedAbility). Suppress it so
     // mana taps keep flowing into that ability instead of starting a second one.
-    if (pendingActivatedAbility.waitingForMana) {
+    if (pendingActivatedAbility.valid) {
         return false;
     }
 
@@ -4096,9 +4129,7 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     menuLabels.reserve(abilityTexts.size());
     for (int i = 0; i < abilityTexts.size(); ++i) {
         const QString costLabel = costLabels.value(i);
-        const QString label = costLabel.isEmpty()
-            ? abilityTexts[i]
-            : tr("%1: %2").arg(costLabel, abilityTexts[i]);
+        const QString label = costLabel.isEmpty() ? abilityTexts[i] : tr("%1: %2").arg(costLabel, abilityTexts[i]);
         menuLabels.append(label);
         QAction *action = menu.addAction(label);
         // Disable rather than omit: the indices below are ability indices, and the player still
@@ -4121,14 +4152,11 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     // Look up the mana cost from the engine-supplied cost string (e.g. "4", "R", "").
     // This comes directly from AbilityCost in the tricerules registry — no text parsing.
     const QStringList manaCostStrings = handler->activatedAbilityManaCostsForOid(oid);
-    const QString manaCostStr = (abilityIndex < manaCostStrings.size())
-                                    ? manaCostStrings.at(abilityIndex)
-                                    : QString{};
+    const QString manaCostStr = (abilityIndex < manaCostStrings.size()) ? manaCostStrings.at(abilityIndex) : QString{};
     const QMap<QChar, int> manaCost = parseSimpleManaCost(manaCostStr);
     // CR 107.4d–f: flexible pips ({G/U}, {2/W}, {B/P}) in the ability cost are front-loaded via
     // the choice dialog before mana payment, just like a spell cast (see resolvePendingAbility...).
     const QVector<RuledFlexPip> flexPips = parseFlexPips(manaCostStr);
-    const bool needsMana = totalRemainingForCost(manaCost, flexPips) > 0;
 
     manaPaymentCounterIds.clear();
     midCastLandTapStack.clear();
@@ -4142,6 +4170,9 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     pendingActivatedAbility.needsTarget = needsTarget;
     pendingActivatedAbility.waitingForTarget = needsTarget;
     pendingActivatedAbility.selectedTargetOid = 0;
+    pendingActivatedAbility.costChoices = handler->abilityCostChoices(oid, abilityIndex);
+    pendingActivatedAbility.nextCostChoice = 0;
+    pendingActivatedAbility.waitingForCost = false;
     pendingActivatedAbility.waitingForMana = false;
     pendingActivatedAbility.remainingCost = manaCost;
     pendingActivatedAbility.flexPips = flexPips;
@@ -4150,22 +4181,8 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         // Target first, then mana payment after target is chosen.
         emit ruledActivatedAbilityTargetPendingChanged(true, chosen->text());
         handler->emitLocalLog(tr("Choose a target for: %1").arg(chosen->text()));
-    } else if (needsMana) {
-        // No target — front-load any flexible-pip choices, then go to mana payment. A Phyrexian
-        // pip paid with life can leave the cost fully resolved, so re-check before prompting.
-        if (!resolvePendingAbilityFlexiblePips()) {
-            return true; // cancelled at the flexible-pip dialog; activation aborted
-        }
-        if (totalRemainingForCost(pendingActivatedAbility.remainingCost, pendingActivatedAbility.flexPips) > 0) {
-            pendingActivatedAbility.waitingForMana = true;
-            emit ruledAbilityActivationPendingChanged(true);
-            emit ruledAbilityManaPromptChanged();
-        } else {
-            completeActivateAbility();
-        }
     } else {
-        // No target, no mana cost — send immediately.
-        completeActivateAbility();
+        continuePendingActivatedAbilityAfterChoice();
     }
     return true;
 }
@@ -4247,6 +4264,55 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
         return true;
     }
 
+    // Explicit nonmana activated-cost choices are engine-authored. Hand candidates are concealed
+    // hand slots and battlefield candidates are ObjectIds; never infer legality from card text.
+    if (pendingActivatedAbility.valid && pendingActivatedAbility.waitingForCost) {
+        if (!card || !card->getZone() ||
+            pendingActivatedAbility.nextCostChoice >= pendingActivatedAbility.costChoices.size()) {
+            return true;
+        }
+        const auto &choice = pendingActivatedAbility.costChoices.at(pendingActivatedAbility.nextCostChoice);
+        const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
+        quint32 selectedId = 0;
+        if (choice.zone == RuledAbilityCostChoiceZone::Hand) {
+            if (card->getZone()->getName() != ZoneNames::HAND) {
+                handler->emitLocalLog(tr("Choose a card from your hand to discard."));
+                return true;
+            }
+            const int handSlot = handler->engineHandSlotForServerCard(ownerPlayerId, card->getId());
+            if (handSlot < 0) {
+                handler->emitLocalLog(tr("That hand card is not selectable yet."));
+                return true;
+            }
+            selectedId = static_cast<quint32>(handSlot);
+        } else {
+            if (card->getZone()->getName() != ZoneNames::TABLE) {
+                handler->emitLocalLog(tr("Choose a permanent on the battlefield to sacrifice."));
+                return true;
+            }
+            selectedId = handler->engineOidForCardId(ownerPlayerId, card->getId());
+        }
+        if (selectedId == 0 && choice.zone == RuledAbilityCostChoiceZone::Battlefield) {
+            handler->emitLocalLog(tr("That permanent is not selectable yet."));
+            return true;
+        }
+        if (!choice.candidateIds.contains(selectedId)) {
+            handler->emitLocalLog(tr("That object cannot pay this ability cost."));
+            return true;
+        }
+        for (const auto &already : pendingActivatedAbility.costSelections) {
+            if (already.zone == choice.zone && already.selectedId == selectedId) {
+                handler->emitLocalLog(tr("One object cannot pay two cost components."));
+                return true;
+            }
+        }
+        pendingActivatedAbility.costSelections.append({choice.costIndex, choice.zone, selectedId});
+        ++pendingActivatedAbility.nextCostChoice;
+        pendingActivatedAbility.waitingForCost = false;
+        continuePendingActivatedAbilityAfterChoice();
+        return true;
+    }
+
     // Check pending activated ability target.
     if (!pendingActivatedAbility.valid || !pendingActivatedAbility.waitingForTarget) {
         return false;
@@ -4256,8 +4322,7 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
     }
     const QString zoneName = card->getZone()->getName();
     if (zoneName != ZoneNames::TABLE && zoneName != ZoneNames::STACK) {
-        handler->emitLocalLog(
-            tr("Select a target on the battlefield (or stack), or press Cancel."));
+        handler->emitLocalLog(tr("Select a target on the battlefield (or stack), or press Cancel."));
         return true;
     }
     const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
@@ -4266,28 +4331,16 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
         handler->emitLocalLog(tr("That target is not selectable yet."));
         return true;
     }
-    if (!handler->isValidAbilityTarget(pendingActivatedAbility.permanentOid,
-                                       pendingActivatedAbility.abilityIndex, targetOid)) {
-        handler->emitLocalLog(
-            tr("That is not a legal target for: %1").arg(pendingActivatedAbility.abilityText));
+    if (!handler->isValidAbilityTarget(pendingActivatedAbility.permanentOid, pendingActivatedAbility.abilityIndex,
+                                       targetOid)) {
+        handler->emitLocalLog(tr("That is not a legal target for: %1").arg(pendingActivatedAbility.abilityText));
         return true;
     }
 
     pendingActivatedAbility.selectedTargetOid = targetOid;
     pendingActivatedAbility.waitingForTarget = false;
     emit ruledActivatedAbilityTargetPendingChanged(false, {});
-
-    // CR 107.4d–f: front-load hybrid/Phyrexian choices before paying mana.
-    if (!resolvePendingAbilityFlexiblePips()) {
-        return true; // cancelled at the flexible-pip dialog; activation aborted
-    }
-    if (totalRemainingForCost(pendingActivatedAbility.remainingCost, pendingActivatedAbility.flexPips) > 0) {
-        pendingActivatedAbility.waitingForMana = true;
-        emit ruledAbilityActivationPendingChanged(true);
-        emit ruledAbilityManaPromptChanged();
-    } else {
-        completeActivateAbility();
-    }
+    continuePendingActivatedAbilityAfterChoice();
     return true;
 }
 
@@ -4340,30 +4393,17 @@ bool PlayerActions::tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer)
     const quint32 permOid = pendingActivatedAbility.permanentOid;
     const int abilityIdx = pendingActivatedAbility.abilityIndex;
     if (isSelf && !handler->canAbilityTargetSelf(permOid, abilityIdx)) {
-        handler->emitLocalLog(
-            tr("You cannot target yourself with: %1").arg(pendingActivatedAbility.abilityText));
+        handler->emitLocalLog(tr("You cannot target yourself with: %1").arg(pendingActivatedAbility.abilityText));
         return true;
     }
     if (!isSelf && !handler->canAbilityTargetOpponent(permOid, abilityIdx)) {
-        handler->emitLocalLog(
-            tr("You cannot target that player with: %1").arg(pendingActivatedAbility.abilityText));
+        handler->emitLocalLog(tr("You cannot target that player with: %1").arg(pendingActivatedAbility.abilityText));
         return true;
     }
     pendingActivatedAbility.selectedTargetOid = targetOid;
     pendingActivatedAbility.waitingForTarget = false;
     emit ruledActivatedAbilityTargetPendingChanged(false, {});
-
-    // CR 107.4d–f: front-load hybrid/Phyrexian choices before paying mana.
-    if (!resolvePendingAbilityFlexiblePips()) {
-        return true; // cancelled at the flexible-pip dialog; activation aborted
-    }
-    if (totalRemainingForCost(pendingActivatedAbility.remainingCost, pendingActivatedAbility.flexPips) > 0) {
-        pendingActivatedAbility.waitingForMana = true;
-        emit ruledAbilityActivationPendingChanged(true);
-        emit ruledAbilityManaPromptChanged();
-    } else {
-        completeActivateAbility();
-    }
+    continuePendingActivatedAbilityAfterChoice();
     return true;
 }
 

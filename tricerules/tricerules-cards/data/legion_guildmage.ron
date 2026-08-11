@@ -7,12 +7,12 @@
   toughness: 2,
   activated_abilities: [
     (
-      cost: TapAndMana("{5}{R}"),
+      costs: [Mana("{5}{R}"), Tap],
       effect: [DamagePlayer(amount: 3, who: EachOpponent)],
       text: "{5}{R}, {T}: This creature deals 3 damage to each opponent.",
     ),
     (
-      cost: TapAndMana("{2}{W}"),
+      costs: [Mana("{2}{W}"), Tap],
       effect: [TapTarget(target: (kind: Creature, exclude_source: true))],
       text: "{2}{W}, {T}: Tap another target creature.",
     ),

@@ -7,7 +7,7 @@
   toughness: 1,
   activated_abilities: [
     (
-      cost: Tap,
+      costs: [Tap],
       effect: [DestroyTarget(target: (kind: Creature, tapped: true))],
       text: "{T}: Destroy target tapped creature.",
     ),

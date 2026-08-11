@@ -14,6 +14,19 @@ struct SacrificeSnapshot {
     was_creature: bool,
 }
 
+enum ValidatedAbilityCost {
+    Tap,
+    Mana(ManaPaymentPlan),
+    Discard(ObjectId),
+    Sacrifice(ObjectId),
+}
+
+struct AbilityCostPayment {
+    move_events: Vec<rv1::RuledEvent>,
+    sacrificed: Vec<SacrificeSnapshot>,
+    life_paid: u32,
+}
+
 /// CR 702.8b: true if the card face is castable at instant speed (is an instant, or has flash).
 pub(super) fn castable_at_instant_speed(face: &tricerules_cards::FaceRef<'_>) -> bool {
     face.is_instant || face.keywords.contains(&tricerules_cards::Keyword::Flash)
@@ -98,17 +111,22 @@ pub(super) fn solve_flex(
     }
 }
 
-/// Pays `cost` (plus `extra_generic` additional generic mana) and returns the amount of life
-/// spent on Phyrexian pips (CR 107.4f). `extra_generic` is used for per-target surcharges such
-/// as Fireball's "{1} per target beyond the first" (CR 601.2f).
-pub(super) fn pay_mana(
-    state: &mut GameState,
+#[derive(Debug, Clone, Copy)]
+struct ManaPaymentPlan {
+    remaining: PoolVec,
+    life_cost: u32,
+}
+
+/// Validate a mana payment without mutating the pool or life total. Activated costs use this
+/// plan as one component of their all-or-nothing CR 601.2h transaction.
+fn plan_mana_payment(
+    state: &GameState,
     player_idx: usize,
     cost: &ManaCost,
     x_value: u32,
     extra_generic: u32,
     flex_payments: &[rv1::FlexPipPayment],
-) -> Result<u32, EngineError> {
+) -> Result<ManaPaymentPlan, EngineError> {
     if player_idx != state.priority_idx {
         return Err(EngineError::Illegal(
             "only priority player can pay mana for spells",
@@ -176,15 +194,42 @@ pub(super) fn pay_mana(
         ));
     };
 
+    Ok(ManaPaymentPlan {
+        remaining,
+        life_cost,
+    })
+}
+
+fn commit_mana_payment(state: &mut GameState, player_idx: usize, plan: ManaPaymentPlan) {
     let pool = &mut state.players[player_idx].mana_pool;
-    pool.white = remaining[0];
-    pool.blue = remaining[1];
-    pool.black = remaining[2];
-    pool.red = remaining[3];
-    pool.green = remaining[4];
-    pool.colorless = remaining[POOL_C];
-    state.players[player_idx].life -= life_cost as i32;
-    Ok(life_cost)
+    pool.white = plan.remaining[0];
+    pool.blue = plan.remaining[1];
+    pool.black = plan.remaining[2];
+    pool.red = plan.remaining[3];
+    pool.green = plan.remaining[4];
+    pool.colorless = plan.remaining[POOL_C];
+    state.players[player_idx].life -= plan.life_cost as i32;
+}
+
+/// Pays `cost` after first proving the whole mana component is affordable.
+pub(super) fn pay_mana(
+    state: &mut GameState,
+    player_idx: usize,
+    cost: &ManaCost,
+    x_value: u32,
+    extra_generic: u32,
+    flex_payments: &[rv1::FlexPipPayment],
+) -> Result<u32, EngineError> {
+    let plan = plan_mana_payment(
+        state,
+        player_idx,
+        cost,
+        x_value,
+        extra_generic,
+        flex_payments,
+    )?;
+    commit_mana_payment(state, player_idx, plan);
+    Ok(plan.life_cost)
 }
 
 impl GameEngine {
@@ -611,12 +656,14 @@ impl GameEngine {
     pub(super) fn activate_ability(
         &mut self,
         player: PlayerId,
-        permanent_id: u32,
-        ability_index: usize,
-        targets: &[rv1::TargetRef],
-        flex_payments: &[rv1::FlexPipPayment],
-        mana_option_index: u32,
+        command: &rv1::ActivateAbility,
     ) -> Result<RuledEventBatch, EngineError> {
+        let permanent_id = command.permanent_id;
+        let ability_index = command.ability_index as usize;
+        let targets = command.targets.as_slice();
+        let flex_payments = command.flex_payments.as_slice();
+        let mana_option_index = command.mana_option_index;
+        let cost_selections = command.cost_selections.as_slice();
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("not your priority"));
         }
@@ -674,6 +721,7 @@ impl GameEngine {
                 mana_option_index,
                 targets,
                 flex_payments,
+                cost_selections,
             );
         }
 
@@ -699,14 +747,19 @@ impl GameEngine {
             .get(&permanent_id)
             .copied()
             .unwrap_or(0);
-        let sacrificed = self.sacrifice_snapshot(permanent_id, &ability.cost);
-        let (sacrifice_ev, life_paid) = self.pay_ability_cost(
+        let source_face_change = self
+            .state
+            .face_change_generation
+            .get(&permanent_id)
+            .copied()
+            .unwrap_or(0);
+        let payment = self.pay_ability_costs(
             player,
             idx,
             permanent_id,
-            &card_id,
-            &ability.cost,
+            &ability.costs,
             flex_payments,
+            cost_selections,
         )?;
 
         let ability_text = ability.text.clone();
@@ -727,12 +780,7 @@ impl GameEngine {
             ability_text: Some(ability_text.clone()),
             source_permanent_id: Some(permanent_id),
             source_zone_change,
-            source_face_change: self
-                .state
-                .face_change_generation
-                .get(&permanent_id)
-                .copied()
-                .unwrap_or(0),
+            source_face_change,
             ability_index: Some(ability_index),
             is_triggered: false,
             is_copy: false,
@@ -753,19 +801,20 @@ impl GameEngine {
         batch.events.push(ev_log(format!(
             "P{player} activates {card_name}: {ability_text}{tgt_line}"
         )));
-        if life_paid > 0 {
+        if payment.life_paid > 0 {
             batch.events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
                     player_id: player,
                     new_total: self.state.players[idx].life,
-                    delta: -(life_paid as i32),
+                    delta: -(payment.life_paid as i32),
                 })),
             });
             batch.events.push(ev_log(format!(
-                "P{player} pays {life_paid} life (Phyrexian mana)."
+                "P{player} pays {} life (Phyrexian mana).",
+                payment.life_paid
             )));
         }
-        if let Some(ev) = sacrifice_ev {
+        for ev in payment.move_events {
             batch.events.push(ev);
         }
         batch.events.push(rv1::RuledEvent {
@@ -786,70 +835,201 @@ impl GameEngine {
         // the ability it paid for, so its events must follow that ability's StackPushed. Emitting
         // the trigger prompt first also made the client discard it, because an activated ability
         // reaching the stack is its signal that a pending trigger target was just answered.
-        target_triggers.extend(self.collect_committed_sacrifice_cost_dies(sacrificed));
+        target_triggers.extend(self.collect_committed_sacrifice_cost_dies(payment.sacrificed));
         self.stage_triggers(target_triggers);
         batch.events.push(ev_priority_changed(self));
         fill_legal(&mut batch, self);
         Ok(batch)
     }
 
-    pub(super) fn pay_ability_cost(
+    fn pay_ability_costs(
         &mut self,
         player: PlayerId,
         idx: usize,
         permanent_id: ObjectId,
-        card_id: &str,
-        cost: &AbilityCost,
+        costs: &[AbilityCost],
         flex_payments: &[rv1::FlexPipPayment],
-    ) -> Result<(Option<rv1::RuledEvent>, u32), EngineError> {
-        match cost {
-            AbilityCost::Tap => {
-                self.tap_for_cost(permanent_id, card_id)?;
-                Ok((None, 0))
-            }
-            AbilityCost::Mana(cost) => {
-                let life_paid = pay_mana(&mut self.state, idx, cost, 0, 0, flex_payments)?;
-                Ok((None, life_paid))
-            }
-            AbilityCost::TapAndMana(cost) => {
-                self.check_tappable(permanent_id, card_id)?;
-                let life_paid = pay_mana(&mut self.state, idx, cost, 0, 0, flex_payments)?;
-                self.tap_for_cost(permanent_id, card_id)?;
-                Ok((None, life_paid))
-            }
-            AbilityCost::Sacrifice => {
-                let owner = self
-                    .state
-                    .objects
-                    .get(&permanent_id)
-                    .map(|o| o.owner)
-                    .unwrap_or(player);
-                sacrifice_permanent(&mut self.state, self.registry, permanent_id)?;
-                Ok((
-                    Some(permanent_moved_event(
-                        &self.state,
-                        permanent_id,
-                        owner,
-                        rv1::permanent_moved::Destination::Graveyard,
-                    )),
-                    0,
-                ))
+        selections: &[rv1::AbilityCostSelection],
+    ) -> Result<AbilityCostPayment, EngineError> {
+        use rv1::ability_cost_selection::Selection;
+
+        let source_card_id = self
+            .state
+            .objects
+            .get(&permanent_id)
+            .map(|object| object.card_id.as_str())
+            .ok_or(EngineError::Illegal("permanent missing"))?;
+        let mut by_index = HashMap::new();
+        for selection in selections {
+            let cost_index = selection.cost_index as usize;
+            if cost_index >= costs.len() || by_index.insert(cost_index, selection).is_some() {
+                return Err(EngineError::Illegal("invalid or duplicate cost selection"));
             }
         }
+
+        let mut validated = Vec::with_capacity(costs.len());
+        let mut consumed = HashSet::new();
+        let mut expected_selections = 0usize;
+        let mut saw_mana = false;
+        let mut saw_tap = false;
+        for (cost_index, cost) in costs.iter().enumerate() {
+            match cost {
+                AbilityCost::Tap => {
+                    if saw_tap {
+                        return Err(EngineError::Illegal("duplicate tap cost"));
+                    }
+                    self.check_tappable(permanent_id, source_card_id)?;
+                    saw_tap = true;
+                    validated.push(ValidatedAbilityCost::Tap);
+                }
+                AbilityCost::Mana(cost) => {
+                    if saw_mana {
+                        return Err(EngineError::Illegal("multiple mana cost components"));
+                    }
+                    saw_mana = true;
+                    validated.push(ValidatedAbilityCost::Mana(plan_mana_payment(
+                        &self.state,
+                        idx,
+                        cost,
+                        0,
+                        0,
+                        flex_payments,
+                    )?));
+                }
+                AbilityCost::Discard => {
+                    expected_selections += 1;
+                    let Some(selection) = by_index.get(&cost_index) else {
+                        return Err(EngineError::Illegal("missing discard cost selection"));
+                    };
+                    let Some(Selection::HandIndex(hand_index)) = selection.selection else {
+                        return Err(EngineError::Illegal("discard cost requires a hand card"));
+                    };
+                    let oid = self.state.players[idx]
+                        .hand
+                        .get(hand_index as usize)
+                        .copied()
+                        .ok_or(EngineError::Illegal("invalid discard hand slot"))?;
+                    if !consumed.insert(oid) {
+                        return Err(EngineError::Illegal("one object cannot pay two costs"));
+                    }
+                    validated.push(ValidatedAbilityCost::Discard(oid));
+                }
+                AbilityCost::SacrificeSelf => {
+                    if !consumed.insert(permanent_id) {
+                        return Err(EngineError::Illegal("one object cannot pay two costs"));
+                    }
+                    validated.push(ValidatedAbilityCost::Sacrifice(permanent_id));
+                }
+                AbilityCost::SacrificePermanent { filter } => {
+                    expected_selections += 1;
+                    let Some(selection) = by_index.get(&cost_index) else {
+                        return Err(EngineError::Illegal("missing sacrifice cost selection"));
+                    };
+                    let Some(Selection::PermanentId(oid)) = selection.selection else {
+                        return Err(EngineError::Illegal(
+                            "sacrifice cost requires a battlefield permanent",
+                        ));
+                    };
+                    if !self.ability_cost_permanent_matches(player, oid, filter) {
+                        return Err(EngineError::Illegal("illegal sacrifice cost selection"));
+                    }
+                    if !consumed.insert(oid) {
+                        return Err(EngineError::Illegal("one object cannot pay two costs"));
+                    }
+                    validated.push(ValidatedAbilityCost::Sacrifice(oid));
+                }
+            }
+        }
+        if selections.len() != expected_selections {
+            return Err(EngineError::Illegal("unexpected cost selection"));
+        }
+
+        let mut payment = AbilityCostPayment {
+            move_events: vec![],
+            sacrificed: vec![],
+            life_paid: 0,
+        };
+        for component in validated {
+            match component {
+                ValidatedAbilityCost::Tap => {
+                    super::set_tapped(&mut self.state, permanent_id, true);
+                }
+                ValidatedAbilityCost::Mana(plan) => {
+                    payment.life_paid += plan.life_cost;
+                    commit_mana_payment(&mut self.state, idx, plan);
+                }
+                ValidatedAbilityCost::Discard(oid) => {
+                    let owner = self
+                        .state
+                        .objects
+                        .get(&oid)
+                        .map(|object| object.owner)
+                        .unwrap_or(player);
+                    super::resolution::move_object_to_zone(
+                        &mut self.state,
+                        self.registry,
+                        oid,
+                        Zone::Graveyard,
+                        None,
+                    )?;
+                    payment.move_events.push(permanent_moved_event(
+                        &self.state,
+                        oid,
+                        owner,
+                        rv1::permanent_moved::Destination::Graveyard,
+                    ));
+                }
+                ValidatedAbilityCost::Sacrifice(oid) => {
+                    let owner = self
+                        .state
+                        .objects
+                        .get(&oid)
+                        .map(|object| object.owner)
+                        .unwrap_or(player);
+                    payment.sacrificed.push(
+                        self.sacrifice_snapshot(oid)
+                            .ok_or(EngineError::Illegal("sacrifice permanent missing"))?,
+                    );
+                    sacrifice_permanent(&mut self.state, self.registry, oid)?;
+                    payment.move_events.push(permanent_moved_event(
+                        &self.state,
+                        oid,
+                        owner,
+                        rv1::permanent_moved::Destination::Graveyard,
+                    ));
+                }
+            }
+        }
+        Ok(payment)
+    }
+
+    pub(super) fn ability_cost_permanent_matches(
+        &self,
+        player: PlayerId,
+        oid: ObjectId,
+        filter: &TargetFilter,
+    ) -> bool {
+        let Some(object) = self.state.objects.get(&oid) else {
+            return false;
+        };
+        if object.zone != Zone::Battlefield || object.controller != player {
+            return false;
+        }
+        let Some(characteristics) = self.characteristics(oid) else {
+            return false;
+        };
+        let kind_matches = match filter.kind {
+            TargetKind::Creature => characteristics.is_creature(),
+            TargetKind::AnyPermanent => true,
+            _ => false,
+        };
+        kind_matches && super::targeting::filter_characteristics_match(self, filter, oid)
     }
 
     /// Snapshot a permanent about to be sacrificed as an activation cost. Taken *before* the cost
     /// is paid, because CR 603.6 reads the dying object's last-known information and the object is
     /// already in the graveyard (controller reset, characteristics gone) by the time it fires.
-    /// `None` for any cost that is not [`AbilityCost::Sacrifice`].
-    fn sacrifice_snapshot(
-        &self,
-        permanent_id: ObjectId,
-        cost: &AbilityCost,
-    ) -> Option<SacrificeSnapshot> {
-        if !matches!(cost, AbilityCost::Sacrifice) {
-            return None;
-        }
+    fn sacrifice_snapshot(&self, permanent_id: ObjectId) -> Option<SacrificeSnapshot> {
         let object = self.state.objects.get(&permanent_id)?;
         Some(SacrificeSnapshot {
             object_id: permanent_id,
@@ -868,26 +1048,26 @@ impl GameEngine {
     /// ability has been pushed.
     fn collect_committed_sacrifice_cost_dies(
         &mut self,
-        snapshot: Option<SacrificeSnapshot>,
+        snapshots: Vec<SacrificeSnapshot>,
     ) -> Vec<super::triggers::CollectedTrigger> {
-        let Some(snapshot) = snapshot else {
-            return vec![];
-        };
-        let event = GameEvent::Dies {
-            source: TriggerSourceSnapshot {
-                object_id: snapshot.object_id,
-                card_id: snapshot.card_id,
-                controller: snapshot.controller,
-                face_index: snapshot.face_index,
-            },
-            was_creature: snapshot.was_creature,
-        };
-        self.record_committed_events(std::slice::from_ref(&event));
-        self.collect_event_triggers(&[event])
+        let events: Vec<_> = snapshots
+            .into_iter()
+            .map(|snapshot| GameEvent::Dies {
+                source: TriggerSourceSnapshot {
+                    object_id: snapshot.object_id,
+                    card_id: snapshot.card_id,
+                    controller: snapshot.controller,
+                    face_index: snapshot.face_index,
+                },
+                was_creature: snapshot.was_creature,
+            })
+            .collect();
+        self.record_committed_events(&events);
+        self.collect_event_triggers(&events)
     }
 
-    fn fire_sacrifice_cost_dies(&mut self, snapshot: Option<SacrificeSnapshot>) {
-        let collected = self.collect_committed_sacrifice_cost_dies(snapshot);
+    fn fire_sacrifice_cost_dies(&mut self, snapshots: Vec<SacrificeSnapshot>) {
+        let collected = self.collect_committed_sacrifice_cost_dies(snapshots);
         self.stage_triggers(collected);
     }
 
@@ -913,7 +1093,10 @@ impl GameEngine {
         {
             return false;
         }
-        if matches!(ability.cost, AbilityCost::Tap | AbilityCost::TapAndMana(_))
+        if ability
+            .costs
+            .iter()
+            .any(|cost| matches!(cost, AbilityCost::Tap))
             && self.check_tappable(permanent_id, &object.card_id).is_err()
         {
             return false;
@@ -948,16 +1131,6 @@ impl GameEngine {
         Ok(())
     }
 
-    pub(super) fn tap_for_cost(
-        &mut self,
-        permanent_id: ObjectId,
-        card_id: &str,
-    ) -> Result<(), EngineError> {
-        self.check_tappable(permanent_id, card_id)?;
-        super::set_tapped(&mut self.state, permanent_id, true);
-        Ok(())
-    }
-
     #[allow(clippy::too_many_arguments)]
     pub(super) fn resolve_mana_ability(
         &mut self,
@@ -969,6 +1142,7 @@ impl GameEngine {
         mana_option_index: u32,
         targets: &[rv1::TargetRef],
         flex_payments: &[rv1::FlexPipPayment],
+        cost_selections: &[rv1::AbilityCostSelection],
     ) -> Result<RuledEventBatch, EngineError> {
         if !targets.is_empty() {
             return Err(EngineError::Illegal("mana ability takes no targets"));
@@ -980,14 +1154,13 @@ impl GameEngine {
             .get(mana_option_index as usize)
             .ok_or(EngineError::Illegal("invalid mana option"))?;
 
-        let sacrificed = self.sacrifice_snapshot(permanent_id, &ability.cost);
-        let (sacrifice_ev, life_paid) = self.pay_ability_cost(
+        let payment = self.pay_ability_costs(
             player,
             idx,
             permanent_id,
-            card_id,
-            &ability.cost,
+            &ability.costs,
             flex_payments,
+            cost_selections,
         )?;
 
         let pool = &mut self.state.players[idx].mana_pool;
@@ -998,7 +1171,7 @@ impl GameEngine {
         pool.green += amount.g;
         pool.colorless += amount.c;
 
-        if matches!(ability.cost, AbilityCost::Tap) {
+        if matches!(ability.costs.as_slice(), [AbilityCost::Tap]) {
             self.state
                 .undoable_mana_abilities
                 .push(UndoableManaAbility {
@@ -1019,24 +1192,25 @@ impl GameEngine {
         batch.events.push(ev_log(format!(
             "P{player} activates {card_name}: {ability_text}"
         )));
-        if let Some(ev) = sacrifice_ev {
+        for ev in payment.move_events {
             batch.events.push(ev);
         }
-        if life_paid > 0 {
+        if payment.life_paid > 0 {
             batch.events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
                     player_id: player,
                     new_total: self.state.players[idx].life,
-                    delta: -(life_paid as i32),
+                    delta: -(payment.life_paid as i32),
                 })),
             });
             batch.events.push(ev_log(format!(
-                "P{player} pays {life_paid} life (Phyrexian mana)."
+                "P{player} pays {} life (Phyrexian mana).",
+                payment.life_paid
             )));
         }
         // A mana ability does not use the stack (CR 605.3a), so a permanent sacrificed to pay for
         // one dies immediately rather than under a pushed ability.
-        self.fire_sacrifice_cost_dies(sacrificed);
+        self.fire_sacrifice_cost_dies(payment.sacrificed);
         Ok(batch)
     }
 
@@ -1207,6 +1381,49 @@ mod mana_payment_tests {
         let mut e = GameEngine::new_with_default_decks(1, &[0, 1], 20).expect("new");
         e.state.priority_idx = 0;
         e
+    }
+
+    #[test]
+    fn one_permanent_cannot_pay_two_consuming_cost_components() {
+        use rv1::ability_cost_selection::Selection;
+
+        let mut e = engine_with_priority();
+        let oid = e.state.players[0]
+            .library
+            .pop_front()
+            .expect("default deck card");
+        e.state.players[0].battlefield.push(oid);
+        let object = e.state.objects.get_mut(&oid).expect("object");
+        object.zone = Zone::Battlefield;
+        object.controller = 0;
+        let filter = TargetFilter {
+            kind: TargetKind::AnyPermanent,
+            controller: TargetController::You,
+            ..TargetFilter::default()
+        };
+        let costs = [
+            AbilityCost::SacrificePermanent {
+                filter: filter.clone(),
+            },
+            AbilityCost::SacrificePermanent { filter },
+        ];
+        let selections = [
+            rv1::AbilityCostSelection {
+                cost_index: 0,
+                selection: Some(Selection::PermanentId(oid)),
+            },
+            rv1::AbilityCostSelection {
+                cost_index: 1,
+                selection: Some(Selection::PermanentId(oid)),
+            },
+        ];
+
+        let err = e
+            .pay_ability_costs(0, 0, oid, &costs, &[], &selections)
+            .err()
+            .expect("one object cannot be sacrificed twice");
+        assert!(format!("{err:?}").contains("one object cannot pay two costs"));
+        assert_eq!(e.state.objects[&oid].zone, Zone::Battlefield);
     }
 
     #[test]

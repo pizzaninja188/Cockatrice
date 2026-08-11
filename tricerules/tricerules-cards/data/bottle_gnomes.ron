@@ -7,7 +7,7 @@
   toughness: 3,
   activated_abilities: [
     (
-      cost: Sacrifice,
+      costs: [SacrificeSelf],
       effect: [GainLife(amount: 3)],
       text: "Sacrifice this creature: You gain 3 life.",
     ),

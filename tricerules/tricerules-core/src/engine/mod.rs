@@ -1138,14 +1138,7 @@ impl GameEngine {
             }
             Some(Cmd::PrimitiveYieldStructured(_)) => self.primitive_yield_structured(player),
             Some(Cmd::CastSpell(cs)) => self.cast_spell(player, cs),
-            Some(Cmd::ActivateAbility(aa)) => self.activate_ability(
-                player,
-                aa.permanent_id,
-                aa.ability_index as usize,
-                &aa.targets,
-                &aa.flex_payments,
-                aa.mana_option_index,
-            ),
+            Some(Cmd::ActivateAbility(aa)) => self.activate_ability(player, aa),
             Some(Cmd::UndoManaAbility(_)) => self.undo_mana_ability(player),
             Some(Cmd::ChooseTriggerTarget(ctt)) => {
                 self.choose_trigger_target(player, ctt.target_object_id, ctt.decline)

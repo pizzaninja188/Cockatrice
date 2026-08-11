@@ -8,7 +8,7 @@
   evasions: [Landwalk(land_subtype: "Island")],
   activated_abilities: [
     (
-      cost: Mana("{G}"),
+      costs: [Mana("{G}")],
       effect: [Regenerate(subject: Source)],
       text: "{G}: Regenerate this creature.",
     ),

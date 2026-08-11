@@ -3,7 +3,7 @@
   name: "Blossoming Sands",
   mana_cost: "",
   types: ["Land"],
-  activated_abilities: [(cost: Tap, effect: [ProduceMana(options: [(g: 1), (w: 1)])], text: "{T}: Add {G} or {W}.")],
+  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(g: 1), (w: 1)])], text: "{T}: Add {G} or {W}.")],
   triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)], text: "When Blossoming Sands enters, you gain 1 life.")],
   static_abilities: [EntersTapped(affected: Self_)],
 )

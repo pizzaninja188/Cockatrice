@@ -19,6 +19,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
         let mut valid_targets_by_hand_slot = BTreeMap::new();
         let mut valid_targets_by_zone_object = BTreeMap::new();
         let mut valid_targets_by_ability = BTreeMap::new();
+        let mut cost_choices_by_ability = BTreeMap::new();
 
         if let Some(idx) = eng.state.player_idx(p.id) {
             for (slot, &oid) in eng.state.players[idx].hand.iter().enumerate() {
@@ -58,6 +59,9 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                     continue;
                 };
                 for (ai, ability) in face.activated_abilities.iter().enumerate() {
+                    let key = (poid as u64) << 32 | ai as u64;
+                    cost_choices_by_ability
+                        .insert(key, legal_ability_cost_choices(eng, p.id, poid, ability));
                     if ability.effect.iter().any(spell_effect_kind_needs_target) {
                         let targets = compute_spell_targets(
                             eng,
@@ -65,7 +69,6 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                             TargetSourceIdentity::current(eng, poid),
                             &ability.effect,
                         );
-                        let key = (poid as u64) << 32 | ai as u64;
                         valid_targets_by_ability.insert(key, targets);
                     }
                 }
@@ -179,8 +182,82 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 selectable_blocker_ids,
                 zone_cast_actions,
                 valid_targets_by_zone_object,
+                cost_choices_by_ability,
             },
         );
+    }
+}
+
+fn distinct_assignment_exists(
+    candidates: &[Vec<ObjectId>],
+    choice_index: usize,
+    consumed: &mut HashSet<ObjectId>,
+) -> bool {
+    if choice_index == candidates.len() {
+        return true;
+    }
+    candidates[choice_index].iter().copied().any(|oid| {
+        if !consumed.insert(oid) {
+            return false;
+        }
+        let works = distinct_assignment_exists(candidates, choice_index + 1, consumed);
+        consumed.remove(&oid);
+        works
+    })
+}
+
+fn legal_ability_cost_choices(
+    eng: &GameEngine,
+    player: PlayerId,
+    source: ObjectId,
+    ability: &tricerules_cards::ActivatedAbilityDef,
+) -> rv1::LegalAbilityCostChoices {
+    let Some(player_idx) = eng.state.player_idx(player) else {
+        return rv1::LegalAbilityCostChoices::default();
+    };
+    let mut choices = vec![];
+    let mut assignment_candidates = vec![];
+    let mut consumed = HashSet::new();
+    let mut structurally_payable = eng.ability_activatable(source, ability);
+
+    for (cost_index, cost) in ability.costs.iter().enumerate() {
+        match cost {
+            AbilityCost::Discard => {
+                let candidate_ids: Vec<u32> = (0..eng.state.players[player_idx].hand.len())
+                    .map(|slot| slot as u32)
+                    .collect();
+                assignment_candidates.push(eng.state.players[player_idx].hand.clone());
+                choices.push(rv1::LegalAbilityCostChoice {
+                    cost_index: cost_index as u32,
+                    zone: rv1::AbilityCostChoiceZone::Hand as i32,
+                    candidate_ids,
+                });
+            }
+            AbilityCost::SacrificeSelf => {
+                structurally_payable &= consumed.insert(source);
+            }
+            AbilityCost::SacrificePermanent { filter } => {
+                let candidate_ids: Vec<u32> = eng
+                    .state
+                    .players
+                    .iter()
+                    .flat_map(|state| state.battlefield.iter().copied())
+                    .filter(|&oid| eng.ability_cost_permanent_matches(player, oid, filter))
+                    .collect();
+                assignment_candidates.push(candidate_ids.clone());
+                choices.push(rv1::LegalAbilityCostChoice {
+                    cost_index: cost_index as u32,
+                    zone: rv1::AbilityCostChoiceZone::Battlefield as i32,
+                    candidate_ids,
+                });
+            }
+            AbilityCost::Tap | AbilityCost::Mana(_) => {}
+        }
+    }
+    structurally_payable &= distinct_assignment_exists(&assignment_candidates, 0, &mut consumed);
+    rv1::LegalAbilityCostChoices {
+        non_mana_costs_payable: structurally_payable,
+        choices,
     }
 }
 

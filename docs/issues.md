@@ -25,16 +25,12 @@ it records progress in `AUTOMATION_STATUS.md` instead.
 
 ## Open
 
-- [ ] #52 [feature] Composable activated-ability costs and sacrifice filters
-  - Details: Replace single-shape activated costs with an ordered, atomic cost list supporting tap, mana, discard, self-sacrifice, and filtered sacrifice of another permanent. Calibration evidence: Evolving Wilds, Explosive Apparatus, Vial of Dragonfire, Portcullis Vine, Liliana's Steward, and Silent Dart; Portcullis Vine also requires the secondary `sacrifice_filter` capability. Validate all choices before paying anything, reject reuse of one object for two cost components, and cover rollback-free illegal submissions.
-  - Priority: Low
-
 - [ ] #53 [feature] Additional spell costs
   - Details: Model discard and sacrifice as composable additional costs paid atomically with mana during casting, rather than as resolution effects. Calibration evidence: Bone Splinters, Thrill of Possibility, Tormenting Voice, and Village Rites. Legal actions must expose valid payable combinations, and an illegal or stale choice must leave mana, hand, and battlefield unchanged.
   - Priority: Low
 
 - [ ] #54 [feature] Activated-ability timing and board-state restrictions
-  - Details: Add reusable activation predicates for sorcery-speed timing and conditions over controlled permanents or keywords. Calibration evidence: Celestial Enforcer, Goblin Bird-Grabber, and Liliana's Steward's secondary `activation_timing_and_discard_choice` gap. Integrate the predicates into authoritative legal actions and command validation. Caged Zombie can reuse the shipped `GameCondition::CreatureDeathsThisTurn`; its tap-and-mana cost is already supported and its untargeted each-opponent life-loss effect shipped with Issue #87, so the activation predicate is its only remaining gap.
+  - Details: Add reusable activation predicates for sorcery-speed timing and conditions over controlled permanents or keywords. Calibration evidence: Celestial Enforcer, Goblin Bird-Grabber, and Liliana's Steward's secondary `activation_timing_and_discard_choice` gap. Issue #52 shipped Liliana's tap plus self-sacrifice cost shape; its sorcery-speed restriction remains here and its opponent discard resolution remains in Issue #58. Integrate the predicates into authoritative legal actions and command validation. Caged Zombie can reuse the shipped `GameCondition::CreatureDeathsThisTurn`; its tap-and-mana cost is already supported and its untargeted each-opponent life-loss effect shipped with Issue #87, so the activation predicate is its only remaining gap.
   - Priority: Low
 
 - [ ] #55 [feature] Conditional mana output and restricted mana spending
@@ -50,7 +46,7 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Priority: Low
 
 - [ ] #58 [feature] Non-targeted discard and loot choices
-  - Details: Generalize discard effects so the affected player chooses cards from their own hand and optional discard-then-draw sequences can branch without turning discard into targeting. Calibration evidence: Mind Rot, Rousing Read, Teferi's Protege, and Keldon Raider; Liliana's Steward also depends on the discard-choice portion. Reuse resumable resolution choices, enforce exact cardinality, and preserve hidden information in multiplayer views.
+  - Details: Generalize discard effects so the affected player chooses cards from their own hand and optional discard-then-draw sequences can branch without turning discard into targeting. Calibration evidence: Mind Rot, Rousing Read, Teferi's Protege, and Keldon Raider; Liliana's Steward still depends on this resolution-time discard choice after Issue #52 shipped its composite activation cost. Reuse resumable resolution choices, enforce exact cardinality, and preserve hidden information in multiplayer views.
   - Priority: Low
 
 - [ ] #59 [feature] Resolution-time modes, optional payments, and costs
@@ -86,7 +82,7 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Priority: Low
 
 - [ ] #71 [feature] Power and keyword predicates in target and sacrifice filters
-  - Details: Extend the shared filter vocabulary with power comparisons and keyword presence or absence, usable for targets and cost choices. Calibration evidence: Legion's Judgment, Reckless Air Strike, Run Afoul, and Goblin Smuggler's secondary `power_target_filter` gap. Keep derived characteristics controller-aware and reusable; filtered sacrifices must compose with Issue #52's atomic cost validation.
+  - Details: Extend the shared filter vocabulary with power comparisons and keyword absence, usable for targets and selections. Issue #52 shipped derived keyword-presence matching in the shared target/mass/cost predicate for Portcullis Vine. Remaining calibration evidence: Legion's Judgment, Reckless Air Strike, Run Afoul, and Goblin Smuggler's secondary `power_target_filter` gap. Keep derived characteristics controller-aware and reusable.
   - Priority: Low
 
 - [ ] #72 [feature] Planeswalker and battle objects as rules targets
@@ -150,7 +146,7 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Priority: Low
 
 - [ ] #90 [feature] Search for a land onto the battlefield tapped
-  - Details: Extend library search with a land filter, battlefield destination routed through the shared replacement-aware entry funnel, and mandatory shuffle. Calibration evidence: Evolving Wilds. The search must be owner-scoped, reveal only what the effect requires, handle failure-to-find legally, preserve deterministic shuffle logging, and use Issue #52 for the sacrifice cost.
+  - Details: Extend library search with a land filter, battlefield destination routed through the shared replacement-aware entry funnel, and mandatory shuffle. Calibration evidence: Evolving Wilds. Issue #52 shipped its tap plus self-sacrifice activation cost; this issue remains the owner-scoped search, reveal, failure-to-find, replacement-aware battlefield entry, and deterministic mandatory shuffle behavior.
   - Priority: Low
 
 - [ ] #91 [feature] Aggregate results of milling cards

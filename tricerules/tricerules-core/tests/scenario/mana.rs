@@ -84,7 +84,7 @@ fn cannot_activate_mana_ability_when_already_tapped() {
     assert_eq!(e.state.players[0].mana_pool.red, 1, "no extra mana");
 }
 
-/// CR 601.2h: an activated ability's cost is paid atomically. Activating a `TapAndMana` ability
+/// CR 601.2h: an activated ability's cost is paid atomically. Activating a mana-plus-tap ability
 /// (Jayemdae Tome's "{4}, {T}: Draw a card.") whose source is already tapped must be rejected
 /// *without* draining the mana — `apply_command` does not roll back partial state mutations on an
 /// Illegal result, so paying the {4} first and then failing the tap would burn the player's pool.
@@ -99,7 +99,7 @@ fn tap_and_mana_ability_rejected_when_tapped_leaves_pool_intact() {
 
     let err = e
         .apply_command(0, &activate_ability(tome, 0, vec![]))
-        .expect_err("cannot activate a TapAndMana ability on an already-tapped source");
+        .expect_err("cannot activate a mana-plus-tap ability on an already-tapped source");
     assert!(
         format!("{err:?}").contains("already tapped"),
         "unexpected error: {err:?}"
@@ -108,6 +108,27 @@ fn tap_and_mana_ability_rejected_when_tapped_leaves_pool_intact() {
         e.state.players[0].mana_pool.colorless, 4,
         "mana pool must be untouched when the tap precondition fails"
     );
+}
+
+/// CR 602.2b / 601.2h: every component of a composite activated cost is paid as one atomic
+/// transaction. Explosive Apparatus pays {3}, taps, and sacrifices itself before its ability is
+/// put on the stack; a failed tap precondition must leave both the mana and permanent untouched.
+#[test]
+fn composite_mana_tap_sacrifice_cost_is_atomic() {
+    let mut e = GameEngine::new(52, &[0, 1], 20, None, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let apparatus = inject_permanent_on_battlefield(&mut e, 0, "explosive_apparatus");
+    e.state.objects.get_mut(&apparatus).unwrap().tapped = true;
+    e.state.players[0].mana_pool.colorless = 3;
+
+    let err = e
+        .apply_command(0, &activate_ability(apparatus, 0, target_player(1)))
+        .expect_err("a tapped Apparatus cannot pay its tap cost");
+
+    assert!(format!("{err:?}").contains("already tapped"));
+    assert_eq!(e.state.players[0].mana_pool.colorless, 3);
+    let object = e.state.objects.get(&apparatus).expect("apparatus remains");
+    assert_eq!(object.zone, tricerules_core::Zone::Battlefield);
 }
 
 /// CR 605 float courtesy: a freshly activated pure-`{T}` mana ability is undoable while still

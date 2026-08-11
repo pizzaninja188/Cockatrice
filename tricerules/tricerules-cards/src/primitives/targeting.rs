@@ -1,6 +1,6 @@
 //! Target kinds and composable target filters.
 
-use super::Color;
+use super::{Color, Keyword};
 use serde::{Deserialize, Serialize};
 
 /// Base kind for a [`TargetFilter`] — what category of object is targeted.
@@ -141,6 +141,10 @@ pub struct TargetFilter {
     /// restriction). Empty means no excluded subtypes.
     #[serde(default)]
     pub excluded_subtypes: Vec<String>,
+    /// Keywords every matching permanent must currently have. Shared by targeted, untargeted,
+    /// and cost-selection predicates (for example Defender on Portcullis Vine / Run Afoul).
+    #[serde(default)]
+    pub required_keywords: Vec<Keyword>,
 }
 
 impl TargetFilter {

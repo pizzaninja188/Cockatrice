@@ -13,16 +13,16 @@
 #include "event_processing_options.h"
 #include "player.h"
 
+#include <QMap>
 #include <QMenu>
 #include <QObject>
-#include <QMap>
 #include <QPair>
 #include <QVector>
-#include <memory>
 #include <libcockatrice/card/relation/card_relation_type.h>
 #include <libcockatrice/filters/filter_string.h>
 #include <libcockatrice/protocol/pb/card_attributes.pb.h>
 #include <libcockatrice/protocol/pb/command_ruled_payload.pb.h>
+#include <memory>
 
 namespace google
 {
@@ -56,6 +56,7 @@ signals:
     void ruledAbilityActivationPendingChanged(bool pending);
     /// Emitted when `remainingCost` changes during ability mana payment (land or counter).
     void ruledAbilityManaPromptChanged();
+    void ruledAbilityCostPromptChanged();
     /// Emitted when an activated ability enters or leaves the target-selection waiting state.
     void ruledActivatedAbilityTargetPendingChanged(bool pending, QString abilityText);
 
@@ -129,6 +130,8 @@ public:
     void cancelPendingActivatedAbility();
     /// Returns the mana-payment prompt text if an ability is pending and still needs mana, otherwise empty.
     [[nodiscard]] QString pendingRuledAbilityPromptText() const;
+    [[nodiscard]] bool isAwaitingRuledAbilityCostSelection() const;
+    [[nodiscard]] QString pendingRuledAbilityCostPromptText() const;
     bool tryToggleRuledCleanupDiscard(CardItem *card);
     bool tryRuledOpeningBottomCard(CardItem *card);
     bool tryRuledResolutionHandPickCard(CardItem *card);
@@ -154,7 +157,10 @@ public:
     void recordLandTapUndo(int cardId, const QString &counterName, int counterId);
     void undoLastLandTap();
     void clearLandTapUndoStack();
-    [[nodiscard]] bool hasLandTapUndoEntries() const { return !landTapUndoStack.isEmpty(); }
+    [[nodiscard]] bool hasLandTapUndoEntries() const
+    {
+        return !landTapUndoStack.isEmpty();
+    }
 
     [[nodiscard]] bool isMovingCardsUntil() const
     {
@@ -278,8 +284,12 @@ private:
     // Set up and begin a pending ruled cast for an already-resolved hand slot + face. faceIndex selects
     // the split/MDFC half (0 for single-face); castName/castCost are that face's name and mana cost.
     // Handles the toggle-cancel, {X}, hybrid/Phyrexian pip, target and mana-payment flow.
-    bool beginRuledSpellCast(CardItem *card, int ruledHandIndex, int faceIndex, const QString &castName,
-                             const QString &castCost, RuledCastSource source = RuledCastSource::Hand);
+    bool beginRuledSpellCast(CardItem *card,
+                             int ruledHandIndex,
+                             int faceIndex,
+                             const QString &castName,
+                             const QString &castCost,
+                             RuledCastSource source = RuledCastSource::Hand);
     bool storeCurrentModalTargetsAndAdvance();
     static QMap<QChar, int> parseSimpleManaCost(const QString &manaCost);
     static QVector<RuledFlexPip> parseFlexPips(const QString &manaCost);
@@ -339,6 +349,7 @@ private:
     bool tryReducePendingSpellRemainingCostOnePip(bool colorlessMana, QChar coloredMana);
     void finishPendingSpellManaPaymentStep();
     bool completeActivateAbility();
+    void continuePendingActivatedAbilityAfterChoice();
     bool tryReducePendingAbilityRemainingCostOnePip(bool colorlessMana, QChar coloredMana);
     void finishPendingAbilityManaPaymentStep();
 

@@ -7,7 +7,7 @@
   toughness: 1,
   activated_abilities: [
     (
-      cost: Tap,
+      costs: [Tap],
       effect: [DamageTarget(amount: 1, target: (kind: AnyTarget))],
       text: "{T}: This creature deals 1 damage to any target.",
     ),

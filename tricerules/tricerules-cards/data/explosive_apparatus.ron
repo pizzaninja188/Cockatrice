@@ -1,0 +1,13 @@
+(
+  id: "explosive_apparatus",
+  name: "Explosive Apparatus",
+  mana_cost: "{1}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      costs: [Mana("{3}"), Tap, SacrificeSelf],
+      effect: [DamageTarget(amount: 2, target: (kind: AnyTarget))],
+      text: "{3}, {T}, Sacrifice this artifact: It deals 2 damage to any target.",
+    ),
+  ],
+)

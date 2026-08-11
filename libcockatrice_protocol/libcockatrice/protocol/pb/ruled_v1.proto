@@ -450,6 +450,27 @@ message LegalZoneCastAction {
   string cost = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
+// Zone and authoritative candidates for one explicit activated-cost choice. Hand candidates are
+// concealed engine hand slots; battlefield candidates are public engine ObjectIds.
+enum AbilityCostChoiceZone {
+  ABILITY_COST_CHOICE_ZONE_UNSPECIFIED = 0;
+  ABILITY_COST_CHOICE_ZONE_HAND = 1;
+  ABILITY_COST_CHOICE_ZONE_BATTLEFIELD = 2;
+}
+
+message LegalAbilityCostChoice {
+  uint32 cost_index = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  AbilityCostChoiceZone zone = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated uint32 candidate_ids = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message LegalAbilityCostChoices {
+  // False when no distinct assignment can satisfy every nonmana component. Mana affordability is
+  // intentionally separate because the client may activate mana abilities before paying.
+  bool non_mana_costs_payable = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated LegalAbilityCostChoice choices = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
 message LegalActions {
   // Display-only prompt feed. Gameplay consumes hand_actions, never these strings.
   repeated string labels = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
@@ -491,6 +512,10 @@ message LegalActions {
   repeated LegalZoneCastAction zone_cast_actions = 13 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Valid targets for public-zone casts. Key = (engine ObjectId << 8) | face index.
   map<uint64, SpellTargets> valid_targets_by_zone_object = 14
+      [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Per activated ability, keyed as (permanent_id << 32 | ability_index). The engine publishes
+  // exact selectable objects for discard / filtered-sacrifice cost components.
+  map<uint64, LegalAbilityCostChoices> cost_choices_by_ability = 15
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
@@ -878,6 +903,17 @@ message ActivateAbility {
   // activation because mana abilities don't use the stack (CR 605.3b). 0 (default) for
   // single-option mana abilities and all non-mana abilities.
   uint32 mana_option_index = 5;
+  // Explicit choices for authored cost components. `cost_index` indexes the ability's ordered
+  // cost list; each component that requires a choice appears exactly once.
+  repeated AbilityCostSelection cost_selections = 6;
+}
+
+message AbilityCostSelection {
+  uint32 cost_index = 1;
+  oneof selection {
+    uint32 hand_index = 2;
+    uint32 permanent_id = 3;
+  }
 }
 
 message ChooseTriggerTarget {

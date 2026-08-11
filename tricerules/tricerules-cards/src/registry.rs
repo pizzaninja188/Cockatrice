@@ -1,6 +1,7 @@
 use crate::card_def::{CardDefinition, Layout, RawCardDefinition};
 use crate::primitives::{
-    EffectContext, FaceChangeAction, InterveningIf, SpellEffectKind, StaticAbilityDef,
+    AbilityCost, EffectContext, FaceChangeAction, InterveningIf, SpellEffectKind, StaticAbilityDef,
+    TargetController, TargetKind,
 };
 use crate::token_def::TokenDefinition;
 use once_cell::sync::Lazy;
@@ -277,6 +278,35 @@ impl CardRegistry {
                 // against its context, then the list as a whole (CR 608.2 — the effects resolve
                 // together, so a cross-effect requirement like `LoseLife(TargetManaValue)` must
                 // find its object-targeting sibling inside this one ability).
+                for ability in &face.activated_abilities {
+                    let mana_components = ability
+                        .costs
+                        .iter()
+                        .filter(|cost| matches!(cost, AbilityCost::Mana(_)))
+                        .count();
+                    if mana_components > 1 {
+                        return Err(RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason: "activated ability may have at most one mana cost component"
+                                .into(),
+                        });
+                    }
+                    for cost in &ability.costs {
+                        if let AbilityCost::SacrificePermanent { filter } = cost {
+                            if !matches!(
+                                filter.kind,
+                                TargetKind::Creature | TargetKind::AnyPermanent
+                            ) || filter.controller != TargetController::You
+                                || filter.exclude_source
+                            {
+                                return Err(RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason: "sacrifice cost filter requires Creature or AnyPermanent, controller: You, and may include its source".into(),
+                                });
+                            }
+                        }
+                    }
+                }
                 for effects in face
                     .activated_abilities
                     .iter()
@@ -648,7 +678,7 @@ mod tests {
             types: ["Enchantment"],
             activated_abilities: [
                 (
-                    cost: Mana("{1}"),
+                    costs: [Mana("{1}")],
                     effect: [Draw(count: 1), LoseLife(amount: Fixed(1))],
                     text: "{1}: Draw a card and lose 1 life.",
                 ),
@@ -684,12 +714,12 @@ mod tests {
             types: ["Artifact"],
             activated_abilities: [
                 (
-                    cost: Tap,
+                    costs: [Tap],
                     effect: [ProduceMana(options: [(c: 1)]), LoseLife(amount: Fixed(1))],
                     text: "{T}: Add {C}. You lose 1 life.",
                 ),
                 (
-                    cost: Tap,
+                    costs: [Tap],
                     effect: [ProduceMana(options: [(c: 1)])],
                     text: "{T}: Add {C}.",
                 ),

@@ -1,5 +1,6 @@
 //! Costs paid to activate abilities.
 
+use super::TargetFilter;
 use crate::mana::ManaCost;
 use serde::{Deserialize, Serialize};
 
@@ -13,8 +14,12 @@ pub enum AbilityCost {
     Tap,
     /// Pay mana (e.g. `"{4}"`, `"{2}{R}"`). Same brace syntax as `CardDefinition.mana_cost`.
     Mana(ManaCost),
-    /// {T} plus mana (e.g. Jayemdae Tome: `"{4}"` + tap).
-    TapAndMana(ManaCost),
+    /// Discard one card chosen from the activating player's hand.
+    Discard,
     /// Sacrifice the source permanent as cost (e.g. Bottle Gnomes).
-    Sacrifice,
+    SacrificeSelf,
+    /// Sacrifice another or the source permanent when it matches the filter (e.g. Portcullis
+    /// Vine's "Sacrifice a creature with defender"). This is selection, not targeting: shroud
+    /// and hexproof do not apply.
+    SacrificePermanent { filter: TargetFilter },
 }

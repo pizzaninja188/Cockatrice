@@ -3,6 +3,6 @@
   name: "Tranquil Expanse",
   mana_cost: "",
   types: ["Land"],
-  activated_abilities: [(cost: Tap, effect: [ProduceMana(options: [(g: 1), (w: 1)])], text: "{T}: Add {G} or {W}.")],
+  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(g: 1), (w: 1)])], text: "{T}: Add {G} or {W}.")],
   static_abilities: [EntersTapped(affected: Self_)],
 )

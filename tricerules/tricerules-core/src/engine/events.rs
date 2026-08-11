@@ -278,11 +278,14 @@ impl GameEngine {
                                 face.activated_abilities
                                     .iter()
                                     .map(|ability| {
-                                        let mana_cost = match &ability.cost {
-                                            AbilityCost::Mana(cost)
-                                            | AbilityCost::TapAndMana(cost) => cost.to_string(),
-                                            _ => String::new(),
-                                        };
+                                        let mana_cost = ability
+                                            .costs
+                                            .iter()
+                                            .find_map(|cost| match cost {
+                                                AbilityCost::Mana(cost) => Some(cost.to_string()),
+                                                _ => None,
+                                            })
+                                            .unwrap_or_default();
                                         let mana_produced = ability
                                             .mana_options()
                                             .map(|options| {
@@ -293,14 +296,24 @@ impl GameEngine {
                                                     .join("/")
                                             })
                                             .unwrap_or_default();
-                                        let cost_label = match &ability.cost {
-                                            AbilityCost::Tap => "{T}".to_string(),
-                                            AbilityCost::Mana(cost) => cost.to_string(),
-                                            AbilityCost::TapAndMana(cost) => {
-                                                format!("{{T}}, {cost}")
-                                            }
-                                            AbilityCost::Sacrifice => "Sacrifice this".to_string(),
-                                        };
+                                        let cost_label = ability
+                                            .costs
+                                            .iter()
+                                            .map(|cost| match cost {
+                                                AbilityCost::Tap => "{T}".to_string(),
+                                                AbilityCost::Mana(cost) => cost.to_string(),
+                                                AbilityCost::Discard => {
+                                                    "Discard a card".to_string()
+                                                }
+                                                AbilityCost::SacrificeSelf => {
+                                                    "Sacrifice this".to_string()
+                                                }
+                                                AbilityCost::SacrificePermanent { .. } => {
+                                                    "Sacrifice a permanent".to_string()
+                                                }
+                                            })
+                                            .collect::<Vec<_>>()
+                                            .join(", ");
                                         rv1::AbilityInfo {
                                             text: ability.text.clone(),
                                             mana_cost,

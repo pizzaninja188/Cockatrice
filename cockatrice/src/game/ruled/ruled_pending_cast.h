@@ -34,6 +34,13 @@ struct RuledFlexPip
 
 struct PendingActivatedAbility
 {
+    struct CostSelection
+    {
+        int costIndex = -1;
+        RuledAbilityCostChoiceZone zone = RuledAbilityCostChoiceZone::Battlefield;
+        quint32 selectedId = 0;
+    };
+
     bool valid = false;
     quint32 permanentOid = 0;
     int abilityIndex = -1;
@@ -42,6 +49,10 @@ struct PendingActivatedAbility
     bool needsTarget = false;
     bool waitingForTarget = false;
     quint32 selectedTargetOid = 0;
+    bool waitingForCost = false;
+    QVector<RuledAbilityCostChoice> costChoices;
+    int nextCostChoice = 0;
+    QVector<CostSelection> costSelections;
     bool waitingForMana = false;
     QMap<QChar, int> remainingCost;
     QVector<RuledFlexPip> flexPips;
@@ -97,8 +108,8 @@ enum class RuledPendingPaymentAction
 /// Identify a locally staged spell or ability whose last mana pip was consumed while another
 /// engine command (normally that mana ability) was still in flight. The caller invokes this after
 /// the command lock clears and submits the returned action.
-[[nodiscard]] inline RuledPendingPaymentAction
-readyRuledPendingPaymentAction(const PendingRuledSpellCast &spell, const PendingActivatedAbility &ability)
+[[nodiscard]] inline RuledPendingPaymentAction readyRuledPendingPaymentAction(const PendingRuledSpellCast &spell,
+                                                                              const PendingActivatedAbility &ability)
 {
     const auto costIsPaid = [](const QMap<QChar, int> &fixed, const QVector<RuledFlexPip> &flex) {
         for (auto it = fixed.constBegin(); it != fixed.constEnd(); ++it) {
@@ -112,7 +123,8 @@ readyRuledPendingPaymentAction(const PendingRuledSpellCast &spell, const Pending
         costIsPaid(spell.remainingCost, spell.flexPips)) {
         return RuledPendingPaymentAction::CastSpell;
     }
-    if (ability.valid && !ability.waitingForTarget && costIsPaid(ability.remainingCost, ability.flexPips)) {
+    if (ability.valid && !ability.waitingForTarget && !ability.waitingForCost &&
+        costIsPaid(ability.remainingCost, ability.flexPips)) {
         return RuledPendingPaymentAction::ActivateAbility;
     }
     return RuledPendingPaymentAction::None;

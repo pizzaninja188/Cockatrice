@@ -10,8 +10,8 @@
 // This is the layer that used to be untestable — the same logic lived inline in the
 // `RULED_PAYLOAD` case of the upstream `GameEventHandler`, behind the whole client.
 
-#include "game/ruled/ruled_client_host.h"
 #include "game/ruled/ruled_auto_pass_policy.h"
+#include "game/ruled/ruled_client_host.h"
 #include "game/ruled/ruled_client_state.h"
 #include "game/ruled/ruled_dev_command_parser.h"
 #include "game/ruled/ruled_event_dispatcher.h"
@@ -339,6 +339,8 @@ TEST(RuledPendingPaymentTest, LastManaPipConsumedDuringEngineCommandIsReadyAfter
     ability.waitingForTarget = false;
     ability.waitingForMana = false; // the last-pip path clears this before command submission
     EXPECT_EQ(readyRuledPendingPaymentAction({}, ability), RuledPendingPaymentAction::ActivateAbility);
+    ability.waitingForCost = true;
+    EXPECT_EQ(readyRuledPendingPaymentAction({}, ability), RuledPendingPaymentAction::None);
 }
 
 TEST_F(RuledClientTest, HandSlotAndPublicZoneMapsAreQueryable)
@@ -456,8 +458,7 @@ TEST_F(RuledClientTest, AdventureCastFacesCarryEngineNamesAndCosts)
     addHandAction(actions, ruled::v1::HAND_ACTION_CAST_SPELL, 6, "Stomp", 1, true, "{1}{R}");
     apply(batch);
 
-    const QVector<RuledFaceOption> faces =
-        state->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, 6);
+    const QVector<RuledFaceOption> faces = state->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, 6);
     ASSERT_EQ(faces.size(), 2);
     EXPECT_EQ(faces[0].faceIndex, 0);
     EXPECT_EQ(faces[0].faceName, QStringLiteral("Bonecrusher Giant"));
@@ -607,6 +608,34 @@ TEST_F(RuledClientTest, ParsesTargetingTablesForHandSlotsAndAbilities)
     EXPECT_FALSE(state->abilityNeedsTarget(100, 0));
     EXPECT_TRUE(state->isValidAbilityTarget(100, 2, 200));
     EXPECT_TRUE(state->canAbilityTargetSelf(100, 2));
+}
+
+TEST_F(RuledClientTest, ParsesAuthoritativeActivatedCostChoicesAndPayability)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    const quint64 key = (quint64(100) << 32) | 2u;
+    auto &costs = (*actions.mutable_cost_choices_by_ability())[key];
+    costs.set_non_mana_costs_payable(false);
+    auto *discard = costs.add_choices();
+    discard->set_cost_index(0);
+    discard->set_zone(ruled::v1::ABILITY_COST_CHOICE_ZONE_HAND);
+    discard->add_candidate_ids(1);
+    discard->add_candidate_ids(3);
+    auto *sacrifice = costs.add_choices();
+    sacrifice->set_cost_index(2);
+    sacrifice->set_zone(ruled::v1::ABILITY_COST_CHOICE_ZONE_BATTLEFIELD);
+    sacrifice->add_candidate_ids(100);
+    apply(batch);
+
+    EXPECT_FALSE(state->abilityActivatable(100, 2));
+    const auto choices = state->abilityCostChoices(100, 2);
+    ASSERT_EQ(choices.size(), 2);
+    EXPECT_EQ(choices.at(0).costIndex, 0);
+    EXPECT_EQ(choices.at(0).zone, RuledAbilityCostChoiceZone::Hand);
+    EXPECT_EQ(choices.at(0).candidateIds, QSet<quint32>({1, 3}));
+    EXPECT_EQ(choices.at(1).zone, RuledAbilityCostChoiceZone::Battlefield);
+    EXPECT_TRUE(choices.at(1).candidateIds.contains(100));
 }
 
 TEST_F(RuledClientTest, RequirementSetsSurviveABatchWithoutLegalActions)

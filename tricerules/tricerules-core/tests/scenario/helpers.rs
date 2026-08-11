@@ -6,11 +6,12 @@ use tricerules_proto::ruled::v1 as rv1;
 pub(crate) use tricerules_proto::ruled::v1::ruled_command::Cmd;
 pub(crate) use tricerules_proto::ruled::v1::ruled_event::Ev;
 pub(crate) use tricerules_proto::ruled::v1::{
-    ActivateAbility, AssignCombatDamage, BlockPair, CastSource, CastSpell, ChoiceKind,
-    ChooseTriggerTarget, DamagePair, DeclareAttackers, DeclareBlockers, DiscardToHandSize,
-    FlexPipPayment, PassPriority, PlayLand, PreviewDeclareAttackers, PreviewDeclareBlockers,
-    PrimitiveYieldStructured, ResolutionChoiceRequired, RuledCommand, RuledEventBatch,
-    SelectedSpellMode, SubmitResolutionChoice, SubmitTriggerOrder, TargetRef, UndoManaAbility,
+    AbilityCostSelection, ActivateAbility, AssignCombatDamage, BlockPair, CastSource, CastSpell,
+    ChoiceKind, ChooseTriggerTarget, DamagePair, DeclareAttackers, DeclareBlockers,
+    DiscardToHandSize, FlexPipPayment, PassPriority, PlayLand, PreviewDeclareAttackers,
+    PreviewDeclareBlockers, PrimitiveYieldStructured, ResolutionChoiceRequired, RuledCommand,
+    RuledEventBatch, SelectedSpellMode, SubmitResolutionChoice, SubmitTriggerOrder, TargetRef,
+    UndoManaAbility,
 };
 
 pub(crate) fn pass() -> RuledCommand {
@@ -182,6 +183,41 @@ pub(crate) fn activate_ability(
             targets,
             ..Default::default()
         })),
+    }
+}
+
+pub(crate) fn activate_ability_with_costs(
+    permanent_id: u32,
+    ability_index: u32,
+    targets: Vec<TargetRef>,
+    cost_selections: Vec<AbilityCostSelection>,
+) -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+            permanent_id,
+            ability_index,
+            targets,
+            cost_selections,
+            ..Default::default()
+        })),
+    }
+}
+
+pub(crate) fn hand_cost_selection(cost_index: u32, hand_index: u32) -> AbilityCostSelection {
+    AbilityCostSelection {
+        cost_index,
+        selection: Some(rv1::ability_cost_selection::Selection::HandIndex(
+            hand_index,
+        )),
+    }
+}
+
+pub(crate) fn permanent_cost_selection(cost_index: u32, permanent_id: u32) -> AbilityCostSelection {
+    AbilityCostSelection {
+        cost_index,
+        selection: Some(rv1::ability_cost_selection::Selection::PermanentId(
+            permanent_id,
+        )),
     }
 }
 

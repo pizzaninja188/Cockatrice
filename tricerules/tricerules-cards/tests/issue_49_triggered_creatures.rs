@@ -413,7 +413,7 @@ fn issue_49_untargeted_etbs_compose_existing_effects() {
         .get("llanowar_visionary")
         .unwrap()
         .primary_face();
-    assert_eq!(visionary.activated_abilities[0].cost, AbilityCost::Tap);
+    assert_eq!(visionary.activated_abilities[0].costs, [AbilityCost::Tap]);
     assert_eq!(
         visionary.activated_abilities[0].effect,
         [SpellEffectKind::ProduceMana {

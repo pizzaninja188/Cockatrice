@@ -5,7 +5,7 @@
   types: ["Artifact", "Book"],
   activated_abilities: [
     (
-      cost: TapAndMana("{4}"),
+      costs: [Mana("{4}"), Tap],
       effect: [Draw(count: 1)],
       text: "{4}, {T}: Draw a card.",
     ),

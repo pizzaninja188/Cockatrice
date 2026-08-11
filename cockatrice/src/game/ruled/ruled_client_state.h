@@ -22,7 +22,6 @@
 #ifndef COCKATRICE_RULED_CLIENT_STATE_H
 #define COCKATRICE_RULED_CLIENT_STATE_H
 
-#include <algorithm>
 #include <QHash>
 #include <QList>
 #include <QMultiHash>
@@ -32,6 +31,7 @@
 #include <QStringList>
 #include <QVector>
 #include <QtGlobal>
+#include <algorithm>
 // For ruled::v1::PhaseId only — the engine's turn-structure position is mirrored verbatim.
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <optional>
@@ -92,6 +92,25 @@ struct RuledSpellTargetData
     /// resolution among the targets still legal then, so the client must not prompt for an
     /// allocation, must not demand one damage per target, and may send zero targets.
     bool damageDividedEvenly = false;
+};
+
+enum class RuledAbilityCostChoiceZone : int
+{
+    Hand,
+    Battlefield,
+};
+
+struct RuledAbilityCostChoice
+{
+    int costIndex = -1;
+    RuledAbilityCostChoiceZone zone = RuledAbilityCostChoiceZone::Battlefield;
+    QSet<quint32> candidateIds;
+};
+
+struct RuledAbilityCostData
+{
+    bool nonManaCostsPayable = true;
+    QVector<RuledAbilityCostChoice> choices;
 };
 
 /// CR 603.3b: one of the simultaneous triggered abilities a player is being asked to order.
@@ -343,6 +362,7 @@ public:
     QHash<quint64, SpellTargetData> validTargetsByZoneObject;
     // Key = (permanentOid << 32 | abilityIndex). Presence means the ability needs a target.
     QHash<quint64, SpellTargetData> validTargetsByAbility;
+    QHash<quint64, RuledAbilityCostData> abilityCostData;
     // Engine ObjectId -> marked damage currently shown in ruled ZoneView.
     QHash<quint32, int> engineOidMarkedDamage;
     // From ZoneViewSync BattlefieldObject power / toughness (ruled creatures).
@@ -635,52 +655,55 @@ public:
     spellTargetData(int slot, int faceIndex, RuledCastSource source = RuledCastSource::Hand) const
     {
         return source == RuledCastSource::Hand
-            ? validTargetsByHandSlot.value(spellTargetKey(slot, faceIndex))
-            : validTargetsByZoneObject.value(zoneSpellTargetKey(static_cast<quint32>(slot), faceIndex));
+                   ? validTargetsByHandSlot.value(spellTargetKey(slot, faceIndex))
+                   : validTargetsByZoneObject.value(zoneSpellTargetKey(static_cast<quint32>(slot), faceIndex));
     }
-    [[nodiscard]] bool isValidSpellTarget(int handSlot, int faceIndex, quint32 oid,
-                                          RuledCastSource source = RuledCastSource::Hand) const
+    [[nodiscard]] bool
+    isValidSpellTarget(int handSlot, int faceIndex, quint32 oid, RuledCastSource source = RuledCastSource::Hand) const
     {
         return spellTargetData(handSlot, faceIndex, source).validPermanentIds.contains(oid);
     }
-    [[nodiscard]] bool isValidSpellStackTarget(int handSlot, int faceIndex, quint32 oid,
+    [[nodiscard]] bool isValidSpellStackTarget(int handSlot,
+                                               int faceIndex,
+                                               quint32 oid,
                                                RuledCastSource source = RuledCastSource::Hand) const
     {
         return spellTargetData(handSlot, faceIndex, source).validStackIds.contains(oid);
     }
-    [[nodiscard]] bool isValidSpellGraveyardTarget(int handSlot, int faceIndex, quint32 oid,
+    [[nodiscard]] bool isValidSpellGraveyardTarget(int handSlot,
+                                                   int faceIndex,
+                                                   quint32 oid,
                                                    RuledCastSource source = RuledCastSource::Hand) const
     {
         return spellTargetData(handSlot, faceIndex, source).validGraveyardIds.contains(oid);
     }
-    [[nodiscard]] bool canSpellTargetSelf(int handSlot, int faceIndex,
-                                          RuledCastSource source = RuledCastSource::Hand) const
+    [[nodiscard]] bool
+    canSpellTargetSelf(int handSlot, int faceIndex, RuledCastSource source = RuledCastSource::Hand) const
     {
         return spellTargetData(handSlot, faceIndex, source).canTargetSelf;
     }
-    [[nodiscard]] bool canSpellTargetOpponent(int handSlot, int faceIndex,
-                                              RuledCastSource source = RuledCastSource::Hand) const
+    [[nodiscard]] bool
+    canSpellTargetOpponent(int handSlot, int faceIndex, RuledCastSource source = RuledCastSource::Hand) const
     {
         return spellTargetData(handSlot, faceIndex, source).canTargetOpponent;
     }
     // DamageTargets: max targets (0 = unlimited), fixed damage total (0 = X-spell), and flag.
-    [[nodiscard]] int spellMaxTargets(int handSlot, int faceIndex,
-                                      RuledCastSource source = RuledCastSource::Hand) const
+    [[nodiscard]] int spellMaxTargets(int handSlot, int faceIndex, RuledCastSource source = RuledCastSource::Hand) const
     {
         return spellTargetData(handSlot, faceIndex, source).maxTargets;
     }
-    [[nodiscard]] int spellFixedDamage(int handSlot, int faceIndex,
-                                       RuledCastSource source = RuledCastSource::Hand) const
+    [[nodiscard]] int
+    spellFixedDamage(int handSlot, int faceIndex, RuledCastSource source = RuledCastSource::Hand) const
     {
         return spellTargetData(handSlot, faceIndex, source).fixedDamage;
     }
-    [[nodiscard]] bool spellIsDamageTargets(int handSlot, int faceIndex,
-                                            RuledCastSource source = RuledCastSource::Hand) const
+    [[nodiscard]] bool
+    spellIsDamageTargets(int handSlot, int faceIndex, RuledCastSource source = RuledCastSource::Hand) const
     {
         return spellTargetData(handSlot, faceIndex, source).isDamageTargets;
     }
-    [[nodiscard]] int spellExtraManaPerTarget(int handSlot, int faceIndex,
-                                              RuledCastSource source = RuledCastSource::Hand) const
+    [[nodiscard]] int
+    spellExtraManaPerTarget(int handSlot, int faceIndex, RuledCastSource source = RuledCastSource::Hand) const
     {
         return spellTargetData(handSlot, faceIndex, source).extraManaPerTarget;
     }
@@ -729,7 +752,13 @@ public:
     [[nodiscard]] bool abilityActivatable(quint32 oid, int abilityIndex) const
     {
         const QVector<bool> flags = engineOidToActivatedAbilityActivatable.value(oid);
-        return abilityIndex < 0 || abilityIndex >= flags.size() || flags.at(abilityIndex);
+        const bool publicGate = abilityIndex < 0 || abilityIndex >= flags.size() || flags.at(abilityIndex);
+        const auto it = abilityCostData.constFind(abilityTargetKey(oid, abilityIndex));
+        return publicGate && (it == abilityCostData.constEnd() || it->nonManaCostsPayable);
+    }
+    [[nodiscard]] QVector<RuledAbilityCostChoice> abilityCostChoices(quint32 oid, int abilityIndex) const
+    {
+        return abilityCostData.value(abilityTargetKey(oid, abilityIndex)).choices;
     }
 
     // -----------------------------------------------------------------------------------
@@ -1003,8 +1032,7 @@ public:
     }
     [[nodiscard]] QVector<RuledTriggerOrderCandidate> triggerOrderCandidates() const
     {
-        return hasPendingTriggerOrder() ? pendingChoice->orderCandidates
-                                        : QVector<RuledTriggerOrderCandidate>{};
+        return hasPendingTriggerOrder() ? pendingChoice->orderCandidates : QVector<RuledTriggerOrderCandidate>{};
     }
     [[nodiscard]] QString triggerOrderPromptText() const
     {

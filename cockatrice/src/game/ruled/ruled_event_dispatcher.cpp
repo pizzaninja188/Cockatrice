@@ -1,11 +1,11 @@
 #include "ruled_event_dispatcher.h"
-#include <libcockatrice/utility/ruled_debug.h>
 
 #include "ruled_client_host.h"
 #include "ruled_client_state.h"
 
 #include <algorithm>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
+#include <libcockatrice/utility/ruled_debug.h>
 
 namespace
 {
@@ -108,8 +108,7 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
         set.handIndices.insert(handIndex);
         const QString cardName = QString::fromStdString(action.card_name());
         set.indicesByCardName.insert(cardName, handIndex);
-        set.faceOptionsByIndex[handIndex].append(
-            {faceIndex, cardName, QString::fromStdString(action.cost())});
+        set.faceOptionsByIndex[handIndex].append({faceIndex, cardName, QString::fromStdString(action.cost())});
         if (action.needs_target()) {
             set.needsTargetCastKeys.insert(castKey);
         }
@@ -119,10 +118,10 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
             QVector<RuledModalSpellOption> modes;
             modes.reserve(action.modes_size());
             for (const auto &mode : action.modes()) {
-                modes.append({static_cast<int>(mode.mode_index()), QString::fromStdString(mode.label()),
-                              mode.selectable(), mode.needs_target(),
-                              mode.has_targets() ? parseSpellTargets(mode.targets())
-                                                 : RuledClientState::SpellTargetData{}});
+                modes.append(
+                    {static_cast<int>(mode.mode_index()), QString::fromStdString(mode.label()), mode.selectable(),
+                     mode.needs_target(),
+                     mode.has_targets() ? parseSpellTargets(mode.targets()) : RuledClientState::SpellTargetData{}});
             }
             set.modalOptionsByCastKey.insert(castKey, modes);
         }
@@ -156,6 +155,8 @@ void RuledEventDispatcher::resetPerBatchLegalActions()
     state->zoneCastCostsByCastKey.clear();
     state->validTargetsByHandSlot.clear();
     state->validTargetsByZoneObject.clear();
+    state->validTargetsByAbility.clear();
+    state->abilityCostData.clear();
     state->openingBottomSelectedIndices.clear();
     state->openingPickSeatIds.clear();
     state->openingUiKind = RuledOpeningUiKind::None;
@@ -329,10 +330,9 @@ void RuledEventDispatcher::applyStackPushed(const ruled::v1::StackPushed &sp, Ba
         tlist.append(static_cast<quint32>(sp.targets(ti).object_id()));
     }
     state->stackTargetsByStackOid.insert(sp.object_id(), tlist);
-    RULED_TRACE("client") << "stackPushed: oid=" << sp.object_id()
-                          << " cardId=" << QString::fromStdString(sp.card_id())
-                          << " isCopy=" << sp.is_copy() << " isTriggered=" << sp.is_triggered()
-                          << " annotation='" << QString::fromStdString(sp.ability_annotation()) << "'"
+    RULED_TRACE("client") << "stackPushed: oid=" << sp.object_id() << " cardId=" << QString::fromStdString(sp.card_id())
+                          << " isCopy=" << sp.is_copy() << " isTriggered=" << sp.is_triggered() << " annotation='"
+                          << QString::fromStdString(sp.ability_annotation()) << "'"
                           << " description='" << QString::fromStdString(sp.description()) << "'"
                           << " -> syntheticCard=" << (sp.card_id().empty() || sp.is_copy())
                           << " (a spell with a card_id expects a REAL CardItem the relay moved onto"
@@ -478,8 +478,8 @@ void RuledEventDispatcher::applyTriggerOrderRequired(const ruled::v1::TriggerOrd
                               .arg(candidates.size());
     } else {
         state->clearPendingChoiceOfKind(ChoiceKind::TriggerOrder);
-        ctx.promptFeed += QStringLiteral("Waiting: opponent is ordering %1 simultaneous triggers.\n")
-                              .arg(candidates.size());
+        ctx.promptFeed +=
+            QStringLiteral("Waiting: opponent is ordering %1 simultaneous triggers.\n").arg(candidates.size());
     }
     ctx.triggerOrderDirty = true;
 }
@@ -506,8 +506,8 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         //   LEGEND_KEEP    — CR 704.5j, the controller clicks the legend to KEEP; the rest are
         //                    sacrificed.
         PendingChoice choice;
-        choice.kind = rcr.choice_kind() == ruled::v1::CHOICE_KIND_LEGEND_KEEP ? ChoiceKind::LegendKeep
-                                                                             : ChoiceKind::CopyTarget;
+        choice.kind =
+            rcr.choice_kind() == ruled::v1::CHOICE_KIND_LEGEND_KEEP ? ChoiceKind::LegendKeep : ChoiceKind::CopyTarget;
         choice.promptText = QString::fromStdString(rcr.prompt_text());
         for (int i = 0; i < rcr.candidate_object_ids_size(); ++i) {
             choice.candidateOids.append(rcr.candidate_object_ids(i));
@@ -601,9 +601,8 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         // the whole table, OPPONENT_HAND is a hand only the decider may look at (CR 701.7). The
         // proto does not carry whose hand it is, so the title stays seat-agnostic — if a future
         // card picks a player without targeting one, that owner id has to come across the wire.
-        pick.viewTitle = rcr.choice_kind() == ruled::v1::CHOICE_KIND_OPPONENT_HAND
-                             ? tr("Target player's hand")
-                             : tr("Revealed cards");
+        pick.viewTitle = rcr.choice_kind() == ruled::v1::CHOICE_KIND_OPPONENT_HAND ? tr("Target player's hand")
+                                                                                   : tr("Revealed cards");
         QStringList names;
         QVector<int> scids;
         for (int i = 0; i < rcr.candidate_names_size(); ++i) {
@@ -944,10 +943,9 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
         const QString cardName = QString::fromStdString(action.card_name());
         state->zoneCastActions.indicesByCardName.insert(cardName, objectId);
         state->zoneCastActions.faceOptionsByIndex[objectId].append({faceIndex, cardName});
-        state->zoneCastSourceByOid.insert(
-            objectId, action.source_zone() == ruled::v1::CAST_SOURCE_ZONE_EXILE
-                          ? RuledCastSource::Exile
-                          : RuledCastSource::Graveyard);
+        state->zoneCastSourceByOid.insert(objectId, action.source_zone() == ruled::v1::CAST_SOURCE_ZONE_EXILE
+                                                        ? RuledCastSource::Exile
+                                                        : RuledCastSource::Graveyard);
         if (action.needs_target()) {
             state->zoneCastActions.needsTargetIndices.insert(objectId);
         }
@@ -957,10 +955,10 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
             state->zoneCastActions.modalMaxModesByCastKey.insert(castKey, static_cast<int>(action.max_modes()));
             QVector<RuledModalSpellOption> modes;
             for (const auto &mode : action.modes()) {
-                modes.append({static_cast<int>(mode.mode_index()), QString::fromStdString(mode.label()),
-                              mode.selectable(), mode.needs_target(),
-                              mode.has_targets() ? parseSpellTargets(mode.targets())
-                                                 : RuledClientState::SpellTargetData{}});
+                modes.append(
+                    {static_cast<int>(mode.mode_index()), QString::fromStdString(mode.label()), mode.selectable(),
+                     mode.needs_target(),
+                     mode.has_targets() ? parseSpellTargets(mode.targets()) : RuledClientState::SpellTargetData{}});
             }
             state->zoneCastActions.modalOptionsByCastKey.insert(castKey, modes);
         }
@@ -979,6 +977,23 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
     state->validTargetsByAbility.clear();
     for (const auto &entry : actions.valid_targets_by_ability()) {
         state->validTargetsByAbility.insert(static_cast<quint64>(entry.first), parseSpellTargets(entry.second));
+    }
+    state->abilityCostData.clear();
+    for (const auto &entry : actions.cost_choices_by_ability()) {
+        RuledAbilityCostData data;
+        data.nonManaCostsPayable = entry.second.non_mana_costs_payable();
+        for (const auto &choice : entry.second.choices()) {
+            RuledAbilityCostChoice parsed;
+            parsed.costIndex = static_cast<int>(choice.cost_index());
+            parsed.zone = choice.zone() == ruled::v1::ABILITY_COST_CHOICE_ZONE_HAND
+                              ? RuledAbilityCostChoiceZone::Hand
+                              : RuledAbilityCostChoiceZone::Battlefield;
+            for (const quint32 candidate : choice.candidate_ids()) {
+                parsed.candidateIds.insert(candidate);
+            }
+            data.choices.append(parsed);
+        }
+        state->abilityCostData.insert(static_cast<quint64>(entry.first), data);
     }
 
     state->openingUiKind = RuledOpeningUiKind::None;

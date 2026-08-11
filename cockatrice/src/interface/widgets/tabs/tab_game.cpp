@@ -32,9 +32,6 @@
 #include "../utility/visibility_change_listener.h"
 #include "tab_supervisor.h"
 
-#include <libcockatrice/protocol/pb/serverinfo_card.pb.h>
-#include <libcockatrice/utility/zone_names.h>
-
 #include <QAction>
 #include <QCompleter>
 #include <QDateTime>
@@ -51,6 +48,8 @@
 #include <QTextStream>
 #include <QTimer>
 #include <QWidget>
+#include <libcockatrice/protocol/pb/serverinfo_card.pb.h>
+#include <libcockatrice/utility/zone_names.h>
 
 // ---------------------------------------------------------------------------
 // Diagnostic logger — same log file as game_event_handler.cpp / player_event_handler.cpp.
@@ -74,7 +73,8 @@ static void tgDbgLog(const QString &msg)
 #include <libcockatrice/protocol/pb/serverinfo_user.pb.h>
 #include <libcockatrice/utility/trice_limits.h>
 
-namespace {
+namespace
+{
 class RuledCombatArrowItem : public ArrowItem
 {
 public:
@@ -244,7 +244,8 @@ void TabGame::connectToGameEventHandler()
     connect(this, &TabGame::gameLeft, game->getGameEventHandler(), &GameEventHandler::handleGameLeft);
     connect(game->getGameEventHandler(), &GameEventHandler::emitUserEvent, this, &TabGame::emitUserEvent);
     connect(game->getGameEventHandler(), &GameEventHandler::gameStopped, this, &TabGame::stopGame);
-    connect(game->getGameEventHandler(), &GameEventHandler::gameStopped, messageLog, &MessageLogWidget::prepareForNewGame);
+    connect(game->getGameEventHandler(), &GameEventHandler::gameStopped, messageLog,
+            &MessageLogWidget::prepareForNewGame);
     connect(game->getGameEventHandler()->ruled(), &RuledClientState::sessionReset, this, [this] {
         publishRuledAutoPassPolicy();
         if (gamePromptWidget) {
@@ -337,12 +338,11 @@ void TabGame::connectToGameEventHandler()
                 }
             });
     if (gamePromptWidget) {
-        connect(game->getGameEventHandler()->ruled(), &RuledClientState::blockerRejected, gamePromptWidget,
-                [this]() {
-                    if (gamePromptWidget) {
-                        gamePromptWidget->setStickyBlockerError(tr("Illegal blocks."));
-                    }
-                });
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::blockerRejected, gamePromptWidget, [this]() {
+            if (gamePromptWidget) {
+                gamePromptWidget->setStickyBlockerError(tr("Illegal blocks."));
+            }
+        });
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::enginePromptFeed, gamePromptWidget,
                 [this](const QString & /*lines*/) {
                     // Recompute the whole prompt mode once per batch, then let the local player's
@@ -383,16 +383,16 @@ void TabGame::connectToGameEventHandler()
                 });
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::openingUiChanged, this,
                 [this]() { refreshRuledPromptState(); });
-        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningPickSeatRequested, game->getGameEventHandler()->ruled(),
-                &RuledClientState::openingPickFirstSeat);
-        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningMulliganKeepRequested, game->getGameEventHandler()->ruled(),
-                &RuledClientState::openingMulliganKeep);
-        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningMulliganRedrawRequested, game->getGameEventHandler()->ruled(),
-                &RuledClientState::openingMulliganRedraw);
-        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningBottomCancelRequested, game->getGameEventHandler()->ruled(),
-                &RuledClientState::openingBottomCancel);
-        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningBottomDoneRequested, game->getGameEventHandler()->ruled(),
-                &RuledClientState::openingBottomDone);
+        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningPickSeatRequested,
+                game->getGameEventHandler()->ruled(), &RuledClientState::openingPickFirstSeat);
+        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningMulliganKeepRequested,
+                game->getGameEventHandler()->ruled(), &RuledClientState::openingMulliganKeep);
+        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningMulliganRedrawRequested,
+                game->getGameEventHandler()->ruled(), &RuledClientState::openingMulliganRedraw);
+        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningBottomCancelRequested,
+                game->getGameEventHandler()->ruled(), &RuledClientState::openingBottomCancel);
+        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningBottomDoneRequested,
+                game->getGameEventHandler()->ruled(), &RuledClientState::openingBottomDone);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::openingBottomUiChanged, this,
                 [this](int, int) { refreshRuledPromptState(); });
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::resolutionHandPickUiChanged, this,
@@ -406,18 +406,20 @@ void TabGame::connectToGameEventHandler()
                 });
         connect(gamePromptWidget, &GamePromptWidget::ruledResolutionHandPickConfirmRequested,
                 game->getGameEventHandler()->ruled(), &RuledClientState::submitResolutionHandPick);
-        connect(game->getGameEventHandler()->ruled(), &RuledClientState::librarySearchPickStarted,
-                this, &TabGame::onRuledLibrarySearchPickStarted);
-        connect(game->getGameEventHandler()->ruled(), &RuledClientState::revealedPickChanged,
-                this, &TabGame::onRuledRevealedPickChanged);
-        connect(game->getGameEventHandler()->ruled(), &RuledClientState::triggerOrderUiChanged,
-                this, &TabGame::onRuledTriggerOrderUiChanged);
-        connect(game->getGameState(), &GameState::activePhaseChanged, gamePromptWidget, &GamePromptWidget::setActivePhase);
-        connect(game->getGameEventHandler(), &GameEventHandler::logActivePlayer, gamePromptWidget, [this](Player *player) {
-            if (player) {
-                gamePromptWidget->setActivePlayerName(player->getPlayerInfo()->getName());
-            }
-        });
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::librarySearchPickStarted, this,
+                &TabGame::onRuledLibrarySearchPickStarted);
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::revealedPickChanged, this,
+                &TabGame::onRuledRevealedPickChanged);
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::triggerOrderUiChanged, this,
+                &TabGame::onRuledTriggerOrderUiChanged);
+        connect(game->getGameState(), &GameState::activePhaseChanged, gamePromptWidget,
+                &GamePromptWidget::setActivePhase);
+        connect(game->getGameEventHandler(), &GameEventHandler::logActivePlayer, gamePromptWidget,
+                [this](Player *player) {
+                    if (player) {
+                        gamePromptWidget->setActivePlayerName(player->getPlayerInfo()->getName());
+                    }
+                });
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::combatStateChanged, gamePromptWidget,
                 [this]() {
                     auto *handler = game->getGameEventHandler()->ruled();
@@ -449,13 +451,10 @@ void TabGame::connectToGameEventHandler()
                         if (handler->localPlayerIsActive()) {
                             gamePromptWidget->setCombatDamageStatus(
                                 handler->currentCombatDamageAttackerDisplayName(),
-                                handler->localCombatDamageAssignedTotal(),
-                                handler->currentCombatDamageAttackerPower(),
-                                handler->localCombatDamagePlayerDamage(),
-                                handler->localCombatDamageAssignmentLegal());
+                                handler->localCombatDamageAssignedTotal(), handler->currentCombatDamageAttackerPower(),
+                                handler->localCombatDamagePlayerDamage(), handler->localCombatDamageAssignmentLegal());
                         } else {
-                            gamePromptWidget->setPromptText(
-                                tr("Wait — your opponent is assigning combat damage."));
+                            gamePromptWidget->setPromptText(tr("Wait — your opponent is assigning combat damage."));
                         }
                     }
                 });
@@ -468,24 +467,25 @@ void TabGame::connectToGameEventHandler()
                 !handler->localPlayerIsActive()) {
                 return;
             }
-            gamePromptWidget->setCombatDamageStatus(handler->currentCombatDamageAttackerDisplayName(),
-                                                    handler->localCombatDamageAssignedTotal(),
-                                                    handler->currentCombatDamageAttackerPower(),
-                                                    handler->localCombatDamagePlayerDamage(),
-                                                    handler->localCombatDamageAssignmentLegal());
+            gamePromptWidget->setCombatDamageStatus(
+                handler->currentCombatDamageAttackerDisplayName(), handler->localCombatDamageAssignedTotal(),
+                handler->currentCombatDamageAttackerPower(), handler->localCombatDamagePlayerDamage(),
+                handler->localCombatDamageAssignmentLegal());
         });
-        connect(game->getGameEventHandler()->ruled(), &RuledClientState::spellDamageAllocationUiChanged, this, [this]() {
-            if (!gamePromptWidget || !RuledActions::isRuledGame(game)) return;
-            const int localId = game->getPlayerManager()->getLocalPlayerId();
-            Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr);
-            auto *actions = local ? local->getPlayerActions() : nullptr;
-            if (!actions) return;
-            const bool active = actions->isInSpellDamageAllocationMode();
-            gamePromptWidget->setSpellDamageAllocationStatus(
-                active,
-                active ? actions->spellDamageAllocationAssignedTotal() : 0,
-                active ? actions->spellDamageAllocationMaxTotal() : 0);
-        });
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::spellDamageAllocationUiChanged, this,
+                [this]() {
+                    if (!gamePromptWidget || !RuledActions::isRuledGame(game))
+                        return;
+                    const int localId = game->getPlayerManager()->getLocalPlayerId();
+                    Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+                    auto *actions = local ? local->getPlayerActions() : nullptr;
+                    if (!actions)
+                        return;
+                    const bool active = actions->isInSpellDamageAllocationMode();
+                    gamePromptWidget->setSpellDamageAllocationStatus(
+                        active, active ? actions->spellDamageAllocationAssignedTotal() : 0,
+                        active ? actions->spellDamageAllocationMaxTotal() : 0);
+                });
         connect(gamePromptWidget, &GamePromptWidget::confirmAttackersRequested, game->getGameEventHandler()->ruled(),
                 &RuledClientState::confirmAttackers);
         connect(gamePromptWidget, &GamePromptWidget::confirmBlockersRequested, game->getGameEventHandler()->ruled(),
@@ -506,15 +506,14 @@ void TabGame::connectToGameEventHandler()
             localPlayer->getPlayerActions()->cancelPendingRuledSpellCast();
             localPlayer->getPlayerActions()->cancelPendingActivatedAbility();
         });
-        connect(gamePromptWidget, &GamePromptWidget::declineTriggerRequested,
-                game->getGameEventHandler()->ruled(), &RuledClientState::declinePendingTrigger);
+        connect(gamePromptWidget, &GamePromptWidget::declineTriggerRequested, game->getGameEventHandler()->ruled(),
+                &RuledClientState::declinePendingTrigger);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::stackHasItemsChanged, gamePromptWidget,
                 &GamePromptWidget::setRuledStackHasItems);
         gamePromptWidget->setRuledStackHasItems(game->getGameEventHandler()->ruled()->hasStackItems());
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::firstStrikeStepPendingChanged,
                 gamePromptWidget, &GamePromptWidget::setFirstStrikeStepPending);
-        gamePromptWidget->setFirstStrikeStepPending(
-            game->getGameEventHandler()->ruled()->isFirstStrikeStepPending());
+        gamePromptWidget->setFirstStrikeStepPending(game->getGameEventHandler()->ruled()->isFirstStrikeStepPending());
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::firstStrikeDamageStepActiveChanged,
                 gamePromptWidget, &GamePromptWidget::setFirstStrikeDamageStepActive);
         gamePromptWidget->setFirstStrikeDamageStepActive(
@@ -635,6 +634,9 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         gamePromptWidget->setRuledPromptState(state);
         return state.mode;
     }
+    const int localPlayerId = game->getPlayerManager()->getLocalPlayerId();
+    Player *localPlayer = game->getPlayerManager()->getPlayers().value(localPlayerId, nullptr);
+    PlayerActions *localActions = localPlayer ? localPlayer->getPlayerActions() : nullptr;
 
     // Priority order, highest first. An in-flight command owns the prompt because all gameplay
     // input is locked immediately, even during the short interval before its status text appears.
@@ -698,6 +700,9 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.mode = PromptMode::ClickChoice;
         state.canDecline = h->pendingTriggerMayDecline();
         state.text = tr("Choose a target for “%1”.").arg(h->pendingTriggerText());
+    } else if (localActions && localActions->isAwaitingRuledAbilityCostSelection()) {
+        state.mode = PromptMode::ClickChoice;
+        state.text = localActions->pendingRuledAbilityCostPromptText();
     } else if (h->engineOpeningPhaseActive()) {
         // Opening phase with nothing for us to do — say who we are waiting for. Runs
         // unconditionally: activePlayerName may already be set from a prior logActivePlayer
@@ -792,8 +797,7 @@ void TabGame::refreshRuledCombatArrows()
             continue;
         }
 
-        auto *arrow =
-            new RuledCombatArrowItem(arrowOwner, attackerCard, defendingPlayerTarget, QColor(Qt::red));
+        auto *arrow = new RuledCombatArrowItem(arrowOwner, attackerCard, defendingPlayerTarget, QColor(Qt::red));
         ruledCombatArrows.append(arrow);
         scene->addItem(arrow);
     }
@@ -1223,16 +1227,17 @@ CardZoneLogic *TabGame::findVisibleStackZone() const
     {
         QString zoneInfo;
         for (Player *p : players) {
-            if (!p || !p->getStackZone()) continue;
-            if (!zoneInfo.isEmpty()) zoneInfo += QLatin1Char(';');
+            if (!p || !p->getStackZone())
+                continue;
+            if (!zoneInfo.isEmpty())
+                zoneInfo += QLatin1Char(';');
             zoneInfo += QStringLiteral("pid=%1 n=%2 isLocal=%3")
-                .arg(p->getPlayerInfo()->getId())
-                .arg(p->getStackZone()->getCards().size())
-                .arg(localPlayer == p);
+                            .arg(p->getPlayerInfo()->getId())
+                            .arg(p->getStackZone()->getCards().size())
+                            .arg(localPlayer == p);
         }
-        tgDbgLog(QStringLiteral("findVisibleStackZone localPid=%1 zones=[%2]")
-                     .arg(pm->getLocalPlayerId())
-                     .arg(zoneInfo));
+        tgDbgLog(
+            QStringLiteral("findVisibleStackZone localPid=%1 zones=[%2]").arg(pm->getLocalPlayerId()).arg(zoneInfo));
     }
     for (Player *player : players) {
         if (!player || !player->getStackZone()) {
@@ -1264,9 +1269,7 @@ CardZoneLogic *TabGame::findVisibleStackZone() const
     // --- DIAG H2/H3: log which zone was chosen. ---
     {
         const int chosenPid = (best && best->getPlayer()) ? best->getPlayer()->getPlayerInfo()->getId() : -1;
-        tgDbgLog(QStringLiteral("findVisibleStackZone → chosenPid=%1 count=%2")
-                     .arg(chosenPid)
-                     .arg(bestCount));
+        tgDbgLog(QStringLiteral("findVisibleStackZone → chosenPid=%1 count=%2").arg(chosenPid).arg(bestCount));
     }
     return best;
 }
@@ -1276,7 +1279,8 @@ CardItem *TabGame::findVisibleStackSpellCardItem(int serverCardId) const
     if (serverCardId < 0 || !stackView) {
         // --- DIAG H4: log when the stack window is absent or ID is invalid. ---
         tgDbgLog(QStringLiteral("findVisibleStackSpellCardItem sid=%1 stackViewNull=%2 MISS (no window)")
-                     .arg(serverCardId).arg(stackView == nullptr));
+                     .arg(serverCardId)
+                     .arg(stackView == nullptr));
         return nullptr;
     }
     ZoneViewZone *zv = stackView->getZone();
@@ -1292,13 +1296,16 @@ CardItem *TabGame::findVisibleStackSpellCardItem(int serverCardId) const
     for (CardItem *c : logic->getCards()) {
         if (c && c->getId() == serverCardId) {
             tgDbgLog(QStringLiteral("findVisibleStackSpellCardItem sid=%1 windowPid=%2 HIT scenePos=(%3,%4)")
-                         .arg(serverCardId).arg(windowPid)
-                         .arg(c->scenePos().x()).arg(c->scenePos().y()));
+                         .arg(serverCardId)
+                         .arg(windowPid)
+                         .arg(c->scenePos().x())
+                         .arg(c->scenePos().y()));
             return c;
         }
     }
     tgDbgLog(QStringLiteral("findVisibleStackSpellCardItem sid=%1 windowPid=%2 MISS (not in window zone)")
-                 .arg(serverCardId).arg(windowPid));
+                 .arg(serverCardId)
+                 .arg(windowPid));
     return nullptr;
 }
 
@@ -1366,10 +1373,14 @@ void TabGame::ensureStackWindow()
     // --- DIAG H3: log whether we're reusing an existing window or creating a new one. ---
     {
         const int newPid = visibleStackZone->getPlayer() ? visibleStackZone->getPlayer()->getPlayerInfo()->getId() : -1;
-        const int oldPid = (stackViewZone && stackViewZone->getPlayer()) ? stackViewZone->getPlayer()->getPlayerInfo()->getId() : -1;
+        const int oldPid =
+            (stackViewZone && stackViewZone->getPlayer()) ? stackViewZone->getPlayer()->getPlayerInfo()->getId() : -1;
         const bool reusing = stackView && stackViewZone == visibleStackZone;
         tgDbgLog(QStringLiteral("ensureStackWindow reusing=%1 oldPid=%2 newPid=%3 stackViewNull=%4")
-                     .arg(reusing).arg(oldPid).arg(newPid).arg(stackView == nullptr));
+                     .arg(reusing)
+                     .arg(oldPid)
+                     .arg(newPid)
+                     .arg(stackView == nullptr));
     }
 
     if (stackView && stackViewZone == visibleStackZone) {
@@ -1496,28 +1507,27 @@ void TabGame::addLocalPlayer(Player *newPlayer, int playerId)
     if (gamePromptWidget && newPlayer->getPlayerActions()) {
         connect(newPlayer->getPlayerActions(), &PlayerActions::ruledSpellTargetingChanged, gamePromptWidget,
                 &GamePromptWidget::setTargetingMode);
-        connect(gamePromptWidget, &GamePromptWidget::confirmSpellDamageRequested,
-                newPlayer->getPlayerActions(), &PlayerActions::confirmSpellDamageAllocation);
+        connect(gamePromptWidget, &GamePromptWidget::confirmSpellDamageRequested, newPlayer->getPlayerActions(),
+                &PlayerActions::confirmSpellDamageAllocation);
         connect(newPlayer->getPlayerActions(), &PlayerActions::ruledMultiTargetSelectionUpdated, gamePromptWidget,
                 &GamePromptWidget::setMultiTargetSelectionCount);
-        connect(gamePromptWidget, &GamePromptWidget::confirmTargetsRequested,
-                newPlayer->getPlayerActions(), &PlayerActions::confirmMultiTargetSelection);
+        connect(gamePromptWidget, &GamePromptWidget::confirmTargetsRequested, newPlayer->getPlayerActions(),
+                &PlayerActions::confirmMultiTargetSelection);
         connect(newPlayer->getPlayerActions(), &PlayerActions::landTapUndoAvailableChanged, gamePromptWidget,
                 &GamePromptWidget::setLandTapUndoAvailable);
         connect(newPlayer->getPlayerActions(), &PlayerActions::ruledSpellCastPendingChanged, gamePromptWidget,
                 &GamePromptWidget::setSpellCastPending);
-        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledSpellManaPromptChanged, this,
-                [this, newPlayer]() {
-                    if (!gamePromptWidget || !newPlayer->getPlayerInfo()->getLocal()) {
-                        return;
-                    }
-                    const QString t = newPlayer->getPlayerActions()->pendingRuledSpellPromptText();
-                    if (!t.isEmpty()) {
-                        gamePromptWidget->setPromptText(t);
-                    }
-                });
-        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledAbilityActivationPendingChanged,
-                gamePromptWidget, &GamePromptWidget::setSpellCastPending);
+        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledSpellManaPromptChanged, this, [this, newPlayer]() {
+            if (!gamePromptWidget || !newPlayer->getPlayerInfo()->getLocal()) {
+                return;
+            }
+            const QString t = newPlayer->getPlayerActions()->pendingRuledSpellPromptText();
+            if (!t.isEmpty()) {
+                gamePromptWidget->setPromptText(t);
+            }
+        });
+        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledAbilityActivationPendingChanged, gamePromptWidget,
+                &GamePromptWidget::setSpellCastPending);
         connect(newPlayer->getPlayerActions(), &PlayerActions::ruledActivatedAbilityTargetPendingChanged,
                 gamePromptWidget, &GamePromptWidget::setActivatedAbilityTargetPending);
         connect(newPlayer->getPlayerActions(), &PlayerActions::ruledAbilityManaPromptChanged, this,
@@ -1530,6 +1540,8 @@ void TabGame::addLocalPlayer(Player *newPlayer, int playerId)
                         gamePromptWidget->setPromptText(t);
                     }
                 });
+        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledAbilityCostPromptChanged, this,
+                [this]() { refreshRuledPromptState(); });
         connect(gamePromptWidget, &GamePromptWidget::undoLandTapRequested, newPlayer->getPlayerActions(),
                 &PlayerActions::undoLastLandTap);
         // CR 605 float courtesy: in ruled mode the Undo button reflects the engine's authoritative
@@ -2054,8 +2066,8 @@ void TabGame::publishRuledAutoPassPolicy()
         return;
     }
     ruled::v1::RuledCommand command;
-    command.mutable_set_auto_pass_policy()->CopyFrom(RuledAutoPassPolicy::fromToolbarStops(
-        phasesToolbar->stopsOnMyTurn(), phasesToolbar->stopsOnOpponentTurn()));
+    command.mutable_set_auto_pass_policy()->CopyFrom(
+        RuledAutoPassPolicy::fromToolbarStops(phasesToolbar->stopsOnMyTurn(), phasesToolbar->stopsOnOpponentTurn()));
     RuledActions::sendRuledCommand(game, command);
 }
 
@@ -2288,8 +2300,7 @@ void TabGame::onRuledLibrarySearchPickStarted(QStringList candidateNames, QVecto
         cardList.append(sic);
     }
     // Open revealed, not closeable (resolution is mandatory per CR 608).
-    librarySearchView =
-        new ZoneViewWidget(localPlayer, deckZone, -1, true, false, cardList, false, true, false, false);
+    librarySearchView = new ZoneViewWidget(localPlayer, deckZone, -1, true, false, cardList, false, true, false, false);
     // The deck zone is only a scaffold for the widget; title the window for what it actually shows.
     librarySearchView->setWindowTitle(game->getGameEventHandler()->ruled()->resolutionHandPickViewTitle());
     scene->addItem(librarySearchView);
@@ -2358,8 +2369,8 @@ void TabGame::onRuledTriggerOrderUiChanged(bool active, QVector<RuledTriggerOrde
     } else {
         // Not closeable: the engine is hard-blocked on this pick (CR 603.3b), so a dismissable
         // popup would strand the game with no way back to it.
-        triggerOrderView = new ZoneViewWidget(localPlayer, deckZone, -1, true, false, cardList,
-                                              false, false, true, false);
+        triggerOrderView =
+            new ZoneViewWidget(localPlayer, deckZone, -1, true, false, cardList, false, false, true, false);
         scene->addItem(triggerOrderView);
         // Deliberately offset from the stack window's default corner (stackWindowPos): the two are
         // open at the same time during ordering, and stacking them exactly would hide the stack the
@@ -2376,8 +2387,11 @@ void TabGame::onRuledTriggerOrderUiChanged(bool active, QVector<RuledTriggerOrde
     refreshRuledPromptState();
 }
 
-void TabGame::onRuledRevealedPickChanged(bool started, QStringList cardNames,
-                                         QVector<int> serverCardIds, int /*min*/, int /*max*/)
+void TabGame::onRuledRevealedPickChanged(bool started,
+                                         QStringList cardNames,
+                                         QVector<int> serverCardIds,
+                                         int /*min*/,
+                                         int /*max*/)
 {
     // Clean up any prior revealed pick view and synthetic card objects.
     if (revealedPickView) {
@@ -2414,8 +2428,7 @@ void TabGame::onRuledRevealedPickChanged(bool started, QStringList cardNames,
     // Create a revealed zone view (stack-window style: fan layout, no sort controls).
     // revealZone = true shows cards face-up; _showControls = false omits search/sort.
     // Not closeable: resolution is mandatory per CR 608.
-    revealedPickView = new ZoneViewWidget(localPlayer, deckZone, -1, true, false, cardList,
-                                          false, false, true, false);
+    revealedPickView = new ZoneViewWidget(localPlayer, deckZone, -1, true, false, cardList, false, false, true, false);
     // The deck zone is only a scaffold for the widget: without this the window would announce
     // itself as somebody's library while showing a hand (Thoughtseize) or a revealed set (Gifts).
     revealedPickView->setWindowTitle(game->getGameEventHandler()->ruled()->resolutionHandPickViewTitle());

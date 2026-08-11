@@ -1,10 +1,10 @@
 use tricerules_cards::primitives::{PlayerRecipient, SpellEffectKind, TargetFilter, TargetKind};
 use tricerules_cards::{AbilityCost, Amount, CardRegistry, Keyword, TriggerCondition};
 
-fn assert_tap_and_mana(cost: &AbilityCost, expected: &str) {
-    match cost {
-        AbilityCost::TapAndMana(mana) => assert_eq!(mana.to_string(), expected),
-        other => panic!("expected TapAndMana({expected}), got {other:?}"),
+fn assert_tap_and_mana(costs: &[AbilityCost], expected: &str) {
+    match costs {
+        [AbilityCost::Mana(mana), AbilityCost::Tap] => assert_eq!(mana.to_string(), expected),
+        other => panic!("expected [Mana({expected}), Tap], got {other:?}"),
     }
 }
 
@@ -54,7 +54,7 @@ fn legion_guildmage_has_complete_oracle_behavior() {
     assert!(definition.partial.is_none());
     assert_eq!(face.activated_abilities.len(), 2);
 
-    assert_tap_and_mana(&face.activated_abilities[0].cost, "{5}{R}");
+    assert_tap_and_mana(&face.activated_abilities[0].costs, "{5}{R}");
     assert_eq!(
         face.activated_abilities[0].effect,
         [SpellEffectKind::DamagePlayer {
@@ -63,7 +63,7 @@ fn legion_guildmage_has_complete_oracle_behavior() {
         }]
     );
 
-    assert_tap_and_mana(&face.activated_abilities[1].cost, "{2}{W}");
+    assert_tap_and_mana(&face.activated_abilities[1].costs, "{2}{W}");
     assert_eq!(
         face.activated_abilities[1].effect,
         [SpellEffectKind::TapTarget {

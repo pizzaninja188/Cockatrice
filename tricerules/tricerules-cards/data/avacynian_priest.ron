@@ -7,7 +7,7 @@
   toughness: 2,
   activated_abilities: [
     (
-      cost: TapAndMana("{1}"),
+      costs: [Mana("{1}"), Tap],
       // excluded_subtypes enforces the non-Human restriction (CR 205.3) — the Priest is itself
       // a Human, so it can never tap its own kind.
       effect: [TapTarget(target: (kind: Creature, excluded_subtypes: ["Human"]))],

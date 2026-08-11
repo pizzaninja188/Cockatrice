@@ -5,7 +5,7 @@
   types: ["Artifact"],
   activated_abilities: [
     (
-      cost: TapAndMana("{1}"),
+      costs: [Mana("{1}"), Tap],
       effect: [TapTarget(target: (
         kind: AnyPermanent,
         permanent_types: [Artifact, Creature, Land],

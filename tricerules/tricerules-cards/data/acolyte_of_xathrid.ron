@@ -7,7 +7,7 @@
   toughness: 1,
   activated_abilities: [
     (
-      cost: TapAndMana("{1}{B}"),
+      costs: [Mana("{1}{B}"), Tap],
       effect: [TargetPlayerLosesLife(amount: 1, target: (kind: AnyPlayer))],
       text: "{1}{B}, {T}: Target player loses 1 life.",
     ),

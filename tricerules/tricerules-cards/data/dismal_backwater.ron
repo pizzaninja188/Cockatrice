@@ -3,7 +3,7 @@
   name: "Dismal Backwater",
   mana_cost: "",
   types: ["Land"],
-  activated_abilities: [(cost: Tap, effect: [ProduceMana(options: [(u: 1), (b: 1)])], text: "{T}: Add {U} or {B}.")],
+  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(u: 1), (b: 1)])], text: "{T}: Add {U} or {B}.")],
   triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)], text: "When Dismal Backwater enters, you gain 1 life.")],
   static_abilities: [EntersTapped(affected: Self_)],
 )

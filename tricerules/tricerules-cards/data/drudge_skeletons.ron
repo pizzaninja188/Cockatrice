@@ -7,7 +7,7 @@
   toughness: 1,
   activated_abilities: [
     (
-      cost: Mana("{B}"),
+      costs: [Mana("{B}")],
       effect: [Regenerate(subject: Source)],
       text: "{B}: Regenerate Drudge Skeletons.",
     ),

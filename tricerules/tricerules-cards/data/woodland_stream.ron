@@ -3,6 +3,6 @@
   name: "Woodland Stream",
   mana_cost: "",
   types: ["Land"],
-  activated_abilities: [(cost: Tap, effect: [ProduceMana(options: [(g: 1), (u: 1)])], text: "{T}: Add {G} or {U}.")],
+  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(g: 1), (u: 1)])], text: "{T}: Add {G} or {U}.")],
   static_abilities: [EntersTapped(affected: Self_)],
 )

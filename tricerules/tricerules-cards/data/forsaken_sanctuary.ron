@@ -3,6 +3,6 @@
   name: "Forsaken Sanctuary",
   mana_cost: "",
   types: ["Land"],
-  activated_abilities: [(cost: Tap, effect: [ProduceMana(options: [(w: 1), (b: 1)])], text: "{T}: Add {W} or {B}.")],
+  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(w: 1), (b: 1)])], text: "{T}: Add {W} or {B}.")],
   static_abilities: [EntersTapped(affected: Self_)],
 )

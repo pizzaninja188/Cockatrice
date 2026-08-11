@@ -7,7 +7,7 @@
   types: ["Artifact", "Equipment"],
   static_abilities: [AttachedModifier(keywords: [Hexproof, Haste])],
   activated_abilities: [(
-    cost: Mana("{1}"),
+    costs: [Mana("{1}")],
     effect: [Equip(target: (kind: Creature, controller: You))],
     text: "Equip {1}",
   )],

@@ -3,7 +3,7 @@
   name: "Rugged Highlands",
   mana_cost: "",
   types: ["Land"],
-  activated_abilities: [(cost: Tap, effect: [ProduceMana(options: [(r: 1), (g: 1)])], text: "{T}: Add {R} or {G}.")],
+  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(r: 1), (g: 1)])], text: "{T}: Add {R} or {G}.")],
   triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)], text: "When Rugged Highlands enters, you gain 1 life.")],
   static_abilities: [EntersTapped(affected: Self_)],
 )

@@ -14,7 +14,7 @@
             // Oracle: "{T}: Add {R}."
             activated_abilities: [
                 (
-                    cost: Tap,
+                    costs: [Tap],
                     effect: [ProduceMana(options: [(r: 1)])],
                     text: "{T}: Add {R}.",
                 ),
@@ -28,7 +28,7 @@
             // Oracle: "{T}: Add {G}."
             activated_abilities: [
                 (
-                    cost: Tap,
+                    costs: [Tap],
                     effect: [ProduceMana(options: [(g: 1)])],
                     text: "{T}: Add {G}.",
                 ),

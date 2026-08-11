@@ -7,7 +7,7 @@
   toughness: 2,
   activated_abilities: [
     (
-      cost: Mana("{R}"),
+      costs: [Mana("{R}")],
       effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
       text: "{R}: This creature gets +1/+0 until end of turn.",
     ),

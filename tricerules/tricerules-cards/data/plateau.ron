@@ -5,7 +5,7 @@
   types: ["Land", "Mountain", "Plains"],
   activated_abilities: [
     (
-      cost: Tap,
+      costs: [Tap],
       effect: [ProduceMana(options: [(r: 1), (w: 1)])],
       text: "{T}: Add {R} or {W}.",
     ),

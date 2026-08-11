@@ -178,7 +178,11 @@ fn object_targetable_by(engine: &GameEngine, tid: ObjectId, caster: PlayerId) ->
 /// - `exclude_source` — needs the source object's captured CR 400.7 identity, which untargeted
 ///   mass selection does not have (and registry validation rejects on mass filters);
 /// - the [`TargetKind`] mapping — the two paths accept different kinds and check zone differently.
-fn filter_characteristics_match(engine: &GameEngine, filter: &TargetFilter, oid: ObjectId) -> bool {
+pub(super) fn filter_characteristics_match(
+    engine: &GameEngine,
+    filter: &TargetFilter,
+    oid: ObjectId,
+) -> bool {
     let Some(object) = engine.state.objects.get(&oid) else {
         return false;
     };
@@ -200,6 +204,13 @@ fn filter_characteristics_match(engine: &GameEngine, filter: &TargetFilter, oid:
         .excluded_subtypes
         .iter()
         .any(|subtype| characteristics.has_type(subtype))
+    {
+        return false;
+    }
+    if !filter
+        .required_keywords
+        .iter()
+        .all(|keyword| characteristics.has_keyword(*keyword))
     {
         return false;
     }
