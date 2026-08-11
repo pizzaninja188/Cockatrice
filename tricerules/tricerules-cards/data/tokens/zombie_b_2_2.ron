@@ -1,0 +1,9 @@
+// 2/2 black Zombie creature token (Undead Servant, Army of the Damned, etc.).
+(
+    id: "zombie_b_2_2",
+    name: "Zombie",
+    types: ["Creature", "Zombie"],
+    colors: [Black],
+    power: 2,
+    toughness: 2,
+)

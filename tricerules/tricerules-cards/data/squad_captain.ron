@@ -10,7 +10,7 @@
     EntersWithCounters(
       counter: PlusOnePlusOne,
       amount: Count(BattlefieldCreatures(
-        filter: (controller: Some(YouControl)),
+        filter: (controllers: Controller, exclude_source: true),
       )),
     ),
   ],

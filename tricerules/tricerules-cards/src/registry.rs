@@ -420,8 +420,9 @@ include!(concat!(env!("OUT_DIR"), "/embedded_cards.rs"));
 mod tests {
     use super::*;
     use crate::primitives::{
-        Amount, AnthemController, AnthemFilter, CountExpression, CounterKind, EntersTappedAffected,
-        SpellEffectKind, StaticAbilityDef, TargetFilter, TargetKind, TriggerCondition,
+        Amount, BattlefieldCreatureCountFilter, CountExpression, CounterKind, EntersTappedAffected,
+        RelativePlayerSet, SpellEffectKind, StaticAbilityDef, TargetFilter, TargetKind,
+        TriggerCondition,
     };
 
     #[test]
@@ -1061,9 +1062,11 @@ mod tests {
     fn issue_51_dynamic_entry_counter_cards_share_the_amount_vocabulary() {
         let reg = CardRegistry::from_embedded().unwrap();
         let controlled_creatures = Amount::Count(CountExpression::BattlefieldCreatures {
-            filter: AnthemFilter {
-                controller: Some(AnthemController::YouControl),
-                ..Default::default()
+            filter: BattlefieldCreatureCountFilter {
+                controllers: RelativePlayerSet::Controller,
+                subtype: None,
+                required_keywords: vec![],
+                exclude_source: false,
             },
         });
 
@@ -1085,7 +1088,17 @@ mod tests {
         };
 
         assert_eq!(entry_amount("endless_one"), Amount::X);
-        assert_eq!(entry_amount("squad_captain"), controlled_creatures);
+        assert_eq!(
+            entry_amount("squad_captain"),
+            Amount::Count(CountExpression::BattlefieldCreatures {
+                filter: BattlefieldCreatureCountFilter {
+                    controllers: RelativePlayerSet::Controller,
+                    subtype: None,
+                    required_keywords: vec![],
+                    exclude_source: true,
+                },
+            })
+        );
         assert_eq!(
             entry_amount("bloodcrazed_paladin"),
             Amount::Count(CountExpression::CreatureDeathsThisTurn)

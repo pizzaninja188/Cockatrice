@@ -1,0 +1,20 @@
+// Oracle/rulings checked 2026-08-10. The spell is still on the stack when its amount is fixed
+// (CR 608.2h, 608.2n); the resulting P/T modifier applies in layer 7c (CR 613.4c).
+(
+  id: "growth_cycle",
+  name: "Growth Cycle",
+  mana_cost: "{1}{G}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(
+      power: 3,
+      toughness: 3,
+      scale: Some((
+        amount: Count(GraveyardCardsNamed(owners: Controller, name: "Growth Cycle")),
+        power_per_unit: 2,
+        toughness_per_unit: 2,
+      )),
+      subject: Chosen((kind: Creature)),
+    ),
+  ],
+)

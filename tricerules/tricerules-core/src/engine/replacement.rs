@@ -149,6 +149,7 @@ impl GameEngine {
                             AmountContext {
                                 controller: event.destination_controller,
                                 source_object_id: event.object_id,
+                                resolving_spell_id: None,
                                 chosen_x: event.chosen_x,
                             },
                         );

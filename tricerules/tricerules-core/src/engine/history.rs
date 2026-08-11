@@ -4,6 +4,19 @@ fn clamp_public_count(count: usize) -> u32 {
     u32::try_from(count).unwrap_or(u32::MAX)
 }
 
+fn relative_player_set_contains(
+    state: &GameState,
+    set: RelativePlayerSet,
+    reference: PlayerId,
+    candidate: PlayerId,
+) -> bool {
+    match set {
+        RelativePlayerSet::Controller => candidate == reference,
+        RelativePlayerSet::Opponents => state.are_opponents(candidate, reference),
+        RelativePlayerSet::All => true,
+    }
+}
+
 impl GameEngine {
     /// Record a committed simultaneous event set. This is deliberately separate from trigger
     /// matching: transactional cast/activation checks may collect prospective triggers, but turn
@@ -62,13 +75,57 @@ impl GameEngine {
                 }
             }
             Amount::Count(CountExpression::BattlefieldCreatures { filter }) => {
-                let count = super::resolution::snapshot_anthem_scope(
-                    self,
-                    filter,
-                    context.controller,
-                    context.source_object_id,
-                )
-                .len();
+                let count = self
+                    .state
+                    .players
+                    .iter()
+                    .flat_map(|player| player.battlefield.iter().copied())
+                    .filter(|oid| !filter.exclude_source || *oid != context.source_object_id)
+                    .filter_map(|oid| self.characteristics(oid))
+                    .filter(|characteristics| {
+                        relative_player_set_contains(
+                            &self.state,
+                            filter.controllers,
+                            context.controller,
+                            characteristics.controller,
+                        ) && characteristics.is_creature()
+                            && filter
+                                .subtype
+                                .as_ref()
+                                .is_none_or(|subtype| characteristics.has_type(subtype))
+                            && filter
+                                .required_keywords
+                                .iter()
+                                .all(|keyword| characteristics.has_keyword(*keyword))
+                    })
+                    .count();
+                clamp_public_count(count)
+            }
+            Amount::Count(CountExpression::GraveyardCardsNamed { owners, name }) => {
+                let count = self
+                    .state
+                    .players
+                    .iter()
+                    .filter(|player| {
+                        relative_player_set_contains(
+                            &self.state,
+                            *owners,
+                            context.controller,
+                            player.id,
+                        )
+                    })
+                    .flat_map(|player| player.graveyard.iter().copied())
+                    .filter(|oid| Some(*oid) != context.resolving_spell_id)
+                    .filter_map(|oid| self.state.objects.get(&oid))
+                    .filter(|object| {
+                        object.zone == Zone::Graveyard
+                            && !object.is_token(self.registry)
+                            && self
+                                .registry
+                                .get(&object.card_id)
+                                .is_some_and(|definition| definition.has_name_outside_stack(name))
+                    })
+                    .count();
                 clamp_public_count(count)
             }
             Amount::Count(CountExpression::CreatureDeathsThisTurn) => {

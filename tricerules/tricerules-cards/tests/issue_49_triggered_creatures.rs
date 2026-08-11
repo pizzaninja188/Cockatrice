@@ -318,6 +318,7 @@ fn issue_49_cast_trigger_cards_use_existing_filters_and_source_effects() {
             [SpellEffectKind::PumpTarget {
                 power: 1,
                 toughness: 1,
+                scale: None,
                 subject: EffectSubject::Source,
             }],
             "{id}"
@@ -339,6 +340,7 @@ fn issue_49_targeted_etbs_use_one_existing_target_group() {
         [SpellEffectKind::PumpTarget {
             power: 2,
             toughness: 0,
+            scale: None,
             subject: EffectSubject::Chosen(creature_target(TargetController::Any)),
         }]
     );
@@ -358,6 +360,7 @@ fn issue_49_targeted_etbs_use_one_existing_target_group() {
             SpellEffectKind::PumpTarget {
                 power: 2,
                 toughness: 0,
+                scale: None,
                 subject: EffectSubject::Chosen(creature_target(TargetController::Any)),
             },
             SpellEffectKind::GrantKeywordsTarget {
@@ -438,6 +441,7 @@ fn issue_49_observer_and_dies_triggers_use_existing_subjects() {
         [SpellEffectKind::PumpTarget {
             power: 1,
             toughness: 1,
+            scale: None,
             subject: EffectSubject::Source,
         }]
     );

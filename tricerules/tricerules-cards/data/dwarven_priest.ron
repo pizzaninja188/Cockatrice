@@ -11,7 +11,7 @@
       effect: [
         GainLife(
           amount: Count(BattlefieldCreatures(
-            filter: (controller: Some(YouControl)),
+            filter: (controllers: Controller),
           )),
         ),
       ],

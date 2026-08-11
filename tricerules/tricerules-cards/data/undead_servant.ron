@@ -1,0 +1,22 @@
+// Oracle/rulings checked 2026-08-10. Count the controller's public graveyard when the ETB trigger
+// resolves; the source card counts if it died in response (CR 400.2, 404, 608.2h).
+(
+  id: "undead_servant",
+  name: "Undead Servant",
+  mana_cost: "{3}{B}",
+  types: ["Creature", "Zombie"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [
+        CreateTokens(
+          token: "zombie_b_2_2",
+          count: Count(GraveyardCardsNamed(owners: Controller, name: "Undead Servant")),
+        ),
+      ],
+      text: "When this creature enters, create a 2/2 black Zombie creature token for each card named Undead Servant in your graveyard.",
+    ),
+  ],
+)

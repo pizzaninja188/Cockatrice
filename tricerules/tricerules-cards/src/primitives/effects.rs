@@ -52,19 +52,68 @@ impl GameCondition {
     }
 }
 
+/// Which battlefield creatures contribute to a [`CountExpression`]. This is deliberately separate
+/// from [`AnthemFilter`]: count predicates may inspect derived keywords, while a keyword-dependent
+/// continuous-effect scope would need CR 613 dependency ordering inside layer 6.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BattlefieldCreatureCountFilter {
+    /// Whose controlled creatures are counted, relative to the resolving spell or ability.
+    pub controllers: RelativePlayerSet,
+    /// If present, the creature must have this derived subtype.
+    #[serde(default)]
+    pub subtype: Option<String>,
+    /// Every listed keyword must be present in the creature's derived characteristics.
+    #[serde(default)]
+    pub required_keywords: Vec<Keyword>,
+    /// Exclude the resolving spell or ability's physical source object.
+    #[serde(default)]
+    pub exclude_source: bool,
+}
+
+impl BattlefieldCreatureCountFilter {
+    fn validate(&self) -> Result<(), String> {
+        if self
+            .subtype
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty())
+        {
+            return Err("battlefield creature count subtype cannot be empty".into());
+        }
+        Ok(())
+    }
+}
+
 /// A public game-state count usable by any [`Amount`] consumer. Keeping the counted quantity
-/// separate from the effect lets Squad Captain's entry replacement and Dwarven Priest's life-gain
-/// trigger share one authoritative evaluator.
+/// separate from the effect lets entry replacements, life gain, damage, P/T modifiers, and token
+/// creation share one authoritative evaluator.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CountExpression {
-    /// Count battlefield creatures matching the shared untargeted creature filter. The
-    /// `YouControl` relation is evaluated from the amount context's controller, while
-    /// `exclude_self` uses its source object. Squad Captain and Dwarven Priest are the first
-    /// entry-replacement and resolution-effect consumers of the same expression.
-    BattlefieldCreatures { filter: AnthemFilter },
+    /// Count battlefield creatures using their fully derived characteristics at evaluation time.
+    BattlefieldCreatures {
+        filter: BattlefieldCreatureCountFilter,
+    },
+    /// Count nontoken card objects with `name` in the selected players' public graveyards.
+    /// `owners` is relative to the resolving spell or ability's controller.
+    GraveyardCardsNamed {
+        owners: RelativePlayerSet,
+        name: String,
+    },
     /// The committed, identity-free number of creatures that died during the current turn.
     /// Bloodcrazed Paladin shares this watcher with `GameCondition::CreatureDeathsThisTurn`.
     CreatureDeathsThisTurn,
+}
+
+impl CountExpression {
+    fn validate(&self) -> Result<(), String> {
+        match self {
+            CountExpression::BattlefieldCreatures { filter } => filter.validate(),
+            CountExpression::GraveyardCardsNamed { name, .. } if name.trim().is_empty() => {
+                Err("graveyard card count name cannot be empty".into())
+            }
+            CountExpression::GraveyardCardsNamed { .. }
+            | CountExpression::CreatureDeathsThisTurn => Ok(()),
+        }
+    }
 }
 
 /// An effect amount that is a fixed literal, the spell's cast-time X (CR 107.3), or a value
@@ -117,7 +166,8 @@ impl Amount {
     pub fn validate(&self) -> Result<(), String> {
         match self {
             Amount::Conditional { condition, .. } => (*condition).validate(),
-            Amount::Fixed(_) | Amount::X | Amount::Count(_) => Ok(()),
+            Amount::Count(expression) => expression.validate(),
+            Amount::Fixed(_) | Amount::X => Ok(()),
         }
     }
 }
@@ -334,6 +384,16 @@ pub enum EffectSubject {
     Chosen(TargetFilter),
 }
 
+/// An affine P/T bonus applied by [`SpellEffectKind::PumpTarget`]: resolve `amount` once, multiply
+/// it by the signed per-unit deltas, then add those results to the effect's fixed P/T bonus.
+/// Growth Cycle and Lavakin Brawler are the first spell and triggered-ability users.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PtScale {
+    pub amount: Amount,
+    pub power_per_unit: i32,
+    pub toughness_per_unit: i32,
+}
+
 /// The two distinct CR face-change actions. Transform toggles an eligible double-faced
 /// permanent; flip changes an unflipped Kamigawa flip permanent to its flipped status once.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -417,6 +477,8 @@ pub enum SpellEffectKind {
     PumpTarget {
         power: i32,
         toughness: i32,
+        #[serde(default)]
+        scale: Option<PtScale>,
         #[serde(default)]
         subject: EffectSubject,
     },
@@ -603,7 +665,7 @@ pub enum SpellEffectKind {
     CreateTokens {
         /// Token id (slug of the token's name) in the registry's token namespace.
         token: String,
-        count: u32,
+        count: Amount,
         #[serde(default)]
         controller: TokenController,
     },
@@ -865,7 +927,11 @@ impl SpellEffectKind {
             SpellEffectKind::DamageTarget { amount, .. }
             | SpellEffectKind::DamagePlayer { amount, .. }
             | SpellEffectKind::Draw { count: amount }
-            | SpellEffectKind::GainLife { amount } => amount.validate()?,
+            | SpellEffectKind::GainLife { amount }
+            | SpellEffectKind::CreateTokens { count: amount, .. } => amount.validate()?,
+            SpellEffectKind::PumpTarget {
+                scale: Some(scale), ..
+            } => scale.amount.validate()?,
             SpellEffectKind::DamageTargets { amount, .. } => {
                 amount.validate()?;
                 if amount.requires_game_state() {

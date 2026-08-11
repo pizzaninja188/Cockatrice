@@ -5,8 +5,9 @@ pub(super) fn pump_target(
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
     let SpellEffectKind::PumpTarget {
-        power,
-        toughness,
+        mut power,
+        mut toughness,
+        scale,
         subject,
     } = effect
     else {
@@ -17,6 +18,16 @@ pub(super) fn pump_target(
     let targets = cx.targets;
     let top = cx.top;
     let spell_label = cx.spell_label;
+
+    if let Some(scale) = scale {
+        let units = engine.resolve_amount(
+            &scale.amount,
+            AmountContext::for_stack_item(top, cx.controller),
+        );
+        let units = i32::try_from(units).unwrap_or(i32::MAX);
+        power = power.saturating_add(scale.power_per_unit.saturating_mul(units));
+        toughness = toughness.saturating_add(scale.toughness_per_unit.saturating_mul(units));
+    }
 
     let tid = match subject {
         EffectSubject::Source => top

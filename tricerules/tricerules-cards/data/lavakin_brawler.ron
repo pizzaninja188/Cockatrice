@@ -1,0 +1,30 @@
+// Oracle/rulings checked 2026-08-10. Count Elementals as the trigger resolves and lock the
+// resulting layer-7c bonus for the rest of the turn (CR 608.2h, 611.2d, 613.4c).
+(
+  id: "lavakin_brawler",
+  name: "Lavakin Brawler",
+  mana_cost: "{3}{R}",
+  types: ["Creature", "Elemental", "Warrior"],
+  power: 2,
+  toughness: 4,
+  triggered_abilities: [
+    (
+      trigger: WheneverSelfAttacks,
+      effect: [
+        PumpTarget(
+          power: 0,
+          toughness: 0,
+          scale: Some((
+            amount: Count(BattlefieldCreatures(
+              filter: (controllers: Controller, subtype: "Elemental"),
+            )),
+            power_per_unit: 1,
+            toughness_per_unit: 0,
+          )),
+          subject: Source,
+        ),
+      ],
+      text: "Whenever this creature attacks, it gets +1/+0 until end of turn for each Elemental you control.",
+    ),
+  ],
+)

@@ -37,16 +37,42 @@ mod tests {
 
         for amount in [
             Amount::Count(CountExpression::BattlefieldCreatures {
-                filter: AnthemFilter {
-                    controller: Some(AnthemController::YouControl),
-                    ..AnthemFilter::default()
+                filter: BattlefieldCreatureCountFilter {
+                    controllers: RelativePlayerSet::Controller,
+                    subtype: None,
+                    required_keywords: vec![],
+                    exclude_source: false,
                 },
+            }),
+            Amount::Count(CountExpression::GraveyardCardsNamed {
+                owners: RelativePlayerSet::Controller,
+                name: "Growth Cycle".into(),
             }),
             Amount::Count(CountExpression::CreatureDeathsThisTurn),
         ] {
             let encoded = ron::to_string(&amount).unwrap();
             assert_eq!(ron::from_str::<Amount>(&encoded).unwrap(), amount);
         }
+    }
+
+    #[test]
+    fn counted_amounts_reject_empty_authored_filters() {
+        assert!(Amount::Count(CountExpression::BattlefieldCreatures {
+            filter: BattlefieldCreatureCountFilter {
+                controllers: RelativePlayerSet::Controller,
+                subtype: Some(" ".into()),
+                required_keywords: vec![],
+                exclude_source: false,
+            },
+        })
+        .validate()
+        .is_err());
+        assert!(Amount::Count(CountExpression::GraveyardCardsNamed {
+            owners: RelativePlayerSet::Controller,
+            name: String::new(),
+        })
+        .validate()
+        .is_err());
     }
 
     #[test]
@@ -199,6 +225,7 @@ mod tests {
         let pump_self = SpellEffectKind::PumpTarget {
             power: 1,
             toughness: 1,
+            scale: None,
             subject: EffectSubject::Source,
         };
         assert!(pump_self.validate(EffectContext::Spell).is_err());

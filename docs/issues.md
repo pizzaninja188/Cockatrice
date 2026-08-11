@@ -137,10 +137,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Add a reusable way for resolution effects to enumerate and affect attachments of a specified kind on a chosen permanent. Calibration evidence: Turn to Slag. Revalidate the target and attachment set independently, preserve deterministic ordering for simultaneous zone moves, and satisfy the two-card-or-mechanic reuse gate before adding a new effect primitive.
   - Priority: Low
 
-- [ ] #84 [feature] Dynamic amounts from counted game objects
-  - Details: Extend the shipped battlefield-creature count with filters for flying, subtype, and same name, then reuse counted amounts across damage and power/toughness effects. Calibration evidence: Aerial Assault, Growth Cycle, Lavakin Brawler, and Undead Servant. Dwarven Priest's controlled-creature life count shipped with Issue #51. Define the zone, controller/owner relation, and evaluation time explicitly for each added filter.
-  - Priority: Low
-
 - [ ] #85 [feature] Creature-deals-damage-equal-to-power effects
   - Details: Add a reusable effect in which a selected creature deals damage equal to its current power to another selected creature, with independently filtered distinct targets from Issue #73. Calibration evidence: Hunter's Edge and Rabid Bite. Determine power and source characteristics at resolution, handle a missing source or target legally, and attribute damage to the creature for downstream triggers and prevention.
   - Priority: Low

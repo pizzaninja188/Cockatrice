@@ -17,6 +17,7 @@ pub(super) fn create_tokens(
     let events = &mut *cx.events;
     let controller = cx.controller;
     let spell_label = cx.spell_label;
+    let count = engine.resolve_amount(&count, AmountContext::for_stack_item(&item, controller));
 
     if engine.create_tokens(
         TokenCreationRequest {

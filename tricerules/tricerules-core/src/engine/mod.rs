@@ -43,6 +43,10 @@ const MAX_AUTOMATIC_PRIORITY_PASSES: usize = 128;
 struct AmountContext {
     controller: PlayerId,
     source_object_id: ObjectId,
+    /// The instant/sorcery object logically still resolving on the stack. The engine seats spell
+    /// cards in their destination before dispatching effects, so graveyard counts must exclude
+    /// this object until CR 608.2n's final move would occur.
+    resolving_spell_id: Option<ObjectId>,
     chosen_x: u32,
 }
 
@@ -51,6 +55,7 @@ impl AmountContext {
         Self {
             controller,
             source_object_id: item.source_permanent_id.unwrap_or(item.id),
+            resolving_spell_id: item.ability_text.is_none().then_some(item.id),
             chosen_x: item.chosen_x,
         }
     }

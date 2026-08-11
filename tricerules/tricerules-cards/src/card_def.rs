@@ -409,6 +409,17 @@ impl CardDefinition {
         }
     }
 
+    /// Whether this physical card has `name` in a zone other than the battlefield or stack.
+    /// Split cards have both half names there (CR 709.4); flip, double-faced, and adventurer cards
+    /// use only their normal/front face (CR 710.2, 712.8a, 715.4).
+    pub fn has_name_outside_stack(&self, name: &str) -> bool {
+        if self.layout == Layout::Split {
+            self.faces_iter().any(|face| face.name == name)
+        } else {
+            self.primary_face().name == name
+        }
+    }
+
     /// Whether `face_index` is a face the player may choose while playing this card from hand.
     /// Split cards, modal DFCs, and Adventures expose both authored spell/land choices there;
     /// transforming DFCs and flip cards expose only their front/top face. This is a layout rule,
@@ -462,5 +473,24 @@ mod tests {
             assert!(!card.matches_card_type_outside_stack(CardTypeFilter::Instant));
             assert!(!card.matches_card_type_outside_stack(CardTypeFilter::InstantOrSorcery));
         }
+    }
+
+    #[test]
+    fn nonstack_card_names_follow_multiface_layout_rules() {
+        let mut left = face(&["Instant"]);
+        left.name = "Fire".into();
+        let mut right = face(&["Instant"]);
+        right.name = "Ice".into();
+        let split = definition(Layout::Split, vec![left, right]);
+        assert!(split.has_name_outside_stack("Fire"));
+        assert!(split.has_name_outside_stack("Ice"));
+
+        let mut front = face(&["Creature"]);
+        front.name = "Bonecrusher Giant".into();
+        let mut back = face(&["Instant"]);
+        back.name = "Stomp".into();
+        let adventure = definition(Layout::Adventure, vec![front, back]);
+        assert!(adventure.has_name_outside_stack("Bonecrusher Giant"));
+        assert!(!adventure.has_name_outside_stack("Stomp"));
     }
 }

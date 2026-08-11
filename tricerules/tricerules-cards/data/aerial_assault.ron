@@ -1,0 +1,15 @@
+// Oracle/rulings checked 2026-08-10. CR 608.2b-c, 608.2h; flying is CR 702.9.
+(
+  id: "aerial_assault",
+  name: "Aerial Assault",
+  mana_cost: "{2}{W}",
+  types: ["Sorcery"],
+  spell_effect: [
+    DestroyTarget(target: (kind: Creature, tapped: true)),
+    GainLife(
+      amount: Count(BattlefieldCreatures(
+        filter: (controllers: Controller, required_keywords: [Flying]),
+      )),
+    ),
+  ],
+)

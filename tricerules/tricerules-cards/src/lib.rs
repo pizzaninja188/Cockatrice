@@ -10,9 +10,10 @@ pub mod token_def;
 pub use card_def::{CardDefinition, CardFace, FaceRef, Layout, ModalSpellDef, SpellModeDef};
 pub use mana::{ColorPip, ManaCost, ManaSymbol};
 pub use primitives::{
-    AbilityCost, ActivatedAbilityDef, Amount, CastTriggerPlayer, Color, ContinuousEffectKind,
-    CountExpression, CounterKind, EffectContext, EffectDuration, Evasion, GameCondition, Keyword,
-    ManaAmount, PermanentTypeFilter, TokenController, TriggerCondition, TriggeredAbilityDef,
+    AbilityCost, ActivatedAbilityDef, Amount, BattlefieldCreatureCountFilter, CastTriggerPlayer,
+    Color, ContinuousEffectKind, CountExpression, CounterKind, EffectContext, EffectDuration,
+    Evasion, GameCondition, Keyword, ManaAmount, PermanentTypeFilter, PtScale, RelativePlayerSet,
+    TokenController, TriggerCondition, TriggeredAbilityDef,
 };
 pub use registry::CardRegistry;
 pub use slug::slugify;
