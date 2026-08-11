@@ -66,6 +66,48 @@ try {
     Assert-True ($normalFailureExitCode -eq 7) 'Normal runner entrypoint did not preserve failure exit code 7.'
     Assert-True ($normalFailureOutput -match 'FAIL \[normal failing fixture\] exit 7') 'Normal failure output omitted its concise summary.'
     Assert-True ($normalFailureOutput -match 'visible-failure') 'Normal failure output did not print the retained command log.'
+
+    $stderrSuccessFixture = Join-Path $tempRoot 'stderr-success-fixture.cmd'
+    Set-Content -LiteralPath $stderrSuccessFixture -Encoding Ascii -Value @(
+        '@echo retained-stdout'
+        '@echo retained-stderr 1>&2'
+        '@exit /b 0'
+    )
+    $stderrSuccessOutput = (& 'powershell.exe' `
+        -NoProfile `
+        -File $runner `
+        -Label 'stderr success fixture' `
+        -Executable $stderrSuccessFixture `
+        -WorkingDirectory $repo `
+        -LogDirectory $tempRoot 2>&1) -join "`n"
+    $stderrSuccessExitCode = $LASTEXITCODE
+    Assert-True ($stderrSuccessExitCode -eq 0) 'Normal runner entrypoint treated successful native stderr as a failure.'
+    Assert-True ($stderrSuccessOutput -match 'PASS \[stderr success fixture\] exit 0') 'Successful native stderr output omitted its concise summary.'
+    Assert-True ($stderrSuccessOutput -match 'log: (?<LogPath>[^\r\n]+)') 'Successful native stderr output omitted its log path.'
+    $stderrSuccessLogPath = $Matches.LogPath
+    $stderrSuccessLog = Get-Content -LiteralPath $stderrSuccessLogPath -Raw
+    Assert-True ($stderrSuccessLog -match 'retained-stdout') 'Successful native stdout was not retained in the log.'
+    Assert-True ($stderrSuccessLog -match 'retained-stderr') 'Successful native stderr was not retained in the log.'
+
+    $extendedPathFixture = Join-Path $tempRoot 'extended-path-fixture.cmd'
+    Set-Content -LiteralPath $extendedPathFixture -Encoding Ascii -Value @(
+        '@echo extended-working-directory=%CD%'
+        '@exit /b 0'
+    )
+    $extendedWorkingDirectory = "\\?\$tempRoot"
+    $extendedPathOutput = (& 'powershell.exe' `
+        -NoProfile `
+        -File $runner `
+        -Label 'extended path fixture' `
+        -Executable $extendedPathFixture `
+        -WorkingDirectory $extendedWorkingDirectory `
+        -LogDirectory $tempRoot 2>&1) -join "`n"
+    $extendedPathExitCode = $LASTEXITCODE
+    Assert-True ($extendedPathExitCode -eq 0) 'Normal runner entrypoint failed from an extended-length drive working directory.'
+    Assert-True ($extendedPathOutput -match 'PASS \[extended path fixture\] exit 0') 'Extended-path success output omitted its concise summary.'
+    Assert-True ($extendedPathOutput -match 'log: (?<LogPath>[^\r\n]+)') 'Extended-path success output omitted its log path.'
+    $extendedPathLog = Get-Content -LiteralPath $Matches.LogPath -Raw
+    Assert-True ($extendedPathLog -match [regex]::Escape("extended-working-directory=$tempRoot")) 'Extended-length drive path was not normalized to the requested native working directory.'
 }
 finally {
     $resolvedTemp = [System.IO.Path]::GetFullPath($tempRoot)

@@ -24,13 +24,34 @@ param(
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 
+function ConvertTo-NativePath {
+    param(
+        [Parameter(Mandatory)]
+        [string] $Path
+    )
+
+    $providerPrefix = 'Microsoft.PowerShell.Core\FileSystem::'
+    if ($Path.StartsWith($providerPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $Path = $Path.Substring($providerPrefix.Length)
+    }
+
+    if ($Path.StartsWith('\\?\UNC\', [System.StringComparison]::OrdinalIgnoreCase)) {
+        return '\\' + $Path.Substring(8)
+    }
+    if ($Path -match '^\\\\\?\\[A-Za-z]:\\') {
+        return $Path.Substring(4)
+    }
+
+    return $Path
+}
+
 if (-not $WorkingDirectory) {
     $WorkingDirectory = $repo
 }
 elseif (-not [System.IO.Path]::IsPathRooted($WorkingDirectory)) {
     $WorkingDirectory = Join-Path $repo $WorkingDirectory
 }
-$resolvedWorkingDirectory = (Resolve-Path -LiteralPath $WorkingDirectory -ErrorAction Stop).Path
+$resolvedWorkingDirectory = ConvertTo-NativePath (Resolve-Path -LiteralPath $WorkingDirectory -ErrorAction Stop).Path
 
 if (-not $LogDirectory) {
     $LogDirectory = Join-Path $repo 'build\verification-logs'
@@ -39,7 +60,7 @@ elseif (-not [System.IO.Path]::IsPathRooted($LogDirectory)) {
     $LogDirectory = Join-Path $repo $LogDirectory
 }
 New-Item -ItemType Directory -Path $LogDirectory -Force | Out-Null
-$resolvedLogDirectory = (Resolve-Path -LiteralPath $LogDirectory -ErrorAction Stop).Path
+$resolvedLogDirectory = ConvertTo-NativePath (Resolve-Path -LiteralPath $LogDirectory -ErrorAction Stop).Path
 
 $safeLabel = ($Label -replace '[^A-Za-z0-9._-]+', '-').Trim('-')
 if (-not $safeLabel) {
@@ -52,13 +73,21 @@ $exitCode = 1
 Push-Location $resolvedWorkingDirectory
 try {
     try {
-        & $Executable @ArgumentList *> $logPath
-        if ($null -eq $LASTEXITCODE) {
-            $exitCode = 0
+        $nativeExitCode = $null
+        try {
+            $ErrorActionPreference = 'Continue'
+            $global:LASTEXITCODE = $null
+            & $Executable @ArgumentList *> $logPath
+            $nativeExitCode = $LASTEXITCODE
         }
-        else {
-            $exitCode = $LASTEXITCODE
+        finally {
+            $ErrorActionPreference = 'Stop'
         }
+
+        if ($null -eq $nativeExitCode) {
+            throw "External command did not report an exit code: $Executable"
+        }
+        $exitCode = $nativeExitCode
     }
     catch {
         $_ | Out-String | Set-Content -LiteralPath $logPath
