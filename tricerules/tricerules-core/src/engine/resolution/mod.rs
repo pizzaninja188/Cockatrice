@@ -516,6 +516,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::TapTarget { .. } => {
                         misc::tap_target(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::SkipNextUntap { .. } => {
+                        misc::skip_next_untap(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::Untap { .. } => misc::untap(&mut cx, effect)?,
                     effect @ SpellEffectKind::GainControlUntilEndOfTurn { .. } => {
                         misc::gain_control_until_end_of_turn(&mut cx, effect)?
@@ -918,6 +921,9 @@ pub(crate) fn move_object_to_zone(
     // One-shot `UntilEndOfTurn` effects (Giant Growth, firebreathing) are deliberately NOT drained
     // here: once created they are independent of their source (CR 611.2g) and only end at cleanup.
     if leaving_battlefield {
+        state
+            .skip_next_untap
+            .retain(|&(object_id, _)| object_id != oid);
         state.continuous_effects.retain(|e| {
             let single_on_this = matches!(&e.affected, AffectedScope::Single(id) if *id == oid);
             let static_from_this =

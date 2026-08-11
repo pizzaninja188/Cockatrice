@@ -567,6 +567,7 @@ impl GameEngine {
             pending_resolution: None,
             pending_replacement_event: None,
             continuous_effects: Vec::new(),
+            skip_next_untap: HashSet::new(),
             damage_prevention_effects: Vec::new(),
             damage_prevention_prohibitions: Vec::new(),
             next_damage_prevention_effect_id: 1,

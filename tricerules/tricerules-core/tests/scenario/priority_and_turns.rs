@@ -139,6 +139,65 @@ fn canonical_turn_roll_publishes_untap_and_draw_after_coalescing() {
 }
 
 #[test]
+fn skip_next_untap_keeps_the_authoritative_zone_view_tapped_without_an_untap_edge() {
+    let mut e = GameEngine::new(9310, &[0, 1], 20, all_land_decks(), true).expect("new");
+    let forest_oid = inject_permanent_on_battlefield(&mut e, 1, "forest");
+    e.state.objects.get_mut(&forest_oid).expect("forest").tapped = true;
+    let generation = e
+        .state
+        .zone_change_generation
+        .get(&forest_oid)
+        .copied()
+        .unwrap_or(0);
+    e.state.skip_next_untap.insert((forest_oid, generation));
+    e.state.turn_step = tricerules_core::TurnStep::EndStep;
+    e.state.active_player_idx = 0;
+    e.state.priority_idx = 0;
+    e.state.passes_since_stack_change = 0;
+    let _ = e.initial_response_batch();
+
+    let batch = e
+        .apply_command(
+            0,
+            &canonical_with_policies(
+                pass(),
+                vec![
+                    auto_pass_everywhere(0),
+                    AutoPassPolicy {
+                        player_id: 1,
+                        stop_on_own_turn: vec![PhaseId::Draw as i32],
+                        stop_on_opponent_turn: vec![],
+                    },
+                ],
+            ),
+        )
+        .expect("canonical turn roll");
+
+    assert!(e.state.objects[&forest_oid].tapped);
+    assert!(batch.events.iter().all(|event| !matches!(
+        event.ev.as_ref(),
+        Some(Ev::PermanentsUntapped(untapped)) if untapped.object_ids.contains(&forest_oid)
+    )));
+    let view = batch
+        .events
+        .iter()
+        .find_map(|event| match event.ev.as_ref() {
+            Some(Ev::ZoneView(view)) if !view.battlefields_unchanged => Some(view),
+            _ => None,
+        })
+        .expect("untap-step zone view");
+    let player_view = view
+        .per_player
+        .iter()
+        .find(|player| player.player_id == 1)
+        .expect("active player view");
+    assert!(player_view
+        .battlefield_objects
+        .iter()
+        .any(|object| object.object_id == forest_oid && object.tapped));
+}
+
+#[test]
 fn canonical_settlement_stops_at_configured_phase() {
     let mut e = GameEngine::new(9902, &[0, 1], 20, all_land_decks(), true).expect("new");
     let batch = e

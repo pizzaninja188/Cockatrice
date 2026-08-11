@@ -65,6 +65,8 @@ mod priority_and_turns;
 mod regenerate;
 #[path = "scenario/scry.rs"]
 mod scry;
+#[path = "scenario/skip_next_untap.rs"]
+mod skip_next_untap;
 #[path = "scenario/source_excluding_targets.rs"]
 mod source_excluding_targets;
 #[path = "scenario/spell_effects.rs"]

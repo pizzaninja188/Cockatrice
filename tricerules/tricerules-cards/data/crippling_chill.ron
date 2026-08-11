@@ -1,0 +1,11 @@
+(
+  id: "crippling_chill",
+  name: "Crippling Chill",
+  mana_cost: "{2}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    TapTarget(target: (kind: Creature)),
+    SkipNextUntap(target: (kind: Creature)),
+    Draw(count: 1),
+  ],
+)

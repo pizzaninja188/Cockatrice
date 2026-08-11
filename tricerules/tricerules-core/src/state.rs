@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use tricerules_cards::primitives::{
     Color, ContinuousEffectKind, CounterKind, DamagePreventionAdditionalEffect, EffectDuration,
     Keyword, ManaAmount, RelativePlayerSet, SearchDestination,
@@ -775,6 +775,11 @@ pub struct GameState {
     /// recomputed from base + this list on demand — `GameObject.power/toughness` always hold the
     /// printed base value and are never mutated by effects.
     pub continuous_effects: Vec<ContinuousEffect>,
+    /// CR 502.3 / 611.2a rules-changing effects that suppress one permanent's next controller
+    /// untap. The generation is part of identity because relay-compatible ObjectIds survive zone
+    /// changes (CR 400.7). A set intentionally coalesces repeated applications: every identical
+    /// "next untap step" restriction expires during the same applicable step.
+    pub skip_next_untap: HashSet<(ObjectId, u64)>,
     /// Active CR 615 prevention effects. Healing Salve and Fog are both represented here so every
     /// producer enters one event pipeline and finite effects have stable opaque identities.
     pub damage_prevention_effects: Vec<ActiveDamagePrevention>,

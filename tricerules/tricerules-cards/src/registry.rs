@@ -563,6 +563,23 @@ mod tests {
                 },
             }]
         );
+        assert_eq!(
+            reg.get("crippling_chill")
+                .unwrap()
+                .primary_face()
+                .spell_effect,
+            vec![
+                SpellEffectKind::TapTarget {
+                    target: TargetFilter::default_creature(),
+                },
+                SpellEffectKind::SkipNextUntap {
+                    target: TargetFilter::default_creature(),
+                },
+                SpellEffectKind::Draw {
+                    count: Amount::Fixed(1),
+                },
+            ]
+        );
     }
 
     #[test]
@@ -586,7 +603,7 @@ mod tests {
     /// either is invalid card data and must not survive registry load.
     #[test]
     fn load_rejects_tap_or_untap_aimed_at_a_player() {
-        for effect in ["TapTarget", "Untap"] {
+        for effect in ["TapTarget", "Untap", "SkipNextUntap"] {
             let bad = format!(
                 r#"(
             id: "bad_{}",
@@ -598,7 +615,7 @@ mod tests {
                 effect.to_lowercase(),
                 effect,
                 effect,
-                if effect == "TapTarget" {
+                if matches!(effect, "TapTarget" | "SkipNextUntap") {
                     "target: (kind: AnyPlayer)"
                 } else {
                     "subject: Chosen((kind: AnyPlayer))"

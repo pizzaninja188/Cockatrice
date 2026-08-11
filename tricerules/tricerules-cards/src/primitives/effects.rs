@@ -486,6 +486,13 @@ pub enum SpellEffectKind {
     TapTarget {
         target: TargetFilter,
     },
+    /// CR 502.3 / 611.2a: the chosen permanent does not untap during its controller's next
+    /// untap step. The restriction follows the permanent's current controller, is consumed by
+    /// that untap step even if the permanent is already untapped, and does not survive a zone
+    /// change. Crippling Chill and Frost Breath share this primitive.
+    SkipNextUntap {
+        target: TargetFilter,
+    },
     /// Tap every creature controlled by the selected relative player set. This is untargeted and
     /// snapshots the battlefield as it resolves. Covers Cryptic Command and Tempest Caller.
     TapAllCreatures {
@@ -859,6 +866,7 @@ impl SpellEffectKind {
             | SpellEffectKind::DamageTargets { target, .. }
             | SpellEffectKind::DestroyTarget { target }
             | SpellEffectKind::TapTarget { target }
+            | SpellEffectKind::SkipNextUntap { target }
             | SpellEffectKind::GainControlUntilEndOfTurn { target }
             | SpellEffectKind::TargetPlayerGainsLife { target, .. }
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
@@ -999,6 +1007,7 @@ impl SpellEffectKind {
             // CR 701.19/701.20: tapping and chosen-subject untapping act on permanents, never
             // players. A source subject is already constrained to a permanent ability above.
             SpellEffectKind::TapTarget { target }
+            | SpellEffectKind::SkipNextUntap { target }
             | SpellEffectKind::GainControlUntilEndOfTurn { target }
             | SpellEffectKind::Untap {
                 subject: EffectSubject::Chosen(target),

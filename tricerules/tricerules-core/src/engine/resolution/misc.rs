@@ -121,6 +121,42 @@ pub(super) fn tap_target(
     set_target_tapped(cx, true)
 }
 
+/// CR 502.3 / 611.2a: keep the targeted permanent from untapping during its controller's next
+/// untap step. This is rules state rather than tap state: applying it to an already-tapped or
+/// already-untapped permanent is meaningful, and the untap-step handler consumes it either way.
+pub(super) fn skip_next_untap(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::SkipNextUntap { .. } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    if let Some(tid) = cx.targets.first().copied() {
+        let on_battlefield = cx
+            .engine
+            .state
+            .objects
+            .get(&tid)
+            .is_some_and(|object| object.zone == Zone::Battlefield);
+        if on_battlefield {
+            let generation = cx
+                .engine
+                .state
+                .zone_change_generation
+                .get(&tid)
+                .copied()
+                .unwrap_or(0);
+            cx.engine.state.skip_next_untap.insert((tid, generation));
+            let subject_name = object_display_name(&cx.engine.state, cx.engine.registry, tid);
+            cx.events.push(ev_log(format!(
+                "{} keeps {subject_name} from untapping during its controller's next untap step",
+                cx.spell_label
+            )));
+        }
+    }
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn untap(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

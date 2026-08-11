@@ -82,7 +82,7 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Priority: Low
 
 - [ ] #73 [feature] Multiple distinct and optional targets
-  - Details: Generalize target schemas beyond one homogeneous required target to support independently filtered slots, distinctness constraints, and "up to N" cardinality. Calibration evidence: Soul Salvage, optional targets on Frost Breath and Ghostform, and Hunter's Edge's secondary `multiple_distinct_targets` gap. Legal actions must enumerate or validate complete assignments without Cartesian explosion, and stale, duplicate, missing, or overfilled submissions must be rejected before costs are paid.
+  - Details: Generalize target schemas beyond one homogeneous required target to support independently filtered slots, distinctness constraints, and "up to N" cardinality. Calibration evidence: Soul Salvage, optional targets on Frost Breath and Ghostform, and Hunter's Edge's secondary `multiple_distinct_targets` gap. Issue #93 shipped Frost Breath's next-untap suppression; this issue retains only its up-to-two optional target selection and card definition. Legal actions must enumerate or validate complete assignments without Cartesian explosion, and stale, duplicate, missing, or overfilled submissions must be rejected before costs are paid.
   - Priority: Low
 
 - [ ] #76 [feature] Attacking-creature scopes for one-shot and static effects
@@ -143,10 +143,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
 
 - [ ] #92 [feature] Look, choose a matching card, and bottom the rest
   - Details: Add a resumable library-selection algorithm that looks at the top N cards, optionally chooses one matching a filter for hand, and puts the rest on the bottom in the rules-required order. Calibration evidence: Brightwood Tracker. Preserve hidden information, deterministic ordering, exact choice validation, and satisfy the custom-effect review plus two-card-or-mechanic reuse gates before choosing a primitive or tier-3 implementation.
-  - Priority: Low
-
-- [ ] #93 [feature] Skip the next untap of an affected permanent
-  - Details: Add a consumable marker or delayed replacement that causes a permanent not to untap during its controller's next untap step, then expires whether or not that step untaps other objects. Calibration evidence: Frost Breath. Cover controller changes, already-untapped permanents, multiple applications, and skipped untap steps; satisfy the two-card-or-mechanic reuse gate before committing the representation.
   - Priority: Low
 
 - [ ] #94 [feature] Player-attached Auras and Curses

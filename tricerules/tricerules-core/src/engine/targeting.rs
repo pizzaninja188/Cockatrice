@@ -492,6 +492,7 @@ fn effect_target_legal_at_resolution(
         | SpellEffectKind::DiscardCards { target, .. }
         | SpellEffectKind::TargetPlayerSacrifices { target, .. }
         | SpellEffectKind::TapTarget { target }
+        | SpellEffectKind::SkipNextUntap { target }
         | SpellEffectKind::GainControlUntilEndOfTurn { target }
         | SpellEffectKind::PreventNextDamage { target, .. } => {
             target_filter_legal(engine, target, tid, caster, source)
@@ -586,6 +587,7 @@ pub(super) fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
         | SpellEffectKind::MillTargetPlayer { .. }
         | SpellEffectKind::DiscardCards { .. }
         | SpellEffectKind::TapTarget { .. }
+        | SpellEffectKind::SkipNextUntap { .. }
         | SpellEffectKind::GainControlUntilEndOfTurn { .. }
         | SpellEffectKind::CounterTargetSpell { .. }
         | SpellEffectKind::CopyTargetSpell { .. }
@@ -618,6 +620,7 @@ pub(super) fn validate_effect_targets(
             }
         }
         SpellEffectKind::TapTarget { target: filter }
+        | SpellEffectKind::SkipNextUntap { target: filter }
         | SpellEffectKind::GainControlUntilEndOfTurn { target: filter }
         | SpellEffectKind::Untap {
             subject: EffectSubject::Chosen(filter),
@@ -906,6 +909,7 @@ pub(super) fn spell_target_legality_error(
         | SpellEffectKind::DamageTarget { target: filter, .. }
         | SpellEffectKind::DamageTargets { target: filter, .. }
         | SpellEffectKind::TapTarget { target: filter }
+        | SpellEffectKind::SkipNextUntap { target: filter }
         | SpellEffectKind::GainControlUntilEndOfTurn { target: filter }
         | SpellEffectKind::Untap {
             subject: EffectSubject::Chosen(filter),
