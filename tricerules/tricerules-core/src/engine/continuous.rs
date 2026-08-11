@@ -3,7 +3,7 @@
 //! Rules-visible characteristic evaluation lives in `characteristics`; the CR 704 fixed-point
 //! loop lives in `state_based`. This module owns creation and expiry of active effects.
 
-use super::resolution::resolve_anthem_scope;
+use super::resolution::resolve_creature_scope;
 use super::*;
 
 impl GameEngine {
@@ -42,7 +42,7 @@ impl GameEngine {
             return;
         };
         // CR 604.2 / 611.2: a static ability's continuous effect is created by the permanent's
-        // controller, and `AnthemController::YouControl` scopes off this value. Reading the owner
+        // controller, and `CreatureScopeController::YouControl` scopes off this value. Reading the owner
         // here would make a reanimated Glorious Anthem pump its *former* controller's creatures.
         let controller = object.controller;
         let card_id = object.card_id.clone();
@@ -111,7 +111,7 @@ impl GameEngine {
                 } => {
                     self.state.continuous_effects.push(ContinuousEffect {
                         source_id: Some(object_id),
-                        affected: resolve_anthem_scope(&filter, controller, object_id),
+                        affected: resolve_creature_scope(&filter, controller, object_id),
                         kind: ContinuousEffectKind::PtModify {
                             delta_power,
                             delta_toughness,
@@ -176,7 +176,7 @@ impl GameEngine {
                 StaticAbilityDef::AnthemKeyword { filter, keyword } => {
                     self.state.continuous_effects.push(ContinuousEffect {
                         source_id: Some(object_id),
-                        affected: resolve_anthem_scope(&filter, controller, object_id),
+                        affected: resolve_creature_scope(&filter, controller, object_id),
                         kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
                         duration: EffectDuration::WhileSourceOnBattlefield,
                         timestamp,

@@ -1,6 +1,6 @@
 use tricerules_cards::primitives::{
-    AnthemController, AnthemFilter, CardTypeFilter, EffectSubject, LifeAmount, PlayerRecipient,
-    SpellEffectKind, TargetController, TargetFilter, TargetKind,
+    CardTypeFilter, CreatureScopeController, CreatureScopeFilter, EffectSubject, LifeAmount,
+    PlayerRecipient, SpellEffectKind, TargetController, TargetFilter, TargetKind,
 };
 use tricerules_cards::{
     AbilityCost, Amount, CardRegistry, CastTriggerPlayer, CounterKind, Keyword, ManaAmount,
@@ -400,9 +400,9 @@ fn issue_49_untargeted_etbs_compose_existing_effects() {
     assert_eq!(
         trigger("inspiring_captain").effect,
         [SpellEffectKind::PumpAll {
-            filter: AnthemFilter {
-                controller: Some(AnthemController::YouControl),
-                ..AnthemFilter::default()
+            filter: CreatureScopeFilter {
+                controller: Some(CreatureScopeController::YouControl),
+                ..CreatureScopeFilter::default()
             },
             power: 1,
             toughness: 1,

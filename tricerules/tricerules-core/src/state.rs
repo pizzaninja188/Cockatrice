@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use tricerules_cards::primitives::{
-    Color, ContinuousEffectKind, CounterKind, DamagePreventionAdditionalEffect, EffectDuration,
-    Keyword, ManaAmount, RelativePlayerSet, SearchDestination,
+    ContinuousEffectKind, CounterKind, CreatureScopeFilter, DamagePreventionAdditionalEffect,
+    EffectDuration, Keyword, ManaAmount, SearchDestination,
 };
 use tricerules_cards::CardFace;
 use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
@@ -590,22 +590,18 @@ pub fn next_unresolved_from(resolved: &[bool], start_idx: usize) -> Option<usize
 pub enum AffectedScope {
     Single(ObjectId),
     AllCreatures,
-    /// Creatures matching an anthem/lord filter (CR 613) — resolved from an [`AnthemFilter`] when
-    /// the source's static ability or one-shot pump fires. Evaluated dynamically each P/T query so
-    /// creatures entering *after* the effect are still affected. `players` relates each creature's
-    /// controller to `reference_player`; source-bound static effects replace that stored reference
-    /// with the source's current controller when characteristics are evaluated. `subtype`/`color`
-    /// narrow by characteristics (Lord of Atlantis = Merfolk, Bad Moon = Black), while `attacking`
-    /// consults authoritative combat membership. `exclude` is the source for "other ... creatures"
-    /// lords. Membership needs engine state and card characteristics, so it is evaluated in the
-    /// engine (which holds the registry), not in [`ContinuousEffect::affects`].
+    /// Creatures matching a creature-scope filter (CR 613) — resolved from a
+    /// [`CreatureScopeFilter`] when
+    /// the source's static ability fires. Evaluated dynamically each characteristics query so
+    /// creatures entering or gaining counters after the effect starts can become affected.
+    /// `filter.controller` relates each creature to `reference_player`; source-bound static effects
+    /// replace that reference with the source's current controller. The remaining predicates use
+    /// derived characteristics, effective copiable names, current counters, and authoritative
+    /// combat membership. `exclude` is the physical source for "other ... creatures" abilities.
     CreaturesMatching {
-        players: RelativePlayerSet,
         reference_player: PlayerId,
-        subtype: Option<String>,
-        color: Option<Color>,
+        filter: CreatureScopeFilter,
         exclude: Option<ObjectId>,
-        attacking: bool,
     },
     /// The permanent currently attached to the Aura or Equipment with `source_oid`. Resolved
     /// dynamically from the source object's `attached_to`, so re-equipping moves every modifier

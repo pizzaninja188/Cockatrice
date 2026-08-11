@@ -808,28 +808,21 @@ pub(crate) fn permanent_moved_event(
     }
 }
 
-/// Resolve an [`AnthemFilter`] into a dynamic [`AffectedScope`] for a static continuous effect,
+/// Resolve a [`CreatureScopeFilter`] into a dynamic [`AffectedScope`] for a static continuous effect,
 /// given the effect's `controller` and the source permanent `source`.
-pub(super) fn resolve_anthem_scope(
-    filter: &AnthemFilter,
+pub(super) fn resolve_creature_scope(
+    filter: &CreatureScopeFilter,
     controller: PlayerId,
     source: ObjectId,
 ) -> AffectedScope {
     AffectedScope::CreaturesMatching {
-        players: match filter.controller {
-            None => RelativePlayerSet::All,
-            Some(AnthemController::YouControl) => RelativePlayerSet::Controller,
-            Some(AnthemController::Opponents) => RelativePlayerSet::Opponents,
-        },
         reference_player: controller,
-        subtype: filter.subtype.clone(),
-        color: filter.color,
+        filter: filter.clone(),
         exclude: if filter.exclude_self {
             Some(source)
         } else {
             None
         },
-        attacking: filter.attacking,
     }
 }
 
@@ -838,9 +831,9 @@ pub(super) fn resolve_anthem_scope(
 /// Unlike a static anthem, a resolving spell or triggered ability fixes its affected objects when
 /// it resolves. Glorious Charge and Inspiring Captain both use this path; a creature entering
 /// later in the turn must not inherit their pump.
-pub(super) fn snapshot_anthem_scope(
+pub(super) fn snapshot_creature_scope(
     engine: &GameEngine,
-    filter: &AnthemFilter,
+    filter: &CreatureScopeFilter,
     controller: PlayerId,
     source: ObjectId,
 ) -> Vec<ObjectId> {
@@ -849,25 +842,17 @@ pub(super) fn snapshot_anthem_scope(
         .players
         .iter()
         .flat_map(|player| player.battlefield.iter().copied())
-        .filter(|oid| !filter.exclude_self || *oid != source)
-        .filter(|oid| !filter.attacking || super::combat::is_attacking(&engine.state, *oid))
         .filter_map(|oid| engine.characteristics(oid).map(|value| (oid, value)))
-        .filter(|(_, value)| {
-            value.is_creature()
-                && match filter.controller {
-                    None => true,
-                    Some(AnthemController::YouControl) => value.controller == controller,
-                    Some(AnthemController::Opponents) => {
-                        engine.state.are_opponents(value.controller, controller)
-                    }
-                }
-                && filter
-                    .subtype
-                    .as_ref()
-                    .is_none_or(|subtype| value.types.contains(subtype))
-                && filter
-                    .color
-                    .is_none_or(|color| value.colors.contains(&color))
+        .filter(|(oid, value)| {
+            super::characteristics::creature_matches_scope(
+                &engine.state,
+                engine.registry,
+                filter,
+                controller,
+                filter.exclude_self.then_some(source),
+                *oid,
+                value,
+            )
         })
         .map(|(oid, _)| oid)
         .collect()
@@ -1223,11 +1208,11 @@ mod anthem_scope_tests {
         let first_opponent = add_creature(&mut engine, 20);
         let second_opponent = add_creature(&mut engine, 30);
 
-        let affected = snapshot_anthem_scope(
+        let affected = snapshot_creature_scope(
             &engine,
-            &AnthemFilter {
-                controller: Some(AnthemController::Opponents),
-                ..AnthemFilter::default()
+            &CreatureScopeFilter {
+                controller: Some(CreatureScopeController::Opponents),
+                ..CreatureScopeFilter::default()
             },
             10,
             u32::MAX,

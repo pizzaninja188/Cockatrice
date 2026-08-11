@@ -87,7 +87,7 @@ pub(super) fn pump_all(
     // represent its layer-7c modification as one UntilEndOfTurn effect per affected object.
     // A creature entering later this turn was not affected and must not inherit the pump.
     let filter_source = top.source_permanent_id.unwrap_or(top.id);
-    let affected = snapshot_anthem_scope(engine, &filter, controller, filter_source);
+    let affected = snapshot_creature_scope(engine, &filter, controller, filter_source);
     for oid in affected {
         engine.state.continuous_effects.push(ContinuousEffect {
             source_id: Some(top.id),
@@ -123,7 +123,7 @@ pub(super) fn grant_keywords_all(
     // CR 611.2c / 613 layer 6: snapshot the filtered creature set as this one-shot effect
     // resolves. Creatures that enter or begin matching later do not acquire the keyword.
     let filter_source = top.source_permanent_id.unwrap_or(top.id);
-    let affected = snapshot_anthem_scope(engine, &filter, controller, filter_source);
+    let affected = snapshot_creature_scope(engine, &filter, controller, filter_source);
     let kw_names: Vec<&str> = keywords.iter().map(|k| k.as_str()).collect();
     for oid in affected {
         for kw in &keywords {

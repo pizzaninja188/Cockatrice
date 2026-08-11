@@ -228,6 +228,16 @@ impl CardRegistry {
                 }
                 let attachment_source = face.is_aura || face.types.iter().any(|t| t == "Equipment");
                 for ability in &face.static_abilities {
+                    if let StaticAbilityDef::AnthemPt { filter, .. }
+                    | StaticAbilityDef::AnthemKeyword { filter, .. } = ability
+                    {
+                        filter
+                            .validate()
+                            .map_err(|reason| RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason,
+                            })?;
+                    }
                     if let StaticAbilityDef::EntersAsCopy { filter } = ability {
                         filter
                             .validate_characteristic_constraints()

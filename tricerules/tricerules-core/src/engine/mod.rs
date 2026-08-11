@@ -18,9 +18,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use thiserror::Error;
 use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
-    AbilityCost, Amount, AnthemController, AnthemFilter, BattlefieldAggregate,
-    BattlefieldPermanentFilter, CardTypeFilter, CastTriggerPlayer, Color, ContinuousEffectKind,
-    ControllerReference, CountExpression, CounterKind, DamageDivision,
+    AbilityCost, Amount, BattlefieldAggregate, BattlefieldPermanentFilter, CardTypeFilter,
+    CastTriggerPlayer, Color, ContinuousEffectKind, ControllerReference, CountExpression,
+    CounterKind, CreatureScopeController, CreatureScopeFilter, DamageDivision,
     DamagePreventionAdditionalEffect, DamagePreventionSubject, EffectDuration, EffectSubject,
     EntersTappedAffected, Evasion, FaceChangeAction, GameCondition, InterveningIf, Keyword,
     LifeAmount, PermanentTypeFilter, PlayerRecipient, PreventionAmountBasis, RelativePlayerSet,

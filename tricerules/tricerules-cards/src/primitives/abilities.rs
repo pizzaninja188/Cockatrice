@@ -342,23 +342,24 @@ pub struct TriggeredAbilityDef {
 }
 
 // ---------------------------------------------------------------------------
-// Static abilities (CR 604) and anthem/lord scopes
+// Static abilities (CR 604) and shared creature scopes
 // ---------------------------------------------------------------------------
 
-/// Controller restriction for an [`AnthemFilter`]. `None` on the field means "every creature in
+/// Controller restriction for a [`CreatureScopeFilter`]. `None` on the field means "every creature in
 /// play" (Crusade, Bad Moon — symmetrical anthems); `Some(YouControl)` means only the source's
 /// controller's creatures (Glorious Anthem, Goblin King); `Some(Opponents)` means creatures
 /// controlled by an opponent of the source's controller (Uncomfortable Chill, Make Obsolete).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum AnthemController {
-    /// Only creatures controlled by the anthem source's controller ("creatures you control").
+pub enum CreatureScopeController {
+    /// Only creatures controlled by the effect's reference player ("creatures you control").
     YouControl,
     /// Only creatures controlled by opponents of the source's controller ("creatures your
     /// opponents control"). Untargeted and player-set-generic.
     Opponents,
 }
 
-/// Which creatures a static anthem or one-shot mass pump applies to (CR 613). AND-combined
+/// Which creatures a static ability or resolving one-shot effect applies to (CR 611/613).
+/// AND-combined
 /// optional constraints over the creatures in play, mirroring how [`TargetFilter`] narrows a
 /// chosen target. "Name two" per field: `controller` (Glorious Anthem, Goblin King) · `subtype`
 /// (Lord of Atlantis = Merfolk, Goblin Chieftain = Goblin) · `color` (Crusade = White, Bad Moon =
@@ -366,19 +367,28 @@ pub enum AnthemController {
 /// Warded Battlements). Reused by both [`StaticAbilityDef::AnthemPt`] and
 /// [`SpellEffectKind::PumpAll`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct AnthemFilter {
+pub struct CreatureScopeFilter {
     /// `None` = every creature in play; otherwise use the listed relationship to the source's
     /// controller.
     #[serde(default)]
-    pub controller: Option<AnthemController>,
+    pub controller: Option<CreatureScopeController>,
     /// If `Some`, only creatures whose type line contains this subtype (e.g. "Merfolk", "Goblin").
     #[serde(default)]
     pub subtype: Option<String>,
     /// If `Some`, only creatures of this color (Crusade = White, Bad Moon = Black).
     #[serde(default)]
     pub color: Option<Color>,
-    /// CR "other ... creatures": exclude the anthem's own source permanent (a lord that doesn't
-    /// pump itself). Ignored by [`SpellEffectKind::PumpAll`], which has no persistent source.
+    /// If `Some`, only creatures whose current layer-one copiable face has this name. Pack
+    /// Mastiff and Cylian Sunsinger use name-selected resolving effects; copied permanents match
+    /// the name they acquired rather than their physical card definition id.
+    #[serde(default)]
+    pub name: Option<String>,
+    /// If `Some`, only creatures with at least one counter of this kind. Pridemalkin, Abzan
+    /// Falconer, Ainok Bond-Kin, and Tuskguard Captain share this static-scope predicate.
+    #[serde(default)]
+    pub required_counter: Option<CounterKind>,
+    /// CR "other ... creatures": exclude the effect's physical source permanent when it is on
+    /// the battlefield. A resolving instant or sorcery source cannot itself match this filter.
     #[serde(default)]
     pub exclude_self: bool,
     /// If true, only creatures currently attacking in the authoritative combat assignment match.
@@ -386,6 +396,19 @@ pub struct AnthemFilter {
     /// it continuously.
     #[serde(default)]
     pub attacking: bool,
+}
+
+impl CreatureScopeFilter {
+    pub fn validate(&self) -> Result<(), String> {
+        if self
+            .name
+            .as_ref()
+            .is_some_and(|name| name.trim().is_empty())
+        {
+            return Err("creature scope name cannot be empty".into());
+        }
+        Ok(())
+    }
 }
 
 /// Which creature(s) a static damage-prevention ability protects. `Source` covers Anti-Venom;
@@ -468,7 +491,7 @@ pub enum StaticAbilityDef {
     /// (negative values for a debuff anthem). Anthems (Glorious Anthem) and lords (Crusade, Bad Moon).
     AnthemPt {
         #[serde(default)]
-        filter: AnthemFilter,
+        filter: CreatureScopeFilter,
         delta_power: i32,
         delta_toughness: i32,
     },
@@ -496,7 +519,7 @@ pub enum StaticAbilityDef {
     /// enchantments. Pairs with `AnthemPt` on the same card for combined "+1/+1 and haste" effects.
     AnthemKeyword {
         #[serde(default)]
-        filter: AnthemFilter,
+        filter: CreatureScopeFilter,
         keyword: Keyword,
     },
     /// CR 305.2b / layer 5: controller may play `count` additional lands per turn while this

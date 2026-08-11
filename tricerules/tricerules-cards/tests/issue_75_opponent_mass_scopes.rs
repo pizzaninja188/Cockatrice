@@ -1,4 +1,6 @@
-use tricerules_cards::primitives::{Amount, AnthemController, AnthemFilter, SpellEffectKind};
+use tricerules_cards::primitives::{
+    Amount, CreatureScopeController, CreatureScopeFilter, SpellEffectKind,
+};
 use tricerules_cards::CardRegistry;
 
 #[test]
@@ -17,9 +19,9 @@ fn opponent_mass_scope_cards_have_complete_oracle_behavior() {
         chill_face.spell_effect,
         [
             SpellEffectKind::PumpAll {
-                filter: AnthemFilter {
-                    controller: Some(AnthemController::Opponents),
-                    ..AnthemFilter::default()
+                filter: CreatureScopeFilter {
+                    controller: Some(CreatureScopeController::Opponents),
+                    ..CreatureScopeFilter::default()
                 },
                 power: -2,
                 toughness: 0,
@@ -41,9 +43,9 @@ fn opponent_mass_scope_cards_have_complete_oracle_behavior() {
     assert_eq!(
         obsolete_face.spell_effect,
         [SpellEffectKind::PumpAll {
-            filter: AnthemFilter {
-                controller: Some(AnthemController::Opponents),
-                ..AnthemFilter::default()
+            filter: CreatureScopeFilter {
+                controller: Some(CreatureScopeController::Opponents),
+                ..CreatureScopeFilter::default()
             },
             power: -1,
             toughness: -1,

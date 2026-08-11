@@ -55,6 +55,8 @@ mod mana;
 mod modal_spells;
 #[path = "scenario/multi_face.rs"]
 mod multi_face;
+#[path = "scenario/name_counter_scopes.rs"]
+mod name_counter_scopes;
 #[path = "scenario/opening.rs"]
 mod opening;
 #[path = "scenario/opponent_life_loss.rs"]

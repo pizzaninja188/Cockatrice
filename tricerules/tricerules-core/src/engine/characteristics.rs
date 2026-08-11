@@ -242,14 +242,11 @@ pub(super) fn effect_affects(
             })
         }
         AffectedScope::CreaturesMatching {
-            players,
             reference_player,
-            subtype,
-            color,
+            filter,
             exclude,
-            attacking,
         } => {
-            let current_reference = if *players != RelativePlayerSet::All
+            let current_reference = if filter.controller.is_some()
                 && effect.duration == EffectDuration::WhileSourceOnBattlefield
             {
                 effect
@@ -262,25 +259,69 @@ pub(super) fn effect_affects(
             } else {
                 *reference_player
             };
-            *exclude != Some(oid)
-                && (!attacking || super::combat::is_attacking(state, oid))
-                && match players {
-                    RelativePlayerSet::Controller => {
-                        characteristics.controller == current_reference
-                    }
-                    RelativePlayerSet::Opponents => {
-                        state.are_opponents(characteristics.controller, current_reference)
-                    }
-                    RelativePlayerSet::All => true,
-                }
-                && characteristics.is_creature()
-                && subtype
-                    .as_ref()
-                    .is_none_or(|value| characteristics.types.contains(value))
-                && color.is_none_or(|value| characteristics.colors.contains(&value))
+            creature_matches_scope(
+                state,
+                registry,
+                filter,
+                current_reference,
+                *exclude,
+                oid,
+                characteristics,
+            )
         }
         AffectedScope::Player(_) => false,
     }
+}
+
+pub(super) fn creature_matches_scope(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    filter: &CreatureScopeFilter,
+    reference_player: PlayerId,
+    exclude: Option<ObjectId>,
+    oid: ObjectId,
+    characteristics: &Characteristics,
+) -> bool {
+    let Some(object) = state.objects.get(&oid) else {
+        return false;
+    };
+    let name_matches = filter.name.as_ref().is_none_or(|required_name| {
+        object
+            .copiable_values
+            .as_ref()
+            .map(|values| values.face.name.as_str())
+            .or_else(|| {
+                registry
+                    .get(&object.card_id)
+                    .and_then(|definition| definition.face(object.face_up_index))
+                    .map(|face| face.name.as_str())
+            })
+            == Some(required_name.as_str())
+    });
+
+    exclude != Some(oid)
+        && (!filter.attacking || super::combat::is_attacking(state, oid))
+        && match filter.controller {
+            None => true,
+            Some(CreatureScopeController::YouControl) => {
+                characteristics.controller == reference_player
+            }
+            Some(CreatureScopeController::Opponents) => {
+                state.are_opponents(characteristics.controller, reference_player)
+            }
+        }
+        && characteristics.is_creature()
+        && filter
+            .subtype
+            .as_ref()
+            .is_none_or(|value| characteristics.types.contains(value))
+        && filter
+            .color
+            .is_none_or(|value| characteristics.colors.contains(&value))
+        && name_matches
+        && filter
+            .required_counter
+            .is_none_or(|counter| object.counter_count(counter) > 0)
 }
 
 impl CharacteristicsEvaluator<'_> {
@@ -652,12 +693,12 @@ mod tests {
         engine.state.continuous_effects.push(ContinuousEffect {
             source_id: Some(source),
             affected: AffectedScope::CreaturesMatching {
-                players: RelativePlayerSet::Opponents,
                 reference_player: 0,
-                subtype: None,
-                color: None,
+                filter: CreatureScopeFilter {
+                    controller: Some(CreatureScopeController::Opponents),
+                    ..CreatureScopeFilter::default()
+                },
                 exclude: None,
-                attacking: false,
             },
             kind: ContinuousEffectKind::PtModify {
                 delta_power: -1,

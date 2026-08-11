@@ -1,8 +1,8 @@
 //! Spell and continuous-effect vocabulary plus shared effect parameters.
 
 use super::{
-    AnthemFilter, CardTypeFilter, GraveyardDestination, GraveyardFilter, Keyword, TargetController,
-    TargetFilter, TargetKind,
+    CardTypeFilter, CreatureScopeFilter, GraveyardDestination, GraveyardFilter, Keyword,
+    TargetController, TargetFilter, TargetKind,
 };
 use serde::de::{EnumAccess, MapAccess, SeqAccess, VariantAccess};
 use serde::ser::SerializeStructVariant;
@@ -120,7 +120,7 @@ pub enum BattlefieldAggregate {
 }
 
 /// Which battlefield creatures contribute to a [`CountExpression`]. This is deliberately separate
-/// from [`AnthemFilter`]: count predicates may inspect derived keywords, while a keyword-dependent
+/// from [`CreatureScopeFilter`]: count predicates may inspect derived keywords, while a keyword-dependent
 /// continuous-effect scope would need CR 613 dependency ordering inside layer 6.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BattlefieldCreatureCountFilter {
@@ -617,7 +617,7 @@ pub enum SpellEffectKind {
     /// (`controller: YouControl`); attacking-creature pumps reuse the same filter machinery.
     PumpAll {
         #[serde(default)]
-        filter: AnthemFilter,
+        filter: CreatureScopeFilter,
         power: i32,
         toughness: i32,
     },
@@ -636,7 +636,7 @@ pub enum SpellEffectKind {
     /// (Indestructible); attacking-creature keyword grants reuse the same snapshot filter.
     GrantKeywordsAll {
         #[serde(default)]
-        filter: AnthemFilter,
+        filter: CreatureScopeFilter,
         keywords: Vec<Keyword>,
     },
     /// CR 613 layer 6: grant one or more keyword abilities until end of turn. `Chosen` is an
@@ -1028,6 +1028,8 @@ impl SpellEffectKind {
                     );
                 }
             }
+            SpellEffectKind::PumpAll { filter, .. }
+            | SpellEffectKind::GrantKeywordsAll { filter, .. } => filter.validate()?,
             _ => {}
         }
 
@@ -1145,7 +1147,7 @@ impl SpellEffectKind {
                 }
                 // Untargeted mass selection runs through `battlefield_objects_matching`, which has
                 // no activating player to compare a controller against — controller scope belongs
-                // in the effect's own `players` (RelativePlayerSet) or `AnthemFilter`, not here.
+                // in the effect's own `players` (RelativePlayerSet) or `CreatureScopeFilter`, not here.
                 // Rejecting it beats silently ignoring it.
                 if kind.controller != TargetController::Any {
                     return Err(

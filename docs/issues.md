@@ -89,10 +89,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Add reusable static conditions for changing power/toughness, keywords, or attack permissions from current game state or turn state. Calibration evidence: Daggersail Aeronaut, Drowsing Tyrannodon, Gearsmith Guardian, and Gearsmith Prodigy. Evaluate conditions in the correct characteristics layer without controller circularity, and share condition expressions with other continuous effects where possible.
   - Priority: Low
 
-- [ ] #79 [feature] Name- and counter-filtered static scopes
-  - Details: Extend continuous-effect scopes to select permanents by printed or copiable name and by counter presence. Calibration evidence: Pack Mastiff and Pridemalkin. Define which derived name and counter state are observed, preserve timestamp/dependency ordering, and make the predicates reusable outside these two cards.
-  - Priority: Low
-
 - [ ] #80 [feature] Protection
   - Details: Implement protection as a parameterized keyword consumed by damage prevention, attachment legality, blocking legality, and targeting legality rather than four card-specific checks. Calibration evidence: Feat of Resistance. Cover an Aura or Equipment becoming illegal, already-declared blocks, damage sources with matching characteristics, and satisfy the two-card-or-mechanic reuse gate before adding the keyword.
   - Priority: Low

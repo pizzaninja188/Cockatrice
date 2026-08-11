@@ -1,0 +1,27 @@
+(
+  id: "pridemalkin",
+  name: "Pridemalkin",
+  mana_cost: "{2}{G}",
+  types: ["Creature", "Cat"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [
+        PutCounters(
+          counter: PlusOnePlusOne,
+          count: 1,
+          subject: Chosen((kind: Creature, controller: You)),
+        ),
+      ],
+      text: "When this creature enters, put a +1/+1 counter on target creature you control.",
+    ),
+  ],
+  static_abilities: [
+    AnthemKeyword(
+      filter: (controller: YouControl, required_counter: PlusOnePlusOne),
+      keyword: Trample,
+    ),
+  ],
+)
