@@ -62,6 +62,10 @@ enum EffectOutcome {
 /// each chosen mode, so targets are per-entry rather than per-item.
 type ResolutionEffect = (SpellEffectKind, Vec<ObjectId>, Vec<u32>);
 
+fn resolving_damage_source_id(item: &StackItem) -> ObjectId {
+    item.source_permanent_id.unwrap_or(item.id)
+}
+
 impl GameEngine {
     /// Whether the resolving spell or ability's damage source has `keyword` now, or had it as
     /// last known information before leaving the battlefield. Kept generic so all future
@@ -281,16 +285,17 @@ impl GameEngine {
                 .get(&card_id)
                 .and_then(|d| d.face(top.face_index))
                 .and_then(|f| f.triggered_abilities.get(top.ability_index.unwrap_or(0)))
-                .and_then(|ta| ta.intervening_if);
+                .and_then(|ta| ta.intervening_if.as_ref());
             let source_id = top.source_permanent_id.unwrap_or(top.id);
             let holds = if top.source_permanent_id.is_some() {
                 self.intervening_if_holds_at_generation(
                     source_id,
+                    top.controller,
                     clause,
                     Some(top.source_zone_change),
                 )
             } else {
-                self.intervening_if_holds(source_id, clause)
+                self.intervening_if_holds(source_id, top.controller, clause)
             };
             if !holds {
                 events.push(ev_log(format!(

@@ -18,8 +18,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use thiserror::Error;
 use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
-    AbilityCost, Amount, AnthemController, AnthemFilter, CardTypeFilter, CastTriggerPlayer, Color,
-    ContinuousEffectKind, ControllerReference, CountExpression, CounterKind, DamageDivision,
+    AbilityCost, Amount, AnthemController, AnthemFilter, BattlefieldAggregate,
+    BattlefieldPermanentFilter, CardTypeFilter, CastTriggerPlayer, Color, ContinuousEffectKind,
+    ControllerReference, CountExpression, CounterKind, DamageDivision,
     DamagePreventionAdditionalEffect, DamagePreventionSubject, EffectDuration, EffectSubject,
     EntersTappedAffected, Evasion, FaceChangeAction, GameCondition, InterveningIf, Keyword,
     LifeAmount, PermanentTypeFilter, PlayerRecipient, PreventionAmountBasis, RelativePlayerSet,
@@ -43,6 +44,7 @@ const MAX_AUTOMATIC_PRIORITY_PASSES: usize = 128;
 struct AmountContext {
     controller: PlayerId,
     source_object_id: ObjectId,
+    source_zone_change: u64,
     /// The instant/sorcery object logically still resolving on the stack. The engine seats spell
     /// cards in their destination before dispatching effects, so graveyard counts must exclude
     /// this object until CR 608.2n's final move would occur.
@@ -55,10 +57,18 @@ impl AmountContext {
         Self {
             controller,
             source_object_id: item.source_permanent_id.unwrap_or(item.id),
+            source_zone_change: item.source_zone_change,
             resolving_spell_id: item.ability_text.is_none().then_some(item.id),
             chosen_x: item.chosen_x,
         }
     }
+}
+
+#[derive(Clone, Copy)]
+struct ConditionContext {
+    controller: PlayerId,
+    source_object_id: ObjectId,
+    source_zone_change: u64,
 }
 
 mod casting;

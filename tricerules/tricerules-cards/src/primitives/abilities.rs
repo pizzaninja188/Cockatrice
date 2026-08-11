@@ -301,7 +301,7 @@ pub enum TargetingSourceFilter {
 ///
 /// This is the general CR 603.4 slot on [`TriggeredAbilityDef`] — a new condition is a variant
 /// here, never a per-card bool on the def.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InterveningIf {
     /// "if {this} is untapped" — Howling Mine.
     SourceUntapped,

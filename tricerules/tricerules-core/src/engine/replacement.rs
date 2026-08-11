@@ -276,6 +276,12 @@ impl GameEngine {
                             AmountContext {
                                 controller: event.destination_controller,
                                 source_object_id: event.object_id,
+                                source_zone_change: self
+                                    .state
+                                    .zone_change_generation
+                                    .get(&event.object_id)
+                                    .copied()
+                                    .unwrap_or(0),
                                 resolving_spell_id: None,
                                 chosen_x: event.chosen_x,
                             },

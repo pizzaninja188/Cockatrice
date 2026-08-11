@@ -9,14 +9,27 @@ use serde::ser::SerializeStructVariant;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-/// A public turn-history predicate evaluated by the rules engine at resolution.
+/// A public game-state predicate evaluated by the rules engine at the timing required by its
+/// consumer: activation, trigger creation/resolution, or ordinary effect resolution.
 ///
 /// The bounded count shape supports both boolean "a creature died" cards (Life Goes On,
 /// Brimstone Volley) and count-sensitive consumers (Bloodcrazed Paladin, Lagomos) without exposing
 /// the identities of the cards that moved through a graveyard.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GameCondition {
     CreatureDeathsThisTurn {
+        #[serde(default)]
+        min: Option<u32>,
+        #[serde(default)]
+        max: Option<u32>,
+    },
+    /// Compare an aggregate of public battlefield permanents against inclusive bounds. This is
+    /// the shared condition vocabulary for Scholar of Stars (count artifacts), Faerie Miscreant
+    /// (count another permanent by effective name), and the power checks on Ornery Dilophosaur
+    /// and Turret Ogre.
+    BattlefieldAggregate {
+        filter: BattlefieldPermanentFilter,
+        aggregate: BattlefieldAggregate,
         #[serde(default)]
         min: Option<u32>,
         #[serde(default)]
@@ -25,31 +38,85 @@ pub enum GameCondition {
 }
 
 impl GameCondition {
-    pub fn validate(self) -> Result<(), String> {
+    pub fn validate(&self) -> Result<(), String> {
         match self {
             GameCondition::CreatureDeathsThisTurn { min, max } => {
                 if min.is_none() && max.is_none() {
                     return Err("CreatureDeathsThisTurn requires at least one of min or max".into());
                 }
                 if min
-                    .zip(max)
+                    .as_ref()
+                    .zip(max.as_ref())
                     .is_some_and(|(minimum, maximum)| minimum > maximum)
                 {
                     return Err("CreatureDeathsThisTurn min cannot exceed max".into());
                 }
                 Ok(())
             }
-        }
-    }
-
-    pub fn matches_count(self, count: u32) -> bool {
-        match self {
-            GameCondition::CreatureDeathsThisTurn { min, max } => {
-                min.is_none_or(|minimum| count >= minimum)
-                    && max.is_none_or(|maximum| count <= maximum)
+            GameCondition::BattlefieldAggregate {
+                filter, min, max, ..
+            } => {
+                filter.validate()?;
+                if min.is_none() && max.is_none() {
+                    return Err("BattlefieldAggregate requires at least one of min or max".into());
+                }
+                if min
+                    .as_ref()
+                    .zip(max.as_ref())
+                    .is_some_and(|(minimum, maximum)| minimum > maximum)
+                {
+                    return Err("BattlefieldAggregate min cannot exceed max".into());
+                }
+                Ok(())
             }
         }
     }
+
+    pub fn matches_value(&self, value: u32) -> bool {
+        match self {
+            GameCondition::CreatureDeathsThisTurn { min, max }
+            | GameCondition::BattlefieldAggregate { min, max, .. } => {
+                min.is_none_or(|minimum| value >= minimum)
+                    && max.is_none_or(|maximum| value <= maximum)
+            }
+        }
+    }
+}
+
+/// Public characteristics used to select battlefield permanents for a [`GameCondition`].
+/// All fields compose with logical AND. Controller, type, and power are derived values; `name`
+/// uses the effective copiable face name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BattlefieldPermanentFilter {
+    pub controllers: RelativePlayerSet,
+    #[serde(default)]
+    pub card_type: Option<CardTypeFilter>,
+    #[serde(default)]
+    pub name: Option<String>,
+    /// "Another" excludes only the source object generation that created the condition.
+    #[serde(default)]
+    pub exclude_source: bool,
+}
+
+impl BattlefieldPermanentFilter {
+    fn validate(&self) -> Result<(), String> {
+        if self
+            .name
+            .as_ref()
+            .is_some_and(|name| name.trim().is_empty())
+        {
+            return Err("battlefield permanent filter name cannot be empty".into());
+        }
+        Ok(())
+    }
+}
+
+/// Which public number a battlefield condition observes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BattlefieldAggregate {
+    Count,
+    TotalPower,
+    MaximumPower,
 }
 
 /// Which battlefield creatures contribute to a [`CountExpression`]. This is deliberately separate
@@ -165,7 +232,7 @@ impl Amount {
 
     pub fn validate(&self) -> Result<(), String> {
         match self {
-            Amount::Conditional { condition, .. } => (*condition).validate(),
+            Amount::Conditional { condition, .. } => condition.validate(),
             Amount::Count(expression) => expression.validate(),
             Amount::Fixed(_) | Amount::X => Ok(()),
         }

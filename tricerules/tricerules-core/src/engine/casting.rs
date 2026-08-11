@@ -1126,9 +1126,20 @@ impl GameEngine {
             return false;
         };
         ability.conditions.iter().all(|condition| match condition {
-            tricerules_cards::ActivationCondition::GameCondition(condition) => {
-                self.condition_holds(*condition)
-            }
+            tricerules_cards::ActivationCondition::GameCondition(condition) => self
+                .condition_holds(
+                    condition,
+                    ConditionContext {
+                        controller,
+                        source_object_id: permanent_id,
+                        source_zone_change: self
+                            .state
+                            .zone_change_generation
+                            .get(&permanent_id)
+                            .copied()
+                            .unwrap_or(0),
+                    },
+                ),
             tricerules_cards::ActivationCondition::BattlefieldCreatureCount {
                 filter,
                 min,

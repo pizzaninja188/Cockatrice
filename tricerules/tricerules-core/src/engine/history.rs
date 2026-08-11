@@ -51,11 +51,85 @@ impl GameEngine {
             .saturating_add(1);
     }
 
-    pub(super) fn condition_holds(&self, condition: GameCondition) -> bool {
+    pub(super) fn condition_holds(
+        &self,
+        condition: &GameCondition,
+        context: ConditionContext,
+    ) -> bool {
         match condition {
             GameCondition::CreatureDeathsThisTurn { .. } => {
-                condition.matches_count(self.state.turn_history.current.creatures_died)
+                condition.matches_value(self.state.turn_history.current.creatures_died)
             }
+            GameCondition::BattlefieldAggregate {
+                filter, aggregate, ..
+            } => condition
+                .matches_value(self.battlefield_aggregate_value(filter, *aggregate, context)),
+        }
+    }
+
+    fn battlefield_aggregate_value(
+        &self,
+        filter: &BattlefieldPermanentFilter,
+        aggregate: BattlefieldAggregate,
+        context: ConditionContext,
+    ) -> u32 {
+        let matching: Vec<_> = self
+            .state
+            .players
+            .iter()
+            .flat_map(|player| player.battlefield.iter().copied())
+            .filter(|oid| {
+                !filter.exclude_source
+                    || *oid != context.source_object_id
+                    || self
+                        .state
+                        .zone_change_generation
+                        .get(oid)
+                        .copied()
+                        .unwrap_or(0)
+                        != context.source_zone_change
+            })
+            .filter_map(|oid| {
+                self.characteristics(oid)
+                    .map(|characteristics| (oid, characteristics))
+            })
+            .filter(|(_, characteristics)| {
+                relative_player_set_contains(
+                    &self.state,
+                    filter.controllers,
+                    context.controller,
+                    characteristics.controller,
+                ) && filter.card_type.is_none_or(|card_type| match card_type {
+                    CardTypeFilter::Enchantment => characteristics.has_type("Enchantment"),
+                    CardTypeFilter::Instant => characteristics.has_type("Instant"),
+                    CardTypeFilter::Sorcery => characteristics.has_type("Sorcery"),
+                    CardTypeFilter::InstantOrSorcery => {
+                        characteristics.has_type("Instant") || characteristics.has_type("Sorcery")
+                    }
+                    CardTypeFilter::Creature => characteristics.is_creature(),
+                    CardTypeFilter::Artifact => characteristics.is_artifact(),
+                    CardTypeFilter::Noncreature => !characteristics.is_creature(),
+                })
+            })
+            .filter(|(oid, _)| {
+                filter.name.as_ref().is_none_or(|name| {
+                    self.effective_face(*oid)
+                        .is_some_and(|face| face.name == *name)
+                })
+            })
+            .collect();
+
+        match aggregate {
+            BattlefieldAggregate::Count => clamp_public_count(matching.len()),
+            BattlefieldAggregate::TotalPower => matching
+                .iter()
+                .filter_map(|(_, characteristics)| characteristics.power)
+                .fold(0u32, u32::saturating_add),
+            BattlefieldAggregate::MaximumPower => matching
+                .iter()
+                .filter_map(|(_, characteristics)| characteristics.power)
+                .max()
+                .unwrap_or(0),
         }
     }
 
@@ -101,7 +175,14 @@ impl GameEngine {
                 when_true,
                 otherwise,
             } => {
-                if self.condition_holds(*condition) {
+                if self.condition_holds(
+                    condition,
+                    ConditionContext {
+                        controller: context.controller,
+                        source_object_id: context.source_object_id,
+                        source_zone_change: context.source_zone_change,
+                    },
+                ) {
                     *when_true
                 } else {
                     *otherwise
@@ -145,7 +226,37 @@ impl GameEngine {
 
 #[cfg(test)]
 mod tests {
-    use super::clamp_public_count;
+    use super::*;
+
+    fn deck_with_cards(cards: &[&str], basic: &str) -> Vec<String> {
+        let mut deck: Vec<_> = cards.iter().map(|card| (*card).to_string()).collect();
+        while deck.len() < 20 {
+            deck.push(basic.to_string());
+        }
+        deck
+    }
+
+    fn move_to_battlefield(engine: &mut GameEngine, player: usize, card_id: &str) -> ObjectId {
+        let player_id = engine.state.players[player].id;
+        let oid = engine
+            .state
+            .objects
+            .values()
+            .find(|object| object.owner == player_id && object.card_id == card_id)
+            .expect("deck object")
+            .id;
+        engine.state.players[player]
+            .hand
+            .retain(|candidate| *candidate != oid);
+        engine.state.players[player]
+            .library
+            .retain(|candidate| *candidate != oid);
+        engine.state.players[player].battlefield.push(oid);
+        let object = engine.state.objects.get_mut(&oid).expect("object");
+        object.zone = Zone::Battlefield;
+        object.summoning_sick = false;
+        oid
+    }
 
     #[test]
     fn public_counts_saturate_at_the_wire_sized_amount_limit() {
@@ -153,5 +264,42 @@ mod tests {
         if usize::BITS > u32::BITS {
             assert_eq!(clamp_public_count(usize::MAX), u32::MAX);
         }
+    }
+
+    #[test]
+    fn battlefield_total_power_uses_derived_values_and_generation_aware_source_exclusion() {
+        let decks = Some(vec![
+            deck_with_cards(&["grizzly_bears", "serra_angel"], "forest"),
+            deck_with_cards(&[], "island"),
+        ]);
+        let mut engine = GameEngine::new(67_010, &[0, 1], 20, decks, true).expect("engine");
+        let bear = move_to_battlefield(&mut engine, 0, "grizzly_bears");
+        let angel = move_to_battlefield(&mut engine, 0, "serra_angel");
+        let filter = BattlefieldPermanentFilter {
+            controllers: RelativePlayerSet::Controller,
+            card_type: Some(CardTypeFilter::Creature),
+            name: None,
+            exclude_source: true,
+        };
+        let context = ConditionContext {
+            controller: 0,
+            source_object_id: angel,
+            source_zone_change: 0,
+        };
+
+        assert_eq!(engine.effective_power(bear), Some(2));
+        assert_eq!(engine.effective_power(angel), Some(4));
+        assert_eq!(
+            engine.battlefield_aggregate_value(&filter, BattlefieldAggregate::TotalPower, context,),
+            2,
+            "the original source generation is excluded"
+        );
+
+        engine.state.zone_change_generation.insert(angel, 1);
+        assert_eq!(
+            engine.battlefield_aggregate_value(&filter, BattlefieldAggregate::TotalPower, context,),
+            6,
+            "the same physical id after a zone change is a new object and counts as another"
+        );
     }
 }

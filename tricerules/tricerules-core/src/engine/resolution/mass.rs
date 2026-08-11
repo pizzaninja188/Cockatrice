@@ -141,7 +141,7 @@ pub(super) fn damage_all(
         .into_iter()
         .map(|tid| crate::engine::damage::DamageSpec {
             event: crate::engine::damage::DamageEvent::noncombat(
-                cx.top.id,
+                resolving_damage_source_id(cx.top),
                 cx.controller,
                 spell_label,
                 crate::engine::damage::DamageRecipient::Permanent(tid),

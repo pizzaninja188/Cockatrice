@@ -1,0 +1,27 @@
+// Oracle and rulings checked 2026-08-11. "Another" excludes this source generation, CR 603.4
+// rechecks the maximum derived power, and the physical Ogre is the source of the damage.
+(
+  id: "turret_ogre",
+  name: "Turret Ogre",
+  mana_cost: "{3}{R}",
+  types: ["Creature", "Ogre", "Warrior"],
+  power: 4,
+  toughness: 3,
+  keywords: [Reach],
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [DamagePlayer(amount: 2, who: EachOpponent)],
+      text: "When this creature enters, if you control another creature with power 4 or greater, this creature deals 2 damage to each opponent.",
+      intervening_if: Some(GameCondition(BattlefieldAggregate(
+        filter: (
+          controllers: Controller,
+          card_type: Some(Creature),
+          exclude_source: true,
+        ),
+        aggregate: MaximumPower,
+        min: Some(4),
+      ))),
+    ),
+  ],
+)

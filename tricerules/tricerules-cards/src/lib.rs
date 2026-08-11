@@ -11,10 +11,11 @@ pub use card_def::{CardDefinition, CardFace, FaceRef, Layout, ModalSpellDef, Spe
 pub use mana::{ColorPip, ManaCost, ManaSymbol};
 pub use primitives::{
     AbilityCost, ActivatedAbilityDef, ActivationCondition, ActivationTiming, Amount,
-    BattlefieldCreatureCountFilter, CastTriggerPlayer, Color, ContinuousEffectKind,
-    ControllerReference, CountExpression, CounterKind, EffectContext, EffectDuration, Evasion,
-    GameCondition, Keyword, ManaAmount, PermanentTypeFilter, PtScale, RelativePlayerSet,
-    TokenController, TriggerCondition, TriggeredAbilityDef,
+    BattlefieldAggregate, BattlefieldCreatureCountFilter, BattlefieldPermanentFilter,
+    CastTriggerPlayer, Color, ContinuousEffectKind, ControllerReference, CountExpression,
+    CounterKind, EffectContext, EffectDuration, Evasion, GameCondition, Keyword, ManaAmount,
+    PermanentTypeFilter, PtScale, RelativePlayerSet, TokenController, TriggerCondition,
+    TriggeredAbilityDef,
 };
 pub use registry::CardRegistry;
 pub use slug::slugify;

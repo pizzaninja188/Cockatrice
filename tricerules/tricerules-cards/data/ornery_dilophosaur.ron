@@ -1,0 +1,23 @@
+// Oracle and rulings checked 2026-08-11. The source may itself satisfy the power condition; CR
+// 603.4 rechecks current derived power as the trigger resolves and CR 611.2d then locks the bonus.
+(
+  id: "ornery_dilophosaur",
+  name: "Ornery Dilophosaur",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Dinosaur"],
+  power: 2,
+  toughness: 2,
+  keywords: [Deathtouch],
+  triggered_abilities: [
+    (
+      trigger: WheneverSelfAttacks,
+      effect: [PumpTarget(power: 2, toughness: 2, subject: Source)],
+      text: "Whenever this creature attacks, if you control a creature with power 4 or greater, this creature gets +2/+2 until end of turn.",
+      intervening_if: Some(GameCondition(BattlefieldAggregate(
+        filter: (controllers: Controller, card_type: Some(Creature)),
+        aggregate: MaximumPower,
+        min: Some(4),
+      ))),
+    ),
+  ],
+)

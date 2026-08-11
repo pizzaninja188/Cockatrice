@@ -69,10 +69,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Let token definitions carry reusable triggered abilities that are registered immediately when the token enters. Calibration evidence: Goblin Wizardry. Cover simultaneous token creation, token LKI, zone changes and cease-to-exist behavior, plus registry/conformance validation; satisfy the two-card-or-mechanic reuse gate before widening the token schema.
   - Priority: Low
 
-- [ ] #67 [feature] Board-state predicates for attack and ETB triggers
-  - Details: Add composable trigger predicates over controlled permanent types, total or maximum power, and named permanents. Calibration evidence: Ornery Dilophosaur, Scholar of Stars, Turret Ogre, and Faerie Miscreant. Evaluate intervening conditions at the rules-required times, use controller-relative multiplayer semantics, and share one predicate vocabulary rather than introducing card-specific trigger variants.
-  - Priority: Low
-
 - [ ] #68 [feature] Multi-attacker trigger conditions
   - Details: Add a reusable attack trigger predicate based on the declared attacking group, not one event per creature. Calibration evidence: Makeshift Battalion. Capture the simultaneous declaration set, trigger only once when its threshold is met, and cover attacks split among multiple defending players or planeswalkers; satisfy the two-card-or-mechanic reuse gate before adding the condition.
   - Priority: Low

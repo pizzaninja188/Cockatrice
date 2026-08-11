@@ -726,7 +726,9 @@ impl GameEngine {
             .filter(|(_, ta)| filter(&ta.trigger))
             // CR 603.4, first of the two checks: an intervening-"if" clause that is false as the
             // ability would go on the stack means it never triggers at all.
-            .filter(|(_, ta)| self.intervening_if_holds(source_id, ta.intervening_if))
+            .filter(|(_, ta)| {
+                self.intervening_if_holds(source_id, controller, ta.intervening_if.as_ref())
+            })
             .map(|(idx, ta)| CollectedTrigger {
                 source_id,
                 card_id: card_id.to_string(),
@@ -770,15 +772,17 @@ impl GameEngine {
     pub(super) fn intervening_if_holds(
         &self,
         source_id: ObjectId,
-        clause: Option<InterveningIf>,
+        controller: PlayerId,
+        clause: Option<&InterveningIf>,
     ) -> bool {
-        self.intervening_if_holds_at_generation(source_id, clause, None)
+        self.intervening_if_holds_at_generation(source_id, controller, clause, None)
     }
 
     pub(super) fn intervening_if_holds_at_generation(
         &self,
         source_id: ObjectId,
-        clause: Option<InterveningIf>,
+        controller: PlayerId,
+        clause: Option<&InterveningIf>,
         source_generation: Option<u64>,
     ) -> bool {
         match clause {
@@ -822,7 +826,20 @@ impl GameEngine {
                 min.is_none_or(|minimum| count >= minimum)
                     && max.is_none_or(|maximum| count <= maximum)
             }
-            Some(InterveningIf::GameCondition(condition)) => self.condition_holds(condition),
+            Some(InterveningIf::GameCondition(condition)) => self.condition_holds(
+                condition,
+                ConditionContext {
+                    controller,
+                    source_object_id: source_id,
+                    source_zone_change: source_generation.unwrap_or_else(|| {
+                        self.state
+                            .zone_change_generation
+                            .get(&source_id)
+                            .copied()
+                            .unwrap_or(0)
+                    }),
+                },
+            ),
         }
     }
 

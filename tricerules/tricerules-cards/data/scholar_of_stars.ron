@@ -1,0 +1,22 @@
+// Oracle and rulings checked 2026-08-11. CR 603.4 checks the artifact condition both when this
+// ability would trigger and when it resolves; the qualifying artifact may differ between checks.
+(
+  id: "scholar_of_stars",
+  name: "Scholar of Stars",
+  mana_cost: "{3}{U}",
+  types: ["Creature", "Human", "Artificer"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Draw(count: 1)],
+      text: "When this creature enters, if you control an artifact, draw a card.",
+      intervening_if: Some(GameCondition(BattlefieldAggregate(
+        filter: (controllers: Controller, card_type: Some(Artifact)),
+        aggregate: Count,
+        min: Some(1),
+      ))),
+    ),
+  ],
+)

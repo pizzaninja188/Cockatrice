@@ -289,7 +289,9 @@ impl CardRegistry {
                     }
                 }
                 for ability in &face.triggered_abilities {
-                    if let Some(InterveningIf::GameCondition(condition)) = ability.intervening_if {
+                    if let Some(InterveningIf::GameCondition(condition)) =
+                        ability.intervening_if.as_ref()
+                    {
                         condition
                             .validate()
                             .map_err(|reason| RegistryError::InvalidCard {

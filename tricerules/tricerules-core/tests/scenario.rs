@@ -11,6 +11,8 @@ mod activation_restrictions;
 mod attacking_scopes;
 #[path = "scenario/auras.rs"]
 mod auras;
+#[path = "scenario/board_state_trigger_conditions.rs"]
+mod board_state_trigger_conditions;
 #[path = "scenario/casting_and_lands.rs"]
 mod casting_and_lands;
 #[path = "scenario/combat.rs"]

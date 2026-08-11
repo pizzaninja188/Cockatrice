@@ -42,7 +42,7 @@ pub(super) fn damage_target(
         if let Some(pi) = engine.state.player_idx(tid as i32) {
             let pid = engine.state.players[pi].id;
             let event = DamageEvent::noncombat(
-                top.id,
+                resolving_damage_source_id(top),
                 top.controller,
                 spell_label,
                 DamageRecipient::Player(pid),
@@ -63,7 +63,7 @@ pub(super) fn damage_target(
                 events,
                 top,
                 DamageEvent::noncombat(
-                    top.id,
+                    resolving_damage_source_id(top),
                     top.controller,
                     spell_label,
                     DamageRecipient::Permanent(tid),
@@ -162,7 +162,7 @@ pub(super) fn damage_targets(
         };
         damage.push(DamageSpec {
             event: DamageEvent::noncombat(
-                cx.top.id,
+                resolving_damage_source_id(cx.top),
                 controller,
                 spell_label,
                 recipient,
@@ -222,7 +222,7 @@ pub(super) fn damage_player(
         .into_iter()
         .map(|player| DamageSpec {
             event: DamageEvent::noncombat(
-                cx.top.id,
+                resolving_damage_source_id(cx.top),
                 cx.controller,
                 cx.spell_label,
                 DamageRecipient::Player(player),
@@ -241,4 +241,38 @@ pub(super) fn damage_player(
     cx.engine
         .commit_completed_damage_batch(&completed, cx.events);
     Ok(EffectOutcome::Continue)
+}
+
+#[cfg(test)]
+mod damage_source_tests {
+    use super::*;
+
+    fn item(id: ObjectId, source_permanent_id: Option<ObjectId>) -> StackItem {
+        StackItem {
+            id,
+            controller: 0,
+            card_id: "test".into(),
+            targets: Vec::new(),
+            ability_text: source_permanent_id.map(|_| "ability".into()),
+            source_permanent_id,
+            source_zone_change: 0,
+            source_face_change: 0,
+            ability_index: None,
+            is_triggered: source_permanent_id.is_some(),
+            is_copy: false,
+            face_index: 0,
+            flashback: false,
+            chosen_x: 0,
+            target_damage: Vec::new(),
+            chosen_modes: Vec::new(),
+            trigger_player: None,
+            trigger_object: None,
+        }
+    }
+
+    #[test]
+    fn spells_deal_damage_as_the_stack_card_and_abilities_as_their_physical_source() {
+        assert_eq!(resolving_damage_source_id(&item(40, None)), 40);
+        assert_eq!(resolving_damage_source_id(&item(90, Some(12))), 12);
+    }
 }
