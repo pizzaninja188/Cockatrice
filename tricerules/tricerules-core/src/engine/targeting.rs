@@ -460,7 +460,6 @@ fn effect_target_legal_at_resolution(
         | SpellEffectKind::DiscardCards { target, .. }
         | SpellEffectKind::TargetPlayerSacrifices { target, .. }
         | SpellEffectKind::TapTarget { target }
-        | SpellEffectKind::UntapTarget { target }
         | SpellEffectKind::PreventNextDamage { target, .. } => {
             target_filter_legal(engine, target, tid, caster, source)
         }
@@ -477,6 +476,9 @@ fn effect_target_legal_at_resolution(
             subject: EffectSubject::Chosen(target),
             ..
         }
+        | SpellEffectKind::Untap {
+            subject: EffectSubject::Chosen(target),
+        }
         | SpellEffectKind::Regenerate {
             subject: EffectSubject::Chosen(target),
         } => target_filter_legal(engine, target, tid, caster, source),
@@ -487,6 +489,9 @@ fn effect_target_legal_at_resolution(
         | SpellEffectKind::PutCounters {
             subject: EffectSubject::Source,
             ..
+        }
+        | SpellEffectKind::Untap {
+            subject: EffectSubject::Source,
         }
         | SpellEffectKind::Regenerate {
             subject: EffectSubject::Source,
@@ -523,6 +528,7 @@ pub(super) fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
     match kind {
         SpellEffectKind::PumpTarget { subject, .. }
         | SpellEffectKind::PutCounters { subject, .. }
+        | SpellEffectKind::Untap { subject }
         | SpellEffectKind::Regenerate { subject } => {
             matches!(subject, EffectSubject::Chosen(_))
         }
@@ -541,7 +547,6 @@ pub(super) fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
         | SpellEffectKind::MillTargetPlayer { .. }
         | SpellEffectKind::DiscardCards { .. }
         | SpellEffectKind::TapTarget { .. }
-        | SpellEffectKind::UntapTarget { .. }
         | SpellEffectKind::CounterTargetSpell { .. }
         | SpellEffectKind::CopyTargetSpell { .. }
         | SpellEffectKind::AuraAttach { .. }
@@ -573,7 +578,9 @@ pub(super) fn validate_effect_targets(
             }
         }
         SpellEffectKind::TapTarget { target: filter }
-        | SpellEffectKind::UntapTarget { target: filter } => {
+        | SpellEffectKind::Untap {
+            subject: EffectSubject::Chosen(filter),
+        } => {
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one target"));
             }
@@ -748,6 +755,9 @@ pub(super) fn validate_effect_targets(
         | SpellEffectKind::DamageAll { .. }
         | SpellEffectKind::TapAllCreatures { .. }
         | SpellEffectKind::UntapAll { .. }
+        | SpellEffectKind::Untap {
+            subject: EffectSubject::Source,
+        }
         | SpellEffectKind::PumpAll { .. }
         | SpellEffectKind::GrantKeywordsAll { .. }
         | SpellEffectKind::GrantKeywordsAllPermanents { .. }
@@ -864,7 +874,9 @@ pub(super) fn spell_target_legality_error(
         | SpellEffectKind::DamageTarget { target: filter, .. }
         | SpellEffectKind::DamageTargets { target: filter, .. }
         | SpellEffectKind::TapTarget { target: filter }
-        | SpellEffectKind::UntapTarget { target: filter }
+        | SpellEffectKind::Untap {
+            subject: EffectSubject::Chosen(filter),
+        }
         | SpellEffectKind::PumpTarget {
             subject: EffectSubject::Chosen(filter),
             ..
@@ -888,6 +900,9 @@ pub(super) fn spell_target_legality_error(
         | SpellEffectKind::PutCounters {
             subject: EffectSubject::Source,
             ..
+        }
+        | SpellEffectKind::Untap {
+            subject: EffectSubject::Source,
         } => {
             return Err(EngineError::Illegal(
                 "source-bound effects are only valid on activated or triggered abilities",

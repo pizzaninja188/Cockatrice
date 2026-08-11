@@ -447,6 +447,26 @@ impl GameEngine {
                     })
                     .collect()
             }
+            GameEvent::EndStepBegin { player: active } => sources
+                .iter()
+                .flat_map(|source| {
+                    self.matching_triggered_abilities(
+                        &source.card_id,
+                        source.object_id,
+                        source.controller,
+                        source.face_index,
+                        |tc| {
+                            let TriggerCondition::AtBeginningOfEndStep {
+                                player: player_filter,
+                            } = tc
+                            else {
+                                return false;
+                            };
+                            self.relative_player_matches(*player_filter, *active, source.controller)
+                        },
+                    )
+                })
+                .collect(),
             GameEvent::LifeGained { player: gaining } => {
                 // Every player's permanents watch, in APNAP order (CR 603.3b) — the amount is
                 // irrelevant, one gain event fires each matching ability once.
@@ -788,6 +808,7 @@ impl GameEngine {
                 min.is_none_or(|minimum| count >= minimum)
                     && max.is_none_or(|maximum| count <= maximum)
             }
+            Some(InterveningIf::GameCondition(condition)) => self.condition_holds(condition),
         }
     }
 
@@ -797,9 +818,9 @@ impl GameEngine {
     /// beneficiary survives the trip through the stack and any responses.
     fn trigger_player_for(event: &GameEvent) -> Option<PlayerId> {
         match event {
-            GameEvent::UpkeepBegin { player } | GameEvent::DrawStepBegin { player } => {
-                Some(*player)
-            }
+            GameEvent::UpkeepBegin { player }
+            | GameEvent::DrawStepBegin { player }
+            | GameEvent::EndStepBegin { player } => Some(*player),
             GameEvent::TargetsChosen { controller, .. } => Some(*controller),
             _ => None,
         }

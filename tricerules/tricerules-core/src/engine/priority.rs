@@ -401,6 +401,7 @@ impl GameEngine {
                 self.state.turn_step = EndStep;
                 self.state.passes_since_stack_change = 0;
                 ev.push(ev_phase(self, rv1::PhaseId::EndStep));
+                self.fire_triggers(&[GameEvent::EndStepBegin { player: ap }]);
                 ev.push(ev_priority_changed(self));
             }
             EndStep => {

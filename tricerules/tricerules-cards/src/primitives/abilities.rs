@@ -1,6 +1,9 @@
 //! Activated, triggered, and static ability definitions.
 
-use super::{AbilityCost, Amount, CardTypeFilter, Color, CounterKind, Keyword, SpellEffectKind};
+use super::{
+    AbilityCost, Amount, CardTypeFilter, Color, CounterKind, GameCondition, Keyword,
+    SpellEffectKind,
+};
 use crate::ManaAmount;
 use serde::{Deserialize, Serialize};
 
@@ -85,6 +88,13 @@ pub enum TriggerCondition {
         /// Whose draw step fires this, relative to the source permanent's controller.
         /// Defaults to `AnyPlayer` (the Howling Mine "each player's draw step" reading).
         #[serde(default = "any_player_trigger")]
+        player: CastTriggerPlayer,
+    },
+    /// CR 513.1-2: at the beginning of an end step. `player` filters whose end step qualifies,
+    /// relative to the source's controller. Defaults to `Controller`, the common "your end step"
+    /// template used by Sabertooth Mauler and Twinblade Assassins.
+    AtBeginningOfEndStep {
+        #[serde(default)]
         player: CastTriggerPlayer,
     },
     /// Whenever a player casts a spell (optionally filtered by type). Parameters control
@@ -234,6 +244,9 @@ pub enum InterveningIf {
         #[serde(default)]
         max: Option<u32>,
     },
+    /// A reusable public game-state predicate. The nested condition is validated at registry load
+    /// and evaluated through the engine's canonical condition funnel for both CR 603.4 checks.
+    GameCondition(GameCondition),
 }
 
 /// One triggered ability on a permanent (RON data tier). The effects are plain

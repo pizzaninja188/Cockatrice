@@ -1,5 +1,7 @@
 use crate::card_def::{CardDefinition, Layout, RawCardDefinition};
-use crate::primitives::{EffectContext, FaceChangeAction, SpellEffectKind, StaticAbilityDef};
+use crate::primitives::{
+    EffectContext, FaceChangeAction, InterveningIf, SpellEffectKind, StaticAbilityDef,
+};
 use crate::token_def::TokenDefinition;
 use once_cell::sync::Lazy;
 use ron::extensions::Extensions;
@@ -261,6 +263,16 @@ impl CardRegistry {
                         }
                     }
                 }
+                for ability in &face.triggered_abilities {
+                    if let Some(InterveningIf::GameCondition(condition)) = ability.intervening_if {
+                        condition
+                            .validate()
+                            .map_err(|reason| RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason,
+                            })?;
+                    }
+                }
                 // An ability's effect list gets the same two checks a spell's does: each effect
                 // against its context, then the list as a whole (CR 608.2 — the effects resolve
                 // together, so a cross-effect requirement like `LoseLife(TargetManaValue)` must
@@ -420,9 +432,9 @@ include!(concat!(env!("OUT_DIR"), "/embedded_cards.rs"));
 mod tests {
     use super::*;
     use crate::primitives::{
-        Amount, BattlefieldCreatureCountFilter, CountExpression, CounterKind, EntersTappedAffected,
-        RelativePlayerSet, SpellEffectKind, StaticAbilityDef, TargetFilter, TargetKind,
-        TriggerCondition,
+        Amount, BattlefieldCreatureCountFilter, CastTriggerPlayer, CountExpression, CounterKind,
+        EffectSubject, EntersTappedAffected, GameCondition, InterveningIf, RelativePlayerSet,
+        SpellEffectKind, StaticAbilityDef, TargetFilter, TargetKind, TriggerCondition,
     };
 
     #[test]
@@ -485,18 +497,23 @@ mod tests {
     /// either is invalid card data and must not survive registry load.
     #[test]
     fn load_rejects_tap_or_untap_aimed_at_a_player() {
-        for effect in ["TapTarget", "UntapTarget"] {
+        for effect in ["TapTarget", "Untap"] {
             let bad = format!(
                 r#"(
             id: "bad_{}",
             name: "Bad {}",
             mana_cost: "{{U}}",
             types: ["Instant"],
-            spell_effect: [{}(target: (kind: AnyPlayer))],
+            spell_effect: [{}({})],
         )"#,
                 effect.to_lowercase(),
                 effect,
-                effect
+                effect,
+                if effect == "TapTarget" {
+                    "target: (kind: AnyPlayer)"
+                } else {
+                    "subject: Chosen((kind: AnyPlayer))"
+                }
             );
             let err = CardRegistry::from_chunks(&[&bad]).unwrap_err();
             assert!(
@@ -504,6 +521,43 @@ mod tests {
                 "{effect} at a player should be rejected, got {err:?}"
             );
         }
+    }
+
+    #[test]
+    fn load_rejects_invalid_intervening_game_condition() {
+        let bad = r#"(
+            id: "bad_end_step_condition",
+            name: "Bad End Step Condition",
+            mana_cost: "{G}",
+            types: ["Creature"],
+            power: 1,
+            toughness: 1,
+            triggered_abilities: [(
+                trigger: AtBeginningOfEndStep(player: Controller),
+                intervening_if: Some(GameCondition(CreatureDeathsThisTurn(min: None, max: None))),
+                effect: [Draw(count: 1)],
+                text: "Bad.",
+            )],
+        )"#;
+        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        assert!(
+            matches!(err, RegistryError::InvalidCard { ref reason, .. } if reason.contains("requires at least one"))
+        );
+    }
+
+    #[test]
+    fn load_rejects_source_untap_in_a_spell_definition() {
+        let bad = r#"(
+            id: "bad_source_untap",
+            name: "Bad Source Untap",
+            mana_cost: "{G}",
+            types: ["Instant"],
+            spell_effect: [Untap(subject: Source)],
+        )"#;
+        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        assert!(
+            matches!(err, RegistryError::InvalidCard { ref reason, .. } if reason.contains("source-bound effects"))
+        );
     }
 
     /// `LoseLife(amount: TargetManaValue)` reads a sibling effect's target, so a list without
@@ -1056,6 +1110,57 @@ mod tests {
                 affected: EntersTappedAffected::Permanents
             }
         )));
+    }
+
+    #[test]
+    fn issue_60_end_step_cards_share_the_trigger_and_condition_shape() {
+        let registry = CardRegistry::from_embedded().unwrap();
+        let death_condition = Some(InterveningIf::GameCondition(
+            GameCondition::CreatureDeathsThisTurn {
+                min: Some(1),
+                max: None,
+            },
+        ));
+
+        let mauler = &registry
+            .get("sabertooth_mauler")
+            .unwrap()
+            .primary_face()
+            .triggered_abilities[0];
+        assert_eq!(
+            mauler.trigger,
+            TriggerCondition::AtBeginningOfEndStep {
+                player: CastTriggerPlayer::Controller,
+            }
+        );
+        assert_eq!(mauler.intervening_if, death_condition);
+        assert_eq!(
+            mauler.effect,
+            [
+                SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: 1,
+                    subject: EffectSubject::Source,
+                },
+                SpellEffectKind::Untap {
+                    subject: EffectSubject::Source,
+                },
+            ]
+        );
+
+        let assassins = &registry
+            .get("twinblade_assassins")
+            .unwrap()
+            .primary_face()
+            .triggered_abilities[0];
+        assert_eq!(assassins.trigger, mauler.trigger);
+        assert_eq!(assassins.intervening_if, death_condition);
+        assert_eq!(
+            assassins.effect,
+            [SpellEffectKind::Draw {
+                count: Amount::Fixed(1),
+            }]
+        );
     }
 
     #[test]

@@ -8,7 +8,7 @@
   activated_abilities: [
     (
       cost: Tap,
-      effect: [UntapTarget(target: (kind: Creature))],
+      effect: [Untap(subject: Chosen((kind: Creature)))],
       text: "{T}: Untap target creature.",
     ),
   ],

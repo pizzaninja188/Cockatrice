@@ -1,0 +1,18 @@
+// Core Set 2021. Shares the reusable end-step event and counted turn-history condition with
+// Sabertooth Mauler; the condition is checked both when the ability triggers and on resolution.
+(
+  id: "twinblade_assassins",
+  name: "Twinblade Assassins",
+  mana_cost: "{3}{B}{G}",
+  types: ["Creature", "Elf", "Assassin"],
+  power: 5,
+  toughness: 4,
+  triggered_abilities: [
+    (
+      trigger: AtBeginningOfEndStep(player: Controller),
+      intervening_if: Some(GameCondition(CreatureDeathsThisTurn(min: Some(1), max: None))),
+      effect: [Draw(count: 1)],
+      text: "At the beginning of your end step, if a creature died this turn, draw a card.",
+    ),
+  ],
+)

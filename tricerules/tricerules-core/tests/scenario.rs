@@ -25,6 +25,8 @@ mod damage_prevention;
 mod dev_commands;
 #[path = "scenario/dynamic_amounts.rs"]
 mod dynamic_amounts;
+#[path = "scenario/end_step_triggers.rs"]
+mod end_step_triggers;
 #[path = "scenario/enters_tapped.rs"]
 mod enters_tapped;
 #[path = "scenario/enters_with_counters.rs"]

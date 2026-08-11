@@ -1,0 +1,21 @@
+// Core Set 2021. CR 513.1-2 / 603.4: this triggers once at the beginning of its controller's
+// end step only if a creature died earlier that turn, then checks the same condition on resolution.
+(
+  id: "sabertooth_mauler",
+  name: "Sabertooth Mauler",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Cat"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [
+    (
+      trigger: AtBeginningOfEndStep(player: Controller),
+      intervening_if: Some(GameCondition(CreatureDeathsThisTurn(min: Some(1), max: None))),
+      effect: [
+        PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source),
+        Untap(subject: Source),
+      ],
+      text: "At the beginning of your end step, if a creature died this turn, put a +1/+1 counter on this creature and untap it.",
+    ),
+  ],
+)

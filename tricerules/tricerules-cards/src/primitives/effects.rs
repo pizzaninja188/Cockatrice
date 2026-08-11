@@ -491,13 +491,12 @@ pub enum SpellEffectKind {
     TapAllCreatures {
         players: RelativePlayerSet,
     },
-    /// CR 701.20: untap target permanent matching `target` filter. The mirror of
-    /// [`Self::TapTarget`], and deliberately *not* restricted to tapped permanents — an untapped
-    /// permanent is a legal target and the effect simply does nothing (add `tapped: Some(true)`
-    /// to the filter only for a card whose own text demands it). Covers Seeker of Skybreak
-    /// (`{T}: Untap target creature`) and Aphetto Alchemist.
-    UntapTarget {
-        target: TargetFilter,
+    /// CR 701.20: untap `subject`. `Chosen` preserves ordinary permanent targeting for Seeker of
+    /// Skybreak and Aphetto Alchemist; `Source` is the untargeted self-reference used by
+    /// Sabertooth Mauler. An untapped chosen permanent is still legal and the effect is a no-op.
+    Untap {
+        #[serde(default)]
+        subject: EffectSubject,
     },
     /// CR 701.20: untap every permanent matching `filter` controlled by `players`. Untargeted, and
     /// snapshots the battlefield as it resolves, like [`Self::TapAllCreatures`]. Controller scope
@@ -854,7 +853,6 @@ impl SpellEffectKind {
             | SpellEffectKind::DestroyTarget { target }
             | SpellEffectKind::GrantKeywordsTarget { target, .. }
             | SpellEffectKind::TapTarget { target }
-            | SpellEffectKind::UntapTarget { target }
             | SpellEffectKind::TargetPlayerGainsLife { target, .. }
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
             | SpellEffectKind::DrainTarget { target, .. }
@@ -871,6 +869,9 @@ impl SpellEffectKind {
             | SpellEffectKind::PutCounters {
                 subject: EffectSubject::Chosen(target),
                 ..
+            }
+            | SpellEffectKind::Untap {
+                subject: EffectSubject::Chosen(target),
             }
             | SpellEffectKind::Regenerate {
                 subject: EffectSubject::Chosen(target),
@@ -956,6 +957,8 @@ impl SpellEffectKind {
                 ..
             } | SpellEffectKind::Regenerate {
                 subject: EffectSubject::Source,
+            } | SpellEffectKind::Untap {
+                subject: EffectSubject::Source,
             } | SpellEffectKind::ChangeSourceFace { .. }
         );
         if context == EffectContext::Spell && source_bound {
@@ -979,8 +982,12 @@ impl SpellEffectKind {
                     ))
                 }
             }
-            // CR 701.19/701.20: tapping and untapping act on permanents, never players.
-            SpellEffectKind::TapTarget { target } | SpellEffectKind::UntapTarget { target } => {
+            // CR 701.19/701.20: tapping and chosen-subject untapping act on permanents, never
+            // players. A source subject is already constrained to a permanent ability above.
+            SpellEffectKind::TapTarget { target }
+            | SpellEffectKind::Untap {
+                subject: EffectSubject::Chosen(target),
+            } => {
                 if target.is_player() {
                     Err(format!(
                         "tap/untap cannot target players, got {:?}",

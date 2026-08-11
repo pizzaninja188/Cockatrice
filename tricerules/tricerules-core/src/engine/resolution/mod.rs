@@ -516,9 +516,7 @@ impl GameEngine {
                     effect @ SpellEffectKind::TapTarget { .. } => {
                         misc::tap_target(&mut cx, effect)?
                     }
-                    effect @ SpellEffectKind::UntapTarget { .. } => {
-                        misc::untap_target(&mut cx, effect)?
-                    }
+                    effect @ SpellEffectKind::Untap { .. } => misc::untap(&mut cx, effect)?,
                     effect @ SpellEffectKind::TapAllCreatures { .. } => {
                         misc::tap_all_creatures(&mut cx, effect)?
                     }

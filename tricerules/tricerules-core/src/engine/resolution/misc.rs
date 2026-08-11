@@ -125,14 +125,34 @@ pub(super) fn tap_target(
     set_target_tapped(cx, true)
 }
 
-pub(super) fn untap_target(
+pub(super) fn untap(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::UntapTarget { .. } = effect else {
+    let SpellEffectKind::Untap { subject } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    set_target_tapped(cx, false)
+    let tid = match subject {
+        EffectSubject::Source => cx
+            .top
+            .source_permanent_id
+            .filter(|_| cx.engine.source_is_current_object(cx.top)),
+        EffectSubject::Chosen(_) => cx.targets.first().copied(),
+    };
+    if let Some(tid) = tid {
+        let on_battlefield = cx
+            .engine
+            .state
+            .objects
+            .get(&tid)
+            .is_some_and(|object| object.zone == Zone::Battlefield);
+        if on_battlefield && set_tapped(&mut cx.engine.state, tid, false) {
+            let subject_name = object_display_name(&cx.engine.state, cx.engine.registry, tid);
+            cx.events
+                .push(ev_log(format!("{} untaps {subject_name}", cx.spell_label)));
+        }
+    }
+    Ok(EffectOutcome::Continue)
 }
 
 pub(super) fn tap_all_creatures(

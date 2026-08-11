@@ -57,10 +57,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Extend resumable resolution choices with reusable mode selection and optional payment/cost branches. Calibration evidence: Trufflesnout, Sparktongue Dragon, and Crypt Lurker. Legal choice payloads must describe the available branches and required objects or mana, stale submissions must be rejected atomically, and declining an optional branch must remain legal.
   - Priority: Low
 
-- [ ] #60 [feature] End-step trigger conditions
-  - Details: Add reusable beginning/end-step trigger conditions with controller-aware active-player matching and normal APNAP collection. Calibration evidence: Sabertooth Mauler, whose effect can query the shipped counted `TurnHistory`. Cover triggers created before the step, objects entering after the step began, and multiplayer ordering; satisfy the two-card-or-mechanic reuse gate before adding the trigger variant.
-  - Priority: Low
-
 - [ ] #62 [feature] Block-event triggers and related-player recipients
   - Details: Extend combat events and trigger matching for "becomes blocked" and "blocks a creature," including effects applied to the blocking creature or its controller without targeting. Calibration evidence: Gloom Sower and Snarespinner; Gloom Sower also supplies the secondary `blocking_creature_controller_recipient` gap. Cover multiple blockers, one blocker assigned to multiple attackers where legal, removal before resolution, and trigger-source LKI.
   - Priority: Low
