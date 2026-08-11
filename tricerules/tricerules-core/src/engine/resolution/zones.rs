@@ -18,7 +18,11 @@ pub(super) fn draw(
     let spell_label = cx.spell_label;
 
     // Blue Sun's Zenith / Braingeyser: `count` may be the cast-time X.
-    let count = engine.resolve_amount(&count, AmountContext::for_stack_item(top, cx.controller));
+    let count = engine.resolve_amount(
+        &count,
+        AmountContext::for_stack_item(top, cx.controller)
+            .with_previous_effect_result(cx.previous_effect_result),
+    );
     let idx = engine.state.player_idx(drawer).unwrap();
     // CR 120.3 / 104.3c: drawing from an empty library does NOT fail the spell —
     // draw as many as possible, then the player loses as a state-based action
@@ -296,38 +300,66 @@ pub(super) fn mill_target_player(
     let SpellEffectKind::MillTargetPlayer { count, .. } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let engine = &mut *cx.engine;
-    let events = &mut *cx.events;
-    let targets = cx.targets;
-    let spell_label = cx.spell_label;
-
-    if let Some(&tid) = targets.first() {
-        if let Some(pi) = engine.state.player_idx(tid as i32) {
-            let pid = engine.state.players[pi].id;
-            let mut milled = 0u32;
-            for _ in 0..count {
-                let Some(oid) = engine.state.players[pi].library.pop_front() else {
-                    break;
-                };
-                engine.state.players[pi].graveyard.push(oid);
-                if let Some(o) = engine.state.objects.get_mut(&oid) {
-                    o.zone = Zone::Graveyard;
-                }
-                events.push(permanent_moved_event(
-                    &engine.state,
-                    oid,
-                    pid,
-                    rv1::permanent_moved::Destination::Graveyard,
-                ));
-                milled += 1;
-            }
-            events.push(ev_log(format!(
-                "{spell_label} mills {milled} card(s) from P{pid}"
-            )));
-        }
+    let recipients = cx.targets.first().map(|target| *target as PlayerId);
+    if let Some(recipient) = recipients {
+        let milled = mill_players(cx, &[recipient], count);
+        *cx.effect_result = EffectResult::MilledCards(milled);
     }
 
     Ok(EffectOutcome::Continue)
+}
+
+pub(super) fn mill(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::Mill { count, who } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let amount_context = AmountContext::for_stack_item(cx.top, cx.controller)
+        .with_previous_effect_result(cx.previous_effect_result);
+    let count = cx.engine.resolve_amount(&count, amount_context);
+    let recipients = player_recipients(&cx.engine.state, cx.controller, cx.affected_player, who);
+    let milled = mill_players(cx, &recipients, count);
+    *cx.effect_result = EffectResult::MilledCards(milled);
+
+    Ok(EffectOutcome::Continue)
+}
+
+fn mill_players(cx: &mut EffectCx<'_>, recipients: &[PlayerId], count: u32) -> Vec<ObjectId> {
+    let engine = &mut *cx.engine;
+    let events = &mut *cx.events;
+    let spell_label = cx.spell_label;
+    let mut result = vec![];
+
+    for &pid in recipients {
+        let Some(pi) = engine.state.player_idx(pid) else {
+            continue;
+        };
+        let mut milled = 0u32;
+        for _ in 0..count {
+            let Some(oid) = engine.state.players[pi].library.pop_front() else {
+                break;
+            };
+            engine.state.players[pi].graveyard.push(oid);
+            if let Some(o) = engine.state.objects.get_mut(&oid) {
+                o.zone = Zone::Graveyard;
+            }
+            events.push(permanent_moved_event(
+                &engine.state,
+                oid,
+                pid,
+                rv1::permanent_moved::Destination::Graveyard,
+            ));
+            result.push(oid);
+            milled += 1;
+        }
+        events.push(ev_log(format!(
+            "{spell_label} mills {milled} card(s) from P{pid}"
+        )));
+    }
+
+    result
 }
 
 pub(super) fn target_player_sacrifices(

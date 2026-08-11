@@ -37,7 +37,11 @@ pub(super) fn damage_target(
     let spell_label = cx.spell_label;
 
     // CR 107.3: `amount` may be the cast-time X (Fireball) or a literal (Bolt).
-    let amount = engine.resolve_amount(&amount, AmountContext::for_stack_item(top, top.controller));
+    let amount = engine.resolve_amount(
+        &amount,
+        AmountContext::for_stack_item(top, top.controller)
+            .with_previous_effect_result(cx.previous_effect_result),
+    );
     if let Some(&tid) = targets.first() {
         if let Some(pi) = engine.state.player_idx(tid as i32) {
             let pid = engine.state.players[pi].id;
@@ -124,7 +128,11 @@ pub(super) fn damage_targets(
             0
         } else {
             engine
-                .resolve_amount(&amount, AmountContext::for_stack_item(cx.top, controller))
+                .resolve_amount(
+                    &amount,
+                    AmountContext::for_stack_item(cx.top, controller)
+                        .with_previous_effect_result(cx.previous_effect_result),
+                )
                 .checked_div(legal_count)
                 .unwrap_or(0)
         }
@@ -194,7 +202,8 @@ pub(super) fn damage_player(
     };
     let amount = cx.engine.resolve_amount(
         &amount,
-        AmountContext::for_stack_item(cx.top, cx.controller),
+        AmountContext::for_stack_item(cx.top, cx.controller)
+            .with_previous_effect_result(cx.previous_effect_result),
     );
     // CR 101.4: APNAP for the multi-player recipients, so the log and the life-loss order are
     // reproducible in a replay.

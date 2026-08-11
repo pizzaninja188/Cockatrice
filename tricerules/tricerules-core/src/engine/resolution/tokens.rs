@@ -17,7 +17,11 @@ pub(super) fn create_tokens(
     let events = &mut *cx.events;
     let controller = cx.controller;
     let spell_label = cx.spell_label;
-    let count = engine.resolve_amount(&count, AmountContext::for_stack_item(&item, controller));
+    let count = engine.resolve_amount(
+        &count,
+        AmountContext::for_stack_item(&item, controller)
+            .with_previous_effect_result(cx.previous_effect_result),
+    );
 
     if engine.create_tokens(
         TokenCreationRequest {

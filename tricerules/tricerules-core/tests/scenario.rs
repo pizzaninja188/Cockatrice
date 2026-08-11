@@ -51,6 +51,8 @@ mod issue_71_filters;
 mod legend_rule;
 #[path = "scenario/mana.rs"]
 mod mana;
+#[path = "scenario/mill_results.rs"]
+mod mill_results;
 #[path = "scenario/modal_spells.rs"]
 mod modal_spells;
 #[path = "scenario/multi_face.rs"]

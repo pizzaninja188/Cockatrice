@@ -22,7 +22,8 @@ pub(super) fn pump_target(
     if let Some(scale) = scale {
         let units = engine.resolve_amount(
             &scale.amount,
-            AmountContext::for_stack_item(top, cx.controller),
+            AmountContext::for_stack_item(top, cx.controller)
+                .with_previous_effect_result(cx.previous_effect_result),
         );
         let units = i32::try_from(units).unwrap_or(i32::MAX);
         power = power.saturating_add(scale.power_per_unit.saturating_mul(units));

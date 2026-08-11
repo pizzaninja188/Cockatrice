@@ -257,6 +257,13 @@ impl CardRegistry {
                         }
                     }
                     if let StaticAbilityDef::EntersWithCounters { amount, .. } = ability {
+                        if amount.uses_milled_result() {
+                            return Err(RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason: "CardsMilledThisWay is valid only in an effect list immediately following mill"
+                                    .into(),
+                            });
+                        }
                         amount
                             .validate()
                             .map_err(|reason| RegistryError::InvalidCard {

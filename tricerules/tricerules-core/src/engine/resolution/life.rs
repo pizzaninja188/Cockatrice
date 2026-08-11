@@ -64,34 +64,14 @@ pub(super) fn gain_life(
     let controller = cx.controller;
     let spell_label = cx.spell_label;
 
-    let amount = engine.resolve_amount(&amount, AmountContext::for_stack_item(top, controller));
+    let amount = engine.resolve_amount(
+        &amount,
+        AmountContext::for_stack_item(top, controller)
+            .with_previous_effect_result(cx.previous_effect_result),
+    );
     apply_life_gain(engine, events, controller, amount, spell_label);
 
     Ok(EffectOutcome::Continue)
-}
-
-fn lose_life_recipients(
-    state: &GameState,
-    controller: PlayerId,
-    affected_player: PlayerId,
-    who: PlayerRecipient,
-) -> Vec<PlayerId> {
-    match who {
-        PlayerRecipient::Controller => vec![controller],
-        PlayerRecipient::AffectedPlayer => vec![affected_player],
-        PlayerRecipient::EachOpponent => state
-            .players
-            .iter()
-            .filter(|player| state.are_opponents(player.id, controller) && !player.has_lost)
-            .map(|player| player.id)
-            .collect(),
-        PlayerRecipient::EachPlayer => state
-            .players
-            .iter()
-            .filter(|player| !player.has_lost)
-            .map(|player| player.id)
-            .collect(),
-    }
 }
 
 /// CR 119.3: the players named by `who` lose life. Untargeted (CR 115.1).
@@ -109,7 +89,7 @@ pub(super) fn lose_life(
     let SpellEffectKind::LoseLife { amount, who } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let recipients = lose_life_recipients(&cx.engine.state, cx.controller, cx.affected_player, who);
+    let recipients = player_recipients(&cx.engine.state, cx.controller, cx.affected_player, who);
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let targets = cx.targets;
@@ -309,19 +289,19 @@ mod tests {
         engine.state.players.push(lost_player);
 
         assert_eq!(
-            lose_life_recipients(&engine.state, 10, 30, PlayerRecipient::Controller),
+            player_recipients(&engine.state, 10, 30, PlayerRecipient::Controller),
             vec![10]
         );
         assert_eq!(
-            lose_life_recipients(&engine.state, 10, 30, PlayerRecipient::AffectedPlayer),
+            player_recipients(&engine.state, 10, 30, PlayerRecipient::AffectedPlayer),
             vec![30]
         );
         assert_eq!(
-            lose_life_recipients(&engine.state, 10, 30, PlayerRecipient::EachOpponent),
+            player_recipients(&engine.state, 10, 30, PlayerRecipient::EachOpponent),
             vec![20, 30]
         );
         assert_eq!(
-            lose_life_recipients(&engine.state, 10, 30, PlayerRecipient::EachPlayer),
+            player_recipients(&engine.state, 10, 30, PlayerRecipient::EachPlayer),
             vec![10, 20, 30]
         );
     }

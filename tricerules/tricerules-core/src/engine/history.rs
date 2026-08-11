@@ -166,7 +166,7 @@ impl GameEngine {
         clamp_public_count(count)
     }
 
-    pub(super) fn resolve_amount(&self, amount: &Amount, context: AmountContext) -> u32 {
+    pub(super) fn resolve_amount(&self, amount: &Amount, context: AmountContext<'_>) -> u32 {
         match amount {
             Amount::Fixed(value) => *value,
             Amount::X => context.chosen_x,
@@ -219,6 +219,20 @@ impl GameEngine {
             }
             Amount::Count(CountExpression::CreatureDeathsThisTurn) => {
                 self.state.turn_history.current.creatures_died
+            }
+            Amount::Count(CountExpression::CardsMilledThisWay { filter }) => {
+                let Some(EffectResult::MilledCards(object_ids)) = context.previous_effect_result
+                else {
+                    return 0;
+                };
+                let count = object_ids
+                    .iter()
+                    .filter_map(|oid| self.state.objects.get(oid))
+                    .filter(|object| object.zone == Zone::Graveyard)
+                    .filter_map(|object| self.registry.get(&object.card_id))
+                    .filter(|definition| definition.matches_card_type_outside_stack(*filter))
+                    .count();
+                clamp_public_count(count)
             }
         }
     }

@@ -40,8 +40,15 @@ const MAX_HAND_SIZE: usize = 7;
 /// the engine at its current valid priority window and publishes that settled state.
 const MAX_AUTOMATIC_PRIORITY_PASSES: usize = 128;
 
+#[derive(Clone, Debug, Default)]
+enum EffectResult {
+    #[default]
+    None,
+    MilledCards(Vec<ObjectId>),
+}
+
 #[derive(Clone, Copy)]
-struct AmountContext {
+struct AmountContext<'a> {
     controller: PlayerId,
     source_object_id: ObjectId,
     source_zone_change: u64,
@@ -50,9 +57,10 @@ struct AmountContext {
     /// this object until CR 608.2n's final move would occur.
     resolving_spell_id: Option<ObjectId>,
     chosen_x: u32,
+    previous_effect_result: Option<&'a EffectResult>,
 }
 
-impl AmountContext {
+impl<'a> AmountContext<'a> {
     fn for_stack_item(item: &StackItem, controller: PlayerId) -> Self {
         Self {
             controller,
@@ -60,7 +68,13 @@ impl AmountContext {
             source_zone_change: item.source_zone_change,
             resolving_spell_id: item.ability_text.is_none().then_some(item.id),
             chosen_x: item.chosen_x,
+            previous_effect_result: None,
         }
+    }
+
+    fn with_previous_effect_result(mut self, result: &'a EffectResult) -> Self {
+        self.previous_effect_result = Some(result);
+        self
     }
 }
 

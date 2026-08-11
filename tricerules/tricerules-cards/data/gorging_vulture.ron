@@ -1,0 +1,21 @@
+// Oracle and rulings checked 2026-08-11. The life gain counts only creature cards in the exact
+// cohort produced by the preceding mill instruction (CR 608.2c, 701.17c).
+(
+  id: "gorging_vulture",
+  name: "Gorging Vulture",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Bird"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying],
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [
+        Mill(count: 4),
+        GainLife(amount: Count(CardsMilledThisWay(filter: Creature))),
+      ],
+      text: "When this creature enters, mill four cards. You gain 1 life for each creature card milled this way.",
+    ),
+  ],
+)

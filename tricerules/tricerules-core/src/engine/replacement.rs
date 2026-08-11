@@ -284,6 +284,7 @@ impl GameEngine {
                                     .unwrap_or(0),
                                 resolving_spell_id: None,
                                 chosen_x: event.chosen_x,
+                                previous_effect_result: None,
                             },
                         );
                         accumulate_entry_counters(&mut event.entry_counters, *counter, count);

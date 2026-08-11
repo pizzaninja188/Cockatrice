@@ -49,6 +49,9 @@ mod tests {
                 name: "Growth Cycle".into(),
             }),
             Amount::Count(CountExpression::CreatureDeathsThisTurn),
+            Amount::Count(CountExpression::CardsMilledThisWay {
+                filter: CardTypeFilter::Creature,
+            }),
         ] {
             let encoded = ron::to_string(&amount).unwrap();
             assert_eq!(ron::from_str::<Amount>(&encoded).unwrap(), amount);
@@ -177,6 +180,30 @@ mod tests {
             max_targets: None,
         };
         assert!(effect.validate(EffectContext::Spell).is_err());
+    }
+
+    #[test]
+    fn milled_result_amount_requires_an_immediately_preceding_mill() {
+        let counted_gain = SpellEffectKind::GainLife {
+            amount: Amount::Count(CountExpression::CardsMilledThisWay {
+                filter: CardTypeFilter::Creature,
+            }),
+        };
+        let mill = SpellEffectKind::Mill {
+            count: Amount::Fixed(4),
+            who: PlayerRecipient::Controller,
+        };
+
+        assert!(SpellEffectKind::validate_list(&[mill.clone(), counted_gain.clone()]).is_ok());
+        assert!(SpellEffectKind::validate_list(std::slice::from_ref(&counted_gain)).is_err());
+        assert!(SpellEffectKind::validate_list(&[
+            mill,
+            SpellEffectKind::Draw {
+                count: Amount::Fixed(1),
+            },
+            counted_gain,
+        ])
+        .is_err());
     }
 
     #[test]

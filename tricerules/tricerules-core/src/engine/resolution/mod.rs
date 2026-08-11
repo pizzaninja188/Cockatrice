@@ -40,6 +40,8 @@ struct EffectCx<'a> {
     /// `controller`.
     affected_player: PlayerId,
     spell_label: &'a str,
+    previous_effect_result: &'a EffectResult,
+    effect_result: &'a mut EffectResult,
 }
 
 struct TokenCreationRequest<'a> {
@@ -55,6 +57,30 @@ struct TokenCreationRequest<'a> {
 enum EffectOutcome {
     Continue,
     Suspended,
+}
+
+fn player_recipients(
+    state: &GameState,
+    controller: PlayerId,
+    affected_player: PlayerId,
+    who: PlayerRecipient,
+) -> Vec<PlayerId> {
+    match who {
+        PlayerRecipient::Controller => vec![controller],
+        PlayerRecipient::AffectedPlayer => vec![affected_player],
+        PlayerRecipient::EachOpponent => state
+            .players
+            .iter()
+            .filter(|player| state.are_opponents(player.id, controller) && !player.has_lost)
+            .map(|player| player.id)
+            .collect(),
+        PlayerRecipient::EachPlayer => state
+            .players
+            .iter()
+            .filter(|player| !player.has_lost)
+            .map(|player| player.id)
+            .collect(),
+    }
 }
 
 /// One entry of a resolving stack item's flattened effect list: the primitive, the targets it was
@@ -423,6 +449,7 @@ impl GameEngine {
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
         let controller = top.controller;
+        let mut previous_effect_result = EffectResult::None;
         for (index, (effect, effect_targets, effect_target_damage)) in
             resolution_effects.into_iter().enumerate().skip(start)
         {
@@ -435,8 +462,10 @@ impl GameEngine {
                     TargetSourceIdentity::for_stack_item(self, top),
                 )
             {
+                previous_effect_result = EffectResult::None;
                 continue;
             }
+            let mut effect_result = EffectResult::None;
             let outcome = {
                 let mut cx = EffectCx {
                     engine: self,
@@ -447,6 +476,8 @@ impl GameEngine {
                     controller,
                     affected_player: top.trigger_player.unwrap_or(controller),
                     spell_label,
+                    previous_effect_result: &previous_effect_result,
+                    effect_result: &mut effect_result,
                 };
                 match effect {
                     effect @ SpellEffectKind::DamageTarget { .. } => {
@@ -515,6 +546,7 @@ impl GameEngine {
                     effect @ SpellEffectKind::MillTargetPlayer { .. } => {
                         zones::mill_target_player(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::Mill { .. } => zones::mill(&mut cx, effect)?,
                     effect @ SpellEffectKind::TargetPlayerSacrifices { .. } => {
                         zones::target_player_sacrifices(&mut cx, effect)?
                     }
@@ -585,6 +617,7 @@ impl GameEngine {
                 }
                 return Ok(());
             }
+            previous_effect_result = effect_result;
         }
         events.push(ev_log(format!("{spell_label} resolves.")));
         // CR 608.2m: the spell lands in its owner's graveyard *after* its effects, so it sits
@@ -1387,6 +1420,8 @@ mod source_keyword_tests {
             .spell_effect[0]
             .clone();
         let mut events = vec![];
+        let previous_effect_result = EffectResult::None;
+        let mut effect_result = EffectResult::None;
         let mut cx = EffectCx {
             engine: &mut engine,
             events: &mut events,
@@ -1396,6 +1431,8 @@ mod source_keyword_tests {
             controller: 0,
             affected_player: 0,
             spell_label: "deathtouch source",
+            previous_effect_result: &previous_effect_result,
+            effect_result: &mut effect_result,
         };
 
         damage::damage_targets(&mut cx, effect).unwrap();
@@ -1421,6 +1458,8 @@ mod source_keyword_tests {
             .spell_effect[0]
             .clone();
         let mut events = vec![];
+        let previous_effect_result = EffectResult::None;
+        let mut effect_result = EffectResult::None;
         let mut cx = EffectCx {
             engine: &mut engine,
             events: &mut events,
@@ -1430,6 +1469,8 @@ mod source_keyword_tests {
             controller: 0,
             affected_player: 0,
             spell_label: "deathtouch source",
+            previous_effect_result: &previous_effect_result,
+            effect_result: &mut effect_result,
         };
 
         mass::damage_all(&mut cx, effect).unwrap();

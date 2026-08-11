@@ -168,6 +168,10 @@ pub enum CountExpression {
     /// The committed, identity-free number of creatures that died during the current turn.
     /// Bloodcrazed Paladin shares this watcher with `GameCondition::CreatureDeathsThisTurn`.
     CreatureDeathsThisTurn,
+    /// Count cards with `filter` among the exact objects produced by the immediately preceding
+    /// mill effect in this resolving effect list. Gorging Vulture consumes the count as life;
+    /// Tribune of Rot consumes the same cohort as a token count.
+    CardsMilledThisWay { filter: CardTypeFilter },
 }
 
 impl CountExpression {
@@ -178,7 +182,8 @@ impl CountExpression {
                 Err("graveyard card count name cannot be empty".into())
             }
             CountExpression::GraveyardCardsNamed { .. }
-            | CountExpression::CreatureDeathsThisTurn => Ok(()),
+            | CountExpression::CreatureDeathsThisTurn
+            | CountExpression::CardsMilledThisWay { .. } => Ok(()),
         }
     }
 }
@@ -228,6 +233,13 @@ impl Amount {
 
     pub fn requires_game_state(&self) -> bool {
         matches!(self, Amount::Conditional { .. } | Amount::Count(_))
+    }
+
+    pub(crate) fn uses_milled_result(&self) -> bool {
+        matches!(
+            self,
+            Amount::Count(CountExpression::CardsMilledThisWay { .. })
+        )
     }
 
     pub fn validate(&self) -> Result<(), String> {
@@ -697,6 +709,14 @@ pub enum SpellEffectKind {
         count: u32,
         target: TargetFilter,
     },
+    /// CR 701.17: mill the players named by `who` without targeting them. Gorging Vulture and
+    /// Tribune of Rot use the default `Controller`; player-relative trigger effects can reuse the
+    /// remaining [`PlayerRecipient`] variants without pretending that "you" is a target.
+    Mill {
+        count: Amount,
+        #[serde(default)]
+        who: PlayerRecipient,
+    },
     /// CR 701.7a: force `count` cards from the target player's hand to their graveyard.
     /// `random: true` chooses cards at random (Hymn to Tourach); `random: false` lets
     /// the spell's controller choose from the revealed hand (Coercion, Thoughtseize).
@@ -998,6 +1018,34 @@ impl SpellEffectKind {
                     .into(),
             );
         }
+
+        for (index, effect) in effects.iter().enumerate() {
+            let amount = match effect {
+                SpellEffectKind::DamageTarget { amount, .. }
+                | SpellEffectKind::DamagePlayer { amount, .. }
+                | SpellEffectKind::Draw { count: amount }
+                | SpellEffectKind::GainLife { amount }
+                | SpellEffectKind::Mill { count: amount, .. }
+                | SpellEffectKind::CreateTokens { count: amount, .. } => Some(amount),
+                SpellEffectKind::PumpTarget {
+                    scale: Some(scale), ..
+                } => Some(&scale.amount),
+                _ => None,
+            };
+            if amount.is_some_and(Amount::uses_milled_result)
+                && !matches!(
+                    index
+                        .checked_sub(1)
+                        .and_then(|previous| effects.get(previous)),
+                    Some(SpellEffectKind::Mill { .. } | SpellEffectKind::MillTargetPlayer { .. })
+                )
+            {
+                return Err(
+                    "CardsMilledThisWay requires an immediately preceding Mill or MillTargetPlayer effect"
+                        .into(),
+                );
+            }
+        }
         Ok(())
     }
 
@@ -1015,6 +1063,7 @@ impl SpellEffectKind {
             | SpellEffectKind::DamagePlayer { amount, .. }
             | SpellEffectKind::Draw { count: amount }
             | SpellEffectKind::GainLife { amount }
+            | SpellEffectKind::Mill { count: amount, .. }
             | SpellEffectKind::CreateTokens { count: amount, .. } => amount.validate()?,
             SpellEffectKind::PumpTarget {
                 scale: Some(scale), ..

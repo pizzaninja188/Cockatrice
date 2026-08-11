@@ -125,10 +125,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Extend library search with a land filter, battlefield destination routed through the shared replacement-aware entry funnel, and mandatory shuffle. Calibration evidence: Evolving Wilds. Issue #52 shipped its tap plus self-sacrifice activation cost; this issue remains the owner-scoped search, reveal, failure-to-find, replacement-aware battlefield entry, and deterministic mandatory shuffle behavior.
   - Priority: Low
 
-- [ ] #91 [feature] Aggregate results of milling cards
-  - Details: Let a compound effect inspect the cards moved by its immediately preceding mill operation and derive a count from their characteristics. Calibration evidence: Gorging Vulture. Keep the moved-object result local to one resolving effect chain, use graveyard-zone characteristics, and satisfy the two-card-or-mechanic reuse gate before adding cross-effect result plumbing.
-  - Priority: Low
-
 - [ ] #92 [feature] Look, choose a matching card, and bottom the rest
   - Details: Add a resumable library-selection algorithm that looks at the top N cards, optionally chooses one matching a filter for hand, and puts the rest on the bottom in the rules-required order. Calibration evidence: Brightwood Tracker. Preserve hidden information, deterministic ordering, exact choice validation, and satisfy the custom-effect review plus two-card-or-mechanic reuse gates before choosing a primitive or tier-3 implementation.
   - Priority: Low
