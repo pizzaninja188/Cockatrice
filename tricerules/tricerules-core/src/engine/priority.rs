@@ -428,26 +428,16 @@ impl GameEngine {
         Ok(finish_with_events(self, std::mem::take(ev)))
     }
 
-    pub(super) fn next_cleanup_discard_needed(&self) -> Option<PlayerId> {
-        let n = self.state.players.len();
-        if n == 0 {
-            return None;
-        }
-        let start = self.state.active_player_idx;
-        for k in 0..n {
-            let i = (start + k) % n;
-            if self.state.players[i].hand.len() > MAX_HAND_SIZE {
-                return Some(self.state.players[i].id);
-            }
-        }
-        None
+    pub(super) fn active_player_cleanup_discard_needed(&self) -> Option<PlayerId> {
+        let active_player = self.state.players.get(self.state.active_player_idx)?;
+        (active_player.hand.len() > MAX_HAND_SIZE).then_some(active_player.id)
     }
 
     pub(super) fn start_cleanup_or_roll_turn(
         &mut self,
         mut ev: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
-        if let Some(pid) = self.next_cleanup_discard_needed() {
+        if let Some(pid) = self.active_player_cleanup_discard_needed() {
             self.state.cleanup_discard_player = Some(pid);
             if let Some(i) = self.state.player_idx(pid) {
                 self.state.priority_idx = i;
@@ -535,17 +525,6 @@ impl GameEngine {
             return Ok(finish_with_events(self, ev));
         }
         self.state.cleanup_discard_player = None;
-        if let Some(pid) = self.next_cleanup_discard_needed() {
-            self.state.cleanup_discard_player = Some(pid);
-            if let Some(i) = self.state.player_idx(pid) {
-                self.state.priority_idx = i;
-            }
-            ev.push(ev_log(format!(
-                "P{pid}: discard to hand size ({MAX_HAND_SIZE})"
-            )));
-            ev.push(ev_priority_changed(self));
-            return Ok(finish_with_events(self, ev));
-        }
         self.finish_cleanup_roll_new_turn(ev)
     }
 

@@ -494,29 +494,36 @@ fn automatic_settlement_stops_at_the_safety_limit() {
     assert_eq!(final_phase.active_player_id, e.state.active_player_id());
 }
 
-fn engine_in_cleanup_with_excess(seed: u64, excess: usize) -> GameEngine {
-    let mut e = GameEngine::new(seed, &[0, 1], 20, None, true).expect("new");
-    advance_to_main1_from_game_start(&mut e);
-    let ap_idx = e.state.player_idx(0).expect("active player");
-    for _ in 0..excess {
-        let oid = e.state.players[ap_idx]
+fn add_cards_to_hand_from_library(e: &mut GameEngine, player: i32, count: usize) {
+    let player_idx = e.state.player_idx(player).expect("player");
+    for _ in 0..count {
+        let oid = e.state.players[player_idx]
             .library
             .pop_front()
             .expect("library");
-        e.state.players[ap_idx].hand.push(oid);
+        e.state.players[player_idx].hand.push(oid);
         e.state.objects.get_mut(&oid).expect("obj").zone = tricerules_core::Zone::Hand;
     }
+}
 
-    e.apply_command(0, &primitive_yield())
+fn advance_from_main1_through_end_step(e: &mut GameEngine, active_player: i32) {
+    e.apply_command(active_player, &primitive_yield())
         .expect("main1->begin combat");
-    e.apply_command(0, &primitive_yield())
+    e.apply_command(active_player, &primitive_yield())
         .expect("begin combat->end combat");
-    e.apply_command(0, &primitive_yield())
+    e.apply_command(active_player, &primitive_yield())
         .expect("end combat->main2");
-    e.apply_command(0, &primitive_yield())
+    e.apply_command(active_player, &primitive_yield())
         .expect("main2->end step");
-    e.apply_command(0, &primitive_yield())
+    e.apply_command(active_player, &primitive_yield())
         .expect("end step->cleanup");
+}
+
+fn engine_in_cleanup_with_excess(seed: u64, excess: usize) -> GameEngine {
+    let mut e = GameEngine::new(seed, &[0, 1], 20, None, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    add_cards_to_hand_from_library(&mut e, 0, excess);
+    advance_from_main1_through_end_step(&mut e, 0);
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Cleanup);
     assert_eq!(e.state.cleanup_discard_player, Some(0));
     e
@@ -638,6 +645,45 @@ fn cleanup_step_opens_when_hand_exceeds_max_and_discard_finishes_turn() {
     assert_eq!(e.state.players[ap_idx].hand.len(), 7);
     assert_eq!(e.state.active_player_id(), 1);
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
+}
+
+#[test]
+fn cleanup_ignores_nonactive_player_over_max_hand_size() {
+    let mut e = GameEngine::new(1003, &[0, 1], 20, None, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    add_cards_to_hand_from_library(&mut e, 1, 1);
+    let hand_before = e.state.players[1].hand.clone();
+    let graveyard_before = e.state.players[1].graveyard.clone();
+
+    advance_from_main1_through_end_step(&mut e, 0);
+
+    assert_eq!(e.state.cleanup_discard_player, None);
+    assert_eq!(e.state.active_player_id(), 1);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
+    assert_eq!(e.state.players[1].hand, hand_before);
+    assert_eq!(e.state.players[1].graveyard, graveyard_before);
+}
+
+#[test]
+fn cleanup_does_not_chain_from_active_to_nonactive_player() {
+    let mut e = GameEngine::new(1004, &[0, 1], 20, None, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    add_cards_to_hand_from_library(&mut e, 0, 1);
+    add_cards_to_hand_from_library(&mut e, 1, 1);
+    let nonactive_hand_before = e.state.players[1].hand.clone();
+    let nonactive_graveyard_before = e.state.players[1].graveyard.clone();
+
+    advance_from_main1_through_end_step(&mut e, 0);
+    assert_eq!(e.state.cleanup_discard_player, Some(0));
+
+    e.apply_command(0, &discard_cleanup(0))
+        .expect("active player discards to maximum hand size");
+
+    assert_eq!(e.state.cleanup_discard_player, None);
+    assert_eq!(e.state.active_player_id(), 1);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
+    assert_eq!(e.state.players[1].hand, nonactive_hand_before);
+    assert_eq!(e.state.players[1].graveyard, nonactive_graveyard_before);
 }
 
 #[test]

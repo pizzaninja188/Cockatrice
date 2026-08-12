@@ -741,7 +741,7 @@ pub struct GameState {
     pub combat: Option<CombatState>,
     /// If set, game is over; winning player
     pub winner: Option<PlayerId>,
-    /// CR 514.1: player who must discard next during cleanup, if any.
+    /// CR 514.1: active player who must discard during their cleanup step, if any.
     pub cleanup_discard_player: Option<PlayerId>,
     /// Pre-game flow; `None` once the duel has started (upkeep of turn 1).
     pub opening: Option<OpeningSequence>,
