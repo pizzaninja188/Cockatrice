@@ -685,7 +685,12 @@ fn pacifism_prevents_blocking() {
         .legal_by_player
         .get(&1)
         .expect("defending-player legal actions");
-    assert_eq!(legal.selectable_blocker_ids, vec![legal_blocker]);
+    let legal_pairs: Vec<_> = legal
+        .legal_block_pairs
+        .iter()
+        .map(|pair| (pair.blocker_id, pair.attacker_id))
+        .collect();
+    assert_eq!(legal_pairs, [(legal_blocker, attacker)]);
     assert!(
         e.apply_command(
             1,

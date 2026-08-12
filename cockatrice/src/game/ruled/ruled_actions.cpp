@@ -591,8 +591,12 @@ bool tryHandleCombatClick(CardItem *card)
             return true;
         }
         // Clicked an enemy attacker — pair all staged blockers to it.
-        if (state->hasStagedBlocker() && state->isCurrentAttacker(oid)) {
-            state->pairStagedBlockerToAttacker(oid);
+        if (state->isCurrentAttacker(oid)) {
+            if (state->hasStagedBlocker()) {
+                state->pairStagedBlockerToAttacker(oid);
+            }
+            // Declared attackers are combat controls during this step. Consume every click so an
+            // illegal pair (including an unblockable attacker) cannot fall through to freeform UI.
             return true;
         }
     }

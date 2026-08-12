@@ -274,8 +274,13 @@ fn destructive_tampering_tracks_current_flying_status_and_later_creatures() {
         .expect("declare attacker");
     pass_to_declare_blockers(&mut engine);
 
-    let selectable = &engine.initial_response_batch().legal_by_player[&1].selectable_blocker_ids;
-    assert_eq!(selectable, &[bird_grabber, flyer]);
+    let legal = &engine.initial_response_batch().legal_by_player[&1];
+    let legal_pairs: Vec<_> = legal
+        .legal_block_pairs
+        .iter()
+        .map(|pair| (pair.blocker_id, pair.attacker_id))
+        .collect();
+    assert_eq!(legal_pairs, [(bird_grabber, attacker), (flyer, attacker)]);
     let err = engine
         .apply_command(
             1,
@@ -324,7 +329,12 @@ fn cant_be_blocked_coexists_with_menace_and_must_block_requirements() {
 
     let legal = &engine.initial_response_batch().legal_by_player[&1];
     assert_eq!(legal.required_blocker_ids, vec![blocker]);
-    assert_eq!(legal.selectable_blocker_ids, vec![blocker]);
+    let legal_pairs: Vec<_> = legal
+        .legal_block_pairs
+        .iter()
+        .map(|pair| (pair.blocker_id, pair.attacker_id))
+        .collect();
+    assert_eq!(legal_pairs, [(blocker, ordinary)]);
     let err = engine
         .apply_command(
             1,
@@ -344,6 +354,32 @@ fn cant_be_blocked_coexists_with_menace_and_must_block_requirements() {
             }]),
         )
         .expect("must-block is satisfied by the other legal attacker");
+}
+
+#[test]
+fn legal_block_pairs_exclude_pair_specific_flying_restrictions() {
+    let mut engine = GameEngine::new(77_009, &[0, 1], 20, None, true).expect("new engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let ground_attacker = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    let flying_attacker = inject_creature_on_battlefield(&mut engine, 0, "storm_crow");
+    let ground_blocker = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+
+    advance_main1_to_declare_attackers(&mut engine);
+    engine
+        .apply_command(
+            0,
+            &declare_attackers(vec![ground_attacker, flying_attacker]),
+        )
+        .expect("declare mixed attackers");
+    pass_to_declare_blockers(&mut engine);
+
+    let legal = &engine.initial_response_batch().legal_by_player[&1];
+    let legal_pairs: Vec<_> = legal
+        .legal_block_pairs
+        .iter()
+        .map(|pair| (pair.blocker_id, pair.attacker_id))
+        .collect();
+    assert_eq!(legal_pairs, [(ground_blocker, ground_attacker)]);
 }
 
 #[test]

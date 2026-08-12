@@ -504,16 +504,12 @@ message LegalActions {
   // disable the confirm-blockers control until every id is staged as a blocker (mirrors set_blockers).
   repeated uint32 required_blocker_ids = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated LegalHandAction hand_actions = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  reserved 9, 10;
-  reserved "graveyard_actions", "valid_targets_by_graveyard_index";
+  reserved 9, 10, 12;
+  reserved "graveyard_actions", "valid_targets_by_graveyard_index", "selectable_blocker_ids";
   // Battlefield creatures the active player may currently stage as attackers. Populated only
   // while that player is making the declaration; derived from the same legality predicate used
   // by DeclareAttackers, so restrictions such as Defender and Pacifism are reflected in the UI.
   repeated uint32 selectable_attacker_ids = 11 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  // Battlefield creatures the defending player may currently stage as blockers. A creature is
-  // included when it can legally block at least one declared attacker; pair-specific restrictions
-  // remain authoritative when the staged blocker is assigned to an attacker.
-  repeated uint32 selectable_blocker_ids = 12 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated LegalZoneCastAction zone_cast_actions = 13 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Valid targets for public-zone casts. Key = (engine ObjectId << 8) | face index.
   map<uint64, SpellTargets> valid_targets_by_zone_object = 14
@@ -522,6 +518,10 @@ message LegalActions {
   // exact selectable objects for discard / filtered-sacrifice cost components.
   map<uint64, LegalCostChoices> cost_choices_by_ability = 15
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Exact blocker -> attacker assignments the defending player may currently stage. Each pair is
+  // derived from the same legality predicate used by DeclareBlockers, so pair-specific evasion and
+  // restrictions are reflected without client-side rules inference.
+  repeated BlockPair legal_block_pairs = 16 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // Servatrice-injected each ruled broadcast: engine hand slot index -> Server_Card.id for that player,

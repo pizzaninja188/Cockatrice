@@ -604,7 +604,7 @@ void RuledClientState::toggleStagedBlocker(quint32 blockerOid)
 {
     if (stagedBlockerOids.contains(blockerOid)) {
         stagedBlockerOids.remove(blockerOid);
-    } else if (selectableBlockerOids.contains(blockerOid)) {
+    } else if (isSelectableBlocker(blockerOid)) {
         stagedBlockerOids.insert(blockerOid);
     } else {
         return;
@@ -628,6 +628,14 @@ void RuledClientState::pairStagedBlockerToAttacker(quint32 attackerOid)
     }
     if (!currentAttackerOids.contains(attackerOid)) {
         return;
+    }
+    // Pairing is all-or-nothing: do not silently move only the legal subset of a multi-blocker
+    // staging selection. The engine publishes this exact relation from the same predicate used by
+    // DeclareBlockers, including attacker-side restrictions such as "can't be blocked."
+    for (quint32 blockerOid : std::as_const(stagedBlockerOids)) {
+        if (!isLegalBlockPair(blockerOid, attackerOid)) {
+            return;
+        }
     }
     for (quint32 blockerOid : std::as_const(stagedBlockerOids)) {
         pendingBlocks.insert(blockerOid, attackerOid);

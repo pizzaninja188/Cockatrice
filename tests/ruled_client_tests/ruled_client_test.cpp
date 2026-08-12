@@ -217,6 +217,13 @@ protected:
         action->set_cost(cost);
         return action;
     }
+
+    static void addLegalBlockPair(ruled::v1::LegalActions &actions, quint32 blockerOid, quint32 attackerOid)
+    {
+        auto *pair = actions.add_legal_block_pairs();
+        pair->set_blocker_id(blockerOid);
+        pair->set_attacker_id(attackerOid);
+    }
 };
 
 // ---------------------------------------------------------------------------------------
@@ -796,7 +803,7 @@ TEST_F(RuledClientTest, RequirementSetsSurviveABatchWithoutLegalActions)
     actions.add_required_attacker_ids(100); // CR 508.1d
     actions.add_required_blocker_ids(200);  // CR 509.1c
     actions.add_selectable_attacker_ids(100);
-    actions.add_selectable_blocker_ids(200);
+    addLegalBlockPair(actions, 200, 300);
     apply(withActions);
     ASSERT_EQ(state->requiredAttackerOids.size(), 1);
 
@@ -1286,12 +1293,21 @@ TEST_F(RuledClientTest, BlockerStagingPairsToAnAttackerAndSyncsAPreview)
     ruled::v1::RuledEventBatch declared;
     auto *ad = declared.add_events()->mutable_attackers_declared();
     ad->add_attacker_object_ids(100);
+    ad->add_attacker_object_ids(101); // Only blocker 200 can block this attacker.
+    ad->add_attacker_object_ids(102); // Unblockable: no legal pair targets this attacker.
     apply(declared);
     // The opponent is the active player during our declare-blockers step.
     auto batch = phaseBatch(ruled::v1::PHASE_ID_DECLARE_BLOCKERS, kOpponent);
     auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
-    actions.add_selectable_blocker_ids(200);
-    actions.add_selectable_blocker_ids(201);
+    auto *firstPair = actions.add_legal_block_pairs();
+    firstPair->set_blocker_id(200);
+    firstPair->set_attacker_id(100);
+    auto *secondPair = actions.add_legal_block_pairs();
+    secondPair->set_blocker_id(201);
+    secondPair->set_attacker_id(100);
+    auto *thirdPair = actions.add_legal_block_pairs();
+    thirdPair->set_blocker_id(200);
+    thirdPair->set_attacker_id(101);
     apply(batch);
     ASSERT_TRUE(state->localPlayerIsDefender());
     host.sentCommands.clear();
@@ -1300,18 +1316,34 @@ TEST_F(RuledClientTest, BlockerStagingPairsToAnAttackerAndSyncsAPreview)
     EXPECT_TRUE(state->hasStagedBlocker());
     EXPECT_TRUE(state->isStagedBlocker(200));
 
+    // No staged blocker has an edge to the unblockable attacker.
+    state->pairStagedBlockerToAttacker(102);
+    EXPECT_TRUE(state->hasStagedBlocker());
+    EXPECT_EQ(state->pendingBlockTargetForBlocker(200), 0u);
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+
+    // Pairing multiple staged blockers is all-or-nothing: blocker 200 can block attacker 101,
+    // but blocker 201 cannot, so neither blocker is moved and no preview is emitted.
+    state->toggleStagedBlocker(201);
+    state->pairStagedBlockerToAttacker(101);
+    EXPECT_TRUE(state->isStagedBlocker(200));
+    EXPECT_TRUE(state->isStagedBlocker(201));
+    EXPECT_EQ(state->pendingBlockTargetForBlocker(200), 0u);
+    EXPECT_EQ(state->pendingBlockTargetForBlocker(201), 0u);
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+
     state->pairStagedBlockerToAttacker(100);
     EXPECT_FALSE(state->hasStagedBlocker());
     EXPECT_EQ(state->pendingBlockTargetForBlocker(200), 100u);
+    EXPECT_EQ(state->pendingBlockTargetForBlocker(201), 100u);
     ASSERT_EQ(host.sentCommands.size(), 1);
     ASSERT_TRUE(host.sentCommands[0].has_preview_declare_blockers());
-    ASSERT_EQ(host.sentCommands[0].preview_declare_blockers().block_pairs_size(), 1);
-    EXPECT_EQ(host.sentCommands[0].preview_declare_blockers().block_pairs(0).blocker_id(), 200u);
+    ASSERT_EQ(host.sentCommands[0].preview_declare_blockers().block_pairs_size(), 2);
 
     // Pairing to a creature that is not a declared attacker is a no-op.
-    state->toggleStagedBlocker(201);
+    state->toggleStagedBlocker(200);
     state->pairStagedBlockerToAttacker(999);
-    EXPECT_EQ(state->pendingBlockTargetForBlocker(201), 0u);
+    EXPECT_TRUE(state->isStagedBlocker(200));
 }
 
 TEST_F(RuledClientTest, RejectedBlockDeclarationRollsBackTheLocalGuard)
@@ -1320,7 +1352,7 @@ TEST_F(RuledClientTest, RejectedBlockDeclarationRollsBackTheLocalGuard)
     declared.add_events()->mutable_attackers_declared()->add_attacker_object_ids(100);
     apply(declared);
     auto batch = phaseBatch(ruled::v1::PHASE_ID_DECLARE_BLOCKERS, kOpponent);
-    (*batch.mutable_legal_by_player())[kLocalPlayer].add_selectable_blocker_ids(200);
+    addLegalBlockPair((*batch.mutable_legal_by_player())[kLocalPlayer], 200, 100);
     apply(batch);
     state->toggleStagedBlocker(200);
     state->pairStagedBlockerToAttacker(100);
@@ -1387,7 +1419,7 @@ TEST_F(RuledClientTest, CombatStagingIgnoresCreaturesOutsideEngineSelectableSets
     declared.add_events()->mutable_attackers_declared()->add_attacker_object_ids(300);
     apply(declared);
     auto blockers = phaseBatch(ruled::v1::PHASE_ID_DECLARE_BLOCKERS, kOpponent);
-    (*blockers.mutable_legal_by_player())[kLocalPlayer].add_selectable_blocker_ids(400);
+    addLegalBlockPair((*blockers.mutable_legal_by_player())[kLocalPlayer], 400, 300);
     apply(blockers);
 
     state->toggleStagedBlocker(500);

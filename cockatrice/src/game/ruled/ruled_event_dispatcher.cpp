@@ -1059,9 +1059,9 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
     for (const quint32 oid : actions.selectable_attacker_ids()) {
         state->selectableAttackerOids.insert(oid);
     }
-    state->selectableBlockerOids.clear();
-    for (const quint32 oid : actions.selectable_blocker_ids()) {
-        state->selectableBlockerOids.insert(oid);
+    state->legalBlockAttackerOidsByBlocker.clear();
+    for (const auto &pair : actions.legal_block_pairs()) {
+        state->legalBlockAttackerOidsByBlocker[pair.blocker_id()].insert(pair.attacker_id());
     }
 }
 

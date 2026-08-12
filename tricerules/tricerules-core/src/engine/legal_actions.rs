@@ -157,8 +157,8 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
         } else {
             Vec::new()
         };
-        let selectable_blocker_ids = if blocks_open && eng.state.is_defending_player(p.id) {
-            eng.eligible_blocker_ids(p.id)
+        let legal_block_pairs = if blocks_open && eng.state.is_defending_player(p.id) {
+            eng.legal_block_pairs(p.id)
         } else {
             Vec::new()
         };
@@ -174,10 +174,10 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 required_blocker_ids,
                 hand_actions,
                 selectable_attacker_ids,
-                selectable_blocker_ids,
                 zone_cast_actions,
                 valid_targets_by_zone_object,
                 cost_choices_by_ability,
+                legal_block_pairs,
             },
         );
     }

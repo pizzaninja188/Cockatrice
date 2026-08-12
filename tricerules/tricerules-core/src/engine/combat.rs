@@ -117,6 +117,37 @@ impl GameEngine {
             .collect()
     }
 
+    /// Exact blocker-to-attacker assignments currently permitted by CR 509.1a-b. This is the
+    /// client-facing relation as well as a direct projection of [`Self::can_block`], so UI staging
+    /// cannot drift from the legality enforced by [`Self::set_blockers`].
+    pub(super) fn legal_block_pairs(&self, defending_player: PlayerId) -> Vec<rv1::BlockPair> {
+        let attackers = self
+            .state
+            .combat
+            .as_ref()
+            .map(|combat| combat.attacking.as_slice())
+            .unwrap_or_default();
+        let Some(player_idx) = self.state.player_idx(defending_player) else {
+            return Vec::new();
+        };
+        let mut pairs = Vec::new();
+        for &blocker_id in &self.state.players[player_idx].battlefield {
+            if !self.base_blocker_eligible(blocker_id, defending_player) {
+                continue;
+            }
+            for &attacker_id in attackers {
+                if self.can_block(attacker_id, blocker_id) {
+                    pairs.push(rv1::BlockPair {
+                        attacker_id,
+                        blocker_id,
+                    });
+                }
+            }
+        }
+        pairs.sort_unstable_by_key(|pair| (pair.blocker_id, pair.attacker_id));
+        pairs
+    }
+
     /// Returns false if `blocker_id` is not permitted to block `attacker_id` due to
     /// keyword evasion abilities. Checks all active blocking restrictions in order.
     pub(super) fn can_block(&self, attacker_id: ObjectId, blocker_id: ObjectId) -> bool {
