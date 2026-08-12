@@ -20,6 +20,14 @@ impl GameEngine {
         let Some(characteristics) = self.characteristics(oid) else {
             return CombatRestriction::default();
         };
+        self.combat_restrictions_for(oid, &characteristics)
+    }
+
+    pub(super) fn combat_restrictions_for(
+        &self,
+        oid: ObjectId,
+        characteristics: &super::characteristics::Characteristics,
+    ) -> CombatRestriction {
         self.state
             .continuous_effects
             .iter()
@@ -29,7 +37,7 @@ impl GameEngine {
                     self.registry,
                     effect,
                     oid,
-                    &characteristics,
+                    characteristics,
                 )
             })
             .fold(CombatRestriction::default(), |mut combined, effect| {

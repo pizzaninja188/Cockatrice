@@ -100,7 +100,7 @@ pub struct GameObject {
     /// Equipment uses only [`AttachmentRecipient::Object`]. `None` means no attachment. Cleared
     /// on every battlefield exit under the CR 400.7 zone-change funnel.
     pub attached_to: Option<AttachmentRecipient>,
-    /// CR 701.15: number of regeneration shields on this permanent. Each shield is a replacement
+    /// CR 701.19: number of regeneration shields on this permanent. Each shield is a replacement
     /// effect: the next time this permanent would be destroyed, instead tap it, remove it from
     /// combat, and clear all damage from it. Shields expire at the cleanup step (like damage).
     pub regeneration_shields: u32,

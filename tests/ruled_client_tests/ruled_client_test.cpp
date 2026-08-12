@@ -1442,7 +1442,7 @@ TEST_F(RuledClientTest, RemovedFromCombatPrunesAttackersAndBlockPairs)
     ASSERT_TRUE(state->isCurrentAttacker(100));
     ASSERT_EQ(state->getCommittedBlocks().value(200), 100u);
 
-    // CR 701.15a: regeneration removes the blocker from combat.
+    // CR 701.19a: regeneration removes the blocker from combat.
     ruled::v1::RuledEventBatch removed;
     removed.add_events()->mutable_removed_from_combat()->add_object_ids(200);
     apply(removed);

@@ -44,6 +44,11 @@ fn frilled_sea_serpent_rejects_blocks_and_drives_automatic_empty_blocks() {
         .apply_command(0, &activate_ability(serpent, 0, vec![]))
         .expect("activate Frilled Sea Serpent");
     resolve_entire_stack_two_player(&mut engine);
+    assert_eq!(
+        zone_view_rules_annotation_labels(&mut engine, 0, serpent),
+        vec!["Can't be blocked"],
+        "the active unblockable effect is visible in the battlefield feed"
+    );
     advance_main1_to_declare_attackers(&mut engine);
     engine
         .apply_command(0, &declare_attackers(vec![serpent, ordinary_attacker]))
@@ -199,6 +204,11 @@ fn goblin_smuggler_effect_persists_if_power_increases_after_resolution() {
         .apply_command(0, &activate_ability(smuggler, 0, target_object(target)))
         .expect("activate Goblin Smuggler");
     resolve_entire_stack_two_player(&mut engine);
+    assert_eq!(
+        zone_view_rules_annotation_labels(&mut engine, 0, target),
+        vec!["Can't be blocked"],
+        "the chosen creature reports the resolved combat restriction"
+    );
     engine
         .state
         .objects
@@ -253,6 +263,16 @@ fn destructive_tampering_tracks_current_flying_status_and_later_creatures() {
     let bird_grabber = inject_creature_on_battlefield(&mut engine, 1, "goblin_bird-grabber");
     let flyer = inject_creature_on_battlefield(&mut engine, 1, "storm_crow");
 
+    assert_eq!(
+        zone_view_rules_annotation_labels(&mut engine, 1, ground),
+        vec!["Can't block"]
+    );
+    assert_eq!(
+        zone_view_rules_annotation_labels(&mut engine, 1, bird_grabber),
+        vec!["Can't block"]
+    );
+    assert!(zone_view_rules_annotation_labels(&mut engine, 1, flyer).is_empty());
+
     engine.apply_command(0, &pass()).expect("pass priority");
     give_mana(
         &mut engine,
@@ -267,6 +287,11 @@ fn destructive_tampering_tracks_current_flying_status_and_later_creatures() {
         .expect("grant Flying after Destructive Tampering resolves");
     resolve_entire_stack_two_player(&mut engine);
     assert!(engine.effective_has_keyword(bird_grabber, Keyword::Flying));
+    assert_eq!(
+        zone_view_rules_annotation_labels(&mut engine, 1, bird_grabber),
+        vec!["Flying"],
+        "gaining Flying removes the dynamic restriction label but retains the granted keyword"
+    );
 
     advance_main1_to_declare_attackers(&mut engine);
     engine

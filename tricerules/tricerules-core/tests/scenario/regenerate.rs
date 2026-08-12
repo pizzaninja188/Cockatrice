@@ -1,9 +1,9 @@
-//! Scenario tests for CR 701.15 Regenerate mechanic.
+//! Scenario tests for CR 701.19 Regenerate mechanic.
 //!
 //! Regenerate creates a replacement effect: the next time the creature would be destroyed
 //! this turn, instead tap it, remove it from combat, and clear all damage from it.
 //! Regeneration does NOT save a creature from toughness-0 (CR 704.5f — not a "destroy").
-//! Wrath of God's "can't be regenerated" bypasses shields (CR 701.15b).
+//! Wrath of God's "can't be regenerated" bypasses shields (CR 701.19c).
 
 use crate::helpers::*;
 use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration};
@@ -51,6 +51,11 @@ fn regen_shield_placed_by_ability() {
         Some(false),
         "placing a shield must not tap the creature"
     );
+    assert_eq!(
+        zone_view_rules_annotation_labels(&mut e, 0, troll),
+        vec!["Regeneration shield"],
+        "the active regeneration shield is visible on the permanent"
+    );
 }
 
 /// Shield consumed on lethal damage: creature survives tapped, damage cleared.
@@ -63,6 +68,10 @@ fn regen_shield_consumed_on_lethal_damage_sba() {
         o.regeneration_shields = 1;
         o.damage = 3; // toughness = 3 → lethal
     }
+    assert_eq!(
+        zone_view_rules_annotation_labels(&mut e, 0, troll),
+        vec!["Regeneration shield"]
+    );
     e.apply_command(0, &pass()).expect("pass to trigger sba");
     e.apply_command(1, &pass()).expect("second pass");
     assert_eq!(
@@ -85,6 +94,7 @@ fn regen_shield_consumed_on_lethal_damage_sba() {
         Some(0),
         "regenerated creature's damage must be cleared"
     );
+    assert!(zone_view_rules_annotation_labels(&mut e, 0, troll).is_empty());
 }
 
 /// Without a shield, the creature dies to lethal damage normally.
@@ -134,7 +144,7 @@ fn shield_not_present_on_second_lethal() {
     );
 }
 
-/// Wrath of God's `prevent_regeneration` bypasses shields (CR 701.15b).
+/// Wrath of God's `prevent_regeneration` bypasses shields (CR 701.19c).
 #[test]
 fn wrath_bypasses_regen_shields() {
     let decks = Some(vec![
@@ -196,18 +206,23 @@ fn toughness_zero_bypasses_regen_shield() {
     );
 }
 
-/// Regeneration shields expire at cleanup (CR 701.15a "this turn").
+/// Regeneration shields expire at cleanup (CR 701.19a "this turn").
 #[test]
 fn regen_shields_expire_at_cleanup() {
     let mut e = regen_engine();
     let troll = relocate_to_battlefield(&mut e, 0, "cudgel_troll", false);
     if let Some(o) = e.state.objects.get_mut(&troll) {
-        o.regeneration_shields = 1;
+        o.regeneration_shields = 2;
     }
+    assert_eq!(
+        zone_view_rules_annotation_labels(&mut e, 0, troll),
+        vec!["2 regeneration shields"]
+    );
     end_active_turn(&mut e, 0);
     assert_eq!(
         e.state.objects.get(&troll).map(|o| o.regeneration_shields),
         Some(0),
         "regeneration shields must expire at cleanup"
     );
+    assert!(zone_view_rules_annotation_labels(&mut e, 0, troll).is_empty());
 }

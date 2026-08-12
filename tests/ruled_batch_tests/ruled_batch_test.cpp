@@ -1225,7 +1225,7 @@ TEST_F(RuledBatchTest, PlayerAttachmentStaysInNormalRowAndTransitionsWithoutLosi
     curseObject->mutable_attachment_recipient()->set_player_id(p2->getPlayerId());
     curseObject->set_counters_annotation("1 lore counter(s)");
     curseObject->set_copy_annotation("Copy: Curse of Disturbance");
-    curseObject->add_granted_ability_labels("Hexproof");
+    curseObject->add_rules_annotation_labels("Hexproof");
     *playerZoneView->add_per_player() = playerView;
     *playerZoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
     callBatchApply(playerAttached);
@@ -1236,7 +1236,7 @@ TEST_F(RuledBatchTest, PlayerAttachmentStaysInNormalRowAndTransitionsWithoutLosi
     EXPECT_EQ(curse->getZone()->getPlayer(), p1);
     EXPECT_EQ(curse->getAnnotation(),
               QStringLiteral("User note\n1 lore counter(s)\nCopy: Curse of Disturbance\nEnchanting: bob\n"
-                             "Granted: Hexproof"));
+                             "Effects: Hexproof"));
 
     ruled::v1::IpcResponse backToObject;
     backToObject.set_ok(true);
@@ -1328,14 +1328,14 @@ TEST_F(RuledBatchTest, PlayerAttachmentAnnotationIsStrippedBeforeEveryBattlefiel
     }
 }
 
-// Ability labels are attached to the physical card bound to the engine OID, coexist with other
+// Rules labels are attached to the physical card bound to the engine OID, coexist with other
 // annotation text, and are removed on the next authoritative sync or zone transition.
-TEST_F(RuledBatchTest, GrantedAbilitiesAnnotateOnlyTheBoundBattlefieldCardAndClearCleanly)
+TEST_F(RuledBatchTest, RulesEffectsAnnotateOnlyTheBoundBattlefieldCardAndClearCleanly)
 {
     Server_Card *first = addCardToTable(p1, "Grizzly Bears");
     Server_Card *second = addCardToTable(p1, "Timber Wolves");
     first->setAnnotation(QStringLiteral("Keep me"));
-    second->setAnnotation(QStringLiteral("Keep me"));
+    second->setAnnotation(QStringLiteral("Keep me\nGranted: Flying"));
 
     {
         ruled::v1::IpcResponse resp;
@@ -1343,8 +1343,8 @@ TEST_F(RuledBatchTest, GrantedAbilitiesAnnotateOnlyTheBoundBattlefieldCardAndCle
         auto *evZv = resp.mutable_batch()->add_events()->mutable_zone_view();
         auto view = buildPerPlayerView(p1, {910u, 911u}, {false, false});
         auto *object = view.mutable_battlefield_objects(1);
-        object->add_granted_ability_labels("Deathtouch");
-        object->add_granted_ability_labels("Haste");
+        object->add_rules_annotation_labels("Deathtouch");
+        object->add_rules_annotation_labels("Can't be blocked");
         *evZv->add_per_player() = view;
         *evZv->add_per_player() = buildPerPlayerView(p2, {}, {});
         callBatchApply(resp);
@@ -1355,8 +1355,10 @@ TEST_F(RuledBatchTest, GrantedAbilitiesAnnotateOnlyTheBoundBattlefieldCardAndCle
     ASSERT_NE(unaffected, nullptr);
     ASSERT_NE(enhanced, nullptr);
     ASSERT_NE(unaffected, enhanced);
-    EXPECT_FALSE(unaffected->getAnnotation().contains(QStringLiteral("Granted:")));
-    EXPECT_EQ(enhanced->getAnnotation(), QStringLiteral("Keep me\nGranted: Deathtouch, Haste"));
+    EXPECT_FALSE(unaffected->getAnnotation().contains(QStringLiteral("Effects:")));
+    EXPECT_EQ(enhanced->getAnnotation(),
+              QStringLiteral("Keep me\nEffects: Deathtouch, Can't be blocked"));
+    EXPECT_FALSE(enhanced->getAnnotation().contains(QStringLiteral("Granted:")));
 
     {
         ruled::v1::IpcResponse resp;
@@ -1370,7 +1372,7 @@ TEST_F(RuledBatchTest, GrantedAbilitiesAnnotateOnlyTheBoundBattlefieldCardAndCle
 
     // Re-add the line, then prove a battlefield -> graveyard move cannot carry it into the new
     // object generation. The normal ruled move resets transient card attributes.
-    enhanced->setAnnotation(QStringLiteral("Granted: Deathtouch"));
+    enhanced->setAnnotation(QStringLiteral("Effects: Deathtouch"));
     {
         ruled::v1::IpcResponse resp;
         resp.set_ok(true);

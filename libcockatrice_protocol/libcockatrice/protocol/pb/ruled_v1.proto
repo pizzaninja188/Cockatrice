@@ -583,7 +583,7 @@ message RuledEvent {
     // The relay translates this into Event_AttachCard so the client stacks the aura under the
     // enchanted permanent. Also emitted on zone-view reconnect to restore the attachment.
     AuraAttached aura_attached = 25 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
-    // One or more creatures were removed from combat mid-step (CR 701.15a: regeneration; also
+    // One or more creatures were removed from combat mid-step (CR 701.19a: regeneration; also
     // covers future tap-out-of-combat effects). Clients remove the corresponding arrows.
     CreaturesRemovedFromCombat removed_from_combat = 26 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
     // Server-built graveyard OID map (parallel to battlefield_object_map) so clients can
@@ -1005,10 +1005,10 @@ message BattlefieldObject {
   // it (reanimation). The relay uses it to annotate such a permanent with "Owner: <name>" and to
   // route the card home when it leaves the battlefield (CR 400.3).
   int32 owner_player_id = 14 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
-  // Canonical display labels for abilities present in the effective characteristics but absent
-  // from the active intrinsic face (e.g. ["Deathtouch"] after Bladebrand resolves). The engine
-  // owns this delta; relay and client code must not infer it from the Oracle display database.
-  repeated string granted_ability_labels = 15 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Canonical engine-authored display labels for nonintrinsic rules state on this permanent
+  // (e.g. ["Deathtouch", "Can't be blocked"]). The relay renders these as one replaceable
+  // annotation line; relay and client code must not infer them from the Oracle display database.
+  repeated string rules_annotation_labels = 15 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // Engine-owned effective display identity after CR 613 layer 1. The relay may use cards.xml to
   // render this name, but must not infer rules characteristics from it.
   string effective_display_name = 16 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
@@ -1190,7 +1190,7 @@ message AttackersPreview {
   repeated uint32 attacker_object_ids = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
-// Engine-emitted when one or more creatures are removed from combat mid-step (CR 701.15a).
+// Engine-emitted when one or more creatures are removed from combat mid-step (CR 701.19a).
 // Covers regeneration and any future effect that taps or otherwise ejects a creature from combat.
 // Clients remove the corresponding attacker/blocker arrows for the listed engine object ids.
 message CreaturesRemovedFromCombat {

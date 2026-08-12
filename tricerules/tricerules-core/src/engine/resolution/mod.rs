@@ -984,8 +984,10 @@ pub(crate) fn move_object_to_zone(
             !single_on_this && !static_from_this
         });
         state.damage_prevention_effects.retain(|effect| {
-            !(effect.source_id == Some(oid)
-                && effect.duration == EffectDuration::WhileSourceOnBattlefield)
+            let recipient_is_this_object = effect.scope == DamagePreventionScope::Recipient(oid);
+            let static_from_this = effect.source_id == Some(oid)
+                && effect.duration == EffectDuration::WhileSourceOnBattlefield;
+            !recipient_is_this_object && !static_from_this
         });
         // CR 400.7 / 121.2: a zone change makes this a new game object — transient
         // battlefield-only state (marked damage, deathtouch marking, tap status, regeneration
@@ -1173,7 +1175,7 @@ fn card_type_filter_desc(f: &CardTypeFilter) -> &'static str {
     }
 }
 
-/// CR 701.15: attempt to consume one regeneration shield from `oid`. If a shield is present,
+/// CR 614.8 / 701.19: attempt to consume one regeneration shield from `oid`. If a shield is present,
 /// taps the creature, removes it from combat, clears all marked damage, and returns `true`.
 /// The caller is responsible for not destroying the creature. Returns `false` if no shield exists.
 /// Does NOT emit a zone-change event (the creature stays on the battlefield).
@@ -1190,7 +1192,7 @@ pub(super) fn consume_regen_shield(
     if shields == 0 {
         return false;
     }
-    // CR 701.15a: regenerating taps the permanent — a real "becomes tapped" edge, so it goes
+    // CR 701.19a: regenerating taps the permanent — a real "becomes tapped" edge, so it goes
     // through the shared funnel rather than writing the flag inline.
     super::set_tapped(state, oid, true);
     if let Some(o) = state.objects.get_mut(&oid) {
@@ -1198,7 +1200,7 @@ pub(super) fn consume_regen_shield(
         o.damage = 0;
         o.deathtouch_damage = false;
     }
-    // CR 701.15a: remove from combat (attacker/blocker lists). This mirrors what happens when
+    // CR 701.19a: remove from combat (attacker/blocker lists). This mirrors what happens when
     // a creature is removed from combat by a tap effect.
     if let Some(combat) = state.combat.as_mut() {
         let was_in_combat = combat.attacking.contains(&oid)

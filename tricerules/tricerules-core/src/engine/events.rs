@@ -2,6 +2,89 @@ use super::legal_actions::fill_legal;
 use super::*;
 
 impl GameEngine {
+    fn rules_annotation_labels(
+        &self,
+        oid: ObjectId,
+        object: &GameObject,
+        characteristics: Option<&Characteristics>,
+        face: Option<&CardFace>,
+    ) -> Vec<String> {
+        let mut labels: Vec<String> = characteristics
+            .zip(face)
+            .map(|(effective, intrinsic)| {
+                effective
+                    .keywords
+                    .iter()
+                    .copied()
+                    .filter(|keyword| !intrinsic.keywords.contains(keyword))
+                    .map(|keyword| keyword.as_str().to_string())
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        if let Some(characteristics) = characteristics {
+            let restrictions = self.combat_restrictions_for(oid, characteristics);
+            if restrictions.cant_attack {
+                labels.push("Can't attack".to_string());
+            }
+            if restrictions.cant_block {
+                labels.push("Can't block".to_string());
+            }
+            if restrictions.cant_be_blocked {
+                labels.push("Can't be blocked".to_string());
+            }
+        }
+
+        let generation = self
+            .state
+            .zone_change_generation
+            .get(&oid)
+            .copied()
+            .unwrap_or(0);
+        if self.state.skip_next_untap.contains(&(oid, generation)) {
+            labels.push("Doesn't untap during its controller's next untap step".to_string());
+        }
+
+        match object.regeneration_shields {
+            0 => {}
+            1 => labels.push("Regeneration shield".to_string()),
+            count => labels.push(format!("{count} regeneration shields")),
+        }
+
+        let mut remaining_prevention = 0u32;
+        let mut per_event_prevention = 0u32;
+        let mut prevents_all = false;
+        for effect in &self.state.damage_prevention_effects {
+            if effect.duration != EffectDuration::UntilEndOfTurn
+                || effect.scope != DamagePreventionScope::Recipient(oid)
+            {
+                continue;
+            }
+            match effect.amount {
+                DamagePreventionAmount::Remaining(amount) => {
+                    remaining_prevention = remaining_prevention.saturating_add(amount);
+                }
+                DamagePreventionAmount::FixedPerEvent(amount) => {
+                    per_event_prevention = per_event_prevention.saturating_add(amount);
+                }
+                DamagePreventionAmount::All => prevents_all = true,
+            }
+        }
+        if remaining_prevention > 0 {
+            labels.push(format!("Prevent next {remaining_prevention} damage"));
+        }
+        if prevents_all {
+            labels.push("Prevent all damage".to_string());
+        }
+        if per_event_prevention > 0 {
+            labels.push(format!(
+                "Prevent up to {per_event_prevention} damage per event"
+            ));
+        }
+
+        labels
+    }
+
     pub fn initial_response_batch(&mut self) -> RuledEventBatch {
         let mut batch = RuledEventBatch::default();
         // Catalog first: Servatrice resolves the zone-view card ids below through it.
@@ -257,19 +340,12 @@ impl GameEngine {
                             .as_ref()
                             .is_some_and(Characteristics::is_creature);
                         let face = self.effective_face(oid);
-                        let granted_ability_labels = characteristics
-                            .as_ref()
-                            .zip(face)
-                            .map(|(effective, intrinsic)| {
-                                effective
-                                    .keywords
-                                    .iter()
-                                    .copied()
-                                    .filter(|keyword| !intrinsic.keywords.contains(keyword))
-                                    .map(|keyword| keyword.as_str().to_string())
-                                    .collect()
-                            })
-                            .unwrap_or_default();
+                        let rules_annotation_labels = self.rules_annotation_labels(
+                            oid,
+                            object,
+                            characteristics.as_ref(),
+                            face,
+                        );
                         let activated_abilities = face
                             .map(|face| {
                                 face.activated_abilities
@@ -405,7 +481,7 @@ impl GameEngine {
                             // half the relay needs for the "Owner:" annotation and for routing
                             // the card home when it leaves the battlefield.
                             owner_player_id: object.owner,
-                            granted_ability_labels,
+                            rules_annotation_labels,
                             effective_display_name,
                             copy_annotation,
                         }

@@ -1169,8 +1169,8 @@ pub(crate) fn zone_view_ability_flags(e: &mut GameEngine, player: usize, oid: u3
         .unwrap_or_default()
 }
 
-/// Engine-authored display labels for abilities added to `oid` by derived characteristics.
-pub(crate) fn zone_view_granted_ability_labels(
+/// Engine-authored display labels for nonintrinsic rules state on `oid`.
+pub(crate) fn zone_view_rules_annotation_labels(
     e: &mut GameEngine,
     player: usize,
     oid: u32,
@@ -1186,6 +1186,6 @@ pub(crate) fn zone_view_granted_ability_labels(
         .into_iter()
         .flat_map(|p| p.battlefield_objects.iter())
         .find(|object| object.object_id == oid)
-        .map(|object| object.granted_ability_labels.clone())
+        .map(|object| object.rules_annotation_labels.clone())
         .unwrap_or_default()
 }

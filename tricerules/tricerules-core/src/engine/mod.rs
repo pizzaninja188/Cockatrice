@@ -409,7 +409,7 @@ struct BattlefieldObjectSnapshot {
 ///
 /// The single funnel for every *becomes tapped* / *becomes untapped* edge — cost payment,
 /// attacking (CR 508.1f), the untap step (CR 502.2), tap/untap effects, and the regeneration
-/// shield's tap (CR 701.15a). "Becomes" is an edge, not a state: a permanent that is already
+/// shield's tap (CR 701.19a). "Becomes" is an edge, not a state: a permanent that is already
 /// tapped does not become tapped again, which is exactly the returned bool. A later
 /// `WheneverPermanentBecomesTapped` trigger hangs off that bool here instead of auditing every
 /// mutation site.

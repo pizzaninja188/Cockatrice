@@ -591,7 +591,7 @@ fn flight_grants_flying_only_while_attached() {
 
     assert!(e.effective_has_keyword(bear, Keyword::Flying));
     assert_eq!(
-        zone_view_granted_ability_labels(&mut e, 0, bear),
+        zone_view_rules_annotation_labels(&mut e, 0, bear),
         vec!["Flying"],
         "Flight's static ability is visible in the granted-ability feed"
     );
@@ -601,7 +601,7 @@ fn flight_grants_flying_only_while_attached() {
         "the attached keyword stops applying as soon as its source leaves"
     );
     assert!(
-        zone_view_granted_ability_labels(&mut e, 0, bear).is_empty(),
+        zone_view_rules_annotation_labels(&mut e, 0, bear).is_empty(),
         "the annotation disappears with the granting source"
     );
 }
@@ -617,7 +617,7 @@ fn pacifism_restriction_overrides_must_attack() {
         .get_mut(&goblin)
         .expect("goblin")
         .must_attack_if_able = true;
-    cast_and_resolve_aura(
+    let pacifism = cast_and_resolve_aura(
         &mut e,
         "pacifism",
         goblin,
@@ -625,6 +625,11 @@ fn pacifism_restriction_overrides_must_attack() {
             w: 2,
             ..Default::default()
         },
+    );
+    assert_eq!(
+        zone_view_rules_annotation_labels(&mut e, 0, goblin),
+        vec!["Can't attack", "Can't block"],
+        "Pacifism's two combat restrictions are visible on the enchanted creature"
     );
     let legal_bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
 
@@ -648,6 +653,12 @@ fn pacifism_restriction_overrides_must_attack() {
     );
     e.apply_command(0, &declare_attackers(vec![]))
         .expect("a Pacified must-attack creature is not able and may be omitted");
+
+    e.state.objects.get_mut(&pacifism).expect("Pacifism").zone = tricerules_core::Zone::Graveyard;
+    assert!(
+        zone_view_rules_annotation_labels(&mut e, 0, goblin).is_empty(),
+        "the restriction labels disappear with their source"
+    );
 }
 
 #[test]

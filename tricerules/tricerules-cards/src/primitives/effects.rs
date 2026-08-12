@@ -776,14 +776,14 @@ pub enum SpellEffectKind {
     /// for Wrath of God / Day of Judgment, `AnyPermanent` for "destroy all permanents". Only
     /// object kinds are legal (validated at load); player kinds make no sense here.
     /// `prevent_regeneration: true` means regeneration shields are bypassed (Wrath of God:
-    /// "they can't be regenerated", CR 701.15b).
+    /// "they can't be regenerated", CR 701.19c).
     DestroyAll {
         #[serde(default = "TargetFilter::default_creature")]
         kind: TargetFilter,
         #[serde(default)]
         prevent_regeneration: bool,
     },
-    /// CR 701.15: put a regeneration shield on target creature. The next time that creature would
+    /// CR 701.19: put a regeneration shield on target creature. The next time that creature would
     /// be destroyed this turn, instead tap it, remove it from combat, and clear all damage from it.
     /// Legal only as an activated ability effect — never a spell (validated at load). Covers
     /// Cudgel Troll (`{G}: Regenerate`) and Drudge Skeletons (`{B}: Regenerate`).
@@ -1382,7 +1382,7 @@ impl SpellEffectKind {
                     Ok(())
                 }
             }
-            // CR 701.15: Regenerate puts a shield on the target; it is an activated ability, not
+            // CR 701.19: Regenerate puts a shield on the target; it is an activated ability, not
             // a spell. Applying a regeneration shield via a spell would have no source permanent
             // to attach the replacement to and is a nonsensical card design — reject early.
             SpellEffectKind::Regenerate { .. } => {

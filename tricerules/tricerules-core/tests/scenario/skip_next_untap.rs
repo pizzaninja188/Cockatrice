@@ -52,12 +52,17 @@ fn crippling_chill_skips_exactly_the_next_controller_untap() {
         hand_before,
         "Crippling Chill draws after leaving its caster's hand"
     );
+    assert_eq!(
+        zone_view_rules_annotation_labels(&mut engine, 1, bear),
+        vec!["Doesn't untap during its controller's next untap step"]
+    );
 
     end_active_turn(&mut engine, 0);
     assert!(
         engine.state.objects[&bear].tapped,
         "the bear skipped its controller's next untap"
     );
+    assert!(zone_view_rules_annotation_labels(&mut engine, 1, bear).is_empty());
 
     advance_upkeep_to_main1(&mut engine);
     end_active_turn(&mut engine, 1);
@@ -166,6 +171,7 @@ fn leaving_and_returning_clears_the_old_objects_restriction() {
 
     let returned = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", true);
     assert_eq!(returned, bear, "the relay-compatible ObjectId is reused");
+    assert!(zone_view_rules_annotation_labels(&mut engine, 1, bear).is_empty());
     end_active_turn(&mut engine, 0);
     assert!(
         !engine.state.objects[&bear].tapped,

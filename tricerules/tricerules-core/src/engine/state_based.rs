@@ -151,7 +151,7 @@ impl GameEngine {
                 }
             }
         }
-        // Lethal-damage destroy: CR 701.15 regeneration shields apply before destruction.
+        // Lethal-damage destroy: CR 614.8 / 701.19 regeneration shields apply before destruction.
         for id in to_destroy_lethal {
             let owner = self.state.objects.get(&id).map(|o| o.owner);
             let controller = self.state.objects.get(&id).map(|o| o.controller);

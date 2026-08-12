@@ -2956,12 +2956,12 @@ fn bladebrand_turns_prodigal_sorcerer_damage_lethal_and_draws_a_card() {
 
     assert!(engine.effective_has_keyword(source, Keyword::Deathtouch));
     assert_eq!(
-        zone_view_granted_ability_labels(&mut engine, 0, source),
+        zone_view_rules_annotation_labels(&mut engine, 0, source),
         vec!["Deathtouch"],
         "the battlefield feed identifies Bladebrand's derived ability"
     );
     assert!(
-        zone_view_granted_ability_labels(&mut engine, 0, intrinsic_deathtouch).is_empty(),
+        zone_view_rules_annotation_labels(&mut engine, 0, intrinsic_deathtouch).is_empty(),
         "an ability printed on the active face is not annotated as granted"
     );
     assert_eq!(
@@ -2993,7 +2993,7 @@ fn bladebrand_turns_prodigal_sorcerer_damage_lethal_and_draws_a_card() {
 
     end_active_turn(&mut engine, 0);
     assert!(
-        zone_view_granted_ability_labels(&mut engine, 0, source).is_empty(),
+        zone_view_rules_annotation_labels(&mut engine, 0, source).is_empty(),
         "the derived annotation expires with Bladebrand's until-end-of-turn effect"
     );
 }

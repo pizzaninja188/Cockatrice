@@ -31,7 +31,7 @@ pub(super) fn destroy_all(
             )));
             continue;
         }
-        // CR 701.15b: "can't be regenerated" bypasses shields.
+        // CR 701.19c: "can't be regenerated" bypasses shields.
         if !prevent_regeneration && consume_regen_shield(&mut engine.state, tid, events) {
             events.push(ev_log(format!("{tgt} regenerates.")));
             continue;

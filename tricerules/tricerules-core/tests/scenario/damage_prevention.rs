@@ -206,6 +206,7 @@ fn shield_then_anti_venom_consumes_shield_and_counts_only_remaining_damage() {
     assert_eq!(object.damage, 0);
     assert_eq!(object.counter_count(CounterKind::PlusOnePlusOne), 2);
     assert_eq!(engine.state.remaining_damage_prevention(anti_venom), 0);
+    assert!(zone_view_rules_annotation_labels(&mut engine, 0, anti_venom).is_empty());
 }
 
 #[test]
@@ -216,6 +217,11 @@ fn unpreventable_ordered_damage_applies_every_effect_without_consuming_the_shiel
         .state
         .damage_prevention_prohibitions
         .push(tricerules_core::state::DamagePreventionProhibition { source_id: None });
+    assert_eq!(
+        zone_view_rules_annotation_labels(&mut engine, 0, anti_venom),
+        vec!["Prevent next 3 damage"],
+        "only the temporary recipient shield is annotated, not Anti-Venom's intrinsic prevention"
+    );
 
     engine
         .apply_command(0, &submit_resolution_choice(vec![anti_application]))
@@ -228,6 +234,68 @@ fn unpreventable_ordered_damage_applies_every_effect_without_consuming_the_shiel
         5
     );
     assert_eq!(engine.state.remaining_damage_prevention(anti_venom), 3);
+    assert_eq!(
+        zone_view_rules_annotation_labels(&mut engine, 0, anti_venom),
+        vec!["Prevent next 3 damage"],
+        "unpreventable damage leaves the shield and its annotation intact"
+    );
+}
+
+#[test]
+fn finite_prevention_annotation_tracks_remaining_capacity_and_zone_changes() {
+    let decks = Some(vec![
+        deck_with("mountain", &["blaze", "unsummon"]),
+        deck_with("forest", &["grizzly_bears"]),
+    ]);
+    let mut engine = GameEngine::new(4814, &[0, 1], 20, decks, true).expect("new engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let bears = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
+    engine.state.add_damage_prevention_shield(bears, 3);
+    assert_eq!(
+        zone_view_rules_annotation_labels(&mut engine, 1, bears),
+        vec!["Prevent next 3 damage"]
+    );
+
+    ensure_in_hand(&mut engine, 0, "blaze");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            r: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let blaze = hand_index_for_card(&engine, 0, "blaze");
+    engine
+        .apply_command(0, &cast_spell_x(blaze, target_object(bears), 1))
+        .expect("cast Blaze for one");
+    resolve_entire_stack_two_player(&mut engine);
+    assert_eq!(engine.state.remaining_damage_prevention(bears), 2);
+    assert_eq!(
+        zone_view_rules_annotation_labels(&mut engine, 1, bears),
+        vec!["Prevent next 2 damage"]
+    );
+
+    ensure_in_hand(&mut engine, 0, "unsummon");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    let unsummon = hand_index_for_card(&engine, 0, "unsummon");
+    engine
+        .apply_command(0, &cast_spell(unsummon, target_object(bears)))
+        .expect("cast Unsummon");
+    resolve_entire_stack_two_player(&mut engine);
+    assert_eq!(engine.state.remaining_damage_prevention(bears), 0);
+
+    let returned = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", true);
+    assert_eq!(returned, bears, "the relay-compatible ObjectId is reused");
+    assert!(zone_view_rules_annotation_labels(&mut engine, 1, bears).is_empty());
 }
 
 #[test]

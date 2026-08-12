@@ -110,28 +110,30 @@ QString mergeRuledOwnerIntoAnnotation(const QString &baseAnn, const QString &own
     return without + QLatin1Char('\n') + ownerLine;
 }
 
-// Engine-authored labels for abilities added by derived characteristics. Keep them on one
-// replaceable line so every authoritative battlefield sync can remove expired grants without
-// disturbing user text or the other ruled annotation lines above.
-QString mergeRuledGrantedAbilitiesIntoAnnotation(const QString &baseAnn, const QStringList &abilityLabels)
+// Engine-authored labels for nonintrinsic rules state. Keep them on one replaceable line so every
+// authoritative battlefield sync can remove expired effects without disturbing user text or the
+// other ruled annotation lines above. Strip the legacy marker during the transition as well.
+QString mergeRuledEffectsIntoAnnotation(const QString &baseAnn, const QStringList &effectLabels)
 {
-    const QString marker = QStringLiteral("Granted:");
+    const QString marker = QStringLiteral("Effects:");
+    const QString legacyMarker = QStringLiteral("Granted:");
     QStringList kept;
     for (const QString &line : baseAnn.split(QLatin1Char('\n'))) {
-        if (line.trimmed().startsWith(marker)) {
+        const QString trimmed = line.trimmed();
+        if (trimmed.startsWith(marker) || trimmed.startsWith(legacyMarker)) {
             continue;
         }
         kept.append(line);
     }
     QString without = kept.join(QLatin1Char('\n')).trimmed();
-    if (abilityLabels.isEmpty()) {
+    if (effectLabels.isEmpty()) {
         return without;
     }
-    const QString grantedLine = marker + QLatin1Char(' ') + abilityLabels.join(QStringLiteral(", "));
+    const QString effectsLine = marker + QLatin1Char(' ') + effectLabels.join(QStringLiteral(", "));
     if (without.isEmpty()) {
-        return grantedLine;
+        return effectsLine;
     }
-    return without + QLatin1Char('\n') + grantedLine;
+    return without + QLatin1Char('\n') + effectsLine;
 }
 
 // CR 707 display aid. This line is authoritative and replaceable so a copied permanent can
@@ -561,12 +563,12 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                         }
                     }
                     mergedAnn = mergeRuledEnchantingIntoAnnotation(mergedAnn, enchantedPlayerName);
-                    QStringList grantedAbilityLabels;
-                    grantedAbilityLabels.reserve(battlefieldObject.granted_ability_labels_size());
-                    for (const std::string &label : battlefieldObject.granted_ability_labels()) {
-                        grantedAbilityLabels.append(QString::fromStdString(label));
+                    QStringList rulesAnnotationLabels;
+                    rulesAnnotationLabels.reserve(battlefieldObject.rules_annotation_labels_size());
+                    for (const std::string &label : battlefieldObject.rules_annotation_labels()) {
+                        rulesAnnotationLabels.append(QString::fromStdString(label));
                     }
-                    mergedAnn = mergeRuledGrantedAbilitiesIntoAnnotation(mergedAnn, grantedAbilityLabels);
+                    mergedAnn = mergeRuledEffectsIntoAnnotation(mergedAnn, rulesAnnotationLabels);
                     if (mergedAnn != card->getAnnotation()) {
                         card->setAnnotation(mergedAnn);
                         result.tapStateChanged = true;
