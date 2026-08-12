@@ -6,9 +6,9 @@
 
 use super::events::{color_string, ev_log, object_display_name};
 use super::targeting::{
-    battlefield_objects_matching, compute_spell_targets, effect_has_legal_target_at_resolution,
-    graveyard_target_legal, object_matches_mass_filter, spell_effect_kind_needs_target,
-    target_filter_legal_at_resolution, TargetSourceIdentity,
+    attachment_recipient_for_target, battlefield_objects_matching, compute_spell_targets,
+    effect_has_legal_target_at_resolution, graveyard_target_legal, object_matches_mass_filter,
+    spell_effect_kind_needs_target, target_filter_legal_at_resolution, TargetSourceIdentity,
 };
 use super::*;
 use rand::seq::SliceRandom;
@@ -195,14 +195,32 @@ impl GameEngine {
             // is countered (goes to owner's graveyard) rather than entering the battlefield orphaned.
             let is_aura =
                 resolves_to_battlefield_raw && resolving_face.map(|f| f.is_aura).unwrap_or(false);
-            let aura_target_valid = !is_aura
-                || targets.first().is_some_and(|&tid| {
-                    self.state
-                        .objects
-                        .get(&tid)
-                        .map(|o| o.zone == Zone::Battlefield)
-                        .unwrap_or(false)
-                });
+            let aura_filter = is_aura
+                .then(|| {
+                    resolving_face.and_then(|face| {
+                        face.spell_effect.iter().find_map(|effect| match effect {
+                            SpellEffectKind::AuraAttach { target } => Some(target),
+                            _ => None,
+                        })
+                    })
+                })
+                .flatten();
+            let aura_recipient = aura_filter.and_then(|filter| {
+                targets.first().copied().and_then(|target| {
+                    effect_has_legal_target_at_resolution(
+                        self,
+                        &SpellEffectKind::AuraAttach {
+                            target: filter.clone(),
+                        },
+                        &targets,
+                        controller,
+                        TargetSourceIdentity::for_stack_item(self, &top),
+                    )
+                    .then(|| attachment_recipient_for_target(filter, target))
+                    .flatten()
+                })
+            });
+            let aura_target_valid = !is_aura || aura_recipient.is_some();
             // CR 702.34a: a spell cast with flashback is exiled instead of being put into its
             // owner's graveyard as it leaves the stack, regardless of whether it would normally
             // be a permanent spell.
@@ -216,7 +234,7 @@ impl GameEngine {
                 rv1::StackResolveDestination::Graveyard as i32
             };
             if resolves_to_battlefield {
-                let attached_to = is_aura.then(|| targets.first().copied()).flatten();
+                let attached_to = aura_recipient;
                 match self.begin_battlefield_entry(
                     top.clone(),
                     BattlefieldEntryEvent {

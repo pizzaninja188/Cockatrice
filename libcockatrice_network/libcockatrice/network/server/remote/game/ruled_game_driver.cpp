@@ -50,6 +50,17 @@ QString withoutRuledCopyAnnotation(const QString &annotation)
     return kept.join(QLatin1Char('\n')).trimmed();
 }
 
+QString withoutRuledEnchantingAnnotation(const QString &annotation)
+{
+    QStringList kept;
+    for (const QString &line : annotation.split(QLatin1Char('\n'))) {
+        if (!line.trimmed().startsWith(QStringLiteral("Enchanting: "))) {
+            kept.append(line);
+        }
+    }
+    return kept.join(QLatin1Char('\n')).trimmed();
+}
+
 Server_CardZone *ruledCanonicalStackZone(Server_Game *game)
 {
     if (!game) {
@@ -1002,8 +1013,9 @@ void RuledGameDriver::applyPermanentMoves(const ruled::v1::RuledEventBatch &batc
                 card->setCardRef(CardRef{physicalDisplayName});
             }
             const QString annotationWithoutCopy = withoutRuledCopyAnnotation(card->getAnnotation());
-            if (annotationWithoutCopy != card->getAnnotation()) {
-                card->setAnnotation(annotationWithoutCopy);
+            const QString annotationWithoutAttachment = withoutRuledEnchantingAnnotation(annotationWithoutCopy);
+            if (annotationWithoutAttachment != card->getAnnotation()) {
+                card->setAnnotation(annotationWithoutAttachment);
             }
         }
         // Hidden zones (the library) address cards by position index in moveCard/getCard, not by
@@ -1361,11 +1373,11 @@ void RuledGameDriver::applyFaceDisplays(const ruled::v1::RuledEventBatch &batch,
     }
 }
 
-// Post-zone-view pass: restore attach state from battlefield_attached_to_oid for both
-// Auras and Equipment. The engine OID maps are fresh after the zone-view pass, so
-// cross-player lookups work. A non-zero attached_to_oid means the card at that slot is
-// currently attached to that target — issue Event_AttachCard to bring client visual state
-// into sync. This handles reconnect (initial_response_batch) and any batch with a zone_view.
+// Post-zone-view pass: restore physical object attachments from the engine's typed recipient.
+// Player-attached Auras remain unparented in their controller's ordinary battlefield row; their
+// public identity is rendered through the replaceable Enchanting annotation. Missing recipients
+// clear stale physical parents. The full replacement handles reconnect and both transition
+// directions; object recipients still emit Event_AttachCard for the legacy stacked presentation.
 void RuledGameDriver::applyAttachmentRestores(const ruled::v1::RuledEventBatch &batch)
 {
     {
@@ -1386,15 +1398,25 @@ void RuledGameDriver::applyAttachmentRestores(const ruled::v1::RuledEventBatch &
                 }
                 auto *ownerPlayer = static_cast<Server_Player *>(ownerAb);
                 for (const auto &battlefieldObject : p.battlefield_objects()) {
-                    const quint32 targetOid = static_cast<quint32>(battlefieldObject.attached_to_oid());
-                    if (targetOid == 0) {
-                        continue;
-                    }
                     const quint32 attachedOid = static_cast<quint32>(battlefieldObject.object_id());
                     Server_Card *attachedCard = playerBinding(p.player_id()).findCardByEngineOid(ownerPlayer, attachedOid);
                     if (!attachedCard || !attachedCard->getZone()) {
                         continue;
                     }
+                    const bool hasObjectRecipient =
+                        battlefieldObject.has_attachment_recipient() &&
+                        battlefieldObject.attachment_recipient().recipient_case() ==
+                            ruled::v1::AttachmentRecipient::kObjectId;
+                    if (!hasObjectRecipient) {
+                        if (attachedCard->getParentCard()) {
+                            playerBinding(p.player_id())
+                                .unattachRuledCard(ownerPlayer, attachedCard, attachRestoreGes);
+                            attachRestoreGesHasEvents = true;
+                        }
+                        continue;
+                    }
+                    const quint32 targetOid =
+                        static_cast<quint32>(battlefieldObject.attachment_recipient().object_id());
                     Server_Card *targetCard = nullptr;
                     for (Server_AbstractPlayer *ab : game->getPlayers().values()) {
                         if (!ab) {
@@ -1407,11 +1429,21 @@ void RuledGameDriver::applyAttachmentRestores(const ruled::v1::RuledEventBatch &
                         }
                     }
                     if (!targetCard || !targetCard->getZone()) {
+                        if (attachedCard->getParentCard()) {
+                            playerBinding(p.player_id())
+                                .unattachRuledCard(ownerPlayer, attachedCard, attachRestoreGes);
+                            attachRestoreGesHasEvents = true;
+                        }
                         continue;
                     }
                     // Avoid redundant events when the server already knows about this attachment.
                     if (attachedCard->getParentCard() == targetCard) {
                         continue;
+                    }
+                    if (attachedCard->getParentCard()) {
+                        playerBinding(p.player_id())
+                            .unattachRuledCard(ownerPlayer, attachedCard, attachRestoreGes);
+                        attachRestoreGesHasEvents = true;
                     }
                     attachedCard->setParentCard(targetCard);
                     // Match cmdAttachCard: an attached card leaves the grid (x = -1) and is drawn
@@ -1564,8 +1596,12 @@ void RuledGameDriver::applyLifeManaAndCombatEvents(const ruled::v1::RuledEventBa
         // underneath the enchanted permanent (the visual layout used in freeform too).
         if (e.has_aura_attached()) {
             const auto &aa = e.aura_attached();
+            if (!aa.has_attachment_recipient() ||
+                aa.attachment_recipient().recipient_case() != ruled::v1::AttachmentRecipient::kObjectId) {
+                continue;
+            }
             const quint32 auraOid = static_cast<quint32>(aa.aura_object_id());
-            const quint32 enchantedOid = static_cast<quint32>(aa.enchanted_object_id());
+            const quint32 enchantedOid = static_cast<quint32>(aa.attachment_recipient().object_id());
             Server_Card *auraCard = nullptr;
             Server_Card *enchantedCard = nullptr;
             for (Server_AbstractPlayer *ab : game->getPlayers().values()) {

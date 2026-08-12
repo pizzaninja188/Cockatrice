@@ -6,6 +6,6 @@ pub mod state;
 
 pub use engine::{Characteristics, EngineError, GameEngine};
 pub use state::{
-    AffectedScope, ContinuousEffect, GameObject, GameState, ObjectId, OpeningSequence, PlayerId,
-    TurnStep, Zone,
+    AffectedScope, AttachmentRecipient, ContinuousEffect, GameObject, GameState, ObjectId,
+    OpeningSequence, PlayerId, TurnStep, Zone,
 };

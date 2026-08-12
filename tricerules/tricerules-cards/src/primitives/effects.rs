@@ -1274,13 +1274,17 @@ impl SpellEffectKind {
                     Ok(())
                 }
             }
-            // CR 303.4a: an aura enchants a permanent (never a player).
+            // CR 303.4a: an Aura may enchant an object or player. Keep mixed AnyTarget out until
+            // a real card needs the additional recipient disambiguation surface.
             SpellEffectKind::AuraAttach { target } => {
-                if !matches!(target.kind, TargetKind::Creature | TargetKind::AnyPermanent) {
-                    Err(
-                        "AuraAttach cannot target players; auras enchant permanents (CR 303.4a)"
-                            .into(),
-                    )
+                if !matches!(
+                    target.kind,
+                    TargetKind::Creature
+                        | TargetKind::AnyPermanent
+                        | TargetKind::AnyPlayer
+                        | TargetKind::OpponentPlayer
+                ) {
+                    Err("AuraAttach does not support mixed AnyTarget recipients".into())
                 } else {
                     Ok(())
                 }

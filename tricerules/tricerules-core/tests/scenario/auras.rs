@@ -1,6 +1,9 @@
 use crate::helpers::*;
 use tricerules_cards::Keyword;
+use tricerules_proto::ruled::v1::attachment_recipient::Recipient;
+use tricerules_proto::ruled::v1::dev_command::Dev;
 use tricerules_proto::ruled::v1::TargetRef;
+use tricerules_proto::ruled::v1::{DevCommand, DevMoveCard, DevZone};
 
 fn aura_deck(aura: &str) -> Vec<String> {
     (0..60).map(|_| aura.to_string()).collect()
@@ -23,6 +26,227 @@ fn cast_and_resolve_aura(e: &mut GameEngine, card_id: &str, target: u32, mana: M
     .expect("cast aura");
     resolve_entire_stack_two_player(e);
     battlefield_object_for_card(e, 0, card_id)
+}
+
+fn cast_and_resolve_player_aura(
+    e: &mut GameEngine,
+    card_id: &str,
+    player_id: i32,
+    mana: ManaGift,
+) -> (u32, RuledEventBatch) {
+    ensure_card_in_hand(e, 0, card_id);
+    give_mana(e, 0, mana);
+    let slot = hand_index_for_card(e, 0, card_id);
+    e.apply_command(0, &cast_spell(slot, target_player(player_id)))
+        .expect("cast player Aura");
+    e.apply_command(0, &pass()).expect("caster pass");
+    let batch = e.apply_command(1, &pass()).expect("opponent pass");
+    (battlefield_object_for_card(e, 0, card_id), batch)
+}
+
+fn dev_move(player_id: i32, zone: DevZone, card_name: &str) -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::DevCommand(DevCommand {
+            target_player_id: player_id,
+            dev: Some(Dev::MoveCard(DevMoveCard {
+                card_name: card_name.to_string(),
+                zone: zone as i32,
+                ready: false,
+            })),
+        })),
+    }
+}
+
+#[test]
+fn curse_of_disturbance_can_target_a_player() {
+    let decks = Some(vec![
+        deck_with("swamp", &["curse_of_disturbance"]),
+        vec!["swamp".into(); 20],
+    ]);
+    let mut e = GameEngine::new(4219, &[0, 1], 20, decks, true)
+        .expect("player-enchanting Aura card data must validate");
+    advance_to_main1_from_game_start(&mut e);
+    ensure_card_in_hand(&mut e, 0, "curse_of_disturbance");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            c: 2,
+            ..Default::default()
+        },
+    );
+
+    let slot = hand_index_for_card(&e, 0, "curse_of_disturbance");
+    e.apply_command(0, &cast_spell(slot, target_player(1)))
+        .expect("cast Curse of Disturbance targeting opponent");
+    e.apply_command(0, &pass()).expect("caster pass");
+    let resolution = e.apply_command(1, &pass()).expect("opponent pass");
+    let curse = battlefield_object_for_card(&e, 0, "curse_of_disturbance");
+
+    assert_eq!(
+        e.state.objects.get(&curse).map(|object| object.zone),
+        Some(tricerules_core::Zone::Battlefield)
+    );
+    assert_eq!(
+        e.state.objects[&curse].attached_to,
+        Some(AttachmentRecipient::Player(1))
+    );
+    let aura_event = resolution.events.iter().find_map(|event| match &event.ev {
+        Some(Ev::AuraAttached(attached)) => Some(attached),
+        _ => None,
+    });
+    assert!(matches!(
+        aura_event
+            .and_then(|event| event.attachment_recipient.as_ref())
+            .and_then(|recipient| recipient.recipient.as_ref()),
+        Some(Recipient::PlayerId(1))
+    ));
+
+    let snapshot = e.initial_response_batch();
+    let public_recipient = snapshot.events.iter().find_map(|event| match &event.ev {
+        Some(Ev::ZoneView(view)) => view
+            .per_player
+            .iter()
+            .flat_map(|player| &player.battlefield_objects)
+            .find(|object| object.object_id == curse)
+            .and_then(|object| object.attachment_recipient.as_ref()),
+        _ => None,
+    });
+    assert!(matches!(
+        public_recipient.and_then(|recipient| recipient.recipient.as_ref()),
+        Some(Recipient::PlayerId(1))
+    ));
+}
+
+#[test]
+fn curse_of_opulence_can_enchant_its_controller() {
+    let decks = Some(vec![
+        aura_deck("curse_of_opulence"),
+        aura_deck("curse_of_opulence"),
+    ]);
+    let mut e = GameEngine::new(4220, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let (curse, _) = cast_and_resolve_player_aura(
+        &mut e,
+        "curse_of_opulence",
+        0,
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+    assert_eq!(
+        e.state.objects[&curse].attached_to,
+        Some(AttachmentRecipient::Player(0))
+    );
+}
+
+#[test]
+fn player_aura_rejects_a_forged_permanent_target() {
+    let decks = Some(vec![
+        aura_deck("curse_of_opulence"),
+        aura_deck("curse_of_opulence"),
+    ]);
+    let mut e = GameEngine::new(4221, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let bear = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    ensure_card_in_hand(&mut e, 0, "curse_of_opulence");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+    let slot = hand_index_for_card(&e, 0, "curse_of_opulence");
+    assert!(
+        e.apply_command(
+            0,
+            &cast_spell(
+                slot,
+                vec![TargetRef {
+                    object_id: bear,
+                    damage_amount: 0,
+                }]
+            )
+        )
+        .is_err(),
+        "AnyPlayer Aura must reject a forged permanent target"
+    );
+}
+
+#[test]
+fn player_aura_sba_cleans_up_a_lost_recipient() {
+    let decks = Some(vec![
+        aura_deck("curse_of_opulence"),
+        aura_deck("curse_of_opulence"),
+    ]);
+    let mut e = GameEngine::new(4223, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let (curse, _) = cast_and_resolve_player_aura(
+        &mut e,
+        "curse_of_opulence",
+        1,
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+    e.state.players[1].has_lost = true;
+    e.apply_command(0, &pass()).expect("pass applies SBAs");
+    assert_eq!(
+        e.state.objects[&curse].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert_eq!(e.state.objects[&curse].attached_to, None);
+}
+
+#[test]
+fn player_aura_survives_control_change_and_clears_on_zone_change() {
+    let decks = Some(vec![
+        deck_with("swamp", &["curse_of_disturbance"]),
+        vec!["swamp".into(); 20],
+    ]);
+    let mut e = GameEngine::new(4224, &[0, 1], 20, decks, true).expect("new");
+    e.enable_dev_commands();
+    advance_to_main1_from_game_start(&mut e);
+    let (curse, _) = cast_and_resolve_player_aura(
+        &mut e,
+        "curse_of_disturbance",
+        1,
+        ManaGift {
+            b: 1,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    e.state.objects.get_mut(&curse).expect("Curse").controller = 1;
+    e.state
+        .objects
+        .get_mut(&curse)
+        .expect("Curse")
+        .base_controller = 1;
+    e.state.players[0].battlefield.retain(|&id| id != curse);
+    e.state.players[1].battlefield.push(curse);
+    e.apply_command(0, &pass()).expect("pass applies SBAs");
+    assert_eq!(
+        e.state.objects[&curse].attached_to,
+        Some(AttachmentRecipient::Player(1)),
+        "AnyPlayer remains legal after the Aura changes control"
+    );
+
+    e.apply_command(0, &dev_move(1, DevZone::Graveyard, "Curse of Disturbance"))
+        .expect("move Curse to graveyard");
+    assert_eq!(
+        e.state.objects[&curse].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert_eq!(
+        e.state.objects[&curse].attached_to, None,
+        "CR 400.7 exit funnel clears typed recipient"
+    );
 }
 
 #[test]
@@ -84,7 +308,7 @@ fn holy_strength_buffs_enchanted_creature() {
     let hs_oid = battlefield_object_for_card(&e, 0, "holy_strength");
     assert_eq!(
         e.state.objects.get(&hs_oid).and_then(|o| o.attached_to),
-        Some(bear),
+        Some(AttachmentRecipient::Object(bear)),
         "aura.attached_to must point at the enchanted creature"
     );
 }

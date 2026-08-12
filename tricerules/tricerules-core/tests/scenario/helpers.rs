@@ -1,7 +1,7 @@
 //! Shared helpers for scenario tests.
 #![allow(dead_code)]
 
-pub(crate) use tricerules_core::GameEngine;
+pub(crate) use tricerules_core::{AttachmentRecipient, GameEngine};
 use tricerules_proto::ruled::v1 as rv1;
 pub(crate) use tricerules_proto::ruled::v1::ruled_command::Cmd;
 pub(crate) use tricerules_proto::ruled::v1::ruled_event::Ev;

@@ -1100,7 +1100,8 @@ fn icy_manipulator_cannot_target_an_enchantment() {
     // An Aura attached to a creature: a permanent, but not artifact/creature/land.
     let bears = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     let aura = inject_permanent_on_battlefield(&mut e, 0, "holy_strength");
-    e.state.objects.get_mut(&aura).expect("aura").attached_to = Some(bears);
+    e.state.objects.get_mut(&aura).expect("aura").attached_to =
+        Some(AttachmentRecipient::Object(bears));
 
     give_mana(
         &mut e,

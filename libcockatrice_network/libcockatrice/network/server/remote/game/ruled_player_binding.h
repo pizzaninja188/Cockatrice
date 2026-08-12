@@ -76,6 +76,10 @@ struct RuledPlayerBinding
     Server_Card *findCardByEngineOid(const Server_Player *player, quint32 engineOid) const;
     Server_Card *findGraveyardCardByEngineOid(const Server_Player *player, quint32 engineOid) const;
     Server_Card *findExileCardByEngineOid(const Server_Player *player, quint32 engineOid) const;
+    /// Remove a stale physical parent-card relationship and restore the card to its table row,
+    /// emitting the ordinary Cockatrice unattach/move events. RuledGameDriver decides from the
+    /// authoritative typed recipient when this transition is required.
+    void unattachRuledCard(Server_Player *player, Server_Card *card, GameEventStorage &ges);
     /// Resolve an *engine* graveyard index (as carried by CastSpell.hand_card_index on a flashback
     /// cast) to the physical card. Never index the pile with an engine index directly: the two
     /// zones run in opposite directions.

@@ -396,7 +396,9 @@ impl GameEngine {
                             keywords,
                             activated_abilities,
                             counters_annotation: object.counter_annotation(),
-                            attached_to_oid: object.attached_to.unwrap_or(0),
+                            attachment_recipient: object
+                                .attached_to
+                                .map(attachment_recipient_proto),
                             face_up_index: object.face_up_index as u32,
                             // CR 108.3. The per-player view already says who *controls* this
                             // permanent (it is listed under its controller); the owner is the

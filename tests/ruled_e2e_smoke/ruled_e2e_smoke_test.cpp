@@ -24,6 +24,8 @@
 //     is the only cross-language check that a C++-built DevCommand decodes and applies in Rust.
 //   * continuous control change: Act of Treason moves one physical permanent to the caster's
 //     TABLE for the turn, grants haste, then returns it to the owner's TABLE at cleanup
+//   * player-attached Aura: Curse of Disturbance targets the other seat, stays on its controller's
+//     TABLE, and publishes the same typed recipient / physical mapping to both clients
 //
 // Scope: engine + relay + protocol wiring only — no Qt client UI logic (that arrives with the
 // Step 5 headless client-core suite).
@@ -206,6 +208,7 @@ public:
         int power = 0;
         int toughness = 0;
         int faceIndex = 0;
+        int attachmentPlayerId = -1;
     };
     std::map<int, std::vector<Permanent>> battlefieldByPlayer;
     struct Pool
@@ -228,6 +231,9 @@ public:
     bool borosCharmCast = false;
     bool giantCast = false;
     bool brainstormCast = false;
+    bool devCurseConjureSent = false;
+    bool devCurseManaSent = false;
+    bool curseCast = false;
     // Flashback (CR 702.34) exercises the one relay path nothing else covers: the physical
     // card is sourced from the GRAVE pile rather than the hand. Tracked through the freeform
     // Event_MoveCard stream, because the ruled batch looks identical whether or not the relay
@@ -272,6 +278,10 @@ public:
     bool sawControlReturn = false;
     bool sawPhysicalControlTransfer = false;
     bool sawPhysicalControlReturn = false;
+    bool sawCursePlayerAttachment = false;
+    quint32 curseOid = 0;
+    std::map<quint32, int> serverCardByEngineOid;
+    std::map<int, QString> annotationByServerCardId;
 
     // Milestone observations (asserted by the fixture)
     bool sawBoltPushWithTarget = false;
@@ -550,6 +560,8 @@ public:
                 if (attr.attribute() == AttrTapped) {
                     sawPhysicalTap = sawPhysicalTap || attr.attr_value() == "1";
                     sawPhysicalUntap = sawPhysicalUntap || attr.attr_value() == "0";
+                } else if (attr.attribute() == AttrAnnotation) {
+                    annotationByServerCardId[attr.card_id()] = QString::fromStdString(attr.attr_value());
                 }
             }
             if (ev.HasExtension(Event_RuledPayload::ext)) {
@@ -640,6 +652,10 @@ public:
                 if (waifOid != 0 && face.object_id() == waifOid && face.face_up_index() == 1) {
                     sawWaifFaceChanged = true;
                 }
+            } else if (ev.has_battlefield_object_map()) {
+                for (const auto &entry : ev.battlefield_object_map().entries()) {
+                    serverCardByEngineOid[entry.engine_object_id()] = entry.server_card_id();
+                }
             } else if (ev.has_trigger_order_required()) {
                 const auto &tor = ev.trigger_order_required();
                 if (tor.deciding_player_id() == myId && tor.candidates_size() > 0) {
@@ -680,6 +696,11 @@ public:
                             perm.power = static_cast<int>(battlefieldObject.power());
                             perm.toughness = static_cast<int>(battlefieldObject.toughness());
                             perm.faceIndex = static_cast<int>(battlefieldObject.face_up_index());
+                            if (battlefieldObject.has_attachment_recipient() &&
+                                battlefieldObject.attachment_recipient().recipient_case() ==
+                                    ruled::v1::AttachmentRecipient::kPlayerId) {
+                                perm.attachmentPlayerId = battlefieldObject.attachment_recipient().player_id();
+                            }
                             perm.haste = std::find(battlefieldObject.keywords().begin(),
                                                    battlefieldObject.keywords().end(),
                                                    "Haste") != battlefieldObject.keywords().end();
@@ -690,6 +711,12 @@ public:
                                 if (perm.faceIndex == 1 && perm.power == 3 && perm.toughness == 2) {
                                     sawWaifBackPt = true;
                                 }
+                            }
+                            const int expectedCurseTarget = role == Role::Aggressor ? oppId : myId;
+                            if (perm.cardId == QLatin1String("curse_of_disturbance") &&
+                                perm.attachmentPlayerId == expectedCurseTarget) {
+                                sawCursePlayerAttachment = true;
+                                curseOid = perm.oid;
                             }
                         }
                     }
@@ -951,6 +978,17 @@ public:
             }
         }
         return n;
+    }
+
+    bool hasCursePhysicalAnnotation() const
+    {
+        const auto card = serverCardByEngineOid.find(curseOid);
+        if (curseOid == 0 || card == serverCardByEngineOid.end()) {
+            return false;
+        }
+        const auto annotation = annotationByServerCardId.find(card->second);
+        return annotation != annotationByServerCardId.end() &&
+               annotation->second.contains(QStringLiteral("Enchanting: smokep2"));
     }
 
     std::optional<quint32> firstOwnUntapped(const QString &cardId) const
@@ -1248,6 +1286,44 @@ public:
             (phase == ruled::v1::PHASE_ID_MAIN1 || phase == ruled::v1::PHASE_ID_MAIN2) && activePlayer == myId;
 
         if (role == Role::Aggressor && inMain && stackDepth == 0) {
+            if (!devCurseConjureSent) {
+                devCurseConjureSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                auto *put = dev->mutable_put_card_in_zone();
+                put->set_card_name("Curse of Disturbance");
+                put->set_zone(ruled::v1::DEV_ZONE_HAND);
+                sendRuled(cmd, QStringLiteral("dev: conjure Curse of Disturbance into hand"));
+                return;
+            }
+            if (!devCurseManaSent) {
+                devCurseManaSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                dev->mutable_add_mana()->set_b(1);
+                dev->mutable_add_mana()->set_c(2);
+                sendRuled(cmd, QStringLiteral("dev: add {2}{B} for Curse of Disturbance"));
+                return;
+            }
+            if (!curseCast) {
+                if (const auto *curse =
+                        handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Curse of Disturbance"))) {
+                    if (myPool.b >= 1 && myPool.total() >= 3) {
+                        ruled::v1::RuledCommand cmd;
+                        auto *cast = cmd.mutable_cast_spell();
+                        cast->mutable_source()->set_hand_index(curse->hand_index());
+                        cast->add_targets()->set_object_id(static_cast<quint32>(oppId));
+                        curseCast = true;
+                        sendRuled(cmd, QStringLiteral("cast Curse of Disturbance enchanting player %1").arg(oppId));
+                        return;
+                    }
+                }
+            }
+            if (curseCast && !sawCursePlayerAttachment) {
+                return;
+            }
             if (tryFlashbackSequence()) {
                 return;
             }
@@ -1814,6 +1890,8 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     // --- Drive the scripted game until every milestone is observed ---
     const auto milestonesDone = [&] {
         return p2.sentBottom && p1.sawBattlefieldOmission && p2.sawBattlefieldOmission && p1.sawBoltPushWithTarget &&
+               p1.sawCursePlayerAttachment && p2.sawCursePlayerAttachment && p1.hasCursePhysicalAnnotation() &&
+               p2.hasCursePhysicalAnnotation() &&
                p1.sawBoltLifeLoss && p1.sawBorosCharmPushWithMode && p1.sawBorosCharmLifeLoss &&
                p1.sawAttackersDeclared && p1.sawCombatLifeLoss && p2.sawBrainstormChoice &&
                p2.submittedBrainstormChoice && p2.sawBrainstormResolved && p2.sentCleanupDiscard &&
@@ -1855,6 +1933,17 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     EXPECT_TRUE(p2.sawBottomAction && p2.sentBottom) << "London mulligan bottoming never happened";
     EXPECT_TRUE(p1.sawBattlefieldOmission && p2.sawBattlefieldOmission)
         << "no unchanged battlefield snapshot was omitted end to end";
+    EXPECT_TRUE(p1.curseCast) << "Curse of Disturbance was never cast at the opposing player";
+    EXPECT_TRUE(p1.sawCursePlayerAttachment && p2.sawCursePlayerAttachment)
+        << "both clients did not receive the typed player attachment";
+    ASSERT_NE(p1.curseOid, 0u);
+    EXPECT_EQ(p1.curseOid, p2.curseOid) << "clients disagreed on the Curse engine ObjectId";
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(p1.curseOid));
+    ASSERT_TRUE(p2.serverCardByEngineOid.count(p2.curseOid));
+    EXPECT_EQ(p1.serverCardByEngineOid[p1.curseOid], p2.serverCardByEngineOid[p2.curseOid])
+        << "clients disagreed on the Curse physical Server_Card mapping";
+    EXPECT_TRUE(p1.hasCursePhysicalAnnotation() && p2.hasCursePhysicalAnnotation())
+        << "both clients did not receive Enchanting: smokep2 for the same physical Curse";
     EXPECT_TRUE(p1.sawPhysicalTap && p2.sawPhysicalTap)
         << "a mana activation never produced a physical tapped-card event for both clients";
     EXPECT_TRUE(p1.sawPhysicalUntap && p2.sawPhysicalUntap)

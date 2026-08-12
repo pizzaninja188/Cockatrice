@@ -91,7 +91,7 @@ fn bonesplitter_equip_adds_bonus() {
             .get(&splitter)
             .expect("splitter")
             .attached_to,
-        Some(creature),
+        Some(AttachmentRecipient::Object(creature)),
         "Bonesplitter attached_to should be the creature"
     );
     // Creature now has +2/+0 from the attached modifier (layer 7c).
@@ -181,7 +181,7 @@ fn bonesplitter_reequip_shifts_bonus() {
             .get(&splitter)
             .expect("splitter")
             .attached_to,
-        Some(bear2),
+        Some(AttachmentRecipient::Object(bear2)),
         "now attached to bear2"
     );
     assert_eq!(e.effective_power(bear1), Some(2), "bear1 bonus gone");
@@ -234,7 +234,7 @@ fn equipment_falls_off_when_creature_dies() {
     pass_both_players(&mut e);
     assert_eq!(
         e.state.objects.get(&splitter).unwrap().attached_to,
-        Some(bear)
+        Some(AttachmentRecipient::Object(bear))
     );
 
     // Mark lethal damage on the bear (base 2/2 toughness, 2 damage = lethal per CR 704.5g).
@@ -362,7 +362,10 @@ fn vulshok_morningstar_adds_power_and_toughness() {
     .expect("equip Vulshok Morningstar");
     pass_both_players(&mut e);
 
-    assert_eq!(e.state.objects.get(&star).unwrap().attached_to, Some(bear));
+    assert_eq!(
+        e.state.objects.get(&star).unwrap().attached_to,
+        Some(AttachmentRecipient::Object(bear))
+    );
     assert_eq!(
         e.effective_power(bear),
         Some(4),

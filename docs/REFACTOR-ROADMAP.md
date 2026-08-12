@@ -426,7 +426,8 @@ message BattlefieldObject {
   bool is_creature = 5; uint32 power = 6; uint32 toughness = 7; uint32 damage = 8;
   repeated string keywords = 9;                  // mirror engine Keyword serde names
   repeated AbilityInfo activated_abilities = 10; // kills the pipe-delimited encoding
-  string counters_annotation = 11; uint32 attached_to_oid = 12; uint32 face_up_index = 13;
+  string counters_annotation = 11; reserved 12; uint32 face_up_index = 13;
+  AttachmentRecipient attachment_recipient = 18;
 }
 message HandCard { string card_id = 1; uint32 object_id = 2; }
 ```

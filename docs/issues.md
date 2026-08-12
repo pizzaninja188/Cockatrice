@@ -54,7 +54,7 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Priority: Low
 
 - [ ] #63 [feature] Triggers from the object carrying an attachment
-  - Details: Let Equipment and Auras define triggers keyed to events involving the object they are attached to, while snapshotting the attachment relation needed at trigger time. Calibration evidence: Heart-Piercer Bow and Unholy Indenture. Cover attack and death events, detachment or zone changes before resolution, and multiple attachments without hard-coding card names.
+  - Details: Let Equipment and Auras define triggers keyed to events involving the object or player they are attached to, while snapshotting the attachment relation needed at trigger time. Calibration evidence: Heart-Piercer Bow, Unholy Indenture, Curse of Opulence, and Curse of Disturbance. Issue #94 shipped typed player attachment identity and the two Curses as partial cards; this issue retains their "enchanted player is attacked" trigger generation, attachment snapshot, and attack-participant context. Cover attack and death events, detachment or zone changes before resolution, and multiple attachments without hard-coding card names.
   - Priority: Low
 
 - [ ] #64 [feature] Granted and delayed triggered abilities
@@ -102,7 +102,7 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Priority: Low
 
 - [ ] #86 [feature] Related-player effect recipients
-  - Details: Add recipient expressions for the controller of a target or blocking creature and the defending player or planeswalker associated with an attacker. Calibration evidence: Chandra's Outrage, Gloom Sower's secondary controller-recipient gap, and Scorch Spitter. Derive recipients from engine identities at the event or resolution time required by the effect, with controller-aware multiplayer coverage.
+  - Details: Add recipient expressions for the controller of a target or blocking creature, the defending player or planeswalker associated with an attacker, and each opponent attacking an enchanted player. Calibration evidence: Chandra's Outrage, Gloom Sower's secondary controller-recipient gap, Scorch Spitter, Curse of Opulence, and Curse of Disturbance. Issue #94 shipped typed player attachment identity and the two Curses as partial cards; this issue retains their controller-created reward plus each-attacking-opponent reward after #63 supplies the attack trigger context. Derive recipients from engine identities at the event or resolution time required by the effect, with controller-aware multiplayer coverage.
   - Priority: Low
 
 - [ ] #88 [feature] Soft counters with optional payment
@@ -119,10 +119,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
 
 - [ ] #92 [feature] Look, choose a matching card, and bottom the rest
   - Details: Add a resumable library-selection algorithm that looks at the top N cards, optionally chooses one matching a filter for hand, and puts the rest on the bottom in the rules-required order. Calibration evidence: Brightwood Tracker. Preserve hidden information, deterministic ordering, exact choice validation, and satisfy the custom-effect review plus two-card-or-mechanic reuse gates before choosing a primitive or tier-3 implementation.
-  - Priority: Low
-
-- [ ] #94 [feature] Player-attached Auras and Curses
-  - Details: Generalize Aura attachment identity so an Aura can enchant either a battlefield object or a player under CR 303.4, without representing players as fake `ObjectId`s. Use a typed engine-owned attachment recipient and extend authoritative target publication, cast validation, resolution revalidation, ongoing enchant legality, CR 704.5m state-based actions, and player-leaves-game handling; Equipment remains permanent-only. Propagate the public recipient identity through `ruled_v1.proto`, every Rust/C++ constructor and consumer, Servatrice physical binding, and a ruled-client presentation that does not require a parent `CardItem`; preserve freeform behavior. Applicability evidence: Curse of Opulence and Curse of Disturbance. Cover self and opponent recipients, multiplayer player sets, illegal/stale/eliminated recipients, zone changes, replay determinism, reflection visibility classification, relay/client regressions, ruled E2E synchronization, and a manual two-client check. Card-specific attack triggers and related-player effects may reuse or remain explicitly dependent on #62, #63, and #86 rather than being hard-coded into the attachment substrate.
   - Priority: Low
 
 - [ ] #46 [feature] Token copy effects — Populate and create-a-copy tokens

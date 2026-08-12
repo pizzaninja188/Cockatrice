@@ -162,7 +162,8 @@ impl CharacteristicsEvaluator<'_> {
                         AffectedScope::Single(id) => id == oid,
                         AffectedScope::AttachedTo(source_id) => {
                             self.state.objects.get(&source_id).is_some_and(|source| {
-                                source.zone == Zone::Battlefield && source.attached_to == Some(oid)
+                                source.zone == Zone::Battlefield
+                                    && source.attached_to == Some(AttachmentRecipient::Object(oid))
                             })
                         }
                         _ => false,
@@ -238,7 +239,8 @@ pub(super) fn effect_affects(
         AffectedScope::AllCreatures => characteristics.is_creature(),
         AffectedScope::AttachedTo(source_oid) => {
             state.objects.get(source_oid).is_some_and(|attachment| {
-                attachment.zone == Zone::Battlefield && attachment.attached_to == Some(oid)
+                attachment.zone == Zone::Battlefield
+                    && attachment.attached_to == Some(AttachmentRecipient::Object(oid))
             })
         }
         AffectedScope::CreaturesMatching {
@@ -560,14 +562,18 @@ mod tests {
             .state
             .objects
             .insert(target, make_object(target, 0, None));
-        engine
-            .state
-            .objects
-            .insert(control_aura, make_object(control_aura, 0, Some(target)));
-        engine
-            .state
-            .objects
-            .insert(aura_thief, make_object(aura_thief, 1, Some(control_aura)));
+        engine.state.objects.insert(
+            control_aura,
+            make_object(control_aura, 0, Some(AttachmentRecipient::Object(target))),
+        );
+        engine.state.objects.insert(
+            aura_thief,
+            make_object(
+                aura_thief,
+                1,
+                Some(AttachmentRecipient::Object(control_aura)),
+            ),
+        );
         engine.state.continuous_effects.extend([
             ContinuousEffect {
                 source_id: Some(control_aura),

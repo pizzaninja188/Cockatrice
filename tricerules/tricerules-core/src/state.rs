@@ -9,6 +9,14 @@ use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
 pub type PlayerId = i32;
 pub type ObjectId = u32;
 
+/// The game entity an Aura or Equipment is attached to. Players are represented explicitly;
+/// their numeric ids must never be confused with engine object ids.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AttachmentRecipient {
+    Object(ObjectId),
+    Player(PlayerId),
+}
+
 /// CR 715.3d: the player who resolved this card as an Adventure may cast one specific permanent
 /// face for as long as this exact object remains exiled.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -88,10 +96,10 @@ pub struct GameObject {
     /// in pairs as a state-based action (CR 122.3). Unlike continuous effects, counters persist
     /// across cleanup — they are not until-end-of-turn effects.
     pub counters: BTreeMap<CounterKind, u32>,
-    /// CR 303.4 / CR 301.5 / 702.6: for Aura or Equipment permanents, the `ObjectId` of the
-    /// permanent this card is attached to. `None` for non-aura, non-equipment permanents or
-    /// before attachment is established. Cleared on zone change (auras die; equipment falls off).
-    pub attached_to: Option<ObjectId>,
+    /// CR 303.4 / CR 301.5 / 702.6: the object or player this Aura or Equipment is attached to.
+    /// Equipment uses only [`AttachmentRecipient::Object`]. `None` means no attachment. Cleared
+    /// on every battlefield exit under the CR 400.7 zone-change funnel.
+    pub attached_to: Option<AttachmentRecipient>,
     /// CR 701.15: number of regeneration shields on this permanent. Each shield is a replacement
     /// effect: the next time this permanent would be destroyed, instead tap it, remove it from
     /// combat, and clear all damage from it. Shields expire at the cleanup step (like damage).
@@ -455,7 +463,7 @@ pub(crate) enum BattlefieldEntryCompletion {
         land_name: String,
     },
     PermanentSpell {
-        attached_to: Option<ObjectId>,
+        attached_to: Option<AttachmentRecipient>,
     },
     ResolutionEffect {
         owner: PlayerId,

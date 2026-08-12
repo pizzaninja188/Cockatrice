@@ -1147,7 +1147,7 @@ TEST_F(RuledBatchTest, ControlTransferRestoresAttachmentAcrossPlayerTables)
         seed.set_ok(true);
         auto *zoneView = seed.mutable_batch()->add_events()->mutable_zone_view();
         auto p1View = buildPerPlayerView(p1, {905u, 906u}, {false, false});
-        p1View.mutable_battlefield_objects(1)->set_attached_to_oid(905u);
+        p1View.mutable_battlefield_objects(1)->mutable_attachment_recipient()->set_object_id(905u);
         *zoneView->add_per_player() = p1View;
         *zoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
         callBatchApply(seed);
@@ -1163,7 +1163,7 @@ TEST_F(RuledBatchTest, ControlTransferRestoresAttachmentAcrossPlayerTables)
     auraObject->set_object_id(906u);
     auraObject->set_card_id("timber_wolves");
     auraObject->set_owner_player_id(p1->getPlayerId());
-    auraObject->set_attached_to_oid(905u);
+    auraObject->mutable_attachment_recipient()->set_object_id(905u);
     auto *p2View = zoneView->add_per_player();
     p2View->set_player_id(p2->getPlayerId());
     auto *bearObject = p2View->add_battlefield_objects();
@@ -1177,6 +1177,135 @@ TEST_F(RuledBatchTest, ControlTransferRestoresAttachmentAcrossPlayerTables)
     EXPECT_EQ(aura->getZone()->getPlayer(), p1);
     EXPECT_EQ(bear->getZone()->getPlayer(), p2);
     EXPECT_EQ(aura->getParentCard(), bear);
+}
+
+TEST_F(RuledBatchTest, PlayerAttachmentStaysInNormalRowAndTransitionsWithoutLosingAnnotations)
+{
+    seedCardCatalog({"Curse of Disturbance"});
+    Server_Card *bear = addCardToTable(p1, "Grizzly Bears");
+    Server_Card *curse = addCardToTable(p1, "Curse of Disturbance");
+    curse->setAnnotation(QStringLiteral("User note"));
+
+    ruled::v1::IpcResponse objectAttached;
+    objectAttached.set_ok(true);
+    auto *objectZoneView = objectAttached.mutable_batch()->add_events()->mutable_zone_view();
+    auto objectView = buildPerPlayerView(p1, {920u, 921u}, {false, false});
+    objectView.mutable_battlefield_objects(1)->mutable_attachment_recipient()->set_object_id(920u);
+    *objectZoneView->add_per_player() = objectView;
+    *objectZoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(objectAttached);
+    ASSERT_EQ(curse->getParentCard(), bear);
+    EXPECT_EQ(curse->getX(), -1);
+
+    ruled::v1::IpcResponse playerAttached;
+    playerAttached.set_ok(true);
+    auto *playerZoneView = playerAttached.mutable_batch()->add_events()->mutable_zone_view();
+    auto playerView = buildPerPlayerView(p1, {920u, 921u}, {false, false});
+    auto *curseObject = playerView.mutable_battlefield_objects(1);
+    curseObject->mutable_attachment_recipient()->set_player_id(p2->getPlayerId());
+    curseObject->set_counters_annotation("1 lore counter(s)");
+    curseObject->set_copy_annotation("Copy: Curse of Disturbance");
+    curseObject->add_granted_ability_labels("Hexproof");
+    *playerZoneView->add_per_player() = playerView;
+    *playerZoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(playerAttached);
+
+    EXPECT_EQ(curse->getParentCard(), nullptr);
+    EXPECT_GE(curse->getX(), 0);
+    EXPECT_EQ(curse->getY(), 1);
+    EXPECT_EQ(curse->getZone()->getPlayer(), p1);
+    EXPECT_EQ(curse->getAnnotation(),
+              QStringLiteral("User note\n1 lore counter(s)\nCopy: Curse of Disturbance\nEnchanting: bob\n"
+                             "Granted: Hexproof"));
+
+    ruled::v1::IpcResponse backToObject;
+    backToObject.set_ok(true);
+    auto *backZoneView = backToObject.mutable_batch()->add_events()->mutable_zone_view();
+    auto backView = buildPerPlayerView(p1, {920u, 921u}, {false, false});
+    backView.mutable_battlefield_objects(1)->mutable_attachment_recipient()->set_object_id(920u);
+    *backZoneView->add_per_player() = backView;
+    *backZoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(backToObject);
+
+    EXPECT_EQ(curse->getParentCard(), bear);
+    EXPECT_FALSE(curse->getAnnotation().contains(QStringLiteral("Enchanting: ")));
+
+    ruled::v1::IpcResponse detached;
+    detached.set_ok(true);
+    auto *detachedZoneView = detached.mutable_batch()->add_events()->mutable_zone_view();
+    *detachedZoneView->add_per_player() = buildPerPlayerView(p1, {920u, 921u}, {false, false});
+    *detachedZoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(detached);
+    EXPECT_EQ(curse->getParentCard(), nullptr);
+    EXPECT_GE(curse->getX(), 0);
+    EXPECT_EQ(curse->getY(), 1);
+}
+
+TEST_F(RuledBatchTest, PlayerAttachmentUsesIdFallbackAndIsPublicToBothSeats)
+{
+    seedCardCatalog({"Curse of Opulence"});
+    Server_Card *curse = addCardToTable(p1, "Curse of Opulence");
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *zoneView = response.mutable_batch()->add_events()->mutable_zone_view();
+    auto view = buildPerPlayerView(p1, {922u}, {false});
+    view.mutable_battlefield_objects(0)->mutable_attachment_recipient()->set_player_id(99);
+    *zoneView->add_per_player() = view;
+    *zoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(response);
+    EXPECT_EQ(curse->getAnnotation(), QStringLiteral("Enchanting: P99"));
+
+    for (auto *participant : {p1, p2}) {
+        const auto redacted = redactFor(response.batch(), participant);
+        ASSERT_EQ(redacted.events_size(), 1);
+        const auto &publicObject = redacted.events(0).zone_view().per_player(0).battlefield_objects(0);
+        ASSERT_TRUE(publicObject.has_attachment_recipient());
+        EXPECT_EQ(publicObject.attachment_recipient().player_id(), 99);
+    }
+}
+
+TEST_F(RuledBatchTest, PlayerAttachmentAnnotationIsStrippedBeforeEveryBattlefieldExit)
+{
+    seedCardCatalog({"Curse of Opulence", "Curse of Disturbance"});
+    Server_Card *toGraveyard = addCardToTable(p1, "Curse of Opulence");
+    Server_Card *toHand = addCardToTable(p1, "Curse of Disturbance");
+    Server_Card *toExile = addCardToTable(p1, "Curse of Opulence");
+
+    ruled::v1::IpcResponse attached;
+    attached.set_ok(true);
+    auto *zoneView = attached.mutable_batch()->add_events()->mutable_zone_view();
+    auto view = buildPerPlayerView(p1, {923u, 924u, 925u}, {false, false, false});
+    for (auto &object : *view.mutable_battlefield_objects()) {
+        object.mutable_attachment_recipient()->set_player_id(p2->getPlayerId());
+    }
+    *zoneView->add_per_player() = view;
+    *zoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(attached);
+    ASSERT_TRUE(toGraveyard->getAnnotation().contains(QStringLiteral("Enchanting: bob")));
+    ASSERT_TRUE(toHand->getAnnotation().contains(QStringLiteral("Enchanting: bob")));
+    ASSERT_TRUE(toExile->getAnnotation().contains(QStringLiteral("Enchanting: bob")));
+
+    ruled::v1::IpcResponse moved;
+    moved.set_ok(true);
+    const auto addMove = [&moved, this](quint32 oid, ruled::v1::PermanentMoved::Destination destination) {
+        auto *event = moved.mutable_batch()->add_events()->mutable_permanent_moved();
+        event->set_object_id(oid);
+        event->set_owner_player_id(p1->getPlayerId());
+        event->set_controller_player_id(p1->getPlayerId());
+        event->set_destination(destination);
+    };
+    addMove(923u, ruled::v1::PermanentMoved::DESTINATION_GRAVEYARD);
+    addMove(924u, ruled::v1::PermanentMoved::DESTINATION_HAND);
+    addMove(925u, ruled::v1::PermanentMoved::DESTINATION_EXILE);
+    callBatchApply(moved);
+
+    EXPECT_EQ(toGraveyard->getZone()->getName(), QString(ZoneNames::GRAVE));
+    EXPECT_EQ(toHand->getZone()->getName(), QString(ZoneNames::HAND));
+    EXPECT_EQ(toExile->getZone()->getName(), QString(ZoneNames::EXILE));
+    for (Server_Card *card : {toGraveyard, toHand, toExile}) {
+        EXPECT_FALSE(card->getAnnotation().contains(QStringLiteral("Enchanting: ")));
+    }
 }
 
 // Ability labels are attached to the physical card bound to the engine OID, coexist with other

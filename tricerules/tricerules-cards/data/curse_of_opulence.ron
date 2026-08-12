@@ -1,0 +1,10 @@
+(
+  id: "curse_of_opulence",
+  name: "Curse of Opulence",
+  mana_cost: "{R}",
+  // Oracle: Enchant player. Whenever enchanted player is attacked, create a Gold token.
+  // Each opponent attacking that player does the same.
+  types: ["Enchantment", "Aura", "Curse"],
+  spell_effect: [AuraAttach(target: (kind: AnyPlayer))],
+  partial: "the attacked-player trigger, Gold token, and each-attacking-opponent reward are deferred to issues #63 and #86",
+)

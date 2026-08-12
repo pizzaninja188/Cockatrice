@@ -214,17 +214,17 @@ impl GameEngine {
                     && self
                         .characteristics(eq.id)
                         .is_some_and(|value| value.has_type("Equipment"))
-                    && eq
-                        .attached_to
-                        .map(|target_id| {
+                    && eq.attached_to.is_some_and(|recipient| match recipient {
+                        AttachmentRecipient::Player(_) => true,
+                        AttachmentRecipient::Object(target_id) => {
                             self.state.objects.get(&target_id).is_none_or(|target| {
                                 target.zone != Zone::Battlefield
                                     || !self
                                         .characteristics(target_id)
                                         .is_some_and(|value| value.is_creature())
                             })
-                        })
-                        .unwrap_or(false)
+                        }
+                    })
             })
             .map(|(id, _)| *id)
             .collect();
@@ -271,7 +271,7 @@ impl GameEngine {
                     && self
                         .characteristics(o.id)
                         .is_some_and(|value| value.is_aura())
-                    && o.attached_to.is_none_or(|enchanted_id| {
+                    && o.attached_to.is_none_or(|recipient| {
                         let enchant_filter = self.effective_face(o.id).and_then(|face| {
                             face.spell_effect.iter().find_map(|effect| match effect {
                                 SpellEffectKind::AuraAttach { target } => Some(target),
@@ -282,7 +282,7 @@ impl GameEngine {
                             !super::targeting::attachment_filter_legal(
                                 self,
                                 filter,
-                                enchanted_id,
+                                recipient,
                                 o.id,
                                 o.controller,
                             )

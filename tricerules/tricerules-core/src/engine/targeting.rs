@@ -283,10 +283,25 @@ fn target_controller_matches(
 pub(super) fn attachment_filter_legal(
     engine: &GameEngine,
     filter: &TargetFilter,
-    oid: ObjectId,
+    recipient: AttachmentRecipient,
     attachment_id: ObjectId,
     attachment_controller: PlayerId,
 ) -> bool {
+    let AttachmentRecipient::Object(oid) = recipient else {
+        let AttachmentRecipient::Player(player_id) = recipient else {
+            unreachable!()
+        };
+        if !player_target_legal(&engine.state, player_id as ObjectId) {
+            return false;
+        }
+        return match filter.kind {
+            TargetKind::AnyPlayer => true,
+            TargetKind::OpponentPlayer => {
+                engine.state.are_opponents(player_id, attachment_controller)
+            }
+            _ => false,
+        };
+    };
     let Some(object) = engine.state.objects.get(&oid) else {
         return false;
     };
@@ -310,6 +325,23 @@ pub(super) fn attachment_filter_legal(
             attachment_controller,
             characteristics.controller,
         )
+}
+
+/// Convert a validated Aura target into explicit attachment identity. Mixed AnyTarget Auras are
+/// rejected by card-data validation, so the filter kind unambiguously owns the conversion.
+pub(super) fn attachment_recipient_for_target(
+    filter: &TargetFilter,
+    target: ObjectId,
+) -> Option<AttachmentRecipient> {
+    match filter.kind {
+        TargetKind::Creature | TargetKind::AnyPermanent => {
+            Some(AttachmentRecipient::Object(target))
+        }
+        TargetKind::AnyPlayer | TargetKind::OpponentPlayer => {
+            Some(AttachmentRecipient::Player(target as PlayerId))
+        }
+        TargetKind::AnyTarget => None,
+    }
 }
 
 /// Legality of a single target against a [`TargetFilter`].
@@ -1227,7 +1259,7 @@ mod tests {
         assert!(!attachment_filter_legal(
             &engine,
             &opponent_only,
-            bear,
+            AttachmentRecipient::Object(bear),
             u32::MAX,
             0,
         ));
@@ -1251,14 +1283,14 @@ mod tests {
         assert!(attachment_filter_legal(
             &engine,
             &opponent_only,
-            bear,
+            AttachmentRecipient::Object(bear),
             u32::MAX,
             0,
         ));
         assert!(!attachment_filter_legal(
             &engine,
             &opponent_only,
-            bear,
+            AttachmentRecipient::Object(bear),
             u32::MAX,
             1,
         ));
@@ -1306,8 +1338,82 @@ mod tests {
             TargetSourceIdentity::current(&engine, bear),
         ));
 
-        assert!(!attachment_filter_legal(&engine, &filter, bear, bear, 0));
-        assert!(attachment_filter_legal(&engine, &filter, bear, u32::MAX, 0,));
+        assert!(!attachment_filter_legal(
+            &engine,
+            &filter,
+            AttachmentRecipient::Object(bear),
+            bear,
+            0
+        ));
+        assert!(attachment_filter_legal(
+            &engine,
+            &filter,
+            AttachmentRecipient::Object(bear),
+            u32::MAX,
+            0,
+        ));
+    }
+
+    #[test]
+    fn player_attachment_legality_tracks_relationships_and_lost_players() {
+        let decks = Some(vec![
+            vec!["grizzly_bears".into(); 7],
+            vec!["forest".into(); 7],
+        ]);
+        let mut engine = GameEngine::new(96907, &[0, 1], 20, decks, true).expect("new");
+        let any_player = TargetFilter {
+            kind: TargetKind::AnyPlayer,
+            ..TargetFilter::default()
+        };
+        let opponent = TargetFilter {
+            kind: TargetKind::OpponentPlayer,
+            ..TargetFilter::default()
+        };
+
+        assert!(attachment_filter_legal(
+            &engine,
+            &any_player,
+            AttachmentRecipient::Player(0),
+            u32::MAX,
+            0,
+        ));
+        assert!(attachment_filter_legal(
+            &engine,
+            &opponent,
+            AttachmentRecipient::Player(1),
+            u32::MAX,
+            0,
+        ));
+        assert!(!attachment_filter_legal(
+            &engine,
+            &opponent,
+            AttachmentRecipient::Player(0),
+            u32::MAX,
+            0,
+        ));
+        assert!(!attachment_filter_legal(
+            &engine,
+            &opponent,
+            AttachmentRecipient::Player(1),
+            u32::MAX,
+            1,
+        ));
+        assert!(!attachment_filter_legal(
+            &engine,
+            &any_player,
+            AttachmentRecipient::Object(engine.state.players[0].hand[0]),
+            u32::MAX,
+            0,
+        ));
+
+        engine.state.players[1].has_lost = true;
+        assert!(!attachment_filter_legal(
+            &engine,
+            &any_player,
+            AttachmentRecipient::Player(1),
+            u32::MAX,
+            0,
+        ));
     }
 
     #[test]

@@ -1080,7 +1080,8 @@ fn transform_preserves_battlefield_identity_and_does_not_fire_etb() {
             .counters
             .insert(tricerules_cards::CounterKind::PlusOnePlusOne, 2);
     }
-    e.state.objects.get_mut(&attachment).unwrap().attached_to = Some(waif);
+    e.state.objects.get_mut(&attachment).unwrap().attached_to =
+        Some(AttachmentRecipient::Object(waif));
     resolve_entire_stack_two_player(&mut e);
 
     let object = &e.state.objects[&waif];
@@ -1092,7 +1093,10 @@ fn transform_preserves_battlefield_identity_and_does_not_fire_etb() {
         2
     );
     assert_eq!(object.controller, 0);
-    assert_eq!(e.state.objects[&attachment].attached_to, Some(waif));
+    assert_eq!(
+        e.state.objects[&attachment].attached_to,
+        Some(AttachmentRecipient::Object(waif))
+    );
     assert_eq!(e.state.players[0].life, life_before, "no ETB event fired");
 }
 

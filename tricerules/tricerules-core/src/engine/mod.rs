@@ -2,13 +2,14 @@
 
 use crate::custom::{self, ResolutionChoice, ResolutionCtx, ResolutionStep};
 use crate::state::{
-    ActiveDamagePrevention, AdventureCastPermission, AffectedScope, BattlefieldEntryCompletion,
-    BattlefieldEntryEvent, BlockingChoice, ChosenSpellMode, CombatState, ContinuousEffect,
-    CopiableValues, DamagePreventionAmount, DamagePreventionProhibition, DamagePreventionScope,
-    EntryReplacementApplication, EntryReplacementEffectId, GameObject, GameState, ObjectId,
-    OpeningSequence, PendingBattlefieldEntry, PendingResolution, PendingTrigger,
-    PendingTriggerOrder, PlayerId, PlayerState, ReplacementPriority, StackItem, StagedTrigger,
-    StagedTriggerGroup, TokenBattlefieldEntry, TurnHistory, TurnStep, UndoableManaAbility, Zone,
+    ActiveDamagePrevention, AdventureCastPermission, AffectedScope, AttachmentRecipient,
+    BattlefieldEntryCompletion, BattlefieldEntryEvent, BlockingChoice, ChosenSpellMode,
+    CombatState, ContinuousEffect, CopiableValues, DamagePreventionAmount,
+    DamagePreventionProhibition, DamagePreventionScope, EntryReplacementApplication,
+    EntryReplacementEffectId, GameObject, GameState, ObjectId, OpeningSequence,
+    PendingBattlefieldEntry, PendingResolution, PendingTrigger, PendingTriggerOrder, PlayerId,
+    PlayerState, ReplacementPriority, StackItem, StagedTrigger, StagedTriggerGroup,
+    TokenBattlefieldEntry, TurnHistory, TurnStep, UndoableManaAbility, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -39,6 +40,20 @@ const MAX_HAND_SIZE: usize = 7;
 /// A malformed or future policy must never make one command spin forever. Reaching the cap leaves
 /// the engine at its current valid priority window and publishes that settled state.
 const MAX_AUTOMATIC_PRIORITY_PASSES: usize = 128;
+
+fn attachment_recipient_proto(recipient: AttachmentRecipient) -> rv1::AttachmentRecipient {
+    let recipient = match recipient {
+        AttachmentRecipient::Object(object_id) => {
+            rv1::attachment_recipient::Recipient::ObjectId(object_id)
+        }
+        AttachmentRecipient::Player(player_id) => {
+            rv1::attachment_recipient::Recipient::PlayerId(player_id)
+        }
+    };
+    rv1::AttachmentRecipient {
+        recipient: Some(recipient),
+    }
+}
 
 #[derive(Clone, Debug, Default)]
 enum EffectResult {
@@ -385,7 +400,7 @@ struct BattlefieldObjectSnapshot {
     toughness: Option<u32>,
     damage: u32,
     counters: BTreeMap<CounterKind, u32>,
-    attached_to: Option<ObjectId>,
+    attached_to: Option<AttachmentRecipient>,
     face_up_index: usize,
     copy_revision: u64,
 }

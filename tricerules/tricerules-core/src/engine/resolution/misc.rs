@@ -321,7 +321,7 @@ pub(super) fn equip(
             let tgt = object_display_name(&engine.state, engine.registry, target_id);
             let eq_name = object_display_name(&engine.state, engine.registry, equip_oid);
             if let Some(eq) = engine.state.objects.get_mut(&equip_oid) {
-                eq.attached_to = Some(target_id);
+                eq.attached_to = Some(AttachmentRecipient::Object(target_id));
             }
             events.push(ev_log(format!(
                 "{spell_label} attaches {eq_name} to {tgt}."
@@ -471,19 +471,24 @@ pub(super) fn aura_attach(
     };
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
-    let targets = cx.targets;
     let top = cx.top;
     let spell_label = cx.spell_label;
 
-    if let (Some(enchanted_oid), Some(obj)) =
-        (targets.first().copied(), engine.state.objects.get(&top.id))
-    {
+    if let Some(obj) = engine.state.objects.get(&top.id) {
         if obj.zone == Zone::Battlefield {
-            let tgt = object_display_name(&engine.state, engine.registry, enchanted_oid);
+            let Some(recipient) = obj.attached_to else {
+                return Ok(EffectOutcome::Continue);
+            };
+            let tgt = match recipient {
+                AttachmentRecipient::Object(object_id) => {
+                    object_display_name(&engine.state, engine.registry, object_id)
+                }
+                AttachmentRecipient::Player(player_id) => format!("P{player_id}"),
+            };
             events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::AuraAttached(rv1::AuraAttached {
                     aura_object_id: top.id,
-                    enchanted_object_id: enchanted_oid,
+                    attachment_recipient: Some(attachment_recipient_proto(recipient)),
                 })),
             });
             events.push(ev_log(format!("{spell_label} attaches to {tgt}.")));

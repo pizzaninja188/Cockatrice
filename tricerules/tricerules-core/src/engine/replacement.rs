@@ -418,7 +418,7 @@ impl GameEngine {
     pub(super) fn commit_battlefield_entry(
         &mut self,
         event: BattlefieldEntryEvent,
-        attached_to: Option<ObjectId>,
+        attached_to: Option<AttachmentRecipient>,
     ) -> Result<(), EngineError> {
         let object_id = event.object_id;
         self.commit_battlefield_entry_state(event, attached_to)?;
@@ -429,7 +429,7 @@ impl GameEngine {
     pub(super) fn commit_battlefield_entry_state(
         &mut self,
         event: BattlefieldEntryEvent,
-        attached_to: Option<ObjectId>,
+        attached_to: Option<AttachmentRecipient>,
     ) -> Result<(), EngineError> {
         move_object_to_zone(
             &mut self.state,

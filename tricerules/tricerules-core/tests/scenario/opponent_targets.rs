@@ -70,7 +70,7 @@ fn glaring_aegis_rejects_own_trigger_target_and_taps_opponents_creature() {
     let aegis = battlefield_object_for_card(&e, 0, "glaring_aegis");
     assert_eq!(
         e.state.objects.get(&aegis).expect("Aegis").attached_to,
-        Some(own_bear)
+        Some(AttachmentRecipient::Object(own_bear))
     );
     let enchanted = e.characteristics(own_bear).expect("enchanted bear");
     assert_eq!((enchanted.power, enchanted.toughness), (Some(3), Some(5)));

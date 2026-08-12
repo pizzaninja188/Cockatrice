@@ -457,7 +457,10 @@ fn mind_control_tracks_its_auras_controller_and_restores_control_when_bounced() 
     resolve_entire_stack_two_player(&mut e);
 
     let aura = battlefield_object_for_card(&e, 0, "mind_control");
-    assert_eq!(e.state.objects[&aura].attached_to, Some(bear));
+    assert_eq!(
+        e.state.objects[&aura].attached_to,
+        Some(AttachmentRecipient::Object(bear))
+    );
     assert_eq!(e.state.objects[&bear].owner, 1);
     assert_eq!(e.state.objects[&bear].base_controller, 1);
     assert_eq!(e.state.objects[&bear].controller, 0);
@@ -636,7 +639,10 @@ fn controller_restricted_aura_goes_to_graveyard_when_creature_is_stolen() {
     .expect("cast Cartouche");
     resolve_entire_stack_two_player(&mut e);
     let aura = battlefield_object_for_card(&e, 0, "cartouche_of_knowledge");
-    assert_eq!(e.state.objects[&aura].attached_to, Some(bear));
+    assert_eq!(
+        e.state.objects[&aura].attached_to,
+        Some(AttachmentRecipient::Object(bear))
+    );
 
     end_active_turn(&mut e, 0);
     pass_both_players(&mut e); // upkeep -> draw
@@ -731,7 +737,10 @@ fn unrestricted_aura_stays_attached_when_creature_is_stolen() {
 
     assert_eq!(e.state.objects[&bear].controller, 1);
     assert_eq!(e.state.objects[&aura].zone, Zone::Battlefield);
-    assert_eq!(e.state.objects[&aura].attached_to, Some(bear));
+    assert_eq!(
+        e.state.objects[&aura].attached_to,
+        Some(AttachmentRecipient::Object(bear))
+    );
 }
 
 #[test]
@@ -778,7 +787,10 @@ fn equipment_stays_attached_when_equipped_creature_is_stolen() {
     )
     .expect("equip Bonesplitter");
     pass_both_players(&mut e);
-    assert_eq!(e.state.objects[&equipment].attached_to, Some(bear));
+    assert_eq!(
+        e.state.objects[&equipment].attached_to,
+        Some(AttachmentRecipient::Object(bear))
+    );
 
     end_active_turn(&mut e, 0);
     pass_both_players(&mut e);
@@ -809,5 +821,8 @@ fn equipment_stays_attached_when_equipped_creature_is_stolen() {
     assert_eq!(e.state.objects[&bear].controller, 1);
     assert_eq!(e.state.objects[&equipment].zone, Zone::Battlefield);
     assert_eq!(e.state.objects[&equipment].controller, 0);
-    assert_eq!(e.state.objects[&equipment].attached_to, Some(bear));
+    assert_eq!(
+        e.state.objects[&equipment].attached_to,
+        Some(AttachmentRecipient::Object(bear))
+    );
 }

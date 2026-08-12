@@ -155,7 +155,35 @@ QString mergeRuledCopyIntoAnnotation(const QString &baseAnn, const QString &copy
     }
     return without + QLatin1Char('\n') + copyAnnotation;
 }
+
+QString mergeRuledEnchantingIntoAnnotation(const QString &baseAnn, const QString &playerName)
+{
+    const QString marker = QStringLiteral("Enchanting: ");
+    QStringList kept;
+    for (const QString &line : baseAnn.split(QLatin1Char('\n'))) {
+        if (!line.trimmed().startsWith(marker)) {
+            kept.append(line);
+        }
+    }
+    const QString without = kept.join(QLatin1Char('\n')).trimmed();
+    if (playerName.isEmpty()) {
+        return without;
+    }
+    const QString enchantingLine = marker + playerName;
+    if (without.isEmpty()) {
+        return enchantingLine;
+    }
+    return without + QLatin1Char('\n') + enchantingLine;
+}
 } // namespace
+
+void RuledPlayerBinding::unattachRuledCard(Server_Player *player, Server_Card *card, GameEventStorage &ges)
+{
+    if (!player || !card || !card->getParentCard()) {
+        return;
+    }
+    player->unattachCard(ges, card);
+}
 
 RuledPlayerBinding::RuledZoneSyncResult
 RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
@@ -516,6 +544,23 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                     mergedAnn = mergeRuledOwnerIntoAnnotation(mergedAnn, ownerName);
                     mergedAnn = mergeRuledCopyIntoAnnotation(
                         mergedAnn, QString::fromStdString(battlefieldObject.copy_annotation()));
+                    QString enchantedPlayerName;
+                    if (battlefieldObject.has_attachment_recipient() &&
+                        battlefieldObject.attachment_recipient().recipient_case() ==
+                            ruled::v1::AttachmentRecipient::kPlayerId) {
+                        const int enchantedPlayerId = battlefieldObject.attachment_recipient().player_id();
+                        enchantedPlayerName = QStringLiteral("P%1").arg(enchantedPlayerId);
+                        if (Server_Game *g = player->getGame()) {
+                            if (Server_AbstractPlayer *enchantedPlayer = g->getPlayer(enchantedPlayerId)) {
+                                const QString resolvedName =
+                                    QString::fromStdString(enchantedPlayer->getUserInfo()->name());
+                                if (!resolvedName.isEmpty()) {
+                                    enchantedPlayerName = resolvedName;
+                                }
+                            }
+                        }
+                    }
+                    mergedAnn = mergeRuledEnchantingIntoAnnotation(mergedAnn, enchantedPlayerName);
                     QStringList grantedAbilityLabels;
                     grantedAbilityLabels.reserve(battlefieldObject.granted_ability_labels_size());
                     for (const std::string &label : battlefieldObject.granted_ability_labels()) {

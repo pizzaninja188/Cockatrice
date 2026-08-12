@@ -665,11 +665,20 @@ message DevCardConjured {
   bool is_creature = 5 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
 }
 
-// An Aura spell resolved and attached to a permanent on the battlefield (CR 303.4).
-// The relay calls Event_AttachCard: aura_object_id attaches to enchanted_object_id.
+// Public, engine-authored identity of the object or player an Aura is attached to.
+message AttachmentRecipient {
+  oneof recipient {
+    uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    int32 player_id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  }
+}
+
+// An Aura spell resolved and attached to an object or player (CR 303.4).
 message AuraAttached {
   uint32 aura_object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
-  uint32 enchanted_object_id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  reserved 2;
+  reserved "enchanted_object_id";
+  AttachmentRecipient attachment_recipient = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // A permanent changed its active face (CR 710/712.8: transform does not trigger ETB).
@@ -982,7 +991,8 @@ message BattlefieldObject {
   repeated string keywords = 9 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   repeated AbilityInfo activated_abilities = 10 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   string counters_annotation = 11 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
-  uint32 attached_to_oid = 12 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  reserved 12;
+  reserved "attached_to_oid";
   uint32 face_up_index = 13 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // CR 108.3 owner. The per-player view this object appears in already identifies its CR 110.2
   // *controller* (the engine's battlefield list is the control index), so this is the other half
@@ -999,6 +1009,7 @@ message BattlefieldObject {
   string effective_display_name = 16 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // Replaceable compact annotation describing the underlying physical object (e.g. "Copy: Clone").
   string copy_annotation = 17 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  AttachmentRecipient attachment_recipient = 18 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message HandCard {
