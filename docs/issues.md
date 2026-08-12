@@ -25,10 +25,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
 
 ## Open
 
-- [ ] #53 [feature] Additional spell costs
-  - Details: Model discard and sacrifice as composable additional costs paid atomically with mana during casting, rather than as resolution effects. Calibration evidence: Bone Splinters, Thrill of Possibility, Tormenting Voice, and Village Rites. Legal actions must expose valid payable combinations, and an illegal or stale choice must leave mana, hand, and battlefield unchanged. This is the `PendingRuledSpellCast` extraction trigger recorded in `docs/REFACTOR-ROADMAP.md`: first land a characterized, behavior-preserving extraction of the remaining ruled cast/payment orchestration from upstream `player_actions.{h,cpp}` into `cockatrice/src/game/ruled/ruled_pending_cast.{h,cpp}`, leaving `PlayerActions` with a member pointer and thin ruled guards; then add the additional-cost behavior as a separate green increment. Fold the spell, activated-ability, and new additional-cost pending state into the existing exclusive pending-choice model instead of adding another parallel pending family. The engine remains authoritative over payable combinations and atomic command validation; the client only stages engine-published choices, and freeform behavior must remain unchanged.
-  - Priority: Low
-
 - [ ] #55 [feature] Conditional mana output and restricted mana spending
   - Details: Represent mana abilities whose output depends on current battlefield state and mana whose spending is restricted by spell or ability characteristics. Calibration evidence: Leafkin Druid, Chandra's Embercat, and Vodalian Arcanist. Track restrictions on individual mana contributions through payment selection, reject illegal mixed payments, and keep unrestricted mana behavior unchanged.
   - Priority: Low

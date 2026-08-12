@@ -23,3 +23,15 @@ pub enum AbilityCost {
     /// and hexproof do not apply.
     SacrificePermanent { filter: TargetFilter },
 }
+
+/// Mandatory additional costs paid while casting a spell (CR 118.8, 601.2f-h).
+///
+/// These components deliberately exclude mana: the face's normal or alternate mana cost remains
+/// the single mana component, while this ordered list supplies authored nonmana choices.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AdditionalCost {
+    /// Discard one other card chosen from the caster's hand.
+    DiscardCard,
+    /// Sacrifice one permanent the caster controls that matches `filter`.
+    SacrificePermanent { filter: TargetFilter },
+}

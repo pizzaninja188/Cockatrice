@@ -6,8 +6,8 @@ use tricerules_proto::ruled::v1 as rv1;
 pub(crate) use tricerules_proto::ruled::v1::ruled_command::Cmd;
 pub(crate) use tricerules_proto::ruled::v1::ruled_event::Ev;
 pub(crate) use tricerules_proto::ruled::v1::{
-    AbilityCostSelection, ActivateAbility, AssignCombatDamage, BlockPair, CastSource, CastSpell,
-    ChoiceKind, ChooseTriggerTarget, DamagePair, DeclareAttackers, DeclareBlockers,
+    ActivateAbility, AssignCombatDamage, BlockPair, CastSource, CastSpell, ChoiceKind,
+    ChooseTriggerTarget, CostSelection, DamagePair, DeclareAttackers, DeclareBlockers,
     DiscardToHandSize, FlexPipPayment, PassPriority, PlayLand, PreviewDeclareAttackers,
     PreviewDeclareBlockers, PrimitiveYieldStructured, ResolutionChoiceRequired, RuledCommand,
     RuledEventBatch, SelectedSpellMode, SubmitResolutionChoice, SubmitTriggerOrder, TargetRef,
@@ -100,6 +100,21 @@ pub(crate) fn cast_spell(hand_card_index: usize, targets: Vec<TargetRef>) -> Rul
     cast_spell_x(hand_card_index, targets, 0)
 }
 
+pub(crate) fn cast_spell_with_costs(
+    hand_card_index: usize,
+    targets: Vec<TargetRef>,
+    cost_selections: Vec<CostSelection>,
+) -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::CastSpell(CastSpell {
+            source: Some(hand_cast_source(hand_card_index)),
+            targets,
+            cost_selections,
+            ..Default::default()
+        })),
+    }
+}
+
 pub(crate) fn cast_spell_x(
     hand_card_index: usize,
     targets: Vec<TargetRef>,
@@ -190,7 +205,7 @@ pub(crate) fn activate_ability_with_costs(
     permanent_id: u32,
     ability_index: u32,
     targets: Vec<TargetRef>,
-    cost_selections: Vec<AbilityCostSelection>,
+    cost_selections: Vec<CostSelection>,
 ) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::ActivateAbility(ActivateAbility {
@@ -203,21 +218,17 @@ pub(crate) fn activate_ability_with_costs(
     }
 }
 
-pub(crate) fn hand_cost_selection(cost_index: u32, hand_index: u32) -> AbilityCostSelection {
-    AbilityCostSelection {
+pub(crate) fn hand_cost_selection(cost_index: u32, hand_index: u32) -> CostSelection {
+    CostSelection {
         cost_index,
-        selection: Some(rv1::ability_cost_selection::Selection::HandIndex(
-            hand_index,
-        )),
+        selection: Some(rv1::cost_selection::Selection::HandIndex(hand_index)),
     }
 }
 
-pub(crate) fn permanent_cost_selection(cost_index: u32, permanent_id: u32) -> AbilityCostSelection {
-    AbilityCostSelection {
+pub(crate) fn permanent_cost_selection(cost_index: u32, permanent_id: u32) -> CostSelection {
+    CostSelection {
         cost_index,
-        selection: Some(rv1::ability_cost_selection::Selection::PermanentId(
-            permanent_id,
-        )),
+        selection: Some(rv1::cost_selection::Selection::PermanentId(permanent_id)),
     }
 }
 
@@ -258,6 +269,13 @@ pub(crate) fn target_player(pid: i32) -> Vec<TargetRef> {
     vec![TargetRef {
         object_id: pid as u32,
         damage_amount: 0,
+    }]
+}
+
+pub(crate) fn target_object(oid: u32) -> Vec<TargetRef> {
+    vec![TargetRef {
+        object_id: oid,
+        ..Default::default()
     }]
 }
 

@@ -1,0 +1,11 @@
+// Oracle checked 2026-08-11. CR 118.8 and 601.2f-h: sacrifice is an additional cost.
+(
+  id: "bone_splinters",
+  name: "Bone Splinters",
+  mana_cost: "{B}",
+  additional_costs: [
+    SacrificePermanent(filter: (kind: Creature, controller: You)),
+  ],
+  types: ["Sorcery"],
+  spell_effect: [DestroyTarget(target: (kind: Creature))],
+)

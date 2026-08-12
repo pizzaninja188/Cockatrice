@@ -832,17 +832,14 @@ Unscheduled by design. Each entry fires on its trigger, not before.
   architecture supports it nearly for free; noting it here so nobody designs against it.
 - **Test-harness split** — *trigger: `tests/scenario/helpers.rs` passes ~1,500 lines.* Split
   by concern (setup builders vs assertion helpers), not by card theme.
-- **`PendingRuledSpellCast` extraction** — *trigger: when a new cast-time mechanic (kicker,
-  additional costs, alternative costs) would add another parallel pending-* family to
-  `player_actions.cpp`.* Step 5 left the ruled pending-cast state machine in place
-  (`PendingRuledSpellCast` + `PendingActivatedAbility`, flex-pip mana payment, X prompting,
-  multi-target collection, damage allocation — ~1,300 lines in the upstream
-  `player_actions.{h,cpp}`). It is genuinely local-player UI state, not part of the engine
-  mirror, and the click interpreters in `RuledActions` already gate every entry into it, so it
-  is not on the bleeding path the way `game_event_handler` was. When the trigger fires, move it
-  to `cockatrice/src/game/ruled/ruled_pending_cast.{h,cpp}` with `PlayerActions` keeping a
-  member pointer — and fold the three pending-* families into Step 7's one pending-choice holder
-  in the same pass rather than porting them as-is.
+- **`PendingRuledSpellCast` extraction** — *completed by issue #53 (2026-08-12).* The fork-owned
+  `RuledPendingCast` is the exclusive local transaction holder for spell casts and activated
+  abilities; its entry points cannot represent both at once. Engine legal-action refreshes repair
+  target and cost staging, and an engine-blocking choice removes the relevant legal action and
+  cancels the local transaction. Additional spell costs reuse the same `LegalCostChoices` /
+  `CostSelection` vocabulary as abilities instead of adding a third pending family. Remaining
+  `PlayerActions` methods are UI/command host adapters; card legality and payment validation stay
+  in tricerules.
 
 ---
 

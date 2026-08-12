@@ -62,6 +62,58 @@ PlayerActions::PlayerActions(Player *_player)
 void PlayerActions::reconcilePendingRuledTargetSelections()
 {
     RuledTargetUi::reconcile(this);
+    RuledClientState *const state = player->getGame()->getGameEventHandler()->ruled();
+    if (!state) {
+        return;
+    }
+    const int localPlayerId = player->getPlayerInfo()->getId();
+    const auto selectionStillLegal = [state, localPlayerId](const RuledPendingCostSelection &selection,
+                                                            const QVector<RuledCostChoice> &choices) {
+        const auto choice = std::find_if(choices.cbegin(), choices.cend(), [&selection](const RuledCostChoice &entry) {
+            return entry.costIndex == selection.costIndex && entry.zone == selection.zone;
+        });
+        if (choice == choices.cend()) {
+            return false;
+        }
+        if (selection.zone == RuledCostChoiceZone::Hand) {
+            const int slot = state->engineHandSlotForServerCard(localPlayerId, static_cast<int>(selection.selectedId));
+            return slot >= 0 && choice->candidateIds.contains(static_cast<quint32>(slot));
+        }
+        return choice->candidateIds.contains(selection.selectedId);
+    };
+
+    if (pendingRuledSpellCast.valid) {
+        const bool sourceStillLegal = pendingRuledSpellCast.source == RuledCastSource::Hand
+                                          ? state->isHandActionLegal(ruled::v1::HAND_ACTION_CAST_SPELL,
+                                                                     pendingRuledSpellCast.handIndex)
+                                          : state->isZoneActionLegal(
+                                                static_cast<quint32>(pendingRuledSpellCast.handIndex));
+        const auto latest = state->spellCostData(pendingRuledSpellCast.handIndex,
+                                                 pendingRuledSpellCast.faceIndex,
+                                                 pendingRuledSpellCast.source);
+        if (!sourceStillLegal || std::any_of(pendingRuledSpellCast.costSelections.cbegin(),
+                                             pendingRuledSpellCast.costSelections.cend(),
+                                             [&selectionStillLegal, &latest](const auto &selection) {
+                                                 return !selectionStillLegal(selection, latest.choices);
+                                             })) {
+            cancelPendingRuledSpellCast();
+        } else {
+            pendingRuledSpellCast.costChoices = latest.choices;
+        }
+    }
+    if (pendingActivatedAbility.valid) {
+        const auto latest = state->abilityCostChoices(pendingActivatedAbility.permanentOid,
+                                                      pendingActivatedAbility.abilityIndex);
+        if (std::any_of(pendingActivatedAbility.costSelections.cbegin(),
+                        pendingActivatedAbility.costSelections.cend(),
+                        [&selectionStillLegal, &latest](const auto &selection) {
+                            return !selectionStillLegal(selection, latest);
+                        })) {
+            cancelPendingActivatedAbility();
+        } else {
+            pendingActivatedAbility.costChoices = latest;
+        }
+    }
 }
 
 QMap<QChar, int> PlayerActions::parseSimpleManaCost(const QString &manaCost)
@@ -372,6 +424,12 @@ QString PlayerActions::pendingRuledSpellPromptText() const
         pendingRuledSpellCast.inDamageAllocationMode) {
         return {};
     }
+    if (isAwaitingRuledSpellCostSelection()) {
+        const auto &choice = pendingRuledSpellCast.costChoices.at(pendingRuledSpellCast.nextCostChoice);
+        return choice.zone == RuledCostChoiceZone::Hand
+                   ? tr("Choose a card to discard for %1.").arg(pendingRuledSpellCast.cardName)
+                   : tr("Choose a permanent to sacrifice for %1.").arg(pendingRuledSpellCast.cardName);
+    }
     if (totalRemainingForCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips) == 0) {
         return {};
     }
@@ -385,7 +443,7 @@ void PlayerActions::clearPendingRuledSpellCast()
     const bool hadTargeting = pendingRuledSpellCast.valid && pendingRuledSpellCast.waitingForTarget;
     const bool hadAllocation = pendingRuledSpellCast.valid && pendingRuledSpellCast.inDamageAllocationMode;
     const bool hadPending = pendingRuledSpellCast.valid;
-    pendingRuledSpellCast = PendingRuledSpellCast{};
+    ruledPendingCast->clearSpell();
     if (hadTargeting) {
         emit ruledSpellTargetingChanged(false, {});
         emit ruledMultiTargetSelectionUpdated(0, -1);
@@ -591,7 +649,7 @@ bool PlayerActions::completePendingRuledSpellCast()
         clearPendingRuledSpellCast();
         return false;
     }
-    if (pendingRuledSpellCast.waitingForTarget) {
+    if (pendingRuledSpellCast.waitingForTarget || pendingRuledSpellCast.waitingForCost) {
         return false;
     }
 
@@ -639,6 +697,24 @@ bool PlayerActions::completePendingRuledSpellCast()
         flex->set_pip_index(pipIndex);
         flex->set_pay_life(true);
     }
+    RuledClientState *const handler = player->getGame()->getGameEventHandler()->ruled();
+    const int localPlayerId = player->getPlayerInfo()->getId();
+    for (const auto &selection : pendingRuledSpellCast.costSelections) {
+        auto *costSelection = cast->add_cost_selections();
+        costSelection->set_cost_index(static_cast<quint32>(selection.costIndex));
+        if (selection.zone == RuledCostChoiceZone::Hand) {
+            const int handSlot =
+                handler ? handler->engineHandSlotForServerCard(localPlayerId, static_cast<int>(selection.selectedId))
+                        : -1;
+            if (handSlot < 0) {
+                cancelPendingRuledSpellCast();
+                return false;
+            }
+            costSelection->set_hand_index(static_cast<quint32>(handSlot));
+        } else {
+            costSelection->set_permanent_id(selection.selectedId);
+        }
+    }
     std::string payload;
     if (!ruledCommand.SerializeToString(&payload)) {
         clearPendingRuledSpellCast();
@@ -684,15 +760,24 @@ bool PlayerActions::completeActivateAbility()
     for (const auto &selection : pendingActivatedAbility.costSelections) {
         auto *costSelection = aa->add_cost_selections();
         costSelection->set_cost_index(static_cast<quint32>(selection.costIndex));
-        if (selection.zone == RuledAbilityCostChoiceZone::Hand) {
-            costSelection->set_hand_index(selection.selectedId);
+        if (selection.zone == RuledCostChoiceZone::Hand) {
+            RuledClientState *const handler = player->getGame()->getGameEventHandler()->ruled();
+            const int handSlot = handler ? handler->engineHandSlotForServerCard(
+                                               player->getPlayerInfo()->getId(),
+                                               static_cast<int>(selection.selectedId))
+                                         : -1;
+            if (handSlot < 0) {
+                cancelPendingActivatedAbility();
+                return false;
+            }
+            costSelection->set_hand_index(static_cast<quint32>(handSlot));
         } else {
             costSelection->set_permanent_id(selection.selectedId);
         }
     }
     std::string payload;
     if (!cmd.SerializeToString(&payload)) {
-        pendingActivatedAbility = {};
+        ruledPendingCast->clearAbility();
         return false;
     }
     Command_RuledPayload ruledPayload;
@@ -704,8 +789,34 @@ bool PlayerActions::completeActivateAbility()
     clearLandTapUndoStack();
     emit ruledAbilityActivationPendingChanged(false);
     emit ruledAbilityCostPromptChanged();
-    pendingActivatedAbility = {};
+    ruledPendingCast->clearAbility();
     return true;
+}
+
+void PlayerActions::continuePendingSpellAfterChoice()
+{
+    if (!pendingRuledSpellCast.valid || pendingRuledSpellCast.waitingForTarget ||
+        pendingRuledSpellCast.waitingForCost) {
+        return;
+    }
+    if (pendingRuledSpellCast.nextCostChoice < pendingRuledSpellCast.costChoices.size()) {
+        pendingRuledSpellCast.waitingForCost = true;
+        player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(pendingRuledSpellPromptText());
+        emit ruledSpellCastPendingChanged(true);
+        return;
+    }
+    pendingRuledSpellCast.waitingForCost = false;
+    if (!resolvePendingSpellFlexiblePips()) {
+        return;
+    }
+    if (totalRemainingForCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips) == 0) {
+        completePendingRuledSpellCast();
+        return;
+    }
+    player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
+        tr("Pay mana for %1: %2 remaining (click mana counters).")
+            .arg(pendingRuledSpellCast.cardName,
+                 formatRemainingCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips)));
 }
 
 void PlayerActions::continuePendingActivatedAbilityAfterChoice()
@@ -758,7 +869,8 @@ void PlayerActions::finishPendingAbilityManaPaymentStep()
 
 bool PlayerActions::tryReducePendingSpellRemainingCostOnePip(bool colorlessMana, QChar coloredMana)
 {
-    if (!pendingRuledSpellCast.valid || pendingRuledSpellCast.waitingForTarget) {
+    if (!pendingRuledSpellCast.valid || pendingRuledSpellCast.waitingForTarget ||
+        pendingRuledSpellCast.waitingForCost) {
         return false;
     }
     return applyManaPipToFlexibleCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips,
@@ -847,7 +959,7 @@ void PlayerActions::cancelPendingActivatedAbility()
     emit ruledActivatedAbilityTargetPendingChanged(false, {});
     emit ruledAbilityActivationPendingChanged(false);
     emit ruledAbilityCostPromptChanged();
-    pendingActivatedAbility = {};
+    ruledPendingCast->clearAbility();
     emit landTapUndoAvailableChanged(landTapUndoCurrentlyAvailable());
     player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
         tr("Canceled activating %1.").arg(cardName.isEmpty() ? abilityText : cardName));
@@ -927,9 +1039,10 @@ bool PlayerActions::tryPayRuledSpellWithCounter(const QString &counterName)
     }
     // Cast flow picks targets before mana (see tryStartRuledSpellCast). Paying mana here while
     // still waiting for a target would complete the cast with no targets and burn pool counters.
-    if (pendingRuledSpellCast.waitingForTarget) {
+    if (pendingRuledSpellCast.waitingForTarget || pendingRuledSpellCast.waitingForCost) {
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            tr("Choose a target for %1 before paying mana.").arg(pendingRuledSpellCast.cardName));
+            tr("Finish choosing targets and additional costs for %1 before paying mana.")
+                .arg(pendingRuledSpellCast.cardName));
         return false;
     }
     const QString rawLower = counterName.trimmed().toLower();
@@ -1012,7 +1125,7 @@ QString PlayerActions::pendingRuledAbilityCostPromptText() const
         return {};
     }
     const auto &choice = pendingActivatedAbility.costChoices.at(pendingActivatedAbility.nextCostChoice);
-    return choice.zone == RuledAbilityCostChoiceZone::Hand
+    return choice.zone == RuledCostChoiceZone::Hand
                ? tr("Choose a card to discard for %1.").arg(pendingActivatedAbility.cardName)
                : tr("Choose a permanent to sacrifice for %1.").arg(pendingActivatedAbility.cardName);
 }
@@ -1389,8 +1502,11 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
 
     manaPaymentCounterIds.clear();
     midCastLandTapStack.clear();
+    if (pendingActivatedAbility.valid) {
+        cancelPendingActivatedAbility();
+    }
     clearPendingRuledSpellCast();
-    pendingRuledSpellCast.valid = true;
+    ruledPendingCast->beginSpell();
     RuledTargetUi::ensureRefreshConnection(this);
     pendingRuledSpellCast.handIndex = ruledHandIndex;
     pendingRuledSpellCast.source = source;
@@ -1399,6 +1515,7 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
     pendingRuledSpellCast.xValue = 0;
     pendingRuledSpellCast.cardName = castName;
     pendingRuledSpellCast.remainingCost = parseSimpleManaCost(castCost);
+    pendingRuledSpellCast.costChoices = geh->spellCostData(ruledHandIndex, faceIndex, source).choices;
     pendingRuledSpellCast.selectedModes = selectedModes;
 
     // CR 107.3: record how many X pips the cost has; X is chosen before target selection
@@ -1470,18 +1587,7 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
 
     // CR 107.4d–f: front-load hybrid/Phyrexian choices before paying, so the player picks one side
     // of each flexible pip and the mana prompt then shows only the resolved (fixed) cost.
-    if (!resolvePendingSpellFlexiblePips()) {
-        return true; // cancelled at the flexible-pip dialog; cast aborted
-    }
-
-    if (totalRemainingForCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips) == 0) {
-        return completePendingRuledSpellCast();
-    }
-
-    player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-        tr("Cast %1 selected. Pay mana by clicking counters: %2.")
-            .arg(pendingRuledSpellCast.cardName,
-                 formatRemainingCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips)));
+    continuePendingSpellAfterChoice();
     return true;
 }
 
@@ -1532,6 +1638,12 @@ bool PlayerActions::tryRuledSpellCastFaceMenu(CardItem *card)
 RuledTargetClickEligibility PlayerActions::ruledCardTargetEligibility(CardItem *card) const
 {
     return RuledTargetUi::cardEligibility(this, card);
+}
+
+bool PlayerActions::isAwaitingRuledSpellCostSelection() const
+{
+    return pendingRuledSpellCast.valid && pendingRuledSpellCast.waitingForCost &&
+           pendingRuledSpellCast.nextCostChoice < pendingRuledSpellCast.costChoices.size();
 }
 
 RuledTargetClickEligibility PlayerActions::ruledPlayerTargetEligibility(Player *targetPlayer) const
@@ -1918,18 +2030,7 @@ bool PlayerActions::finalizeTargetSelectionAndContinue()
     }
 
     // CR 107.4d–f: front-load hybrid/Phyrexian choices.
-    if (!resolvePendingSpellFlexiblePips()) {
-        return true;
-    }
-
-    if (totalRemainingForCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips) == 0) {
-        return completePendingRuledSpellCast();
-    }
-
-    player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-        tr("Target(s) selected for %1. Pay mana by clicking counters: %2.")
-            .arg(pendingRuledSpellCast.cardName,
-                 formatRemainingCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips)));
+    continuePendingSpellAfterChoice();
     return true;
 }
 
@@ -2038,16 +2139,7 @@ void PlayerActions::confirmSpellDamageAllocation()
 
     if (storeCurrentModalTargetsAndAdvance())
         return;
-    if (!resolvePendingSpellFlexiblePips())
-        return;
-    if (totalRemainingForCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips) == 0) {
-        completePendingRuledSpellCast();
-        return;
-    }
-    player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-        tr("Target(s) selected for %1. Pay mana by clicking counters: %2.")
-            .arg(pendingRuledSpellCast.cardName,
-                 formatRemainingCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips)));
+    continuePendingSpellAfterChoice();
 }
 
 void PlayerActions::playCard(CardItem *card, bool faceDown)
@@ -4197,8 +4289,10 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     manaPaymentCounterIds.clear();
     midCastLandTapStack.clear();
 
-    pendingActivatedAbility = {};
-    pendingActivatedAbility.valid = true;
+    if (pendingRuledSpellCast.valid) {
+        cancelPendingRuledSpellCast();
+    }
+    ruledPendingCast->beginAbility();
     RuledTargetUi::ensureRefreshConnection(this);
     pendingActivatedAbility.permanentOid = oid;
     pendingActivatedAbility.abilityIndex = abilityIndex;
@@ -4332,6 +4426,53 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
         return true;
     }
 
+    // Explicit spell-cost choices use the same engine-authored candidates as activated costs.
+    if (pendingRuledSpellCast.valid && pendingRuledSpellCast.waitingForCost) {
+        if (!card || !card->getZone() ||
+            pendingRuledSpellCast.nextCostChoice >= pendingRuledSpellCast.costChoices.size()) {
+            return true;
+        }
+        const auto &choice = pendingRuledSpellCast.costChoices.at(pendingRuledSpellCast.nextCostChoice);
+        const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
+        quint32 candidateId = 0;
+        quint32 stableId = 0;
+        if (choice.zone == RuledCostChoiceZone::Hand) {
+            if (card->getZone()->getName() != ZoneNames::HAND || ownerPlayerId != player->getPlayerInfo()->getId()) {
+                handler->emitLocalLog(tr("Choose a card from your hand to discard."));
+                return true;
+            }
+            const int handSlot = handler->engineHandSlotForServerCard(ownerPlayerId, card->getId());
+            if (handSlot < 0) {
+                handler->emitLocalLog(tr("That hand card is not selectable yet."));
+                return true;
+            }
+            candidateId = static_cast<quint32>(handSlot);
+            stableId = static_cast<quint32>(card->getId());
+        } else {
+            if (card->getZone()->getName() != ZoneNames::TABLE) {
+                handler->emitLocalLog(tr("Choose a permanent on the battlefield to sacrifice."));
+                return true;
+            }
+            candidateId = handler->engineOidForCardId(ownerPlayerId, card->getId());
+            stableId = candidateId;
+        }
+        if (!choice.candidateIds.contains(candidateId)) {
+            handler->emitLocalLog(tr("That object cannot pay this spell cost."));
+            return true;
+        }
+        for (const auto &already : pendingRuledSpellCast.costSelections) {
+            if (already.zone == choice.zone && already.selectedId == stableId) {
+                handler->emitLocalLog(tr("One object cannot pay two cost components."));
+                return true;
+            }
+        }
+        pendingRuledSpellCast.costSelections.append({choice.costIndex, choice.zone, stableId});
+        ++pendingRuledSpellCast.nextCostChoice;
+        pendingRuledSpellCast.waitingForCost = false;
+        continuePendingSpellAfterChoice();
+        return true;
+    }
+
     // Explicit nonmana activated-cost choices are engine-authored. Hand candidates are concealed
     // hand slots and battlefield candidates are ObjectIds; never infer legality from card text.
     if (pendingActivatedAbility.valid && pendingActivatedAbility.waitingForCost) {
@@ -4342,8 +4483,10 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
         const auto &choice = pendingActivatedAbility.costChoices.at(pendingActivatedAbility.nextCostChoice);
         const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
         quint32 selectedId = 0;
-        if (choice.zone == RuledAbilityCostChoiceZone::Hand) {
-            if (card->getZone()->getName() != ZoneNames::HAND) {
+        quint32 stableId = 0;
+        if (choice.zone == RuledCostChoiceZone::Hand) {
+            if (card->getZone()->getName() != ZoneNames::HAND ||
+                ownerPlayerId != player->getPlayerInfo()->getId()) {
                 handler->emitLocalLog(tr("Choose a card from your hand to discard."));
                 return true;
             }
@@ -4353,14 +4496,16 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
                 return true;
             }
             selectedId = static_cast<quint32>(handSlot);
+            stableId = static_cast<quint32>(card->getId());
         } else {
             if (card->getZone()->getName() != ZoneNames::TABLE) {
                 handler->emitLocalLog(tr("Choose a permanent on the battlefield to sacrifice."));
                 return true;
             }
             selectedId = handler->engineOidForCardId(ownerPlayerId, card->getId());
+            stableId = selectedId;
         }
-        if (selectedId == 0 && choice.zone == RuledAbilityCostChoiceZone::Battlefield) {
+        if (selectedId == 0 && choice.zone == RuledCostChoiceZone::Battlefield) {
             handler->emitLocalLog(tr("That permanent is not selectable yet."));
             return true;
         }
@@ -4369,12 +4514,12 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
             return true;
         }
         for (const auto &already : pendingActivatedAbility.costSelections) {
-            if (already.zone == choice.zone && already.selectedId == selectedId) {
+            if (already.zone == choice.zone && already.selectedId == stableId) {
                 handler->emitLocalLog(tr("One object cannot pay two cost components."));
                 return true;
             }
         }
-        pendingActivatedAbility.costSelections.append({choice.costIndex, choice.zone, selectedId});
+        pendingActivatedAbility.costSelections.append({choice.costIndex, choice.zone, stableId});
         ++pendingActivatedAbility.nextCostChoice;
         pendingActivatedAbility.waitingForCost = false;
         continuePendingActivatedAbilityAfterChoice();

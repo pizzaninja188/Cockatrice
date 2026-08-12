@@ -35,15 +35,16 @@ struct RuledFlexPip
     int genericPaid = 0;
 };
 
+struct RuledPendingCostSelection
+{
+    int costIndex = -1;
+    RuledCostChoiceZone zone = RuledCostChoiceZone::Battlefield;
+    /// Stable Server_Card.id for hand choices; engine ObjectId for battlefield choices.
+    quint32 selectedId = 0;
+};
+
 struct PendingActivatedAbility
 {
-    struct CostSelection
-    {
-        int costIndex = -1;
-        RuledAbilityCostChoiceZone zone = RuledAbilityCostChoiceZone::Battlefield;
-        quint32 selectedId = 0;
-    };
-
     bool valid = false;
     quint32 permanentOid = 0;
     int abilityIndex = -1;
@@ -53,9 +54,9 @@ struct PendingActivatedAbility
     bool waitingForTarget = false;
     quint32 selectedTargetOid = 0;
     bool waitingForCost = false;
-    QVector<RuledAbilityCostChoice> costChoices;
+    QVector<RuledCostChoice> costChoices;
     int nextCostChoice = 0;
-    QVector<CostSelection> costSelections;
+    QVector<RuledPendingCostSelection> costSelections;
     bool waitingForMana = false;
     QMap<QChar, int> remainingCost;
     QVector<RuledFlexPip> flexPips;
@@ -97,6 +98,10 @@ struct PendingRuledSpellCast
     int xValue = 0;
     QVector<RuledFlexPip> flexPips;
     QVector<quint32> lifePipIndices;
+    bool waitingForCost = false;
+    QVector<RuledCostChoice> costChoices;
+    int nextCostChoice = 0;
+    QVector<RuledPendingCostSelection> costSelections;
     QVector<SelectedMode> selectedModes;
     int activeModePosition = -1;
 };
@@ -275,7 +280,7 @@ ruledTargetClickEligibility(const PendingRuledSpellCast &spell,
         }
         return flex.isEmpty();
     };
-    if (spell.valid && !spell.waitingForTarget && !spell.inDamageAllocationMode &&
+    if (spell.valid && !spell.waitingForTarget && !spell.waitingForCost && !spell.inDamageAllocationMode &&
         costIsPaid(spell.remainingCost, spell.flexPips)) {
         return RuledPendingPaymentAction::CastSpell;
     }
@@ -289,6 +294,13 @@ ruledTargetClickEligibility(const PendingRuledSpellCast &spell,
 class RuledPendingCast
 {
 public:
+    enum class InteractionKind
+    {
+        None,
+        Spell,
+        Ability,
+    };
+
     RuledPendingCast();
 
     /// Shared left/right-click modal picker. Choose-one spells use ordinary menu actions;
@@ -303,6 +315,13 @@ public:
     /// front display name (Adventure), so menu entries come exclusively from `faces`.
     static std::optional<RuledFaceOption>
     chooseFace(QWidget *parent, const QString &cardName, const QVector<RuledFaceOption> &faces);
+
+    /// Spell casts and activated abilities are mutually exclusive local UI transactions.
+    PendingRuledSpellCast &beginSpell();
+    PendingActivatedAbility &beginAbility();
+    void clearSpell();
+    void clearAbility();
+    [[nodiscard]] InteractionKind activeInteraction() const;
 
     PendingRuledSpellCast spell;
     PendingActivatedAbility ability;

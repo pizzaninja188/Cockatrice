@@ -1,5 +1,5 @@
 use super::combat::priority_locked_for_combat_declaration;
-use super::events::{ev_log, ev_priority_changed, format_spell_targets_log};
+use super::events::{ev_log, ev_priority_changed, format_spell_targets_log, object_display_name};
 use super::legal_actions::fill_legal;
 use super::resolution::{permanent_moved_event, sacrifice_permanent};
 use super::targeting::{validate_ability_targets, validate_spell_targets, TargetSourceIdentity};
@@ -24,7 +24,46 @@ enum ValidatedAbilityCost {
 struct AbilityCostPayment {
     move_events: Vec<rv1::RuledEvent>,
     sacrificed: Vec<SacrificeSnapshot>,
+    paid_card_costs: Vec<PaidCardCost>,
     life_paid: u32,
+}
+
+enum PaidCardCost {
+    Discard(String),
+    Sacrifice(String),
+}
+
+impl PaidCardCost {
+    fn log_phrase(&self) -> String {
+        match self {
+            Self::Discard(card_name) => format!("discarding {card_name}"),
+            Self::Sacrifice(card_name) => format!("sacrificing {card_name}"),
+        }
+    }
+}
+
+fn format_paid_card_costs_log(costs: &[PaidCardCost]) -> String {
+    let phrases: Vec<_> = costs.iter().map(PaidCardCost::log_phrase).collect();
+    match phrases.as_slice() {
+        [] => String::new(),
+        [only] => format!(" {only}"),
+        [first, second] => format!(" {first} and {second}"),
+        _ => format!(
+            " {}, and {}",
+            phrases[..phrases.len() - 1].join(", "),
+            phrases.last().expect("nonempty cost phrases")
+        ),
+    }
+}
+
+enum ValidatedSpellCost {
+    Discard(ObjectId),
+    Sacrifice(SacrificeSnapshot),
+}
+
+struct SpellCostPaymentPlan {
+    mana: ManaPaymentPlan,
+    components: Vec<ValidatedSpellCost>,
 }
 
 /// CR 702.8b: true if the card face is castable at instant speed (is an instant, or has flash).
@@ -212,6 +251,7 @@ fn commit_mana_payment(state: &mut GameState, player_idx: usize, plan: ManaPayme
 }
 
 /// Pays `cost` after first proving the whole mana component is affordable.
+#[cfg(test)]
 pub(super) fn pay_mana(
     state: &mut GameState,
     player_idx: usize,
@@ -243,6 +283,7 @@ impl GameEngine {
         let flex_payments = command.flex_payments.as_slice();
         let face_index = command.face_index as usize;
         let selected_modes = command.selected_modes.as_slice();
+        let cost_selections = command.cost_selections.as_slice();
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("not your priority"));
         }
@@ -328,6 +369,7 @@ impl GameEngine {
         let face_name = face.name.to_string();
         let face_effects: Vec<SpellEffectKind> = face.spell_effect.to_vec();
         let modal_spell = face.modal_spell.clone();
+        let additional_costs = face.additional_costs.clone();
         let sorcery_ok = super::priority::sorcery_speed_available(&self.state, player);
         let instant_ok = super::priority::instant_timing_step_allowed(self.state.turn_step);
         if face_is_sorcery {
@@ -498,6 +540,18 @@ impl GameEngine {
             public_targets.extend_from_slice(targets);
         }
 
+        let payment_plan = self.plan_spell_costs(
+            player,
+            idx,
+            oid,
+            &face_mana,
+            chosen_x,
+            extra_generic,
+            flex_payments,
+            &additional_costs,
+            cost_selections,
+        )?;
+
         let trefs: Vec<ObjectId> = public_targets
             .iter()
             .map(|target| target.object_id)
@@ -510,14 +564,9 @@ impl GameEngine {
             source: TargetingSourceKind::SpellCast,
             targets: trefs.clone(),
         }]);
-        let life_paid = pay_mana(
-            &mut self.state,
-            idx,
-            &face_mana,
-            chosen_x,
-            extra_generic,
-            flex_payments,
-        )?;
+        let payment = self.commit_spell_costs(player, idx, payment_plan)?;
+        let life_paid = payment.life_paid;
+        let paid_costs_line = format_paid_card_costs_log(&payment.paid_card_costs);
 
         // For DamageTargets, store per-target damage allocations parallel to targets.
         let target_damage: Vec<u32> = if face_effects
@@ -589,8 +638,8 @@ impl GameEngine {
             format!(" [{}]", chosen_mode_labels.join("; "))
         };
         batch.events.push(ev_log(format!(
-            "P{} casts {}{}{}{}",
-            player, face_name, modes_line, x_line, tgt_line
+            "P{} casts {}{}{}{}{}",
+            player, face_name, modes_line, x_line, paid_costs_line, tgt_line
         )));
         let mut stack_annotation = match (has_multiple_cast_options, has_x) {
             (true, true) => format!("{face_name} (X = {chosen_x})"),
@@ -625,6 +674,9 @@ impl GameEngine {
                 "P{player} pays {life_paid} life (Phyrexian mana)."
             )));
         }
+        for ev in payment.move_events {
+            batch.events.push(ev);
+        }
         batch.events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
                 object_id: oid,
@@ -640,6 +692,7 @@ impl GameEngine {
             })),
         });
         self.record_spell_cast();
+        target_triggers.extend(self.collect_committed_sacrifice_cost_dies(payment.sacrificed));
         target_triggers.extend(self.collect_event_triggers(&[GameEvent::SpellCast {
             caster: player,
             card_id: cast_card_id,
@@ -651,6 +704,145 @@ impl GameEngine {
         batch.events.push(ev_priority_changed(self));
         fill_legal(&mut batch, self);
         Ok(batch)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn plan_spell_costs(
+        &self,
+        player: PlayerId,
+        player_idx: usize,
+        source_oid: ObjectId,
+        mana_cost: &ManaCost,
+        x_value: u32,
+        extra_generic: u32,
+        flex_payments: &[rv1::FlexPipPayment],
+        costs: &[AdditionalCost],
+        selections: &[rv1::CostSelection],
+    ) -> Result<SpellCostPaymentPlan, EngineError> {
+        use rv1::cost_selection::Selection;
+
+        let mut by_index = HashMap::new();
+        for selection in selections {
+            let cost_index = selection.cost_index as usize;
+            if cost_index >= costs.len() || by_index.insert(cost_index, selection).is_some() {
+                return Err(EngineError::Illegal("invalid or duplicate cost selection"));
+            }
+        }
+
+        let mut components = Vec::with_capacity(costs.len());
+        let mut consumed = HashSet::new();
+        for (cost_index, cost) in costs.iter().enumerate() {
+            let Some(selection) = by_index.get(&cost_index) else {
+                return Err(EngineError::Illegal("missing additional cost selection"));
+            };
+            match cost {
+                AdditionalCost::DiscardCard => {
+                    let Some(Selection::HandIndex(hand_index)) = selection.selection else {
+                        return Err(EngineError::Illegal("discard cost requires a hand card"));
+                    };
+                    let oid = self.state.players[player_idx]
+                        .hand
+                        .get(hand_index as usize)
+                        .copied()
+                        .ok_or(EngineError::Illegal("invalid discard hand slot"))?;
+                    if oid == source_oid {
+                        return Err(EngineError::Illegal(
+                            "a spell cannot discard itself as a cost",
+                        ));
+                    }
+                    if !consumed.insert(oid) {
+                        return Err(EngineError::Illegal("one object cannot pay two costs"));
+                    }
+                    components.push(ValidatedSpellCost::Discard(oid));
+                }
+                AdditionalCost::SacrificePermanent { filter } => {
+                    let Some(Selection::PermanentId(oid)) = selection.selection else {
+                        return Err(EngineError::Illegal(
+                            "sacrifice cost requires a battlefield permanent",
+                        ));
+                    };
+                    if !self.ability_cost_permanent_matches(player, oid, filter) {
+                        return Err(EngineError::Illegal("illegal sacrifice cost selection"));
+                    }
+                    if !consumed.insert(oid) {
+                        return Err(EngineError::Illegal("one object cannot pay two costs"));
+                    }
+                    let snapshot = self
+                        .sacrifice_snapshot(oid)
+                        .ok_or(EngineError::Illegal("sacrifice permanent missing"))?;
+                    components.push(ValidatedSpellCost::Sacrifice(snapshot));
+                }
+            }
+        }
+        if selections.len() != costs.len() {
+            return Err(EngineError::Illegal("unexpected cost selection"));
+        }
+
+        Ok(SpellCostPaymentPlan {
+            mana: plan_mana_payment(
+                &self.state,
+                player_idx,
+                mana_cost,
+                x_value,
+                extra_generic,
+                flex_payments,
+            )?,
+            components,
+        })
+    }
+
+    fn commit_spell_costs(
+        &mut self,
+        player: PlayerId,
+        player_idx: usize,
+        plan: SpellCostPaymentPlan,
+    ) -> Result<AbilityCostPayment, EngineError> {
+        let life_paid = plan.mana.life_cost;
+        commit_mana_payment(&mut self.state, player_idx, plan.mana);
+        let mut payment = AbilityCostPayment {
+            move_events: vec![],
+            sacrificed: vec![],
+            paid_card_costs: vec![],
+            life_paid,
+        };
+        for component in plan.components {
+            let (oid, sacrificed) = match component {
+                ValidatedSpellCost::Discard(oid) => (oid, None),
+                ValidatedSpellCost::Sacrifice(snapshot) => (snapshot.object_id, Some(snapshot)),
+            };
+            let card_name = object_display_name(&self.state, self.registry, oid);
+            let owner = self
+                .state
+                .objects
+                .get(&oid)
+                .map(|object| object.owner)
+                .unwrap_or(player);
+            if let Some(snapshot) = sacrificed {
+                sacrifice_permanent(&mut self.state, self.registry, oid)?;
+                payment.sacrificed.push(snapshot);
+                payment
+                    .paid_card_costs
+                    .push(PaidCardCost::Sacrifice(card_name));
+            } else {
+                super::resolution::move_object_to_zone(
+                    &mut self.state,
+                    self.registry,
+                    oid,
+                    Zone::Graveyard,
+                    None,
+                )?;
+                payment
+                    .paid_card_costs
+                    .push(PaidCardCost::Discard(card_name));
+            }
+            payment.move_events.push(permanent_moved_event(
+                &self.state,
+                oid,
+                owner,
+                rv1::permanent_moved::Destination::Graveyard,
+            ));
+        }
+        Ok(payment)
     }
 
     pub(super) fn activate_ability(
@@ -798,9 +990,10 @@ impl GameEngine {
         self.state.priority_idx = idx;
 
         let tgt_line = format_spell_targets_log(&self.state, self.registry, &trefs);
+        let paid_costs_line = format_paid_card_costs_log(&payment.paid_card_costs);
         let mut batch = RuledEventBatch::default();
         batch.events.push(ev_log(format!(
-            "P{player} activates {card_name}: {ability_text}{tgt_line}"
+            "P{player} activates {card_name}{paid_costs_line}: {ability_text}{tgt_line}"
         )));
         if payment.life_paid > 0 {
             batch.events.push(rv1::RuledEvent {
@@ -850,9 +1043,9 @@ impl GameEngine {
         permanent_id: ObjectId,
         costs: &[AbilityCost],
         flex_payments: &[rv1::FlexPipPayment],
-        selections: &[rv1::AbilityCostSelection],
+        selections: &[rv1::CostSelection],
     ) -> Result<AbilityCostPayment, EngineError> {
-        use rv1::ability_cost_selection::Selection;
+        use rv1::cost_selection::Selection;
 
         let source_card_id = self
             .state
@@ -948,6 +1141,7 @@ impl GameEngine {
         let mut payment = AbilityCostPayment {
             move_events: vec![],
             sacrificed: vec![],
+            paid_card_costs: vec![],
             life_paid: 0,
         };
         for component in validated {
@@ -960,6 +1154,7 @@ impl GameEngine {
                     commit_mana_payment(&mut self.state, idx, plan);
                 }
                 ValidatedAbilityCost::Discard(oid) => {
+                    let card_name = object_display_name(&self.state, self.registry, oid);
                     let owner = self
                         .state
                         .objects
@@ -979,8 +1174,12 @@ impl GameEngine {
                         owner,
                         rv1::permanent_moved::Destination::Graveyard,
                     ));
+                    payment
+                        .paid_card_costs
+                        .push(PaidCardCost::Discard(card_name));
                 }
                 ValidatedAbilityCost::Sacrifice(oid) => {
+                    let card_name = object_display_name(&self.state, self.registry, oid);
                     let owner = self
                         .state
                         .objects
@@ -998,6 +1197,9 @@ impl GameEngine {
                         owner,
                         rv1::permanent_moved::Destination::Graveyard,
                     ));
+                    payment
+                        .paid_card_costs
+                        .push(PaidCardCost::Sacrifice(card_name));
                 }
             }
         }
@@ -1190,7 +1392,7 @@ impl GameEngine {
         mana_option_index: u32,
         targets: &[rv1::TargetRef],
         flex_payments: &[rv1::FlexPipPayment],
-        cost_selections: &[rv1::AbilityCostSelection],
+        cost_selections: &[rv1::CostSelection],
     ) -> Result<RuledEventBatch, EngineError> {
         if !targets.is_empty() {
             return Err(EngineError::Illegal("mana ability takes no targets"));
@@ -1235,10 +1437,11 @@ impl GameEngine {
             .map(|d| d.name.clone())
             .unwrap_or_else(|| card_id.to_string());
         let ability_text = ability.text.clone();
+        let paid_costs_line = format_paid_card_costs_log(&payment.paid_card_costs);
 
         let mut batch = RuledEventBatch::default();
         batch.events.push(ev_log(format!(
-            "P{player} activates {card_name}: {ability_text}"
+            "P{player} activates {card_name}{paid_costs_line}: {ability_text}"
         )));
         for ev in payment.move_events {
             batch.events.push(ev);
@@ -1432,8 +1635,32 @@ mod mana_payment_tests {
     }
 
     #[test]
+    fn paid_card_cost_log_formats_any_number_of_components() {
+        assert_eq!(format_paid_card_costs_log(&[]), "");
+        assert_eq!(
+            format_paid_card_costs_log(&[PaidCardCost::Discard("Mountain".into())]),
+            " discarding Mountain"
+        );
+        assert_eq!(
+            format_paid_card_costs_log(&[
+                PaidCardCost::Discard("Mountain".into()),
+                PaidCardCost::Sacrifice("Grizzly Bears".into()),
+            ]),
+            " discarding Mountain and sacrificing Grizzly Bears"
+        );
+        assert_eq!(
+            format_paid_card_costs_log(&[
+                PaidCardCost::Discard("Mountain".into()),
+                PaidCardCost::Sacrifice("Grizzly Bears".into()),
+                PaidCardCost::Sacrifice("Hill Giant".into()),
+            ]),
+            " discarding Mountain, sacrificing Grizzly Bears, and sacrificing Hill Giant"
+        );
+    }
+
+    #[test]
     fn one_permanent_cannot_pay_two_consuming_cost_components() {
-        use rv1::ability_cost_selection::Selection;
+        use rv1::cost_selection::Selection;
 
         let mut e = engine_with_priority();
         let oid = e.state.players[0]
@@ -1457,11 +1684,11 @@ mod mana_payment_tests {
             AbilityCost::SacrificePermanent { filter },
         ];
         let selections = [
-            rv1::AbilityCostSelection {
+            rv1::CostSelection {
                 cost_index: 0,
                 selection: Some(Selection::PermanentId(oid)),
             },
-            rv1::AbilityCostSelection {
+            rv1::CostSelection {
                 cost_index: 1,
                 selection: Some(Selection::PermanentId(oid)),
             },

@@ -206,9 +206,9 @@ fn legal_ability_cost_choices(
     player: PlayerId,
     source: ObjectId,
     ability: &tricerules_cards::ActivatedAbilityDef,
-) -> rv1::LegalAbilityCostChoices {
+) -> rv1::LegalCostChoices {
     let Some(player_idx) = eng.state.player_idx(player) else {
-        return rv1::LegalAbilityCostChoices::default();
+        return rv1::LegalCostChoices::default();
     };
     let mut choices = vec![];
     let mut assignment_candidates = vec![];
@@ -222,9 +222,9 @@ fn legal_ability_cost_choices(
                     .map(|slot| slot as u32)
                     .collect();
                 assignment_candidates.push(eng.state.players[player_idx].hand.clone());
-                choices.push(rv1::LegalAbilityCostChoice {
+                choices.push(rv1::LegalCostChoice {
                     cost_index: cost_index as u32,
-                    zone: rv1::AbilityCostChoiceZone::Hand as i32,
+                    zone: rv1::CostChoiceZone::Hand as i32,
                     candidate_ids,
                 });
             }
@@ -240,9 +240,9 @@ fn legal_ability_cost_choices(
                     .filter(|&oid| eng.ability_cost_permanent_matches(player, oid, filter))
                     .collect();
                 assignment_candidates.push(candidate_ids.clone());
-                choices.push(rv1::LegalAbilityCostChoice {
+                choices.push(rv1::LegalCostChoice {
                     cost_index: cost_index as u32,
-                    zone: rv1::AbilityCostChoiceZone::Battlefield as i32,
+                    zone: rv1::CostChoiceZone::Battlefield as i32,
                     candidate_ids,
                 });
             }
@@ -250,8 +250,62 @@ fn legal_ability_cost_choices(
         }
     }
     structurally_payable &= distinct_assignment_exists(&assignment_candidates, 0, &mut consumed);
-    rv1::LegalAbilityCostChoices {
+    rv1::LegalCostChoices {
         non_mana_costs_payable: structurally_payable,
+        choices,
+    }
+}
+
+fn legal_spell_cost_choices(
+    eng: &GameEngine,
+    player: PlayerId,
+    source: ObjectId,
+    costs: &[AdditionalCost],
+) -> rv1::LegalCostChoices {
+    let Some(player_idx) = eng.state.player_idx(player) else {
+        return rv1::LegalCostChoices::default();
+    };
+    let mut choices = vec![];
+    let mut assignment_candidates = vec![];
+    for (cost_index, cost) in costs.iter().enumerate() {
+        match cost {
+            AdditionalCost::DiscardCard => {
+                let candidates: Vec<(u32, ObjectId)> = eng.state.players[player_idx]
+                    .hand
+                    .iter()
+                    .copied()
+                    .enumerate()
+                    .filter(|(_, oid)| *oid != source)
+                    .map(|(slot, oid)| (slot as u32, oid))
+                    .collect();
+                assignment_candidates.push(candidates.iter().map(|(_, oid)| *oid).collect());
+                choices.push(rv1::LegalCostChoice {
+                    cost_index: cost_index as u32,
+                    zone: rv1::CostChoiceZone::Hand as i32,
+                    candidate_ids: candidates.into_iter().map(|(slot, _)| slot).collect(),
+                });
+            }
+            AdditionalCost::SacrificePermanent { filter } => {
+                let candidate_ids: Vec<ObjectId> = eng
+                    .state
+                    .players
+                    .iter()
+                    .flat_map(|state| state.battlefield.iter().copied())
+                    .filter(|&oid| eng.ability_cost_permanent_matches(player, oid, filter))
+                    .collect();
+                assignment_candidates.push(candidate_ids.clone());
+                choices.push(rv1::LegalCostChoice {
+                    cost_index: cost_index as u32,
+                    zone: rv1::CostChoiceZone::Battlefield as i32,
+                    candidate_ids,
+                });
+            }
+        }
+    }
+    let non_mana_costs_payable =
+        distinct_assignment_exists(&assignment_candidates, 0, &mut HashSet::new());
+    rv1::LegalCostChoices {
+        non_mana_costs_payable,
         choices,
     }
 }
@@ -273,6 +327,7 @@ fn hand_action(
         max_modes: 0,
         modes: vec![],
         cost: String::new(),
+        cost_choices: None,
     }
 }
 
@@ -420,6 +475,11 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                     face.spell_effect.iter().any(spell_effect_kind_needs_target),
                 );
                 action.cost = face.mana_cost.to_string();
+                let cost_choices = legal_spell_cost_choices(eng, pid, oid, &face.additional_costs);
+                if !cost_choices.non_mana_costs_payable {
+                    continue;
+                }
+                action.cost_choices = Some(cost_choices);
                 if let Some(modal) = &face.modal_spell {
                     action.min_modes = modal.min_modes;
                     action.max_modes = modal.max_modes;
@@ -513,7 +573,13 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                     .as_ref()
                     .map(ToString::to_string)
                     .unwrap_or_default(),
+                cost_choices: None,
             };
+            let cost_choices = legal_spell_cost_choices(eng, pid, oid, &face.additional_costs);
+            if !cost_choices.non_mana_costs_payable {
+                continue;
+            }
+            action.cost_choices = Some(cost_choices);
             if let Some(modal) = &face.modal_spell {
                 action.min_modes = modal.min_modes;
                 action.max_modes = modal.max_modes;
@@ -595,7 +661,13 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
             max_modes: 0,
             modes: vec![],
             cost: face.mana_cost.to_string(),
+            cost_choices: None,
         };
+        let cost_choices = legal_spell_cost_choices(eng, pid, object.id, &face.additional_costs);
+        if !cost_choices.non_mana_costs_payable {
+            continue;
+        }
+        action.cost_choices = Some(cost_choices);
         if let Some(modal) = &face.modal_spell {
             action.min_modes = modal.min_modes;
             action.max_modes = modal.max_modes;

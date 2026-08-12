@@ -1,7 +1,7 @@
 use crate::card_def::{CardDefinition, Layout, RawCardDefinition};
 use crate::primitives::{
-    AbilityCost, EffectContext, FaceChangeAction, InterveningIf, SpellEffectKind, StaticAbilityDef,
-    TargetController, TargetKind,
+    AbilityCost, AdditionalCost, EffectContext, FaceChangeAction, InterveningIf, SpellEffectKind,
+    StaticAbilityDef, TargetController, TargetKind,
 };
 use crate::token_def::TokenDefinition;
 use once_cell::sync::Lazy;
@@ -413,6 +413,25 @@ impl CardRegistry {
                                     reason: "sacrifice cost filter requires Creature or AnyPermanent, controller: You, and may include its source".into(),
                                 });
                             }
+                        }
+                    }
+                }
+                for cost in &face.additional_costs {
+                    if let AdditionalCost::SacrificePermanent { filter } = cost {
+                        filter
+                            .validate_characteristic_constraints()
+                            .map_err(|reason| RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason,
+                            })?;
+                        if !matches!(filter.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+                            || filter.controller != TargetController::You
+                            || filter.exclude_source
+                        {
+                            return Err(RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason: "additional sacrifice cost filter requires Creature or AnyPermanent, controller: You, and may include its source".into(),
+                            });
                         }
                     }
                 }

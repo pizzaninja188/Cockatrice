@@ -704,6 +704,9 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.mode = PromptMode::ClickChoice;
         state.canDecline = h->pendingTriggerMayDecline();
         state.text = tr("Choose a target for “%1”.").arg(h->pendingTriggerText());
+    } else if (localActions && localActions->isAwaitingRuledSpellCostSelection()) {
+        state.mode = PromptMode::ClickChoice;
+        state.text = localActions->pendingRuledSpellPromptText();
     } else if (localActions && localActions->isAwaitingRuledAbilityCostSelection()) {
         state.mode = PromptMode::ClickChoice;
         state.text = localActions->pendingRuledAbilityCostPromptText();

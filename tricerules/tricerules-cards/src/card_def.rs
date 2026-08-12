@@ -15,8 +15,8 @@
 
 use crate::mana::ManaCost;
 use crate::primitives::{
-    ActivatedAbilityDef, CardTypeFilter, Color, Evasion, Keyword, PermanentTypeFilter,
-    SpellEffectKind, StaticAbilityDef, TriggeredAbilityDef,
+    ActivatedAbilityDef, AdditionalCost, CardTypeFilter, Color, Evasion, Keyword,
+    PermanentTypeFilter, SpellEffectKind, StaticAbilityDef, TriggeredAbilityDef,
 };
 use serde::{Deserialize, Serialize};
 
@@ -75,6 +75,9 @@ pub struct CardFace {
     /// CR 702.34: optional cost to cast this face from its owner's graveyard.
     #[serde(default)]
     pub flashback_cost: Option<ManaCost>,
+    /// Mandatory nonmana costs paid in addition to this face's mana cost (CR 118.8).
+    #[serde(default)]
+    pub additional_costs: Vec<AdditionalCost>,
     /// Card types followed by subtypes (e.g. `["Creature", "Bear"]`). Single source of truth for
     /// the type flags below — see [`CardFace::derive_type_flags`].
     #[serde(default)]
@@ -259,6 +262,8 @@ pub struct RawCardDefinition {
     #[serde(default)]
     pub flashback_cost: Option<ManaCost>,
     #[serde(default)]
+    pub additional_costs: Vec<AdditionalCost>,
+    #[serde(default)]
     pub types: Vec<String>,
     #[serde(default)]
     pub supertypes: Vec<String>,
@@ -311,6 +316,7 @@ impl RawCardDefinition {
                 name: self.name.clone(),
                 mana_cost: self.mana_cost,
                 flashback_cost: self.flashback_cost,
+                additional_costs: self.additional_costs,
                 types: self.types,
                 supertypes: self.supertypes,
                 power: self.power,

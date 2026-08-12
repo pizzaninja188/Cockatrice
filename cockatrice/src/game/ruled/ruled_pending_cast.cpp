@@ -11,6 +11,43 @@
 
 RuledPendingCast::RuledPendingCast() = default;
 
+PendingRuledSpellCast &RuledPendingCast::beginSpell()
+{
+    ability = {};
+    spell = {};
+    spell.valid = true;
+    return spell;
+}
+
+PendingActivatedAbility &RuledPendingCast::beginAbility()
+{
+    spell = {};
+    ability = {};
+    ability.valid = true;
+    return ability;
+}
+
+void RuledPendingCast::clearSpell()
+{
+    spell = {};
+}
+
+void RuledPendingCast::clearAbility()
+{
+    ability = {};
+}
+
+RuledPendingCast::InteractionKind RuledPendingCast::activeInteraction() const
+{
+    if (spell.valid) {
+        return InteractionKind::Spell;
+    }
+    if (ability.valid) {
+        return InteractionKind::Ability;
+    }
+    return InteractionKind::None;
+}
+
 std::optional<RuledFaceOption> RuledPendingCast::chooseFace(QWidget *parent,
                                                             const QString &cardName,
                                                             const QVector<RuledFaceOption> &faces)

@@ -343,6 +343,38 @@ TEST(RuledPendingPaymentTest, LastManaPipConsumedDuringEngineCommandIsReadyAfter
     EXPECT_EQ(readyRuledPendingPaymentAction({}, ability), RuledPendingPaymentAction::None);
 }
 
+TEST(RuledPendingPaymentTest, LegacyOverlapResumesTheSpellBeforeTheAbility)
+{
+    PendingRuledSpellCast spell;
+    spell.valid = true;
+
+    PendingActivatedAbility ability;
+    ability.valid = true;
+
+    // This overlap should disappear when the pending controller becomes exclusive. Characterize
+    // the current recovery order first so an in-flight client cannot submit two commands while the
+    // state is being extracted: the older code always resumes the spell and leaves the ability
+    // pending for the next settled batch.
+    EXPECT_EQ(readyRuledPendingPaymentAction(spell, ability), RuledPendingPaymentAction::CastSpell);
+}
+
+TEST(RuledPendingPaymentTest, ControllerKeepsSpellAndAbilityInteractionsExclusive)
+{
+    RuledPendingCast pending;
+    pending.beginSpell().cardName = QStringLiteral("Fireball");
+    EXPECT_EQ(pending.activeInteraction(), RuledPendingCast::InteractionKind::Spell);
+    EXPECT_TRUE(pending.spell.valid);
+    EXPECT_FALSE(pending.ability.valid);
+
+    pending.beginAbility().cardName = QStringLiteral("Bottle Gnomes");
+    EXPECT_EQ(pending.activeInteraction(), RuledPendingCast::InteractionKind::Ability);
+    EXPECT_FALSE(pending.spell.valid);
+    EXPECT_TRUE(pending.ability.valid);
+
+    pending.clearAbility();
+    EXPECT_EQ(pending.activeInteraction(), RuledPendingCast::InteractionKind::None);
+}
+
 TEST(RuledPendingTargetTest, ClickEligibilityUsesLatestAuthoritativeModalTargets)
 {
     FakeHost host;
@@ -435,6 +467,30 @@ TEST(RuledPendingTargetTest, ReconcileDropsTargetsMissingFromLatestLegalSnapshot
     EXPECT_EQ(spell.selectedTargetOids, QVector<quint32>({20}));
     EXPECT_EQ(spell.selectedTargetDamages, QVector<quint32>({2}));
     EXPECT_EQ(spell.targetDamageAllocations, QVector<int>({2}));
+}
+
+TEST(RuledPendingTargetTest, ReconcileRepairsBothLegacyPendingFamiliesInOneLegalRefresh)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+
+    PendingRuledSpellCast spell;
+    spell.valid = true;
+    spell.handIndex = 2;
+    spell.selectedTargetOids = {10};
+
+    PendingActivatedAbility ability;
+    ability.valid = true;
+    ability.permanentOid = 30;
+    ability.abilityIndex = 1;
+    ability.selectedTargetOid = 40;
+
+    state.validTargetsByHandSlot.insert(RuledClientState::spellTargetKey(2, 0), {});
+    state.validTargetsByAbility.insert(RuledClientState::abilityTargetKey(30, 1), {});
+
+    EXPECT_TRUE(reconcileRuledPendingTargets(spell, ability, state, 0));
+    EXPECT_TRUE(spell.selectedTargetOids.isEmpty());
+    EXPECT_EQ(ability.selectedTargetOid, 0u);
 }
 
 TEST_F(RuledClientTest, HandSlotAndPublicZoneMapsAreQueryable)
@@ -713,12 +769,12 @@ TEST_F(RuledClientTest, ParsesAuthoritativeActivatedCostChoicesAndPayability)
     costs.set_non_mana_costs_payable(false);
     auto *discard = costs.add_choices();
     discard->set_cost_index(0);
-    discard->set_zone(ruled::v1::ABILITY_COST_CHOICE_ZONE_HAND);
+    discard->set_zone(ruled::v1::COST_CHOICE_ZONE_HAND);
     discard->add_candidate_ids(1);
     discard->add_candidate_ids(3);
     auto *sacrifice = costs.add_choices();
     sacrifice->set_cost_index(2);
-    sacrifice->set_zone(ruled::v1::ABILITY_COST_CHOICE_ZONE_BATTLEFIELD);
+    sacrifice->set_zone(ruled::v1::COST_CHOICE_ZONE_BATTLEFIELD);
     sacrifice->add_candidate_ids(100);
     apply(batch);
 
@@ -726,9 +782,9 @@ TEST_F(RuledClientTest, ParsesAuthoritativeActivatedCostChoicesAndPayability)
     const auto choices = state->abilityCostChoices(100, 2);
     ASSERT_EQ(choices.size(), 2);
     EXPECT_EQ(choices.at(0).costIndex, 0);
-    EXPECT_EQ(choices.at(0).zone, RuledAbilityCostChoiceZone::Hand);
+    EXPECT_EQ(choices.at(0).zone, RuledCostChoiceZone::Hand);
     EXPECT_EQ(choices.at(0).candidateIds, QSet<quint32>({1, 3}));
-    EXPECT_EQ(choices.at(1).zone, RuledAbilityCostChoiceZone::Battlefield);
+    EXPECT_EQ(choices.at(1).zone, RuledCostChoiceZone::Battlefield);
     EXPECT_TRUE(choices.at(1).candidateIds.contains(100));
 }
 
@@ -1525,6 +1581,38 @@ TEST_F(RuledClientTest, ZoneViewParsesDamageAndPipeDelimitedAbilities)
     // The flag only re-announces on a change.
     apply(batch);
     EXPECT_EQ(fsSpy.count(), 1);
+}
+
+TEST_F(RuledClientTest, ParsesSpellCostChoicesForHandAndPublicZoneCasts)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    auto *hand = actions.add_hand_actions();
+    hand->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
+    hand->set_hand_index(3);
+    hand->set_face_index(0);
+    auto *discard = hand->mutable_cost_choices()->add_choices();
+    discard->set_cost_index(0);
+    discard->set_zone(ruled::v1::COST_CHOICE_ZONE_HAND);
+    discard->add_candidate_ids(1);
+
+    auto *zone = actions.add_zone_cast_actions();
+    zone->set_object_id(77);
+    zone->set_face_index(1);
+    auto *sacrifice = zone->mutable_cost_choices()->add_choices();
+    sacrifice->set_cost_index(0);
+    sacrifice->set_zone(ruled::v1::COST_CHOICE_ZONE_BATTLEFIELD);
+    sacrifice->add_candidate_ids(900);
+    apply(batch);
+
+    const auto handCosts = state->spellCostData(3, 0, RuledCastSource::Hand);
+    ASSERT_EQ(handCosts.choices.size(), 1);
+    EXPECT_EQ(handCosts.choices.first().zone, RuledCostChoiceZone::Hand);
+    EXPECT_EQ(handCosts.choices.first().candidateIds, QSet<quint32>({1}));
+    const auto zoneCosts = state->spellCostData(77, 1, RuledCastSource::Graveyard);
+    ASSERT_EQ(zoneCosts.choices.size(), 1);
+    EXPECT_EQ(zoneCosts.choices.first().zone, RuledCostChoiceZone::Battlefield);
+    EXPECT_EQ(zoneCosts.choices.first().candidateIds, QSet<quint32>({900}));
 }
 
 TEST_F(RuledClientTest, ActivatedAbilityMenuLabelsDoNotDuplicateStructuredCosts)

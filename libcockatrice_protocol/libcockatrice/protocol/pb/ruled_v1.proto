@@ -274,6 +274,9 @@ message CastSpell {
   // Exactly one physical source. Graveyard means flashback; exile requires an engine-issued
   // permission such as Adventure. A missing source is always illegal.
   CastSource source = 8;
+  // Explicit choices for authored additional-cost components. `cost_index` indexes the face's
+  // ordered additional_costs list; every choice-bearing component appears exactly once.
+  repeated CostSelection cost_selections = 9;
 }
 
 // A payment decision for one flexible mana pip (CR 107.4d–f). Currently only Phyrexian pips
@@ -428,6 +431,7 @@ message LegalHandAction {
   // CastSpell only: authoritative cost of this face. Multi-face physical cards may expose only
   // the front face's Oracle display data to Cockatrice, so the client must not infer this value.
   string cost = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  LegalCostChoices cost_choices = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // CR 702.34: a spell the player may cast from their own graveyard using flashback.
@@ -448,27 +452,28 @@ message LegalZoneCastAction {
   uint32 max_modes = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated LegalSpellMode modes = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   string cost = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  LegalCostChoices cost_choices = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // Zone and authoritative candidates for one explicit activated-cost choice. Hand candidates are
 // concealed engine hand slots; battlefield candidates are public engine ObjectIds.
-enum AbilityCostChoiceZone {
-  ABILITY_COST_CHOICE_ZONE_UNSPECIFIED = 0;
-  ABILITY_COST_CHOICE_ZONE_HAND = 1;
-  ABILITY_COST_CHOICE_ZONE_BATTLEFIELD = 2;
+enum CostChoiceZone {
+  COST_CHOICE_ZONE_UNSPECIFIED = 0;
+  COST_CHOICE_ZONE_HAND = 1;
+  COST_CHOICE_ZONE_BATTLEFIELD = 2;
 }
 
-message LegalAbilityCostChoice {
+message LegalCostChoice {
   uint32 cost_index = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  AbilityCostChoiceZone zone = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  CostChoiceZone zone = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated uint32 candidate_ids = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
-message LegalAbilityCostChoices {
+message LegalCostChoices {
   // False when no distinct assignment can satisfy every nonmana component. Mana affordability is
   // intentionally separate because the client may activate mana abilities before paying.
   bool non_mana_costs_payable = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  repeated LegalAbilityCostChoice choices = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated LegalCostChoice choices = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message LegalActions {
@@ -515,7 +520,7 @@ message LegalActions {
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Per activated ability, keyed as (permanent_id << 32 | ability_index). The engine publishes
   // exact selectable objects for discard / filtered-sacrifice cost components.
-  map<uint64, LegalAbilityCostChoices> cost_choices_by_ability = 15
+  map<uint64, LegalCostChoices> cost_choices_by_ability = 15
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
@@ -920,10 +925,10 @@ message ActivateAbility {
   uint32 mana_option_index = 5;
   // Explicit choices for authored cost components. `cost_index` indexes the ability's ordered
   // cost list; each component that requires a choice appears exactly once.
-  repeated AbilityCostSelection cost_selections = 6;
+  repeated CostSelection cost_selections = 6;
 }
 
-message AbilityCostSelection {
+message CostSelection {
   uint32 cost_index = 1;
   oneof selection {
     uint32 hand_index = 2;

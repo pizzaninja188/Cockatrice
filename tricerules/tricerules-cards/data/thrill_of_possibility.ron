@@ -1,0 +1,9 @@
+// Oracle checked 2026-08-11. CR 118.8 and 601.2f-h: discard is an additional cost.
+(
+  id: "thrill_of_possibility",
+  name: "Thrill of Possibility",
+  mana_cost: "{1}{R}",
+  additional_costs: [DiscardCard],
+  types: ["Instant"],
+  spell_effect: [Draw(count: 2)],
+)

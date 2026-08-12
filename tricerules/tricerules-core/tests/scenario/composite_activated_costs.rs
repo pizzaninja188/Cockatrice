@@ -1,4 +1,5 @@
 use crate::helpers::*;
+use tricerules_proto::ruled::v1::ruled_event::Ev;
 
 #[test]
 fn apparatus_pays_mana_tap_and_self_sacrifice_before_resolution() {
@@ -11,8 +12,16 @@ fn apparatus_pays_mana_tap_and_self_sacrifice_before_resolution() {
     let apparatus = relocate_to_battlefield(&mut e, 0, "explosive_apparatus", false);
     e.state.players[0].mana_pool.colorless = 3;
 
-    e.apply_command(0, &activate_ability(apparatus, 0, target_player(1)))
+    let batch = e
+        .apply_command(0, &activate_ability(apparatus, 0, target_player(1)))
         .expect("pay all three cost components");
+    assert!(batch.events.iter().any(|event| {
+        matches!(
+            &event.ev,
+            Some(Ev::Log(log))
+                if log.text == "P0 activates Explosive Apparatus sacrificing Explosive Apparatus: {3}, {T}, Sacrifice this artifact: It deals 2 damage to any target. — P1"
+        )
+    }));
     assert_eq!(e.state.players[0].mana_pool.colorless, 0);
     assert_eq!(
         e.state.objects[&apparatus].zone,
@@ -89,13 +98,27 @@ fn discard_cost_uses_authoritative_hand_slot() {
     let mut e = GameEngine::new(5204, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
     let constrictor = relocate_to_battlefield(&mut e, 0, "noose_constrictor", false);
-    let discarded = e.state.players[0].hand[0];
+    let discarded_slot = hand_index_for_card(&e, 0, "forest");
+    let discarded = e.state.players[0].hand[discarded_slot];
 
-    e.apply_command(
-        0,
-        &activate_ability_with_costs(constrictor, 0, vec![], vec![hand_cost_selection(0, 0)]),
-    )
-    .expect("discard the selected physical hand object");
+    let batch = e
+        .apply_command(
+            0,
+            &activate_ability_with_costs(
+                constrictor,
+                0,
+                vec![],
+                vec![hand_cost_selection(0, discarded_slot as u32)],
+            ),
+        )
+        .expect("discard the selected physical hand object");
+    assert!(batch.events.iter().any(|event| {
+        matches!(
+            &event.ev,
+            Some(Ev::Log(log))
+                if log.text == "P0 activates Noose Constrictor discarding Forest: Discard a card: This creature gets +1/+1 until end of turn."
+        )
+    }));
 
     assert_eq!(
         e.state.objects[&discarded].zone,

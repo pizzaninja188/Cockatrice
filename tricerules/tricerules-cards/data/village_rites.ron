@@ -1,0 +1,11 @@
+// Oracle checked 2026-08-11. CR 118.8 and 601.2f-h: sacrifice is an additional cost.
+(
+  id: "village_rites",
+  name: "Village Rites",
+  mana_cost: "{B}",
+  additional_costs: [
+    SacrificePermanent(filter: (kind: Creature, controller: You)),
+  ],
+  types: ["Instant"],
+  spell_effect: [Draw(count: 2)],
+)

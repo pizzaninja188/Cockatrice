@@ -453,8 +453,16 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     publicPermanent->set_object_id(101);
     publicPermanent->set_card_id("grizzly_bears");
 
-    (*batch.mutable_legal_by_player())[1].add_labels("P1 legal");
-    (*batch.mutable_legal_by_player())[2].add_labels("P2 legal");
+    auto &p1Legal = (*batch.mutable_legal_by_player())[1];
+    p1Legal.add_labels("P1 legal");
+    auto *p1Cast = p1Legal.add_hand_actions();
+    p1Cast->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
+    p1Cast->mutable_cost_choices()->add_choices()->add_candidate_ids(7);
+    auto &p2Legal = (*batch.mutable_legal_by_player())[2];
+    p2Legal.add_labels("P2 legal");
+    auto *p2Cast = p2Legal.add_hand_actions();
+    p2Cast->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
+    p2Cast->mutable_cost_choices()->add_choices()->add_candidate_ids(9);
     auto *handMap = batch.add_events()->mutable_hand_slot_map();
     handMap->add_entries()->set_player_id(1);
     handMap->add_entries()->set_player_id(2);
@@ -473,9 +481,11 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     const auto forP1 = redactFor(batch, p1);
     ASSERT_EQ(forP1.legal_by_player_size(), 1);
     EXPECT_TRUE(forP1.legal_by_player().contains(1));
+    EXPECT_EQ(forP1.legal_by_player().at(1).hand_actions(0).cost_choices().choices(0).candidate_ids(0), 7u);
     const auto forP2 = redactFor(batch, p2);
     ASSERT_EQ(forP2.legal_by_player_size(), 1);
     EXPECT_TRUE(forP2.legal_by_player().contains(2));
+    EXPECT_EQ(forP2.legal_by_player().at(2).hand_actions(0).cost_choices().choices(0).candidate_ids(0), 9u);
 
     for (const auto *redacted : {&forP1, &forP2}) {
         EXPECT_TRUE(std::none_of(redacted->events().begin(), redacted->events().end(),

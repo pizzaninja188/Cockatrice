@@ -1,0 +1,9 @@
+// Oracle checked 2026-08-11. CR 118.8 and 601.2f-h: discard is an additional cost.
+(
+  id: "tormenting_voice",
+  name: "Tormenting Voice",
+  mana_cost: "{1}{R}",
+  additional_costs: [DiscardCard],
+  types: ["Sorcery"],
+  spell_effect: [Draw(count: 2)],
+)

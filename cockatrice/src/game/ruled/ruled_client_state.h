@@ -94,23 +94,23 @@ struct RuledSpellTargetData
     bool damageDividedEvenly = false;
 };
 
-enum class RuledAbilityCostChoiceZone : int
+enum class RuledCostChoiceZone : int
 {
     Hand,
     Battlefield,
 };
 
-struct RuledAbilityCostChoice
+struct RuledCostChoice
 {
     int costIndex = -1;
-    RuledAbilityCostChoiceZone zone = RuledAbilityCostChoiceZone::Battlefield;
+    RuledCostChoiceZone zone = RuledCostChoiceZone::Battlefield;
     QSet<quint32> candidateIds;
 };
 
-struct RuledAbilityCostData
+struct RuledCostData
 {
     bool nonManaCostsPayable = true;
-    QVector<RuledAbilityCostChoice> choices;
+    QVector<RuledCostChoice> choices;
 };
 
 /// CR 603.3b: one of the simultaneous triggered abilities a player is being asked to order.
@@ -177,6 +177,8 @@ struct RuledHandActionSet
     QHash<int, QVector<RuledModalSpellOption>> modalOptionsByCastKey;
     QHash<int, int> modalMinModesByCastKey;
     QHash<int, int> modalMaxModesByCastKey;
+    /// Mandatory nonmana costs keyed by (source slot/object << 8 | face index).
+    QHash<int, RuledCostData> costDataByCastKey;
 };
 
 class RuledClientState : public QObject
@@ -365,7 +367,7 @@ public:
     QHash<quint64, SpellTargetData> validTargetsByZoneObject;
     // Key = (permanentOid << 32 | abilityIndex). Presence means the ability needs a target.
     QHash<quint64, SpellTargetData> validTargetsByAbility;
-    QHash<quint64, RuledAbilityCostData> abilityCostData;
+    QHash<quint64, RuledCostData> abilityCostData;
     // Engine ObjectId -> marked damage currently shown in ruled ZoneView.
     QHash<quint32, int> engineOidMarkedDamage;
     // From ZoneViewSync BattlefieldObject power / toughness (ruled creatures).
@@ -661,6 +663,14 @@ public:
                    ? validTargetsByHandSlot.value(spellTargetKey(slot, faceIndex))
                    : validTargetsByZoneObject.value(zoneSpellTargetKey(static_cast<quint32>(slot), faceIndex));
     }
+    [[nodiscard]] RuledCostData
+    spellCostData(int sourceId, int faceIndex, RuledCastSource source = RuledCastSource::Hand) const
+    {
+        const auto &set = source == RuledCastSource::Hand
+                              ? handActionSet(ruled::v1::HAND_ACTION_CAST_SPELL)
+                              : zoneCastActions;
+        return set.costDataByCastKey.value(spellTargetKey(sourceId, faceIndex));
+    }
     /// Latest engine-published target group for one selected modal mode. The pending-cast UI keeps
     /// a display snapshot, but click legality must always consult this live copy after mana or
     /// other commands cause a fresh LegalActions batch.
@@ -798,7 +808,7 @@ public:
         const auto it = abilityCostData.constFind(abilityTargetKey(oid, abilityIndex));
         return publicGate && (it == abilityCostData.constEnd() || it->nonManaCostsPayable);
     }
-    [[nodiscard]] QVector<RuledAbilityCostChoice> abilityCostChoices(quint32 oid, int abilityIndex) const
+    [[nodiscard]] QVector<RuledCostChoice> abilityCostChoices(quint32 oid, int abilityIndex) const
     {
         return abilityCostData.value(abilityTargetKey(oid, abilityIndex)).choices;
     }

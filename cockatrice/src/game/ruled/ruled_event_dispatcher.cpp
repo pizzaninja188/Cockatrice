@@ -96,6 +96,23 @@ RuledClientState::SpellTargetData parseSpellTargets(const ruled::v1::SpellTarget
     return data;
 }
 
+RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src)
+{
+    RuledCostData data;
+    data.nonManaCostsPayable = src.non_mana_costs_payable();
+    for (const auto &choice : src.choices()) {
+        RuledCostChoice parsed;
+        parsed.costIndex = static_cast<int>(choice.cost_index());
+        parsed.zone = choice.zone() == ruled::v1::COST_CHOICE_ZONE_HAND ? RuledCostChoiceZone::Hand
+                                                                       : RuledCostChoiceZone::Battlefield;
+        for (const quint32 candidate : choice.candidate_ids()) {
+            parsed.candidateIds.insert(candidate);
+        }
+        data.choices.append(parsed);
+    }
+    return data;
+}
+
 /// Copies the engine's structured hand-action contract into the generic client-side indexes.
 QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::LegalActions &actions)
 {
@@ -109,6 +126,9 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
         const QString cardName = QString::fromStdString(action.card_name());
         set.indicesByCardName.insert(cardName, handIndex);
         set.faceOptionsByIndex[handIndex].append({faceIndex, cardName, QString::fromStdString(action.cost())});
+        if (action.has_cost_choices()) {
+            set.costDataByCastKey.insert(castKey, parseCostData(action.cost_choices()));
+        }
         if (action.needs_target()) {
             set.needsTargetCastKeys.insert(castKey);
         }
@@ -957,6 +977,9 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
             state->zoneCastActions.needsTargetIndices.insert(objectId);
         }
         state->zoneCastCostsByCastKey.insert(castKey, QString::fromStdString(action.cost()));
+        if (action.has_cost_choices()) {
+            state->zoneCastActions.costDataByCastKey.insert(castKey, parseCostData(action.cost_choices()));
+        }
         if (action.modes_size() > 0) {
             state->zoneCastActions.modalMinModesByCastKey.insert(castKey, static_cast<int>(action.min_modes()));
             state->zoneCastActions.modalMaxModesByCastKey.insert(castKey, static_cast<int>(action.max_modes()));
@@ -987,20 +1010,7 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
     }
     state->abilityCostData.clear();
     for (const auto &entry : actions.cost_choices_by_ability()) {
-        RuledAbilityCostData data;
-        data.nonManaCostsPayable = entry.second.non_mana_costs_payable();
-        for (const auto &choice : entry.second.choices()) {
-            RuledAbilityCostChoice parsed;
-            parsed.costIndex = static_cast<int>(choice.cost_index());
-            parsed.zone = choice.zone() == ruled::v1::ABILITY_COST_CHOICE_ZONE_HAND
-                              ? RuledAbilityCostChoiceZone::Hand
-                              : RuledAbilityCostChoiceZone::Battlefield;
-            for (const quint32 candidate : choice.candidate_ids()) {
-                parsed.candidateIds.insert(candidate);
-            }
-            data.choices.append(parsed);
-        }
-        state->abilityCostData.insert(static_cast<quint64>(entry.first), data);
+        state->abilityCostData.insert(static_cast<quint64>(entry.first), parseCostData(entry.second));
     }
 
     state->openingUiKind = RuledOpeningUiKind::None;

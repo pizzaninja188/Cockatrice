@@ -7,6 +7,8 @@
 
 #[path = "scenario/activation_restrictions.rs"]
 mod activation_restrictions;
+#[path = "scenario/additional_spell_costs.rs"]
+mod additional_spell_costs;
 #[path = "scenario/attacking_scopes.rs"]
 mod attacking_scopes;
 #[path = "scenario/auras.rs"]

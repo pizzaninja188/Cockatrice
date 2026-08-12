@@ -10,7 +10,7 @@ this a legal target, is this a creature — is answered from what the engine sen
 
 ---
 
-## The four units
+## The five units
 
 (Plus `ruled_autopilot.{h,cpp}`, which is dev tooling rather than view model — see
 [Dev-loop autopilot](#dev-loop-autopilot) at the end.)
@@ -41,6 +41,15 @@ combat state, stack order and annotations, the single pending player choice, and
 
 Members are public on purpose — this is a shared view model, and an accessor pair per field would
 be noise. The `[[nodiscard]]` query methods are the read API consumers should prefer.
+
+### `ruled_pending_cast.{h,cpp}` — `RuledPendingCast`
+
+Owns the mutually exclusive local spell-cast / activated-ability transaction. The engine still
+owns legality: `LegalCostChoices` supplies discard hand slots or sacrifice ObjectIds, and a legal
+refresh reconciles staged selections. Hand selections are retained as stable `Server_Card.id`
+values and converted back to the latest engine hand slot only when the command is submitted.
+Starting one transaction cancels the other; a genuine engine-blocking choice removes the cast
+action and therefore cancels local staging. Freeform never enters this controller.
 
 Two writer groups, and they must not be confused:
 
