@@ -487,6 +487,41 @@ impl Default for EffectSubject {
     }
 }
 
+/// Rule-level attack and block restrictions applied by static or resolving effects. Menace stays
+/// a keyword because it constrains a completed blocking assignment rather than one creature or
+/// attacker/blocker pair; both forms meet in the engine's shared block-legality pipeline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct CombatRestriction {
+    #[serde(default)]
+    pub cant_attack: bool,
+    #[serde(default)]
+    pub cant_block: bool,
+    #[serde(default)]
+    pub cant_be_blocked: bool,
+}
+
+impl CombatRestriction {
+    pub fn is_empty(self) -> bool {
+        !self.cant_attack && !self.cant_block && !self.cant_be_blocked
+    }
+
+    pub fn combine(&mut self, other: Self) {
+        self.cant_attack |= other.cant_attack;
+        self.cant_block |= other.cant_block;
+        self.cant_be_blocked |= other.cant_be_blocked;
+    }
+}
+
+/// Which creature(s) receive a resolving [`CombatRestriction`]. `Matching` is deliberately
+/// dynamic: rule-changing effects such as Destructive Tampering continuously re-evaluate which
+/// creatures lack Flying, including creatures entering after the spell resolves (CR 611.2c).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CombatRestrictionScope {
+    Source,
+    Chosen(TargetFilter),
+    Matching(TargetFilter),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpellEffectKind {
     DamageTarget {
@@ -665,6 +700,13 @@ pub enum SpellEffectKind {
     GrantKeywordsAllPermanents {
         filter: TargetFilter,
         keywords: Vec<Keyword>,
+    },
+    /// Apply attack/block rules through the shared combat-legality path until cleanup. Source and
+    /// chosen scopes bind one physical object; matching scopes remain dynamic because these
+    /// restrictions modify the rules of the game rather than creature characteristics.
+    ApplyCombatRestriction {
+        scope: CombatRestrictionScope,
+        restriction: CombatRestriction,
     },
     GainLife {
         amount: Amount,
@@ -981,6 +1023,10 @@ impl SpellEffectKind {
             | SpellEffectKind::GrantKeywords {
                 subject: EffectSubject::Chosen(target),
                 ..
+            }
+            | SpellEffectKind::ApplyCombatRestriction {
+                scope: CombatRestrictionScope::Chosen(target),
+                ..
             } => vec![target],
             _ => vec![],
         }
@@ -1100,6 +1146,10 @@ impl SpellEffectKind {
             } | SpellEffectKind::Untap {
                 subject: EffectSubject::Source,
             } | SpellEffectKind::ChangeSourceFace { .. }
+                | SpellEffectKind::ApplyCombatRestriction {
+                    scope: CombatRestrictionScope::Source,
+                    ..
+                }
         );
         if context == EffectContext::Spell && source_bound {
             return Err(
@@ -1245,6 +1295,35 @@ impl SpellEffectKind {
                     Ok(())
                 }
             }
+            SpellEffectKind::ApplyCombatRestriction { scope, restriction } => {
+                if restriction.is_empty() {
+                    return Err("ApplyCombatRestriction requires at least one restriction".into());
+                }
+                match scope {
+                    CombatRestrictionScope::Source => Ok(()),
+                    CombatRestrictionScope::Chosen(target) => {
+                        if target.is_player() {
+                            Err(format!(
+                                "ApplyCombatRestriction cannot target players, got {:?}",
+                                target.kind
+                            ))
+                        } else {
+                            Ok(())
+                        }
+                    }
+                    CombatRestrictionScope::Matching(filter) => {
+                        filter.validate_characteristic_constraints()?;
+                        if filter.kind != TargetKind::Creature {
+                            Err(format!(
+                                "matching combat restriction requires Creature kind, got {:?}",
+                                filter.kind
+                            ))
+                        } else {
+                            Ok(())
+                        }
+                    }
+                }
+            }
             // CR 605.1a: a mana ability is an activated/triggered ability — never a spell. An
             // empty option set would produce nothing and is rejected as malformed.
             SpellEffectKind::ProduceMana { options } => {
@@ -1366,10 +1445,7 @@ pub enum ContinuousEffectKind {
     /// (Goblin Chieftain → Haste), pump sorceries (Overrun → Trample), and any
     /// "creatures you control gain [keyword] until end of turn" effect.
     Layer6AddKeyword(Keyword),
-    CombatRestriction {
-        cant_attack: bool,
-        cant_block: bool,
-    },
+    CombatRestriction(CombatRestriction),
     /// CR 305.2b / layer 5 (rule-change): controller may play `count` additional lands per turn.
     /// Covers Exploration, Oracle of Mul Daya, and similar enchantments/permanents.
     ExtraLandPlays(u32),

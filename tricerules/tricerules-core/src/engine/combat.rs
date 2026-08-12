@@ -16,9 +16,9 @@ impl GameEngine {
                 && self.effective_has_keyword(attacker_id, tricerules_cards::Keyword::Trample))
     }
 
-    fn combat_restrictions(&self, oid: ObjectId) -> (bool, bool) {
+    fn combat_restrictions(&self, oid: ObjectId) -> CombatRestriction {
         let Some(characteristics) = self.characteristics(oid) else {
-            return (false, false);
+            return CombatRestriction::default();
         };
         self.state
             .continuous_effects
@@ -32,19 +32,11 @@ impl GameEngine {
                     &characteristics,
                 )
             })
-            .fold((false, false), |(cant_attack, cant_block), effect| {
-                if let ContinuousEffectKind::CombatRestriction {
-                    cant_attack: effect_cant_attack,
-                    cant_block: effect_cant_block,
-                } = &effect.kind
-                {
-                    (
-                        cant_attack || *effect_cant_attack,
-                        cant_block || *effect_cant_block,
-                    )
-                } else {
-                    (cant_attack, cant_block)
+            .fold(CombatRestriction::default(), |mut combined, effect| {
+                if let ContinuousEffectKind::CombatRestriction(restriction) = effect.kind {
+                    combined.combine(restriction);
                 }
+                combined
             })
     }
 
@@ -67,7 +59,7 @@ impl GameEngine {
         if characteristics.has_keyword(tricerules_cards::Keyword::Defender) {
             return Some("creature has defender");
         }
-        if self.combat_restrictions(oid).0 {
+        if self.combat_restrictions(oid).cant_attack {
             return Some("creature cannot attack");
         }
         if object.summoning_sick && !characteristics.has_keyword(tricerules_cards::Keyword::Haste) {
@@ -135,7 +127,9 @@ impl GameEngine {
         if !self.state.objects.contains_key(&blocker_id) {
             return false;
         };
-        if self.combat_restrictions(blocker_id).1 {
+        if self.combat_restrictions(blocker_id).cant_block
+            || self.combat_restrictions(attacker_id).cant_be_blocked
+        {
             return false;
         }
 

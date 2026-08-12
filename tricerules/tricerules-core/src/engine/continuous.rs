@@ -153,10 +153,11 @@ impl GameEngine {
                         self.state.continuous_effects.push(ContinuousEffect {
                             source_id: Some(object_id),
                             affected,
-                            kind: ContinuousEffectKind::CombatRestriction {
+                            kind: ContinuousEffectKind::CombatRestriction(CombatRestriction {
                                 cant_attack,
                                 cant_block,
-                            },
+                                cant_be_blocked: false,
+                            }),
                             duration: EffectDuration::WhileSourceOnBattlefield,
                             timestamp,
                         });

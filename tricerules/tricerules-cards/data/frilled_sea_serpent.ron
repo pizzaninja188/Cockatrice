@@ -1,0 +1,16 @@
+(
+  id: "frilled_sea_serpent",
+  name: "Frilled Sea Serpent",
+  mana_cost: "{4}{U}{U}",
+  types: ["Creature", "Serpent"],
+  power: 4,
+  toughness: 6,
+  activated_abilities: [(
+    costs: [Mana("{5}{U}{U}")],
+    effect: [ApplyCombatRestriction(
+      scope: Source,
+      restriction: (cant_be_blocked: true),
+    )],
+    text: "{5}{U}{U}: This creature can't be blocked this turn.",
+  )],
+)

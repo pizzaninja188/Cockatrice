@@ -13,6 +13,8 @@ mod additional_spell_costs;
 mod attacking_scopes;
 #[path = "scenario/auras.rs"]
 mod auras;
+#[path = "scenario/blocking_restrictions.rs"]
+mod blocking_restrictions;
 #[path = "scenario/board_state_trigger_conditions.rs"]
 mod board_state_trigger_conditions;
 #[path = "scenario/casting_and_lands.rs"]

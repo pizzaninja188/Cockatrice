@@ -1,0 +1,17 @@
+(
+  id: "goblin_smuggler",
+  name: "Goblin Smuggler",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Goblin", "Rogue"],
+  power: 2,
+  toughness: 2,
+  keywords: [Haste],
+  activated_abilities: [(
+    costs: [Tap],
+    effect: [ApplyCombatRestriction(
+      scope: Chosen((kind: Creature, exclude_source: true, power: AtMost(2))),
+      restriction: (cant_be_blocked: true),
+    )],
+    text: "{T}: Another target creature with power 2 or less can't be blocked this turn.",
+  )],
+)

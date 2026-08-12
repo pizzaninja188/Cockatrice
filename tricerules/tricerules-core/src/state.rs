@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use tricerules_cards::primitives::{
     ContinuousEffectKind, CounterKind, CreatureScopeFilter, DamagePreventionAdditionalEffect,
-    EffectDuration, Keyword, ManaAmount, SearchDestination,
+    EffectDuration, Keyword, ManaAmount, SearchDestination, TargetFilter,
 };
 use tricerules_cards::CardFace;
 use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
@@ -609,6 +609,13 @@ pub enum AffectedScope {
     CreaturesMatching {
         reference_player: PlayerId,
         filter: CreatureScopeFilter,
+        exclude: Option<ObjectId>,
+    },
+    /// Permanents matched by a resolving rule-changing effect. Unlike characteristic-changing
+    /// one-shot scopes, this set remains dynamic for the effect's duration (CR 611.2c).
+    PermanentsMatching {
+        reference_player: PlayerId,
+        filter: TargetFilter,
         exclude: Option<ObjectId>,
     },
     /// The permanent currently attached to the Aura or Equipment with `source_oid`. Resolved

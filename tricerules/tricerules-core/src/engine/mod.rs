@@ -20,14 +20,14 @@ use thiserror::Error;
 use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
     AbilityCost, AdditionalCost, Amount, BattlefieldAggregate, BattlefieldPermanentFilter,
-    CardTypeFilter, CastTriggerPlayer, Color, ContinuousEffectKind, ControllerReference,
-    CountExpression, CounterKind, CreatureScopeController, CreatureScopeFilter, DamageDivision,
-    DamagePreventionAdditionalEffect, DamagePreventionSubject, EffectDuration, EffectSubject,
-    EntersTappedAffected, Evasion, FaceChangeAction, GameCondition, InterveningIf, Keyword,
-    LifeAmount, PermanentTypeFilter, PlayerRecipient, PreventionAmountBasis, RelativePlayerSet,
-    SearchDestination, SpellEffectKind, StaticAbilityDef, StaticDamagePreventionAmount,
-    TargetController, TargetFilter, TargetKind, TargetingSourceFilter, TokenController,
-    TriggerCondition,
+    CardTypeFilter, CastTriggerPlayer, Color, CombatRestriction, CombatRestrictionScope,
+    ContinuousEffectKind, ControllerReference, CountExpression, CounterKind,
+    CreatureScopeController, CreatureScopeFilter, DamageDivision, DamagePreventionAdditionalEffect,
+    DamagePreventionSubject, EffectDuration, EffectSubject, EntersTappedAffected, Evasion,
+    FaceChangeAction, GameCondition, InterveningIf, Keyword, LifeAmount, PermanentTypeFilter,
+    PlayerRecipient, PowerComparison, PreventionAmountBasis, RelativePlayerSet, SearchDestination,
+    SpellEffectKind, StaticAbilityDef, StaticDamagePreventionAmount, TargetController,
+    TargetFilter, TargetKind, TargetingSourceFilter, TokenController, TriggerCondition,
 };
 use tricerules_cards::{CardFace, CardRegistry, FaceRef, Layout};
 use tricerules_proto::ruled::v1 as rv1;

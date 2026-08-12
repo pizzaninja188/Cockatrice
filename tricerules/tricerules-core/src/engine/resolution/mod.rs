@@ -21,6 +21,7 @@ pub(super) mod life;
 mod mass;
 mod misc;
 mod pump_counters;
+mod restrictions;
 mod stack_ops;
 mod tokens;
 mod zones;
@@ -523,6 +524,9 @@ impl GameEngine {
                     }
                     effect @ SpellEffectKind::GrantKeywordsAllPermanents { .. } => {
                         pump_counters::grant_keywords_all_permanents(&mut cx, effect)?
+                    }
+                    effect @ SpellEffectKind::ApplyCombatRestriction { .. } => {
+                        restrictions::apply_combat_restriction(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::PutCounters { .. } => {
                         pump_counters::put_counters(&mut cx, effect)?

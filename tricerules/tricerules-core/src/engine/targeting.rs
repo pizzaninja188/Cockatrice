@@ -1,8 +1,5 @@
-use super::combat::is_attacking_or_blocking;
 use super::*;
-use tricerules_cards::primitives::{
-    GraveyardFilter, GraveyardOwner, PermanentTypeFilter, PowerComparison,
-};
+use tricerules_cards::primitives::{GraveyardFilter, GraveyardOwner};
 
 /// The object that sourced a targeted spell or ability, captured at the moment targets are
 /// chosen. Object ids are stable across zone changes in this engine, so CR 400.7 identity also
@@ -185,81 +182,15 @@ pub(super) fn filter_characteristics_match(
     filter: &TargetFilter,
     oid: ObjectId,
 ) -> bool {
-    let Some(object) = engine.state.objects.get(&oid) else {
-        return false;
-    };
     let Some(characteristics) = engine.characteristics(oid) else {
         return false;
     };
-    if !filter.permanent_types.is_empty()
-        && !filter.permanent_types.iter().any(|kind| match kind {
-            PermanentTypeFilter::Creature => characteristics.is_creature(),
-            PermanentTypeFilter::Artifact => characteristics.is_artifact(),
-            PermanentTypeFilter::Enchantment => characteristics.has_type("Enchantment"),
-            PermanentTypeFilter::Land => characteristics.has_type("Land"),
-        })
-    {
-        return false;
-    }
-    // CR 205.3: a "non-[Subtype]" restriction (Eyeblight's Ending) skips the excluded subtypes.
-    if filter
-        .excluded_subtypes
-        .iter()
-        .any(|subtype| characteristics.has_type(subtype))
-    {
-        return false;
-    }
-    if !filter
-        .required_keywords
-        .iter()
-        .all(|keyword| characteristics.has_keyword(*keyword))
-    {
-        return false;
-    }
-    if filter
-        .excluded_keywords
-        .iter()
-        .any(|keyword| characteristics.has_keyword(*keyword))
-    {
-        return false;
-    }
-    if let Some(comparison) = filter.power {
-        let Some(power) = characteristics.power else {
-            return false;
-        };
-        let matches = match comparison {
-            PowerComparison::AtLeast(minimum) => power >= minimum,
-            PowerComparison::AtMost(maximum) => power <= maximum,
-        };
-        if !matches {
-            return false;
-        }
-    }
-    if filter.not_artifact && characteristics.is_artifact() {
-        return false;
-    }
-    if let Some(tapped_req) = filter.tapped {
-        if object.tapped != tapped_req {
-            return false;
-        }
-    }
-    // CR 105/202.2: "nonblack", "nonwhite", … — reject an object of the excluded color.
-    if let Some(c) = filter.not_color {
-        if characteristics.colors.contains(&c) {
-            return false;
-        }
-    }
-    // CR 105/202.2: the inclusive mirror — "all green creatures" (Perish), "target red permanent".
-    if let Some(c) = filter.is_color {
-        if !characteristics.colors.contains(&c) {
-            return false;
-        }
-    }
-    // CR 508/509: "attacking or blocking creature" — must be in combat right now.
-    if filter.attacking_or_blocking && !is_attacking_or_blocking(&engine.state, oid) {
-        return false;
-    }
-    true
+    super::characteristics::permanent_matches_filter_characteristics(
+        &engine.state,
+        filter,
+        oid,
+        &characteristics,
+    )
 }
 
 /// Match a permanent's current derived controller against a target restriction.
@@ -549,6 +480,10 @@ fn effect_target_legal_at_resolution(
         }
         | SpellEffectKind::Regenerate {
             subject: EffectSubject::Chosen(target),
+        }
+        | SpellEffectKind::ApplyCombatRestriction {
+            scope: CombatRestrictionScope::Chosen(target),
+            ..
         } => target_filter_legal(engine, target, tid, caster, source),
         SpellEffectKind::PumpTarget {
             subject: EffectSubject::Source,
@@ -567,6 +502,10 @@ fn effect_target_legal_at_resolution(
         }
         | SpellEffectKind::Regenerate {
             subject: EffectSubject::Source,
+        }
+        | SpellEffectKind::ApplyCombatRestriction {
+            scope: CombatRestrictionScope::Source | CombatRestrictionScope::Matching(_),
+            ..
         } => false,
         SpellEffectKind::ExileTarget
         | SpellEffectKind::ExileTargetGainLifeEqualToPower
@@ -604,6 +543,9 @@ pub(super) fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
         | SpellEffectKind::Untap { subject }
         | SpellEffectKind::Regenerate { subject } => {
             matches!(subject, EffectSubject::Chosen(_))
+        }
+        SpellEffectKind::ApplyCombatRestriction { scope, .. } => {
+            matches!(scope, CombatRestrictionScope::Chosen(_))
         }
         SpellEffectKind::DamageTarget { .. }
         | SpellEffectKind::DamageTargets { .. }
@@ -708,6 +650,23 @@ pub(super) fn validate_effect_targets(
                 }
             }
             EffectSubject::Chosen(filter) => {
+                if targets.len() != 1 {
+                    return Err(EngineError::Illegal("requires exactly one target"));
+                }
+                if !target_filter_legal(engine, filter, targets[0].object_id, caster, source) {
+                    return Err(EngineError::Illegal(
+                        "target must be a creature on the battlefield",
+                    ));
+                }
+            }
+        },
+        SpellEffectKind::ApplyCombatRestriction { scope, .. } => match scope {
+            CombatRestrictionScope::Source | CombatRestrictionScope::Matching(_) => {
+                if !targets.is_empty() {
+                    return Err(EngineError::Illegal("this effect takes no targets"));
+                }
+            }
+            CombatRestrictionScope::Chosen(filter) => {
                 if targets.len() != 1 {
                     return Err(EngineError::Illegal("requires exactly one target"));
                 }
@@ -955,6 +914,10 @@ pub(super) fn spell_target_legality_error(
             subject: EffectSubject::Chosen(filter),
             ..
         }
+        | SpellEffectKind::ApplyCombatRestriction {
+            scope: CombatRestrictionScope::Chosen(filter),
+            ..
+        }
         | SpellEffectKind::PutCounters {
             subject: EffectSubject::Chosen(filter),
             ..
@@ -976,6 +939,10 @@ pub(super) fn spell_target_legality_error(
         }
         | SpellEffectKind::Untap {
             subject: EffectSubject::Source,
+        }
+        | SpellEffectKind::ApplyCombatRestriction {
+            scope: CombatRestrictionScope::Source | CombatRestrictionScope::Matching(_),
+            ..
         } => {
             return Err(EngineError::Illegal(
                 "source-bound effects are only valid on activated or triggered abilities",

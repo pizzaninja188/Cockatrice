@@ -271,8 +271,110 @@ pub(super) fn effect_affects(
                 characteristics,
             )
         }
+        AffectedScope::PermanentsMatching {
+            reference_player,
+            filter,
+            exclude,
+        } => {
+            exclude != &Some(oid)
+                && match filter.kind {
+                    TargetKind::Creature => characteristics.is_creature(),
+                    TargetKind::AnyPermanent => true,
+                    _ => false,
+                }
+                && match filter.controller {
+                    TargetController::Any => true,
+                    TargetController::You => characteristics.controller == *reference_player,
+                    TargetController::Opponent => {
+                        state.are_opponents(characteristics.controller, *reference_player)
+                    }
+                }
+                && permanent_matches_filter_characteristics(state, filter, oid, characteristics)
+        }
         AffectedScope::Player(_) => false,
     }
+}
+
+/// Characteristic predicates shared by targeted filters and dynamic rule-changing scopes. The
+/// caller separately owns kind, controller, source exclusion, and targetability because those
+/// differ between targeted and untargeted effects.
+pub(super) fn permanent_matches_filter_characteristics(
+    state: &GameState,
+    filter: &TargetFilter,
+    oid: ObjectId,
+    characteristics: &Characteristics,
+) -> bool {
+    let Some(object) = state.objects.get(&oid) else {
+        return false;
+    };
+    if !filter.permanent_types.is_empty()
+        && !filter.permanent_types.iter().any(|kind| match kind {
+            PermanentTypeFilter::Creature => characteristics.is_creature(),
+            PermanentTypeFilter::Artifact => characteristics.is_artifact(),
+            PermanentTypeFilter::Enchantment => characteristics.has_type("Enchantment"),
+            PermanentTypeFilter::Land => characteristics.has_type("Land"),
+        })
+    {
+        return false;
+    }
+    if filter
+        .excluded_subtypes
+        .iter()
+        .any(|subtype| characteristics.has_type(subtype))
+    {
+        return false;
+    }
+    if !filter
+        .required_keywords
+        .iter()
+        .all(|keyword| characteristics.has_keyword(*keyword))
+    {
+        return false;
+    }
+    if filter
+        .excluded_keywords
+        .iter()
+        .any(|keyword| characteristics.has_keyword(*keyword))
+    {
+        return false;
+    }
+    if let Some(comparison) = filter.power {
+        let Some(power) = characteristics.power else {
+            return false;
+        };
+        let matches = match comparison {
+            PowerComparison::AtLeast(minimum) => power >= minimum,
+            PowerComparison::AtMost(maximum) => power <= maximum,
+        };
+        if !matches {
+            return false;
+        }
+    }
+    if filter.not_artifact && characteristics.is_artifact() {
+        return false;
+    }
+    if filter
+        .tapped
+        .is_some_and(|required| object.tapped != required)
+    {
+        return false;
+    }
+    if filter
+        .not_color
+        .is_some_and(|color| characteristics.colors.contains(&color))
+    {
+        return false;
+    }
+    if filter
+        .is_color
+        .is_some_and(|color| !characteristics.colors.contains(&color))
+    {
+        return false;
+    }
+    if filter.attacking_or_blocking && !super::combat::is_attacking_or_blocking(state, oid) {
+        return false;
+    }
+    true
 }
 
 pub(super) fn creature_matches_scope(

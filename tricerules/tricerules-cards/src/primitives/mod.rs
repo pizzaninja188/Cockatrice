@@ -300,6 +300,54 @@ mod tests {
     }
 
     #[test]
+    fn combat_restriction_scopes_validate_by_context_and_subject_kind() {
+        let cant_block = CombatRestriction {
+            cant_block: true,
+            ..Default::default()
+        };
+        let source = SpellEffectKind::ApplyCombatRestriction {
+            scope: CombatRestrictionScope::Source,
+            restriction: cant_block,
+        };
+        assert!(source.validate(EffectContext::Spell).is_err());
+        assert!(source.validate(EffectContext::Ability).is_ok());
+
+        let chosen_player = SpellEffectKind::ApplyCombatRestriction {
+            scope: CombatRestrictionScope::Chosen(TargetFilter {
+                kind: TargetKind::OpponentPlayer,
+                ..Default::default()
+            }),
+            restriction: cant_block,
+        };
+        assert!(chosen_player.validate(EffectContext::Spell).is_err());
+
+        let matching_creatures = SpellEffectKind::ApplyCombatRestriction {
+            scope: CombatRestrictionScope::Matching(TargetFilter {
+                kind: TargetKind::Creature,
+                excluded_keywords: vec![Keyword::Flying],
+                ..Default::default()
+            }),
+            restriction: cant_block,
+        };
+        assert!(matching_creatures.validate(EffectContext::Spell).is_ok());
+
+        let matching_permanents = SpellEffectKind::ApplyCombatRestriction {
+            scope: CombatRestrictionScope::Matching(TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                ..Default::default()
+            }),
+            restriction: cant_block,
+        };
+        assert!(matching_permanents.validate(EffectContext::Spell).is_err());
+
+        let empty = SpellEffectKind::ApplyCombatRestriction {
+            scope: CombatRestrictionScope::Chosen(TargetFilter::default_creature()),
+            restriction: CombatRestriction::default(),
+        };
+        assert!(empty.validate(EffectContext::Spell).is_err());
+    }
+
+    #[test]
     fn chosen_subject_defaults_to_creature_target() {
         assert_eq!(
             EffectSubject::default(),
