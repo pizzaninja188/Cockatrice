@@ -2,6 +2,18 @@
 <cockatrice_carddatabase version="4">
     <cards>
         <card>
+            <name>Goblin Wizard Token </name>
+            <text>Prowess</text>
+            <token>1</token>
+            <tablerow>0</tablerow>
+            <prop>
+                <colors>R</colors>
+                <type>Token Creature — Goblin Wizard</type>
+                <maintype>Creature</maintype>
+                <pt>1/1</pt>
+            </prop>
+        </card>
+        <card>
             <name>Kitten</name>
             <set>CAT</set>
             <tablerow>0</tablerow>

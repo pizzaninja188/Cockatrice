@@ -157,6 +157,9 @@ makeCreateTokenEvent(Server_CardZone *zone, Server_Card *card, int xCoord, int y
         for (const QString &kw : card->getTokenAbilityKeywords()) {
             event.add_ability_keywords(kw.toStdString());
         }
+        for (const QString &text : card->getTokenTriggeredAbilityTexts()) {
+            event.add_triggered_ability_texts(text.toStdString());
+        }
     }
 
     event.set_color(card->getColor().toStdString());

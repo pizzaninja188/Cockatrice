@@ -165,6 +165,9 @@ void Server_Card::getInfo(ServerInfo_Card *info)
         for (const QString &kw : tokenAbilityKeywords) {
             info->add_ability_keywords(kw.toStdString());
         }
+        for (const QString &text : tokenTriggeredAbilityTexts) {
+            info->add_triggered_ability_texts(text.toStdString());
+        }
         if (!tokenBasePt.isEmpty()) {
             info->set_token_base_pt(tokenBasePt.toStdString());
         }

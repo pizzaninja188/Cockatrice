@@ -65,4 +65,8 @@ message ServerInfo_Card {
     // resolution so anthem-inflated effective P/T can't match the wrong token variant.
     // Empty for normal (non-token) cards.
     optional string token_base_pt = 19;
+
+    // Ruled engine tokens only: mirrors Event_CreateToken.triggered_ability_texts so a full-state
+    // resync resolves the same token printing selected at creation time.
+    repeated string triggered_ability_texts = 20;
 }

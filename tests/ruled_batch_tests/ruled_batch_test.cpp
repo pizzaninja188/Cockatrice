@@ -1343,6 +1343,8 @@ TEST_F(RuledBatchTest, ApplyRuledBatchCreatesTokenOnControllerTable)
     id->set_pt("1/1");
     id->set_color("w");
     id->set_is_creature(true);
+    id->add_triggered_ability_texts(
+        "Prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)");
 
     callBatchApply(resp);
 
@@ -1351,7 +1353,17 @@ TEST_F(RuledBatchTest, ApplyRuledBatchCreatesTokenOnControllerTable)
     EXPECT_EQ(token->getName(), QStringLiteral("Soldier"));
     EXPECT_EQ(token->getPT(), QStringLiteral("1/1"));
     EXPECT_EQ(token->getColor(), QStringLiteral("w"));
+    EXPECT_EQ(token->getTokenTriggeredAbilityTexts(),
+              QStringList({QStringLiteral(
+                  "Prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)")}));
     EXPECT_TRUE(token->getDestroyOnZoneChange());
+
+    ServerInfo_Card info;
+    token->getInfo(&info);
+    ASSERT_EQ(info.triggered_ability_texts_size(), 1);
+    EXPECT_EQ(info.triggered_ability_texts(0),
+              "Prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)");
+    EXPECT_EQ(info.token_base_pt(), "1/1");
     // The engine ObjectId is bound to the minted card for subsequent zone-view / combat sync.
     EXPECT_EQ(findCardByEngineOid(p1, 501u), token);
     // The opponent received no token (controller-only effect).

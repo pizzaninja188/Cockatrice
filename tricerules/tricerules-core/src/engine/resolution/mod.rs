@@ -667,6 +667,11 @@ impl GameEngine {
             .iter()
             .map(|k| k.as_str().to_string())
             .collect();
+        let triggered_ability_texts: Vec<String> = face
+            .triggered_abilities
+            .iter()
+            .map(|ability| ability.text.clone())
+            .collect();
         let color = color_string(&face.colors());
         let pt = if is_creature {
             format!("{}/{}", power.unwrap_or(0), toughness.unwrap_or(0))
@@ -735,6 +740,7 @@ impl GameEngine {
                         types: types.clone(),
                         is_creature,
                         keywords: keywords.clone(),
+                        triggered_ability_texts: triggered_ability_texts.clone(),
                     }),
                 };
                 entries.push(TokenBattlefieldEntry {

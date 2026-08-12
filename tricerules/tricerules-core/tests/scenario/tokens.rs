@@ -85,6 +85,87 @@ fn call_the_cavalry_token_identity_carries_keywords() {
     }
 }
 
+/// Goblin Wizardry creates two independent 1/1 red Goblin Wizard tokens whose prowess ability is
+/// both mechanically active and included in the public token identity used by the client.
+#[test]
+fn goblin_wizardry_tokens_carry_and_trigger_prowess() {
+    let decks = Some(vec![
+        deck_with(
+            "mountain",
+            &["goblin_wizardry", "lightning_bolt", "grizzly_bears"],
+        ),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(66, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    ensure_in_hand(&mut e, 0, "goblin_wizardry");
+    grant_pool(&mut e, 0);
+    let idx = hand_index_for_card(&e, 0, "goblin_wizardry");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast Goblin Wizardry");
+    e.apply_command(0, &pass()).expect("caster pass");
+    let resolved = e.apply_command(1, &pass()).expect("opponent pass");
+
+    let wizards = battlefield_token_oids(&e, 0, "goblin_wizard_r_1_1_prowess");
+    assert_eq!(wizards.len(), 2);
+    for oid in &wizards {
+        assert_eq!(e.effective_power(*oid), Some(1));
+        assert_eq!(e.effective_toughness(*oid), Some(1));
+    }
+    let created = token_created_events(&resolved);
+    assert_eq!(created.len(), 2);
+    for event in created {
+        let identity = event.identity.as_ref().expect("token identity");
+        assert_eq!(identity.name, "Goblin Wizard");
+        assert_eq!(identity.pt, "1/1");
+        assert_eq!(identity.color, "r");
+        assert_eq!(
+            identity.triggered_ability_texts,
+            vec!["Prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)"]
+        );
+    }
+
+    ensure_in_hand(&mut e, 0, "lightning_bolt");
+    grant_pool(&mut e, 0);
+    let bolt = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(0, &cast_spell(bolt, target_player(1)))
+        .expect("cast Lightning Bolt");
+    let prowess_order = e
+        .state
+        .pending_trigger_order
+        .as_ref()
+        .expect("the two prowess triggers need a deterministic controller-chosen order");
+    assert_eq!(prowess_order.candidates.len(), 2);
+    let mut prowess_sources: Vec<_> = prowess_order
+        .candidates
+        .iter()
+        .map(|trigger| trigger.source_permanent_id)
+        .collect();
+    prowess_sources.sort_unstable();
+    let mut expected_sources = wizards.clone();
+    expected_sources.sort_unstable();
+    assert_eq!(
+        prowess_sources, expected_sources,
+        "one prowess trigger per token"
+    );
+    resolve_entire_stack_two_player(&mut e);
+    for oid in &wizards {
+        assert_eq!(e.effective_power(*oid), Some(2));
+        assert_eq!(e.effective_toughness(*oid), Some(2));
+    }
+
+    ensure_in_hand(&mut e, 0, "grizzly_bears");
+    grant_pool(&mut e, 0);
+    let bears = hand_index_for_card(&e, 0, "grizzly_bears");
+    e.apply_command(0, &cast_spell(bears, vec![]))
+        .expect("cast creature spell");
+    assert!(
+        e.state.pending_triggers.is_empty() && e.state.pending_trigger_order.is_none(),
+        "prowess must not trigger for a creature spell"
+    );
+}
+
 /// One spell with several CreateTokens effects (Bestial Menace) mints each distinct token type
 /// from its own registry definition — proving the ordered `spell_effect` Vec resolves tokens of
 /// different characteristics in a single resolution.

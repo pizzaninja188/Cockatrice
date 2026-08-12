@@ -143,17 +143,6 @@ public:
     void resetState(bool keepAnnotations = false);
     void processCardInfo(const ServerInfo_Card &_info);
 
-    // Ruled engine tokens are named by their MTG subtype ("Knight"); the Oracle display DB stores
-    // generic tokens as "<Subtype> Token", with same-name variants kept apart by trailing spaces.
-    // Given the engine token's characteristics, return the CardRef of the best-matching Oracle token
-    // (by P/T, color, keyword abilities) so it shows the right art/details, or an empty CardRef if
-    // the family has no entry. Display-only; the engine stays authoritative for rules. Shared by the
-    // token-creation event and full-state resync so the resolved name survives a battlefield resync.
-    static CardRef resolveRuledTokenDisplayCard(const QString &subtype,
-                                                const QString &enginePt,
-                                                const QString &engineColor,
-                                                const QStringList &engineKeywords);
-
     bool animationEvent();
     /// Restart the tap animation from `startAngle` degrees, sweeping toward whatever `tapped`
     /// currently says (0 or 90). Used to resume an animation that a zone rebuild interrupted.

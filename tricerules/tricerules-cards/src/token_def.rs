@@ -10,7 +10,7 @@
 //! token-ness for a characteristic lookup.
 
 use crate::card_def::{CardDefinition, CardFace};
-use crate::primitives::{Color, Keyword};
+use crate::primitives::{Color, Keyword, TriggeredAbilityDef};
 use serde::{Deserialize, Serialize};
 
 /// A token's printed characteristics, authored in `data/tokens/*.ron`. Mirrors the subset of
@@ -43,6 +43,10 @@ pub struct TokenDefinition {
     /// Static keyword abilities printed on the token (e.g. Flying for a Spirit token).
     #[serde(default)]
     pub keywords: Vec<Keyword>,
+    /// Triggered abilities printed on the token. These use the same reusable trigger/effect
+    /// vocabulary as ordinary permanent cards.
+    #[serde(default)]
+    pub triggered_abilities: Vec<TriggeredAbilityDef>,
 }
 
 impl TokenDefinition {
@@ -60,6 +64,7 @@ impl TokenDefinition {
                 power: self.power,
                 toughness: self.toughness,
                 keywords: self.keywords.clone(),
+                triggered_abilities: self.triggered_abilities.clone(),
                 colors_override: Some(self.colors.clone()),
                 ..Default::default()
             }],

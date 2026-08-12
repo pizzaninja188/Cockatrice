@@ -1,0 +1,8 @@
+// Create two 1/1 red Goblin Wizard creature tokens with prowess.
+(
+  id: "goblin_wizardry",
+  name: "Goblin Wizardry",
+  mana_cost: "{3}{R}",
+  types: ["Instant"],
+  spell_effect: [CreateTokens(token: "goblin_wizard_r_1_1_prowess", count: 2)],
+)

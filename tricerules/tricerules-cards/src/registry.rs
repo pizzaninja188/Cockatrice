@@ -72,6 +72,58 @@ impl CardRegistry {
                 });
             }
         }
+        // Token definitions use the same ability vocabulary as permanent cards. Validate after
+        // the complete token namespace is loaded so a token trigger may create another token
+        // regardless of file ordering.
+        for (id, token) in &reg.tokens {
+            let face = token.primary_face();
+            for ability in &face.triggered_abilities {
+                if ability.text.trim().is_empty() {
+                    return Err(RegistryError::InvalidCard {
+                        id: id.clone(),
+                        reason: "token triggered ability text must not be empty".into(),
+                    });
+                }
+                if ability.effect.is_empty() {
+                    return Err(RegistryError::InvalidCard {
+                        id: id.clone(),
+                        reason: "token triggered ability must contain at least one effect".into(),
+                    });
+                }
+                if let Some(InterveningIf::GameCondition(condition)) =
+                    ability.intervening_if.as_ref()
+                {
+                    condition
+                        .validate()
+                        .map_err(|reason| RegistryError::InvalidCard {
+                            id: id.clone(),
+                            reason,
+                        })?;
+                }
+                for effect in &ability.effect {
+                    effect.validate(EffectContext::Ability).map_err(|reason| {
+                        RegistryError::InvalidCard {
+                            id: id.clone(),
+                            reason,
+                        }
+                    })?;
+                    if let SpellEffectKind::CreateTokens { token, .. } = effect {
+                        if !reg.tokens.contains_key(token) {
+                            return Err(RegistryError::InvalidCard {
+                                id: id.clone(),
+                                reason: format!("CreateTokens references unknown token '{token}'"),
+                            });
+                        }
+                    }
+                }
+                SpellEffectKind::validate_list(&ability.effect).map_err(|reason| {
+                    RegistryError::InvalidCard {
+                        id: id.clone(),
+                        reason,
+                    }
+                })?;
+            }
+        }
         for chunk in chunks {
             // Authored RON (flat for single-face cards) is normalized into the faces-only runtime
             // shape here — the one place that knows about the flat authoring schema.
@@ -527,6 +579,49 @@ mod tests {
     #[test]
     fn embedded_registry_loads() {
         CardRegistry::from_embedded().unwrap();
+    }
+
+    #[test]
+    fn token_trigger_validation_rejects_empty_text_and_effects() {
+        let empty_text = r#"(
+            id: "bad_token",
+            name: "Bad",
+            types: ["Creature", "Bad"],
+            colors: [Red],
+            power: 1,
+            toughness: 1,
+            triggered_abilities: [(
+                trigger: WheneverPlayerCastsSpell(caster: Controller, spell_type: Some(Noncreature)),
+                effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+                text: "",
+            )],
+        )"#;
+        let err = CardRegistry::from_chunks_and_tokens(&[], &[empty_text]).unwrap_err();
+        assert!(matches!(
+            err,
+            RegistryError::InvalidCard { reason, .. }
+                if reason.contains("triggered ability text must not be empty")
+        ));
+
+        let empty_effect = r#"(
+            id: "bad_token",
+            name: "Bad",
+            types: ["Creature", "Bad"],
+            colors: [Red],
+            power: 1,
+            toughness: 1,
+            triggered_abilities: [(
+                trigger: WheneverPlayerCastsSpell(caster: Controller, spell_type: Some(Noncreature)),
+                effect: [],
+                text: "Prowess",
+            )],
+        )"#;
+        let err = CardRegistry::from_chunks_and_tokens(&[], &[empty_effect]).unwrap_err();
+        assert!(matches!(
+            err,
+            RegistryError::InvalidCard { reason, .. }
+                if reason.contains("must contain at least one effect")
+        ));
     }
 
     #[test]

@@ -679,6 +679,12 @@ void RuledPlayerBinding::createRuledToken(Server_Player *player,
         keywords.append(QString::fromStdString(kw));
     }
     card->setTokenAbilityKeywords(keywords);
+    QStringList triggeredAbilityTexts;
+    triggeredAbilityTexts.reserve(identity.triggered_ability_texts_size());
+    for (const auto &text : identity.triggered_ability_texts()) {
+        triggeredAbilityTexts.append(QString::fromStdString(text));
+    }
+    card->setTokenTriggeredAbilityTexts(triggeredAbilityTexts);
     card->setAnnotation(QStringLiteral("Token"));
     // CR 111.7: when the engine later moves the token off the battlefield it ceases to exist;
     // destroy-on-zone-change makes the client drop the card the moment that move arrives.

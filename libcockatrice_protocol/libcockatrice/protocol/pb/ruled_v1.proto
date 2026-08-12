@@ -789,6 +789,9 @@ message TokenIdentity {
   // Static keyword abilities, MTG spelling (e.g. ["Flying"], ["Lifelink"]). Lets the client pick
   // the matching Oracle token art among same-name variants (e.g. vanilla vs. vigilance Knight).
   repeated string keywords = 6 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Oracle-style text for printed triggered abilities. This is display identity, not a client
+  // rules source; the engine remains authoritative for when and how each ability triggers.
+  repeated string triggered_ability_texts = 7 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // The single source of card identity for a ruled session: Servatrice sends Oracle names

@@ -2,6 +2,20 @@
 <cockatrice_carddatabase version="4">
     <cards>
         <card>
+            <name>Goblin Wizard</name>
+            <set>FEM</set>
+            <tablerow>0</tablerow>
+            <text>{T}: Target Goblin gains protection from white until end of turn.</text>
+            <prop>
+                <colors>R</colors>
+                <manacost>2RR</manacost>
+                <cmc>4</cmc>
+                <type>Creature — Goblin Wizard</type>
+                <maintype>Creature</maintype>
+                <pt>1/1</pt>
+            </prop>
+        </card>
+        <card>
             <name>Cat</name>
             <set>CAT</set>
             <tablerow>0</tablerow>

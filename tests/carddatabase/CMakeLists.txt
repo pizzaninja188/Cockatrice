@@ -9,7 +9,17 @@ add_definitions("-DCARDDB_DATADIR=\"${CMAKE_CURRENT_SOURCE_DIR}/data/\"")
 # ------------------------
 # Card Database Test
 # ------------------------
-add_executable(carddatabase_test ${MOCKS_SOURCES} ${VERSION_STRING_CPP} carddatabase_test.cpp mocks.cpp)
+add_executable(
+  carddatabase_test
+  ${MOCKS_SOURCES}
+  ${VERSION_STRING_CPP}
+  carddatabase_test.cpp
+  ruled_token_display_test.cpp
+  mocks.cpp
+  ${CMAKE_SOURCE_DIR}/cockatrice/src/game/ruled/ruled_token_display.cpp
+)
+
+target_include_directories(carddatabase_test PRIVATE ${CMAKE_SOURCE_DIR}/cockatrice/src)
 
 target_link_libraries(
   carddatabase_test

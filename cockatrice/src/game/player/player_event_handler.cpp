@@ -1,17 +1,21 @@
 #include "player_event_handler.h"
-#include <libcockatrice/utility/ruled_debug.h>
 
-#include "../ruled/ruled_actions.h"
 #include "../../interface/widgets/tabs/tab_game.h"
-#include "../game_event_handler.h"
-#include "../ruled/ruled_client_state.h"
 #include "../board/arrow_item.h"
 #include "../board/card_item.h"
 #include "../board/card_list.h"
+#include "../game_event_handler.h"
+#include "../ruled/ruled_actions.h"
+#include "../ruled/ruled_client_state.h"
+#include "../ruled/ruled_token_display.h"
 #include "../zones/view_zone.h"
 #include "player.h"
 #include "player_actions.h"
 
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QTextStream>
 #include <libcockatrice/card/database/card_database_manager.h>
 #include <libcockatrice/protocol/pb/command_set_card_attr.pb.h>
 #include <libcockatrice/protocol/pb/context_move_card.pb.h>
@@ -35,11 +39,8 @@
 #include <libcockatrice/protocol/pb/event_set_card_counter.pb.h>
 #include <libcockatrice/protocol/pb/event_set_counter.pb.h>
 #include <libcockatrice/protocol/pb/event_shuffle.pb.h>
+#include <libcockatrice/utility/ruled_debug.h>
 #include <libcockatrice/utility/zone_names.h>
-#include <QDateTime>
-#include <QDir>
-#include <QFile>
-#include <QTextStream>
 
 // ---------------------------------------------------------------------------
 // Diagnostic logger — mirrors the one in game_event_handler.cpp.
@@ -154,22 +155,25 @@ void PlayerEventHandler::eventCreateToken(const Event_CreateToken &event)
     }
 
     CardRef cardRef = {QString::fromStdString(event.card_name()), QString::fromStdString(event.card_provider_id())};
-    // Ruled engine tokens carry their MTG subtype as the name ("Knight"); Oracle's display DB stores
-    // generic tokens as "<Subtype> Token", with same-name variants kept apart by trailing spaces. If
-    // the bare name has no Oracle entry, retarget the card at the best-matching "<Subtype> Token"
-    // variant so it shows the right art and details (CardItem::resolveRuledTokenDisplayCard). The same
-    // resolution runs in CardItem::processCardInfo so a battlefield resync doesn't revert it. Display-
-    // only; only triggers on an exact-name miss, so freeform tokens (exact DB names) are unaffected.
-    if (RuledActions::isRuledGame(player->getGame()) &&
-        !event.face_down() && !cardRef.name.isEmpty() &&
-        !CardDatabaseManager::query()->getCard(cardRef)) {
+    // Ruled engine tokens carry their MTG subtype as the name ("Goblin Wizard"); Oracle's display DB
+    // stores token printings under "<Subtype> Token" plus trailing-space variant keys. Resolve every
+    // engine-created token against its full identity, even when a printed card has the same bare name.
+    // The same resolution runs during battlefield resync. Freeform creation never enters this path.
+    if (RuledActions::isRuledGame(player->getGame()) && event.destroy_on_zone_change() && !event.face_down() &&
+        !cardRef.name.isEmpty()) {
         QStringList engineKeywords;
         engineKeywords.reserve(event.ability_keywords_size());
         for (const auto &kw : event.ability_keywords()) {
             engineKeywords.append(QString::fromStdString(kw));
         }
-        CardRef tokenRef = CardItem::resolveRuledTokenDisplayCard(
-            cardRef.name, QString::fromStdString(event.pt()), QString::fromStdString(event.color()), engineKeywords);
+        QStringList triggeredAbilityTexts;
+        triggeredAbilityTexts.reserve(event.triggered_ability_texts_size());
+        for (const auto &text : event.triggered_ability_texts()) {
+            triggeredAbilityTexts.append(QString::fromStdString(text));
+        }
+        CardRef tokenRef =
+            RuledTokenDisplay::resolve(CardDatabaseManager::query(), cardRef.name, QString::fromStdString(event.pt()),
+                                       QString::fromStdString(event.color()), engineKeywords, triggeredAbilityTexts);
         if (!tokenRef.name.isEmpty()) {
             cardRef = tokenRef;
         }
