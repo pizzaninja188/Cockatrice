@@ -542,6 +542,16 @@ public:
     {
         return ownedCardToEngineHandSlot.value(makeOwnedCardKey(ownerPlayerId, serverCardId), -1);
     }
+    /// Resolve a physical hand card only when the latest authoritative map binds it to a slot
+    /// offered for this action. A missing binding is not recoverable from visual hand order:
+    /// game-state and ruled-payload updates can briefly expose different generations.
+    [[nodiscard]] int legalHandSlotForServerCard(RuledHandActionKind kind,
+                                                 int ownerPlayerId,
+                                                 int serverCardId) const
+    {
+        const int handSlot = engineHandSlotForServerCard(ownerPlayerId, serverCardId);
+        return handSlot >= 0 && isHandActionLegal(kind, handSlot) ? handSlot : -1;
+    }
     [[nodiscard]] quint32 engineOidForCardId(int ownerPlayerId, int cardId) const
     {
         return ownerCardIdToEngineOid.value(makeOwnedCardKey(ownerPlayerId, cardId), 0);

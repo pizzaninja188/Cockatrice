@@ -559,6 +559,30 @@ TEST_F(RuledClientTest, HandSlotMapPersistsUntilReplaced)
 // Structured legal hand actions — one case per kind
 // ---------------------------------------------------------------------------------------
 
+TEST_F(RuledClientTest, LegalHandSlotRequiresStableServerCardIdentity)
+{
+    ruled::v1::RuledEventBatch legalOnly;
+    auto &actions = (*legalOnly.mutable_legal_by_player())[kLocalPlayer];
+    addHandAction(actions, ruled::v1::HAND_ACTION_PLAY_LAND, 0, "Forest");
+    apply(legalOnly);
+
+    // A newly visible dev-conjured card can arrive before its HandSlotMap refresh. Its visual
+    // position must never be treated as engine slot 0, or clicking it plays the existing Forest.
+    EXPECT_EQ(state->legalHandSlotForServerCard(ruled::v1::HAND_ACTION_PLAY_LAND, kLocalPlayer, 99), -1);
+
+    ruled::v1::RuledEventBatch mapped;
+    auto &mappedActions = (*mapped.mutable_legal_by_player())[kLocalPlayer];
+    addHandAction(mappedActions, ruled::v1::HAND_ACTION_PLAY_LAND, 0, "Forest");
+    auto *forest = mapped.add_events()->mutable_hand_slot_map()->add_entries();
+    forest->set_player_id(kLocalPlayer);
+    forest->set_server_card_id(5);
+    forest->set_hand_index(0);
+    apply(mapped);
+
+    EXPECT_EQ(state->legalHandSlotForServerCard(ruled::v1::HAND_ACTION_PLAY_LAND, kLocalPlayer, 5), 0);
+    EXPECT_EQ(state->legalHandSlotForServerCard(ruled::v1::HAND_ACTION_PLAY_LAND, kLocalPlayer, 99), -1);
+}
+
 TEST_F(RuledClientTest, AppliesStructuredLandActionsIncludingMdfcFaces)
 {
     ruled::v1::RuledEventBatch batch;

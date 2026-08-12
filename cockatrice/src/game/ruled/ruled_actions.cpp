@@ -402,48 +402,22 @@ resolveSpellTargetItem(AbstractGame *game, RuledClientState *state, quint32 targ
 // Clicked hand card → engine hand slot
 // ---------------------------------------------------------------------------------------
 
-int engineHandIndexFromLegalSlots(const RuledClientState *state,
-                                  const CardItem *card,
-                                  const QList<int> &sortedLegalHandIndices)
-{
-    if (!state || !card || !card->getZone()) {
-        return -1;
-    }
-    const CardZoneLogic *zone = card->getZone();
-    Player *handPlayer = zone->getPlayer();
-    const int clickedId = card->getId();
-    if (handPlayer && handPlayer->getPlayerInfo()) {
-        const int pid = handPlayer->getPlayerInfo()->getId();
-        const int mapped = state->engineHandSlotForServerCard(pid, clickedId);
-        if (mapped >= 0 && sortedLegalHandIndices.contains(mapped)) {
-            return mapped;
-        }
-    }
-    for (int h : sortedLegalHandIndices) {
-        if (h < 0 || h >= zone->getCards().size()) {
-            continue;
-        }
-        const CardItem *slot = zone->getCards().at(h);
-        if (slot && slot->getId() == clickedId) {
-            return h;
-        }
-    }
-    const int handIndex = zone->getCards().indexOf(const_cast<CardItem *>(card));
-    if (handIndex >= 0 && sortedLegalHandIndices.contains(handIndex)) {
-        return handIndex;
-    }
-    return -1;
-}
-
 int resolveHandActionIndex(const RuledClientState *state, RuledHandActionKind kind, const CardItem *card)
 {
-    if (!state || !card) {
+    if (!state || !card || !card->getZone()) {
         return -1;
     }
     // HandSlotMap binds the exact physical CardItem to its engine slot. Resolve against every slot
     // the engine offered for this action, not its display name: Adventure cards show only the
     // permanent name while the sole currently castable face may be the differently named spell.
-    return engineHandIndexFromLegalSlots(state, card, state->handActionLegalIndicesSorted(kind));
+    // Never fall back to visual hand order: a dev-conjured card can become visible during the
+    // full-state resync before the matching ruled payload arrives, and a positional guess can
+    // turn that click into an action on a different physical card.
+    Player *handPlayer = card->getZone()->getPlayer();
+    if (!handPlayer || !handPlayer->getPlayerInfo()) {
+        return -1;
+    }
+    return state->legalHandSlotForServerCard(kind, handPlayer->getPlayerInfo()->getId(), card->getId());
 }
 
 quint32 resolvePublicZoneObjectId(const RuledClientState *state, const CardItem *card)

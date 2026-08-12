@@ -110,11 +110,6 @@ resolveSpellTargetItem(AbstractGame *game, RuledClientState *state, quint32 targ
 // ---------------------------------------------------------------------------------------
 // Clicked hand card → engine hand slot.
 // ---------------------------------------------------------------------------------------
-/// Maps a clicked hand card to an engine hand index given a precomputed set of legal slots
-/// (e.g. the slots for a particular split-card face name).
-[[nodiscard]] int engineHandIndexFromLegalSlots(const RuledClientState *state,
-                                                const CardItem *card,
-                                                const QList<int> &sortedLegalHandIndices);
 /// Engine hand slot a clicked hand card would use for `kind`, or -1 when the engine does not offer
 /// that action on it. The only click→slot entry point; a new hand mechanic needs no new function.
 [[nodiscard]] int
