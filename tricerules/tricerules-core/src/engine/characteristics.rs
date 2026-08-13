@@ -21,6 +21,7 @@
 //! queried object id. Its owned result and single ordered-effect pass make it straightforward
 //! to memoize later without changing callers.
 
+use super::history::relative_player_set_contains;
 use super::*;
 
 /// The complete rules-visible characteristic snapshot currently modeled for a permanent.
@@ -78,6 +79,18 @@ pub(super) fn characteristics_from(
 impl CharacteristicsEvaluator<'_> {
     fn characteristics(&self, oid: ObjectId) -> Option<Characteristics> {
         let object = self.state.objects.get(&oid)?;
+        let mut result = self.characteristics_through_layer_5(oid)?;
+
+        let ordered_effects = self.ordered_effects(oid, &result);
+        self.apply_layer_6_abilities(&mut result, &ordered_effects);
+        self.apply_layer_7_power_toughness(object, &mut result, &ordered_effects);
+        Some(result)
+    }
+
+    /// Snapshot through CR 613 layer 5. Conditional layer-6/7 effects may inspect controller,
+    /// type, and color through this boundary without recursively asking for their own result.
+    fn characteristics_through_layer_5(&self, oid: ObjectId) -> Option<Characteristics> {
+        let object = self.state.objects.get(&oid)?;
         let definition = self.registry.get(&object.card_id)?;
         let copied = object.copiable_values.as_ref();
         let face = copied
@@ -119,10 +132,6 @@ impl CharacteristicsEvaluator<'_> {
         self.apply_layer_3_text(&mut result);
         self.apply_layer_4_type(&mut result);
         self.apply_layer_5_color(&mut result);
-
-        let ordered_effects = self.ordered_effects(oid, &result);
-        self.apply_layer_6_abilities(&mut result, &ordered_effects);
-        self.apply_layer_7_power_toughness(object, &mut result, &ordered_effects);
         Some(result)
     }
 
@@ -215,12 +224,134 @@ impl CharacteristicsEvaluator<'_> {
             .iter()
             .enumerate()
             .filter(|(_, effect)| {
+                matches!(
+                    effect.kind,
+                    ContinuousEffectKind::Layer6AddKeyword(_)
+                        | ContinuousEffectKind::PtModify { .. }
+                )
+            })
+            .filter(|(_, effect)| {
                 effect_affects(self.state, self.registry, effect, oid, pre_layer_6)
+            })
+            .filter(|(_, effect)| {
+                self.characteristic_effect_condition_holds(effect, oid, pre_layer_6)
             })
             .collect();
         effects.sort_by_key(|(index, effect)| (effect.timestamp, *index));
         effects.into_iter().map(|(_, effect)| effect).collect()
     }
+
+    fn characteristic_effect_condition_holds(
+        &self,
+        effect: &ContinuousEffect,
+        queried_oid: ObjectId,
+        queried_pre_layer_6: &Characteristics,
+    ) -> bool {
+        let Some(condition) = effect.condition.as_ref() else {
+            return true;
+        };
+        let Some(source_oid) = effect.source_id else {
+            return false;
+        };
+        let controller = self.layer_2_controller(source_oid, &mut Vec::new());
+        match condition {
+            GameCondition::ActivePlayer { players } => relative_player_set_contains(
+                self.state,
+                *players,
+                controller,
+                self.state.active_player_id(),
+            ),
+            GameCondition::CreatureDeathsThisTurn { .. } => {
+                condition.matches_value(self.state.turn_history.current.creatures_died)
+            }
+            GameCondition::BattlefieldAggregate {
+                filter,
+                aggregate: BattlefieldAggregate::Count,
+                ..
+            } => {
+                let source_generation = self
+                    .state
+                    .zone_change_generation
+                    .get(&source_oid)
+                    .copied()
+                    .unwrap_or(0);
+                let count = self
+                    .state
+                    .players
+                    .iter()
+                    .flat_map(|player| player.battlefield.iter().copied())
+                    .filter(|candidate_oid| {
+                        !filter.exclude_source
+                            || *candidate_oid != source_oid
+                            || self
+                                .state
+                                .zone_change_generation
+                                .get(candidate_oid)
+                                .copied()
+                                .unwrap_or(0)
+                                != source_generation
+                    })
+                    .filter_map(|candidate_oid| {
+                        let characteristics = if candidate_oid == queried_oid {
+                            queried_pre_layer_6.clone()
+                        } else {
+                            self.characteristics_through_layer_5(candidate_oid)?
+                        };
+                        Some((candidate_oid, characteristics))
+                    })
+                    .filter(|(_, characteristics)| {
+                        relative_player_set_contains(
+                            self.state,
+                            filter.controllers,
+                            controller,
+                            characteristics.controller,
+                        ) && battlefield_card_type_matches(filter.card_type, characteristics)
+                            && filter
+                                .color
+                                .is_none_or(|color| characteristics.colors.contains(&color))
+                    })
+                    .filter(|(candidate_oid, _)| {
+                        filter.name.as_ref().is_none_or(|name| {
+                            self.effective_face(*candidate_oid)
+                                .is_some_and(|face| face.name == *name)
+                        })
+                    })
+                    .count();
+                condition.matches_value(u32::try_from(count).unwrap_or(u32::MAX))
+            }
+            GameCondition::BattlefieldAggregate { .. } => false,
+        }
+    }
+
+    fn effective_face(&self, oid: ObjectId) -> Option<&CardFace> {
+        let object = self.state.objects.get(&oid)?;
+        object
+            .copiable_values
+            .as_ref()
+            .map(|values| &values.face)
+            .or_else(|| {
+                self.registry
+                    .get(&object.card_id)?
+                    .face(object.face_up_index)
+            })
+    }
+}
+
+fn battlefield_card_type_matches(
+    required: Option<CardTypeFilter>,
+    characteristics: &Characteristics,
+) -> bool {
+    required.is_none_or(|card_type| match card_type {
+        CardTypeFilter::Enchantment => characteristics.has_type("Enchantment"),
+        CardTypeFilter::Instant => characteristics.has_type("Instant"),
+        CardTypeFilter::Sorcery => characteristics.has_type("Sorcery"),
+        CardTypeFilter::InstantOrSorcery => {
+            characteristics.has_type("Instant") || characteristics.has_type("Sorcery")
+        }
+        CardTypeFilter::Creature => characteristics.is_creature(),
+        CardTypeFilter::Artifact => characteristics.is_artifact(),
+        CardTypeFilter::Noncreature => !characteristics.is_creature(),
+    })
 }
 
 /// Whether an effect applies, evaluated from the relevant characteristic snapshot and direct
@@ -451,7 +582,8 @@ impl CharacteristicsEvaluator<'_> {
         let mut power = result.power.map(|value| value as i32);
         let mut toughness = result.toughness.map(|value| value as i32);
 
-        // CR 613.4c: modifying effects.
+        // CR 613.4c: modifying effects and P/T counters. Both are additive here, so applying the
+        // counters after the other modifiers within the sublayer does not change the result.
         for effect in effects {
             if let ContinuousEffectKind::PtModify {
                 delta_power,
@@ -467,7 +599,7 @@ impl CharacteristicsEvaluator<'_> {
             }
         }
 
-        // CR 613.4d: +1/+1 and -1/-1 counters.
+        // +1/+1 and -1/-1 counters remain in layer 7c in the current rules.
         let counter_delta = object.counter_pt_delta();
         if let Some(value) = &mut power {
             *value += counter_delta;
@@ -475,7 +607,7 @@ impl CharacteristicsEvaluator<'_> {
         if let Some(value) = &mut toughness {
             *value += counter_delta;
         }
-        // CR 613.4e: P/T-switching effects. None modeled yet.
+        // CR 613.4d: P/T-switching effects. None modeled yet.
 
         result.power = power.map(|value| value.max(0) as u32);
         result.toughness = toughness.map(|value| value.max(0) as u32);
@@ -559,6 +691,7 @@ mod tests {
                     delta_power: 2,
                     delta_toughness: 1,
                 },
+                condition: None,
                 duration: EffectDuration::UntilEndOfTurn,
                 timestamp: 2,
             },
@@ -566,6 +699,7 @@ mod tests {
                 source_id: None,
                 affected: AffectedScope::AllCreatures,
                 kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Haste),
+                condition: None,
                 duration: EffectDuration::UntilEndOfTurn,
                 timestamp: 1,
             },
@@ -618,6 +752,7 @@ mod tests {
             kind: ContinuousEffectKind::Layer2Control {
                 controller: ControllerReference::Fixed(1),
             },
+            condition: None,
             duration: EffectDuration::UntilEndOfTurn,
             timestamp: 0,
         });
@@ -684,6 +819,7 @@ mod tests {
                 kind: ContinuousEffectKind::Layer2Control {
                     controller: ControllerReference::SourceController,
                 },
+                condition: None,
                 duration: EffectDuration::WhileSourceOnBattlefield,
                 timestamp: 1,
             },
@@ -693,6 +829,7 @@ mod tests {
                 kind: ContinuousEffectKind::Layer2Control {
                     controller: ControllerReference::SourceController,
                 },
+                condition: None,
                 duration: EffectDuration::WhileSourceOnBattlefield,
                 timestamp: 2,
             },
@@ -740,6 +877,7 @@ mod tests {
                 kind: ContinuousEffectKind::Layer2Control {
                     controller: ControllerReference::Fixed(controller),
                 },
+                condition: None,
                 duration: EffectDuration::UntilEndOfTurn,
                 timestamp,
             });
@@ -813,6 +951,7 @@ mod tests {
                 delta_power: -1,
                 delta_toughness: 0,
             },
+            condition: None,
             duration: EffectDuration::WhileSourceOnBattlefield,
             timestamp: 0,
         });

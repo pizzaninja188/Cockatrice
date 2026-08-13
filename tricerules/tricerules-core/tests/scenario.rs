@@ -25,6 +25,8 @@ mod combat;
 mod combat_keywords;
 #[path = "scenario/composite_activated_costs.rs"]
 mod composite_activated_costs;
+#[path = "scenario/conditional_characteristics.rs"]
+mod conditional_characteristics;
 #[path = "scenario/control.rs"]
 mod control;
 #[path = "scenario/copy_effects.rs"]

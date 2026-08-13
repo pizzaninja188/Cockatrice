@@ -34,6 +34,7 @@ fn big_board_characteristics_full_turn_stays_bounded() {
                 delta_power: 1,
                 delta_toughness: 1,
             },
+            condition: None,
             duration: EffectDuration::WhileSourceOnBattlefield,
             timestamp,
         });
@@ -41,6 +42,7 @@ fn big_board_characteristics_full_turn_stays_bounded() {
             source_id: None,
             affected: AffectedScope::AllCreatures,
             kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Vigilance),
+            condition: None,
             duration: EffectDuration::WhileSourceOnBattlefield,
             timestamp,
         });

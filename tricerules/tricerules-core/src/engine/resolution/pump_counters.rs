@@ -54,6 +54,7 @@ pub(super) fn pump_target(
                     delta_power: power,
                     delta_toughness: toughness,
                 },
+                condition: None,
                 duration: EffectDuration::UntilEndOfTurn,
                 timestamp: engine.state.command_index,
             });
@@ -97,6 +98,7 @@ pub(super) fn pump_all(
                 delta_power: power,
                 delta_toughness: toughness,
             },
+            condition: None,
             duration: EffectDuration::UntilEndOfTurn,
             timestamp: engine.state.command_index,
         });
@@ -132,6 +134,7 @@ pub(super) fn grant_keywords_all(
                 source_id: Some(top.id),
                 affected: AffectedScope::Single(oid),
                 kind: ContinuousEffectKind::Layer6AddKeyword(*kw),
+                condition: None,
                 duration: EffectDuration::UntilEndOfTurn,
                 timestamp: engine.state.command_index,
             });
@@ -183,6 +186,7 @@ pub(super) fn grant_keywords(
             source_id: effect_source_id,
             affected: AffectedScope::Single(tid),
             kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
+            condition: None,
             duration: EffectDuration::UntilEndOfTurn,
             timestamp: cx.engine.state.command_index,
         });
@@ -231,6 +235,7 @@ pub(super) fn grant_keywords_all_permanents(
                 source_id: Some(cx.top.id),
                 affected: AffectedScope::Single(oid),
                 kind: ContinuousEffectKind::Layer6AddKeyword(*keyword),
+                condition: None,
                 duration: EffectDuration::UntilEndOfTurn,
                 timestamp: cx.engine.state.command_index,
             });

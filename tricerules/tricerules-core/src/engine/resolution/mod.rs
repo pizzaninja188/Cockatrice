@@ -1621,6 +1621,7 @@ mod source_keyword_tests {
             source_id: None,
             affected: AffectedScope::Single(source),
             kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Deathtouch),
+            condition: None,
             duration: EffectDuration::UntilEndOfTurn,
             timestamp: 0,
         });

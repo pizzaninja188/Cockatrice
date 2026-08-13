@@ -212,6 +212,7 @@ pub(super) fn gain_control_until_end_of_turn(
         kind: ContinuousEffectKind::Layer2Control {
             controller: ControllerReference::Fixed(cx.controller),
         },
+        condition: None,
         duration: EffectDuration::UntilEndOfTurn,
         timestamp: cx.engine.state.command_index,
     });

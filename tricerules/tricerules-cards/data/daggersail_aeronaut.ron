@@ -1,0 +1,15 @@
+// Oracle (M20): "During your turn, this creature has flying."
+(
+  id: "daggersail_aeronaut",
+  name: "Daggersail Aeronaut",
+  mana_cost: "{3}{R}",
+  types: ["Creature", "Goblin"],
+  power: 3,
+  toughness: 2,
+  static_abilities: [
+    ConditionalSelfModifier(
+      condition: ActivePlayer(players: Controller),
+      keywords: [Flying],
+    ),
+  ],
+)

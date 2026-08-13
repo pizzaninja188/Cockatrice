@@ -116,6 +116,7 @@ impl GameEngine {
                             delta_power,
                             delta_toughness,
                         },
+                        condition: None,
                         duration: EffectDuration::WhileSourceOnBattlefield,
                         timestamp,
                     });
@@ -136,6 +137,7 @@ impl GameEngine {
                                 delta_power,
                                 delta_toughness,
                             },
+                            condition: None,
                             duration: EffectDuration::WhileSourceOnBattlefield,
                             timestamp,
                         });
@@ -145,6 +147,7 @@ impl GameEngine {
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
+                            condition: None,
                             duration: EffectDuration::WhileSourceOnBattlefield,
                             timestamp,
                         });
@@ -158,6 +161,7 @@ impl GameEngine {
                                 cant_block,
                                 cant_be_blocked: false,
                             }),
+                            condition: None,
                             duration: EffectDuration::WhileSourceOnBattlefield,
                             timestamp,
                         });
@@ -170,6 +174,7 @@ impl GameEngine {
                         kind: ContinuousEffectKind::Layer2Control {
                             controller: ControllerReference::SourceController,
                         },
+                        condition: None,
                         duration: EffectDuration::WhileSourceOnBattlefield,
                         timestamp,
                     });
@@ -179,15 +184,59 @@ impl GameEngine {
                         source_id: Some(object_id),
                         affected: resolve_creature_scope(&filter, controller, object_id),
                         kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
+                        condition: None,
                         duration: EffectDuration::WhileSourceOnBattlefield,
                         timestamp,
                     });
+                }
+                StaticAbilityDef::ConditionalSelfModifier {
+                    condition,
+                    delta_power,
+                    delta_toughness,
+                    keywords,
+                    can_attack_as_though_without_defender,
+                } => {
+                    let affected = AffectedScope::Single(object_id);
+                    if delta_power != 0 || delta_toughness != 0 {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            source_id: Some(object_id),
+                            affected: affected.clone(),
+                            kind: ContinuousEffectKind::PtModify {
+                                delta_power,
+                                delta_toughness,
+                            },
+                            condition: Some(condition.clone()),
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
+                    for keyword in keywords {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            source_id: Some(object_id),
+                            affected: affected.clone(),
+                            kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
+                            condition: Some(condition.clone()),
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
+                    if can_attack_as_though_without_defender {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            source_id: Some(object_id),
+                            affected,
+                            kind: ContinuousEffectKind::AttackAsThoughWithoutDefender,
+                            condition: Some(condition),
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
                 }
                 StaticAbilityDef::ExtraLandPlays { count } => {
                     self.state.continuous_effects.push(ContinuousEffect {
                         source_id: Some(object_id),
                         affected: AffectedScope::Player(controller),
                         kind: ContinuousEffectKind::ExtraLandPlays(count),
+                        condition: None,
                         duration: EffectDuration::WhileSourceOnBattlefield,
                         timestamp,
                     });

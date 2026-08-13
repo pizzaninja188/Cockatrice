@@ -201,6 +201,7 @@ fn clone_copies_printed_values_but_not_source_status_counters_damage_or_pump() {
             delta_power: 3,
             delta_toughness: 3,
         },
+        condition: None,
         duration: EffectDuration::UntilEndOfTurn,
         timestamp: engine.state.command_index,
     });
@@ -238,6 +239,23 @@ fn clone_copies_printed_values_but_not_source_status_counters_damage_or_pump() {
         .insert(CounterKind::PlusOnePlusOne, 1);
     assert_eq!(engine.effective_power(clone), Some(5));
     assert_eq!(engine.effective_toughness(clone), Some(5));
+}
+
+#[test]
+fn conditional_characteristics_clone_inherits_the_copied_static_ability() {
+    let (mut engine, source) = resolving_clone_with_source("gearsmith_guardian", 78_008);
+    engine
+        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .expect("copy Gearsmith Guardian");
+    let clone = battlefield_object_for_card(&engine, 0, "clone");
+
+    assert_eq!(engine.effective_power(clone), Some(3));
+    inject_creature_on_battlefield(&mut engine, 0, "air_elemental");
+    assert_eq!(
+        engine.effective_power(clone),
+        Some(5),
+        "the copied conditional static ability tracks its new controller's battlefield"
+    );
 }
 
 #[test]

@@ -592,6 +592,7 @@ mod sba_tests {
                 delta_power: 0,
                 delta_toughness: dt,
             },
+            condition: None,
             duration,
             timestamp: 0,
         }
@@ -626,6 +627,7 @@ mod sba_tests {
                 delta_power: 0,
                 delta_toughness: 2,
             },
+            condition: None,
             duration: EffectDuration::UntilEndOfTurn,
             timestamp: 0,
         });
@@ -643,6 +645,7 @@ mod sba_tests {
             kind: ContinuousEffectKind::Layer2Control {
                 controller: ControllerReference::Fixed(1),
             },
+            condition: None,
             duration: EffectDuration::UntilEndOfTurn,
             timestamp: 1,
         });
@@ -681,6 +684,7 @@ mod sba_tests {
             kind: ContinuousEffectKind::Layer2Control {
                 controller: ControllerReference::Fixed(1),
             },
+            condition: None,
             duration: EffectDuration::UntilEndOfTurn,
             timestamp: 1,
         });
@@ -742,6 +746,7 @@ mod sba_tests {
             source_id: None,
             affected: AffectedScope::Single(target),
             kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Indestructible),
+            condition: None,
             duration: EffectDuration::UntilEndOfTurn,
             timestamp: 0,
         });

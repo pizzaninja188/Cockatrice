@@ -390,6 +390,7 @@ fn anthem_buffs_token_via_shared_pt_path() {
                 delta_power: 1,
                 delta_toughness: 1,
             },
+            condition: None,
             duration: EffectDuration::UntilEndOfTurn,
             timestamp: 0,
         });

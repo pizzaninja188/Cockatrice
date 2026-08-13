@@ -194,6 +194,7 @@ fn toughness_zero_bypasses_regen_shield() {
             delta_power: 0,
             delta_toughness: -4,
         },
+        condition: None,
         duration: EffectDuration::UntilEndOfTurn,
         timestamp: 0,
     });

@@ -218,6 +218,7 @@ fn prodigal_sorcerer_lifelink_uses_the_shared_noncombat_damage_pipeline() {
         source_id: None,
         affected: AffectedScope::Single(source),
         kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Lifelink),
+        condition: None,
         duration: EffectDuration::UntilEndOfTurn,
         timestamp: engine.state.command_index,
     });
@@ -280,6 +281,7 @@ fn rabid_bite_uses_creature_deathtouch_and_lifelink_after_prevention() {
             source_id: None,
             affected: AffectedScope::Single(source),
             kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
+            condition: None,
             duration: EffectDuration::UntilEndOfTurn,
             timestamp: engine.state.command_index,
         });

@@ -256,6 +256,7 @@ fn inactive_landwalk_still_obeys_flying_restriction() {
         source_id: None,
         affected: AffectedScope::Single(boa),
         kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Flying),
+        condition: None,
         duration: EffectDuration::UntilEndOfTurn,
         timestamp: e.state.command_index,
     });

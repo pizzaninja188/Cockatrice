@@ -4,7 +4,7 @@ fn clamp_public_count(count: usize) -> u32 {
     u32::try_from(count).unwrap_or(u32::MAX)
 }
 
-fn relative_player_set_contains(
+pub(super) fn relative_player_set_contains(
     state: &GameState,
     set: RelativePlayerSet,
     reference: PlayerId,
@@ -57,6 +57,12 @@ impl GameEngine {
         context: ConditionContext,
     ) -> bool {
         match condition {
+            GameCondition::ActivePlayer { players } => relative_player_set_contains(
+                &self.state,
+                *players,
+                context.controller,
+                self.state.active_player_id(),
+            ),
             GameCondition::CreatureDeathsThisTurn { .. } => {
                 condition.matches_value(self.state.turn_history.current.creatures_died)
             }
@@ -109,7 +115,9 @@ impl GameEngine {
                     CardTypeFilter::Creature => characteristics.is_creature(),
                     CardTypeFilter::Artifact => characteristics.is_artifact(),
                     CardTypeFilter::Noncreature => !characteristics.is_creature(),
-                })
+                }) && filter
+                    .color
+                    .is_none_or(|color| characteristics.colors.contains(&color))
             })
             .filter(|(oid, _)| {
                 filter.name.as_ref().is_none_or(|name| {
@@ -292,6 +300,7 @@ mod tests {
         let filter = BattlefieldPermanentFilter {
             controllers: RelativePlayerSet::Controller,
             card_type: Some(CardTypeFilter::Creature),
+            color: None,
             name: None,
             exclude_source: true,
         };

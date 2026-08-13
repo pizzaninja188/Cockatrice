@@ -1,7 +1,7 @@
 //! Spell and continuous-effect vocabulary plus shared effect parameters.
 
 use super::{
-    CardTypeFilter, CreatureScopeFilter, GraveyardDestination, GraveyardFilter, Keyword,
+    CardTypeFilter, Color, CreatureScopeFilter, GraveyardDestination, GraveyardFilter, Keyword,
     TargetController, TargetFilter, TargetKind,
 };
 use serde::de::{EnumAccess, MapAccess, SeqAccess, VariantAccess};
@@ -17,6 +17,10 @@ use std::fmt;
 /// the identities of the cards that moved through a graveyard.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GameCondition {
+    /// Whether the active player belongs to a player set relative to the condition's controller.
+    /// `Controller` is "during your turn" (Daggersail Aeronaut); `Opponents` supports the inverse
+    /// without assuming a two-player game.
+    ActivePlayer { players: RelativePlayerSet },
     CreatureDeathsThisTurn {
         #[serde(default)]
         min: Option<u32>,
@@ -40,6 +44,7 @@ pub enum GameCondition {
 impl GameCondition {
     pub fn validate(&self) -> Result<(), String> {
         match self {
+            GameCondition::ActivePlayer { .. } => Ok(()),
             GameCondition::CreatureDeathsThisTurn { min, max } => {
                 if min.is_none() && max.is_none() {
                     return Err("CreatureDeathsThisTurn requires at least one of min or max".into());
@@ -74,6 +79,7 @@ impl GameCondition {
 
     pub fn matches_value(&self, value: u32) -> bool {
         match self {
+            GameCondition::ActivePlayer { .. } => false,
             GameCondition::CreatureDeathsThisTurn { min, max }
             | GameCondition::BattlefieldAggregate { min, max, .. } => {
                 min.is_none_or(|minimum| value >= minimum)
@@ -91,6 +97,9 @@ pub struct BattlefieldPermanentFilter {
     pub controllers: RelativePlayerSet,
     #[serde(default)]
     pub card_type: Option<CardTypeFilter>,
+    /// Derived color after copy and color-changing effects. Gearsmith Guardian uses `Blue`.
+    #[serde(default)]
+    pub color: Option<Color>,
     #[serde(default)]
     pub name: Option<String>,
     /// "Another" excludes only the source object generation that created the condition.
@@ -1507,6 +1516,9 @@ pub enum ContinuousEffectKind {
     /// "creatures you control gain [keyword] until end of turn" effect.
     Layer6AddKeyword(Keyword),
     CombatRestriction(CombatRestriction),
+    /// CR 613.11 / 702.3: ignore only Defender while checking whether this creature may attack.
+    /// The creature retains Defender for every other rules and display query.
+    AttackAsThoughWithoutDefender,
     /// CR 305.2b / layer 5 (rule-change): controller may play `count` additional lands per turn.
     /// Covers Exploration, Oracle of Mul Daya, and similar enchantments/permanents.
     ExtraLandPlays(u32),

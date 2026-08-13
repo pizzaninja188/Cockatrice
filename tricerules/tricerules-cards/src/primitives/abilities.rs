@@ -528,6 +528,20 @@ pub enum StaticAbilityDef {
         filter: CreatureScopeFilter,
         keyword: Keyword,
     },
+    /// A self-scoped static effect whose condition is continuously reevaluated. Characteristic
+    /// changes apply in their normal layers; the defender exception changes only attack legality.
+    /// Daggersail Aeronaut, Drowsing Tyrannodon, Gearsmith Guardian, and Gearsmith Prodigy.
+    ConditionalSelfModifier {
+        condition: GameCondition,
+        #[serde(default)]
+        delta_power: i32,
+        #[serde(default)]
+        delta_toughness: i32,
+        #[serde(default)]
+        keywords: Vec<Keyword>,
+        #[serde(default)]
+        can_attack_as_though_without_defender: bool,
+    },
     /// CR 305.2b / layer 5: controller may play `count` additional lands per turn while this
     /// permanent is on the battlefield. Exploration, Oracle of Mul Daya.
     ExtraLandPlays { count: u32 },

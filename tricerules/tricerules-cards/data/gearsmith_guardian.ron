@@ -1,0 +1,19 @@
+// Oracle (M19): "This creature gets +2/+0 as long as you control a blue creature."
+(
+  id: "gearsmith_guardian",
+  name: "Gearsmith Guardian",
+  mana_cost: "{5}",
+  types: ["Artifact", "Creature", "Construct"],
+  power: 3,
+  toughness: 5,
+  static_abilities: [
+    ConditionalSelfModifier(
+      condition: BattlefieldAggregate(
+        filter: (controllers: Controller, card_type: Some(Creature), color: Some(Blue)),
+        aggregate: Count,
+        min: Some(1),
+      ),
+      delta_power: 2,
+    ),
+  ],
+)

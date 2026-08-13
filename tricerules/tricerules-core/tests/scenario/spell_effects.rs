@@ -2867,6 +2867,7 @@ fn setup_noncombat_deathtouch_scenario(
             source_id: None,
             affected: AffectedScope::Single(source),
             kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Deathtouch),
+            condition: None,
             duration: EffectDuration::UntilEndOfTurn,
             timestamp: engine.state.command_index,
         });

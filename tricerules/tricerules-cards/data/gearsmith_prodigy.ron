@@ -1,0 +1,19 @@
+// Oracle (M19): "This creature gets +1/+0 as long as you control an artifact."
+(
+  id: "gearsmith_prodigy",
+  name: "Gearsmith Prodigy",
+  mana_cost: "{U}",
+  types: ["Creature", "Human", "Artificer"],
+  power: 1,
+  toughness: 2,
+  static_abilities: [
+    ConditionalSelfModifier(
+      condition: BattlefieldAggregate(
+        filter: (controllers: Controller, card_type: Some(Artifact)),
+        aggregate: Count,
+        min: Some(1),
+      ),
+      delta_power: 1,
+    ),
+  ],
+)

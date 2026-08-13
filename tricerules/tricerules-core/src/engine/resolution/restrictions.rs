@@ -23,6 +23,7 @@ pub(super) fn apply_combat_restriction(
                 source_id: Some(cx.top.id),
                 affected: AffectedScope::Single(oid),
                 kind: ContinuousEffectKind::CombatRestriction(restriction),
+                condition: None,
                 duration: EffectDuration::UntilEndOfTurn,
                 timestamp: cx.engine.state.command_index,
             });
@@ -74,6 +75,7 @@ pub(super) fn apply_combat_restriction(
         source_id: effect_source_id,
         affected,
         kind: ContinuousEffectKind::CombatRestriction(restriction),
+        condition: None,
         duration: EffectDuration::UntilEndOfTurn,
         timestamp: cx.engine.state.command_index,
     });

@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use tricerules_cards::primitives::{
     ContinuousEffectKind, CounterKind, CreatureScopeFilter, DamagePreventionAdditionalEffect,
-    EffectDuration, Keyword, ManaAmount, SearchDestination, TargetFilter,
+    EffectDuration, GameCondition, Keyword, ManaAmount, SearchDestination, TargetFilter,
 };
 use tricerules_cards::CardFace;
 use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
@@ -656,6 +656,9 @@ pub struct ContinuousEffect {
     pub source_id: Option<ObjectId>,
     pub affected: AffectedScope,
     pub kind: ContinuousEffectKind,
+    /// A dynamically reevaluated public condition. Static self-modifiers use the source's current
+    /// layer-2 controller as the reference player; existing unconditional effects leave this empty.
+    pub condition: Option<GameCondition>,
     pub duration: EffectDuration,
     /// `command_index` at creation; used for layer sublayer timestamp ordering (CR 613.7).
     pub timestamp: u64,

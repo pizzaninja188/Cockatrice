@@ -1,7 +1,7 @@
 use crate::card_def::{CardDefinition, Layout, RawCardDefinition};
 use crate::primitives::{
-    AbilityCost, AdditionalCost, EffectContext, FaceChangeAction, InterveningIf, SpellEffectKind,
-    StaticAbilityDef, TargetController, TargetKind, TargetingDef,
+    AbilityCost, AdditionalCost, BattlefieldAggregate, EffectContext, FaceChangeAction,
+    InterveningIf, SpellEffectKind, StaticAbilityDef, TargetController, TargetKind, TargetingDef,
 };
 use crate::token_def::TokenDefinition;
 use once_cell::sync::Lazy;
@@ -299,6 +299,47 @@ impl CardRegistry {
                                 id: card.id.clone(),
                                 reason,
                             })?;
+                    }
+                    if let StaticAbilityDef::ConditionalSelfModifier {
+                        condition,
+                        delta_power,
+                        delta_toughness,
+                        keywords,
+                        can_attack_as_though_without_defender,
+                    } = ability
+                    {
+                        condition
+                            .validate()
+                            .map_err(|reason| RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason,
+                            })?;
+                        if *delta_power == 0
+                            && *delta_toughness == 0
+                            && keywords.is_empty()
+                            && !can_attack_as_though_without_defender
+                        {
+                            return Err(RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason: "ConditionalSelfModifier must modify at least one value"
+                                    .into(),
+                            });
+                        }
+                        if (*delta_power != 0 || *delta_toughness != 0 || !keywords.is_empty())
+                            && matches!(
+                                condition,
+                                crate::primitives::GameCondition::BattlefieldAggregate {
+                                    aggregate: BattlefieldAggregate::TotalPower
+                                        | BattlefieldAggregate::MaximumPower,
+                                    ..
+                                }
+                            )
+                        {
+                            return Err(RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason: "conditional layer-6/7 modifiers cannot depend on battlefield power until CR 613.8 dependency ordering is implemented".into(),
+                            });
+                        }
                     }
                     if let StaticAbilityDef::EntersAsCopy { filter } = ability {
                         filter
@@ -625,6 +666,50 @@ mod tests {
     #[test]
     fn embedded_registry_loads() {
         CardRegistry::from_embedded().unwrap();
+    }
+
+    #[test]
+    fn conditional_self_modifier_rejects_empty_and_recursive_characteristic_shapes() {
+        let empty = r#"(
+            id: "bad_conditional",
+            name: "Bad Conditional",
+            mana_cost: "{G}",
+            types: ["Creature", "Test"],
+            power: 1,
+            toughness: 1,
+            static_abilities: [ConditionalSelfModifier(
+                condition: ActivePlayer(players: Controller),
+            )],
+        )"#;
+        let err = CardRegistry::from_chunks_and_tokens(&[empty], &[]).unwrap_err();
+        assert!(matches!(
+            err,
+            RegistryError::InvalidCard { reason, .. }
+                if reason.contains("must modify at least one value")
+        ));
+
+        let recursive = r#"(
+            id: "bad_recursive_conditional",
+            name: "Bad Recursive Conditional",
+            mana_cost: "{G}",
+            types: ["Creature", "Test"],
+            power: 1,
+            toughness: 1,
+            static_abilities: [ConditionalSelfModifier(
+                condition: BattlefieldAggregate(
+                    filter: (controllers: Controller, card_type: Some(Creature)),
+                    aggregate: MaximumPower,
+                    min: Some(4),
+                ),
+                delta_power: 1,
+            )],
+        )"#;
+        let err = CardRegistry::from_chunks_and_tokens(&[recursive], &[]).unwrap_err();
+        assert!(matches!(
+            err,
+            RegistryError::InvalidCard { reason, .. }
+                if reason.contains("CR 613.8 dependency ordering")
+        ));
     }
 
     #[test]

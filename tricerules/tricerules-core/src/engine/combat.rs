@@ -40,12 +40,57 @@ impl GameEngine {
                     characteristics,
                 )
             })
+            .filter(|effect| self.continuous_effect_condition_holds(effect))
             .fold(CombatRestriction::default(), |mut combined, effect| {
                 if let ContinuousEffectKind::CombatRestriction(restriction) = effect.kind {
                     combined.combine(restriction);
                 }
                 combined
             })
+    }
+
+    fn continuous_effect_condition_holds(&self, effect: &ContinuousEffect) -> bool {
+        let Some(condition) = effect.condition.as_ref() else {
+            return true;
+        };
+        let Some(source_oid) = effect.source_id else {
+            return false;
+        };
+        let Some(controller) = self.controller_of(source_oid) else {
+            return false;
+        };
+        self.condition_holds(
+            condition,
+            ConditionContext {
+                controller,
+                source_object_id: source_oid,
+                source_zone_change: self
+                    .state
+                    .zone_change_generation
+                    .get(&source_oid)
+                    .copied()
+                    .unwrap_or(0),
+            },
+        )
+    }
+
+    fn can_attack_as_though_without_defender(
+        &self,
+        oid: ObjectId,
+        characteristics: &super::characteristics::Characteristics,
+    ) -> bool {
+        self.state.continuous_effects.iter().any(|effect| {
+            matches!(
+                effect.kind,
+                ContinuousEffectKind::AttackAsThoughWithoutDefender
+            ) && super::characteristics::effect_affects(
+                &self.state,
+                self.registry,
+                effect,
+                oid,
+                characteristics,
+            ) && self.continuous_effect_condition_holds(effect)
+        })
     }
 
     fn attacker_illegality(&self, oid: ObjectId, active_player: PlayerId) -> Option<&'static str> {
@@ -64,7 +109,9 @@ impl GameEngine {
         if !characteristics.is_creature() {
             return Some("not creature");
         }
-        if characteristics.has_keyword(tricerules_cards::Keyword::Defender) {
+        if characteristics.has_keyword(tricerules_cards::Keyword::Defender)
+            && !self.can_attack_as_though_without_defender(oid, &characteristics)
+        {
             return Some("creature has defender");
         }
         if self.combat_restrictions(oid).cant_attack {

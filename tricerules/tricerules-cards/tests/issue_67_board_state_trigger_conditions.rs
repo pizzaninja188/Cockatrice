@@ -37,6 +37,7 @@ fn issue_67_cards_use_one_validated_battlefield_condition_vocabulary() {
             filter: BattlefieldPermanentFilter {
                 controllers: RelativePlayerSet::Controller,
                 card_type: Some(CardTypeFilter::Artifact),
+                color: None,
                 name: None,
                 exclude_source: false,
             },
@@ -130,6 +131,7 @@ fn battlefield_aggregate_conditions_reject_invalid_bounds_and_names() {
         filter: BattlefieldPermanentFilter {
             controllers: RelativePlayerSet::Controller,
             card_type: None,
+            color: None,
             name: name.map(str::to_string),
             exclude_source: false,
         },
