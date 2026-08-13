@@ -70,12 +70,12 @@ fn legion_guildmage_has_complete_oracle_behavior() {
     assert_tap_and_mana(&face.activated_abilities[1].costs, "{2}{W}");
     assert_eq!(
         face.activated_abilities[1].effect,
-        [SpellEffectKind::TapTarget {
-            target: TargetFilter {
+        [SpellEffectKind::Tap {
+            subject: EffectSubject::Chosen(TargetFilter {
                 kind: TargetKind::Creature,
                 exclude_source: true,
                 ..TargetFilter::default()
-            },
+            }),
         }]
     );
 }

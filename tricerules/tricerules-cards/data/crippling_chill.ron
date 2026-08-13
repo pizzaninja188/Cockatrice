@@ -4,7 +4,7 @@
   mana_cost: "{2}{U}",
   types: ["Instant"],
   spell_effect: [
-    TapTarget(target: (kind: Creature)),
+    Tap(subject: Chosen((kind: Creature))),
     SkipNextUntap(target: (kind: Creature)),
     Draw(count: 1),
   ],

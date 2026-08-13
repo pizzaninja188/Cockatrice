@@ -30,7 +30,9 @@ fn celestial_enforcer_requires_a_controlled_flying_creature() {
     ));
     assert!(matches!(
         ability.effect.as_slice(),
-        [SpellEffectKind::TapTarget { target }] if target.kind == TargetKind::Creature
+        [SpellEffectKind::Tap {
+            subject: EffectSubject::Chosen(target),
+        }] if target.kind == TargetKind::Creature
     ));
 }
 

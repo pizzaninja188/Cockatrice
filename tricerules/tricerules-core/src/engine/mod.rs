@@ -581,6 +581,7 @@ impl GameEngine {
             last_known_tapped: HashMap::new(),
             last_known_tapped_by_generation: HashMap::new(),
             last_known_keywords_by_generation: HashMap::new(),
+            last_known_attached_object_by_generation: HashMap::new(),
             zone_change_generation: HashMap::new(),
             face_change_generation: HashMap::new(),
             stack: Vec::new(),

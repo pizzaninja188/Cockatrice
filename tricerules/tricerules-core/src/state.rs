@@ -757,6 +757,11 @@ pub struct GameState {
     /// after an ability's source leaves or returns, so the new object cannot retroactively change
     /// whether damage from the old source had deathtouch (CR 702.2e).
     pub last_known_keywords_by_generation: HashMap<(ObjectId, u64), Vec<Keyword>>,
+    /// The object an Aura or Equipment source was attached to as that source last left the
+    /// battlefield, keyed by the source generation. The value carries the attached object's
+    /// generation so an old ability cannot affect a card that left and returned under the same
+    /// relay-compatible ObjectId (CR 400.7, 608.2h).
+    pub last_known_attached_object_by_generation: HashMap<(ObjectId, u64), (ObjectId, u64)>,
     /// Monotonic per-object generation incremented on every zone change. ObjectIds remain stable
     /// for relay compatibility, while this generation preserves CR 400.7 identity semantics for
     /// effects that resolve after a source leaves and returns.

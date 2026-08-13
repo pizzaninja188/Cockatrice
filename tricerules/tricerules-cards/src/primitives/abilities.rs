@@ -516,6 +516,10 @@ pub enum StaticAbilityDef {
         cant_attack: bool,
         #[serde(default)]
         cant_block: bool,
+        /// The attached permanent does not untap during its controller's untap step. Other
+        /// untap effects remain legal.
+        #[serde(default)]
+        doesnt_untap_during_untap_step: bool,
     },
     /// CR 613.1b: the controller of this Aura controls the permanent it is attached to.
     /// Mind Control and Confiscate share this source-relative layer-2 ability.

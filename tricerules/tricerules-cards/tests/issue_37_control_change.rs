@@ -99,6 +99,7 @@ fn cartouche_requires_a_creature_its_aura_controller_controls() {
             keywords: vec![Keyword::Flying],
             cant_attack: false,
             cant_block: false,
+            doesnt_untap_during_untap_step: false,
         }]
     );
 }

@@ -29,7 +29,7 @@
             mana_cost: "{1}{U}",
             types: ["Instant"],
             // Oracle: "Tap target permanent. Draw a card."
-            spell_effect: [TapTarget(target: (kind: AnyPermanent)), Draw(count: 1)],
+            spell_effect: [Tap(subject: Chosen((kind: AnyPermanent))), Draw(count: 1)],
         ),
     ],
     partial: "Fire cannot target planeswalkers or battles because those object types are not modeled",

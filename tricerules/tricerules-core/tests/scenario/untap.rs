@@ -1,6 +1,6 @@
 //! CR 701.20 untap — the `Untap(Chosen)` / `UntapAll` primitives and the two cards built on them,
 //! Seeker of Skybreak (`{T}: Untap target creature`) and Vitalize (untap all creatures you
-//! control). The mirror image of the `TapTarget` / `TapAllCreatures` coverage in
+//! control). The mirror image of the `Tap` / `TapAllCreatures` coverage in
 //! `spell_effects.rs`.
 
 use crate::helpers::*;

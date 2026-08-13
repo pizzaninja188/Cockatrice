@@ -44,6 +44,9 @@ impl GameEngine {
         if self.state.skip_next_untap.contains(&(oid, generation)) {
             labels.push("Doesn't untap during its controller's next untap step".to_string());
         }
+        if self.doesnt_untap_during_untap_step(oid) {
+            labels.push("Doesn't untap during its controller's untap step".to_string());
+        }
 
         match object.regeneration_shields {
             0 => {}

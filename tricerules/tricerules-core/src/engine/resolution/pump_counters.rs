@@ -30,12 +30,7 @@ pub(super) fn pump_target(
         toughness = toughness.saturating_add(scale.toughness_per_unit.saturating_mul(units));
     }
 
-    let tid = match subject {
-        EffectSubject::Source => top
-            .source_permanent_id
-            .filter(|_| engine.source_is_current_object(top)),
-        EffectSubject::Chosen(_) => targets.first().copied(),
-    };
+    let tid = resolve_effect_subject(engine, top, targets, &subject);
     if let Some(tid) = tid {
         let is_valid_target = engine
             .state
@@ -162,6 +157,10 @@ pub(super) fn grant_keywords(
                 .filter(|_| cx.engine.source_is_current_object(cx.top)),
             cx.top.source_permanent_id,
         ),
+        EffectSubject::AttachedObject => (
+            resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject),
+            cx.top.source_permanent_id,
+        ),
         EffectSubject::Chosen(target) => {
             let tid = cx.targets.first().copied().filter(|tid| {
                 target_filter_legal_at_resolution(
@@ -267,12 +266,7 @@ pub(super) fn put_counters(
     let top = cx.top;
     let spell_label = cx.spell_label;
 
-    let tid = match subject {
-        EffectSubject::Source => top
-            .source_permanent_id
-            .filter(|_| engine.source_is_current_object(top)),
-        EffectSubject::Chosen(_) => targets.first().copied(),
-    };
+    let tid = resolve_effect_subject(engine, top, targets, &subject);
     if let Some(tid) = tid {
         let is_valid_target = engine
             .state

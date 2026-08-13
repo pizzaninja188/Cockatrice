@@ -127,6 +127,7 @@ impl GameEngine {
                     keywords,
                     cant_attack,
                     cant_block,
+                    doesnt_untap_during_untap_step,
                 } => {
                     let affected = AffectedScope::AttachedTo(object_id);
                     if delta_power != 0 || delta_toughness != 0 {
@@ -155,12 +156,22 @@ impl GameEngine {
                     if cant_attack || cant_block {
                         self.state.continuous_effects.push(ContinuousEffect {
                             source_id: Some(object_id),
-                            affected,
+                            affected: affected.clone(),
                             kind: ContinuousEffectKind::CombatRestriction(CombatRestriction {
                                 cant_attack,
                                 cant_block,
                                 cant_be_blocked: false,
                             }),
+                            condition: None,
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
+                    if doesnt_untap_during_untap_step {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            source_id: Some(object_id),
+                            affected,
+                            kind: ContinuousEffectKind::DoesntUntapDuringUntapStep,
                             condition: None,
                             duration: EffectDuration::WhileSourceOnBattlefield,
                             timestamp,
@@ -250,6 +261,26 @@ impl GameEngine {
         self.state
             .continuous_effects
             .retain(|effect| effect.duration != EffectDuration::UntilEndOfTurn);
+    }
+
+    /// CR 502.3: whether the normal untap-step turn-based action excludes this permanent.
+    /// Explicit untap effects do not consult this restriction.
+    pub(super) fn doesnt_untap_during_untap_step(&self, oid: ObjectId) -> bool {
+        let Some(characteristics) = self.characteristics(oid) else {
+            return false;
+        };
+        self.state.continuous_effects.iter().any(|effect| {
+            matches!(
+                effect.kind,
+                ContinuousEffectKind::DoesntUntapDuringUntapStep
+            ) && super::characteristics::effect_affects(
+                &self.state,
+                self.registry,
+                effect,
+                oid,
+                &characteristics,
+            )
+        })
     }
 
     /// CR 514.2: remove marked damage and expire turn-scoped prevention/regeneration shields.

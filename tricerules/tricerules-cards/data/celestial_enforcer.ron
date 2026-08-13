@@ -8,7 +8,7 @@
   activated_abilities: [
     (
       costs: [Mana("{1}{W}"), Tap],
-      effect: [TapTarget(target: (kind: Creature))],
+      effect: [Tap(subject: Chosen((kind: Creature)))],
       conditions: [BattlefieldCreatureCount(
         filter: (controllers: Controller, required_keywords: [Flying]),
         min: Some(1),

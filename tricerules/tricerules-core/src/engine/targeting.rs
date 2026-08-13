@@ -601,7 +601,6 @@ pub(super) fn effect_target_legal_at_resolution(
         | SpellEffectKind::MillTargetPlayer { target, .. }
         | SpellEffectKind::DiscardCards { target, .. }
         | SpellEffectKind::TargetPlayerSacrifices { target, .. }
-        | SpellEffectKind::TapTarget { target }
         | SpellEffectKind::SkipNextUntap { target }
         | SpellEffectKind::GainControlUntilEndOfTurn { target }
         | SpellEffectKind::PreventNextDamage { target, .. } => {
@@ -618,6 +617,9 @@ pub(super) fn effect_target_legal_at_resolution(
             subject: EffectSubject::Chosen(target),
             ..
         }
+        | SpellEffectKind::Tap {
+            subject: EffectSubject::Chosen(target),
+        }
         | SpellEffectKind::GrantKeywords {
             subject: EffectSubject::Chosen(target),
             ..
@@ -633,22 +635,25 @@ pub(super) fn effect_target_legal_at_resolution(
             ..
         } => target_filter_legal(engine, target, tid, caster, source),
         SpellEffectKind::PumpTarget {
-            subject: EffectSubject::Source,
+            subject: EffectSubject::Source | EffectSubject::AttachedObject,
             ..
         }
         | SpellEffectKind::PutCounters {
-            subject: EffectSubject::Source,
+            subject: EffectSubject::Source | EffectSubject::AttachedObject,
             ..
         }
         | SpellEffectKind::GrantKeywords {
-            subject: EffectSubject::Source,
+            subject: EffectSubject::Source | EffectSubject::AttachedObject,
             ..
         }
         | SpellEffectKind::Untap {
-            subject: EffectSubject::Source,
+            subject: EffectSubject::Source | EffectSubject::AttachedObject,
+        }
+        | SpellEffectKind::Tap {
+            subject: EffectSubject::Source | EffectSubject::AttachedObject,
         }
         | SpellEffectKind::Regenerate {
-            subject: EffectSubject::Source,
+            subject: EffectSubject::Source | EffectSubject::AttachedObject,
         }
         | SpellEffectKind::ApplyCombatRestriction {
             scope: CombatRestrictionScope::Source | CombatRestrictionScope::Matching(_),
@@ -710,9 +715,11 @@ pub(super) fn validate_effect_targets(
                 ));
             }
         }
-        SpellEffectKind::TapTarget { target: filter }
-        | SpellEffectKind::SkipNextUntap { target: filter }
+        SpellEffectKind::SkipNextUntap { target: filter }
         | SpellEffectKind::GainControlUntilEndOfTurn { target: filter }
+        | SpellEffectKind::Tap {
+            subject: EffectSubject::Chosen(filter),
+        }
         | SpellEffectKind::Untap {
             subject: EffectSubject::Chosen(filter),
         } => {
@@ -755,7 +762,7 @@ pub(super) fn validate_effect_targets(
         | SpellEffectKind::PutCounters { subject, .. }
         | SpellEffectKind::GrantKeywords { subject, .. }
         | SpellEffectKind::Regenerate { subject } => match subject {
-            EffectSubject::Source => {
+            EffectSubject::Source | EffectSubject::AttachedObject => {
                 if !targets.is_empty() {
                     return Err(EngineError::Illegal("this effect takes no targets"));
                 }
@@ -894,7 +901,10 @@ pub(super) fn validate_effect_targets(
         | SpellEffectKind::TapAllCreatures { .. }
         | SpellEffectKind::UntapAll { .. }
         | SpellEffectKind::Untap {
-            subject: EffectSubject::Source,
+            subject: EffectSubject::Source | EffectSubject::AttachedObject,
+        }
+        | SpellEffectKind::Tap {
+            subject: EffectSubject::Source | EffectSubject::AttachedObject,
         }
         | SpellEffectKind::PumpAll { .. }
         | SpellEffectKind::GrantKeywordsAll { .. }
@@ -1105,9 +1115,11 @@ pub(super) fn spell_target_legality_error(
         SpellEffectKind::DestroyTarget { target: filter }
         | SpellEffectKind::DamageTarget { target: filter, .. }
         | SpellEffectKind::DamageTargets { target: filter, .. }
-        | SpellEffectKind::TapTarget { target: filter }
         | SpellEffectKind::SkipNextUntap { target: filter }
         | SpellEffectKind::GainControlUntilEndOfTurn { target: filter }
+        | SpellEffectKind::Tap {
+            subject: EffectSubject::Chosen(filter),
+        }
         | SpellEffectKind::Untap {
             subject: EffectSubject::Chosen(filter),
         }
@@ -1135,15 +1147,18 @@ pub(super) fn spell_target_legality_error(
             }
         }
         SpellEffectKind::PumpTarget {
-            subject: EffectSubject::Source,
+            subject: EffectSubject::Source | EffectSubject::AttachedObject,
             ..
         }
         | SpellEffectKind::PutCounters {
-            subject: EffectSubject::Source,
+            subject: EffectSubject::Source | EffectSubject::AttachedObject,
             ..
         }
+        | SpellEffectKind::Tap {
+            subject: EffectSubject::Source | EffectSubject::AttachedObject,
+        }
         | SpellEffectKind::Untap {
-            subject: EffectSubject::Source,
+            subject: EffectSubject::Source | EffectSubject::AttachedObject,
         }
         | SpellEffectKind::ApplyCombatRestriction {
             scope: CombatRestrictionScope::Source | CombatRestrictionScope::Matching(_),

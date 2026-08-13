@@ -9,7 +9,7 @@
   triggered_abilities: [
     (
       trigger: WhenSelfEntersBattlefield,
-      effect: [TapTarget(target: (kind: Creature, controller: Opponent))],
+      effect: [Tap(subject: Chosen((kind: Creature, controller: Opponent)))],
       text: "When this Aura enters, tap target creature an opponent controls.",
     ),
   ],

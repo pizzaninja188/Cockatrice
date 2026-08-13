@@ -88,6 +88,60 @@ fn player_recipients(
     }
 }
 
+/// Resolve a permanent-valued effect subject without turning source or attachment references
+/// into CR 115 targets. Attachment references read the source's current relation when possible;
+/// if the source left, CR 608.2h/113.7a last-known information preserves the old relation while
+/// both source and attached-object generations prevent leave-and-return identity leaks.
+fn resolve_effect_subject(
+    engine: &GameEngine,
+    top: &StackItem,
+    targets: &[ObjectId],
+    subject: &EffectSubject,
+) -> Option<ObjectId> {
+    match subject {
+        EffectSubject::Source => top
+            .source_permanent_id
+            .filter(|_| engine.source_is_current_object(top)),
+        EffectSubject::Chosen(_) => targets.first().copied(),
+        EffectSubject::AttachedObject => {
+            let source_oid = top.source_permanent_id?;
+            let (target_oid, expected_generation) = if engine.source_is_current_object(top) {
+                let source = engine.state.objects.get(&source_oid)?;
+                let AttachmentRecipient::Object(target_oid) = source.attached_to? else {
+                    return None;
+                };
+                (
+                    target_oid,
+                    engine
+                        .state
+                        .zone_change_generation
+                        .get(&target_oid)
+                        .copied()
+                        .unwrap_or(0),
+                )
+            } else {
+                *engine
+                    .state
+                    .last_known_attached_object_by_generation
+                    .get(&(source_oid, top.source_zone_change))?
+            };
+            let current_generation = engine
+                .state
+                .zone_change_generation
+                .get(&target_oid)
+                .copied()
+                .unwrap_or(0);
+            (current_generation == expected_generation
+                && engine
+                    .state
+                    .objects
+                    .get(&target_oid)
+                    .is_some_and(|object| object.zone == Zone::Battlefield))
+            .then_some(target_oid)
+        }
+    }
+}
+
 /// One entry of a resolving stack item's flattened effect list. Target group identities stay
 /// attached so one primitive can consume multiple independently filtered roles.
 pub(super) struct ResolutionEffect {
@@ -788,9 +842,7 @@ impl GameEngine {
                     effect @ SpellEffectKind::TargetPlayerSacrifices { .. } => {
                         zones::target_player_sacrifices(&mut cx, effect)?
                     }
-                    effect @ SpellEffectKind::TapTarget { .. } => {
-                        misc::tap_target(&mut cx, effect)?
-                    }
+                    effect @ SpellEffectKind::Tap { .. } => misc::tap(&mut cx, effect)?,
                     effect @ SpellEffectKind::SkipNextUntap { .. } => {
                         misc::skip_next_untap(&mut cx, effect)?
                     }
@@ -1160,6 +1212,32 @@ pub(crate) fn move_object_to_zone(
         .then(|| super::characteristics::characteristics_from(state, registry, oid))
         .flatten()
         .map(|characteristics| characteristics.keywords);
+    let last_known_attached_object = leaving_battlefield
+        .then(|| {
+            state
+                .objects
+                .get(&oid)
+                .and_then(|object| object.attached_to)
+        })
+        .flatten()
+        .and_then(|recipient| match recipient {
+            AttachmentRecipient::Object(target_oid)
+                if state
+                    .objects
+                    .get(&target_oid)
+                    .is_some_and(|target| target.zone == Zone::Battlefield) =>
+            {
+                Some((
+                    target_oid,
+                    state
+                        .zone_change_generation
+                        .get(&target_oid)
+                        .copied()
+                        .unwrap_or(0),
+                ))
+            }
+            AttachmentRecipient::Object(_) | AttachmentRecipient::Player(_) => None,
+        });
     let front_face_values = leaving_battlefield
         .then(|| {
             state
@@ -1191,6 +1269,11 @@ pub(crate) fn move_object_to_zone(
     // One-shot `UntilEndOfTurn` effects (Giant Growth, firebreathing) are deliberately NOT drained
     // here: once created they are independent of their source (CR 611.2g) and only end at cleanup.
     if leaving_battlefield {
+        if let Some(attached_object) = last_known_attached_object {
+            state
+                .last_known_attached_object_by_generation
+                .insert((oid, prior_generation), attached_object);
+        }
         state
             .skip_next_untap
             .retain(|&(object_id, _)| object_id != oid);
@@ -1500,6 +1583,177 @@ mod anthem_scope_tests {
 
         assert_eq!(affected, [first_opponent, second_opponent]);
         assert!(!affected.contains(&mine));
+    }
+}
+
+#[cfg(test)]
+mod attached_subject_tests {
+    use super::*;
+
+    fn add_battlefield_object(
+        engine: &mut GameEngine,
+        controller: PlayerId,
+        card_id: &str,
+    ) -> ObjectId {
+        let id = engine.state.next_object_id;
+        engine.state.next_object_id += 1;
+        engine.state.objects.insert(
+            id,
+            GameObject {
+                id,
+                owner: controller,
+                base_controller: controller,
+                controller,
+                card_id: card_id.to_string(),
+                copiable_values: None,
+                copy_revision: 0,
+                zone: Zone::Battlefield,
+                tapped: false,
+                summoning_sick: false,
+                power: None,
+                toughness: None,
+                damage: 0,
+                deathtouch_damage: false,
+                counters: BTreeMap::new(),
+                attached_to: None,
+                regeneration_shields: 0,
+                must_attack_if_able: false,
+                must_block_if_able: false,
+                face_up_index: 0,
+                adventure_cast_permission: None,
+            },
+        );
+        let player_index = engine.state.player_idx(controller).expect("controller");
+        engine.state.players[player_index].battlefield.push(id);
+        id
+    }
+
+    fn triggered_item(source: ObjectId, generation: u64) -> StackItem {
+        StackItem {
+            id: source + 10_000,
+            controller: 0,
+            card_id: "capture_sphere".to_string(),
+            targets: vec![],
+            ability_text: Some("When this Aura enters, tap enchanted creature.".to_string()),
+            source_permanent_id: Some(source),
+            source_zone_change: generation,
+            source_face_change: 0,
+            ability_index: Some(0),
+            is_triggered: true,
+            is_copy: false,
+            face_index: 0,
+            flashback: false,
+            chosen_x: 0,
+            chosen_modes: vec![],
+            trigger_player: None,
+            trigger_object: None,
+        }
+    }
+
+    #[test]
+    fn attached_subject_uses_generation_scoped_lki_after_source_exits() {
+        let mut engine = GameEngine::new_with_default_decks(82_101, &[0, 1], 20).expect("engine");
+        let source = add_battlefield_object(&mut engine, 0, "capture_sphere");
+        let creature = add_battlefield_object(&mut engine, 1, "grizzly_bears");
+        engine.state.objects.get_mut(&source).unwrap().attached_to =
+            Some(AttachmentRecipient::Object(creature));
+        engine.emit_static_abilities_on_enter(source);
+        assert!(engine.doesnt_untap_during_untap_step(creature));
+
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let item = triggered_item(source, generation);
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("move Aura");
+
+        assert_eq!(
+            resolve_effect_subject(&engine, &item, &[], &EffectSubject::AttachedObject),
+            Some(creature),
+            "the trigger remembers what the departed Aura enchanted"
+        );
+        assert!(
+            !engine.doesnt_untap_during_untap_step(creature),
+            "the departed Aura's static effect stops immediately"
+        );
+    }
+
+    #[test]
+    fn attached_subject_lki_rejects_an_attached_object_that_left_and_returned() {
+        let mut engine = GameEngine::new_with_default_decks(82_102, &[0, 1], 20).expect("engine");
+        let source = add_battlefield_object(&mut engine, 0, "capture_sphere");
+        let creature = add_battlefield_object(&mut engine, 1, "grizzly_bears");
+        engine.state.objects.get_mut(&source).unwrap().attached_to =
+            Some(AttachmentRecipient::Object(creature));
+        let item = triggered_item(
+            source,
+            engine
+                .state
+                .zone_change_generation
+                .get(&source)
+                .copied()
+                .unwrap_or(0),
+        );
+
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("move Aura");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            creature,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("move creature out");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            creature,
+            Zone::Battlefield,
+            None,
+        )
+        .expect("return creature");
+
+        assert_eq!(
+            resolve_effect_subject(&engine, &item, &[], &EffectSubject::AttachedObject),
+            None,
+            "CR 400.7 makes the returned creature a different object"
+        );
+    }
+
+    #[test]
+    fn current_attached_subject_is_empty_after_detachment() {
+        let mut engine = GameEngine::new_with_default_decks(82_103, &[0, 1], 20).expect("engine");
+        let source = add_battlefield_object(&mut engine, 0, "capture_sphere");
+        let item = triggered_item(
+            source,
+            engine
+                .state
+                .zone_change_generation
+                .get(&source)
+                .copied()
+                .unwrap_or(0),
+        );
+
+        assert_eq!(
+            resolve_effect_subject(&engine, &item, &[], &EffectSubject::AttachedObject),
+            None
+        );
     }
 }
 

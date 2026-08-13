@@ -469,6 +469,9 @@ pub enum EffectContext {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EffectSubject {
     Source,
+    /// The object the source Aura or Equipment is currently attached to. This is an untargeted
+    /// rules reference ("enchanted creature" / "equipped creature"), not a CR 115 target.
+    AttachedObject,
     Chosen(TargetFilter),
 }
 
@@ -610,9 +613,10 @@ pub enum SpellEffectKind {
         #[serde(default)]
         subject: EffectSubject,
     },
-    /// Tap target permanent matching `target` filter.
-    TapTarget {
-        target: TargetFilter,
+    /// CR 701.19: tap `subject`. `Chosen` preserves ordinary permanent targeting.
+    Tap {
+        #[serde(default)]
+        subject: EffectSubject,
     },
     /// CR 502.3 / 611.2a: the chosen permanent does not untap during its controller's next
     /// untap step. The restriction follows the permanent's current controller, is consumed by
@@ -1003,11 +1007,34 @@ pub enum PlayerRecipient {
 }
 
 impl SpellEffectKind {
+    pub(crate) fn uses_attached_object_subject(&self) -> bool {
+        matches!(
+            self,
+            SpellEffectKind::PumpTarget {
+                subject: EffectSubject::AttachedObject,
+                ..
+            } | SpellEffectKind::PutCounters {
+                subject: EffectSubject::AttachedObject,
+                ..
+            } | SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::AttachedObject,
+                ..
+            } | SpellEffectKind::Tap {
+                subject: EffectSubject::AttachedObject,
+            } | SpellEffectKind::Untap {
+                subject: EffectSubject::AttachedObject,
+            } | SpellEffectKind::Regenerate {
+                subject: EffectSubject::AttachedObject,
+            }
+        )
+    }
+
     pub fn needs_target(&self) -> bool {
         match self {
             SpellEffectKind::PumpTarget { subject, .. }
             | SpellEffectKind::PutCounters { subject, .. }
             | SpellEffectKind::GrantKeywords { subject, .. }
+            | SpellEffectKind::Tap { subject }
             | SpellEffectKind::Untap { subject }
             | SpellEffectKind::Regenerate { subject } => {
                 matches!(subject, EffectSubject::Chosen(_))
@@ -1029,7 +1056,6 @@ impl SpellEffectKind {
             | SpellEffectKind::DrainTarget { .. }
             | SpellEffectKind::MillTargetPlayer { .. }
             | SpellEffectKind::DiscardCards { .. }
-            | SpellEffectKind::TapTarget { .. }
             | SpellEffectKind::SkipNextUntap { .. }
             | SpellEffectKind::GainControlUntilEndOfTurn { .. }
             | SpellEffectKind::CounterTargetSpell { .. }
@@ -1053,7 +1079,6 @@ impl SpellEffectKind {
             SpellEffectKind::DamageTarget { target, .. }
             | SpellEffectKind::DamageTargets { target, .. }
             | SpellEffectKind::DestroyTarget { target }
-            | SpellEffectKind::TapTarget { target }
             | SpellEffectKind::SkipNextUntap { target }
             | SpellEffectKind::GainControlUntilEndOfTurn { target }
             | SpellEffectKind::TargetPlayerGainsLife { target, .. }
@@ -1072,6 +1097,9 @@ impl SpellEffectKind {
             | SpellEffectKind::PutCounters {
                 subject: EffectSubject::Chosen(target),
                 ..
+            }
+            | SpellEffectKind::Tap {
+                subject: EffectSubject::Chosen(target),
             }
             | SpellEffectKind::Untap {
                 subject: EffectSubject::Chosen(target),
@@ -1199,18 +1227,20 @@ impl SpellEffectKind {
         let source_bound = matches!(
             self,
             SpellEffectKind::PumpTarget {
-                subject: EffectSubject::Source,
+                subject: EffectSubject::Source | EffectSubject::AttachedObject,
                 ..
             } | SpellEffectKind::PutCounters {
-                subject: EffectSubject::Source,
+                subject: EffectSubject::Source | EffectSubject::AttachedObject,
                 ..
             } | SpellEffectKind::GrantKeywords {
-                subject: EffectSubject::Source,
+                subject: EffectSubject::Source | EffectSubject::AttachedObject,
                 ..
             } | SpellEffectKind::Regenerate {
-                subject: EffectSubject::Source,
+                subject: EffectSubject::Source | EffectSubject::AttachedObject,
             } | SpellEffectKind::Untap {
-                subject: EffectSubject::Source,
+                subject: EffectSubject::Source | EffectSubject::AttachedObject,
+            } | SpellEffectKind::Tap {
+                subject: EffectSubject::Source | EffectSubject::AttachedObject,
             } | SpellEffectKind::ChangeSourceFace { .. }
                 | SpellEffectKind::ApplyCombatRestriction {
                     scope: CombatRestrictionScope::Source,
@@ -1240,9 +1270,11 @@ impl SpellEffectKind {
             }
             // CR 701.19/701.20: tapping and chosen-subject untapping act on permanents, never
             // players. A source subject is already constrained to a permanent ability above.
-            SpellEffectKind::TapTarget { target }
-            | SpellEffectKind::SkipNextUntap { target }
+            SpellEffectKind::SkipNextUntap { target }
             | SpellEffectKind::GainControlUntilEndOfTurn { target }
+            | SpellEffectKind::Tap {
+                subject: EffectSubject::Chosen(target),
+            }
             | SpellEffectKind::Untap {
                 subject: EffectSubject::Chosen(target),
             } => {
@@ -1516,6 +1548,9 @@ pub enum ContinuousEffectKind {
     /// "creatures you control gain [keyword] until end of turn" effect.
     Layer6AddKeyword(Keyword),
     CombatRestriction(CombatRestriction),
+    /// CR 502.3: the affected permanent is excluded from its controller's normal untap-step
+    /// turn-based action. This does not prohibit other spells or abilities from untapping it.
+    DoesntUntapDuringUntapStep,
     /// CR 613.11 / 702.3: ignore only Defender while checking whether this creature may attack.
     /// The creature retains Defender for every other rules and display query.
     AttackAsThoughWithoutDefender,

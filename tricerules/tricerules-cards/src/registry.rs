@@ -1,4 +1,4 @@
-use crate::card_def::{CardDefinition, Layout, RawCardDefinition};
+use crate::card_def::{CardDefinition, CardFace, Layout, RawCardDefinition};
 use crate::primitives::{
     AbilityCost, AdditionalCost, BattlefieldAggregate, EffectContext, FaceChangeAction,
     InterveningIf, SpellEffectKind, StaticAbilityDef, TargetController, TargetKind, TargetingDef,
@@ -44,6 +44,19 @@ fn normalize_name(name: &str) -> String {
     name.trim().to_lowercase()
 }
 
+fn face_can_reference_attached_object(face: &CardFace) -> bool {
+    if face.types.iter().any(|card_type| card_type == "Equipment") {
+        return true;
+    }
+    face.is_aura
+        && face.spell_effect.iter().any(|effect| {
+            matches!(
+                effect,
+                SpellEffectKind::AuraAttach { target } if !target.is_player()
+            )
+        })
+}
+
 impl CardRegistry {
     pub fn from_embedded() -> Result<Self, RegistryError> {
         Self::from_chunks_and_tokens(EMBEDDED_RON_CHUNKS, EMBEDDED_TOKEN_CHUNKS)
@@ -77,6 +90,7 @@ impl CardRegistry {
         // regardless of file ordering.
         for (id, token) in &reg.tokens {
             let face = token.primary_face();
+            let can_reference_attached_object = face_can_reference_attached_object(face);
             for ability in &face.triggered_abilities {
                 if ability.text.trim().is_empty() {
                     return Err(RegistryError::InvalidCard {
@@ -101,6 +115,13 @@ impl CardRegistry {
                         })?;
                 }
                 for effect in &ability.effect {
+                    if effect.uses_attached_object_subject() && !can_reference_attached_object {
+                        return Err(RegistryError::InvalidCard {
+                            id: id.clone(),
+                            reason: "AttachedObject requires an Aura enchanting an object or an Equipment source"
+                                .into(),
+                        });
+                    }
                     effect.validate(EffectContext::Ability).map_err(|reason| {
                         RegistryError::InvalidCard {
                             id: id.clone(),
@@ -289,6 +310,24 @@ impl CardRegistry {
                     });
                 }
                 let attachment_source = face.is_aura || face.types.iter().any(|t| t == "Equipment");
+                let can_reference_attached_object = face_can_reference_attached_object(face);
+                let uses_attached_object = face
+                    .activated_abilities
+                    .iter()
+                    .flat_map(|ability| &ability.effect)
+                    .chain(
+                        face.triggered_abilities
+                            .iter()
+                            .flat_map(|ability| &ability.effect),
+                    )
+                    .any(SpellEffectKind::uses_attached_object_subject);
+                if uses_attached_object && !can_reference_attached_object {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: "AttachedObject requires an Aura enchanting an object or an Equipment source"
+                            .into(),
+                    });
+                }
                 for ability in &face.static_abilities {
                     if let StaticAbilityDef::AnthemPt { filter, .. }
                     | StaticAbilityDef::AnthemKeyword { filter, .. } = ability
@@ -380,6 +419,7 @@ impl CardRegistry {
                         keywords,
                         cant_attack,
                         cant_block,
+                        doesnt_untap_during_untap_step,
                     } = ability
                     {
                         if !attachment_source {
@@ -394,6 +434,7 @@ impl CardRegistry {
                             && keywords.is_empty()
                             && !cant_attack
                             && !cant_block
+                            && !doesnt_untap_during_untap_step
                         {
                             return Err(RegistryError::InvalidCard {
                                 id: card.id.clone(),
@@ -814,8 +855,8 @@ mod tests {
                 .primary_face()
                 .spell_effect,
             vec![
-                SpellEffectKind::TapTarget {
-                    target: TargetFilter::default_creature(),
+                SpellEffectKind::Tap {
+                    subject: EffectSubject::Chosen(TargetFilter::default_creature()),
                 },
                 SpellEffectKind::SkipNextUntap {
                     target: TargetFilter::default_creature(),
@@ -848,7 +889,7 @@ mod tests {
     /// either is invalid card data and must not survive registry load.
     #[test]
     fn load_rejects_tap_or_untap_aimed_at_a_player() {
-        for effect in ["TapTarget", "Untap", "SkipNextUntap"] {
+        for effect in ["Tap", "Untap", "SkipNextUntap"] {
             let bad = format!(
                 r#"(
             id: "bad_{}",
@@ -860,7 +901,7 @@ mod tests {
                 effect.to_lowercase(),
                 effect,
                 effect,
-                if matches!(effect, "TapTarget" | "SkipNextUntap") {
+                if effect == "SkipNextUntap" {
                     "target: (kind: AnyPlayer)"
                 } else {
                     "subject: Chosen((kind: AnyPlayer))"
@@ -1669,6 +1710,29 @@ mod tests {
                 mana_cost: "{1}",
                 types: ["Artifact", "Equipment"],
                 static_abilities: [AttachedModifier()],
+            )"#,
+            r#"(
+                id: "ordinary_enchantment_attached_subject",
+                name: "Ordinary Enchantment Attached Subject",
+                mana_cost: "{1}{U}",
+                types: ["Enchantment"],
+                triggered_abilities: [(
+                    trigger: WhenSelfEntersBattlefield,
+                    effect: [Tap(subject: AttachedObject)],
+                    text: "Tap the attached object.",
+                )],
+            )"#,
+            r#"(
+                id: "player_aura_attached_object",
+                name: "Player Aura Attached Object",
+                mana_cost: "{1}{U}",
+                types: ["Enchantment", "Aura"],
+                spell_effect: [AuraAttach(target: (kind: AnyPlayer))],
+                triggered_abilities: [(
+                    trigger: WhenSelfEntersBattlefield,
+                    effect: [Tap(subject: AttachedObject)],
+                    text: "Tap the attached object.",
+                )],
             )"#,
         ];
         for bad in invalid {

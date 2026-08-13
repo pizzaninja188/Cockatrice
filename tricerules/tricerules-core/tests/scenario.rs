@@ -55,6 +55,8 @@ mod helpers;
 mod issue_71_filters;
 #[path = "scenario/issue_73_grouped_targets.rs"]
 mod issue_73_grouped_targets;
+#[path = "scenario/issue_82_attached_untap.rs"]
+mod issue_82_attached_untap;
 #[path = "scenario/issue_85_creature_damage.rs"]
 mod issue_85_creature_damage;
 #[path = "scenario/legend_rule.rs"]

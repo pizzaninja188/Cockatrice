@@ -111,14 +111,32 @@ fn set_target_tapped(cx: &mut EffectCx<'_>, tapped: bool) -> Result<EffectOutcom
     Ok(EffectOutcome::Continue)
 }
 
-pub(super) fn tap_target(
+pub(super) fn tap(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::TapTarget { .. } = effect else {
+    let SpellEffectKind::Tap { subject } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    set_target_tapped(cx, true)
+    if matches!(subject, EffectSubject::Chosen(_)) {
+        return set_target_tapped(cx, true);
+    }
+    let tid = resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject);
+    let Some(tid) = tid else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let subject_name = object_display_name(&cx.engine.state, cx.engine.registry, tid);
+    let on_battlefield = cx
+        .engine
+        .state
+        .objects
+        .get(&tid)
+        .is_some_and(|object| object.zone == Zone::Battlefield);
+    if on_battlefield && set_tapped(&mut cx.engine.state, tid, true) {
+        cx.events
+            .push(ev_log(format!("{} taps {subject_name}", cx.spell_label)));
+    }
+    Ok(EffectOutcome::Continue)
 }
 
 /// CR 502.3 / 611.2a: keep the targeted permanent from untapping during its controller's next
@@ -164,13 +182,7 @@ pub(super) fn untap(
     let SpellEffectKind::Untap { subject } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let tid = match subject {
-        EffectSubject::Source => cx
-            .top
-            .source_permanent_id
-            .filter(|_| cx.engine.source_is_current_object(cx.top)),
-        EffectSubject::Chosen(_) => cx.targets.first().copied(),
-    };
+    let tid = resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject);
     if let Some(tid) = tid {
         let on_battlefield = cx
             .engine
@@ -427,12 +439,7 @@ pub(super) fn regenerate(
     let top = cx.top;
     let spell_label = cx.spell_label;
 
-    let tid = match subject {
-        EffectSubject::Source => top
-            .source_permanent_id
-            .filter(|_| engine.source_is_current_object(top)),
-        EffectSubject::Chosen(_) => targets.first().copied(),
-    };
+    let tid = resolve_effect_subject(engine, top, targets, &subject);
     if let Some(tid) = tid {
         let is_creature = engine
             .state

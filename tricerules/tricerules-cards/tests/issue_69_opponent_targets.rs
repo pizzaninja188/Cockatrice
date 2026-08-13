@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{
-    SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
+    EffectSubject, SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
 };
 use tricerules_cards::{CardRegistry, PermanentTypeFilter, TriggerCondition};
 
@@ -30,12 +30,12 @@ fn glaring_aegis_has_complete_oracle_behavior() {
     );
     assert_eq!(
         face.triggered_abilities[0].effect,
-        [SpellEffectKind::TapTarget {
-            target: TargetFilter {
+        [SpellEffectKind::Tap {
+            subject: EffectSubject::Chosen(TargetFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::Opponent,
                 ..TargetFilter::default()
-            },
+            }),
         }]
     );
     assert_eq!(
@@ -46,6 +46,7 @@ fn glaring_aegis_has_complete_oracle_behavior() {
             keywords: vec![],
             cant_attack: false,
             cant_block: false,
+            doesnt_untap_during_untap_step: false,
         }]
     );
 }

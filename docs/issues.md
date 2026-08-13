@@ -73,10 +73,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Add layer-aware continuous effects that add card types or subtypes without overwriting existing ones. Calibration evidence: Dub. Preserve dependencies with other type-changing effects, update downstream creature/tribal filters, and satisfy the two-card-or-mechanic reuse gate before committing the primitive.
   - Priority: Low
 
-- [ ] #82 [feature] Attached-subject effects and untap restrictions
-  - Details: Let an Aura or Equipment apply a continuous effect to its attached object and express "doesn't untap during its controller's untap step." Calibration evidence: Capture Sphere, including its secondary `attached_subject_effect` gap. Reuse attachment-derived scopes, evaluate the affected object's current controller, stop the effect immediately on detachment, and satisfy the two-card-or-mechanic reuse gate.
-  - Priority: Low
-
 - [ ] #83 [feature] Effects over Equipment attached to a target
   - Details: Add a reusable way for resolution effects to enumerate and affect attachments of a specified kind on a chosen permanent. Calibration evidence: Turn to Slag. Revalidate the target and attachment set independently, preserve deterministic ordering for simultaneous zone moves, and satisfy the two-card-or-mechanic reuse gate before adding a new effect primitive.
   - Priority: Low
