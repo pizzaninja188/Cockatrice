@@ -251,6 +251,8 @@ public:
             LegendKeep,
             /// Tier-3 mid-resolution pick over cards in a zone (Brainstorm, Gifts Ungiven, …).
             ResolutionPick,
+            /// CR 608.2g: a resolving effect offers a generic-mana payment.
+            ResolutionPayment,
             /// CR 603.3b: the order this player's simultaneous triggers go on the stack.
             /// Answered with SubmitTriggerOrder; rendered in its own window, not on the board.
             TriggerOrder,
@@ -283,6 +285,10 @@ public:
         // For Deck / Revealed picks: oracle card names parallel to serverCardIdToOid keys,
         // used to populate the deck zone view prompt and the revealed-cards popup.
         QStringList candidateNames;
+
+        // --- ResolutionPayment payload -----------------------------------------------
+        int genericManaCost = 0;
+        bool paymentCurrentlyLegal = false;
 
         // --- TriggerOrder payload -----------------------------------------------------
         /// The still-unplaced triggers, in the engine's APNAP order as offered. Re-sent (shorter)
@@ -331,6 +337,9 @@ public:
     QList<int> openingBottomSelectedIndices;
     QVector<int> openingPickSeatIds;
     RuledOpeningUiKind openingUiKind = RuledOpeningUiKind::None;
+    /// Public soft-counter choice marker on non-deciding clients. It suppresses stale priority
+    /// controls while the engine is parked without exposing the deciding player's prompt.
+    int resolutionPaymentWaitingPlayerId = -1;
     int openingMulliganCount = 0;
     ruled::v1::PhaseId lastEnginePhaseId = ruled::v1::PHASE_ID_UNSPECIFIED;
 
@@ -1107,6 +1116,33 @@ public:
     void toggleResolutionHandPickCard(int serverCardId);
     void submitResolutionHandPick();
 
+    [[nodiscard]] bool isResolutionPaymentActive() const
+    {
+        return hasPendingChoiceOfKind(ChoiceKind::ResolutionPayment);
+    }
+    [[nodiscard]] int resolutionPaymentGenericCost() const
+    {
+        return isResolutionPaymentActive() ? pendingChoice->genericManaCost : 0;
+    }
+    [[nodiscard]] bool resolutionPaymentCurrentlyLegal() const
+    {
+        return isResolutionPaymentActive() && pendingChoice->paymentCurrentlyLegal;
+    }
+    [[nodiscard]] QString resolutionPaymentPromptText() const
+    {
+        return pendingChoicePromptText(ChoiceKind::ResolutionPayment);
+    }
+    [[nodiscard]] bool isWaitingForResolutionPayment() const
+    {
+        return resolutionPaymentWaitingPlayerId >= 0;
+    }
+    [[nodiscard]] int resolutionPaymentWaitingPlayer() const
+    {
+        return resolutionPaymentWaitingPlayerId;
+    }
+    void payResolutionMana();
+    void declineResolutionMana();
+
     // -----------------------------------------------------------------------------------
     // Simultaneous trigger ordering (CR 603.3b).
     // -----------------------------------------------------------------------------------
@@ -1251,6 +1287,10 @@ signals:
     /// Emitted when resolution hand-pick mode starts, progresses (card toggled), or ends.
     /// required >= 0 means the mode is active; required == -1 (selected == -1) means cleared.
     void resolutionHandPickUiChanged(int required, int selected);
+    void resolutionPaymentUiChanged(bool active);
+    /// Completion of the optimistic pay/decline command. A rejection lets the cost UI restore
+    /// locally staged pool-counter pips before the engine prompt is reinstated.
+    void resolutionPaymentSubmissionFinished(bool accepted);
     /// CR 603.3b ordering prompt opened or closed. `active` is true only for the deciding player,
     /// so TabGame can show the ordering window on exactly one client; `candidates` is empty when
     /// clearing.
@@ -1276,7 +1316,10 @@ private:
     /// good emit it themselves; the dispatcher replacing one pick with the next must not.
     void teardownPendingChoice();
     /// The one SubmitResolutionChoice sender: every non-trigger choice answers this way.
-    void sendResolutionChoice(const QVector<quint32> &chosenOids);
+    void sendResolutionChoice(const QVector<quint32> &chosenOids,
+                              ruled::v1::ResolutionChoiceDecision decision =
+                                  ruled::v1::RESOLUTION_CHOICE_DECISION_UNSPECIFIED);
+    void submitResolutionPayment(ruled::v1::ResolutionChoiceDecision decision);
 
     RuledClientHost *host;
     bool engineCommandPending = false;

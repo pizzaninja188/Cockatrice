@@ -231,6 +231,19 @@ public:
     bool borosCharmCast = false;
     bool giantCast = false;
     bool brainstormCast = false;
+    bool softCounterConvoluteConjured = false;
+    bool softCounterOrbRemoved = false;
+    bool softCounterManaGranted = false;
+    bool softCounterBoltConjured = false;
+    bool softCounterBoltCast = false;
+    bool softCounterConvoluteCast = false;
+    bool sawSoftCounterPaymentChoice = false;
+    bool activatedManaDuringSoftCounterPayment = false;
+    bool paidSoftCounter = false;
+    quint32 softCounterConvoluteOid = 0;
+    bool softCounterLeftStackBeforeChoice = false;
+    bool sawSoftCounterResolveAfterChoice = false;
+    quint32 latestBoltOid = 0;
     bool devCurseConjureSent = false;
     bool devCurseManaSent = false;
     bool curseCast = false;
@@ -609,6 +622,7 @@ public:
                 if (cardId == QLatin1String("lightning_bolt") && sp.targets_size() > 0) {
                     sawBoltPushWithTarget = true;
                     boltOid = sp.object_id();
+                    latestBoltOid = sp.object_id();
                 }
                 if (cardId == QLatin1String("boros_charm") && sp.targets_size() == 1 &&
                     sp.chosen_mode_indices_size() == 1 && sp.chosen_mode_indices(0) == 0 &&
@@ -619,10 +633,18 @@ public:
                 if (cardId == QLatin1String("brainstorm")) {
                     brainstormOid = sp.object_id();
                 }
+                if (cardId == QLatin1String("convolute")) {
+                    softCounterConvoluteOid = sp.object_id();
+                }
             } else if (ev.has_stack_resolved()) {
                 stackDepth = std::max(0, stackDepth - 1);
                 if (brainstormOid != 0 && ev.stack_resolved().object_id() == brainstormOid) {
                     sawBrainstormResolved = true;
+                }
+                if (softCounterConvoluteOid != 0 &&
+                    ev.stack_resolved().object_id() == softCounterConvoluteOid) {
+                    softCounterLeftStackBeforeChoice = !sawSoftCounterPaymentChoice;
+                    sawSoftCounterResolveAfterChoice = sawSoftCounterPaymentChoice;
                 }
             } else if (ev.has_life_changed()) {
                 const auto &lc = ev.life_changed();
@@ -664,7 +686,9 @@ public:
                 }
             } else if (ev.has_resolution_choice_required()) {
                 const auto &rcr = ev.resolution_choice_required();
-                if (rcr.deciding_player_id() == myId && rcr.candidate_object_ids_size() > 0) {
+                if (rcr.deciding_player_id() == myId &&
+                    (rcr.candidate_object_ids_size() > 0 ||
+                     rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANA_PAYMENT)) {
                     pendingChoice = rcr;
                     log(QStringLiteral("resolution choice: kind %1 min %2 max %3 ordered %4 candidates %5")
                             .arg(QString::fromStdString(ruled::v1::ChoiceKind_Name(rcr.choice_kind())))
@@ -1183,6 +1207,30 @@ public:
         // --- Tier-3 resolution choice (may target either player at any point) ---
         if (pendingChoice) {
             const auto &rcr = *pendingChoice;
+            if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANA_PAYMENT) {
+                sawSoftCounterPaymentChoice = true;
+                pendingChoice.reset();
+                if (!rcr.payment_currently_legal()) {
+                    const auto island = firstOwnUntapped(QStringLiteral("island"));
+                    if (!island) {
+                        ADD_FAILURE() << "soft-counter payment was unaffordable with no untapped Island";
+                        return;
+                    }
+                    ruled::v1::RuledCommand cmd;
+                    auto *ability = cmd.mutable_activate_ability();
+                    ability->set_permanent_id(*island);
+                    ability->set_ability_index(0);
+                    activatedManaDuringSoftCounterPayment = true;
+                    sendRuled(cmd, QStringLiteral("tap Island oid %1 during Convolute resolution").arg(*island));
+                    return;
+                }
+                ruled::v1::RuledCommand cmd;
+                cmd.mutable_submit_resolution_choice()->set_decision(
+                    ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
+                paidSoftCounter = true;
+                sendRuled(cmd, QStringLiteral("pay Convolute's resolution cost"));
+                return;
+            }
             const bool isReplacement = rcr.choice_kind() == ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT;
             const QString prompt = QString::fromStdString(rcr.prompt_text());
             const bool isEntryReplacement = isReplacement && prompt.contains(QStringLiteral("entering the battlefield"));
@@ -1240,6 +1288,21 @@ public:
             blockersSentThisCombat = true;
             sendRuled(cmd, QStringLiteral("declare no blockers"));
             return;
+        }
+
+        // Issue #88: the nonactive player responds to the specially conjured Bolt with Convolute.
+        // The Bolt controller will then activate Islands from the parked payment prompt above.
+        if (role == Role::Hoarder && stackDepth == 1 && latestBoltOid != 0 && !softCounterConvoluteCast) {
+            if (const auto *convolute = handAction(ruled::v1::HAND_ACTION_CAST_SPELL,
+                                                   QStringLiteral("Convolute"))) {
+                ruled::v1::RuledCommand cmd;
+                auto *cast = cmd.mutable_cast_spell();
+                cast->mutable_source()->set_hand_index(convolute->hand_index());
+                cast->add_targets()->set_object_id(latestBoltOid);
+                softCounterConvoluteCast = true;
+                sendRuled(cmd, QStringLiteral("cast Convolute at Bolt oid %1").arg(latestBoltOid));
+                return;
+            }
         }
 
         // --- Cleanup discard ---
@@ -1521,6 +1584,84 @@ public:
                 put->set_ready(true);
                 sendRuled(cmd, QStringLiteral("dev: conjure Serra Angel onto the battlefield"));
                 return;
+            }
+            if (sawControlReturn && sawOpponentCleanupDiscard && !paidSoftCounter) {
+                if (!softCounterOrbRemoved) {
+                    softCounterOrbRemoved = true;
+                    ruled::v1::RuledCommand cmd;
+                    auto *dev = cmd.mutable_dev_command();
+                    dev->set_target_player_id(myId);
+                    auto *move = dev->mutable_move_card();
+                    move->set_card_name("Orb of Dreams");
+                    move->set_zone(ruled::v1::DEV_ZONE_HAND);
+                    sendRuled(cmd, QStringLiteral("dev: remove Orb of Dreams before Convolute setup"));
+                    return;
+                }
+                if (countOwn(QStringLiteral("island"), false) < 4) {
+                    ruled::v1::RuledCommand cmd;
+                    auto *dev = cmd.mutable_dev_command();
+                    dev->set_target_player_id(myId);
+                    auto *put = dev->mutable_put_card_in_zone();
+                    put->set_card_name("Island");
+                    put->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+                    put->set_ready(true);
+                    sendRuled(cmd, QStringLiteral("dev: add ready Island for Convolute payment"));
+                    return;
+                }
+                if (!softCounterConvoluteConjured) {
+                    softCounterConvoluteConjured = true;
+                    ruled::v1::RuledCommand cmd;
+                    auto *dev = cmd.mutable_dev_command();
+                    dev->set_target_player_id(oppId);
+                    auto *put = dev->mutable_put_card_in_zone();
+                    put->set_card_name("Convolute");
+                    put->set_zone(ruled::v1::DEV_ZONE_HAND);
+                    sendRuled(cmd, QStringLiteral("dev: conjure Convolute for opponent"));
+                    return;
+                }
+                if (!softCounterManaGranted) {
+                    softCounterManaGranted = true;
+                    ruled::v1::RuledCommand cmd;
+                    auto *dev = cmd.mutable_dev_command();
+                    dev->set_target_player_id(oppId);
+                    dev->mutable_add_mana()->set_u(1);
+                    dev->mutable_add_mana()->set_c(2);
+                    sendRuled(cmd, QStringLiteral("dev: add {2}{U} for opponent's Convolute"));
+                    return;
+                }
+                if (!softCounterBoltConjured) {
+                    softCounterBoltConjured = true;
+                    ruled::v1::RuledCommand cmd;
+                    auto *dev = cmd.mutable_dev_command();
+                    dev->set_target_player_id(myId);
+                    auto *put = dev->mutable_put_card_in_zone();
+                    put->set_card_name("Lightning Bolt");
+                    put->set_zone(ruled::v1::DEV_ZONE_HAND);
+                    sendRuled(cmd, QStringLiteral("dev: conjure Bolt for Convolute scenario"));
+                    return;
+                }
+                if (!softCounterBoltCast) {
+                    if (myPool.r < 1) {
+                        if (const auto mountain = firstOwnUntapped(QStringLiteral("mountain"))) {
+                            ruled::v1::RuledCommand cmd;
+                            auto *ability = cmd.mutable_activate_ability();
+                            ability->set_permanent_id(*mountain);
+                            ability->set_ability_index(0);
+                            sendRuled(cmd, QStringLiteral("tap Mountain for soft-counter Bolt"));
+                            return;
+                        }
+                    }
+                    if (const auto *bolt = handAction(ruled::v1::HAND_ACTION_CAST_SPELL,
+                                                      QStringLiteral("Lightning Bolt"))) {
+                        ruled::v1::RuledCommand cmd;
+                        auto *cast = cmd.mutable_cast_spell();
+                        cast->mutable_source()->set_hand_index(bolt->hand_index());
+                        cast->add_targets()->set_object_id(static_cast<quint32>(oppId));
+                        softCounterBoltCast = true;
+                        sendRuled(cmd, QStringLiteral("cast Bolt for Convolute scenario"));
+                        return;
+                    }
+                }
             }
             if (!devWaifSent) {
                 devWaifSent = true;
@@ -1901,6 +2042,9 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
                p1.sawEntryReplacementChoice && p1.submittedEntryReplacementChoice && p1.sawDiregrafEnterTapped &&
                p1.sawDamagePreventionChoice && p1.submittedDamagePreventionChoice && p1.sawControlTransfer &&
                p1.sawControlReturn && p1.sawPhysicalControlTransfer && p1.sawPhysicalControlReturn &&
+               p1.sawSoftCounterPaymentChoice && p1.activatedManaDuringSoftCounterPayment && p1.paidSoftCounter &&
+               p1.sawSoftCounterResolveAfterChoice &&
+               p2.softCounterConvoluteCast &&
                p2.sawFlashbackGraveToStack && p2.sawFlashbackStackToExile && p2.handSizeByPlayer.count(p2.myId) &&
                p2.handSizeByPlayer[p2.myId] <= 7;
     };
@@ -1949,6 +2093,15 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     EXPECT_TRUE(p1.sawPhysicalUntap && p2.sawPhysicalUntap)
         << "an untap step never produced a physical untapped-card event for both clients";
     EXPECT_TRUE(p1.sawBoltPushWithTarget) << "no targeted Lightning Bolt cast was observed on the stack";
+    EXPECT_TRUE(p1.sawSoftCounterPaymentChoice) << "Convolute never produced its resolution payment choice";
+    EXPECT_TRUE(p1.activatedManaDuringSoftCounterPayment)
+        << "the Bolt controller never activated a mana ability during Convolute's parked resolution";
+    EXPECT_TRUE(p1.paidSoftCounter) << "the Bolt controller never submitted PAY_MANA";
+    EXPECT_FALSE(p1.softCounterLeftStackBeforeChoice)
+        << "Convolute left the stack before its resolution payment was answered";
+    EXPECT_TRUE(p1.sawSoftCounterResolveAfterChoice)
+        << "Convolute did not leave the stack after its resolution payment completed";
+    EXPECT_TRUE(p2.softCounterConvoluteCast) << "the responding client never cast Convolute";
     EXPECT_TRUE(p1.sawBoltLifeLoss) << "Lightning Bolt never dealt its 3 damage";
     EXPECT_TRUE(p1.sawBorosCharmPushWithMode) << "Boros Charm chosen-mode metadata was not observed on the stack";
     EXPECT_TRUE(p1.sawBorosCharmLifeLoss) << "Boros Charm's damage mode never dealt its 4 damage";

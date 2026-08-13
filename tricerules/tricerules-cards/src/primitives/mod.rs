@@ -20,6 +20,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn soft_counter_payment_must_be_nonzero() {
+        let invalid = SpellEffectKind::CounterTargetSpell {
+            spell_filter: None,
+            unless_controller_pays: Some(0),
+        };
+        assert!(invalid.validate(EffectContext::Spell).is_err());
+        let mana_leak_shape = SpellEffectKind::CounterTargetSpell {
+            spell_filter: None,
+            unless_controller_pays: Some(3),
+        };
+        assert!(mana_leak_shape.validate(EffectContext::Spell).is_ok());
+    }
+
+    #[test]
     fn amount_serde_preserves_literals_x_and_named_conditionals() {
         assert_eq!(ron::from_str::<Amount>("4").unwrap(), Amount::Fixed(4));
         assert_eq!(ron::from_str::<Amount>(r#""X""#).unwrap(), Amount::X);

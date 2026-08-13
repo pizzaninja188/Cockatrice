@@ -195,6 +195,7 @@ void RuledEventDispatcher::resetPerBatchLegalActions()
     state->openingBottomSelectedIndices.clear();
     state->openingPickSeatIds.clear();
     state->openingUiKind = RuledOpeningUiKind::None;
+    state->resolutionPaymentWaitingPlayerId = -1;
 }
 
 void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
@@ -550,7 +551,27 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     // Drop any stale pick from a previous resolution step. Deliberately not a full
     // clearPendingChoice(): a parked trigger/copy/legend choice belongs to a different flow.
     state->clearPendingChoiceOfKind(ChoiceKind::ResolutionPick);
-    if (static_cast<int>(rcr.deciding_player_id()) != host->localPlayerId() || rcr.candidate_object_ids_size() <= 0) {
+    state->clearPendingChoiceOfKind(ChoiceKind::ResolutionPayment);
+    if (static_cast<int>(rcr.deciding_player_id()) != host->localPlayerId()) {
+        if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANA_PAYMENT) {
+            state->resolutionPaymentWaitingPlayerId = static_cast<int>(rcr.deciding_player_id());
+        }
+        return;
+    }
+
+    if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANA_PAYMENT) {
+        PendingChoice payment;
+        payment.kind = ChoiceKind::ResolutionPayment;
+        payment.promptText = QString::fromStdString(rcr.prompt_text());
+        payment.genericManaCost = static_cast<int>(rcr.generic_mana_cost());
+        payment.paymentCurrentlyLegal = rcr.payment_currently_legal();
+        state->setPendingChoice(std::move(payment));
+        emit state->resolutionPaymentUiChanged(true);
+        emit state->combatStateChanged();
+        return;
+    }
+
+    if (rcr.candidate_object_ids_size() <= 0) {
         return;
     }
 

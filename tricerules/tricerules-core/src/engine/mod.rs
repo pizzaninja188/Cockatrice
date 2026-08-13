@@ -7,9 +7,10 @@ use crate::state::{
     CombatState, ContinuousEffect, CopiableValues, DamagePreventionAmount,
     DamagePreventionProhibition, DamagePreventionScope, EntryReplacementApplication,
     EntryReplacementEffectId, GameObject, GameState, ObjectId, OpeningSequence,
-    PendingBattlefieldEntry, PendingResolution, PendingTrigger, PendingTriggerOrder, PlayerId,
-    PlayerState, ReplacementPriority, StackItem, StackTarget, StagedTrigger, StagedTriggerGroup,
-    TokenBattlefieldEntry, TurnHistory, TurnStep, UndoableManaAbility, Zone,
+    PendingBattlefieldEntry, PendingManaPayment, PendingResolution, PendingTrigger,
+    PendingTriggerOrder, PlayerId, PlayerState, ReplacementPriority, StackItem, StackTarget,
+    StagedTrigger, StagedTriggerGroup, TokenBattlefieldEntry, TurnHistory, TurnStep,
+    UndoableManaAbility, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -1146,6 +1147,16 @@ impl GameEngine {
             let answered = match blocking {
                 BlockingChoice::Resolution => {
                     matches!(cmd.cmd.as_ref(), Some(Cmd::SubmitResolutionChoice(_)))
+                        || matches!(
+                            cmd.cmd.as_ref(),
+                            Some(Cmd::ActivateAbility(_)) | Some(Cmd::UndoManaAbility(_))
+                        ) && self
+                            .state
+                            .pending_resolution
+                            .as_ref()
+                            .is_some_and(|pending| {
+                                pending.mana_payment.is_some() && pending.deciding_player == player
+                            })
                 }
                 BlockingChoice::TriggerOrder => {
                     matches!(cmd.cmd.as_ref(), Some(Cmd::SubmitTriggerOrder(_)))
@@ -1168,10 +1179,19 @@ impl GameEngine {
         // activations (or another undo). Every other command makes the float consequential, so drop
         // the undo history before it runs. ActivateAbility is preserved here and cleared inside the
         // non-mana branch (a non-mana activation is itself consequential).
-        if !matches!(
-            cmd.cmd.as_ref(),
-            Some(Cmd::ActivateAbility(_)) | Some(Cmd::UndoManaAbility(_))
-        ) {
+        let preserves_payment_undo =
+            matches!(cmd.cmd.as_ref(), Some(Cmd::SubmitResolutionChoice(_)))
+                && self
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .is_some_and(|pending| pending.mana_payment.is_some());
+        if !preserves_payment_undo
+            && !matches!(
+                cmd.cmd.as_ref(),
+                Some(Cmd::ActivateAbility(_)) | Some(Cmd::UndoManaAbility(_))
+            )
+        {
             self.state.undoable_mana_abilities.clear();
         }
         let res = match cmd.cmd.as_ref() {
@@ -1237,9 +1257,7 @@ impl GameEngine {
             Some(Cmd::ChooseTriggerTarget(ctt)) => {
                 self.choose_trigger_target(player, &ctt.targets, ctt.decline)
             }
-            Some(Cmd::SubmitResolutionChoice(s)) => {
-                self.submit_resolution_choice(player, &s.chosen_object_ids)
-            }
+            Some(Cmd::SubmitResolutionChoice(s)) => self.submit_resolution_choice(player, s),
             Some(Cmd::SubmitTriggerOrder(s)) => {
                 self.submit_trigger_order(player, s.trigger_object_id)
             }

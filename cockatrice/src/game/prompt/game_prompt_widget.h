@@ -43,6 +43,10 @@ public:
         CleanupDiscard,
         /// Tier-3 resolution pick over cards in a zone (Brainstorm, Gifts Ungiven, …).
         ResolutionPick,
+        /// CR 608.2g resolution-time mana payment; normal priority controls stay hidden.
+        ResolutionPayment,
+        /// Another player is answering a public parked resolution choice. No local action exists.
+        WaitingForChoice,
         /// CR 603.3b: ordering this player's simultaneous triggers. The picking happens in the
         /// dedicated ordering window, so this mode only supplies the prompt line and suppresses
         /// the priority/combat buttons the engine is refusing anyway.
@@ -70,6 +74,9 @@ public:
         /// New fields go at the *end* — callers and tests use positional aggregate init, so
         /// inserting in the middle silently rebinds their arguments (or fails to compile).
         bool canDecline = false;
+        /// ResolutionPayment only; affordability is copied from the engine event.
+        int genericManaCost = 0;
+        bool paymentCurrentlyLegal = false;
     };
 
     /// Independent async inputs that all mean "mid-cast / mid-activation" and OR into
@@ -154,6 +161,7 @@ signals:
     void ruledOpeningBottomDoneRequested();
     void undoLandTapRequested();
     void ruledResolutionHandPickConfirmRequested();
+    void ruledResolutionPaymentDeclineRequested();
 
 private:
     void updatePassPriorityButtonText();
@@ -210,6 +218,7 @@ private:
     QPushButton *openingBottomCancelButton = nullptr;
     QPushButton *openingBottomDoneButton = nullptr;
     QPushButton *resolutionHandPickConfirmButton = nullptr;
+    QPushButton *resolutionPaymentDeclineButton = nullptr;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(GamePromptWidget::TargetingSources)

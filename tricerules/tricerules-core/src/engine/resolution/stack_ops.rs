@@ -4,7 +4,11 @@ pub(super) fn counter_target_spell(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::CounterTargetSpell { .. } = effect else {
+    let SpellEffectKind::CounterTargetSpell {
+        unless_controller_pays,
+        ..
+    } = effect
+    else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let engine = &mut *cx.engine;
@@ -13,45 +17,123 @@ pub(super) fn counter_target_spell(
     let spell_label = cx.spell_label;
 
     if let Some(&tid) = targets.first() {
-        if let Some(pos) = engine.state.stack.iter().position(|s| s.id == tid) {
-            let st = engine.state.stack.remove(pos);
-            let tgt = engine
-                .registry
-                .get(&st.card_id)
-                .map(|d| d.name.as_str())
-                .unwrap_or("spell");
-            // CR 707.10d: a copy of a spell has no backing card — it simply ceases
-            // to exist when it leaves the stack. Only a genuinely cast spell has a
-            // `GameObject` that moves; CR 701.6a sends that card to its OWNER's
-            // graveyard via an explicit PermanentMoved so the C++ relay routes the
-            // physical card off the shared stack. Moving a copy would error on the
-            // missing object and corrupt the already-popped stack.
-            if !st.is_copy {
-                let owner = engine.state.objects.get(&st.id).map(|o| o.owner);
-                let destination = if st.flashback {
-                    Zone::Exile
-                } else {
-                    Zone::Graveyard
-                };
-                move_object_to_zone(&mut engine.state, engine.registry, st.id, destination, None)?;
-                if let Some(owner) = owner {
-                    events.push(permanent_moved_event(
-                        &engine.state,
-                        st.id,
-                        owner,
-                        if st.flashback {
-                            rv1::permanent_moved::Destination::Exile
-                        } else {
-                            rv1::permanent_moved::Destination::Graveyard
-                        },
-                    ));
-                }
+        if let Some(generic_mana_cost) = unless_controller_pays {
+            let Some(target) = engine
+                .state
+                .stack
+                .iter()
+                .find(|item| item.id == tid)
+                .cloned()
+            else {
+                return Ok(EffectOutcome::Continue);
+            };
+            let deciding_player = target.controller;
+            let prompt = format!(
+                "Pay {{{generic_mana_cost}}} to prevent {spell_label} from countering this spell?"
+            );
+            let payment_currently_legal =
+                engine.can_pay_generic_mana(deciding_player, generic_mana_cost);
+            events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                    rv1::ResolutionChoiceRequired {
+                        deciding_player_id: deciding_player,
+                        source_object_id: cx.top.id,
+                        prompt_text: prompt.clone(),
+                        choice_kind: custom::ChoiceKind::ManaPayment as i32,
+                        candidate_object_ids: Vec::new(),
+                        candidate_card_ids: Vec::new(),
+                        min: 0,
+                        max: 0,
+                        ordered: false,
+                        candidate_names: Vec::new(),
+                        candidate_server_card_ids: Vec::new(),
+                        unique_names: false,
+                        generic_mana_cost,
+                        payment_currently_legal,
+                    },
+                )),
+            });
+            engine.state.pending_resolution = Some(PendingResolution {
+                item: cx.top.clone(),
+                custom_key: "__mana_payment".to_string(),
+                step: 0,
+                scratch: Vec::new(),
+                deciding_player,
+                candidates: Vec::new(),
+                min: 0,
+                max: 0,
+                ordered: false,
+                prompt,
+                choice_kind: custom::ChoiceKind::ManaPayment,
+                unique_names: false,
+                mana_payment: Some(PendingManaPayment {
+                    target_spell_id: tid,
+                    generic_mana_cost,
+                    undo_history_start: engine.state.undoable_mana_abilities.len(),
+                }),
+                copy_source_object_id: 0,
+                search_destination: SearchDestination::Hand,
+                search_shuffle: false,
+                search_reveal: false,
+                resume_effect_index: None,
+            });
+            // The payment is part of this spell's resolution (CR 608.2g). Keep the resolving
+            // counter as the top stack item for public/reconnect state until the player pays or
+            // declines; the blocking choice prevents it from resolving a second time.
+            if !engine.state.stack.iter().any(|item| item.id == cx.top.id) {
+                engine.state.stack.push(cx.top.clone());
             }
-            events.push(ev_log(format!("{spell_label} counters {tgt}")));
+            return Ok(EffectOutcome::Suspended);
         }
+        counter_stack_spell(engine, tid, spell_label, events)?;
     }
 
     Ok(EffectOutcome::Continue)
+}
+
+pub(crate) fn counter_stack_spell(
+    engine: &mut GameEngine,
+    target_id: ObjectId,
+    counter_label: &str,
+    events: &mut Vec<rv1::RuledEvent>,
+) -> Result<(), EngineError> {
+    let Some(pos) = engine
+        .state
+        .stack
+        .iter()
+        .position(|item| item.id == target_id)
+    else {
+        return Ok(());
+    };
+    let st = engine.state.stack.remove(pos);
+    let tgt = engine
+        .registry
+        .get(&st.card_id)
+        .map(|definition| definition.name.as_str())
+        .unwrap_or("spell");
+    if !st.is_copy {
+        let owner = engine.state.objects.get(&st.id).map(|object| object.owner);
+        let destination = if st.flashback {
+            Zone::Exile
+        } else {
+            Zone::Graveyard
+        };
+        move_object_to_zone(&mut engine.state, engine.registry, st.id, destination, None)?;
+        if let Some(owner) = owner {
+            events.push(permanent_moved_event(
+                &engine.state,
+                st.id,
+                owner,
+                if st.flashback {
+                    rv1::permanent_moved::Destination::Exile
+                } else {
+                    rv1::permanent_moved::Destination::Graveyard
+                },
+            ));
+        }
+    }
+    events.push(ev_log(format!("{counter_label} counters {tgt}")));
+    Ok(())
 }
 
 pub(super) fn copy_target_spell(
@@ -233,6 +315,8 @@ pub(super) fn copy_target_spell(
                                 ordered: false,
                                 unique_names: false,
                                 candidate_server_card_ids: Vec::new(),
+                                generic_mana_cost: 0,
+                                payment_currently_legal: false,
                             },
                         )),
                     });
@@ -250,6 +334,7 @@ pub(super) fn copy_target_spell(
                         prompt,
                         choice_kind: custom::ChoiceKind::TargetObjects,
                         unique_names: false,
+                        mana_payment: None,
                         copy_source_object_id: src.id,
                         search_destination: SearchDestination::Hand,
                         search_shuffle: false,

@@ -7,6 +7,7 @@
 #ifndef COCKATRICE_PLAYER_EVENT_HANDLER_H
 #define COCKATRICE_PLAYER_EVENT_HANDLER_H
 #include "event_processing_options.h"
+#include "../ruled/ruled_mana_pool_tracker.h"
 
 #include <QObject>
 #include <libcockatrice/protocol/pb/game_event.pb.h>
@@ -110,6 +111,7 @@ public:
 
 private:
     Player *player;
+    RuledManaPoolTracker ruledManaPoolTracker;
 };
 
 #endif // COCKATRICE_PLAYER_EVENT_HANDLER_H

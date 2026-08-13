@@ -581,6 +581,14 @@ void PlayerActions::undoLastLandTap()
         if (RuledActions::gameplayInputLocked(player->getGame()) || ruledUndoableManaCount <= 0) {
             return;
         }
+        if (resolutionPaymentActive && !resolutionPaymentAutoAppliedGroups.isEmpty()) {
+            const int restoredPips = resolutionPaymentAutoAppliedGroups.takeLast();
+            resolutionPaymentRemaining += restoredPips;
+            for (int i = 0; i < restoredPips && !resolutionPaymentCounterIds.isEmpty(); ++i) {
+                resolutionPaymentCounterIds.removeLast();
+            }
+            emit ruledResolutionManaPromptChanged();
+        }
         ruled::v1::RuledCommand ruledCommand;
         ruledCommand.mutable_undo_mana_ability();
         std::string payload;
@@ -1111,6 +1119,107 @@ bool PlayerActions::tryPayRuledSpellWithCounter(const QString &counterName)
     return true;
 }
 
+bool PlayerActions::tryPayRuledResolutionWithCounter(const QString &counterName)
+{
+    if (!resolutionPaymentActive || resolutionPaymentSubmissionPending || resolutionPaymentRemaining <= 0) {
+        return false;
+    }
+    const QString normalized = counterName.trimmed().toUpper();
+    if (normalized.size() != 1 || !QStringLiteral("WUBRGCX").contains(normalized.at(0))) {
+        return false;
+    }
+
+    int counterId = -1;
+    for (auto it = player->getCounters().constBegin(); it != player->getCounters().constEnd(); ++it) {
+        if (it.value() && it.value()->getName().trimmed().compare(counterName.trimmed(), Qt::CaseInsensitive) == 0) {
+            counterId = it.key();
+            break;
+        }
+    }
+    if (counterId < 0) {
+        return false;
+    }
+
+    resolutionPaymentCounterIds.append(counterId);
+    --resolutionPaymentRemaining;
+    if (auto *counter = player->getCounters().value(counterId, nullptr)) {
+        counter->setValue(counter->getValue() - 1);
+    }
+    emit ruledResolutionManaPromptChanged();
+
+    if (resolutionPaymentRemaining == 0 && !RuledActions::gameplayInputLocked(player->getGame())) {
+        if (auto *handler = player->getGame()->getGameEventHandler()->ruled();
+            handler && handler->resolutionPaymentCurrentlyLegal()) {
+            resolutionPaymentSubmissionPending = true;
+            handler->payResolutionMana();
+        }
+    }
+    return true;
+}
+
+void PlayerActions::syncRuledResolutionPayment(bool active, int genericCost)
+{
+    if (!active) {
+        resolutionPaymentActive = false;
+        return;
+    }
+    if (!resolutionPaymentActive && !resolutionPaymentSubmissionPending) {
+        resolutionPaymentRemaining = qMax(0, genericCost);
+        resolutionPaymentCounterIds.clear();
+        resolutionPaymentAutoAppliedGroups.clear();
+        resolutionPaymentAutoAppliedPendingGroup = 0;
+    }
+    resolutionPaymentActive = true;
+    emit ruledResolutionManaPromptChanged();
+}
+
+int PlayerActions::ruledResolutionPaymentRemaining() const
+{
+    return resolutionPaymentActive ? resolutionPaymentRemaining : 0;
+}
+
+int PlayerActions::ruledManaCounterOptimisticSpendCount(int counterId) const
+{
+    return manaPaymentCounterIds.count(counterId) + resolutionPaymentCounterIds.count(counterId);
+}
+
+void PlayerActions::declineRuledResolutionPayment()
+{
+    if (!resolutionPaymentActive || resolutionPaymentSubmissionPending) {
+        return;
+    }
+    for (int i = resolutionPaymentCounterIds.size() - 1; i >= 0; --i) {
+        if (auto *counter = player->getCounters().value(resolutionPaymentCounterIds[i], nullptr)) {
+            counter->setValue(counter->getValue() + 1);
+        }
+    }
+    resolutionPaymentCounterIds.clear();
+    resolutionPaymentAutoAppliedGroups.clear();
+    resolutionPaymentAutoAppliedPendingGroup = 0;
+    resolutionPaymentSubmissionPending = true;
+    if (auto *handler = player->getGame()->getGameEventHandler()->ruled()) {
+        handler->declineResolutionMana();
+    }
+}
+
+void PlayerActions::finishRuledResolutionPaymentSubmission(bool accepted)
+{
+    if (!accepted) {
+        for (int i = resolutionPaymentCounterIds.size() - 1; i >= 0; --i) {
+            if (auto *counter = player->getCounters().value(resolutionPaymentCounterIds[i], nullptr)) {
+                counter->setValue(counter->getValue() + 1);
+            }
+        }
+    }
+    resolutionPaymentActive = false;
+    resolutionPaymentSubmissionPending = false;
+    resolutionPaymentRemaining = 0;
+    resolutionPaymentCounterIds.clear();
+    resolutionPaymentAutoAppliedGroups.clear();
+    resolutionPaymentAutoAppliedPendingGroup = 0;
+    emit ruledResolutionManaPromptChanged();
+}
+
 void PlayerActions::autoApplyFloatedManaToPendingCost(const QString &counterName, int amount)
 {
     if (amount <= 0) {
@@ -1123,6 +1232,7 @@ void PlayerActions::autoApplyFloatedManaToPendingCost(const QString &counterName
     // counter), so the just-floated mana never lingers visibly in the pool and producing/spending can't
     // double-count. A spell waiting on a target is skipped (mana comes after targets). Pips the pending
     // cost cannot use (wrong color, nothing left to pay) are left floating for later use.
+    const int resolutionCounterCountBefore = resolutionPaymentCounterIds.size();
     for (int i = 0; i < amount; ++i) {
         if (pendingRuledSpellCast.valid && !pendingRuledSpellCast.waitingForTarget) {
             if (tryPayRuledSpellWithCounter(counterName)) {
@@ -1134,7 +1244,16 @@ void PlayerActions::autoApplyFloatedManaToPendingCost(const QString &counterName
                 continue;
             }
         }
+        if (tryPayRuledResolutionWithCounter(counterName)) {
+            continue;
+        }
         break;
+    }
+    const int autoAppliedToResolution = resolutionPaymentCounterIds.size() - resolutionCounterCountBefore;
+    if (autoAppliedToResolution > 0) {
+        // One mana ability can update several coloured pool counters. Collect every pip from this
+        // engine command into one Undo group; resumePendingRuledPaymentAfterEngineCommand closes it.
+        resolutionPaymentAutoAppliedPendingGroup += autoAppliedToResolution;
     }
 }
 
@@ -1160,6 +1279,10 @@ void PlayerActions::resumePendingRuledPaymentAfterEngineCommand()
     if (RuledActions::gameplayInputLocked(player->getGame())) {
         return;
     }
+    if (resolutionPaymentAutoAppliedPendingGroup > 0) {
+        resolutionPaymentAutoAppliedGroups.append(resolutionPaymentAutoAppliedPendingGroup);
+        resolutionPaymentAutoAppliedPendingGroup = 0;
+    }
     switch (readyRuledPendingPaymentAction(pendingRuledSpellCast, pendingActivatedAbility)) {
         case RuledPendingPaymentAction::CastSpell:
             completePendingRuledSpellCast();
@@ -1170,6 +1293,13 @@ void PlayerActions::resumePendingRuledPaymentAfterEngineCommand()
             break;
         case RuledPendingPaymentAction::None:
             break;
+    }
+    if (resolutionPaymentActive && !resolutionPaymentSubmissionPending && resolutionPaymentRemaining == 0) {
+        if (auto *handler = player->getGame()->getGameEventHandler()->ruled();
+            handler && handler->resolutionPaymentCurrentlyLegal()) {
+            resolutionPaymentSubmissionPending = true;
+            handler->payResolutionMana();
+        }
     }
 }
 
@@ -4248,17 +4378,18 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     if (RuledActions::gameplayInputLocked(player->getGame())) {
         return leftClick; // left-click is consumed; right-click still opens inspection
     }
-    // Only show the ability menu when the local player actually has priority.
-    {
-        const int localId = player->getPlayerInfo()->getId();
-        const int priorityId = player->getGame()->getGameState()->getPriorityPlayer();
-        if (priorityId < 0 || localId != priorityId) {
-            return false;
-        }
-    }
     RuledClientState *handler = player->getGame()->getGameEventHandler()->ruled();
     if (!handler) {
         return false;
+    }
+    // Resolution-time payments grant no priority, but the engine explicitly permits the deciding
+    // player's mana abilities. Every other activation keeps the normal priority gate.
+    {
+        const int localId = player->getPlayerInfo()->getId();
+        const int priorityId = player->getGame()->getGameState()->getPriorityPlayer();
+        if (!handler->isResolutionPaymentActive() && (priorityId < 0 || localId != priorityId)) {
+            return false;
+        }
     }
 
     // Suppress the menu while the player is actively declaring attackers/blockers or choosing a target.
@@ -4361,24 +4492,34 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     QMenu menu;
     menu.setTitle(card->getName());
     QVector<QString> menuLabels;
+    QVector<int> menuAbilityIndices;
     menuLabels.reserve(abilityTexts.size());
+    menuAbilityIndices.reserve(abilityTexts.size());
     for (int i = 0; i < abilityTexts.size(); ++i) {
+        if (handler->isResolutionPaymentActive() && manaProduced.value(i).isEmpty()) {
+            continue;
+        }
         const QString label = handler->activatedAbilityMenuLabel(oid, i);
         menuLabels.append(label);
+        menuAbilityIndices.append(i);
         QAction *action = menu.addAction(label);
         // Disable rather than omit: the indices below are ability indices, and the player still
         // wants to see that the ability exists and why it is unavailable right now.
         action->setEnabled(handler->abilityActivatable(oid, i));
+    }
+    if (menu.actions().isEmpty()) {
+        return false;
     }
     QAction *chosen = menu.exec(QCursor::pos());
     if (!chosen) {
         return true; // menu was shown, player cancelled
     }
 
-    const int abilityIndex = menuLabels.indexOf(chosen->text());
-    if (abilityIndex < 0) {
+    const int menuIndex = menuLabels.indexOf(chosen->text());
+    if (menuIndex < 0 || menuIndex >= menuAbilityIndices.size()) {
         return true;
     }
+    const int abilityIndex = menuAbilityIndices.at(menuIndex);
 
     // Engine-authoritative: ability slot key present in valid_targets_by_ability means it needs a target.
     const bool needsTarget = handler->abilityNeedsTarget(oid, abilityIndex);

@@ -1,0 +1,8 @@
+(
+  id: "convolute",
+  name: "Convolute",
+  mana_cost: "{2}{U}",
+  types: ["Instant"],
+  // "Counter target spell unless its controller pays {4}."
+  spell_effect: [CounterTargetSpell(spell_filter: None, unless_controller_pays: Some(4))],
+)

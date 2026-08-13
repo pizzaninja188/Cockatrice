@@ -1,5 +1,274 @@
 use crate::helpers::*;
 
+fn setup_convolute_over_bolt() -> (GameEngine, u32, u32) {
+    let decks = Some(vec![
+        vec![
+            "lightning_bolt".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+        vec![
+            "convolute".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+            "island".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(8801, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+    let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
+        .expect("cast bolt");
+    let bolt_oid = e.state.stack.last().expect("bolt on stack").id;
+    e.apply_command(0, &pass()).expect("pass to opponent");
+
+    give_mana(
+        &mut e,
+        1,
+        ManaGift {
+            u: 1,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    let convolute_idx = hand_index_for_card(&e, 1, "convolute");
+    e.apply_command(
+        1,
+        &cast_spell(
+            convolute_idx,
+            vec![TargetRef {
+                object_id: bolt_oid,
+                damage_amount: 0,
+                group_index: 0,
+                kind: 0,
+            }],
+        ),
+    )
+    .expect("cast Convolute");
+    let convolute_oid = e.state.stack.last().expect("Convolute on stack").id;
+    (e, bolt_oid, convolute_oid)
+}
+
+#[test]
+fn convolute_prefloated_payment_parks_resolution_and_preserves_target() {
+    let (mut e, bolt_oid, convolute_oid) = setup_convolute_over_bolt();
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            c: 4,
+            ..Default::default()
+        },
+    );
+
+    e.apply_command(1, &pass())
+        .expect("Convolute controller passes");
+    let parked = e
+        .apply_command(0, &pass())
+        .expect("target controller passes to resolve Convolute");
+    let choice = find_resolution_choice(&parked).expect("Convolute must request payment");
+    assert_eq!(choice.choice_kind, ChoiceKind::ManaPayment as i32);
+    assert_eq!(choice.deciding_player_id, 0);
+    assert_eq!(choice.generic_mana_cost, 4);
+    assert!(choice.payment_currently_legal);
+    assert!(e.state.pending_resolution.is_some());
+    assert!(
+        e.state.stack.iter().any(|item| item.id == convolute_oid),
+        "the resolving soft counter remains on the stack while payment is pending"
+    );
+    assert!(
+        !parked.events.iter().any(|event| matches!(
+            &event.ev,
+            Some(Ev::StackResolved(resolved)) if resolved.object_id == convolute_oid
+        )),
+        "StackResolved is deferred until the payment branch completes"
+    );
+
+    e.apply_command(
+        0,
+        &submit_resolution_decision(tricerules_proto::ruled::v1::ResolutionChoiceDecision::PayMana),
+    )
+    .expect("pay four");
+    assert!(e.state.stack.iter().any(|item| item.id == bolt_oid));
+    assert!(!e.state.stack.iter().any(|item| item.id == convolute_oid));
+    assert_eq!(e.state.players[0].mana_pool.colorless, 0);
+}
+
+#[test]
+fn convolute_decline_counters_target_to_its_owners_graveyard() {
+    let (mut e, bolt_oid, convolute_oid) = setup_convolute_over_bolt();
+    e.apply_command(1, &pass())
+        .expect("Convolute controller passes");
+    let parked = e.apply_command(0, &pass()).expect("Convolute resolves");
+    let choice = find_resolution_choice(&parked).expect("payment choice");
+    assert!(!choice.payment_currently_legal);
+
+    let result = e
+        .apply_command(
+            0,
+            &submit_resolution_decision(
+                tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline,
+            ),
+        )
+        .expect("decline payment");
+    let bolt_move = permanents_moved_in(&result)
+        .into_iter()
+        .find(|event| event.object_id == bolt_oid)
+        .expect("countered Bolt move");
+    assert_eq!(bolt_move.owner_player_id, 0);
+    assert!(e.state.players[0].graveyard.contains(&bolt_oid));
+    assert!(e.state.players[1].graveyard.contains(&convolute_oid));
+    assert!(e.state.stack.is_empty());
+}
+
+#[test]
+fn convolute_allows_mana_abilities_without_priority_and_refreshes_affordability() {
+    let (mut e, bolt_oid, _) = setup_convolute_over_bolt();
+    let mut islands = Vec::new();
+    for _ in 0..4 {
+        let index = hand_index_for_card(&e, 0, "island");
+        let island = e.state.players[0].hand.remove(index);
+        e.state.players[0].battlefield.push(island);
+        let object = e.state.objects.get_mut(&island).expect("basic land");
+        object.zone = tricerules_core::Zone::Battlefield;
+        islands.push(island);
+    }
+
+    e.apply_command(1, &pass())
+        .expect("Convolute controller passes");
+    e.apply_command(0, &pass()).expect("park payment");
+    for (index, island) in islands.into_iter().enumerate() {
+        let batch = e
+            .apply_command(0, &activate_ability(island, 0, vec![]))
+            .expect("mana ability is legal during resolution");
+        let choice = find_resolution_choice(&batch).expect("refreshed payment choice");
+        assert_eq!(choice.payment_currently_legal, index == 3);
+    }
+
+    e.apply_command(
+        0,
+        &submit_resolution_decision(tricerules_proto::ruled::v1::ResolutionChoiceDecision::PayMana),
+    )
+    .expect("pay after fourth Island");
+    assert!(e.state.stack.iter().any(|item| item.id == bolt_oid));
+    assert_eq!(e.state.players[0].mana_pool.blue, 0);
+}
+
+#[test]
+fn convolute_payment_mana_can_be_undone_without_priority() {
+    let (mut e, _, convolute_oid) = setup_convolute_over_bolt();
+    let island = inject_permanent_on_battlefield(&mut e, 0, "island");
+
+    e.apply_command(1, &pass())
+        .expect("Convolute controller passes");
+    e.apply_command(0, &pass()).expect("park payment");
+    let floated = e
+        .apply_command(0, &activate_ability(island, 0, vec![]))
+        .expect("tap Island during payment");
+    assert_eq!(floated.legal_by_player[&0].undoable_mana_abilities, 1);
+    assert_eq!(e.state.players[0].mana_pool.blue, 1);
+    assert!(e.state.objects[&island].tapped);
+
+    let undone = e
+        .apply_command(0, &undo_mana_ability())
+        .expect("Undo is legal for the payment decider without priority");
+    assert_eq!(e.state.players[0].mana_pool.blue, 0);
+    assert!(!e.state.objects[&island].tapped);
+    assert_eq!(undone.legal_by_player[&0].undoable_mana_abilities, 0);
+    assert!(
+        !find_resolution_choice(&undone)
+            .expect("undo refreshes payment prompt")
+            .payment_currently_legal
+    );
+    assert!(e.state.stack.iter().any(|item| item.id == convolute_oid));
+}
+
+#[test]
+fn convolute_decline_rewinds_only_mana_abilities_used_during_payment() {
+    let (mut e, _, _) = setup_convolute_over_bolt();
+    let islands = [
+        inject_permanent_on_battlefield(&mut e, 0, "island"),
+        inject_permanent_on_battlefield(&mut e, 0, "island"),
+    ];
+    // This mana predates the prompt and was not produced by a reversible payment-time ability.
+    e.state.players[0].mana_pool.colorless = 1;
+
+    e.apply_command(1, &pass())
+        .expect("Convolute controller passes");
+    e.apply_command(0, &pass()).expect("park payment");
+    for island in islands {
+        e.apply_command(0, &activate_ability(island, 0, vec![]))
+            .expect("tap Island during payment");
+    }
+    assert_eq!(e.state.players[0].mana_pool.blue, 2);
+
+    e.apply_command(
+        0,
+        &submit_resolution_decision(tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline),
+    )
+    .expect("decline and rewind prompt mana");
+    assert_eq!(
+        e.state.players[0].mana_pool.colorless, 1,
+        "pre-prompt mana remains floated"
+    );
+    assert_eq!(e.state.players[0].mana_pool.blue, 0);
+    assert!(islands.iter().all(|island| !e.state.objects[island].tapped));
+}
+
+#[test]
+fn convolute_rejects_stale_or_malformed_payment_atomically() {
+    let (mut e, bolt_oid, _) = setup_convolute_over_bolt();
+    e.apply_command(1, &pass())
+        .expect("Convolute controller passes");
+    e.apply_command(0, &pass()).expect("park payment");
+
+    let before_index = e.state.command_index;
+    let before_stack = e.state.stack.clone();
+    let wrong_player = e.apply_command(
+        1,
+        &submit_resolution_decision(tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline),
+    );
+    assert!(wrong_player.is_err());
+    assert_eq!(e.state.command_index, before_index);
+    assert_eq!(e.state.stack.len(), before_stack.len());
+    assert!(e.state.pending_resolution.is_some());
+
+    let insufficient = e.apply_command(
+        0,
+        &submit_resolution_decision(tricerules_proto::ruled::v1::ResolutionChoiceDecision::PayMana),
+    );
+    assert!(insufficient.is_err());
+    assert_eq!(e.state.command_index, before_index);
+    assert!(e.state.stack.iter().any(|item| item.id == bolt_oid));
+    assert!(e.state.pending_resolution.is_some());
+
+    let malformed = RuledCommand {
+        cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            chosen_object_ids: vec![bolt_oid],
+            decision: tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline as i32,
+        })),
+    };
+    assert!(e.apply_command(0, &malformed).is_err());
+    assert_eq!(e.state.command_index, before_index);
+    assert!(e.state.pending_resolution.is_some());
+}
+
 // Regression: a spell countered by the *opponent* must go to its OWNER's graveyard (CR 701.6a),
 // not the counterer's. The engine emits a PermanentMoved stamped with the countered spell's owner
 // so the relay can route the physical card off the shared stack to the right player — without any

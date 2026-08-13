@@ -289,6 +289,37 @@ TEST_F(GamePromptWidgetTest, ResolutionPickShowsConfirmEnabledOnlyWhenSatisfied)
     EXPECT_FALSE(btn("passPriorityButton")->isHidden());
 }
 
+TEST_F(GamePromptWidgetTest, ResolutionPaymentUsesNormalCostControlsAndSuppressesPriority)
+{
+    QSignalSpy declineSpy(widget.get(), &GamePromptWidget::ruledResolutionPaymentDeclineRequested);
+    widget->setLocalPlayerHasPriority(true);
+    widget->setLandTapUndoAvailable(true);
+    widget->setRuledPromptState(
+        {PromptMode::ResolutionPayment, 0, 0, "Pay {4} or decline.", {}, false, 4, false});
+
+    EXPECT_EQ(widget->effectiveMode(), PromptMode::ResolutionPayment);
+    EXPECT_FALSE(btn("resolutionPaymentDeclineButton")->isHidden());
+    EXPECT_TRUE(btn("passPriorityButton")->isHidden());
+    EXPECT_FALSE(btn("undoLandTapButton")->isHidden());
+
+    widget->setLandTapUndoAvailable(false);
+    EXPECT_TRUE(btn("undoLandTapButton")->isHidden());
+    btn("resolutionPaymentDeclineButton")->click();
+    EXPECT_EQ(declineSpy.count(), 1);
+}
+
+TEST_F(GamePromptWidgetTest, WaitingForResolutionChoiceSuppressesEveryActionControl)
+{
+    widget->setLocalPlayerHasPriority(true);
+    widget->setRuledPromptState({PromptMode::WaitingForChoice, 0, 0, "Waiting for p1...", {}});
+
+    EXPECT_EQ(widget->effectiveMode(), PromptMode::WaitingForChoice);
+    EXPECT_EQ(label("promptLabel")->text(), QString("Waiting for p1..."));
+    EXPECT_TRUE(btn("passPriorityButton")->isHidden());
+    EXPECT_TRUE(btn("resolutionPaymentDeclineButton")->isHidden());
+    EXPECT_TRUE(btn("undoLandTapButton")->isHidden());
+}
+
 TEST_F(GamePromptWidgetTest, TriggerOrderTakesOverFromTargetingAndShowsTheCallerText)
 {
     widget->setLocalPlayerHasPriority(true);

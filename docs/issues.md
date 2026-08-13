@@ -42,7 +42,7 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Priority: Low
 
 - [ ] #59 [feature] Resolution-time modes, optional payments, and costs
-  - Details: Extend resumable resolution choices with reusable mode selection and optional payment/cost branches. Calibration evidence: Trufflesnout, Sparktongue Dragon, and Crypt Lurker. Legal choice payloads must describe the available branches and required objects or mana, stale submissions must be rejected atomically, and declining an optional branch must remain legal.
+  - Details: Extend resumable resolution choices with reusable mode selection and optional nonmana payment/cost branches. Calibration evidence: Trufflesnout, Sparktongue Dragon, and Crypt Lurker. Issue #88 shipped the shared generic-mana pay/decline foundation, including mana abilities during resolution, normal mana-counter payment, automatic acceptance when fully paid, and rollback on decline. Legal choice payloads must describe the remaining branches and required objects, stale submissions must be rejected atomically, and declining an optional branch must remain legal.
   - Priority: Low
 
 - [ ] #62 [feature] Block-event triggers and related-player recipients
@@ -91,10 +91,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
 
 - [ ] #86 [feature] Related-player effect recipients
   - Details: Add recipient expressions for the controller of a target or blocking creature, the defending player or planeswalker associated with an attacker, and each opponent attacking an enchanted player. Calibration evidence: Chandra's Outrage, Gloom Sower's secondary controller-recipient gap, Scorch Spitter, Curse of Opulence, and Curse of Disturbance. Issue #94 shipped typed player attachment identity and the two Curses as partial cards; this issue retains their controller-created reward plus each-attacking-opponent reward after #63 supplies the attack trigger context. Derive recipients from engine identities at the event or resolution time required by the effect, with controller-aware multiplayer coverage.
-  - Priority: Low
-
-- [ ] #88 [feature] Soft counters with optional payment
-  - Details: Add a reusable counter-unless-the-controller-pays effect that pauses resolution for the spell's controller to make and pay a legal mana choice. Calibration evidence: Convolute. Reuse the payment engine and resolution-choice path, revalidate available mana, keep the spell on the stack when payment succeeds, and satisfy the two-card-or-mechanic reuse gate.
   - Priority: Low
 
 - [ ] #89 [feature] Battlefield-to-library zone moves

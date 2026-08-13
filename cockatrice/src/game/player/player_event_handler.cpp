@@ -256,24 +256,29 @@ void PlayerEventHandler::eventSetCounter(const Event_SetCounter &event)
         return;
     }
     int oldValue = ctr->getValue();
-    ctr->setValue(event.value());
     if (RuledActions::isRuledGame(player->getGame()) &&
         isRuledManaPoolCounterName(ctr->getName())) {
         // CR 605: when the local player produces mana (this pool counter just went up) while a spell or
         // ability is mid-payment, route the new mana straight into that pending cost rather than leaving
         // it floating — the "tap a land after clicking the spell pays the spell" behavior. The engine's
-        // own deduction at cast is a decrease and is ignored here.
-        if (player->getPlayerInfo()->getLocal() && event.value() > oldValue && player->getPlayerActions()) {
-            player->getPlayerActions()->autoApplyFloatedManaToPendingCost(ctr->getName(),
-                                                                          event.value() - oldValue);
+        // own deduction at cast is a decrease and is ignored here. Compare authoritative values,
+        // not the optimistically reduced display, so prior staged pips are not applied again.
+        PlayerActions *actions = player->getPlayerActions();
+        const int staged = actions ? actions->ruledManaCounterOptimisticSpendCount(event.counter_id()) : 0;
+        const auto refresh = ruledManaPoolTracker.observe(event.counter_id(), oldValue, event.value(), staged);
+        ctr->setValue(refresh.displayedBeforeNewStaging);
+        if (player->getPlayerInfo()->getLocal() && refresh.newlyProduced > 0 && actions) {
+            actions->autoApplyFloatedManaToPendingCost(ctr->getName(), refresh.newlyProduced);
         }
         return;
     }
+    ctr->setValue(event.value());
     emit logSetCounter(player, ctr->getName(), event.value(), oldValue);
 }
 
 void PlayerEventHandler::eventDelCounter(const Event_DelCounter &event)
 {
+    ruledManaPoolTracker.remove(event.counter_id());
     player->delCounter(event.counter_id());
 }
 

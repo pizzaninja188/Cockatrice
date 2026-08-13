@@ -485,6 +485,8 @@ impl GameEngine {
                         ordered: false,
                         unique_names: false,
                         candidate_server_card_ids: vec![],
+                        generic_mana_cost: 0,
+                        payment_currently_legal: false,
                     },
                 )),
             });
@@ -523,6 +525,7 @@ impl GameEngine {
                 prompt,
                 choice_kind: custom::ChoiceKind::LegendKeep,
                 unique_names: false,
+                mana_payment: None,
                 copy_source_object_id: 0,
                 search_destination: SearchDestination::default(),
                 search_shuffle: false,

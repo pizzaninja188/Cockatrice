@@ -4,12 +4,39 @@ use super::events::{
 };
 use super::legal_actions::fill_legal;
 use super::resolution::{
-    permanent_moved_event, sacrifice_permanent, seat_resolved_spell_last_in_graveyard,
+    counter_stack_spell, permanent_moved_event, sacrifice_permanent,
+    seat_resolved_spell_last_in_graveyard,
 };
 use super::targeting::{validate_ability_targets, validate_spell_targets, TargetSourceIdentity};
 use super::*;
 
 impl GameEngine {
+    pub(super) fn resolution_payment_choice_event(&self) -> Option<rv1::RuledEvent> {
+        let pending = self.state.pending_resolution.as_ref()?;
+        let payment = pending.mana_payment.as_ref()?;
+        Some(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    deciding_player_id: pending.deciding_player,
+                    source_object_id: pending.item.id,
+                    prompt_text: pending.prompt.clone(),
+                    choice_kind: rv1::ChoiceKind::ManaPayment as i32,
+                    candidate_object_ids: Vec::new(),
+                    candidate_card_ids: Vec::new(),
+                    min: 0,
+                    max: 0,
+                    ordered: false,
+                    candidate_names: Vec::new(),
+                    candidate_server_card_ids: Vec::new(),
+                    unique_names: false,
+                    generic_mana_cost: payment.generic_mana_cost,
+                    payment_currently_legal: self
+                        .can_pay_generic_mana(pending.deciding_player, payment.generic_mana_cost),
+                },
+            )),
+        })
+    }
+
     pub(super) fn choose_trigger_target(
         &mut self,
         player: PlayerId,
@@ -262,7 +289,7 @@ impl GameEngine {
     pub(super) fn submit_resolution_choice(
         &mut self,
         player: PlayerId,
-        chosen: &[u32],
+        answer: &rv1::SubmitResolutionChoice,
     ) -> Result<RuledEventBatch, EngineError> {
         let pending = self
             .state
@@ -273,6 +300,81 @@ impl GameEngine {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal("not your resolution choice"));
         }
+        let decision = match rv1::ResolutionChoiceDecision::try_from(answer.decision) {
+            Ok(decision) => decision,
+            Err(_) => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("unknown resolution choice decision"));
+            }
+        };
+        if let Some(payment) = pending.mana_payment.clone() {
+            if !answer.chosen_object_ids.is_empty() {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "mana payment choice cannot include object ids",
+                ));
+            }
+            let mut events = Vec::new();
+            match decision {
+                rv1::ResolutionChoiceDecision::PayMana => {
+                    if !self.can_pay_generic_mana(player, payment.generic_mana_cost) {
+                        self.state.pending_resolution = Some(pending);
+                        return Err(EngineError::Illegal(
+                            "resolution mana payment is not affordable",
+                        ));
+                    }
+                    if let Err(error) = self.pay_generic_mana(player, payment.generic_mana_cost) {
+                        self.state.pending_resolution = Some(pending);
+                        return Err(error);
+                    }
+                    events.push(ev_log(format!(
+                        "P{player} pays {{{}}} during resolution.",
+                        payment.generic_mana_cost
+                    )));
+                    self.state.undoable_mana_abilities.clear();
+                }
+                rv1::ResolutionChoiceDecision::Decline => {
+                    while self.state.undoable_mana_abilities.len() > payment.undo_history_start {
+                        events.push(self.rewind_last_undoable_mana_ability(
+                            player,
+                            payment.undo_history_start,
+                        )?);
+                    }
+                    // Resolution is consequential even though the payment-time entries were
+                    // rewound. Older float stays in the pool but is no longer eligible for Undo.
+                    self.state.undoable_mana_abilities.clear();
+                    let counter_label = self
+                        .registry
+                        .get(&pending.item.card_id)
+                        .map(|definition| definition.name.clone())
+                        .unwrap_or_else(|| pending.item.card_id.clone());
+                    counter_stack_spell(
+                        self,
+                        payment.target_spell_id,
+                        &counter_label,
+                        &mut events,
+                    )?;
+                }
+                rv1::ResolutionChoiceDecision::Unspecified => {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "mana payment choice requires pay or decline",
+                    ));
+                }
+            }
+            return self.complete_parked_resolution(
+                pending.item,
+                pending.resume_effect_index,
+                events,
+            );
+        }
+        if decision != rv1::ResolutionChoiceDecision::Unspecified {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "object resolution choice must leave decision unspecified",
+            ));
+        }
+        let chosen = answer.chosen_object_ids.as_slice();
         let n = chosen.len() as u32;
         if n < pending.min || n > pending.max {
             self.state.pending_resolution = Some(pending);
@@ -825,6 +927,8 @@ impl GameEngine {
                     ordered: true,
                     unique_names: false,
                     candidate_server_card_ids: Vec::new(),
+                    generic_mana_cost: 0,
+                    payment_currently_legal: false,
                 },
             )),
         });
@@ -939,6 +1043,8 @@ impl GameEngine {
                     unique_names: interrupt.unique_names,
                     // Populated by the server relay per-player; the engine never fills it.
                     candidate_server_card_ids: Vec::new(),
+                    generic_mana_cost: 0,
+                    payment_currently_legal: false,
                 },
             )),
         });
@@ -954,6 +1060,7 @@ impl GameEngine {
             max: interrupt.max,
             ordered: interrupt.ordered,
             unique_names: interrupt.unique_names,
+            mana_payment: None,
             prompt: interrupt.prompt,
             choice_kind: interrupt.choice_kind,
             copy_source_object_id: 0,

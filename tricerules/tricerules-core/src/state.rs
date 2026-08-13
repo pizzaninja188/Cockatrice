@@ -362,8 +362,20 @@ pub struct PendingTrigger {
 /// [`StackItem`] (no `dyn CardEffect`) — the `CardEffect` is re-looked-up by `custom_key` so the
 /// engine never has to box a trait object into state. See `engine`/`custom` for the flow.
 #[derive(Debug, Clone)]
+pub struct PendingManaPayment {
+    /// Stack object the resolving soft counter will counter if the player declines.
+    pub target_spell_id: ObjectId,
+    /// Generic mana required to preserve that spell.
+    pub generic_mana_cost: u32,
+    /// First entry in `undoable_mana_abilities` created while this payment prompt was active.
+    /// Undo and Decline may rewind entries at or after this boundary, never earlier float.
+    pub undo_history_start: usize,
+}
+
+#[derive(Debug, Clone)]
 pub struct PendingResolution {
-    /// The spell whose resolution is paused (its card already moved to graveyard/battlefield).
+    /// The spell whose resolution is paused. A soft counter remains on the stack until its
+    /// resolution-time payment branch completes; older custom choices may already have moved it.
     pub item: StackItem,
     /// Key into the `custom` registry; re-resolves to the `CardEffect` each step.
     pub custom_key: String,
@@ -386,6 +398,9 @@ pub struct PendingResolution {
     /// Mirror of [`ResolutionInterrupt::unique_names`]: the engine rejects submissions where two
     /// chosen object ids map to the same card name (Gifts Ungiven: "different names").
     pub unique_names: bool,
+    /// Resolution-time payment metadata for an "unless its controller pays" effect. Object-choice
+    /// resolutions leave this unset and continue to use candidates/min/max.
+    pub mana_payment: Option<PendingManaPayment>,
     /// For `__copy_targets` only: the object id of the spell being copied, so `StackPushed` can
     /// carry `copy_source_object_id` for the client's printing-inheritance logic.
     pub copy_source_object_id: ObjectId,

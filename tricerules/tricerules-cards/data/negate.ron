@@ -4,5 +4,5 @@
   mana_cost: "{1}{U}",
   types: ["Instant"],
   // "Counter target noncreature spell." (CR 701.5).
-  spell_effect: [CounterTargetSpell(spell_filter: Noncreature)],
+  spell_effect: [CounterTargetSpell(spell_filter: Noncreature, unless_controller_pays: None)],
 )

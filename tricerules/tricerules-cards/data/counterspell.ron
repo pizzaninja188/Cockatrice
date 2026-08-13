@@ -4,5 +4,5 @@
   mana_cost: "{U}{U}",
   types: ["Instant"],
   // "Counter target spell." No type restriction (CR 701.5).
-  spell_effect: [CounterTargetSpell(spell_filter: None)],
+  spell_effect: [CounterTargetSpell(spell_filter: None, unless_controller_pays: None)],
 )

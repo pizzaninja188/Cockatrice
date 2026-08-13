@@ -15,6 +15,7 @@
 #include "game/ruled/ruled_client_state.h"
 #include "game/ruled/ruled_dev_command_parser.h"
 #include "game/ruled/ruled_event_dispatcher.h"
+#include "game/ruled/ruled_mana_pool_tracker.h"
 #include "game/ruled/ruled_pending_cast.h"
 
 #include <QSignalSpy>
@@ -2005,6 +2006,103 @@ TEST_F(RuledClientTest, TriggerOrderReplacesAnyStalePendingChoice)
 // ---------------------------------------------------------------------------------------
 // Tier-3 resolution choices (CR 608)
 // ---------------------------------------------------------------------------------------
+
+TEST_F(RuledClientTest, ManaPaymentChoiceCreatesRefreshesAndSerializesDecisions)
+{
+    QSignalSpy paymentUiSpy(state, &RuledClientState::resolutionPaymentUiChanged);
+    auto paymentBatch = [](bool legal) {
+        ruled::v1::RuledEventBatch batch;
+        auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+        rcr->set_deciding_player_id(kLocalPlayer);
+        rcr->set_choice_kind(ruled::v1::CHOICE_KIND_MANA_PAYMENT);
+        rcr->set_prompt_text("Pay {4} or decline.");
+        rcr->set_generic_mana_cost(4);
+        rcr->set_payment_currently_legal(legal);
+        return batch;
+    };
+
+    apply(paymentBatch(false));
+    ASSERT_EQ(paymentUiSpy.count(), 1);
+    EXPECT_TRUE(paymentUiSpy.at(0).at(0).toBool());
+    ASSERT_TRUE(state->isResolutionPaymentActive());
+    EXPECT_EQ(state->resolutionPaymentGenericCost(), 4);
+    EXPECT_FALSE(state->resolutionPaymentCurrentlyLegal());
+    state->payResolutionMana();
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+
+    apply(paymentBatch(true));
+    ASSERT_EQ(paymentUiSpy.count(), 2);
+    EXPECT_TRUE(paymentUiSpy.at(1).at(0).toBool());
+    ASSERT_TRUE(state->resolutionPaymentCurrentlyLegal());
+    state->payResolutionMana();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    EXPECT_EQ(host.sentCommands.last().submit_resolution_choice().decision(),
+              ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
+    EXPECT_EQ(host.sentCommands.last().submit_resolution_choice().chosen_object_ids_size(), 0);
+    EXPECT_FALSE(state->isResolutionPaymentActive());
+    host.answerPendingAck(true);
+}
+
+TEST_F(RuledClientTest, RejectedManaPaymentRestoresThePrompt)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+    rcr->set_deciding_player_id(kLocalPlayer);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_MANA_PAYMENT);
+    rcr->set_prompt_text("Pay {4} or decline.");
+    rcr->set_generic_mana_cost(4);
+    rcr->set_payment_currently_legal(true);
+    apply(batch);
+
+    state->declineResolutionMana();
+    ASSERT_FALSE(state->isResolutionPaymentActive());
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    EXPECT_EQ(host.sentCommands.last().submit_resolution_choice().decision(),
+              ruled::v1::RESOLUTION_CHOICE_DECISION_DECLINE);
+    host.answerPendingAck(false);
+    EXPECT_TRUE(state->isResolutionPaymentActive());
+    EXPECT_TRUE(state->resolutionPaymentCurrentlyLegal());
+}
+
+TEST_F(RuledClientTest, ManaPaymentPromptsOnlyTheDecidingPlayer)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+    rcr->set_deciding_player_id(kLocalPlayer + 1);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_MANA_PAYMENT);
+    rcr->set_generic_mana_cost(4);
+    rcr->set_payment_currently_legal(true);
+    apply(batch);
+    EXPECT_FALSE(state->isResolutionPaymentActive());
+    EXPECT_TRUE(state->isWaitingForResolutionPayment());
+    EXPECT_EQ(state->resolutionPaymentWaitingPlayer(), kOpponent);
+
+    ruled::v1::RuledEventBatch completed;
+    apply(completed);
+    EXPECT_FALSE(state->isWaitingForResolutionPayment());
+}
+
+TEST(RuledManaPoolTrackerTest, OptimisticStagingDoesNotTurnOldManaIntoNewProduction)
+{
+    RuledManaPoolTracker tracker;
+
+    const auto first = tracker.observe(7, 0, 1, 0);
+    EXPECT_EQ(first.newlyProduced, 1);
+    EXPECT_EQ(first.displayedBeforeNewStaging, 1);
+
+    // The first produced pip is staged and hidden locally. The next engine value is 2, but only
+    // one pip is new and only that one may be auto-applied.
+    const auto second = tracker.observe(7, 0, 2, 1);
+    EXPECT_EQ(second.newlyProduced, 1);
+    EXPECT_EQ(second.displayedBeforeNewStaging, 1);
+
+    const auto undoSecond = tracker.observe(7, 0, 1, 1);
+    EXPECT_EQ(undoSecond.newlyProduced, 0);
+    EXPECT_EQ(undoSecond.displayedBeforeNewStaging, 0);
+    const auto undoFirst = tracker.observe(7, 0, 0, 0);
+    EXPECT_EQ(undoFirst.newlyProduced, 0);
+    EXPECT_EQ(undoFirst.displayedBeforeNewStaging, 0);
+}
 
 TEST_F(RuledClientTest, HandCardsChoiceStartsAClickToPickAndSubmitsInClickOrder)
 {

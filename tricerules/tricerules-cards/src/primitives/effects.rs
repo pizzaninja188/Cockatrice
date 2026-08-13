@@ -636,11 +636,14 @@ pub enum SpellEffectKind {
     },
     /// CR 701.5: counter target spell on the stack. `spell_filter` narrows which spells are legal
     /// targets — `None` is unrestricted (Counterspell), `Some(Creature)` is Essence Scatter,
-    /// `Some(Noncreature)` is Negate. Reuses [`CardTypeFilter`] so any future "counter target
-    /// X spell" needs no new variant.
+    /// `Some(Noncreature)` is Negate. `unless_controller_pays` parks resolution for an optional
+    /// generic-mana payment by that spell's controller (Convolute, Mana Leak). Reuses
+    /// [`CardTypeFilter`] so any future "counter target X spell" needs no new variant.
     CounterTargetSpell {
         #[serde(default)]
         spell_filter: Option<CardTypeFilter>,
+        #[serde(default)]
+        unless_controller_pays: Option<u32>,
     },
     /// CR 707.10: put `count` copies of target spell on the stack, each controlled by this
     /// spell's controller. A copy is **not cast** (no mana, no cast triggers, no storm count) and
@@ -1371,6 +1374,10 @@ impl SpellEffectKind {
                     Ok(())
                 }
             }
+            SpellEffectKind::CounterTargetSpell {
+                unless_controller_pays: Some(0),
+                ..
+            } => Err("CounterTargetSpell unless_controller_pays must be at least 1".into()),
             // CR 701.18: library search uses the stack interrupt machinery; it is a spell effect
             // only — using it on a mana ability makes no sense.
             SpellEffectKind::SearchLibrary { .. } => {

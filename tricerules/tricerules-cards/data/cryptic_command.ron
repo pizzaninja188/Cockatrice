@@ -9,7 +9,7 @@
     modes: [
       (
         label: "Counter target spell",
-        effects: [CounterTargetSpell(spell_filter: None)],
+        effects: [CounterTargetSpell(spell_filter: None, unless_controller_pays: None)],
       ),
       (
         label: "Return target permanent to its owner's hand",

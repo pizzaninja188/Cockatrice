@@ -129,11 +129,22 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
             }
         }
 
+        let payment_undo_start = eng
+            .state
+            .pending_resolution
+            .as_ref()
+            .and_then(|pending| {
+                (pending.deciding_player == p.id)
+                    .then_some(pending.mana_payment.as_ref()?.undo_history_start)
+            })
+            .unwrap_or(0);
         let undoable_mana_abilities = eng
             .state
             .undoable_mana_abilities
             .iter()
-            .filter(|e| e.player == p.id)
+            .enumerate()
+            .filter(|(index, _)| *index >= payment_undo_start)
+            .filter(|(_, e)| e.player == p.id)
             .count() as u32;
 
         // CR 508.1d / 509.1c: surface must-attack / must-block sets so the client can gate its

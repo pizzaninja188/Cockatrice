@@ -406,6 +406,31 @@ void TabGame::connectToGameEventHandler()
                 });
         connect(gamePromptWidget, &GamePromptWidget::ruledResolutionHandPickConfirmRequested,
                 game->getGameEventHandler()->ruled(), &RuledClientState::submitResolutionHandPick);
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::resolutionPaymentUiChanged, this,
+                [this](bool active) {
+                    const int localId = game->getPlayerManager()->getLocalPlayerId();
+                    Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+                    if (localPlayer && localPlayer->getPlayerActions()) {
+                        localPlayer->getPlayerActions()->syncRuledResolutionPayment(
+                            active, game->getGameEventHandler()->ruled()->resolutionPaymentGenericCost());
+                    }
+                    refreshRuledPromptState();
+                });
+        connect(gamePromptWidget, &GamePromptWidget::ruledResolutionPaymentDeclineRequested, this, [this]() {
+            const int localId = game->getPlayerManager()->getLocalPlayerId();
+            Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+            if (localPlayer && localPlayer->getPlayerActions()) {
+                localPlayer->getPlayerActions()->declineRuledResolutionPayment();
+            }
+        });
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::resolutionPaymentSubmissionFinished, this,
+                [this](bool accepted) {
+                    const int localId = game->getPlayerManager()->getLocalPlayerId();
+                    Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+                    if (localPlayer && localPlayer->getPlayerActions()) {
+                        localPlayer->getPlayerActions()->finishRuledResolutionPaymentSubmission(accepted);
+                    }
+                });
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::librarySearchPickStarted, this,
                 &TabGame::onRuledLibrarySearchPickStarted);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::revealedPickChanged, this,
@@ -657,6 +682,27 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.text = tr("Click the trigger to put on the stack next (%1 left) — what you pick first "
                         "resolves last.")
                          .arg(state.required);
+    } else if (h->isResolutionPaymentActive() && localActions &&
+               localActions->isAwaitingRuledAbilityCostSelection()) {
+        // A mana ability with an interactive cost temporarily owns the prompt. Once that cost is
+        // submitted or cancelled, the still-parked payment prompt resumes.
+        state.mode = PromptMode::ClickChoice;
+        state.text = localActions->pendingRuledAbilityCostPromptText();
+    } else if (h->isResolutionPaymentActive()) {
+        state.mode = PromptMode::ResolutionPayment;
+        const int remaining = localActions ? localActions->ruledResolutionPaymentRemaining()
+                                           : h->resolutionPaymentGenericCost();
+        state.text = tr("Pay mana: {%1} remaining (click mana counters or activate mana abilities).")
+                         .arg(remaining);
+        state.genericManaCost = remaining;
+        state.paymentCurrentlyLegal = h->resolutionPaymentCurrentlyLegal();
+    } else if (h->isWaitingForResolutionPayment()) {
+        state.mode = PromptMode::WaitingForChoice;
+        if (Player *decider = game->getPlayerManager()->getPlayer(h->resolutionPaymentWaitingPlayer())) {
+            state.text = tr("Waiting for %1...").arg(decider->getPlayerInfo()->getName());
+        } else {
+            state.text = tr("Waiting for opponent...");
+        }
     } else if (h->isResolutionHandPickActive()) {
         state.mode = PromptMode::ResolutionPick;
         state.required = h->resolutionHandPickRequired();
@@ -1548,6 +1594,8 @@ void TabGame::addLocalPlayer(Player *newPlayer, int playerId)
                     }
                 });
         connect(newPlayer->getPlayerActions(), &PlayerActions::ruledAbilityCostPromptChanged, this,
+                [this]() { refreshRuledPromptState(); });
+        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledResolutionManaPromptChanged, this,
                 [this]() { refreshRuledPromptState(); });
         connect(gamePromptWidget, &GamePromptWidget::undoLandTapRequested, newPlayer->getPlayerActions(),
                 &PlayerActions::undoLastLandTap);

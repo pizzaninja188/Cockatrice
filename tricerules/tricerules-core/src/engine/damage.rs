@@ -498,6 +498,8 @@ impl GameEngine {
                     candidate_names,
                     candidate_server_card_ids: Vec::new(),
                     unique_names: false,
+                    generic_mana_cost: 0,
+                    payment_currently_legal: false,
                 },
             )),
         });
@@ -518,6 +520,7 @@ impl GameEngine {
             prompt,
             choice_kind: rv1::ChoiceKind::ReplacementEffect,
             unique_names: false,
+            mana_payment: None,
             copy_source_object_id: 0,
             search_destination: SearchDestination::Hand,
             search_shuffle: false,

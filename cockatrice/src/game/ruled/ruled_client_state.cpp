@@ -354,14 +354,52 @@ void RuledClientState::clearPendingChoiceOfKind(ChoiceKind kind)
     }
 }
 
-void RuledClientState::sendResolutionChoice(const QVector<quint32> &chosenOids)
+void RuledClientState::sendResolutionChoice(const QVector<quint32> &chosenOids,
+                                            ruled::v1::ResolutionChoiceDecision decision)
 {
     ruled::v1::RuledCommand cmd;
     auto *sub = cmd.mutable_submit_resolution_choice();
     for (const quint32 oid : chosenOids) {
         sub->add_chosen_object_ids(oid);
     }
+    sub->set_decision(decision);
     host->sendRuledCommand(cmd);
+}
+
+void RuledClientState::payResolutionMana()
+{
+    if (resolutionPaymentCurrentlyLegal()) {
+        submitResolutionPayment(ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
+    }
+}
+
+void RuledClientState::declineResolutionMana()
+{
+    if (isResolutionPaymentActive()) {
+        submitResolutionPayment(ruled::v1::RESOLUTION_CHOICE_DECISION_DECLINE);
+    }
+}
+
+void RuledClientState::submitResolutionPayment(ruled::v1::ResolutionChoiceDecision decision)
+{
+    if (!isResolutionPaymentActive()) {
+        return;
+    }
+    const RuledPendingChoice restore = *pendingChoice;
+    clearPendingChoiceOfKind(ChoiceKind::ResolutionPayment);
+    emit resolutionPaymentUiChanged(false);
+    emit combatStateChanged();
+
+    ruled::v1::RuledCommand command;
+    command.mutable_submit_resolution_choice()->set_decision(decision);
+    host->sendRuledCommandExpectingAck(command, [this, restore](bool accepted) {
+        emit resolutionPaymentSubmissionFinished(accepted);
+        if (!accepted && !pendingChoice.has_value()) {
+            setPendingChoice(restore);
+            emit resolutionPaymentUiChanged(true);
+            emit combatStateChanged();
+        }
+    });
 }
 
 void RuledClientState::submitPendingChoiceObject(quint32 oid)
@@ -487,6 +525,7 @@ void RuledClientState::submitResolutionHandPick()
     }
     clearPendingChoice();
     emit resolutionHandPickUiChanged(-1, -1);
+    emit resolutionPaymentUiChanged(false);
     emit combatStateChanged();
     sendResolutionChoice(chosen);
 }

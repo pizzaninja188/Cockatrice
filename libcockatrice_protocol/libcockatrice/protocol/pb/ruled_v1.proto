@@ -197,10 +197,18 @@ message DevAddMana {
   uint32 c = 6;
 }
 
-// A player's answer to a ResolutionChoiceRequired: the chosen object ids (in order when the
-// request was `ordered`). The engine validates them against the parked request's candidates.
+enum ResolutionChoiceDecision {
+  RESOLUTION_CHOICE_DECISION_UNSPECIFIED = 0;
+  RESOLUTION_CHOICE_DECISION_DECLINE = 1;
+  RESOLUTION_CHOICE_DECISION_PAY_MANA = 2;
+}
+
+// A player's answer to a ResolutionChoiceRequired. Object choices use chosen_object_ids (in
+// order when the request was `ordered`) and leave decision unspecified. Mana-payment choices use
+// an empty object list and explicitly pay or decline.
 message SubmitResolutionChoice {
   repeated uint32 chosen_object_ids = 1;
+  ResolutionChoiceDecision decision = 2;
 }
 
 // A player's answer to a TriggerOrderRequired (CR 603.3b): put THIS trigger on the stack next.
@@ -756,6 +764,9 @@ enum ChoiceKind {
   // A live battlefield permanent selected for an untargeted "enters as a copy" replacement
   // effect (Clone, Stunt Double). Public; zero selections means decline.
   CHOICE_KIND_COPY_SOURCE = 8;
+  // A public resolution-time generic-mana payment. The decider receives the prompt; other players
+  // receive the ordinary waiting state. No candidate objects are exposed for this choice.
+  CHOICE_KIND_MANA_PAYMENT = 9;
 }
 
 // A parked custom resolution (CR 608) requesting input from one player. Reused by every tier-3
@@ -794,6 +805,10 @@ message ResolutionChoiceRequired {
   // When true, all chosen candidates must have distinct card names (Gifts Ungiven: "four cards
   // with different names"). The client enforces this before submission; the engine re-validates.
   bool unique_names = 12 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Generic mana requested by a CHOICE_KIND_MANA_PAYMENT choice. Zero for object choices.
+  uint32 generic_mana_cost = 13 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Engine-authoritative affordability for a mana payment. Clients must not recompute this.
+  bool payment_currently_legal = 14 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // A token entered the battlefield (CR 111). Unlike a resolved permanent spell, a token has no

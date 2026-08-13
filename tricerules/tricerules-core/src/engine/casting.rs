@@ -166,11 +166,6 @@ fn plan_mana_payment(
     extra_generic: u32,
     flex_payments: &[rv1::FlexPipPayment],
 ) -> Result<ManaPaymentPlan, EngineError> {
-    if player_idx != state.priority_idx {
-        return Err(EngineError::Illegal(
-            "only priority player can pay mana for spells",
-        ));
-    }
     let life_pips: HashSet<usize> = flex_payments
         .iter()
         .filter(|fp| fp.pay_life)
@@ -273,6 +268,41 @@ pub(super) fn pay_mana(
 }
 
 impl GameEngine {
+    pub(super) fn can_pay_generic_mana(&self, player: PlayerId, amount: u32) -> bool {
+        self.state.player_idx(player).is_some_and(|player_idx| {
+            plan_mana_payment(
+                &self.state,
+                player_idx,
+                &ManaCost::default(),
+                0,
+                amount,
+                &[],
+            )
+            .is_ok()
+        })
+    }
+
+    pub(super) fn pay_generic_mana(
+        &mut self,
+        player: PlayerId,
+        amount: u32,
+    ) -> Result<(), EngineError> {
+        let player_idx = self
+            .state
+            .player_idx(player)
+            .ok_or(EngineError::UnknownPlayer(player))?;
+        let plan = plan_mana_payment(
+            &self.state,
+            player_idx,
+            &ManaCost::default(),
+            0,
+            amount,
+            &[],
+        )?;
+        commit_mana_payment(&mut self.state, player_idx, plan);
+        Ok(())
+    }
+
     pub(super) fn cast_spell(
         &mut self,
         player: PlayerId,
@@ -284,9 +314,6 @@ impl GameEngine {
         let face_index = command.face_index as usize;
         let selected_modes = command.selected_modes.as_slice();
         let cost_selections = command.cost_selections.as_slice();
-        if self.state.priority_player_id() != player {
-            return Err(EngineError::Illegal("not your priority"));
-        }
         if self.state.turn_step == TurnStep::Cleanup {
             return Err(EngineError::Illegal("no spells during cleanup"));
         }
@@ -886,6 +913,22 @@ impl GameEngine {
             .get(ability_index)
             .ok_or(EngineError::Illegal("no such activated ability"))?
             .clone();
+        let resolving_mana_payment =
+            self.state
+                .pending_resolution
+                .as_ref()
+                .is_some_and(|pending| {
+                    pending.mana_payment.is_some() && pending.deciding_player == player
+                });
+        if resolving_mana_payment {
+            if ability.mana_options().is_none() {
+                return Err(EngineError::Illegal(
+                    "only mana abilities may be activated during a resolution payment",
+                ));
+            }
+        } else if self.state.priority_player_id() != player {
+            return Err(EngineError::Illegal("not your priority"));
+        }
 
         // CR 602.5d / 702.6a: explicit activation instructions and equip both use the shared
         // sorcery-speed window.
@@ -899,7 +942,7 @@ impl GameEngine {
         }
 
         if ability.mana_options().is_some() {
-            return self.resolve_mana_ability(
+            let mut batch = self.resolve_mana_ability(
                 player,
                 idx,
                 permanent_id,
@@ -909,7 +952,14 @@ impl GameEngine {
                 targets,
                 flex_payments,
                 cost_selections,
-            );
+            )?;
+            if resolving_mana_payment {
+                batch.events.push(
+                    self.resolution_payment_choice_event()
+                        .expect("resolution payment remains parked after a mana ability"),
+                );
+            }
+            return Ok(batch);
         }
 
         self.state.undoable_mana_abilities.clear();
@@ -1477,18 +1527,43 @@ impl GameEngine {
         &mut self,
         player: PlayerId,
     ) -> Result<RuledEventBatch, EngineError> {
+        let payment_undo_start = self.state.pending_resolution.as_ref().and_then(|pending| {
+            (pending.deciding_player == player)
+                .then_some(pending.mana_payment.as_ref()?.undo_history_start)
+        });
+        if self.state.priority_player_id() != player && payment_undo_start.is_none() {
+            return Err(EngineError::Illegal("not your priority"));
+        }
+        let event =
+            self.rewind_last_undoable_mana_ability(player, payment_undo_start.unwrap_or(0))?;
+
+        let mut batch = RuledEventBatch::default();
+        batch.events.push(event);
+        if payment_undo_start.is_some() {
+            batch.events.push(
+                self.resolution_payment_choice_event()
+                    .expect("resolution payment remains parked after undo"),
+            );
+        }
+        Ok(batch)
+    }
+
+    pub(super) fn rewind_last_undoable_mana_ability(
+        &mut self,
+        player: PlayerId,
+        first_allowed_index: usize,
+    ) -> Result<rv1::RuledEvent, EngineError> {
         let idx = self
             .state
             .player_idx(player)
             .ok_or(EngineError::UnknownPlayer(player))?;
-        if self.state.priority_player_id() != player {
-            return Err(EngineError::Illegal("not your priority"));
-        }
         let pos = self
             .state
             .undoable_mana_abilities
             .iter()
-            .rposition(|e| e.player == player)
+            .enumerate()
+            .rfind(|(index, entry)| *index >= first_allowed_index && entry.player == player)
+            .map(|(index, _)| index)
             .ok_or(EngineError::Illegal("no mana ability to undo"))?;
         let entry = self.state.undoable_mana_abilities.remove(pos);
 
@@ -1519,11 +1594,9 @@ impl GameEngine {
             .and_then(|o| self.registry.get(&o.card_id))
             .map(|d| d.name.clone())
             .unwrap_or_else(|| "permanent".to_string());
-        let mut batch = RuledEventBatch::default();
-        batch.events.push(ev_log(format!(
+        Ok(ev_log(format!(
             "P{player} undoes mana ability: {card_name}"
-        )));
-        Ok(batch)
+        )))
     }
 
     pub(super) fn play_land(

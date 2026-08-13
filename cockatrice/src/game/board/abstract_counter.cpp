@@ -166,7 +166,8 @@ void AbstractCounter::mousePressEvent(QGraphicsSceneMouseEvent *event)
     if (isUnderMouse() && player->getPlayerInfo()->getLocalOrJudge()) {
         const bool canPayRuled = player && player->getPlayerActions() && event->button() == Qt::LeftButton && value > 0 &&
                                  (player->getPlayerActions()->tryPayRuledSpellWithCounter(name) ||
-                                  player->getPlayerActions()->tryPayRuledAbilityWithCounter(name));
+                                  player->getPlayerActions()->tryPayRuledAbilityWithCounter(name) ||
+                                  player->getPlayerActions()->tryPayRuledResolutionWithCounter(name));
         if (canPayRuled) {
             event->accept();
             return;

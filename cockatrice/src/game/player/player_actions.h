@@ -56,6 +56,8 @@ signals:
     void ruledAbilityActivationPendingChanged(bool pending);
     /// Emitted when `remainingCost` changes during ability mana payment (land or counter).
     void ruledAbilityManaPromptChanged();
+    /// Emitted as generic pips are staged for a resolution-time payment.
+    void ruledResolutionManaPromptChanged();
     void ruledAbilityCostPromptChanged();
     /// Emitted when an activated ability enters or leaves the target-selection waiting state.
     void ruledActivatedAbilityTargetPendingChanged(bool pending, QString abilityText);
@@ -122,6 +124,9 @@ public:
     bool tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer);
     /// Click a pool mana counter to pay toward a pending activated ability. Returns true if consumed.
     bool tryPayRuledAbilityWithCounter(const QString &counterName);
+    /// Click a pool mana counter toward the current generic resolution payment. The fourth pip
+    /// submits payment automatically, matching ordinary spell-cost interaction.
+    bool tryPayRuledResolutionWithCounter(const QString &counterName);
     /// CR 605/106: route mana the player just produced (e.g. by tapping a land *after* clicking a
     /// spell/ability, so its ManaPoolUpdated SetCounter just raised this pool counter by `amount`)
     /// straight into the pending cost instead of leaving it floating in the pool. Each pip is paid
@@ -131,6 +136,17 @@ public:
     /// Resume the cast/activation whose last pip was paid by an engine mana-ability response while
     /// the one-command lock was still active. No-op unless a staged action is fully paid.
     void resumePendingRuledPaymentAfterEngineCommand();
+    /// Start or refresh the client-side remaining-cost view from the engine-authored prompt.
+    void syncRuledResolutionPayment(bool active, int genericCost);
+    /// Restore locally staged pool pips, then submit Decline. The engine separately rewinds mana
+    /// abilities activated since the prompt began.
+    void declineRuledResolutionPayment();
+    /// Ack completion for an optimistic resolution payment submission.
+    void finishRuledResolutionPaymentSubmission(bool accepted);
+    [[nodiscard]] int ruledResolutionPaymentRemaining() const;
+    /// Pips already staged locally from this engine-owned counter but not yet deducted by the
+    /// authoritative game state.
+    [[nodiscard]] int ruledManaCounterOptimisticSpendCount(int counterId) const;
     void cancelPendingActivatedAbility();
     /// Returns the mana-payment prompt text if an ability is pending and still needs mana, otherwise empty.
     [[nodiscard]] QString pendingRuledAbilityPromptText() const;
@@ -383,6 +399,12 @@ private:
     QVector<LandTapUndoEntry> landTapUndoStack;
     QVector<LandTapUndoEntry> midCastLandTapStack;
     QVector<int> manaPaymentCounterIds;
+    bool resolutionPaymentActive = false;
+    bool resolutionPaymentSubmissionPending = false;
+    int resolutionPaymentRemaining = 0;
+    QVector<int> resolutionPaymentCounterIds;
+    QVector<int> resolutionPaymentAutoAppliedGroups;
+    int resolutionPaymentAutoAppliedPendingGroup = 0;
     // Ruled mode: engine-reported count of this player's undoable mana abilities (CR 605 float
     // courtesy). Authoritative source for the Undo button in ruled games; the local
     // `landTapUndoStack` drives it only in freeform. See setRuledUndoableManaCount.

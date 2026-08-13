@@ -541,7 +541,7 @@ pub(super) fn effect_target_legal_at_resolution(
         // CR 115.2 / 707.10b: counter and copy effects target *spells* on the stack, not
         // activated/triggered abilities. The optional `spell_filter` further restricts which
         // spell types are legal (Essence Scatter, Negate, Twincast).
-        SpellEffectKind::CounterTargetSpell { spell_filter } => {
+        SpellEffectKind::CounterTargetSpell { spell_filter, .. } => {
             stack_spell_target_legal(&engine.state, engine.registry, tid, *spell_filter)
         }
         SpellEffectKind::CopyTargetSpell { spell_filter, .. } => {
@@ -1047,7 +1047,7 @@ pub(super) fn spell_target_legality_error(
         }
         // CR 115.2 / 707.10b: counter and copy effects target spells, not abilities. The optional
         // `spell_filter` further restricts the spell type (Essence Scatter, Negate, Twincast).
-        SpellEffectKind::CounterTargetSpell { spell_filter }
+        SpellEffectKind::CounterTargetSpell { spell_filter, .. }
         | SpellEffectKind::CopyTargetSpell { spell_filter, .. } => {
             if !stack_spell_target_legal(&engine.state, engine.registry, tid, *spell_filter) {
                 return Err(EngineError::Illegal(

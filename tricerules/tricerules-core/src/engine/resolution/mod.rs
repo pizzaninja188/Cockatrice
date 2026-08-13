@@ -25,6 +25,7 @@ mod misc;
 mod pump_counters;
 mod restrictions;
 mod stack_ops;
+pub(super) use stack_ops::counter_stack_spell;
 mod tokens;
 mod zones;
 
@@ -233,7 +234,20 @@ impl GameEngine {
         // `GameObject` in `objects`, so it must take the same no-zone-move path as an ability.
         let is_ability = top.ability_text.is_some();
         let leaves_no_object = is_ability || top.is_copy;
-        if leaves_no_object {
+        let defer_soft_counter_exit =
+            self.build_resolution_effects(&top)
+                .0
+                .iter()
+                .any(|(effect, _, _, _)| {
+                    matches!(
+                        effect,
+                        SpellEffectKind::CounterTargetSpell {
+                            unless_controller_pays: Some(_),
+                            ..
+                        }
+                    )
+                });
+        if leaves_no_object && !defer_soft_counter_exit {
             events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
                     object_id: top.id,
@@ -242,7 +256,7 @@ impl GameEngine {
                     destination: rv1::StackResolveDestination::Graveyard as i32,
                 })),
             });
-        } else {
+        } else if !leaves_no_object {
             // CR 709/712/715: permanence is the *cast face's* (Ice resolves to graveyard; an MDFC
             // permanent face resolves to the battlefield as that face).
             let resolving_face = self
@@ -347,7 +361,7 @@ impl GameEngine {
                         self.commit_battlefield_entry(entry, attached_to)?;
                     }
                 }
-            } else {
+            } else if !defer_soft_counter_exit {
                 events.push(rv1::RuledEvent {
                     ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
                         object_id: top.id,
@@ -431,6 +445,7 @@ impl GameEngine {
                 events.push(ev_log(format!(
                     "{spell_label} does nothing (its \"if\" condition is no longer true, CR 603.4)."
                 )));
+                self.finish_deferred_stack_exit(&top, events)?;
                 return Ok(());
             }
         }
@@ -472,10 +487,56 @@ impl GameEngine {
                 .all(|(_, mode_targets, _, _)| mode_targets.is_empty());
         if fizzle {
             events.push(ev_log(format!("{spell_label} fizzles (no legal targets).")));
+            self.finish_deferred_stack_exit(&top, events)?;
             return Ok(());
         }
 
         self.run_effect_list(&top, &spell_label, resolution_effects, 0, events)
+    }
+
+    /// Complete the stack exit that a resolution-time soft-counter payment deliberately deferred.
+    /// Ordinary spells have already left the stack before this point and make this a no-op.
+    fn finish_deferred_stack_exit(
+        &mut self,
+        top: &StackItem,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let has_stack_item = self.state.stack.iter().any(|item| item.id == top.id);
+        let has_stack_object = self
+            .state
+            .objects
+            .get(&top.id)
+            .is_some_and(|object| object.zone == Zone::Stack);
+        if !has_stack_item && !has_stack_object {
+            return Ok(());
+        }
+
+        self.state.stack.retain(|item| item.id != top.id);
+        let destination = if top.flashback {
+            rv1::StackResolveDestination::Exile
+        } else {
+            rv1::StackResolveDestination::Graveyard
+        };
+        events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
+                object_id: top.id,
+                destination: destination as i32,
+            })),
+        });
+        if has_stack_object {
+            move_object_to_zone(
+                &mut self.state,
+                self.registry,
+                top.id,
+                if top.flashback {
+                    Zone::Exile
+                } else {
+                    Zone::Graveyard
+                },
+                None,
+            )?;
+        }
+        Ok(())
     }
 
     /// Rebuild a stack item's primitive effect list and display label.
@@ -807,6 +868,7 @@ impl GameEngine {
             }
             previous_effect_result = effect_result;
         }
+        self.finish_deferred_stack_exit(top, events)?;
         events.push(ev_log(format!("{spell_label} resolves.")));
         // CR 608.2m: the spell lands in its owner's graveyard *after* its effects, so it sits
         // beneath anything those effects put there (e.g. a self-targeted Tome Scour's five cards).
