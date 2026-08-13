@@ -73,6 +73,8 @@ struct PendingRuledSpellCast
         RuledSpellTargetData targets;
         QVector<quint32> selectedTargetOids;
         QVector<quint32> selectedTargetDamages;
+        QVector<QVector<quint32>> selectedTargetOidsByGroup;
+        QVector<QVector<quint32>> selectedTargetDamagesByGroup;
     };
 
     int handIndex = -1;
@@ -85,8 +87,12 @@ struct PendingRuledSpellCast
     QMap<QChar, int> remainingCost;
     QVector<quint32> selectedTargetOids;
     QVector<quint32> selectedTargetDamages;
+    QVector<QVector<quint32>> selectedTargetOidsByGroup;
+    QVector<QVector<quint32>> selectedTargetDamagesByGroup;
+    int activeTargetGroupPosition = -1;
     bool waitingForTarget = false;
     bool valid = false;
+    int minTargets = 1;
     int maxTargets = 0;
     int fixedDamage = 0;
     bool isDamageTargets = false;
@@ -131,7 +137,7 @@ enum class RuledTargetClickEligibility
     Illegal,
 };
 
-[[nodiscard]] inline bool ruledTargetDataContains(const RuledSpellTargetData &data,
+[[nodiscard]] inline bool ruledTargetDataContains(const RuledTargetGroupData &data,
                                                   RuledTargetCandidateKind kind,
                                                   quint32 oid,
                                                   int localPlayerId)
@@ -149,6 +155,27 @@ enum class RuledTargetClickEligibility
     return false;
 }
 
+/// Encode the physical surface represented by an engine ObjectId. The candidate group is
+/// authoritative; this exists because player ids and object ids intentionally share integers.
+[[nodiscard]] inline ruled::v1::TargetRefKind ruledTargetRefKind(const RuledTargetGroupData &data,
+                                                                 quint32 oid,
+                                                                 int localPlayerId)
+{
+    if (data.validGraveyardIds.contains(oid)) {
+        return ruled::v1::TARGET_REF_KIND_GRAVEYARD;
+    }
+    if (data.validStackIds.contains(oid)) {
+        return ruled::v1::TARGET_REF_KIND_STACK;
+    }
+    if (data.validPermanentIds.contains(oid)) {
+        return ruled::v1::TARGET_REF_KIND_PERMANENT;
+    }
+    if (oid == static_cast<quint32>(localPlayerId) ? data.canTargetSelf : data.canTargetOpponent) {
+        return ruled::v1::TARGET_REF_KIND_PLAYER;
+    }
+    return ruled::v1::TARGET_REF_KIND_UNSPECIFIED;
+}
+
 [[nodiscard]] inline std::optional<RuledSpellTargetData>
 currentRuledSpellTargetData(const PendingRuledSpellCast &spell, const RuledClientState &state)
 {
@@ -160,6 +187,17 @@ currentRuledSpellTargetData(const PendingRuledSpellCast &spell, const RuledClien
                                           spell.selectedModes.at(spell.activeModePosition).modeIndex, spell.source);
     }
     return state.spellTargetData(spell.handIndex, spell.faceIndex, spell.source);
+}
+
+[[nodiscard]] inline std::optional<RuledTargetGroupData>
+currentRuledSpellTargetGroup(const PendingRuledSpellCast &spell, const RuledClientState &state)
+{
+    const auto data = currentRuledSpellTargetData(spell, state);
+    if (!data.has_value() || spell.activeTargetGroupPosition < 0 ||
+        spell.activeTargetGroupPosition >= data->groups.size()) {
+        return std::nullopt;
+    }
+    return data->groups.at(spell.activeTargetGroupPosition);
 }
 
 /// One authoritative click predicate for every true target-selection flow. Untargeted resolution
@@ -192,7 +230,7 @@ ruledTargetClickEligibility(const PendingRuledSpellCast &spell,
                                                                        : RuledTargetClickEligibility::Illegal;
     }
     if (spell.valid && spell.waitingForTarget) {
-        const auto data = currentRuledSpellTargetData(spell, state);
+        const auto data = currentRuledSpellTargetGroup(spell, state);
         return data.has_value() && ruledTargetDataContains(*data, kind, oid, localPlayerId)
                    ? RuledTargetClickEligibility::Legal
                    : RuledTargetClickEligibility::Illegal;
@@ -200,7 +238,7 @@ ruledTargetClickEligibility(const PendingRuledSpellCast &spell,
     return RuledTargetClickEligibility::NotTargeting;
 }
 
-[[nodiscard]] inline bool ruledTargetDataContainsOid(const RuledSpellTargetData &data,
+[[nodiscard]] inline bool ruledTargetDataContainsOid(const RuledTargetGroupData &data,
                                                      quint32 oid,
                                                      int localPlayerId)
 {
@@ -221,7 +259,7 @@ ruledTargetClickEligibility(const PendingRuledSpellCast &spell,
     const auto prune = [&](QVector<quint32> &oids,
                            QVector<quint32> &damages,
                            QVector<int> *allocations,
-                           const RuledSpellTargetData &data) {
+                           const RuledTargetGroupData &data) {
         for (int i = oids.size() - 1; i >= 0; --i) {
             if (ruledTargetDataContainsOid(data, oids.at(i), localPlayerId)) {
                 continue;
@@ -240,18 +278,83 @@ ruledTargetClickEligibility(const PendingRuledSpellCast &spell,
     if (spell.valid) {
         if (spell.selectedModes.isEmpty()) {
             const auto data = state.spellTargetData(spell.handIndex, spell.faceIndex, spell.source);
-            prune(spell.selectedTargetOids, spell.selectedTargetDamages, &spell.targetDamageAllocations, data);
+            while (spell.selectedTargetOidsByGroup.size() < data.groups.size()) {
+                spell.selectedTargetOidsByGroup.append(QVector<quint32>{});
+            }
+            while (spell.selectedTargetDamagesByGroup.size() < data.groups.size()) {
+                spell.selectedTargetDamagesByGroup.append(QVector<quint32>{});
+            }
+            if (spell.activeTargetGroupPosition >= 0 &&
+                spell.activeTargetGroupPosition < spell.selectedTargetOidsByGroup.size()) {
+                spell.selectedTargetOidsByGroup[spell.activeTargetGroupPosition] = spell.selectedTargetOids;
+                spell.selectedTargetDamagesByGroup[spell.activeTargetGroupPosition] = spell.selectedTargetDamages;
+            }
+            for (int groupIndex = 0; groupIndex < data.groups.size(); ++groupIndex) {
+                QVector<int> *const allocations = groupIndex == spell.activeTargetGroupPosition
+                                                      ? &spell.targetDamageAllocations
+                                                      : nullptr;
+                prune(spell.selectedTargetOidsByGroup[groupIndex], spell.selectedTargetDamagesByGroup[groupIndex],
+                      allocations, data.groups.at(groupIndex));
+            }
+            if (spell.activeTargetGroupPosition >= 0 &&
+                spell.activeTargetGroupPosition < spell.selectedTargetOidsByGroup.size()) {
+                spell.selectedTargetOids = spell.selectedTargetOidsByGroup.at(spell.activeTargetGroupPosition);
+                spell.selectedTargetDamages =
+                    spell.selectedTargetDamagesByGroup.at(spell.activeTargetGroupPosition);
+            }
+            for (int groupIndex = 0; groupIndex < data.groups.size(); ++groupIndex) {
+                const auto &group = data.groups.at(groupIndex);
+                if (spell.selectedTargetOidsByGroup.at(groupIndex).size() < group.minTargets) {
+                    spell.activeTargetGroupPosition = groupIndex;
+                    spell.selectedTargetOids = spell.selectedTargetOidsByGroup.at(groupIndex);
+                    spell.selectedTargetDamages = spell.selectedTargetDamagesByGroup.at(groupIndex);
+                    spell.minTargets = group.minTargets;
+                    spell.maxTargets = group.maxTargets;
+                    spell.waitingForTarget = true;
+                    break;
+                }
+            }
         } else {
             for (int modePosition = 0; modePosition < spell.selectedModes.size(); ++modePosition) {
                 auto &mode = spell.selectedModes[modePosition];
                 const auto data = state.modalSpellTargetData(spell.handIndex, spell.faceIndex, mode.modeIndex,
                                                              spell.source);
-                const RuledSpellTargetData empty;
-                prune(mode.selectedTargetOids, mode.selectedTargetDamages, nullptr,
-                      data.has_value() ? *data : empty);
-                if (modePosition == spell.activeModePosition) {
-                    prune(spell.selectedTargetOids, spell.selectedTargetDamages,
-                          &spell.targetDamageAllocations, data.has_value() ? *data : empty);
+                if (!data.has_value()) {
+                    continue;
+                }
+                while (mode.selectedTargetOidsByGroup.size() < data->groups.size()) {
+                    mode.selectedTargetOidsByGroup.append(QVector<quint32>{});
+                }
+                while (mode.selectedTargetDamagesByGroup.size() < data->groups.size()) {
+                    mode.selectedTargetDamagesByGroup.append(QVector<quint32>{});
+                }
+                if (modePosition == spell.activeModePosition && spell.activeTargetGroupPosition >= 0 &&
+                    spell.activeTargetGroupPosition < mode.selectedTargetOidsByGroup.size()) {
+                    mode.selectedTargetOidsByGroup[spell.activeTargetGroupPosition] = spell.selectedTargetOids;
+                    mode.selectedTargetDamagesByGroup[spell.activeTargetGroupPosition] =
+                        spell.selectedTargetDamages;
+                }
+                for (int groupIndex = 0; groupIndex < data->groups.size(); ++groupIndex) {
+                    prune(mode.selectedTargetOidsByGroup[groupIndex], mode.selectedTargetDamagesByGroup[groupIndex],
+                          nullptr, data->groups.at(groupIndex));
+                    if (modePosition == spell.activeModePosition &&
+                        groupIndex == spell.activeTargetGroupPosition) {
+                        spell.selectedTargetOids = mode.selectedTargetOidsByGroup.at(groupIndex);
+                        spell.selectedTargetDamages = mode.selectedTargetDamagesByGroup.at(groupIndex);
+                    }
+                    const auto &group = data->groups.at(groupIndex);
+                    if (mode.selectedTargetOidsByGroup.at(groupIndex).size() < group.minTargets) {
+                        spell.activeModePosition = modePosition;
+                        spell.activeTargetGroupPosition = groupIndex;
+                        spell.selectedTargetOidsByGroup = mode.selectedTargetOidsByGroup;
+                        spell.selectedTargetDamagesByGroup = mode.selectedTargetDamagesByGroup;
+                        spell.selectedTargetOids = mode.selectedTargetOidsByGroup.at(groupIndex);
+                        spell.selectedTargetDamages = mode.selectedTargetDamagesByGroup.at(groupIndex);
+                        spell.minTargets = group.minTargets;
+                        spell.maxTargets = group.maxTargets;
+                        spell.waitingForTarget = true;
+                        break;
+                    }
                 }
             }
         }

@@ -479,6 +479,26 @@ pub(super) fn return_from_graveyard(
     let controller = cx.controller;
     let spell_label = cx.spell_label;
 
+    if destination == tricerules_cards::primitives::GraveyardDestination::Hand {
+        for &tid in targets {
+            let target_name = object_display_name(&engine.state, engine.registry, tid);
+            let owner = engine.state.objects.get(&tid).map(|object| object.owner);
+            move_object_to_zone(&mut engine.state, engine.registry, tid, Zone::Hand, None)?;
+            events.push(ev_log(format!(
+                "{spell_label} returns {target_name} from graveyard to hand."
+            )));
+            if let Some(owner_id) = owner {
+                events.push(permanent_moved_event(
+                    &engine.state,
+                    tid,
+                    owner_id,
+                    rv1::permanent_moved::Destination::Hand,
+                ));
+            }
+        }
+        return Ok(EffectOutcome::Continue);
+    }
+
     if let Some(&tid) = targets.first() {
         let tgt = object_display_name(&engine.state, engine.registry, tid);
         let is_legal = graveyard_target_legal(engine, &filter, tid, controller);

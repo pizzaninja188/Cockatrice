@@ -100,6 +100,8 @@ fn fire_ice_ice_half_taps_and_draws() {
                 vec![TargetRef {
                     object_id: land_oid,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
                 1,
             ),
@@ -272,28 +274,28 @@ fn fire_ice_target_sets_are_per_face() {
         .expect("Ice face target set");
 
     assert!(
-        fire.valid_permanent_ids.contains(&bears),
+        fire.groups[0].valid_permanent_ids.contains(&bears),
         "Fire can target a creature"
     );
     assert!(
-        !fire.valid_permanent_ids.contains(&land),
+        !fire.groups[0].valid_permanent_ids.contains(&land),
         "Fire cannot target a land (any target excludes lands)"
     );
     assert!(
-        fire.can_target_opponent,
+        fire.groups[0].can_target_opponent,
         "Fire can target a player (any target)"
     );
 
     assert!(
-        ice.valid_permanent_ids.contains(&bears),
+        ice.groups[0].valid_permanent_ids.contains(&bears),
         "Ice can target a creature permanent"
     );
     assert!(
-        ice.valid_permanent_ids.contains(&land),
+        ice.groups[0].valid_permanent_ids.contains(&land),
         "Ice can target a land permanent"
     );
     assert!(
-        !ice.can_target_opponent,
+        !ice.groups[0].can_target_opponent,
         "Ice targets a permanent, not a player"
     );
 }
@@ -733,6 +735,8 @@ fn stomp_with_no_legal_target_goes_to_graveyard_without_permission() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
             1,
         ),
@@ -746,6 +750,8 @@ fn stomp_with_no_legal_target_goes_to_graveyard_without_permission() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -811,6 +817,8 @@ fn countered_stomp_goes_to_graveyard_without_permission() {
             vec![TargetRef {
                 object_id: stomp_on_stack,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )

@@ -80,6 +80,8 @@ fn non_active_player_with_priority_pays_mana_for_counterspell() {
             vec![TargetRef {
                 object_id: bolt_oid,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -146,6 +148,8 @@ fn giant_growth_pump_expires_after_active_turn_ends() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -286,6 +290,8 @@ fn fiery_hellhound_source_pump_rejects_supplied_target() {
                 vec![TargetRef {
                     object_id: hound,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -343,6 +349,8 @@ fn two_giant_growths_stack_correctly() {
                 vec![TargetRef {
                     object_id: bear,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -410,6 +418,8 @@ fn battlegrowth_counter_raises_pt_and_persists() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -485,6 +495,8 @@ fn zone_view_reports_counter_annotation() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -570,6 +582,8 @@ fn plus_and_minus_counters_annihilate() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -597,6 +611,8 @@ fn plus_and_minus_counters_annihilate() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -657,6 +673,8 @@ fn minus_counter_to_zero_toughness_kills_via_sba() {
             vec![TargetRef {
                 object_id: sorc,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -712,6 +730,8 @@ fn marked_damage_clears_at_cleanup() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -780,6 +800,8 @@ fn bounce_clears_counters_and_marked_damage() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -919,6 +941,8 @@ fn anthem_buff_drains_when_source_leaves_battlefield() {
             vec![TargetRef {
                 object_id: anthem,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )

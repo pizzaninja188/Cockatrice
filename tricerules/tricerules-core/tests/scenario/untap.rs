@@ -9,6 +9,8 @@ fn target(oid: u32) -> Vec<TargetRef> {
     vec![TargetRef {
         object_id: oid,
         damage_amount: 0,
+        group_index: 0,
+        kind: 0,
     }]
 }
 

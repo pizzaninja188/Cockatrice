@@ -65,10 +65,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Add the missing nonplayer object kinds and legal target vocabulary so damage and destroy effects can include planeswalkers and battles where Oracle permits. Calibration evidence: Chandra's Magmutt, Finishing Blow, Goblin Arsonist, Pitchburn Devils, Scorch Spitter, Shock, Sorcerer of the Fang, and Viashino Pyromancer. This requires engine-owned card types, battlefield identity, damage/defeat state-based actions, proto/relay/client representation, and end-to-end target selection; do not approximate these objects as players.
   - Priority: Low
 
-- [ ] #73 [feature] Multiple distinct and optional targets
-  - Details: Generalize target schemas beyond one homogeneous required target to support independently filtered slots, distinctness constraints, and "up to N" cardinality. Calibration evidence: Soul Salvage, optional targets on Frost Breath and Ghostform, and Hunter's Edge's secondary `multiple_distinct_targets` gap. Issues #77 and #93 shipped Ghostform's unblockable effect primitive and Frost Breath's next-untap suppression; this issue retains only their up-to-two optional target selection and card definitions. Legal actions must enumerate or validate complete assignments without Cartesian explosion, and stale, duplicate, missing, or overfilled submissions must be rejected before costs are paid.
-  - Priority: Low
-
 - [ ] #78 [feature] Conditional continuous characteristics
   - Details: Add reusable static conditions for changing power/toughness, keywords, or attack permissions from current game state or turn state. Calibration evidence: Daggersail Aeronaut, Drowsing Tyrannodon, Gearsmith Guardian, and Gearsmith Prodigy. Evaluate conditions in the correct characteristics layer without controller circularity, and share condition expressions with other continuous effects where possible.
   - Priority: Low
@@ -90,7 +86,7 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Priority: Low
 
 - [ ] #85 [feature] Creature-deals-damage-equal-to-power effects
-  - Details: Add a reusable effect in which a selected creature deals damage equal to its current power to another selected creature, with independently filtered distinct targets from Issue #73. Calibration evidence: Hunter's Edge and Rabid Bite. Determine power and source characteristics at resolution, handle a missing source or target legally, and attribute damage to the creature for downstream triggers and prevention.
+  - Details: Add a reusable effect in which a selected creature deals damage equal to its current power to another selected creature, using the shipped grouped-targeting model for independently filtered distinct targets. Calibration evidence: Hunter's Edge and Rabid Bite. Determine power and source characteristics at resolution, handle a missing source or target legally, and attribute damage to the creature for downstream triggers and prevention.
   - Priority: Low
 
 - [ ] #86 [feature] Related-player effect recipients

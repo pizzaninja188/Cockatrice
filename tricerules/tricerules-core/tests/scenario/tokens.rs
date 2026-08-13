@@ -257,6 +257,8 @@ fn token_dies_and_ceases_to_exist() {
             vec![TargetRef {
                 object_id: victim,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -322,6 +324,8 @@ fn bounced_token_ceases_to_exist() {
             vec![TargetRef {
                 object_id: victim,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )

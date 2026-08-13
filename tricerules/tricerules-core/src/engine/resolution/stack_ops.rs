@@ -129,7 +129,6 @@ pub(super) fn copy_target_spell(
                     is_copy: true,
                     chosen_x: src.chosen_x,
                     face_index: src.face_index,
-                    target_damage: src.target_damage.clone(),
                     chosen_modes: src.chosen_modes.clone(),
                     // CR 707.2: the copy has the original's characteristics and choices. `None`
                     // for every spell today, but copying inherits it rather than dropping it.
@@ -164,22 +163,27 @@ pub(super) fn copy_target_spell(
                             controller,
                             TargetSourceIdentity::for_stack_item(engine, &copy_template),
                             &effects,
+                            None,
                         );
-                        candidates.extend(sp.valid_permanent_ids);
-                        candidates.extend(sp.valid_stack_ids);
-                        for p in &engine.state.players {
-                            if (sp.can_target_self && p.id == controller)
-                                || (sp.can_target_opponent
-                                    && engine.state.are_opponents(p.id, controller))
-                            {
-                                candidates.push(p.id as ObjectId);
+                        for group in sp.groups {
+                            candidates.extend(group.valid_permanent_ids);
+                            candidates.extend(group.valid_stack_ids);
+                            candidates.extend(group.valid_graveyard_ids);
+                            for p in &engine.state.players {
+                                if (group.can_target_self && p.id == controller)
+                                    || (group.can_target_opponent
+                                        && engine.state.are_opponents(p.id, controller))
+                                {
+                                    candidates.push(p.id as ObjectId);
+                                }
                             }
                         }
                     }
                     candidates.sort_unstable();
                     candidates.dedup();
                     // CR 707.10c: may keep original targets even if now illegal.
-                    for &ot in &src.targets {
+                    for target in &src.targets {
+                        let ot = target.object_id;
                         if !candidates.contains(&ot) {
                             candidates.push(ot);
                         }
@@ -265,9 +269,11 @@ pub(super) fn copy_target_spell(
                             targets: src
                                 .targets
                                 .iter()
-                                .map(|&o| rv1::TargetRef {
-                                    object_id: o,
-                                    damage_amount: 0,
+                                .map(|target| rv1::TargetRef {
+                                    object_id: target.object_id,
+                                    damage_amount: target.damage_amount,
+                                    group_index: target.group_index,
+                                    kind: target.kind,
                                 })
                                 .collect(),
                             ability_annotation: "(copy)".to_string(),
@@ -285,7 +291,7 @@ pub(super) fn copy_target_spell(
                     engine.fire_triggers(&[GameEvent::TargetsChosen {
                         controller,
                         source: TargetingSourceKind::SpellCopy,
-                        targets: src.targets.clone(),
+                        targets: src.targets.iter().map(|target| target.object_id).collect(),
                     }]);
                 }
             }

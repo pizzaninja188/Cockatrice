@@ -500,8 +500,16 @@ pub(crate) struct PendingBattlefieldEntry {
 #[derive(Debug, Clone)]
 pub struct ChosenSpellMode {
     pub mode_index: usize,
-    pub targets: Vec<ObjectId>,
-    pub target_damage: Vec<u32>,
+    pub targets: Vec<StackTarget>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StackTarget {
+    pub object_id: ObjectId,
+    pub group_index: u32,
+    pub damage_amount: u32,
+    /// Authoritative presentation domain for clients. ObjectId and PlayerId share integers.
+    pub kind: i32,
 }
 
 #[derive(Debug, Clone)]
@@ -509,7 +517,7 @@ pub struct StackItem {
     pub id: ObjectId,
     pub controller: PlayerId,
     pub card_id: String,
-    pub targets: Vec<ObjectId>,
+    pub targets: Vec<StackTarget>,
     /// `None` = spell; `Some(text)` = activated or triggered ability annotation shown on stack card.
     pub ability_text: Option<String>,
     /// For activated/triggered abilities: the permanent that sourced this ability (stays in its zone).
@@ -540,10 +548,6 @@ pub struct StackItem {
     /// `{X}` pip (and for abilities). On the stack the spell's mana value is `fixed_mv + chosen_x`;
     /// at resolution this feeds [`Amount::X`](tricerules_cards::Amount) effect amounts.
     pub chosen_x: u32,
-    /// Per-target damage amounts for `DamageTargets` (Fireball, Fire). Parallel to `targets`:
-    /// `target_damage[i]` is the damage allocated to `targets[i]` by the casting player.
-    /// Empty for all other effects (no overhead for non-Fireball spells).
-    pub target_damage: Vec<u32>,
     /// Atomic modal choices in printed order. Empty for nonmodal spells and abilities.
     pub chosen_modes: Vec<ChosenSpellMode>,
     /// The player a triggered ability's effects act on when the trigger names someone other than

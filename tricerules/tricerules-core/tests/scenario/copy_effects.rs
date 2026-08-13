@@ -167,6 +167,8 @@ fn countered_clone_never_emits_a_copy_source_choice() {
                 vec![TargetRef {
                     object_id: clone_spell,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )

@@ -16,7 +16,7 @@
 use crate::mana::ManaCost;
 use crate::primitives::{
     ActivatedAbilityDef, AdditionalCost, CardTypeFilter, Color, Evasion, Keyword,
-    PermanentTypeFilter, SpellEffectKind, StaticAbilityDef, TriggeredAbilityDef,
+    PermanentTypeFilter, SpellEffectKind, StaticAbilityDef, TargetingDef, TriggeredAbilityDef,
 };
 use serde::{Deserialize, Serialize};
 
@@ -28,6 +28,8 @@ pub struct SpellModeDef {
     /// Data-driven effects for this mode, resolved from this mode's own target group.
     #[serde(default)]
     pub effects: Vec<SpellEffectKind>,
+    #[serde(default)]
+    pub targeting: Option<TargetingDef>,
 }
 
 /// The choose-N definition of a modal spell (CR 700.2).
@@ -93,6 +95,8 @@ pub struct CardFace {
     /// (see [`SpellEffectKind`]). RON: `spell_effect: [DamageTarget(...), Draw(count: 1)]`.
     #[serde(default)]
     pub spell_effect: Vec<SpellEffectKind>,
+    #[serde(default)]
+    pub targeting: Option<TargetingDef>,
     /// Modal data-driven spell effects. Mutually exclusive with `spell_effect` and
     /// `custom_effect`; selected modes resolve in printed order.
     #[serde(default)]
@@ -274,6 +278,8 @@ pub struct RawCardDefinition {
     #[serde(default)]
     pub spell_effect: Vec<SpellEffectKind>,
     #[serde(default)]
+    pub targeting: Option<TargetingDef>,
+    #[serde(default)]
     pub modal_spell: Option<ModalSpellDef>,
     #[serde(default)]
     pub custom_effect: Option<String>,
@@ -322,6 +328,7 @@ impl RawCardDefinition {
                 power: self.power,
                 toughness: self.toughness,
                 spell_effect: self.spell_effect,
+                targeting: self.targeting,
                 modal_spell: self.modal_spell,
                 custom_effect: self.custom_effect,
                 keywords: self.keywords,

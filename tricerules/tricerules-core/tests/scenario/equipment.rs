@@ -76,6 +76,8 @@ fn bonesplitter_equip_adds_bonus() {
             vec![TargetRef {
                 object_id: creature,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -143,6 +145,8 @@ fn bonesplitter_reequip_shifts_bonus() {
             vec![TargetRef {
                 object_id: bear1,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -169,6 +173,8 @@ fn bonesplitter_reequip_shifts_bonus() {
             vec![TargetRef {
                 object_id: bear2,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -227,6 +233,8 @@ fn equipment_falls_off_when_creature_dies() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -306,6 +314,8 @@ fn equip_cannot_target_opponent_creature() {
             vec![TargetRef {
                 object_id: opp_bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     );
@@ -356,6 +366,8 @@ fn vulshok_morningstar_adds_power_and_toughness() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -418,6 +430,8 @@ fn equip_is_rejected_at_instant_speed() {
             vec![TargetRef {
                 object_id: bears,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     );
@@ -522,6 +536,8 @@ fn swiftfoot_boots_moves_both_keywords_on_reequip() {
                 vec![TargetRef {
                     object_id: target,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -589,6 +605,8 @@ fn equipment_unattaches_when_host_stops_being_a_creature() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -645,6 +663,8 @@ fn short_sword_grants_its_printed_pt_bonus() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )

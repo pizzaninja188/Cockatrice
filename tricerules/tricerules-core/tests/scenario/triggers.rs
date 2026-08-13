@@ -1,5 +1,14 @@
 use crate::helpers::*;
 
+fn trigger_targets(object_id: u32) -> Vec<TargetRef> {
+    vec![TargetRef {
+        object_id,
+        damage_amount: 0,
+        group_index: 0,
+        kind: 0,
+    }]
+}
+
 /// Regression test: combat damage triggers must land on the stack and require both players to
 /// pass priority before resolving.  The fix is that PhaseChanged is emitted before StackPushed
 /// so the C++ client doesn't clear ruledStackObjectIds and mistakenly auto-passes.
@@ -295,8 +304,8 @@ fn targeted_trigger_resolves_after_target_chosen() {
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-                target_object_id: bears_oid,
                 decline: false,
+                targets: trigger_targets(bears_oid),
             })),
         },
     )
@@ -528,8 +537,8 @@ fn blood_artist_triggers_on_opponent_creature_dying() {
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-                target_object_id: p1_id as u32,
                 decline: false,
+                targets: trigger_targets(p1_id as u32),
             })),
         },
     )
@@ -596,8 +605,8 @@ fn blood_artist_triggers_on_own_death() {
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-                target_object_id: p1_id as u32,
                 decline: false,
+                targets: trigger_targets(p1_id as u32),
             })),
         },
     )
@@ -650,8 +659,8 @@ fn blood_artist_triggers_on_own_creature_dying() {
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-                target_object_id: p1_id as u32,
                 decline: false,
+                targets: trigger_targets(p1_id as u32),
             })),
         },
     )
@@ -711,8 +720,8 @@ fn two_blood_artists_both_trigger_on_one_death() {
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-                target_object_id: p1_id as u32,
                 decline: false,
+                targets: trigger_targets(p1_id as u32),
             })),
         },
     )
@@ -722,8 +731,8 @@ fn two_blood_artists_both_trigger_on_one_death() {
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-                target_object_id: p1_id as u32,
                 decline: false,
+                targets: trigger_targets(p1_id as u32),
             })),
         },
     )
@@ -1603,8 +1612,8 @@ fn each_picked_trigger_is_targeted_before_the_next_is_chosen() {
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-                target_object_id: p1_id as u32,
                 decline: false,
+                targets: trigger_targets(p1_id as u32),
             })),
         },
     )
@@ -1618,8 +1627,8 @@ fn each_picked_trigger_is_targeted_before_the_next_is_chosen() {
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-                target_object_id: p1_id as u32,
                 decline: false,
+                targets: trigger_targets(p1_id as u32),
             })),
         },
     )
@@ -1961,8 +1970,8 @@ fn stack_pushed_distinguishes_triggered_from_activated_abilities() {
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-                    target_object_id: p1_id as u32,
                     decline: false,
+                    targets: trigger_targets(p1_id as u32),
                 })),
             },
         )
@@ -2018,8 +2027,8 @@ fn rejected_trigger_target_leaves_the_trigger_pending() {
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-                target_object_id: on_battlefield,
                 decline: false,
+                targets: trigger_targets(on_battlefield),
             })),
         },
     );
@@ -2035,8 +2044,8 @@ fn rejected_trigger_target_leaves_the_trigger_pending() {
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-                target_object_id: 0,
                 decline: true,
+                targets: vec![],
             })),
         },
     )
@@ -2079,8 +2088,8 @@ fn trigger_target_can_be_retried_after_a_rejection() {
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-                target_object_id: on_battlefield,
                 decline: false,
+                targets: trigger_targets(on_battlefield),
             })),
         },
     );
@@ -2088,8 +2097,8 @@ fn trigger_target_can_be_retried_after_a_rejection() {
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-                target_object_id: bears,
                 decline: false,
+                targets: trigger_targets(bears),
             })),
         },
     )
@@ -2123,6 +2132,8 @@ fn issue_47_bonecrusher_target_trigger_is_above_spell() {
             vec![TargetRef {
                 object_id: giant,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -2161,6 +2172,8 @@ fn issue_47_bonecrusher_trigger_resolves_after_targeting_spell_is_countered() {
             vec![TargetRef {
                 object_id: giant,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -2177,6 +2190,8 @@ fn issue_47_bonecrusher_trigger_resolves_after_targeting_spell_is_countered() {
             vec![TargetRef {
                 object_id: bolt_id,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -2213,6 +2228,8 @@ fn issue_47_invalid_or_different_spell_target_emits_no_bonecrusher_trigger() {
                 vec![TargetRef {
                     object_id: forest,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -2252,6 +2269,8 @@ fn issue_47_ability_target_does_not_match_bonecrushers_spell_filter() {
             vec![TargetRef {
                 object_id: giant,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -2286,8 +2305,8 @@ fn issue_47_targeted_trigger_preserves_existing_placement_flow() {
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-                target_object_id: giant,
                 decline: false,
+                targets: trigger_targets(giant),
             })),
         },
     )
@@ -2325,6 +2344,8 @@ fn issue_47_spell_copy_targeting_bonecrusher_creates_a_new_trigger() {
             vec![TargetRef {
                 object_id: giant,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -2342,6 +2363,8 @@ fn issue_47_spell_copy_targeting_bonecrusher_creates_a_new_trigger() {
             vec![TargetRef {
                 object_id: bolt_id,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -2483,8 +2506,8 @@ fn issue_49_cavalry_drillmaster_applies_both_effects_to_one_trigger_target() {
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-                target_object_id: bears,
                 decline: false,
+                targets: trigger_targets(bears),
             })),
         },
     )
@@ -2517,8 +2540,8 @@ fn issue_49_skymarch_bloodletter_rejects_its_controller_as_target() {
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-                target_object_id: controller,
                 decline: false,
+                targets: trigger_targets(controller),
             })),
         },
     );
@@ -2533,8 +2556,8 @@ fn issue_49_skymarch_bloodletter_rejects_its_controller_as_target() {
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-                target_object_id: opponent,
                 decline: false,
+                targets: trigger_targets(opponent),
             })),
         },
     )
@@ -2579,8 +2602,8 @@ fn issue_49_steadfast_sentry_cannot_target_a_creature_that_died_with_it() {
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-                target_object_id: died_too,
                 decline: false,
+                targets: trigger_targets(died_too),
             })),
         },
     );
@@ -2594,8 +2617,8 @@ fn issue_49_steadfast_sentry_cannot_target_a_creature_that_died_with_it() {
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-                target_object_id: survivor,
                 decline: false,
+                targets: trigger_targets(survivor),
             })),
         },
     )

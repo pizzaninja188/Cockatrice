@@ -16,8 +16,13 @@
                 target: (kind: AnyTarget),
                 division: ChooseAtCast,
                 extra_mana_per_target: 0,
-                max_targets: Some(2),
             )],
+            targeting: Some((groups: [(
+                min: 1,
+                max: 2,
+                prompt: "Choose one or two targets",
+                effect_indices: [0],
+            )])),
         ),
         (
             name: "Ice",

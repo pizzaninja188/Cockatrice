@@ -147,16 +147,14 @@ TEST_F(GamePromptWidgetTest, TargetingModeShowsCancelButton)
     widget->setTargetingMode(true, "Counter target spell");
     EXPECT_FALSE(btn("cancelTargetingButton")->isHidden());
     EXPECT_TRUE(btn("passPriorityButton")->isHidden());
-    EXPECT_EQ(label("promptLabel")->text(),
-              QString::fromUtf8("Choose a target for “Counter target spell”, or press Cancel."));
+    EXPECT_EQ(label("promptLabel")->text(), QStringLiteral("Counter target spell"));
 }
 
 TEST_F(GamePromptWidgetTest, TargetingModeUpdatesForTheNextSelectedMode)
 {
     widget->setTargetingMode(true, "Counter target spell");
     widget->setTargetingMode(true, "Return target permanent to its owner's hand");
-    EXPECT_EQ(label("promptLabel")->text(),
-              QString::fromUtf8("Choose a target for “Return target permanent to its owner's hand”, or press Cancel."));
+    EXPECT_EQ(label("promptLabel")->text(), QStringLiteral("Return target permanent to its owner's hand"));
 }
 
 TEST_F(GamePromptWidgetTest, ActivatedAbilityTargetingUsesAbilityText)
@@ -190,6 +188,24 @@ using PromptMode = GamePromptWidget::PromptMode;
 TEST_F(GamePromptWidgetTest, DefaultModeIsNormal)
 {
     EXPECT_EQ(widget->effectiveMode(), PromptMode::Normal);
+}
+
+TEST_F(GamePromptWidgetTest, OptionalMultiTargetShowsConfirmAtZeroSelections)
+{
+    widget->setTargetingMode(true, "Ghostform");
+    widget->setMultiTargetSelectionCount(0, 0, 2);
+    EXPECT_FALSE(btn("confirmTargetsButton")->isHidden());
+    EXPECT_TRUE(btn("confirmTargetsButton")->isEnabled());
+}
+
+TEST_F(GamePromptWidgetTest, RequiredVariableTargetGroupDisablesConfirmBelowMinimum)
+{
+    widget->setTargetingMode(true, "Choose creatures");
+    widget->setMultiTargetSelectionCount(0, 1, 2);
+    EXPECT_FALSE(btn("confirmTargetsButton")->isHidden());
+    EXPECT_FALSE(btn("confirmTargetsButton")->isEnabled());
+    widget->setMultiTargetSelectionCount(1, 1, 2);
+    EXPECT_TRUE(btn("confirmTargetsButton")->isEnabled());
 }
 
 TEST_F(GamePromptWidgetTest, CommandPendingHidesActionsWithoutReplacingCurrentPrompt)

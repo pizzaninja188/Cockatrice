@@ -1,0 +1,16 @@
+(
+  id: "ghostform",
+  name: "Ghostform",
+  mana_cost: "{1}{U}",
+  types: ["Sorcery"],
+  spell_effect: [ApplyCombatRestriction(
+    scope: Chosen((kind: Creature)),
+    restriction: (cant_be_blocked: true),
+  )],
+  targeting: Some((groups: [(
+    min: 0,
+    max: 2,
+    prompt: "Choose up to two target creatures",
+    effect_indices: [0],
+  )])),
+)

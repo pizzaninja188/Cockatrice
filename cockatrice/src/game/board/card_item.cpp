@@ -112,9 +112,14 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
     AbstractGame *ruledGame = owner ? owner->getGame() : nullptr;
     RuledClientState *ruledHandler = RuledActions::stateFor(ruledGame);
     quint32 ruledOid = 0;
+    quint32 ruledTargetSelectionOid = 0;
     if (ruledHandler) {
         const int ownerPlayerId = owner ? owner->getPlayerInfo()->getId() : -1;
         ruledOid = ruledHandler->engineOidForCardId(ownerPlayerId, id);
+        ruledTargetSelectionOid =
+            zone && zone->getName() == ZoneNames::GRAVE
+                ? ruledHandler->graveyardEngineOidForOwnedCard(ownerPlayerId, id)
+                : ruledOid;
     }
 
     if (!pt.isEmpty()) {
@@ -248,9 +253,6 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
             if (ruledHandler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopySource, ruledOid)) {
                 outlineColor = QColor(80, 200, 255); // cyan for an eligible untargeted copy source
             }
-            if (RuledActions::isSelectedSpellTarget(ruledGame, ruledOid)) {
-                outlineColor = QColor(220, 40, 40);
-            }
             if (outlineColor.isValid()) {
                 painter->save();
                 painter->setRenderHint(QPainter::Antialiasing, true);
@@ -274,6 +276,16 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
                     paintNumberEllipse(dmg, 14, dmg > 0 ? QColor(220, 60, 60) : QColor(140, 140, 140), 0, 1, painter);
                 }
             }
+        }
+        if (ruledTargetSelectionOid != 0 &&
+            RuledActions::isSelectedSpellTarget(ruledGame, ruledTargetSelectionOid)) {
+            painter->save();
+            painter->setRenderHint(QPainter::Antialiasing, true);
+            QPen pen(QColor(220, 40, 40));
+            pen.setWidth(4);
+            painter->setPen(pen);
+            painter->drawPath(shape());
+            painter->restore();
         }
         if (zone && zone->getName() == ZoneNames::HAND && owner && owner->getPlayerInfo()->getLocal() &&
             ruledHandler->localPlayerMustCleanupDiscard()) {

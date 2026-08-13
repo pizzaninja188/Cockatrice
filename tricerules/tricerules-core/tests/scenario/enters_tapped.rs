@@ -136,6 +136,8 @@ fn reanimation_applies_intrinsic_entry_replacement_before_etb_triggers() {
                 vec![TargetRef {
                     object_id: ghoul,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -294,6 +296,8 @@ fn graveyard_owner_orders_replacements_even_when_the_permanent_enters_under_oppo
                 vec![TargetRef {
                     object_id: ghoul,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )

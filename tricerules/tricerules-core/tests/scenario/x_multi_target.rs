@@ -44,6 +44,8 @@ fn fireball_single_target_all_damage() {
                 targets: vec![TargetRef {
                     object_id: 1,
                     damage_amount: 5,
+                    group_index: 0,
+                    kind: 0,
                 }],
                 x_value: 5,
                 ..Default::default()
@@ -84,10 +86,14 @@ fn fireball_split_between_two_targets() {
                     TargetRef {
                         object_id: 1,
                         damage_amount: 0,
+                        group_index: 0,
+                        kind: 0,
                     },
                     TargetRef {
                         object_id: 0,
                         damage_amount: 0,
+                        group_index: 0,
+                        kind: 0,
                     },
                 ],
                 x_value: 5,
@@ -129,10 +135,14 @@ fn fireball_does_not_accept_cast_time_allocation() {
                     TargetRef {
                         object_id: 1,
                         damage_amount: 4,
+                        group_index: 0,
+                        kind: 0,
                     },
                     TargetRef {
                         object_id: 0,
                         damage_amount: 2,
+                        group_index: 0,
+                        kind: 0,
                     },
                 ],
                 x_value: 3,
@@ -267,10 +277,14 @@ fn fireball_insufficient_mana_for_surcharge_rejected() {
                     TargetRef {
                         object_id: 1,
                         damage_amount: 2,
+                        group_index: 0,
+                        kind: 0,
                     },
                     TargetRef {
                         object_id: 0,
                         damage_amount: 1,
+                        group_index: 0,
+                        kind: 0,
                     },
                 ],
                 x_value: 3,
@@ -330,6 +344,8 @@ fn fireball_divides_evenly_among_targets_still_legal_at_resolution() {
             vec![TargetRef {
                 object_id: bears,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )

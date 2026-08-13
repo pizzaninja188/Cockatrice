@@ -505,7 +505,6 @@ impl GameEngine {
                 is_copy: false,
                 face_index: 0,
                 chosen_x: 0,
-                target_damage: vec![],
                 chosen_modes: vec![],
                 trigger_player: None,
                 trigger_object: None,

@@ -353,9 +353,10 @@ void GamePromptWidget::applyPromptStateText()
     }
 }
 
-void GamePromptWidget::setMultiTargetSelectionCount(int selected, int maxTargets)
+void GamePromptWidget::setMultiTargetSelectionCount(int selected, int minTargets, int maxTargets)
 {
     multiTargetSelectedCount = selected;
+    multiTargetMinCount = minTargets;
     multiTargetMaxCount = maxTargets;
     updateCombatButtonsVisibility();
 }
@@ -460,7 +461,7 @@ void GamePromptWidget::setTargetingMode(bool enabled, const QString &effectText)
     // Unlike the other two sources this one always re-announces itself: re-entering targeting for
     // a different mode of the same spell must replace the effect text on the label.
     if (enabled) {
-        setPromptText(tr("Choose a target for “%1”, or press Cancel.").arg(effectText));
+        setPromptText(effectText);
     }
     setTargetingSource(TargetingSource::SpellTargetSelection, enabled);
     updateCombatButtonsVisibility();
@@ -593,7 +594,9 @@ void GamePromptWidget::updateCombatButtonsVisibility()
         }
         // Multi-target spells confirm an in-progress selection; single-target ones just wait.
         confirmTargetsButton->setVisible(targetingSources.testFlag(TargetingSource::SpellTargetSelection) &&
-                                         multiTargetMaxCount >= 0 && multiTargetSelectedCount >= 1);
+                                         multiTargetMaxCount >= 0 && multiTargetSelectedCount >= 0);
+        confirmTargetsButton->setEnabled(multiTargetSelectedCount >= multiTargetMinCount &&
+                                         multiTargetSelectedCount <= multiTargetMaxCount);
         return;
     }
 

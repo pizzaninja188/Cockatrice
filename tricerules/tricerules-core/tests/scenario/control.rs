@@ -154,6 +154,8 @@ fn foreign_controlled_creature_dies_to_its_owners_graveyard() {
             vec![tricerules_proto::ruled::v1::TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -216,6 +218,8 @@ fn reanimate_takes_an_opponents_creature_under_your_control() {
             vec![tricerules_proto::ruled::v1::TargetRef {
                 object_id: giant,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -280,6 +284,8 @@ fn reanimated_creature_dies_back_to_its_owners_graveyard() {
             vec![tricerules_proto::ruled::v1::TargetRef {
                 object_id: bears,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -296,6 +302,8 @@ fn reanimated_creature_dies_back_to_its_owners_graveyard() {
             vec![tricerules_proto::ruled::v1::TargetRef {
                 object_id: bears,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -363,6 +371,8 @@ fn reanimated_static_ability_serves_its_new_controller() {
             vec![tricerules_proto::ruled::v1::TargetRef {
                 object_id: captain,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -416,6 +426,8 @@ fn reanimate_cannot_target_a_noncreature_card() {
                 vec![tricerules_proto::ruled::v1::TargetRef {
                     object_id: anthem,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -450,6 +462,8 @@ fn mind_control_tracks_its_auras_controller_and_restores_control_when_bounced() 
             vec![tricerules_proto::ruled::v1::TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -484,6 +498,8 @@ fn mind_control_tracks_its_auras_controller_and_restores_control_when_bounced() 
             vec![tricerules_proto::ruled::v1::TargetRef {
                 object_id: aura,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -522,6 +538,8 @@ fn act_of_treason_untaps_grants_haste_and_returns_control_at_cleanup() {
             vec![tricerules_proto::ruled::v1::TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -596,6 +614,8 @@ fn stolen_static_ability_serves_the_current_controller() {
             vec![tricerules_proto::ruled::v1::TargetRef {
                 object_id: captain,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -633,6 +653,8 @@ fn controller_restricted_aura_goes_to_graveyard_when_creature_is_stolen() {
             vec![tricerules_proto::ruled::v1::TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -665,6 +687,8 @@ fn controller_restricted_aura_goes_to_graveyard_when_creature_is_stolen() {
             vec![tricerules_proto::ruled::v1::TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -702,6 +726,8 @@ fn unrestricted_aura_stays_attached_when_creature_is_stolen() {
             vec![tricerules_proto::ruled::v1::TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -729,6 +755,8 @@ fn unrestricted_aura_stays_attached_when_creature_is_stolen() {
             vec![tricerules_proto::ruled::v1::TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -782,6 +810,8 @@ fn equipment_stays_attached_when_equipped_creature_is_stolen() {
             vec![tricerules_proto::ruled::v1::TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -812,6 +842,8 @@ fn equipment_stays_attached_when_equipped_creature_is_stolen() {
             vec![tricerules_proto::ruled::v1::TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )

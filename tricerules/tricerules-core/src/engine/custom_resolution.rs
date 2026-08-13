@@ -13,7 +13,7 @@ impl GameEngine {
     pub(super) fn choose_trigger_target(
         &mut self,
         player: PlayerId,
-        target_object_id: u32,
+        targets: &[rv1::TargetRef],
         decline: bool,
     ) -> Result<RuledEventBatch, EngineError> {
         let pending = self
@@ -47,10 +47,6 @@ impl GameEngine {
         // permanent, or answering the wrong trigger when two are queued) silently destroys the
         // trigger while the client is still showing its prompt — and Decline then fails too,
         // because the engine no longer believes anything is pending.
-        let target_ref = &[rv1::TargetRef {
-            object_id: target_object_id,
-            damage_amount: 0,
-        }];
         let validated: Result<String, EngineError> = match self.registry.get(&pending.card_id) {
             None => Err(EngineError::MissingCard(pending.card_id.clone())),
             Some(def) => {
@@ -69,7 +65,8 @@ impl GameEngine {
                             pending.source_zone_change,
                         ),
                         &ability.effect,
-                        target_ref,
+                        ability.targeting.as_ref(),
+                        targets,
                     )
                     .map(|()| name),
                     None => Ok(name),
@@ -99,14 +96,25 @@ impl GameEngine {
         let trigger_player = pending.trigger_player;
         let trigger_object = pending.trigger_object;
 
-        let trefs = vec![target_object_id];
+        let trefs = targets
+            .iter()
+            .map(|target| target.object_id)
+            .collect::<Vec<_>>();
         let tgt_line = format_spell_targets_log(&self.state, self.registry, &trefs);
 
         self.state.stack.push(StackItem {
             id: virtual_id,
             controller,
             card_id: card_id.clone(),
-            targets: trefs,
+            targets: targets
+                .iter()
+                .map(|target| StackTarget {
+                    object_id: target.object_id,
+                    group_index: target.group_index,
+                    damage_amount: target.damage_amount,
+                    kind: target.kind,
+                })
+                .collect(),
             ability_text: Some(ability_text.clone()),
             source_permanent_id: Some(source_id),
             source_zone_change,
@@ -116,7 +124,6 @@ impl GameEngine {
             is_copy: false,
             chosen_x: 0,
             face_index: source_face_index,
-            target_damage: vec![],
             chosen_modes: vec![],
             trigger_player,
             trigger_object,
@@ -132,10 +139,7 @@ impl GameEngine {
             ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
                 object_id: virtual_id,
                 description: card_name,
-                targets: vec![rv1::TargetRef {
-                    object_id: target_object_id,
-                    damage_amount: 0,
-                }],
+                targets: targets.to_vec(),
                 ability_annotation: ability_text,
                 card_id: String::new(),
                 is_copy: false,
@@ -151,7 +155,7 @@ impl GameEngine {
         self.fire_triggers(&[GameEvent::TargetsChosen {
             controller,
             source: TargetingSourceKind::Ability,
-            targets: vec![target_object_id],
+            targets: trefs,
         }]);
 
         self.resume_trigger_placement(&mut batch);
@@ -418,7 +422,6 @@ impl GameEngine {
                 &effects,
                 chosen,
                 &item.targets,
-                &item.target_damage,
             )?;
             return Ok(vec![]);
         }
@@ -445,7 +448,6 @@ impl GameEngine {
                 &mode.effects,
                 mode_targets,
                 &chosen_mode.targets,
-                &chosen_mode.target_damage,
             )?;
             per_mode.push(mode_targets.to_vec());
             offset = end;
@@ -468,22 +470,27 @@ impl GameEngine {
         target_source: TargetSourceIdentity,
         effects: &[SpellEffectKind],
         chosen: &[ObjectId],
-        original: &[ObjectId],
-        target_damage: &[u32],
+        original: &[StackTarget],
     ) -> Result<(), EngineError> {
         for (index, &object_id) in chosen.iter().enumerate() {
-            if original.get(index) == Some(&object_id) {
+            if original.get(index).map(|target| target.object_id) == Some(object_id) {
                 continue;
             }
+            let original_target = original
+                .get(index)
+                .ok_or(EngineError::Illegal("wrong number of copied targets"))?;
             let target_ref = rv1::TargetRef {
                 object_id,
-                damage_amount: target_damage.get(index).copied().unwrap_or(0),
+                damage_amount: original_target.damage_amount,
+                group_index: original_target.group_index,
+                kind: original_target.kind,
             };
             validate_spell_targets(
                 self,
                 controller,
                 target_source,
                 effects,
+                None,
                 std::slice::from_ref(&target_ref),
             )?;
         }
@@ -517,9 +524,13 @@ impl GameEngine {
         // Everything below this point is infallible.
         let mut copy_item = pending.item;
         for (chosen_mode, mode_targets) in copy_item.chosen_modes.iter_mut().zip(per_mode_targets) {
-            chosen_mode.targets = mode_targets;
+            for (target, object_id) in chosen_mode.targets.iter_mut().zip(mode_targets) {
+                target.object_id = object_id;
+            }
         }
-        copy_item.targets = chosen.to_vec();
+        for (target, object_id) in copy_item.targets.iter_mut().zip(chosen) {
+            target.object_id = *object_id;
+        }
 
         let copied_name = self
             .registry
@@ -528,6 +539,16 @@ impl GameEngine {
             .map(|f| f.name.to_string())
             .unwrap_or_else(|| card_id.clone());
 
+        let published_targets = copy_item
+            .targets
+            .iter()
+            .map(|target| rv1::TargetRef {
+                object_id: target.object_id,
+                damage_amount: target.damage_amount,
+                group_index: target.group_index,
+                kind: target.kind,
+            })
+            .collect();
         self.state.stack.push(copy_item);
         self.state.passes_since_stack_change = 0;
 
@@ -543,13 +564,7 @@ impl GameEngine {
                 ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
                     object_id: copy_id,
                     description: copied_name.clone(),
-                    targets: chosen
-                        .iter()
-                        .map(|&o| rv1::TargetRef {
-                            object_id: o,
-                            damage_amount: 0,
-                        })
-                        .collect(),
+                    targets: published_targets,
                     ability_annotation: "(copy)".to_string(),
                     card_id: card_id.clone(),
                     is_copy: true,

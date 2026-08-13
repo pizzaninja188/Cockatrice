@@ -75,6 +75,8 @@ fn countered_spell_moves_to_its_owners_graveyard() {
             vec![TargetRef {
                 object_id: bolt_oid,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -189,6 +191,8 @@ fn counterspell_fizzles_when_original_target_already_left_stack() {
             vec![TargetRef {
                 object_id: bolt_oid,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -210,6 +214,8 @@ fn counterspell_fizzles_when_original_target_already_left_stack() {
             vec![TargetRef {
                 object_id: bolt_oid,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -308,6 +314,8 @@ fn counterspell_counters_a_spell_on_stack() {
                 vec![TargetRef {
                     object_id: bolt_oid,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -791,6 +799,8 @@ fn counterspell_on_top_bolt_fizzles_second_leaves_bottom_bolt() {
             vec![TargetRef {
                 object_id: top_bolt_oid,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -893,6 +903,8 @@ fn twincast_copies_bolt_both_deal_damage() {
                 vec![TargetRef {
                     object_id: bolt_oid,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -959,7 +971,9 @@ fn twincast_copies_bolt_both_deal_damage() {
         copy_push.targets,
         vec![TargetRef {
             object_id: 1,
-            damage_amount: 0
+            damage_amount: 0,
+            group_index: 0,
+            kind: 0,
         }],
         "copy has the chosen target (P1)"
     );
@@ -1056,6 +1070,8 @@ fn twincast_rejects_non_spell_target() {
             vec![TargetRef {
                 object_id: bears_oid,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     );
@@ -1131,6 +1147,8 @@ fn countering_a_spell_copy_removes_it_without_error() {
             vec![TargetRef {
                 object_id: bolt_oid,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -1169,6 +1187,8 @@ fn countering_a_spell_copy_removes_it_without_error() {
             vec![TargetRef {
                 object_id: copy_id,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -1262,6 +1282,8 @@ fn twincast_copy_controller_chooses_new_target() {
             vec![TargetRef {
                 object_id: bolt_oid,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -1301,7 +1323,9 @@ fn twincast_copy_controller_chooses_new_target() {
         copy_push.targets,
         vec![TargetRef {
             object_id: 0,
-            damage_amount: 0
+            damage_amount: 0,
+            group_index: 0,
+            kind: 0,
         }],
         "copy targets P0"
     );
@@ -1355,6 +1379,8 @@ fn twincast_awaiting_copy_target(seed: u64) -> (GameEngine, u32, u32) {
             vec![TargetRef {
                 object_id: original_target,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -1379,6 +1405,8 @@ fn twincast_awaiting_copy_target(seed: u64) -> (GameEngine, u32, u32) {
             vec![TargetRef {
                 object_id: bolt_oid,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -1425,7 +1453,9 @@ fn twincast_copy_may_keep_an_original_target_that_is_now_illegal() {
         copy_push.targets,
         vec![TargetRef {
             object_id: original_target,
-            damage_amount: 0
+            damage_amount: 0,
+            group_index: 0,
+            kind: 0,
         }],
         "the copy keeps the original target"
     );

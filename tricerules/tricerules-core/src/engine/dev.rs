@@ -442,7 +442,6 @@ fn dev_entry_item(controller: PlayerId, object_id: ObjectId, card_id: &str) -> S
         face_index: 0,
         flashback: false,
         chosen_x: 0,
-        target_damage: Vec::new(),
         chosen_modes: Vec::new(),
         trigger_player: None,
         trigger_object: None,

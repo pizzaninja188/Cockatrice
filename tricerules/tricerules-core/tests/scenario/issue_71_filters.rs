@@ -33,7 +33,7 @@ fn legions_judgment_publishes_derived_power_targets_and_rejects_a_forged_cast() 
     let slot = hand_index_for_card(&engine, 0, "legions_judgment");
     let batch = engine.initial_response_batch();
     let targets = &batch.legal_by_player[&0].valid_targets_by_hand_slot[&((slot as u32) << 8)];
-    assert_eq!(targets.valid_permanent_ids, vec![boosted_bear]);
+    assert_eq!(targets.groups[0].valid_permanent_ids, vec![boosted_bear]);
 
     let hand_before = engine.state.players[0].hand.clone();
     let mana_before = engine.state.players[0].mana_pool;
@@ -45,6 +45,8 @@ fn legions_judgment_publishes_derived_power_targets_and_rejects_a_forged_cast() 
                 vec![TargetRef {
                     object_id: ordinary_bear,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -78,6 +80,8 @@ fn legions_judgment_publishes_derived_power_targets_and_rejects_a_forged_cast() 
                 vec![TargetRef {
                     object_id: boosted_bear,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -113,19 +117,11 @@ fn reckless_air_strike_modes_publish_disjoint_authoritative_targets() {
         .find(|action| action.hand_index == slot as u32)
         .expect("cast action");
     assert_eq!(
-        action.modes[0]
-            .targets
-            .as_ref()
-            .unwrap()
-            .valid_permanent_ids,
+        action.modes[0].targets.as_ref().unwrap().groups[0].valid_permanent_ids,
         vec![flyer]
     );
     assert_eq!(
-        action.modes[1]
-            .targets
-            .as_ref()
-            .unwrap()
-            .valid_permanent_ids,
+        action.modes[1].targets.as_ref().unwrap().groups[0].valid_permanent_ids,
         vec![artifact]
     );
     assert_ne!(ground, flyer);
@@ -155,8 +151,8 @@ fn run_afoul_targets_only_an_opponent_and_offers_only_their_flyers_to_sacrifice(
     let slot = hand_index_for_card(&engine, 0, "run_afoul");
     let legal = engine.initial_response_batch();
     let targets = &legal.legal_by_player[&0].valid_targets_by_hand_slot[&((slot as u32) << 8)];
-    assert!(!targets.can_target_self);
-    assert!(targets.can_target_opponent);
+    assert!(!targets.groups[0].can_target_self);
+    assert!(targets.groups[0].can_target_opponent);
 
     engine
         .apply_command(0, &cast_spell(slot, target_player(1)))

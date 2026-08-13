@@ -145,6 +145,7 @@ mod tests {
         let explicit = ActivatedAbilityDef {
             costs: vec![],
             effect: vec![],
+            targeting: None,
             timing: ActivationTiming::SorcerySpeed,
             conditions: vec![],
             text: String::new(),
@@ -156,6 +157,7 @@ mod tests {
             effect: vec![SpellEffectKind::Equip {
                 target: TargetFilter::default(),
             }],
+            targeting: None,
             timing: ActivationTiming::Normal,
             conditions: vec![],
             text: String::new(),
@@ -177,7 +179,6 @@ mod tests {
             target: TargetFilter::default(),
             division: DamageDivision::ChooseAtCast,
             extra_mana_per_target: 0,
-            max_targets: None,
         };
         assert!(effect.validate(EffectContext::Spell).is_err());
     }

@@ -7,12 +7,14 @@
 use super::events::{color_string, ev_log, object_display_name};
 use super::targeting::{
     attachment_recipient_for_target, battlefield_objects_matching, compute_spell_targets,
-    effect_has_legal_target_at_resolution, graveyard_target_legal, object_matches_mass_filter,
+    effect_has_legal_target_at_resolution, effect_target_legal_at_resolution,
+    effective_target_groups, graveyard_target_legal, object_matches_mass_filter,
     spell_effect_kind_needs_target, target_filter_legal_at_resolution, TargetSourceIdentity,
 };
 use super::*;
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
+use tricerules_cards::primitives::TargetingDef;
 
 mod damage;
 /// `pub(super)` so the combat damage step can reach `life::apply_life_gain` — lifelink is the one
@@ -87,7 +89,12 @@ fn player_recipients(
 /// One entry of a resolving stack item's flattened effect list: the primitive, the targets it was
 /// cast with, and the per-target damage split. A modal spell contributes one entry per effect of
 /// each chosen mode, so targets are per-entry rather than per-item.
-type ResolutionEffect = (SpellEffectKind, Vec<ObjectId>, Vec<u32>);
+type ResolutionEffect = (
+    SpellEffectKind,
+    Vec<ObjectId>,
+    Vec<u32>,
+    Vec<SpellEffectKind>,
+);
 
 fn resolving_damage_source_id(item: &StackItem) -> ObjectId {
     item.source_permanent_id.unwrap_or(item.id)
@@ -130,18 +137,96 @@ impl GameEngine {
             .is_some_and(|keywords| keywords.contains(&keyword))
     }
 
+    /// CR 608.2b target snapshot. Writing the filtered grouped records back to this local stack
+    /// item also preserves the snapshot if a primitive parks and later resumes its effect tail.
+    fn snapshot_resolution_targets(&self, top: &mut StackItem) {
+        let source = TargetSourceIdentity::for_stack_item(self, top);
+        let controller = top.controller;
+        let requirements_for = |effects: &[SpellEffectKind], targeting: Option<&TargetingDef>| {
+            effective_target_groups(effects, targeting)
+                .into_iter()
+                .map(|group| {
+                    group
+                        .effect_indices
+                        .into_iter()
+                        .filter_map(|index| effects.get(index as usize).cloned())
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>()
+        };
+        let legal = |requirements: &[SpellEffectKind], target: ObjectId| {
+            requirements.iter().all(|effect| {
+                effect_target_legal_at_resolution(self, effect, target, controller, source)
+            })
+        };
+
+        let Some(face) = self
+            .registry
+            .get(&top.card_id)
+            .and_then(|definition| definition.face(top.face_index))
+        else {
+            return;
+        };
+        if !top.chosen_modes.is_empty() {
+            let Some(modal) = face.modal_spell.as_ref() else {
+                return;
+            };
+            for chosen in &mut top.chosen_modes {
+                let Some(mode) = modal.modes.get(chosen.mode_index) else {
+                    continue;
+                };
+                let requirements = requirements_for(&mode.effects, mode.targeting.as_ref());
+                chosen.targets.retain(|target| {
+                    requirements
+                        .get(target.group_index as usize)
+                        .is_some_and(|group| legal(group, target.object_id))
+                });
+            }
+            return;
+        }
+
+        let (effects, targeting) = if top.ability_text.is_some() {
+            if top.is_triggered {
+                let Some(ability) = face.triggered_abilities.get(top.ability_index.unwrap_or(0))
+                else {
+                    return;
+                };
+                (&ability.effect[..], ability.targeting.as_ref())
+            } else {
+                let Some(ability) = face.activated_abilities.get(top.ability_index.unwrap_or(0))
+                else {
+                    return;
+                };
+                (&ability.effect[..], ability.targeting.as_ref())
+            }
+        } else {
+            (&face.spell_effect[..], face.targeting.as_ref())
+        };
+        let requirements = requirements_for(effects, targeting);
+        top.targets.retain(|target| {
+            requirements
+                .get(target.group_index as usize)
+                .is_some_and(|group| legal(group, target.object_id))
+        });
+    }
+
     pub(super) fn resolve_top_of_stack(
         &mut self,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
-        let top = self
+        let mut top = self
             .state
             .stack
             .pop()
             .ok_or(EngineError::Illegal("empty stack"))?;
+        self.snapshot_resolution_targets(&mut top);
         let controller = top.controller;
         let card_id = top.card_id.clone();
-        let targets = top.targets.clone();
+        let targets = top
+            .targets
+            .iter()
+            .map(|target| target.object_id)
+            .collect::<Vec<_>>();
 
         // Abilities — and spell copies (CR 707.10d) — leave no object behind when they resolve;
         // only a genuinely cast spell has a backing card that moves to a zone. A copy has no
@@ -174,10 +259,10 @@ impl GameEngine {
                 let (effects, _) = self.build_resolution_effects(&top);
                 let targeted: Vec<_> = effects
                     .iter()
-                    .filter(|(effect, _, _)| spell_effect_kind_needs_target(effect))
+                    .filter(|(effect, _, _, _)| spell_effect_kind_needs_target(effect))
                     .collect();
                 !targeted.is_empty()
-                    && targeted.iter().all(|(effect, targets, _)| {
+                    && targeted.iter().all(|(effect, targets, _, _)| {
                         !effect_has_legal_target_at_resolution(
                             self,
                             effect,
@@ -319,7 +404,7 @@ impl GameEngine {
             }
         }
 
-        let (resolution_effects, spell_label) = self.build_resolution_effects(&top);
+        let (mut resolution_effects, spell_label) = self.build_resolution_effects(&top);
 
         // CR 603.4, second of the two checks: a triggered ability with an intervening-"if" clause
         // does nothing if the clause is false as it resolves, even though it was true when the
@@ -351,20 +436,40 @@ impl GameEngine {
         }
 
         // CR 608.2b: targets are checked once, at the start of resolution — not again on resume.
+        let target_source = TargetSourceIdentity::for_stack_item(self, &top);
+        for (effect, targets, damage, target_requirements) in &mut resolution_effects {
+            if !spell_effect_kind_needs_target(effect) {
+                continue;
+            }
+            let mut surviving_targets = Vec::new();
+            let mut surviving_damage = Vec::new();
+            for (index, target) in targets.iter().copied().enumerate() {
+                if target_requirements.iter().all(|requirement| {
+                    effect_target_legal_at_resolution(
+                        self,
+                        requirement,
+                        target,
+                        controller,
+                        target_source,
+                    )
+                }) {
+                    surviving_targets.push(target);
+                    if let Some(amount) = damage.get(index) {
+                        surviving_damage.push(*amount);
+                    }
+                }
+            }
+            *targets = surviving_targets;
+            *damage = surviving_damage;
+        }
         let targeted_effects: Vec<_> = resolution_effects
             .iter()
-            .filter(|(effect, _, _)| spell_effect_kind_needs_target(effect))
+            .filter(|(effect, _, _, _)| spell_effect_kind_needs_target(effect))
             .collect();
         let fizzle = !targeted_effects.is_empty()
-            && targeted_effects.iter().all(|(effect, mode_targets, _)| {
-                !effect_has_legal_target_at_resolution(
-                    self,
-                    effect,
-                    mode_targets,
-                    controller,
-                    TargetSourceIdentity::for_stack_item(self, &top),
-                )
-            });
+            && targeted_effects
+                .iter()
+                .all(|(_, mode_targets, _, _)| mode_targets.is_empty());
         if fizzle {
             events.push(ev_log(format!("{spell_label} fizzles (no legal targets).")));
             return Ok(());
@@ -432,22 +537,91 @@ impl GameEngine {
             {
                 for chosen in &top.chosen_modes {
                     if let Some(mode) = modal.modes.get(chosen.mode_index) {
-                        for effect in &mode.effects {
+                        let groups =
+                            effective_target_groups(&mode.effects, mode.targeting.as_ref());
+                        for (effect_index, effect) in mode.effects.iter().enumerate() {
+                            let group_index = groups.iter().position(|group| {
+                                group.effect_indices.contains(&(effect_index as u32))
+                            });
+                            let selected = chosen
+                                .targets
+                                .iter()
+                                .filter(|target| {
+                                    group_index
+                                        .is_none_or(|index| target.group_index as usize == index)
+                                })
+                                .collect::<Vec<_>>();
                             resolution_effects.push((
                                 effect.clone(),
-                                chosen.targets.clone(),
-                                chosen.target_damage.clone(),
+                                selected.iter().map(|target| target.object_id).collect(),
+                                selected.iter().map(|target| target.damage_amount).collect(),
+                                group_index
+                                    .map(|index| {
+                                        groups[index]
+                                            .effect_indices
+                                            .iter()
+                                            .filter_map(|&effect_index| {
+                                                mode.effects.get(effect_index as usize).cloned()
+                                            })
+                                            .collect()
+                                    })
+                                    .unwrap_or_default(),
                             ));
                         }
                     }
                 }
             }
         } else {
-            resolution_effects.extend(
-                effects
-                    .into_iter()
-                    .map(|effect| (effect, top.targets.clone(), top.target_damage.clone())),
-            );
+            let targeting = if is_ability {
+                self.registry
+                    .get(card_id)
+                    .and_then(|definition| definition.face(top.face_index))
+                    .and_then(|face| {
+                        if top.is_triggered {
+                            face.triggered_abilities
+                                .get(top.ability_index.unwrap_or(0))
+                                .and_then(|ability| ability.targeting.as_ref())
+                        } else {
+                            face.activated_abilities
+                                .get(top.ability_index.unwrap_or(0))
+                                .and_then(|ability| ability.targeting.as_ref())
+                        }
+                    })
+            } else {
+                self.registry
+                    .get(card_id)
+                    .and_then(|definition| definition.face(top.face_index))
+                    .and_then(|face| face.targeting.as_ref())
+            };
+            let groups = effective_target_groups(&effects, targeting);
+            for (effect_index, effect) in effects.iter().cloned().enumerate() {
+                let group_index = groups
+                    .iter()
+                    .position(|group| group.effect_indices.contains(&(effect_index as u32)));
+                let selected = top
+                    .targets
+                    .iter()
+                    .filter(|target| {
+                        group_index.is_none_or(|index| target.group_index as usize == index)
+                    })
+                    .collect::<Vec<_>>();
+                resolution_effects.push((
+                    effect,
+                    selected.iter().map(|target| target.object_id).collect(),
+                    selected.iter().map(|target| target.damage_amount).collect(),
+                    group_index
+                        .map(|index| {
+                            groups[index]
+                                .effect_indices
+                                .iter()
+                                .filter_map(|&effect_index| {
+                                    effects.get(effect_index as usize).cloned()
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                ));
+            }
         }
 
         (resolution_effects, spell_label)
@@ -469,18 +643,10 @@ impl GameEngine {
     ) -> Result<(), EngineError> {
         let controller = top.controller;
         let mut previous_effect_result = EffectResult::None;
-        for (index, (effect, effect_targets, effect_target_damage)) in
+        for (index, (effect, effect_targets, effect_target_damage, _)) in
             resolution_effects.into_iter().enumerate().skip(start)
         {
-            if spell_effect_kind_needs_target(&effect)
-                && !effect_has_legal_target_at_resolution(
-                    self,
-                    &effect,
-                    &effect_targets,
-                    controller,
-                    TargetSourceIdentity::for_stack_item(self, top),
-                )
-            {
+            if spell_effect_kind_needs_target(&effect) && effect_targets.is_empty() {
                 previous_effect_result = EffectResult::None;
                 continue;
             }
@@ -1306,7 +1472,6 @@ mod source_keyword_tests {
             face_index: 0,
             flashback: false,
             chosen_x: 0,
-            target_damage: vec![],
             chosen_modes: vec![],
             trigger_player: None,
             trigger_object: None,
@@ -1329,7 +1494,6 @@ mod source_keyword_tests {
             face_index: 0,
             flashback: false,
             chosen_x,
-            target_damage: vec![],
             chosen_modes: vec![],
             trigger_player: None,
             trigger_object: None,

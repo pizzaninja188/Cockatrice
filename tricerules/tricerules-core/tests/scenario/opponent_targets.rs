@@ -4,8 +4,13 @@ use tricerules_core::Zone;
 fn choose_trigger_target(target_object_id: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-            target_object_id,
             decline: false,
+            targets: vec![TargetRef {
+                object_id: target_object_id,
+                damage_amount: 0,
+                group_index: 0,
+                kind: 0,
+            }],
         })),
     }
 }
@@ -28,6 +33,8 @@ fn cast_glaring_aegis(e: &mut GameEngine, enchanted_creature: u32) {
             vec![TargetRef {
                 object_id: enchanted_creature,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )

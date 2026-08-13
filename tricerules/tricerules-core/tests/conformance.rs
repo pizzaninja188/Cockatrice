@@ -79,6 +79,8 @@ fn tref(object_id: u32) -> TargetRef {
     TargetRef {
         object_id,
         damage_amount: 0,
+        group_index: 0,
+        kind: 0,
     }
 }
 

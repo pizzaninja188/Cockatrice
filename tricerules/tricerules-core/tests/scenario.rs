@@ -51,6 +51,8 @@ mod equipment;
 mod helpers;
 #[path = "scenario/issue_71_filters.rs"]
 mod issue_71_filters;
+#[path = "scenario/issue_73_grouped_targets.rs"]
+mod issue_73_grouped_targets;
 #[path = "scenario/legend_rule.rs"]
 mod legend_rule;
 #[path = "scenario/mana.rs"]

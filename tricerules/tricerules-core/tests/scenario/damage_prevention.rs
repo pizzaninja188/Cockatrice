@@ -87,6 +87,8 @@ fn anti_venom_prevents_direct_damage_and_gets_attempted_damage_counters() {
                 vec![TargetRef {
                     object_id: anti_venom,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -155,6 +157,8 @@ fn anti_venom_with_shield_awaiting_five_damage(seed: u64) -> (GameEngine, u32, u
                 vec![TargetRef {
                     object_id: anti_venom,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
                 5,
             ),
@@ -388,6 +392,8 @@ fn lethal_damage_runs_state_based_actions_after_the_ordering_choice() {
                 vec![TargetRef {
                     object_id: bears,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
                 5,
             ),
@@ -536,6 +542,8 @@ fn stomp_damage_still_gives_anti_venom_attempted_damage_counters() {
                 vec![TargetRef {
                     object_id: anti_venom,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
                 1,
             ),

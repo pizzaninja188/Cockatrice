@@ -76,15 +76,26 @@ enum class RuledTargetItemKind : int
     Battlefield,
 };
 
-/// Engine-authoritative targeting data for one spell, mode, or activated ability.
-struct RuledSpellTargetData
+/// One engine-authored target group. Candidate sets are deliberately published independently;
+/// the client collects groups in order and the engine validates the final assignment atomically.
+struct RuledTargetGroupData
 {
+    int groupIndex = 0;
     QSet<quint32> validPermanentIds;
     QSet<quint32> validStackIds;
     QSet<quint32> validGraveyardIds;
     bool canTargetSelf = false;
     bool canTargetOpponent = false;
-    int maxTargets = 0;
+    int minTargets = 1;
+    int maxTargets = 1;
+    QString promptText;
+    QVector<int> distinctFromGroupIndices;
+};
+
+/// Engine-authoritative targeting data for one spell, mode, activated ability, or trigger.
+struct RuledSpellTargetData : RuledTargetGroupData
+{
+    QVector<RuledTargetGroupData> groups;
     int fixedDamage = 0;
     bool isDamageTargets = false;
     int extraManaPerTarget = 0;

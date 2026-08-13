@@ -41,6 +41,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                         p.id,
                         TargetSourceIdentity::current(eng, oid),
                         &face.spell_effect,
+                        face.targeting.as_ref(),
                     );
                     let key = (slot as u32) << 8 | face_index as u32;
                     valid_targets_by_hand_slot.insert(key, t);
@@ -63,6 +64,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                             p.id,
                             TargetSourceIdentity::current(eng, poid),
                             &ability.effect,
+                            ability.targeting.as_ref(),
                         );
                         valid_targets_by_ability.insert(key, targets);
                     }
@@ -89,6 +91,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                     p.id,
                     TargetSourceIdentity::current(eng, action.object_id),
                     &face.spell_effect,
+                    face.targeting.as_ref(),
                 ),
             );
         }
@@ -108,7 +111,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                     .registry
                     .get(&pt.card_id)
                     .and_then(|def| def.primary_face().triggered_abilities.get(pt.ability_index))
-                    .map(|ta| &ta.effect)
+                    .map(|ta| (&ta.effect, ta.targeting.as_ref()))
                 {
                     let targets = compute_spell_targets(
                         eng,
@@ -117,7 +120,8 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                             pt.source_permanent_id,
                             pt.source_zone_change,
                         ),
-                        effects,
+                        effects.0,
+                        effects.1,
                     );
                     let key = (pt.source_permanent_id as u64) << 32 | pt.ability_index as u64;
                     valid_targets_by_ability.insert(key, targets);
@@ -332,11 +336,14 @@ fn hand_action(
 }
 
 fn spell_targets_have_candidate(targets: &rv1::SpellTargets) -> bool {
-    !targets.valid_permanent_ids.is_empty()
-        || !targets.valid_stack_ids.is_empty()
-        || !targets.valid_graveyard_ids.is_empty()
-        || targets.can_target_self
-        || targets.can_target_opponent
+    targets.groups.iter().any(|group| {
+        !group.valid_permanent_ids.is_empty()
+            || !group.valid_stack_ids.is_empty()
+            || !group.valid_graveyard_ids.is_empty()
+            || group.can_target_self
+            || group.can_target_opponent
+            || group.min == 0
+    })
 }
 
 /// Number of face-level cast actions the engine is currently publishing for this exact physical
@@ -495,6 +502,7 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                                 pid,
                                 TargetSourceIdentity::current(eng, oid),
                                 &mode.effects,
+                                mode.targeting.as_ref(),
                             );
                             let selectable =
                                 !needs_target || spell_targets_have_candidate(&targets);
@@ -594,6 +602,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                             pid,
                             TargetSourceIdentity::current(eng, oid),
                             &mode.effects,
+                            mode.targeting.as_ref(),
                         );
                         let selectable = !needs_target || spell_targets_have_candidate(&targets);
                         rv1::LegalSpellMode {
@@ -682,6 +691,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                         pid,
                         TargetSourceIdentity::current(eng, object.id),
                         &mode.effects,
+                        mode.targeting.as_ref(),
                     );
                     rv1::LegalSpellMode {
                         mode_index: mode_index as u32,

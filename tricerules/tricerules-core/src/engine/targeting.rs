@@ -1,5 +1,32 @@
 use super::*;
-use tricerules_cards::primitives::{GraveyardFilter, GraveyardOwner};
+use tricerules_cards::primitives::{GraveyardFilter, GraveyardOwner, TargetGroupDef, TargetingDef};
+
+pub(super) fn effective_target_groups(
+    effects: &[SpellEffectKind],
+    targeting: Option<&TargetingDef>,
+) -> Vec<TargetGroupDef> {
+    if let Some(targeting) = targeting {
+        return targeting.groups.clone();
+    }
+    let effect_indices = effects
+        .iter()
+        .enumerate()
+        .filter_map(|(index, effect)| {
+            spell_effect_kind_needs_target(effect).then_some(index as u32)
+        })
+        .collect::<Vec<_>>();
+    if effect_indices.is_empty() {
+        Vec::new()
+    } else {
+        vec![TargetGroupDef {
+            min: 1,
+            max: 1,
+            prompt: "Choose a target".into(),
+            effect_indices,
+            distinct_from: Vec::new(),
+        }]
+    }
+}
 
 /// The object that sourced a targeted spell or ability, captured at the moment targets are
 /// chosen. Object ids are stable across zone changes in this engine, so CR 400.7 identity also
@@ -427,18 +454,13 @@ pub(super) fn effect_has_legal_target_at_resolution(
     if !spell_effect_kind_needs_target(effect) {
         return true;
     }
-    if matches!(effect, SpellEffectKind::DamageTargets { .. }) {
-        return targets.iter().any(|&target| {
-            effect_target_legal_at_resolution(engine, effect, target, caster, source)
-        });
-    }
-    targets.first().is_some_and(|&target| {
-        effect_target_legal_at_resolution(engine, effect, target, caster, source)
-    })
+    targets
+        .iter()
+        .any(|&target| effect_target_legal_at_resolution(engine, effect, target, caster, source))
 }
 
 /// Returns true if `tid` is a legal target for `effect` at resolution time.
-fn effect_target_legal_at_resolution(
+pub(super) fn effect_target_legal_at_resolution(
     engine: &GameEngine,
     effect: &SpellEffectKind,
     tid: ObjectId,
@@ -536,42 +558,7 @@ fn effect_target_legal_at_resolution(
 }
 
 pub(super) fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
-    match kind {
-        SpellEffectKind::PumpTarget { subject, .. }
-        | SpellEffectKind::PutCounters { subject, .. }
-        | SpellEffectKind::GrantKeywords { subject, .. }
-        | SpellEffectKind::Untap { subject }
-        | SpellEffectKind::Regenerate { subject } => {
-            matches!(subject, EffectSubject::Chosen(_))
-        }
-        SpellEffectKind::ApplyCombatRestriction { scope, .. } => {
-            matches!(scope, CombatRestrictionScope::Chosen(_))
-        }
-        SpellEffectKind::DamageTarget { .. }
-        | SpellEffectKind::DamageTargets { .. }
-        | SpellEffectKind::DestroyTarget { .. }
-        | SpellEffectKind::ExileTarget
-        | SpellEffectKind::ExileTargetGainLifeEqualToPower
-        | SpellEffectKind::ReturnTargetCreatureToHand
-        | SpellEffectKind::ReturnTargetPermanentToHand
-        | SpellEffectKind::ReturnFromGraveyard { .. }
-        | SpellEffectKind::TargetPlayerGainsLife { .. }
-        | SpellEffectKind::TargetPlayerLosesLife { .. }
-        | SpellEffectKind::DrainTarget { .. }
-        | SpellEffectKind::MillTargetPlayer { .. }
-        | SpellEffectKind::DiscardCards { .. }
-        | SpellEffectKind::TapTarget { .. }
-        | SpellEffectKind::SkipNextUntap { .. }
-        | SpellEffectKind::GainControlUntilEndOfTurn { .. }
-        | SpellEffectKind::CounterTargetSpell { .. }
-        | SpellEffectKind::CopyTargetSpell { .. }
-        | SpellEffectKind::AuraAttach { .. }
-        // CR 702.6a: equip targets "target creature you control" — always targeted.
-        | SpellEffectKind::Equip { .. }
-        | SpellEffectKind::TargetPlayerSacrifices { .. }
-        | SpellEffectKind::PreventNextDamage { .. } => true,
-        _ => false,
-    }
+    kind.needs_target()
 }
 
 /// Validate targets for a `SpellEffectKind` directly (used by ability activation/trigger target selection).
@@ -618,17 +605,11 @@ pub(super) fn validate_effect_targets(
         }
         SpellEffectKind::DamageTargets {
             target: filter,
-            max_targets,
             division,
             ..
         } => {
             if targets.is_empty() && !matches!(division, DamageDivision::EvenAtResolution) {
                 return Err(EngineError::Illegal("requires at least one target"));
-            }
-            if let Some(max) = max_targets {
-                if targets.len() > *max as usize {
-                    return Err(EngineError::Illegal("too many targets for this effect"));
-                }
             }
             let mut seen = std::collections::HashSet::new();
             for t in targets {
@@ -822,23 +803,10 @@ pub(super) fn validate_ability_targets(
     caster: PlayerId,
     source: TargetSourceIdentity,
     effects: &[SpellEffectKind],
+    targeting: Option<&TargetingDef>,
     targets: &[rv1::TargetRef],
 ) -> Result<(), EngineError> {
-    let mut any_targeting = false;
-    for effect in effects {
-        if !spell_effect_kind_needs_target(effect) {
-            continue;
-        }
-        any_targeting = true;
-        validate_effect_targets(engine, caster, source, effect, targets)?;
-    }
-    // Every effect is untargeted (Phyrexian Arena's `[Draw, LoseLife]`), so a client that sent
-    // targets anyway is wrong — same rejection the untargeted arms of `validate_effect_targets`
-    // would have produced when the ability held a single effect.
-    if !any_targeting && !targets.is_empty() {
-        return Err(EngineError::Illegal("this effect takes no targets"));
-    }
-    Ok(())
+    validate_grouped_targets(engine, caster, source, effects, targeting, targets, true)
 }
 
 pub(super) fn validate_spell_targets(
@@ -846,38 +814,128 @@ pub(super) fn validate_spell_targets(
     caster: PlayerId,
     source: TargetSourceIdentity,
     effects: &[SpellEffectKind],
+    targeting: Option<&TargetingDef>,
     targets: &[rv1::TargetRef],
 ) -> Result<(), EngineError> {
-    // DamageTargets needs multi-target validation (1..=max_targets) — handled via
-    // validate_effect_targets, which already supports variable count.
-    let has_multi_target = effects
-        .iter()
-        .any(|e| matches!(e, SpellEffectKind::DamageTargets { .. }));
-    if has_multi_target {
-        for effect in effects {
-            if matches!(effect, SpellEffectKind::DamageTargets { .. }) {
-                validate_effect_targets(engine, caster, source, effect, targets)?;
-            }
-        }
-        return Ok(());
-    }
+    validate_grouped_targets(engine, caster, source, effects, targeting, targets, false)
+}
 
-    let needs_target = effects.iter().any(spell_effect_kind_needs_target);
-    if needs_target {
-        if targets.len() != 1 {
-            return Err(EngineError::Illegal("spell requires exactly one target"));
-        }
-        let tid = targets[0].object_id;
-        for effect in effects {
-            if !spell_effect_kind_needs_target(effect) {
-                continue;
+fn validate_grouped_targets(
+    engine: &GameEngine,
+    caster: PlayerId,
+    source: TargetSourceIdentity,
+    effects: &[SpellEffectKind],
+    targeting: Option<&TargetingDef>,
+    targets: &[rv1::TargetRef],
+    ability: bool,
+) -> Result<(), EngineError> {
+    let groups = effective_target_groups(effects, targeting);
+    if groups.is_empty() {
+        return if targets.is_empty() {
+            Ok(())
+        } else {
+            Err(EngineError::Illegal("this action takes no targets"))
+        };
+    }
+    if targets
+        .iter()
+        .any(|target| target.group_index as usize >= groups.len())
+    {
+        return Err(EngineError::Illegal("target references an unknown group"));
+    }
+    let grouped = groups
+        .iter()
+        .enumerate()
+        .map(|(group_index, _)| {
+            targets
+                .iter()
+                .filter(|target| target.group_index as usize == group_index)
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    for (group_index, group) in groups.iter().enumerate() {
+        let selected = &grouped[group_index];
+        if selected.len() < group.min as usize || selected.len() > group.max as usize {
+            if targeting.is_none() && group.min == 1 && group.max == 1 {
+                return Err(EngineError::Illegal("spell requires exactly one target"));
             }
-            spell_target_legality_error(engine, effect, tid, caster, source)?;
+            return Err(EngineError::Illegal("target group cardinality is invalid"));
         }
-    } else if !targets.is_empty() {
-        return Err(EngineError::Illegal("this spell takes no targets"));
+        let mut seen = std::collections::HashSet::new();
+        for target in selected {
+            if !target_ref_domain_exists(engine, target) {
+                return Err(EngineError::Illegal(
+                    "target kind does not match the referenced game object",
+                ));
+            }
+            if !seen.insert(target.object_id) {
+                return Err(EngineError::Illegal("duplicate target in target group"));
+            }
+            for &effect_index in &group.effect_indices {
+                let effect = effects
+                    .get(effect_index as usize)
+                    .ok_or(EngineError::Illegal(
+                        "target group references an unknown effect",
+                    ))?;
+                if ability {
+                    validate_effect_targets(
+                        engine,
+                        caster,
+                        source,
+                        effect,
+                        std::slice::from_ref(*target),
+                    )?;
+                } else {
+                    spell_target_legality_error(engine, effect, target.object_id, caster, source)?;
+                }
+            }
+        }
+        for &other_index in &group.distinct_from {
+            let other = grouped
+                .get(other_index as usize)
+                .ok_or(EngineError::Illegal(
+                    "target group distinctness index is invalid",
+                ))?;
+            if selected.iter().any(|target| {
+                other
+                    .iter()
+                    .any(|candidate| candidate.object_id == target.object_id)
+            }) {
+                return Err(EngineError::Illegal(
+                    "target must be distinct across target groups",
+                ));
+            }
+        }
     }
     Ok(())
+}
+
+fn target_ref_domain_exists(engine: &GameEngine, target: &rv1::TargetRef) -> bool {
+    match rv1::TargetRefKind::try_from(target.kind).unwrap_or(rv1::TargetRefKind::Unspecified) {
+        // Older in-process test helpers omit presentation metadata. Legality is still established
+        // below from the engine-owned effect and object state; shipped clients always send a kind.
+        rv1::TargetRefKind::Unspecified => true,
+        rv1::TargetRefKind::Player => engine
+            .state
+            .players
+            .iter()
+            .any(|player| !player.has_lost && player.id as ObjectId == target.object_id),
+        rv1::TargetRefKind::Permanent => engine
+            .state
+            .players
+            .iter()
+            .any(|player| player.battlefield.contains(&target.object_id)),
+        rv1::TargetRefKind::Stack => engine
+            .state
+            .stack
+            .iter()
+            .any(|item| item.id == target.object_id),
+        rv1::TargetRefKind::Graveyard => engine
+            .state
+            .players
+            .iter()
+            .any(|player| player.graveyard.contains(&target.object_id)),
+    }
 }
 
 /// Returns `Err` with a specific human-readable message when `tid` is not a legal target for `effect`.
@@ -1045,62 +1103,9 @@ pub(super) fn compute_spell_targets(
     caster: PlayerId,
     source: TargetSourceIdentity,
     effects: &[SpellEffectKind],
+    targeting: Option<&TargetingDef>,
 ) -> rv1::SpellTargets {
-    let mut valid_permanent_ids = Vec::new();
-    let mut valid_stack_ids = Vec::new();
-    let mut valid_graveyard_ids = Vec::new();
-    let mut can_target_self = false;
-    let mut can_target_opponent = false;
-
-    let candidate_is_legal = |object_id| {
-        effects
-            .iter()
-            .filter(|e| spell_effect_kind_needs_target(e))
-            .all(|e| spell_target_legality_error(engine, e, object_id, caster, source).is_ok())
-    };
-
-    for offset in 0..engine.state.players.len() {
-        let player_idx = (engine.state.active_player_idx + offset) % engine.state.players.len();
-        let player = &engine.state.players[player_idx];
-        for &object_id in &player.battlefield {
-            if candidate_is_legal(object_id) {
-                valid_permanent_ids.push(object_id);
-            }
-        }
-        for &object_id in &player.graveyard {
-            if candidate_is_legal(object_id) {
-                valid_graveyard_ids.push(object_id);
-            }
-        }
-    }
-
-    for item in &engine.state.stack {
-        if candidate_is_legal(item.id) {
-            valid_stack_ids.push(item.id);
-        }
-    }
-
-    for p in &engine.state.players {
-        if p.has_lost {
-            continue;
-        }
-        let tid = p.id as ObjectId;
-        let legal = effects
-            .iter()
-            .filter(|e| spell_effect_kind_needs_target(e))
-            .all(|e| spell_target_legality_error(engine, e, tid, caster, source).is_ok());
-        if legal {
-            if p.id == caster {
-                can_target_self = true;
-            } else if engine.state.are_opponents(p.id, caster) {
-                can_target_opponent = true;
-            }
-        }
-    }
-
-    // DamageTargets: expose max_targets / fixed_damage / is_damage_targets so the client can
-    // collect multiple targets and prompt for the per-target damage split.
-    let mut max_targets: u32 = 0;
+    // DamageTargets metadata controls the allocation UI. Cardinality lives exclusively on groups.
     let mut fixed_damage: u32 = 0;
     let mut is_damage_targets = false;
     let mut extra_mana_per_target: u32 = 0;
@@ -1108,14 +1113,12 @@ pub(super) fn compute_spell_targets(
     for effect in effects {
         if let SpellEffectKind::DamageTargets {
             amount,
-            max_targets: mt,
             extra_mana_per_target: empt,
             division,
             ..
         } = effect
         {
             is_damage_targets = true;
-            max_targets = mt.unwrap_or(0);
             // Resolving with X=0 gives the fixed total for literal amounts; X amounts become 0
             // (the client will use the player's chosen x_value instead).
             fixed_damage = amount.resolve_unconditional(0).unwrap_or(0);
@@ -1129,17 +1132,80 @@ pub(super) fn compute_spell_targets(
         }
     }
 
+    let groups = effective_target_groups(effects, targeting)
+        .into_iter()
+        .enumerate()
+        .map(|(group_index, group)| {
+            let referenced = group
+                .effect_indices
+                .iter()
+                .filter_map(|&index| effects.get(index as usize))
+                .collect::<Vec<_>>();
+            let legal = |object_id| {
+                referenced.iter().all(|effect| {
+                    spell_target_legality_error(engine, effect, object_id, caster, source).is_ok()
+                })
+            };
+            let mut permanent_ids = Vec::new();
+            let mut graveyard_ids = Vec::new();
+            for offset in 0..engine.state.players.len() {
+                let player_idx =
+                    (engine.state.active_player_idx + offset) % engine.state.players.len();
+                let player = &engine.state.players[player_idx];
+                permanent_ids.extend(
+                    player
+                        .battlefield
+                        .iter()
+                        .copied()
+                        .filter(|&object_id| legal(object_id)),
+                );
+                graveyard_ids.extend(
+                    player
+                        .graveyard
+                        .iter()
+                        .copied()
+                        .filter(|&object_id| legal(object_id)),
+                );
+            }
+            let stack_ids = engine
+                .state
+                .stack
+                .iter()
+                .map(|item| item.id)
+                .filter(|&object_id| legal(object_id))
+                .collect();
+            let mut self_legal = false;
+            let mut opponent_legal = false;
+            for player in &engine.state.players {
+                if !player.has_lost && legal(player.id as ObjectId) {
+                    if player.id == caster {
+                        self_legal = true;
+                    } else if engine.state.are_opponents(player.id, caster) {
+                        opponent_legal = true;
+                    }
+                }
+            }
+            rv1::LegalTargetGroup {
+                group_index: group_index as u32,
+                prompt_text: group.prompt,
+                min: group.min,
+                max: group.max,
+                valid_permanent_ids: permanent_ids,
+                valid_stack_ids: stack_ids,
+                can_target_self: self_legal,
+                can_target_opponent: opponent_legal,
+                valid_graveyard_ids: graveyard_ids,
+                distinct_from_group_indices: group.distinct_from,
+            }
+        })
+        .collect();
+
     rv1::SpellTargets {
-        valid_permanent_ids,
-        valid_stack_ids,
-        valid_graveyard_ids,
-        can_target_self,
-        can_target_opponent,
-        max_targets,
         fixed_damage,
         is_damage_targets,
         extra_mana_per_target,
         damage_division: damage_division as i32,
+        groups,
     }
 }
 
@@ -1147,6 +1213,97 @@ pub(super) fn compute_spell_targets(
 mod tests {
     use super::*;
     use tricerules_cards::CounterKind;
+
+    #[test]
+    fn grouped_targets_publish_independent_candidates_and_validate_distinctness_atomically() {
+        let engine = GameEngine::new(73_001, &[10, 20], 20, None, true).expect("new");
+        let effects = vec![
+            SpellEffectKind::TargetPlayerGainsLife {
+                amount: 1,
+                target: TargetFilter {
+                    kind: TargetKind::AnyPlayer,
+                    ..TargetFilter::default()
+                },
+            },
+            SpellEffectKind::TargetPlayerLosesLife {
+                amount: 1,
+                target: TargetFilter {
+                    kind: TargetKind::OpponentPlayer,
+                    ..TargetFilter::default()
+                },
+            },
+        ];
+        let targeting = TargetingDef {
+            groups: vec![
+                TargetGroupDef {
+                    min: 1,
+                    max: 1,
+                    prompt: "Choose any player".into(),
+                    effect_indices: vec![0],
+                    distinct_from: vec![],
+                },
+                TargetGroupDef {
+                    min: 1,
+                    max: 1,
+                    prompt: "Choose a different opponent".into(),
+                    effect_indices: vec![1],
+                    distinct_from: vec![0],
+                },
+            ],
+        };
+        let source = TargetSourceIdentity::current(&engine, u32::MAX);
+        let published = compute_spell_targets(&engine, 10, source, &effects, Some(&targeting));
+        assert_eq!(published.groups.len(), 2);
+        assert!(published.groups[0].can_target_self);
+        assert!(published.groups[0].can_target_opponent);
+        assert!(!published.groups[1].can_target_self);
+        assert!(published.groups[1].can_target_opponent);
+        assert_eq!(published.groups[1].distinct_from_group_indices, vec![0]);
+
+        let refs = |first, second| {
+            vec![
+                rv1::TargetRef {
+                    object_id: first,
+                    damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
+                },
+                rv1::TargetRef {
+                    object_id: second,
+                    damage_amount: 0,
+                    group_index: 1,
+                    kind: 0,
+                },
+            ]
+        };
+        validate_spell_targets(
+            &engine,
+            10,
+            source,
+            &effects,
+            Some(&targeting),
+            &refs(10, 20),
+        )
+        .expect("independently filtered distinct groups are legal");
+        assert!(validate_spell_targets(
+            &engine,
+            10,
+            source,
+            &effects,
+            Some(&targeting),
+            &refs(20, 20),
+        )
+        .is_err());
+        assert!(validate_spell_targets(
+            &engine,
+            10,
+            source,
+            &effects,
+            Some(&targeting),
+            &refs(20, 10),
+        )
+        .is_err());
+    }
 
     #[test]
     fn opponent_relation_is_state_backed_and_independent_of_loss() {

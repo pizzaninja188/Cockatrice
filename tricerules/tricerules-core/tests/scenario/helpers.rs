@@ -11,7 +11,7 @@ pub(crate) use tricerules_proto::ruled::v1::{
     DiscardToHandSize, FlexPipPayment, PassPriority, PlayLand, PreviewDeclareAttackers,
     PreviewDeclareBlockers, PrimitiveYieldStructured, ResolutionChoiceRequired, RuledCommand,
     RuledEventBatch, SelectedSpellMode, SubmitResolutionChoice, SubmitTriggerOrder, TargetRef,
-    UndoManaAbility,
+    TargetRefKind, UndoManaAbility,
 };
 
 pub(crate) fn pass() -> RuledCommand {
@@ -269,6 +269,8 @@ pub(crate) fn target_player(pid: i32) -> Vec<TargetRef> {
     vec![TargetRef {
         object_id: pid as u32,
         damage_amount: 0,
+        group_index: 0,
+        kind: 0,
     }]
 }
 
@@ -284,6 +286,8 @@ pub(crate) fn target_player_damage(pid: i32, damage: u32) -> Vec<TargetRef> {
     vec![TargetRef {
         object_id: pid as u32,
         damage_amount: damage,
+        group_index: 0,
+        kind: 0,
     }]
 }
 
@@ -294,6 +298,8 @@ pub(crate) fn targets_with_damage(pairs: Vec<(u32, u32)>) -> Vec<TargetRef> {
         .map(|(oid, dmg)| TargetRef {
             object_id: oid,
             damage_amount: dmg,
+            group_index: 0,
+            kind: 0,
         })
         .collect()
 }

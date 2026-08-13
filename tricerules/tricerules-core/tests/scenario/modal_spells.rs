@@ -100,6 +100,8 @@ fn boros_charm_keyword_modes_apply_to_the_correct_snapshot() {
                 vec![TargetRef {
                     object_id: opponent,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             )],
         ),
@@ -134,9 +136,9 @@ fn boros_charm_double_strike_mode_rejects_targets_outside_the_battlefield() {
         .find(|m| m.mode_index == 2)
         .expect("double strike mode");
     let targets = double_strike.targets.as_ref().expect("mode target group");
-    assert_eq!(targets.valid_permanent_ids, vec![creature]);
-    assert!(targets.valid_graveyard_ids.is_empty());
-    assert!(!targets.can_target_self && !targets.can_target_opponent);
+    assert_eq!(targets.groups[0].valid_permanent_ids, vec![creature]);
+    assert!(targets.groups[0].valid_graveyard_ids.is_empty());
+    assert!(!targets.groups[0].can_target_self && !targets.groups[0].can_target_opponent);
 
     for (label, object_id) in [("a graveyard card", buried), ("a player", 1u32)] {
         let result = e.apply_command(
@@ -148,6 +150,8 @@ fn boros_charm_double_strike_mode_rejects_targets_outside_the_battlefield() {
                     vec![TargetRef {
                         object_id,
                         damage_amount: 0,
+                        group_index: 0,
+                        kind: 0,
                     }],
                 )],
             ),
@@ -164,6 +168,8 @@ fn boros_charm_double_strike_mode_rejects_targets_outside_the_battlefield() {
                 vec![TargetRef {
                     object_id: creature,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             )],
         ),
@@ -242,6 +248,8 @@ fn copied_modal_spell_retains_modes_and_mode_targets() {
             vec![TargetRef {
                 object_id: charm_stack_id,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -306,6 +314,8 @@ fn cryptic_command_bounce_then_tap_uses_printed_order_and_relative_controller() 
                     vec![TargetRef {
                         object_id: bounced,
                         damage_amount: 0,
+                        group_index: 0,
+                        kind: 0,
                     }],
                 ),
                 (2, vec![]),
@@ -372,6 +382,8 @@ fn cryptic_command_counter_and_draw_resolve_together() {
                     vec![TargetRef {
                         object_id: bear_stack_id,
                         damage_amount: 0,
+                        group_index: 0,
+                        kind: 0,
                     }],
                 ),
                 (3, vec![]),
@@ -410,6 +422,8 @@ fn cryptic_command_requires_exactly_two_distinct_modes() {
                         vec![TargetRef {
                             object_id: permanent,
                             damage_amount: 0,
+                            group_index: 0,
+                            kind: 0,
                         }],
                     ),
                     (2, vec![]),

@@ -446,7 +446,7 @@ void PlayerActions::clearPendingRuledSpellCast()
     ruledPendingCast->clearSpell();
     if (hadTargeting) {
         emit ruledSpellTargetingChanged(false, {});
-        emit ruledMultiTargetSelectionUpdated(0, -1);
+        emit ruledMultiTargetSelectionUpdated(0, 0, -1);
     }
     if (hadAllocation) {
         player->getGame()->getGameEventHandler()->ruled()->emitSpellDamageAllocationUiChanged();
@@ -670,23 +670,43 @@ bool PlayerActions::completePendingRuledSpellCast()
     cast->set_x_value(static_cast<quint32>(pendingRuledSpellCast.xValue));
     // CR 709/712/715: which face of a multi-face card to cast (0 for single-face cards).
     cast->set_face_index(static_cast<quint32>(pendingRuledSpellCast.faceIndex));
+    RuledClientState *const handler = player->getGame()->getGameEventHandler()->ruled();
+    const int localPlayerId = player->getPlayerInfo()->getId();
     if (pendingRuledSpellCast.selectedModes.isEmpty()) {
-        for (int i = 0; i < pendingRuledSpellCast.selectedTargetOids.size(); ++i) {
-            auto *target = cast->add_targets();
-            target->set_object_id(pendingRuledSpellCast.selectedTargetOids.at(i));
-            if (i < pendingRuledSpellCast.selectedTargetDamages.size()) {
-                target->set_damage_amount(pendingRuledSpellCast.selectedTargetDamages.at(i));
+        const auto targetData = handler ? handler->spellTargetData(pendingRuledSpellCast.handIndex,
+                                                                   pendingRuledSpellCast.faceIndex,
+                                                                   pendingRuledSpellCast.source)
+                                        : RuledSpellTargetData{};
+        for (int groupIndex = 0; groupIndex < pendingRuledSpellCast.selectedTargetOidsByGroup.size(); ++groupIndex) {
+            const auto &oids = pendingRuledSpellCast.selectedTargetOidsByGroup.at(groupIndex);
+            const auto &damages = pendingRuledSpellCast.selectedTargetDamagesByGroup.value(groupIndex);
+            const auto group = targetData.groups.value(groupIndex);
+            for (int i = 0; i < oids.size(); ++i) {
+                auto *target = cast->add_targets();
+                target->set_object_id(oids.at(i));
+                target->set_group_index(static_cast<quint32>(groupIndex));
+                target->set_kind(ruledTargetRefKind(group, oids.at(i), localPlayerId));
+                if (i < damages.size()) {
+                    target->set_damage_amount(damages.at(i));
+                }
             }
         }
     } else {
         for (const auto &mode : pendingRuledSpellCast.selectedModes) {
             auto *selectedMode = cast->add_selected_modes();
             selectedMode->set_mode_index(static_cast<quint32>(mode.modeIndex));
-            for (int i = 0; i < mode.selectedTargetOids.size(); ++i) {
-                auto *target = selectedMode->add_targets();
-                target->set_object_id(mode.selectedTargetOids.at(i));
-                if (i < mode.selectedTargetDamages.size()) {
-                    target->set_damage_amount(mode.selectedTargetDamages.at(i));
+            for (int groupIndex = 0; groupIndex < mode.selectedTargetOidsByGroup.size(); ++groupIndex) {
+                const auto &oids = mode.selectedTargetOidsByGroup.at(groupIndex);
+                const auto &damages = mode.selectedTargetDamagesByGroup.value(groupIndex);
+                for (int i = 0; i < oids.size(); ++i) {
+                    auto *target = selectedMode->add_targets();
+                    target->set_object_id(oids.at(i));
+                    target->set_group_index(static_cast<quint32>(groupIndex));
+                    target->set_kind(
+                        ruledTargetRefKind(mode.targets.groups.value(groupIndex), oids.at(i), localPlayerId));
+                    if (i < damages.size()) {
+                        target->set_damage_amount(damages.at(i));
+                    }
                 }
             }
         }
@@ -697,8 +717,6 @@ bool PlayerActions::completePendingRuledSpellCast()
         flex->set_pip_index(pipIndex);
         flex->set_pay_life(true);
     }
-    RuledClientState *const handler = player->getGame()->getGameEventHandler()->ruled();
-    const int localPlayerId = player->getPlayerInfo()->getId();
     for (const auto &selection : pendingRuledSpellCast.costSelections) {
         auto *costSelection = cast->add_cost_selections();
         costSelection->set_cost_index(static_cast<quint32>(selection.costIndex));
@@ -750,6 +768,13 @@ bool PlayerActions::completeActivateAbility()
     if (pendingActivatedAbility.needsTarget) {
         auto *tref = aa->add_targets();
         tref->set_object_id(pendingActivatedAbility.selectedTargetOid);
+        tref->set_group_index(0);
+        const auto *state = player->getGame()->getGameEventHandler()->ruled();
+        const auto data = state ? state->abilityTargetData(pendingActivatedAbility.permanentOid,
+                                                           pendingActivatedAbility.abilityIndex)
+                                : RuledSpellTargetData{};
+        tref->set_kind(ruledTargetRefKind(data.groups.value(0), pendingActivatedAbility.selectedTargetOid,
+                                          player->getPlayerInfo()->getId()));
     }
     // CR 107.4f: Phyrexian pips the player chose to pay with life (via self-portrait click).
     for (const quint32 pipIndex : pendingActivatedAbility.lifePipIndices) {
@@ -1463,7 +1488,8 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
         pendingRuledSpellCast.source == source) {
         // For multi-target spells, clicking the spell again while 1+ targets are chosen confirms
         // the selection (instead of canceling); clicking with 0 targets cancels as before.
-        if (pendingRuledSpellCast.isDamageTargets && !pendingRuledSpellCast.selectedTargetOids.isEmpty()) {
+        if (pendingRuledSpellCast.maxTargets != 1 &&
+            pendingRuledSpellCast.selectedTargetOids.size() >= pendingRuledSpellCast.minTargets) {
             return finalizeTargetSelectionAndContinue();
         }
         cancelPendingRuledSpellCast();
@@ -1512,6 +1538,8 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
     pendingRuledSpellCast.source = source;
     pendingRuledSpellCast.faceIndex = faceIndex;
     pendingRuledSpellCast.selectedTargetOids.clear();
+    pendingRuledSpellCast.selectedTargetOidsByGroup.clear();
+    pendingRuledSpellCast.selectedTargetDamagesByGroup.clear();
     pendingRuledSpellCast.xValue = 0;
     pendingRuledSpellCast.cardName = castName;
     pendingRuledSpellCast.remainingCost = parseSimpleManaCost(castCost);
@@ -1547,11 +1575,13 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
          (source == RuledCastSource::Hand
               ? geh->handActionNeedsTarget(ruled::v1::HAND_ACTION_CAST_SPELL, ruledHandIndex, faceIndex)
               : geh->zoneActionNeedsTarget(static_cast<quint32>(ruledHandIndex))));
+    pendingRuledSpellCast.activeTargetGroupPosition = pendingRuledSpellCast.waitingForTarget ? 0 : -1;
     if (pendingRuledSpellCast.activeModePosition >= 0) {
         const auto &targetData = selectedModes.at(pendingRuledSpellCast.activeModePosition).targets;
         pendingRuledSpellCast.isDamageTargets = targetData.isDamageTargets;
         pendingRuledSpellCast.damageDividedEvenly = targetData.damageDividedEvenly;
         pendingRuledSpellCast.maxTargets = targetData.maxTargets;
+        pendingRuledSpellCast.minTargets = targetData.minTargets;
         pendingRuledSpellCast.fixedDamage = targetData.fixedDamage;
         pendingRuledSpellCast.extraManaPerTarget = targetData.extraManaPerTarget;
     } else {
@@ -1559,8 +1589,18 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
         pendingRuledSpellCast.damageDividedEvenly =
             geh->spellTargetData(ruledHandIndex, faceIndex, source).damageDividedEvenly;
         pendingRuledSpellCast.maxTargets = geh->spellMaxTargets(ruledHandIndex, faceIndex, source);
+        pendingRuledSpellCast.minTargets = geh->spellTargetData(ruledHandIndex, faceIndex, source).minTargets;
         pendingRuledSpellCast.fixedDamage = geh->spellFixedDamage(ruledHandIndex, faceIndex, source);
         pendingRuledSpellCast.extraManaPerTarget = geh->spellExtraManaPerTarget(ruledHandIndex, faceIndex, source);
+    }
+    if (pendingRuledSpellCast.waitingForTarget) {
+        const auto targetData = currentRuledSpellTargetData(pendingRuledSpellCast, *geh);
+        const int groupCount = targetData.has_value() ? targetData->groups.size() : 0;
+        for (int i = 0; i < groupCount; ++i) {
+            pendingRuledSpellCast.selectedTargetOidsByGroup.append(QVector<quint32>{});
+            pendingRuledSpellCast.selectedTargetDamagesByGroup.append(QVector<quint32>{});
+        }
+        loadCurrentTargetGroup();
     }
     emit landTapUndoAvailableChanged(false);
     emit ruledSpellCastPendingChanged(true);
@@ -1571,17 +1611,24 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
     }
 
     if (pendingRuledSpellCast.waitingForTarget) {
-        const QString effectText =
-            pendingRuledSpellCast.activeModePosition >= 0
-                ? pendingRuledSpellCast.selectedModes.at(pendingRuledSpellCast.activeModePosition).label
-                : pendingRuledSpellCast.cardName;
+        const auto activeGroup = currentRuledSpellTargetGroup(pendingRuledSpellCast, *geh);
+        const QString effectText = activeGroup.has_value() && !activeGroup->promptText.isEmpty()
+                                       ? activeGroup->promptText
+                                   : pendingRuledSpellCast.activeModePosition >= 0
+                                       ? pendingRuledSpellCast.selectedModes.at(
+                                             pendingRuledSpellCast.activeModePosition)
+                                             .label
+                                       : pendingRuledSpellCast.cardName;
         emit ruledSpellTargetingChanged(true, effectText);
+        if (pendingRuledSpellCast.maxTargets != 1) {
+            emit ruledMultiTargetSelectionUpdated(0, pendingRuledSpellCast.minTargets,
+                                                   pendingRuledSpellCast.maxTargets);
+        }
         // Open the graveyard view(s) this spell can target, so a reanimation/regrowth target is
         // reachable without the player opening the pile by hand first.
         RuledActions::updateGraveyardTargetHint(player, pendingRuledSpellCast.handIndex,
                                                 pendingRuledSpellCast.faceIndex);
-        player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            tr("Choose a target for “%1”, or press Cancel.").arg(effectText));
+        player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(effectText);
         return true;
     }
 
@@ -1678,8 +1725,6 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
     }
 
     RuledClientState *handler = player->getGame()->getGameEventHandler()->ruled();
-    const int slot = pendingRuledSpellCast.handIndex;
-    const int face = pendingRuledSpellCast.faceIndex;
 
     const int ownerPlayerId = card && card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
     quint32 targetOid = 0;
@@ -1697,32 +1742,23 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
                 .arg(pendingRuledSpellCast.cardName));
         return true;
     }
-    const bool hasModalTarget = pendingRuledSpellCast.activeModePosition >= 0;
-    const auto liveModalTarget =
-        hasModalTarget
-            ? handler->modalSpellTargetData(slot, face,
-                                            pendingRuledSpellCast.selectedModes
-                                                .at(pendingRuledSpellCast.activeModePosition)
-                                                .modeIndex,
-                                            pendingRuledSpellCast.source)
-            : std::nullopt;
-    const auto *modalTarget = liveModalTarget.has_value() ? &*liveModalTarget : nullptr;
-    const bool valid = hasModalTarget
-                           ? modalTarget &&
-                                 (isOnBattlefield ? modalTarget->validPermanentIds.contains(targetOid)
-                                  : isOnGraveyard ? modalTarget->validGraveyardIds.contains(targetOid)
-                                                  : modalTarget->validStackIds.contains(targetOid))
-                           : (isOnBattlefield
-                                  ? handler->isValidSpellTarget(slot, face, targetOid, pendingRuledSpellCast.source)
-                              : isOnGraveyard
-                                  ? handler->isValidSpellGraveyardTarget(slot, face, targetOid,
-                                                                        pendingRuledSpellCast.source)
-                                  : handler->isValidSpellStackTarget(slot, face, targetOid,
-                                                                    pendingRuledSpellCast.source));
+    const auto activeGroup = currentRuledSpellTargetGroup(pendingRuledSpellCast, *handler);
+    const bool valid = activeGroup.has_value() &&
+                       ruledTargetDataContains(*activeGroup,
+                                               isOnBattlefield ? RuledTargetCandidateKind::Battlefield
+                                               : isOnGraveyard ? RuledTargetCandidateKind::Graveyard
+                                                               : RuledTargetCandidateKind::Stack,
+                                               targetOid, player->getPlayerInfo()->getId());
     if (!valid) {
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
             tr("That is not a legal target for %1.").arg(pendingRuledSpellCast.cardName));
         return true;
+    }
+    for (const int otherGroup : activeGroup->distinctFromGroupIndices) {
+        if (pendingRuledSpellCast.selectedTargetOidsByGroup.value(otherGroup).contains(targetOid)) {
+            handler->emitLocalLog(tr("That object is already selected in a distinct target group."));
+            return true;
+        }
     }
 
     if (pendingRuledSpellCast.selectedTargetOids.contains(targetOid)) {
@@ -1730,7 +1766,8 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
         const int chosen = pendingRuledSpellCast.selectedTargetOids.size();
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
             tr("Target deselected. %1 target(s) chosen for %2.").arg(chosen).arg(pendingRuledSpellCast.cardName));
-        emit ruledMultiTargetSelectionUpdated(chosen, effectiveDamageTargetsMax());
+        emit ruledMultiTargetSelectionUpdated(chosen, pendingRuledSpellCast.minTargets,
+                                               effectiveDamageTargetsMax());
         player->getGame()->getGameEventHandler()->ruled()->emitSpellTargetSelectionChanged();
         return true;
     }
@@ -1746,13 +1783,13 @@ bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
     // effMax == 0 means "no cap" — reachable only for evenly-divided damage, where no per-target
     // minimum bounds the count. There is nothing to auto-advance on, so the player confirms
     // explicitly (click the spell again, or the Confirm Targets button).
-    if (pendingRuledSpellCast.isDamageTargets && (effMax <= 0 || chosen < effMax)) {
+    if (pendingRuledSpellCast.maxTargets != 1 && (effMax <= 0 || chosen < effMax)) {
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
             tr("Target %1%2 chosen for %3. Click another target, or click %3 again to confirm.")
                 .arg(chosen)
                 .arg(effMax > 0 ? QStringLiteral("/%1").arg(effMax) : QString())
                 .arg(pendingRuledSpellCast.cardName));
-        emit ruledMultiTargetSelectionUpdated(chosen, effMax);
+        emit ruledMultiTargetSelectionUpdated(chosen, pendingRuledSpellCast.minTargets, effMax);
         player->getGame()->getGameEventHandler()->ruled()->emitSpellTargetSelectionChanged();
         return true;
     }
@@ -1766,19 +1803,26 @@ namespace
 
 bool PlayerActions::isTargetSelectedForPendingSpell(quint32 oid) const
 {
-    return pendingRuledSpellCast.valid && pendingRuledSpellCast.selectedTargetOids.contains(oid);
+    if (!pendingRuledSpellCast.valid) {
+        return false;
+    }
+    return pendingRuledSpellCast.selectedTargetOids.contains(oid) ||
+           std::any_of(pendingRuledSpellCast.selectedTargetOidsByGroup.cbegin(),
+                       pendingRuledSpellCast.selectedTargetOidsByGroup.cend(),
+                       [oid](const auto &group) { return group.contains(oid); });
 }
 
 bool PlayerActions::isPlayerSelectedAsPendingSpellTarget(int playerId) const
 {
-    return pendingRuledSpellCast.valid &&
-           pendingRuledSpellCast.selectedTargetOids.contains(static_cast<quint32>(playerId));
+    return isTargetSelectedForPendingSpell(static_cast<quint32>(playerId));
 }
 
 void PlayerActions::confirmMultiTargetSelection()
 {
     if (!pendingRuledSpellCast.valid || !pendingRuledSpellCast.waitingForTarget ||
-        !pendingRuledSpellCast.isDamageTargets || pendingRuledSpellCast.selectedTargetOids.isEmpty()) {
+        pendingRuledSpellCast.maxTargets == 1 ||
+        pendingRuledSpellCast.selectedTargetOids.size() < pendingRuledSpellCast.minTargets ||
+        pendingRuledSpellCast.selectedTargetOids.size() > pendingRuledSpellCast.maxTargets) {
         return;
     }
     finalizeTargetSelectionAndContinue();
@@ -1793,16 +1837,8 @@ bool PlayerActions::isAwaitingRuledPlayerTargetSelection() const
     if (!handler) {
         return false;
     }
-    const int slot = pendingRuledSpellCast.handIndex;
-    const int face = pendingRuledSpellCast.faceIndex;
-    if (pendingRuledSpellCast.activeModePosition >= 0) {
-        const auto targets = handler->modalSpellTargetData(
-            slot, face, pendingRuledSpellCast.selectedModes.at(pendingRuledSpellCast.activeModePosition).modeIndex,
-            pendingRuledSpellCast.source);
-        return targets.has_value() && (targets->canTargetSelf || targets->canTargetOpponent);
-    }
-    return handler->canSpellTargetSelf(slot, face, pendingRuledSpellCast.source) ||
-           handler->canSpellTargetOpponent(slot, face, pendingRuledSpellCast.source);
+    const auto group = currentRuledSpellTargetGroup(pendingRuledSpellCast, *handler);
+    return group.has_value() && (group->canTargetSelf || group->canTargetOpponent);
 }
 
 bool PlayerActions::isAwaitingRuledAbilityOrTriggerPlayerTarget() const
@@ -1840,24 +1876,10 @@ bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
     }
 
     RuledClientState *handler = player->getGame()->getGameEventHandler()->ruled();
-    const int slot = pendingRuledSpellCast.handIndex;
-    const int face = pendingRuledSpellCast.faceIndex;
     const bool isSelf = (targetPlayerId == player->getPlayerInfo()->getId());
-    const bool hasModalTarget = pendingRuledSpellCast.activeModePosition >= 0;
-    const auto modalTarget =
-        hasModalTarget
-            ? handler->modalSpellTargetData(slot, face,
-                                            pendingRuledSpellCast.selectedModes
-                                                .at(pendingRuledSpellCast.activeModePosition)
-                                                .modeIndex,
-                                            pendingRuledSpellCast.source)
-            : std::nullopt;
-    const bool canTargetSelf = hasModalTarget ? modalTarget.has_value() && modalTarget->canTargetSelf
-                                              : handler->canSpellTargetSelf(slot, face,
-                                                                            pendingRuledSpellCast.source);
-    const bool canTargetOpponent = hasModalTarget ? modalTarget.has_value() && modalTarget->canTargetOpponent
-                                                  : handler->canSpellTargetOpponent(
-                                                        slot, face, pendingRuledSpellCast.source);
+    const auto activeGroup = currentRuledSpellTargetGroup(pendingRuledSpellCast, *handler);
+    const bool canTargetSelf = activeGroup.has_value() && activeGroup->canTargetSelf;
+    const bool canTargetOpponent = activeGroup.has_value() && activeGroup->canTargetOpponent;
     if (isSelf && !canTargetSelf) {
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
             tr("%1 must target an opponent.").arg(pendingRuledSpellCast.cardName));
@@ -1870,12 +1892,19 @@ bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
     }
 
     const quint32 targetOid = static_cast<quint32>(targetPlayerId);
+    for (const int otherGroup : activeGroup->distinctFromGroupIndices) {
+        if (pendingRuledSpellCast.selectedTargetOidsByGroup.value(otherGroup).contains(targetOid)) {
+            handler->emitLocalLog(tr("That player is already selected in a distinct target group."));
+            return true;
+        }
+    }
     if (pendingRuledSpellCast.selectedTargetOids.contains(targetOid)) {
         pendingRuledSpellCast.selectedTargetOids.removeOne(targetOid);
         const int chosen = pendingRuledSpellCast.selectedTargetOids.size();
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
             tr("Target deselected. %1 target(s) chosen for %2.").arg(chosen).arg(pendingRuledSpellCast.cardName));
-        emit ruledMultiTargetSelectionUpdated(chosen, effectiveDamageTargetsMax());
+        emit ruledMultiTargetSelectionUpdated(chosen, pendingRuledSpellCast.minTargets,
+                                               effectiveDamageTargetsMax());
         player->getGame()->getGameEventHandler()->ruled()->emitSpellTargetSelectionChanged();
         return true;
     }
@@ -1890,13 +1919,13 @@ bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
     // effMax == 0 means "no cap" — reachable only for evenly-divided damage, where no per-target
     // minimum bounds the count. There is nothing to auto-advance on, so the player confirms
     // explicitly (click the spell again, or the Confirm Targets button).
-    if (pendingRuledSpellCast.isDamageTargets && (effMax <= 0 || chosen < effMax)) {
+    if (pendingRuledSpellCast.maxTargets != 1 && (effMax <= 0 || chosen < effMax)) {
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
             tr("Target %1%2 chosen for %3. Click another target, or click %3 again to confirm.")
                 .arg(chosen)
                 .arg(effMax > 0 ? QStringLiteral("/%1").arg(effMax) : QString())
                 .arg(pendingRuledSpellCast.cardName));
-        emit ruledMultiTargetSelectionUpdated(chosen, effMax);
+        emit ruledMultiTargetSelectionUpdated(chosen, pendingRuledSpellCast.minTargets, effMax);
         player->getGame()->getGameEventHandler()->ruled()->emitSpellTargetSelectionChanged();
         return true;
     }
@@ -1928,6 +1957,60 @@ int PlayerActions::effectiveDamageTargetsMax() const
     return total;
 }
 
+void PlayerActions::loadCurrentTargetGroup()
+{
+    RuledClientState *const state = player->getGame()->getGameEventHandler()->ruled();
+    const auto data = state ? currentRuledSpellTargetData(pendingRuledSpellCast, *state) : std::nullopt;
+    if (!data.has_value() || pendingRuledSpellCast.activeTargetGroupPosition < 0 ||
+        pendingRuledSpellCast.activeTargetGroupPosition >= data->groups.size()) {
+        return;
+    }
+    const auto &group = data->groups.at(pendingRuledSpellCast.activeTargetGroupPosition);
+    pendingRuledSpellCast.minTargets = group.minTargets;
+    pendingRuledSpellCast.maxTargets = group.maxTargets;
+    pendingRuledSpellCast.selectedTargetOids =
+        pendingRuledSpellCast.selectedTargetOidsByGroup.value(pendingRuledSpellCast.activeTargetGroupPosition);
+    pendingRuledSpellCast.selectedTargetDamages =
+        pendingRuledSpellCast.selectedTargetDamagesByGroup.value(pendingRuledSpellCast.activeTargetGroupPosition);
+}
+
+bool PlayerActions::storeCurrentTargetGroupAndAdvance()
+{
+    const int current = pendingRuledSpellCast.activeTargetGroupPosition;
+    RuledClientState *const state = player->getGame()->getGameEventHandler()->ruled();
+    const auto data = state ? currentRuledSpellTargetData(pendingRuledSpellCast, *state) : std::nullopt;
+    if (!data.has_value() || current < 0 || current >= data->groups.size()) {
+        return false;
+    }
+    while (pendingRuledSpellCast.selectedTargetOidsByGroup.size() < data->groups.size()) {
+        pendingRuledSpellCast.selectedTargetOidsByGroup.append(QVector<quint32>{});
+    }
+    while (pendingRuledSpellCast.selectedTargetDamagesByGroup.size() < data->groups.size()) {
+        pendingRuledSpellCast.selectedTargetDamagesByGroup.append(QVector<quint32>{});
+    }
+    pendingRuledSpellCast.selectedTargetOidsByGroup[current] = pendingRuledSpellCast.selectedTargetOids;
+    pendingRuledSpellCast.selectedTargetDamagesByGroup[current] = pendingRuledSpellCast.selectedTargetDamages;
+
+    if (current + 1 >= data->groups.size()) {
+        return false;
+    }
+    pendingRuledSpellCast.activeTargetGroupPosition = current + 1;
+    loadCurrentTargetGroup();
+    pendingRuledSpellCast.waitingForTarget = true;
+    const auto &next = data->groups.at(current + 1);
+    emit ruledSpellTargetingChanged(true, next.promptText);
+    if (next.maxTargets != 1) {
+        emit ruledMultiTargetSelectionUpdated(pendingRuledSpellCast.selectedTargetOids.size(), next.minTargets,
+                                               next.maxTargets);
+    }
+    RuledActions::updateGraveyardTargetHint(player, pendingRuledSpellCast.handIndex,
+                                            pendingRuledSpellCast.faceIndex);
+    state->emitLocalLog(next.promptText);
+    state->emitSpellTargetSelectionChanged();
+    player->getGameScene()->update();
+    return true;
+}
+
 bool PlayerActions::storeCurrentModalTargetsAndAdvance()
 {
     const int current = pendingRuledSpellCast.activeModePosition;
@@ -1937,6 +2020,8 @@ bool PlayerActions::storeCurrentModalTargetsAndAdvance()
     auto &mode = pendingRuledSpellCast.selectedModes[current];
     mode.selectedTargetOids = pendingRuledSpellCast.selectedTargetOids;
     mode.selectedTargetDamages = pendingRuledSpellCast.selectedTargetDamages;
+    mode.selectedTargetOidsByGroup = pendingRuledSpellCast.selectedTargetOidsByGroup;
+    mode.selectedTargetDamagesByGroup = pendingRuledSpellCast.selectedTargetDamagesByGroup;
 
     for (int next = current + 1; next < pendingRuledSpellCast.selectedModes.size(); ++next) {
         const auto &nextMode = pendingRuledSpellCast.selectedModes.at(next);
@@ -1944,18 +2029,27 @@ bool PlayerActions::storeCurrentModalTargetsAndAdvance()
             continue;
         }
         pendingRuledSpellCast.activeModePosition = next;
-        pendingRuledSpellCast.selectedTargetOids.clear();
-        pendingRuledSpellCast.selectedTargetDamages.clear();
+        pendingRuledSpellCast.activeTargetGroupPosition = 0;
+        pendingRuledSpellCast.selectedTargetOidsByGroup = nextMode.selectedTargetOidsByGroup;
+        pendingRuledSpellCast.selectedTargetDamagesByGroup = nextMode.selectedTargetDamagesByGroup;
+        while (pendingRuledSpellCast.selectedTargetOidsByGroup.size() < nextMode.targets.groups.size()) {
+            pendingRuledSpellCast.selectedTargetOidsByGroup.append(QVector<quint32>{});
+        }
+        while (pendingRuledSpellCast.selectedTargetDamagesByGroup.size() < nextMode.targets.groups.size()) {
+            pendingRuledSpellCast.selectedTargetDamagesByGroup.append(QVector<quint32>{});
+        }
         pendingRuledSpellCast.isDamageTargets = nextMode.targets.isDamageTargets;
-        pendingRuledSpellCast.maxTargets = nextMode.targets.maxTargets;
         pendingRuledSpellCast.fixedDamage = nextMode.targets.fixedDamage;
         pendingRuledSpellCast.extraManaPerTarget = nextMode.targets.extraManaPerTarget;
+        loadCurrentTargetGroup();
         pendingRuledSpellCast.waitingForTarget = true;
-        emit ruledSpellTargetingChanged(true, nextMode.label);
+        const QString prompt = nextMode.targets.groups.isEmpty()
+                                   ? nextMode.label
+                                   : nextMode.targets.groups.first().promptText;
+        emit ruledSpellTargetingChanged(true, prompt);
         RuledActions::updateGraveyardTargetHint(player, pendingRuledSpellCast.handIndex,
                                                 pendingRuledSpellCast.faceIndex);
-        player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            tr("Choose a target for “%1”, or press Cancel.").arg(nextMode.label));
+        player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(prompt);
         player->getGame()->getGameEventHandler()->ruled()->emitSpellTargetSelectionChanged();
         player->getGameScene()->update();
         return true;
@@ -1966,9 +2060,13 @@ bool PlayerActions::storeCurrentModalTargetsAndAdvance()
 
 bool PlayerActions::finalizeTargetSelectionAndContinue()
 {
+    if (!pendingRuledSpellCast.isDamageTargets && storeCurrentTargetGroupAndAdvance()) {
+        return true;
+    }
+
     pendingRuledSpellCast.waitingForTarget = false;
     emit ruledSpellTargetingChanged(false, {});
-    emit ruledMultiTargetSelectionUpdated(0, -1);
+    emit ruledMultiTargetSelectionUpdated(0, 0, -1);
     player->getGameScene()->update();
 
     // CR 601.2f: DamageTargets surcharge — extra generic mana per target beyond the first
@@ -2023,7 +2121,12 @@ bool PlayerActions::finalizeTargetSelectionAndContinue()
                     .arg(numTargets));
             return true; // wait for the player to confirm via the prompt button
         }
+        if (storeCurrentTargetGroupAndAdvance()) {
+            return true;
+        }
     }
+
+    pendingRuledSpellCast.activeTargetGroupPosition = -1;
 
     if (storeCurrentModalTargetsAndAdvance()) {
         return true;
@@ -2137,6 +2240,9 @@ void PlayerActions::confirmSpellDamageAllocation()
     pendingRuledSpellCast.inDamageAllocationMode = false;
     player->getGame()->getGameEventHandler()->ruled()->emitSpellDamageAllocationUiChanged();
 
+    if (storeCurrentTargetGroupAndAdvance())
+        return;
+    pendingRuledSpellCast.activeTargetGroupPosition = -1;
     if (storeCurrentModalTargetsAndAdvance())
         return;
     continuePendingSpellAfterChoice();
@@ -4416,7 +4522,12 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
             return true;
         }
         ruled::v1::RuledCommand cmd;
-        cmd.mutable_choose_trigger_target()->set_target_object_id(targetOid);
+        auto *target = cmd.mutable_choose_trigger_target()->add_targets();
+        target->set_object_id(targetOid);
+        target->set_group_index(0);
+        target->set_kind(triggerIsGraveyard   ? ruled::v1::TARGET_REF_KIND_GRAVEYARD
+                         : zoneName == ZoneNames::STACK ? ruled::v1::TARGET_REF_KIND_STACK
+                                                       : ruled::v1::TARGET_REF_KIND_PERMANENT);
         std::string payload;
         if (cmd.SerializeToString(&payload)) {
             Command_RuledPayload ruledPayload;
@@ -4594,7 +4705,10 @@ bool PlayerActions::tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer)
             return true;
         }
         ruled::v1::RuledCommand cmd;
-        cmd.mutable_choose_trigger_target()->set_target_object_id(targetOid);
+        auto *target = cmd.mutable_choose_trigger_target()->add_targets();
+        target->set_object_id(targetOid);
+        target->set_group_index(0);
+        target->set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
         std::string payload;
         if (cmd.SerializeToString(&payload)) {
             Command_RuledPayload ruledPayload;

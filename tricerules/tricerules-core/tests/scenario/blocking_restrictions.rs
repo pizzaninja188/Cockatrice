@@ -154,6 +154,7 @@ fn goblin_smuggler_uses_derived_power_and_revalidates_its_target() {
     let key = (smuggler as u64) << 32;
     let targets = &engine.initial_response_batch().legal_by_player[&0].valid_targets_by_ability
         [&key]
+        .groups[0]
         .valid_permanent_ids;
     assert_eq!(targets, &[small]);
 

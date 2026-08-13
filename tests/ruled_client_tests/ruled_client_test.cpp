@@ -392,6 +392,7 @@ TEST(RuledPendingTargetTest, ClickEligibilityUsesLatestAuthoritativeModalTargets
     spell.handIndex = 3;
     spell.faceIndex = 0;
     spell.activeModePosition = 0;
+    spell.activeTargetGroupPosition = 0;
 
     RuledSpellTargetData stale;
     stale.validPermanentIds.insert(100);
@@ -399,6 +400,7 @@ TEST(RuledPendingTargetTest, ClickEligibilityUsesLatestAuthoritativeModalTargets
 
     RuledSpellTargetData current;
     current.validPermanentIds.insert(200);
+    current.groups.append(static_cast<const RuledTargetGroupData &>(current));
     RuledModalSpellOption mode{7, QStringLiteral("mode"), true, true, current};
     state.handActions[ruled::v1::HAND_ACTION_CAST_SPELL]
         .modalOptionsByCastKey[RuledClientState::spellTargetKey(3, 0)] = {mode};
@@ -462,11 +464,15 @@ TEST(RuledPendingTargetTest, ReconcileDropsTargetsMissingFromLatestLegalSnapshot
     spell.valid = true;
     spell.waitingForTarget = true;
     spell.handIndex = 6;
+    spell.activeTargetGroupPosition = 0;
     spell.selectedTargetOids = {10, 20};
     spell.selectedTargetDamages = {1, 2};
+    spell.selectedTargetOidsByGroup = {{10, 20}};
+    spell.selectedTargetDamagesByGroup = {{1, 2}};
     spell.targetDamageAllocations = {1, 2};
     RuledSpellTargetData current;
     current.validPermanentIds.insert(20);
+    current.groups.append(static_cast<const RuledTargetGroupData &>(current));
     state.validTargetsByHandSlot.insert(RuledClientState::spellTargetKey(6, 0), current);
 
     PendingActivatedAbility ability;
@@ -484,7 +490,9 @@ TEST(RuledPendingTargetTest, ReconcileRepairsBothLegacyPendingFamiliesInOneLegal
     PendingRuledSpellCast spell;
     spell.valid = true;
     spell.handIndex = 2;
+    spell.activeTargetGroupPosition = 0;
     spell.selectedTargetOids = {10};
+    spell.selectedTargetOidsByGroup = {{10}};
 
     PendingActivatedAbility ability;
     ability.valid = true;
@@ -492,7 +500,9 @@ TEST(RuledPendingTargetTest, ReconcileRepairsBothLegacyPendingFamiliesInOneLegal
     ability.abilityIndex = 1;
     ability.selectedTargetOid = 40;
 
-    state.validTargetsByHandSlot.insert(RuledClientState::spellTargetKey(2, 0), {});
+    RuledSpellTargetData noSpellCandidates;
+    noSpellCandidates.groups.append(static_cast<const RuledTargetGroupData &>(noSpellCandidates));
+    state.validTargetsByHandSlot.insert(RuledClientState::spellTargetKey(2, 0), noSpellCandidates);
     state.validTargetsByAbility.insert(RuledClientState::abilityTargetKey(30, 1), {});
 
     EXPECT_TRUE(reconcileRuledPendingTargets(spell, ability, state, 0));
@@ -663,7 +673,12 @@ TEST_F(RuledClientTest, AppliesAuthoritativeModalModeDataPerFace)
     damage->set_label("Deal 4 damage");
     damage->set_selectable(true);
     damage->set_needs_target(true);
-    damage->mutable_targets()->set_can_target_opponent(true);
+    auto *damageGroup = damage->mutable_targets()->add_groups();
+    damageGroup->set_group_index(0);
+    damageGroup->set_prompt_text("Choose target player");
+    damageGroup->set_min(1);
+    damageGroup->set_max(1);
+    damageGroup->set_can_target_opponent(true);
     auto *disabled = cast->add_modes();
     disabled->set_mode_index(2);
     disabled->set_label("Creature gains double strike");
@@ -758,22 +773,44 @@ TEST_F(RuledClientTest, ParsesTargetingTablesForHandSlotsAndAbilities)
     auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
     // Hand slot 1, face 0 — the composite key the engine emits.
     auto &slotTargets = (*actions.mutable_valid_targets_by_hand_slot())[(1u << 8) | 0u];
-    slotTargets.add_valid_permanent_ids(100);
-    slotTargets.add_valid_stack_ids(300);
-    slotTargets.add_valid_graveyard_ids(500);
-    slotTargets.set_can_target_opponent(true);
     slotTargets.set_is_damage_targets(true);
-    slotTargets.set_max_targets(3);
     slotTargets.set_fixed_damage(4);
     slotTargets.set_extra_mana_per_target(1);
+    auto *group = slotTargets.add_groups();
+    group->set_group_index(0);
+    group->set_prompt_text("Choose up to two target creatures");
+    group->set_min(0);
+    group->set_max(2);
+    group->add_valid_permanent_ids(101);
+    group->add_valid_stack_ids(300);
+    group->add_valid_graveyard_ids(500);
+    group->set_can_target_opponent(true);
+    auto *secondGroup = slotTargets.add_groups();
+    secondGroup->set_group_index(1);
+    secondGroup->set_prompt_text("Choose another target");
+    secondGroup->set_min(1);
+    secondGroup->set_max(1);
+    secondGroup->add_valid_permanent_ids(202);
+    secondGroup->add_distinct_from_group_indices(0);
     // Ability index 2 on permanent 100.
     auto &abilityTargets = (*actions.mutable_valid_targets_by_ability())[(quint64(100) << 32) | 2u];
-    abilityTargets.add_valid_permanent_ids(200);
-    abilityTargets.set_can_target_self(true);
+    auto *abilityGroup = abilityTargets.add_groups();
+    abilityGroup->set_group_index(0);
+    abilityGroup->set_prompt_text("Choose target");
+    abilityGroup->set_min(1);
+    abilityGroup->set_max(1);
+    abilityGroup->add_valid_permanent_ids(200);
+    abilityGroup->set_can_target_self(true);
     apply(batch);
 
-    EXPECT_TRUE(state->isValidSpellTarget(1, 0, 100));
-    EXPECT_FALSE(state->isValidSpellTarget(1, 0, 101));
+    EXPECT_FALSE(state->isValidSpellTarget(1, 0, 100));
+    EXPECT_TRUE(state->isValidSpellTarget(1, 0, 101));
+    EXPECT_EQ(state->spellTargetData(1, 0).minTargets, 0);
+    EXPECT_EQ(state->spellTargetData(1, 0).maxTargets, 2);
+    EXPECT_EQ(state->spellTargetData(1, 0).promptText, "Choose up to two target creatures");
+    ASSERT_EQ(state->spellTargetData(1, 0).groups.size(), 2);
+    EXPECT_EQ(state->spellTargetData(1, 0).groups.at(1).validPermanentIds, QSet<quint32>({202}));
+    EXPECT_EQ(state->spellTargetData(1, 0).groups.at(1).distinctFromGroupIndices, QVector<int>({0}));
     // A different face of the same slot carries its own (here: empty) target set.
     EXPECT_FALSE(state->isValidSpellTarget(1, 1, 100));
     EXPECT_TRUE(state->isValidSpellStackTarget(1, 0, 300));
@@ -781,7 +818,7 @@ TEST_F(RuledClientTest, ParsesTargetingTablesForHandSlotsAndAbilities)
     EXPECT_TRUE(state->canSpellTargetOpponent(1, 0));
     EXPECT_FALSE(state->canSpellTargetSelf(1, 0));
     EXPECT_TRUE(state->spellIsDamageTargets(1, 0));
-    EXPECT_EQ(state->spellMaxTargets(1, 0), 3);
+    EXPECT_EQ(state->spellMaxTargets(1, 0), 2);
     EXPECT_EQ(state->spellFixedDamage(1, 0), 4);
     EXPECT_EQ(state->spellExtraManaPerTarget(1, 0), 1);
 
@@ -897,6 +934,35 @@ TEST_F(RuledClientTest, StackPushAndResolveKeepLifoOrder)
     EXPECT_EQ(state->getStackOidOrder(), QList<quint32>({10}));
     EXPECT_FALSE(state->stackTargetsByStackOid.contains(11));
     EXPECT_EQ(host.removedSyntheticCards, QVector<quint32>({11}));
+}
+
+TEST_F(RuledClientTest, StackPushPreservesEveryTypedTargetWithoutPlayerIdCollisions)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *push = batch.add_events()->mutable_stack_pushed();
+    push->set_object_id(50);
+    auto *first = push->add_targets();
+    first->set_object_id(1); // Deliberately collides with kOpponent.
+    first->set_group_index(0);
+    first->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    auto *second = push->add_targets();
+    second->set_object_id(2);
+    second->set_group_index(0);
+    second->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+
+    apply(batch);
+
+    EXPECT_EQ(state->stackTargetsByStackOid.value(50), QVector<quint32>({1, 2}));
+    EXPECT_EQ(state->latchedTargetKind(50, 1), RuledTargetItemKind::Battlefield);
+    EXPECT_EQ(state->latchedTargetKind(50, 2), RuledTargetItemKind::Battlefield);
+}
+
+TEST(RuledTargetRefKindTest, UsesGraveyardCandidateDomainForSelectionPresentation)
+{
+    RuledTargetGroupData group;
+    group.validGraveyardIds.insert(7);
+
+    EXPECT_EQ(ruledTargetRefKind(group, 7, kLocalPlayer), ruled::v1::TARGET_REF_KIND_GRAVEYARD);
 }
 
 // CR 608.2b: a target that changes zones becomes a new object, so the arrow endpoint recorded when
@@ -1053,7 +1119,12 @@ TEST_F(RuledClientTest, PendingTriggerWithGraveyardTargetsAsksForTheGraveyardVie
     ge->set_server_card_id(11);
     auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
     auto &abilityTargets = (*actions.mutable_valid_targets_by_ability())[(quint64(100) << 32) | 0u];
-    abilityTargets.add_valid_graveyard_ids(500);
+    auto *triggerGroup = abilityTargets.add_groups();
+    triggerGroup->set_group_index(0);
+    triggerGroup->set_prompt_text("Choose target creature card");
+    triggerGroup->set_min(1);
+    triggerGroup->set_max(1);
+    triggerGroup->add_valid_graveyard_ids(500);
     apply(batch);
 
     ASSERT_TRUE(state->hasPendingTriggerTarget());
@@ -1411,7 +1482,12 @@ TEST_F(RuledClientTest, AppliesAndClearsObjectIdKeyedExileCastActions)
     cast->set_cost("{2}{R}");
     cast->set_needs_target(true);
     auto &targets = (*actions.mutable_valid_targets_by_zone_object())[(quint64(objectId) << 8) | 0u];
-    targets.add_valid_permanent_ids(99);
+    auto *zoneGroup = targets.add_groups();
+    zoneGroup->set_group_index(0);
+    zoneGroup->set_prompt_text("Choose target");
+    zoneGroup->set_min(1);
+    zoneGroup->set_max(1);
+    zoneGroup->add_valid_permanent_ids(99);
     apply(batch);
 
     ASSERT_TRUE(state->isZoneActionLegal(objectId));

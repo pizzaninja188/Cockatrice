@@ -1,0 +1,16 @@
+(
+  id: "soul_salvage",
+  name: "Soul Salvage",
+  mana_cost: "{2}{B}",
+  types: ["Sorcery"],
+  spell_effect: [ReturnFromGraveyard(
+    filter: (owner: Controller, card_type: Some(Creature)),
+    destination: Hand,
+  )],
+  targeting: Some((groups: [(
+    min: 0,
+    max: 2,
+    prompt: "Choose up to two target creature cards in your graveyard",
+    effect_indices: [0],
+  )])),
+)

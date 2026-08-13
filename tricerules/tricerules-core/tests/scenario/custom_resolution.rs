@@ -489,6 +489,8 @@ fn recast_bounced_creature_is_summoning_sick() {
             vec![TargetRef {
                 object_id: grizzly,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )

@@ -41,40 +41,19 @@ void RuledTargetUi::reconcile(PlayerActions *actions)
         return;
     }
 
-    bool spellNeedsNewTarget = false;
     auto &spell = actions->pendingRuledSpellCast;
-    if (spell.valid && !spell.selectedModes.isEmpty()) {
-        for (int i = 0; i < spell.selectedModes.size(); ++i) {
-            auto &mode = spell.selectedModes[i];
-            if (!mode.needsTarget || !mode.selectedTargetOids.isEmpty()) {
-                continue;
-            }
-            spell.activeModePosition = i;
-            spell.selectedTargetOids = mode.selectedTargetOids;
-            spell.selectedTargetDamages = mode.selectedTargetDamages;
-            spell.targetDamageAllocations.clear();
-            if (const auto live =
-                    state->modalSpellTargetData(spell.handIndex, spell.faceIndex, mode.modeIndex, spell.source)) {
-                mode.targets = *live;
-                spell.isDamageTargets = live->isDamageTargets;
-                spell.damageDividedEvenly = live->damageDividedEvenly;
-                spell.maxTargets = live->maxTargets;
-                spell.fixedDamage = live->fixedDamage;
-                spell.extraManaPerTarget = live->extraManaPerTarget;
-            }
-            spellNeedsNewTarget = true;
-            break;
-        }
-    } else if (spell.valid && spellHadTargets && spell.selectedTargetOids.isEmpty()) {
-        spellNeedsNewTarget = true;
-    }
-
-    if (spellNeedsNewTarget) {
-        spell.waitingForTarget = true;
+    if (spell.valid && spell.waitingForTarget) {
         spell.inDamageAllocationMode = false;
-        emit actions->ruledSpellTargetingChanged(true, spell.cardName);
-        state->emitLocalLog(actions->tr("A selected target is no longer legal. Choose a new target for %1.")
-                                .arg(spell.cardName));
+        const auto group = currentRuledSpellTargetGroup(spell, *state);
+        const QString prompt = group.has_value() ? group->promptText : spell.cardName;
+        emit actions->ruledSpellTargetingChanged(true, prompt);
+        if (group.has_value() && group->maxTargets != 1) {
+            emit actions->ruledMultiTargetSelectionUpdated(spell.selectedTargetOids.size(), group->minTargets,
+                                                           group->maxTargets);
+        }
+        if (spellHadTargets) {
+            state->emitLocalLog(actions->tr("A selected target is no longer legal. %1").arg(prompt));
+        }
     }
     auto &ability = actions->pendingActivatedAbility;
     if (abilityHadTarget && ability.valid && ability.selectedTargetOid == 0) {

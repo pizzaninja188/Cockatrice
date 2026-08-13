@@ -47,7 +47,7 @@ signals:
     void logSetDoesntUntap(Player *player, CardItem *card, bool doesntUntap);
     void logSetPT(Player *player, CardItem *card, QString newPT);
     void ruledSpellTargetingChanged(bool active, const QString &effectText);
-    void ruledMultiTargetSelectionUpdated(int selectedCount, int maxTargets);
+    void ruledMultiTargetSelectionUpdated(int selectedCount, int minTargets, int maxTargets);
     void landTapUndoAvailableChanged(bool available);
     void ruledSpellCastPendingChanged(bool pending);
     /// Emitted when `remainingCost` changes during ruled spell payment (land or counter).
@@ -297,6 +297,8 @@ private:
                              const QString &castCost,
                              RuledCastSource source = RuledCastSource::Hand);
     bool storeCurrentModalTargetsAndAdvance();
+    bool storeCurrentTargetGroupAndAdvance();
+    void loadCurrentTargetGroup();
     static QMap<QChar, int> parseSimpleManaCost(const QString &manaCost);
     static QVector<RuledFlexPip> parseFlexPips(const QString &manaCost);
     static QString formatSimpleManaCost(const QMap<QChar, int> &cost);

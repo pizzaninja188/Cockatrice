@@ -11,6 +11,8 @@ fn target(object_id: u32) -> Vec<TargetRef> {
     vec![TargetRef {
         object_id,
         damage_amount: 0,
+        group_index: 0,
+        kind: 0,
     }]
 }
 

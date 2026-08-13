@@ -183,6 +183,14 @@ impl CardRegistry {
                         reason,
                     }
                 })?;
+                if let Some(targeting) = &face.targeting {
+                    targeting.validate(&face.spell_effect).map_err(|reason| {
+                        RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason,
+                        }
+                    })?;
+                }
                 if let Some(modal) = &face.modal_spell {
                     if modal.min_modes == 0
                         || modal.max_modes < modal.min_modes
@@ -231,6 +239,14 @@ impl CardRegistry {
                                 reason,
                             }
                         })?;
+                        if let Some(targeting) = &mode.targeting {
+                            targeting.validate(&mode.effects).map_err(|reason| {
+                                RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason,
+                                }
+                            })?;
+                        }
                     }
                 }
                 // CR 604.2: static abilities exist only on permanents (they generate continuous
@@ -455,6 +471,25 @@ impl CardRegistry {
                             reason,
                         }
                     })?;
+                }
+                for (effects, targeting) in face
+                    .activated_abilities
+                    .iter()
+                    .map(|ability| (&ability.effect, ability.targeting.as_ref()))
+                    .chain(
+                        face.triggered_abilities
+                            .iter()
+                            .map(|ability| (&ability.effect, ability.targeting.as_ref())),
+                    )
+                {
+                    if let Some(targeting) = targeting {
+                        targeting.validate(effects).map_err(|reason| {
+                            RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason,
+                            }
+                        })?;
+                    }
                 }
                 // Every CreateTokens effect must name a loaded token (an uncreatable id is a bug).
                 let all_effects = face

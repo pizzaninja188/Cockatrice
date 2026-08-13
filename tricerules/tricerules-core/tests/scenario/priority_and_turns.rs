@@ -1023,7 +1023,9 @@ fn doom_blade_targets_only_nonblack_creatures() {
                 idx,
                 vec![TargetRef {
                     object_id: black,
-                    damage_amount: 0
+                    damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }]
             )
         )
@@ -1039,6 +1041,8 @@ fn doom_blade_targets_only_nonblack_creatures() {
             vec![TargetRef {
                 object_id: green,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -1111,6 +1115,8 @@ fn essence_scatter_and_negate_respect_spell_type() {
                 vec![TargetRef {
                     object_id: bears_spell,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }]
             )
         )
@@ -1126,6 +1132,8 @@ fn essence_scatter_and_negate_respect_spell_type() {
             vec![TargetRef {
                 object_id: bears_spell,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -1161,6 +1169,8 @@ fn essence_scatter_and_negate_respect_spell_type() {
                 vec![TargetRef {
                     object_id: bolt_spell,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }]
             )
         )
@@ -1175,6 +1185,8 @@ fn essence_scatter_and_negate_respect_spell_type() {
             vec![TargetRef {
                 object_id: bolt_spell,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )

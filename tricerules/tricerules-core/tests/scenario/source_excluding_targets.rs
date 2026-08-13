@@ -4,8 +4,13 @@ use tricerules_cards::Keyword;
 fn choose_trigger_target(target_object_id: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-            target_object_id,
             decline: false,
+            targets: vec![TargetRef {
+                object_id: target_object_id,
+                damage_amount: 0,
+                group_index: 0,
+                kind: 0,
+            }],
         })),
     }
 }
@@ -14,6 +19,8 @@ fn target(object_id: u32) -> Vec<TargetRef> {
     vec![TargetRef {
         object_id,
         damage_amount: 0,
+        group_index: 0,
+        kind: 0,
     }]
 }
 
@@ -40,7 +47,7 @@ fn pegasus_courser_excludes_itself_and_grants_flying_to_the_other_attacker() {
         .get(&key)
         .expect("Pegasus Courser trigger target set");
     assert_eq!(
-        targets.valid_permanent_ids,
+        targets.groups[0].valid_permanent_ids,
         vec![other_attacker],
         "the trigger must publish only the other attacking creature"
     );

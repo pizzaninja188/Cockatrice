@@ -30,6 +30,8 @@ fn life_goes_on_gains_eight_after_a_creature_dies() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -120,6 +122,8 @@ fn conditional_amount_is_evaluated_when_the_effect_resolves() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -159,6 +163,8 @@ fn the_same_creature_can_die_more_than_once_in_a_turn() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -173,6 +179,8 @@ fn the_same_creature_can_die_more_than_once_in_a_turn() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -188,6 +196,8 @@ fn the_same_creature_can_die_more_than_once_in_a_turn() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -252,6 +262,8 @@ fn cleanup_rolls_current_history_to_previous_and_resets_current() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )

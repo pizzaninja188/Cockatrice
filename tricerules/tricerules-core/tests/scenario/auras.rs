@@ -20,6 +20,8 @@ fn cast_and_resolve_aura(e: &mut GameEngine, card_id: &str, target: u32, mana: M
             vec![TargetRef {
                 object_id: target,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -169,6 +171,8 @@ fn player_aura_rejects_a_forged_permanent_target() {
                 vec![TargetRef {
                     object_id: bear,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }]
             )
         )
@@ -285,6 +289,8 @@ fn holy_strength_buffs_enchanted_creature() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -349,6 +355,8 @@ fn unholy_strength_buffs_enchanted_creature() {
             vec![TargetRef {
                 object_id: corpse,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -396,6 +404,8 @@ fn aura_pt_buff_removed_when_aura_leaves_battlefield() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -468,6 +478,8 @@ fn aura_dies_when_enchanted_creature_dies_sba() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -537,6 +549,8 @@ fn aura_spell_fizzles_when_target_leaves_before_resolution() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -866,6 +880,8 @@ fn indestructibility_prevents_destroy_effects() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )

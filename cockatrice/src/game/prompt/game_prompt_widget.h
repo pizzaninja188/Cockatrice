@@ -111,7 +111,7 @@ public slots:
     /// pass-priority button leads into the regular combat damage step from here, so it
     /// reads "Combat Damage" rather than "End of Combat".
     void setFirstStrikeDamageStepActive(bool active);
-    void setMultiTargetSelectionCount(int selected, int maxTargets);
+    void setMultiTargetSelectionCount(int selected, int minTargets, int maxTargets);
     /// Spell damage allocation mode (multi-target DamageTargets). `active` false clears the mode.
     void setSpellDamageAllocationStatus(bool active, int assigned, int total);
     void setLandTapUndoAvailable(bool available);
@@ -181,6 +181,7 @@ private:
     RuledPromptState promptState;
     TargetingSources targetingSources;
     int multiTargetSelectedCount = 0;
+    int multiTargetMinCount = 0;
     int multiTargetMaxCount = -1;
     QString fallbackPromptText;
     bool landTapUndoAvailable = false;

@@ -37,6 +37,8 @@ fn lightning_bolt_rejects_basic_land_target() {
                 vec![TargetRef {
                     object_id: land_oid,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -118,6 +120,8 @@ fn giant_growth_rejects_land_target() {
                 vec![TargetRef {
                     object_id: land_oid,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -175,6 +179,8 @@ fn giant_growth_fizzles_if_creature_target_dies_before_resolution() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -196,6 +202,8 @@ fn giant_growth_fizzles_if_creature_target_dies_before_resolution() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -277,6 +285,8 @@ fn lightning_bolt_fizzles_when_creature_target_left_battlefield() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -297,6 +307,8 @@ fn lightning_bolt_fizzles_when_creature_target_left_battlefield() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -369,6 +381,8 @@ fn go_for_the_throat_fizzles_when_creature_target_left_battlefield() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -390,6 +404,8 @@ fn go_for_the_throat_fizzles_when_creature_target_left_battlefield() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -485,6 +501,8 @@ fn go_for_the_throat_rejects_artifact_creature_target() {
                 vec![TargetRef {
                     object_id: ornithopter_oid,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -531,6 +549,8 @@ fn bump_in_the_night_rejects_creature_target() {
                 vec![TargetRef {
                     object_id: bear,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -691,6 +711,8 @@ fn swords_to_plowshares_fizzles_if_target_dies_before_resolution() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -703,6 +725,8 @@ fn swords_to_plowshares_fizzles_if_target_dies_before_resolution() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -769,6 +793,8 @@ fn unsummon_rejects_land_target() {
                 vec![TargetRef {
                     object_id: island_oid,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -891,6 +917,8 @@ fn hexproof_opponent_cannot_target_with_spell() {
             vec![TargetRef {
                 object_id: scout,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     );
@@ -944,6 +972,8 @@ fn hexproof_controller_can_target_own_permanent() {
             vec![TargetRef {
                 object_id: scout,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -1003,6 +1033,8 @@ fn shroud_controller_cannot_target_own_permanent() {
             vec![TargetRef {
                 object_id: enchantress,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     );
@@ -1035,6 +1067,8 @@ fn royal_assassin_destroys_tapped_creature() {
             vec![TargetRef {
                 object_id: bears,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -1075,6 +1109,8 @@ fn royal_assassin_cannot_target_untapped_creature() {
             vec![TargetRef {
                 object_id: bears,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     );
@@ -1119,6 +1155,8 @@ fn icy_manipulator_cannot_target_an_enchantment() {
             vec![TargetRef {
                 object_id: aura,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     );
@@ -1133,6 +1171,8 @@ fn icy_manipulator_cannot_target_an_enchantment() {
             vec![TargetRef {
                 object_id: bears,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -1171,6 +1211,8 @@ fn eyeblights_ending_cannot_target_an_elf() {
             vec![TargetRef {
                 object_id: elf,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     );
@@ -1183,6 +1225,8 @@ fn eyeblights_ending_cannot_target_an_elf() {
             vec![TargetRef {
                 object_id: bears,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -1217,7 +1261,9 @@ fn avacynian_priest_taps_only_non_humans() {
                 0,
                 vec![TargetRef {
                     object_id: human,
-                    damage_amount: 0
+                    damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }]
             )
         )
@@ -1238,6 +1284,8 @@ fn avacynian_priest_taps_only_non_humans() {
             vec![TargetRef {
                 object_id: bears,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -1288,21 +1336,22 @@ fn published_zone_targets_follow_apnap_and_zone_order() {
         .position(|&oid| oid == reanimate)
         .expect("Reanimate in hand") as u32;
 
-    let assert_targets =
-        |engine: &mut GameEngine, expected_battlefield: Vec<u32>, expected_graveyard: Vec<u32>| {
-            let batch = engine.initial_response_batch();
-            let legal = batch.legal_by_player.get(&0).expect("legal actions for P0");
-            assert_eq!(
-                legal.valid_targets_by_hand_slot[&(bolt_slot << 8)].valid_permanent_ids,
-                expected_battlefield,
-                "battlefield targets must be grouped APNAP and retain battlefield order"
-            );
-            assert_eq!(
-                legal.valid_targets_by_hand_slot[&(reanimate_slot << 8)].valid_graveyard_ids,
-                expected_graveyard,
-                "graveyard targets must be grouped APNAP and retain graveyard order"
-            );
-        };
+    let assert_targets = |engine: &mut GameEngine,
+                          expected_battlefield: Vec<u32>,
+                          expected_graveyard: Vec<u32>| {
+        let batch = engine.initial_response_batch();
+        let legal = batch.legal_by_player.get(&0).expect("legal actions for P0");
+        assert_eq!(
+            legal.valid_targets_by_hand_slot[&(bolt_slot << 8)].groups[0].valid_permanent_ids,
+            expected_battlefield,
+            "battlefield targets must be grouped APNAP and retain battlefield order"
+        );
+        assert_eq!(
+            legal.valid_targets_by_hand_slot[&(reanimate_slot << 8)].groups[0].valid_graveyard_ids,
+            expected_graveyard,
+            "graveyard targets must be grouped APNAP and retain graveyard order"
+        );
+    };
 
     assert_targets(
         &mut e,
@@ -1354,6 +1403,8 @@ fn bladebrand_target_tables_exclude_objects_outside_the_battlefield() {
             vec![TargetRef {
                 object_id: 1,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -1370,22 +1421,28 @@ fn bladebrand_target_tables_exclude_objects_outside_the_battlefield() {
     let targets = &legal.valid_targets_by_hand_slot[&(bladebrand_slot << 8)];
 
     assert_eq!(
-        targets.valid_permanent_ids,
+        targets.groups[0].valid_permanent_ids,
         vec![bears],
         "the battlefield creature is the only legal target"
     );
     assert!(
-        targets.valid_graveyard_ids.is_empty(),
+        targets.groups[0].valid_graveyard_ids.is_empty(),
         "a graveyard card is not a creature on the battlefield: {:?}",
-        targets.valid_graveyard_ids
+        targets.groups[0].valid_graveyard_ids
     );
     assert!(
-        targets.valid_stack_ids.is_empty(),
+        targets.groups[0].valid_stack_ids.is_empty(),
         "a spell on the stack cannot gain deathtouch: {:?}",
-        targets.valid_stack_ids
+        targets.groups[0].valid_stack_ids
     );
-    assert!(!targets.can_target_self, "a player is not a creature");
-    assert!(!targets.can_target_opponent, "a player is not a creature");
+    assert!(
+        !targets.groups[0].can_target_self,
+        "a player is not a creature"
+    );
+    assert!(
+        !targets.groups[0].can_target_opponent,
+        "a player is not a creature"
+    );
 
     // The ids exist — the tables exclude them on legality, not because they are absent.
     assert!(e.state.objects.contains_key(&buried));
@@ -1426,6 +1483,8 @@ fn bladebrand_rejects_cast_targets_outside_the_battlefield() {
             vec![TargetRef {
                 object_id: 1,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -1445,6 +1504,8 @@ fn bladebrand_rejects_cast_targets_outside_the_battlefield() {
                 vec![TargetRef {
                     object_id,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         );
@@ -1469,6 +1530,8 @@ fn bladebrand_rejects_cast_targets_outside_the_battlefield() {
             vec![TargetRef {
                 object_id: bears,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -1502,6 +1565,8 @@ fn published_stack_targets_include_copies_in_bottom_to_top_order() {
             vec![TargetRef {
                 object_id: 1,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -1532,10 +1597,10 @@ fn published_stack_targets_include_copies_in_bottom_to_top_order() {
     let legal = batch.legal_by_player.get(&0).expect("legal actions for P0");
     let targets = &legal.valid_targets_by_hand_slot[&(counterspell_slot << 8)];
     assert_eq!(
-        targets.valid_stack_ids,
+        targets.groups[0].valid_stack_ids,
         vec![physical_spell.id, copy_id],
         "spell targets must include copies bottom-to-top and exclude abilities"
     );
     assert!(!e.state.objects.contains_key(&copy_id));
-    assert!(!targets.valid_stack_ids.contains(&ability_id));
+    assert!(!targets.groups[0].valid_stack_ids.contains(&ability_id));
 }

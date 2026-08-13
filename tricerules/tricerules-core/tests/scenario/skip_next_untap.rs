@@ -7,7 +7,59 @@ fn target(oid: u32) -> Vec<TargetRef> {
     vec![TargetRef {
         object_id: oid,
         damage_amount: 0,
+        group_index: 0,
+        kind: 0,
     }]
+}
+
+#[test]
+fn frost_breath_accepts_and_affects_two_distinct_creatures() {
+    let decks = Some(vec![
+        deck_with("island", &["frost_breath"]),
+        deck_with("forest", &["grizzly_bears", "grizzly_bears"]),
+    ]);
+    let mut engine = GameEngine::new(73_001, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut engine);
+    let first = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
+    let second = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", true);
+    ensure_in_hand(&mut engine, 0, "frost_breath");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            u: 3,
+            ..Default::default()
+        },
+    );
+
+    let spell = hand_index_for_card(&engine, 0, "frost_breath");
+    engine
+        .apply_command(
+            0,
+            &cast_spell(
+                spell,
+                vec![
+                    TargetRef {
+                        object_id: first,
+                        damage_amount: 0,
+                        group_index: 0,
+                        kind: 0,
+                    },
+                    TargetRef {
+                        object_id: second,
+                        damage_amount: 0,
+                        group_index: 0,
+                        kind: 0,
+                    },
+                ],
+            ),
+        )
+        .expect("cast Frost Breath with two targets");
+    resolve_entire_stack_two_player(&mut engine);
+
+    assert!(engine.state.objects[&first].tapped);
+    assert!(engine.state.objects[&second].tapped);
+    assert_eq!(engine.state.skip_next_untap.len(), 2);
 }
 
 fn cast_crippling_chill(engine: &mut GameEngine, caster: i32, target_id: u32) {

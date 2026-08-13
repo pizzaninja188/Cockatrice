@@ -368,6 +368,7 @@ impl GameEngine {
         };
         let face_name = face.name.to_string();
         let face_effects: Vec<SpellEffectKind> = face.spell_effect.to_vec();
+        let face_targeting = face.targeting.clone();
         let modal_spell = face.modal_spell.clone();
         let additional_costs = face.additional_costs.clone();
         let sorcery_ok = super::priority::sorcery_speed_available(&self.state, player);
@@ -446,6 +447,7 @@ impl GameEngine {
                     player,
                     target_source,
                     &mode.effects,
+                    mode.targeting.as_ref(),
                     &selection.targets,
                 )?;
                 for effect in &mode.effects {
@@ -492,12 +494,12 @@ impl GameEngine {
                     targets: selection
                         .targets
                         .iter()
-                        .map(|target| target.object_id)
-                        .collect(),
-                    target_damage: selection
-                        .targets
-                        .iter()
-                        .map(|target| target.damage_amount)
+                        .map(|target| StackTarget {
+                            object_id: target.object_id,
+                            group_index: target.group_index,
+                            damage_amount: target.damage_amount,
+                            kind: target.kind,
+                        })
                         .collect(),
                 });
             }
@@ -507,7 +509,14 @@ impl GameEngine {
                     "selected_modes given for a nonmodal spell",
                 ));
             }
-            validate_spell_targets(self, player, target_source, &face_effects, targets)?;
+            validate_spell_targets(
+                self,
+                player,
+                target_source,
+                &face_effects,
+                face_targeting.as_ref(),
+                targets,
+            )?;
             for effect in &face_effects {
                 if let SpellEffectKind::DamageTargets {
                     amount,
@@ -568,36 +577,22 @@ impl GameEngine {
         let life_paid = payment.life_paid;
         let paid_costs_line = format_paid_card_costs_log(&payment.paid_card_costs);
 
-        // For DamageTargets, store per-target damage allocations parallel to targets.
-        let target_damage: Vec<u32> = if face_effects
+        let stack_targets = public_targets
             .iter()
-            .any(|e| matches!(e, SpellEffectKind::DamageTargets { .. }))
-        {
-            face_effects
-                .iter()
-                .find_map(|effect| match effect {
-                    SpellEffectKind::DamageTargets {
-                        division: DamageDivision::ChooseAtCast,
-                        ..
-                    } => Some(
-                        public_targets
-                            .iter()
-                            .map(|target| target.damage_amount)
-                            .collect(),
-                    ),
-                    _ => None,
-                })
-                .unwrap_or_default()
-        } else {
-            vec![]
-        };
+            .map(|target| StackTarget {
+                object_id: target.object_id,
+                group_index: target.group_index,
+                damage_amount: target.damage_amount,
+                kind: target.kind,
+            })
+            .collect();
         let tgt_line = format_spell_targets_log(&self.state, self.registry, &trefs);
 
         self.state.stack.push(StackItem {
             id: oid,
             controller: player,
             card_id: card_id.clone(),
-            targets: trefs,
+            targets: stack_targets,
             ability_text: None,
             source_permanent_id: None,
             source_zone_change: 0,
@@ -607,7 +602,6 @@ impl GameEngine {
             is_copy: false,
             chosen_x,
             face_index,
-            target_damage,
             chosen_modes,
             // A spell's effects always act on its controller.
             trigger_player: None,
@@ -923,7 +917,14 @@ impl GameEngine {
         // CR 608.2: an ability's effect list validates exactly like a spell's — same shape,
         // same multi-target handling — so it goes through the list-level entry point.
         let target_source = TargetSourceIdentity::current(self, permanent_id);
-        validate_ability_targets(self, player, target_source, &ability.effect, targets)?;
+        validate_ability_targets(
+            self,
+            player,
+            target_source,
+            &ability.effect,
+            ability.targeting.as_ref(),
+            targets,
+        )?;
 
         let trefs: Vec<ObjectId> = targets.iter().map(|t| t.object_id).collect();
         // Snapshot target-watchers before costs: the source itself can be sacrificed while paying
@@ -969,7 +970,15 @@ impl GameEngine {
             id: virtual_id,
             controller: player,
             card_id: card_id.clone(),
-            targets: trefs.clone(),
+            targets: targets
+                .iter()
+                .map(|target| StackTarget {
+                    object_id: target.object_id,
+                    group_index: target.group_index,
+                    damage_amount: target.damage_amount,
+                    kind: target.kind,
+                })
+                .collect(),
             ability_text: Some(ability_text.clone()),
             source_permanent_id: Some(permanent_id),
             source_zone_change,
@@ -979,7 +988,6 @@ impl GameEngine {
             is_copy: false,
             chosen_x: 0,
             face_index: face_up_index,
-            target_damage: vec![],
             chosen_modes: vec![],
             // An activated ability's effects act on the player who activated it.
             trigger_player: None,
@@ -1586,7 +1594,6 @@ impl GameEngine {
             face_index,
             flashback: false,
             chosen_x: 0,
-            target_damage: Vec::new(),
             chosen_modes: Vec::new(),
             trigger_player: None,
             trigger_object: None,

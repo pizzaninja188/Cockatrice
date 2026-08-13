@@ -580,6 +580,8 @@ fn exploration_leaving_revokes_extra_land_play() {
             vec![TargetRef {
                 object_id: exploration_oid,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )

@@ -2,7 +2,7 @@
 
 use super::{
     AbilityCost, Amount, BattlefieldCreatureCountFilter, CardTypeFilter, Color, CounterKind,
-    GameCondition, Keyword, SpellEffectKind, TargetFilter,
+    GameCondition, Keyword, SpellEffectKind, TargetFilter, TargetingDef,
 };
 use crate::ManaAmount;
 use serde::{Deserialize, Serialize};
@@ -15,6 +15,8 @@ pub struct ActivatedAbilityDef {
     /// CR 608.2: the ability's effects, resolved in the order written — the same shape and the
     /// same semantics as a spell's `spell_effect`. A single-effect ability is a one-element list.
     pub effect: Vec<SpellEffectKind>,
+    #[serde(default)]
+    pub targeting: Option<TargetingDef>,
     /// Additional timing instruction printed after the ability's effect (CR 602.1b). Normal
     /// activated abilities already require priority; this dimension records stricter timing.
     #[serde(default)]
@@ -331,6 +333,8 @@ pub struct TriggeredAbilityDef {
     /// same semantics as a spell's `spell_effect`. Phyrexian Arena's "you draw a card and you
     /// lose 1 life" is `[Draw(count: 1), LoseLife(amount: Fixed(1))]`.
     pub effect: Vec<SpellEffectKind>,
+    #[serde(default)]
+    pub targeting: Option<TargetingDef>,
     /// Oracle-style ability text shown as annotation on the stack card.
     pub text: String,
     /// CR 603.5: true when the triggered ability says "you may" and its controller may decline

@@ -12,5 +12,11 @@
     division: EvenAtResolution,
     extra_mana_per_target: 1,
   )],
+  targeting: Some((groups: [(
+    min: 0,
+    max: 4294967295,
+    prompt: "Choose any number of targets",
+    effect_indices: [0],
+  )])),
   partial: "planeswalkers and battles are not modeled as damage targets",
 )

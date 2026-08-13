@@ -128,6 +128,8 @@ fn go_for_the_throat_destroys_target_creature() {
             vec![TargetRef {
                 object_id: p1_bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -497,6 +499,8 @@ fn eyeblights_ending_destroys_target_creature() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -555,6 +559,8 @@ fn swords_to_plowshares_exiles_and_gains_life_equal_to_power() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -608,6 +614,8 @@ fn unsummon_returns_target_creature_to_owner_hand() {
             vec![TargetRef {
                 object_id: bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -675,6 +683,8 @@ fn boomerang_returns_target_land_to_owner_hand() {
             vec![TargetRef {
                 object_id: island_oid,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -1339,6 +1349,8 @@ fn disentomb_returns_creature_from_graveyard_to_hand() {
             vec![TargetRef {
                 object_id: bears_oid,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -1464,6 +1476,8 @@ fn return_from_graveyard_fizzles_when_target_removed_before_resolution() {
             vec![TargetRef {
                 object_id: dummy_oid,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -1618,7 +1632,7 @@ fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
             .get(&key)
             .expect("a parked trigger must publish its valid targets");
         assert_eq!(
-            targets.valid_graveyard_ids,
+            targets.groups[0].valid_graveyard_ids,
             vec![bears_oid],
             "the graveyard creature is the trigger's only legal target"
         );
@@ -1635,8 +1649,13 @@ fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
         0,
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-                target_object_id: bears_oid,
                 decline: false,
+                targets: vec![TargetRef {
+                    object_id: bears_oid,
+                    damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
+                }],
             })),
         },
     )
@@ -1691,8 +1710,13 @@ fn choose_graveyard_return_target(engine: &mut GameEngine, object_id: u32) {
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-                    target_object_id: object_id,
                     decline: false,
+                    targets: vec![TargetRef {
+                        object_id,
+                        damage_amount: 0,
+                        group_index: 0,
+                        kind: 0,
+                    }],
                 })),
             },
         )
@@ -1706,7 +1730,7 @@ fn pending_graveyard_targets(engine: &GameEngine, batch: &RuledEventBatch) -> Ve
         .front()
         .expect("graveyard-return trigger pending");
     let key = (pending.source_permanent_id as u64) << 32 | pending.ability_index as u64;
-    batch.legal_by_player[&0].valid_targets_by_ability[&key]
+    batch.legal_by_player[&0].valid_targets_by_ability[&key].groups[0]
         .valid_graveyard_ids
         .clone()
 }
@@ -1751,8 +1775,13 @@ fn graveyard_card_type_salvager_targets_only_own_instants_and_sorceries() {
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-                    target_object_id: artifact,
                     decline: false,
+                    targets: vec![TargetRef {
+                        object_id: artifact,
+                        damage_amount: 0,
+                        group_index: 0,
+                        kind: 0,
+                    }],
                 })),
             },
         )
@@ -2198,6 +2227,8 @@ fn zombify_returns_creature_from_graveyard_to_battlefield() {
             vec![TargetRef {
                 object_id: visionary,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     )
@@ -2264,6 +2295,8 @@ fn zombify_cannot_target_a_noncreature_graveyard_card() {
             vec![TargetRef {
                 object_id: sorcery,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     );
@@ -2304,6 +2337,8 @@ fn zombify_cannot_target_an_opponents_graveyard() {
             vec![TargetRef {
                 object_id: their_bear,
                 damage_amount: 0,
+                group_index: 0,
+                kind: 0,
             }],
         ),
     );
@@ -2726,6 +2761,8 @@ fn healing_salve_shield_absorbs_mass_damage() {
                 vec![TargetRef {
                     object_id: shielded,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             )],
         ),
@@ -2854,6 +2891,8 @@ fn activated_noncombat_damage_from_deathtouch_source_kills_larger_creature() {
                 vec![TargetRef {
                     object_id: target,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -2879,6 +2918,8 @@ fn activated_noncombat_damage_without_deathtouch_is_not_lethal() {
                 vec![TargetRef {
                     object_id: target,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -2902,6 +2943,8 @@ fn fully_prevented_deathtouch_damage_marks_neither_damage_nor_history() {
                 vec![TargetRef {
                     object_id: target,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -2948,6 +2991,8 @@ fn bladebrand_turns_prodigal_sorcerer_damage_lethal_and_draws_a_card() {
                 vec![TargetRef {
                     object_id: source,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -2979,6 +3024,8 @@ fn bladebrand_turns_prodigal_sorcerer_damage_lethal_and_draws_a_card() {
                 vec![TargetRef {
                     object_id: target,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -3031,6 +3078,8 @@ fn bladebrand_does_not_draw_when_its_target_leaves_before_resolution() {
                 vec![TargetRef {
                     object_id: source,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -3056,6 +3105,8 @@ fn bladebrand_does_not_draw_when_its_target_leaves_before_resolution() {
                 vec![TargetRef {
                     object_id: source,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )

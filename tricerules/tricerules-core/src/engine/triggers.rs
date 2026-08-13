@@ -916,23 +916,30 @@ impl GameEngine {
         let needs_target = trigger_def
             .map(|ta| ta.effect.iter().any(spell_effect_kind_needs_target))
             .unwrap_or(false);
-        let has_legal_target = if needs_target {
-            trigger_def.is_some_and(|ta| {
-                let targets = compute_spell_targets(
+        let legal_targets = if needs_target {
+            trigger_def.map(|ta| {
+                compute_spell_targets(
                     self,
                     controller,
                     TargetSourceIdentity::captured(source_id, source_zone_change),
                     &ta.effect,
-                );
-                !targets.valid_permanent_ids.is_empty()
-                    || !targets.valid_stack_ids.is_empty()
-                    || !targets.valid_graveyard_ids.is_empty()
-                    || targets.can_target_self
-                    || targets.can_target_opponent
+                    ta.targeting.as_ref(),
+                )
             })
         } else {
-            true
+            None
         };
+        let has_legal_target = legal_targets.as_ref().is_none_or(|targets| {
+            targets.groups.iter().all(|group| {
+                let player_count =
+                    u32::from(group.can_target_self) + u32::from(group.can_target_opponent);
+                group.min
+                    <= group.valid_permanent_ids.len() as u32
+                        + group.valid_stack_ids.len() as u32
+                        + group.valid_graveyard_ids.len() as u32
+                        + player_count
+            })
+        });
 
         if needs_target && (has_legal_target || may) {
             let was_empty = self.state.pending_triggers.is_empty();
@@ -959,6 +966,7 @@ impl GameEngine {
                             ability_text: ability_text.clone(),
                             controller_player_id: controller,
                             may_decline: may,
+                            targets: legal_targets.clone(),
                         },
                     )),
                 });
@@ -984,7 +992,6 @@ impl GameEngine {
                 is_copy: false,
                 chosen_x: 0,
                 face_index: source_face_index,
-                target_damage: vec![],
                 chosen_modes: vec![],
                 trigger_player,
                 trigger_object,

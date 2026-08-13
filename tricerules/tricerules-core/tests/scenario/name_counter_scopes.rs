@@ -145,8 +145,13 @@ fn pridemalkin_rechecks_controller_and_counter_presence_continuously() {
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
-                    target_object_id: pridemalkin,
                     decline: false,
+                    targets: vec![TargetRef {
+                        object_id: pridemalkin,
+                        damage_amount: 0,
+                        group_index: 0,
+                        kind: 0,
+                    }],
                 })),
             },
         )

@@ -66,6 +66,8 @@ fn aerial_assault_counts_derived_flying_after_a_legal_destroy_attempt() {
                 vec![TargetRef {
                     object_id: enchanted,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -98,6 +100,8 @@ fn aerial_assault_counts_derived_flying_after_a_legal_destroy_attempt() {
                 vec![TargetRef {
                     object_id: indestructible,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -148,6 +152,8 @@ fn aerial_assault_fizzles_entirely_when_its_only_target_becomes_illegal() {
                 vec![TargetRef {
                     object_id: target,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -202,6 +208,8 @@ fn growth_cycle_counts_only_its_controllers_graveyard_and_locks_the_bonus() {
                 vec![TargetRef {
                     object_id: target,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )
@@ -296,6 +304,8 @@ fn undead_servant_dying_before_its_etb_trigger_resolves_counts_itself() {
                 vec![TargetRef {
                     object_id: servant_oid,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
             ),
         )

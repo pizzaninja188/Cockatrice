@@ -77,18 +77,33 @@ bool isCombatPhase(RuledCombatPhase phase)
 RuledClientState::SpellTargetData parseSpellTargets(const ruled::v1::SpellTargets &src)
 {
     RuledClientState::SpellTargetData data;
-    for (const quint32 oid : src.valid_permanent_ids()) {
-        data.validPermanentIds.insert(oid);
+    for (const auto &group : src.groups()) {
+        RuledTargetGroupData parsed;
+        parsed.groupIndex = static_cast<int>(group.group_index());
+        for (const quint32 oid : group.valid_permanent_ids()) {
+            parsed.validPermanentIds.insert(oid);
+        }
+        for (const quint32 oid : group.valid_stack_ids()) {
+            parsed.validStackIds.insert(oid);
+        }
+        for (const quint32 oid : group.valid_graveyard_ids()) {
+            parsed.validGraveyardIds.insert(oid);
+        }
+        parsed.canTargetSelf = group.can_target_self();
+        parsed.canTargetOpponent = group.can_target_opponent();
+        parsed.minTargets = static_cast<int>(group.min());
+        parsed.maxTargets = static_cast<int>(group.max());
+        parsed.promptText = QString::fromStdString(group.prompt_text());
+        for (const quint32 other : group.distinct_from_group_indices()) {
+            parsed.distinctFromGroupIndices.append(static_cast<int>(other));
+        }
+        data.groups.append(parsed);
     }
-    for (const quint32 oid : src.valid_stack_ids()) {
-        data.validStackIds.insert(oid);
+    // Existing rendering/query helpers expose the active first group through the flat fields.
+    // Pending collectors index `groups` directly as they advance.
+    if (!data.groups.isEmpty()) {
+        static_cast<RuledTargetGroupData &>(data) = data.groups.first();
     }
-    for (const quint32 oid : src.valid_graveyard_ids()) {
-        data.validGraveyardIds.insert(oid);
-    }
-    data.canTargetSelf = src.can_target_self();
-    data.canTargetOpponent = src.can_target_opponent();
-    data.maxTargets = static_cast<int>(src.max_targets());
     data.fixedDamage = static_cast<int>(src.fixed_damage());
     data.isDamageTargets = src.is_damage_targets();
     data.extraManaPerTarget = static_cast<int>(src.extra_mana_per_target());
@@ -347,7 +362,27 @@ void RuledEventDispatcher::applyStackPushed(const ruled::v1::StackPushed &sp, Ba
     QVector<quint32> tlist;
     tlist.reserve(sp.targets_size());
     for (int ti = 0; ti < sp.targets_size(); ++ti) {
-        tlist.append(static_cast<quint32>(sp.targets(ti).object_id()));
+        const auto &target = sp.targets(ti);
+        const quint32 targetOid = static_cast<quint32>(target.object_id());
+        tlist.append(targetOid);
+        RuledTargetItemKind kind = RuledTargetItemKind::Unknown;
+        switch (target.kind()) {
+            case ruled::v1::TARGET_REF_KIND_PLAYER:
+                kind = RuledTargetItemKind::Player;
+                break;
+            case ruled::v1::TARGET_REF_KIND_PERMANENT:
+                kind = RuledTargetItemKind::Battlefield;
+                break;
+            case ruled::v1::TARGET_REF_KIND_STACK:
+                kind = RuledTargetItemKind::Stack;
+                break;
+            case ruled::v1::TARGET_REF_KIND_GRAVEYARD:
+                kind = RuledTargetItemKind::Graveyard;
+                break;
+            case ruled::v1::TARGET_REF_KIND_UNSPECIFIED:
+                break;
+        }
+        state->latchTargetKind(sp.object_id(), targetOid, kind);
     }
     state->stackTargetsByStackOid.insert(sp.object_id(), tlist);
     RULED_TRACE("client") << "stackPushed: oid=" << sp.object_id() << " cardId=" << QString::fromStdString(sp.card_id())

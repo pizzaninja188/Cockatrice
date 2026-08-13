@@ -1,0 +1,16 @@
+(
+  id: "frost_breath",
+  name: "Frost Breath",
+  mana_cost: "{2}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    TapTarget(target: (kind: Creature)),
+    SkipNextUntap(target: (kind: Creature)),
+  ],
+  targeting: Some((groups: [(
+    min: 0,
+    max: 2,
+    prompt: "Choose up to two target creatures",
+    effect_indices: [0, 1],
+  )])),
+)

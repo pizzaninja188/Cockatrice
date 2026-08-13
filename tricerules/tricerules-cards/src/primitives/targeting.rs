@@ -1,7 +1,76 @@
 //! Target kinds and composable target filters.
 
-use super::{Color, Keyword};
+use super::{Color, Keyword, SpellEffectKind};
 use serde::{Deserialize, Serialize};
+
+/// Authored target declaration for one spell, mode, activated ability, or triggered ability.
+/// Omit it to retain the legacy single required group containing every targeted effect.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TargetingDef {
+    pub groups: Vec<TargetGroupDef>,
+}
+
+/// One independently prompted target group. `effect_indices` names the effects in the sibling
+/// effect list that consume this group's ordered targets. Candidate publication intersects the
+/// requirements of every referenced effect.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TargetGroupDef {
+    pub min: u32,
+    pub max: u32,
+    pub prompt: String,
+    pub effect_indices: Vec<u32>,
+    /// Indices of other groups whose chosen objects must be distinct from this group.
+    #[serde(default)]
+    pub distinct_from: Vec<u32>,
+}
+
+impl TargetingDef {
+    pub(crate) fn validate(&self, effects: &[SpellEffectKind]) -> Result<(), String> {
+        if self.groups.is_empty() {
+            return Err("targeting requires at least one group".into());
+        }
+        let mut referenced = vec![0u32; effects.len()];
+        for (group_index, group) in self.groups.iter().enumerate() {
+            if group.min > group.max || group.max == 0 {
+                return Err("target group requires min <= max and max > 0".into());
+            }
+            if group.prompt.trim().is_empty() {
+                return Err("target group prompt must not be empty".into());
+            }
+            if group.effect_indices.is_empty() {
+                return Err("target group must reference at least one effect".into());
+            }
+            let mut within_group = std::collections::HashSet::new();
+            for &effect_index in &group.effect_indices {
+                let effect = effects
+                    .get(effect_index as usize)
+                    .ok_or_else(|| "target group references an unknown effect".to_string())?;
+                if !within_group.insert(effect_index) {
+                    return Err("target group references an effect more than once".into());
+                }
+                if !effect.needs_target() {
+                    return Err("target group references an untargeted effect".into());
+                }
+                referenced[effect_index as usize] += 1;
+            }
+            let mut distinct = std::collections::HashSet::new();
+            for &other in &group.distinct_from {
+                if other as usize >= self.groups.len() || other as usize == group_index {
+                    return Err("target group has an invalid distinctness reference".into());
+                }
+                if !distinct.insert(other) {
+                    return Err("target group repeats a distinctness reference".into());
+                }
+            }
+        }
+        for (index, effect) in effects.iter().enumerate() {
+            if effect.needs_target() && referenced[index] != 1 {
+                return Err("every targeted effect must belong to exactly one target group".into());
+            }
+        }
+        Ok(())
+    }
+}
 
 /// Base kind for a [`TargetFilter`] — what category of object is targeted.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

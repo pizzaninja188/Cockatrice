@@ -551,7 +551,7 @@ pub enum SpellEffectKind {
     },
     /// Divide `amount` damage among any number of targets (CR 601.2d). Costs
     /// `extra_mana_per_target` additional generic mana per target beyond the first (Fireball = 1,
-    /// Fire = 0). `max_targets` caps the count (Fire = `Some(2)`; `None` = unlimited).
+    /// Fire = 0). Target cardinality is declared by the sibling [`TargetingDef`](crate::TargetingDef).
     /// At cast time the player submits `(target, damage_amount)` pairs via `TargetRef`; the sum
     /// must equal the amount resolved from `x_value`. Covers Fireball (X divided unlimited) and Fire
     /// (fixed 2 divided among ≤ 2 targets). CR 608.2b: if some targets become illegal at
@@ -563,8 +563,6 @@ pub enum SpellEffectKind {
         division: DamageDivision,
         #[serde(default)]
         extra_mana_per_target: u32,
-        #[serde(default)]
-        max_targets: Option<u32>,
     },
     Draw {
         count: Amount,
@@ -986,6 +984,44 @@ pub enum PlayerRecipient {
 }
 
 impl SpellEffectKind {
+    pub fn needs_target(&self) -> bool {
+        match self {
+            SpellEffectKind::PumpTarget { subject, .. }
+            | SpellEffectKind::PutCounters { subject, .. }
+            | SpellEffectKind::GrantKeywords { subject, .. }
+            | SpellEffectKind::Untap { subject }
+            | SpellEffectKind::Regenerate { subject } => {
+                matches!(subject, EffectSubject::Chosen(_))
+            }
+            SpellEffectKind::ApplyCombatRestriction { scope, .. } => {
+                matches!(scope, CombatRestrictionScope::Chosen(_))
+            }
+            SpellEffectKind::DamageTarget { .. }
+            | SpellEffectKind::DamageTargets { .. }
+            | SpellEffectKind::DestroyTarget { .. }
+            | SpellEffectKind::ExileTarget
+            | SpellEffectKind::ExileTargetGainLifeEqualToPower
+            | SpellEffectKind::ReturnTargetCreatureToHand
+            | SpellEffectKind::ReturnTargetPermanentToHand
+            | SpellEffectKind::ReturnFromGraveyard { .. }
+            | SpellEffectKind::TargetPlayerGainsLife { .. }
+            | SpellEffectKind::TargetPlayerLosesLife { .. }
+            | SpellEffectKind::DrainTarget { .. }
+            | SpellEffectKind::MillTargetPlayer { .. }
+            | SpellEffectKind::DiscardCards { .. }
+            | SpellEffectKind::TapTarget { .. }
+            | SpellEffectKind::SkipNextUntap { .. }
+            | SpellEffectKind::GainControlUntilEndOfTurn { .. }
+            | SpellEffectKind::CounterTargetSpell { .. }
+            | SpellEffectKind::CopyTargetSpell { .. }
+            | SpellEffectKind::AuraAttach { .. }
+            | SpellEffectKind::Equip { .. }
+            | SpellEffectKind::TargetPlayerSacrifices { .. }
+            | SpellEffectKind::PreventNextDamage { .. } => true,
+            _ => false,
+        }
+    }
+
     /// The target filter(s) this effect selects against, if any. Used by validation and by
     /// the engine's generic legality/targeting paths (one place to enumerate target-bearing
     /// variants instead of repeating the list).

@@ -39,7 +39,7 @@ pub(super) fn destroy_target(
     let targets = cx.targets;
     let spell_label = cx.spell_label;
 
-    if let Some(&tid) = targets.first() {
+    for &tid in targets {
         let tgt = object_display_name(&engine.state, engine.registry, tid);
         let indestructible = engine.effective_has_keyword(tid, Keyword::Indestructible);
         if indestructible {
@@ -95,7 +95,7 @@ fn set_target_tapped(cx: &mut EffectCx<'_>, tapped: bool) -> Result<EffectOutcom
     let targets = cx.targets;
     let spell_label = cx.spell_label;
 
-    if let Some(&tid) = targets.first() {
+    for &tid in targets {
         let tgt = object_display_name(&engine.state, engine.registry, tid);
         let on_battlefield = engine
             .state
@@ -131,7 +131,7 @@ pub(super) fn skip_next_untap(
     let SpellEffectKind::SkipNextUntap { .. } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    if let Some(tid) = cx.targets.first().copied() {
+    for tid in cx.targets.iter().copied() {
         let on_battlefield = cx
             .engine
             .state

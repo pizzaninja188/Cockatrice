@@ -532,6 +532,8 @@ fn phyrexian_mutagenic_growth_paid_with_life() {
                 vec![TargetRef {
                     object_id: bear,
                     damage_amount: 0,
+                    group_index: 0,
+                    kind: 0,
                 }],
                 vec![FlexPipPayment {
                     pip_index: 0,
