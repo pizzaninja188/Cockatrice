@@ -24,7 +24,7 @@ pub(super) struct CollectedTrigger {
     /// The event's affected player ("that player"), when distinct from the ability controller.
     pub trigger_player: Option<PlayerId>,
     /// The distinct permanent whose becoming a target caused this trigger, if any.
-    pub trigger_object: Option<ObjectId>,
+    pub trigger_object: Option<TriggerObjectRef>,
 }
 
 impl GameEngine {
@@ -396,6 +396,47 @@ impl GameEngine {
                 }
                 out
             }
+            GameEvent::BlockersDeclared { edges } => {
+                let mut out = Vec::new();
+                for source in sources {
+                    for edge in edges {
+                        let (related, source_is_blocker) =
+                            if source.object_id == edge.blocker.object_id {
+                                (edge.attacker, true)
+                            } else if source.object_id == edge.attacker.object_id {
+                                (edge.blocker, false)
+                            } else {
+                                continue;
+                            };
+                        let mut matching = self.matching_triggered_abilities(
+                            &source.card_id,
+                            source.object_id,
+                            source.controller,
+                            source.face_index,
+                            |condition| match condition {
+                                TriggerCondition::WheneverSelfBlocksCreature { attacker }
+                                    if source_is_blocker =>
+                                {
+                                    self.creature_event_filter_matches(
+                                        edge.attacker.object_id,
+                                        attacker,
+                                    )
+                                }
+                                TriggerCondition::WheneverSelfBecomesBlockedByCreature {
+                                    blocker,
+                                } if !source_is_blocker => self
+                                    .creature_event_filter_matches(edge.blocker.object_id, blocker),
+                                _ => false,
+                            },
+                        );
+                        for trigger in &mut matching {
+                            trigger.trigger_object = Some(related);
+                        }
+                        out.extend(matching);
+                    }
+                }
+                out
+            }
             GameEvent::DamageDealt { event } => {
                 let DamageRecipient::Player(defender_id) = event.recipient else {
                     return vec![];
@@ -597,7 +638,7 @@ impl GameEngine {
                             },
                         );
                         for trigger in &mut matching {
-                            trigger.trigger_object = Some(*target_id);
+                            trigger.trigger_object = self.trigger_object_ref(*target_id);
                         }
                         out.extend(matching);
                     }
@@ -787,6 +828,39 @@ impl GameEngine {
                 trigger_object: None,
             })
             .collect()
+    }
+
+    pub(super) fn trigger_object_ref(&self, object_id: ObjectId) -> Option<TriggerObjectRef> {
+        let characteristics = self.characteristics(object_id)?;
+        Some(TriggerObjectRef {
+            object_id,
+            zone_change_generation: self
+                .state
+                .zone_change_generation
+                .get(&object_id)
+                .copied()
+                .unwrap_or(0),
+            controller_at_event: characteristics.controller,
+        })
+    }
+
+    fn creature_event_filter_matches(
+        &self,
+        object_id: ObjectId,
+        filter: &CreatureEventFilter,
+    ) -> bool {
+        self.characteristics(object_id)
+            .is_some_and(|characteristics| {
+                characteristics.is_creature()
+                    && filter
+                        .required_keywords
+                        .iter()
+                        .all(|keyword| characteristics.has_keyword(*keyword))
+                    && filter
+                        .excluded_keywords
+                        .iter()
+                        .all(|keyword| !characteristics.has_keyword(*keyword))
+            })
     }
 
     /// CR 603.4: evaluate a triggered ability's intervening-"if" clause against the current state.
@@ -1181,6 +1255,7 @@ mod tests {
                 .triggers
                 .iter()
                 .filter_map(|trigger| trigger.trigger_object)
+                .map(|object| object.object_id)
                 .collect::<BTreeSet<_>>(),
             giants.into_iter().collect()
         );

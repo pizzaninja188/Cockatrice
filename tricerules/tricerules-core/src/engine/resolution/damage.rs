@@ -236,26 +236,13 @@ pub(super) fn damage_player(
         .resolving_source_has_keyword(cx.top, Keyword::Lifelink);
     // CR 101.4: APNAP for the multi-player recipients, so the log and the life-loss order are
     // reproducible in a replay.
-    let recipients: Vec<PlayerId> = match who {
-        PlayerRecipient::Controller => vec![cx.controller],
-        PlayerRecipient::AffectedPlayer => vec![cx.affected_player],
-        PlayerRecipient::EachOpponent => cx
-            .engine
-            .state
-            .players
-            .iter()
-            .filter(|p| cx.engine.state.are_opponents(p.id, cx.controller) && !p.has_lost)
-            .map(|p| p.id)
-            .collect(),
-        PlayerRecipient::EachPlayer => cx
-            .engine
-            .state
-            .players
-            .iter()
-            .filter(|p| !p.has_lost)
-            .map(|p| p.id)
-            .collect(),
-    };
+    let recipients = player_recipients(
+        &cx.engine.state,
+        cx.controller,
+        cx.affected_player,
+        trigger_object_controller(cx.engine, cx.top),
+        who,
+    );
     let damage: Vec<_> = recipients
         .into_iter()
         .map(|player| DamageSpec {

@@ -92,6 +92,13 @@ impl CardRegistry {
             let face = token.primary_face();
             let can_reference_attached_object = face_can_reference_attached_object(face);
             for ability in &face.triggered_abilities {
+                ability
+                    .trigger
+                    .validate()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: id.clone(),
+                        reason,
+                    })?;
                 if ability.text.trim().is_empty() {
                     return Err(RegistryError::InvalidCard {
                         id: id.clone(),
@@ -115,6 +122,15 @@ impl CardRegistry {
                         })?;
                 }
                 for effect in &ability.effect {
+                    if effect.uses_trigger_object_reference()
+                        && !ability.trigger.supplies_trigger_object()
+                    {
+                        return Err(RegistryError::InvalidCard {
+                            id: id.clone(),
+                            reason: "trigger-object effect requires a trigger that supplies an observed object"
+                                .into(),
+                        });
+                    }
                     if effect.uses_attached_object_subject() && !can_reference_attached_object {
                         return Err(RegistryError::InvalidCard {
                             id: id.clone(),
@@ -450,6 +466,25 @@ impl CardRegistry {
                     }
                 }
                 for ability in &face.triggered_abilities {
+                    ability
+                        .trigger
+                        .validate()
+                        .map_err(|reason| RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason,
+                        })?;
+                    if ability
+                        .effect
+                        .iter()
+                        .any(SpellEffectKind::uses_trigger_object_reference)
+                        && !ability.trigger.supplies_trigger_object()
+                    {
+                        return Err(RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason: "trigger-object effect requires a trigger that supplies an observed object"
+                                .into(),
+                        });
+                    }
                     if let Some(InterveningIf::GameCondition(condition)) =
                         ability.intervening_if.as_ref()
                     {
@@ -466,6 +501,16 @@ impl CardRegistry {
                 // together, so a cross-effect requirement like `LoseLife(TargetManaValue)` must
                 // find its object-targeting sibling inside this one ability).
                 for ability in &face.activated_abilities {
+                    if ability
+                        .effect
+                        .iter()
+                        .any(SpellEffectKind::uses_trigger_object_reference)
+                    {
+                        return Err(RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason: "activated abilities cannot reference a trigger object".into(),
+                        });
+                    }
                     for condition in &ability.conditions {
                         condition
                             .validate()
@@ -707,6 +752,55 @@ mod tests {
     #[test]
     fn embedded_registry_loads() {
         CardRegistry::from_embedded().unwrap();
+    }
+
+    #[test]
+    fn block_trigger_filters_reject_contradictory_keywords() {
+        let card = r#"(
+            id: "bad_block_filter",
+            name: "Bad Block Filter",
+            mana_cost: "{G}",
+            types: ["Creature"],
+            power: 1,
+            toughness: 1,
+            triggered_abilities: [(
+                trigger: WheneverSelfBlocksCreature(attacker: (
+                    required_keywords: [Flying],
+                    excluded_keywords: [Flying],
+                )),
+                effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
+                text: "Bad.",
+            )],
+        )"#;
+        let error = CardRegistry::from_chunks(&[card]).expect_err("contradictory filter");
+        assert!(matches!(
+            error,
+            RegistryError::InvalidCard { reason, .. }
+                if reason.contains("cannot require and exclude the same keyword")
+        ));
+    }
+
+    #[test]
+    fn trigger_object_references_require_an_object_supplying_trigger() {
+        let card = r#"(
+            id: "bad_trigger_reference",
+            name: "Bad Trigger Reference",
+            mana_cost: "{G}",
+            types: ["Creature"],
+            power: 1,
+            toughness: 1,
+            triggered_abilities: [(
+                trigger: WhenSelfEntersBattlefield,
+                effect: [LoseLife(amount: Fixed(2), who: TriggerObjectController)],
+                text: "Bad.",
+            )],
+        )"#;
+        let error = CardRegistry::from_chunks(&[card]).expect_err("missing trigger object");
+        assert!(matches!(
+            error,
+            RegistryError::InvalidCard { reason, .. }
+                if reason.contains("requires a trigger that supplies an observed object")
+        ));
     }
 
     #[test]

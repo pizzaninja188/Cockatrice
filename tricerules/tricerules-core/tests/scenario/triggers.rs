@@ -2145,7 +2145,10 @@ fn issue_47_bonecrusher_target_trigger_is_above_spell() {
     assert_eq!(trigger.source_permanent_id, Some(giant));
     assert_eq!(trigger.controller, 0);
     assert_eq!(trigger.trigger_player, Some(1));
-    assert_eq!(trigger.trigger_object, Some(giant));
+    assert_eq!(
+        trigger.trigger_object.map(|object| object.object_id),
+        Some(giant)
+    );
 }
 
 #[test]
@@ -2384,7 +2387,10 @@ fn issue_47_spell_copy_targeting_bonecrusher_creates_a_new_trigger() {
     let trigger = e.state.stack.last().expect("copy target trigger");
     assert!(trigger.is_triggered);
     assert_eq!(trigger.trigger_player, Some(1));
-    assert_eq!(trigger.trigger_object, Some(giant));
+    assert_eq!(
+        trigger.trigger_object.map(|object| object.object_id),
+        Some(giant)
+    );
 }
 
 // ---------------------------------------------------------------------------

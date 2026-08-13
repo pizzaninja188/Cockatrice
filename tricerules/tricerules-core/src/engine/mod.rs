@@ -9,8 +9,8 @@ use crate::state::{
     EntryReplacementEffectId, GameObject, GameState, ObjectId, OpeningSequence,
     PendingBattlefieldEntry, PendingManaPayment, PendingResolution, PendingTrigger,
     PendingTriggerOrder, PlayerId, PlayerState, ReplacementPriority, StackItem, StackTarget,
-    StagedTrigger, StagedTriggerGroup, TokenBattlefieldEntry, TurnHistory, TurnStep,
-    UndoableManaAbility, Zone,
+    StagedTrigger, StagedTriggerGroup, TokenBattlefieldEntry, TriggerObjectRef, TurnHistory,
+    TurnStep, UndoableManaAbility, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -22,7 +22,7 @@ use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
     AbilityCost, AdditionalCost, Amount, BattlefieldAggregate, BattlefieldPermanentFilter,
     CardTypeFilter, CastTriggerPlayer, Color, CombatRestriction, CombatRestrictionScope,
-    ContinuousEffectKind, ControllerReference, CountExpression, CounterKind,
+    ContinuousEffectKind, ControllerReference, CountExpression, CounterKind, CreatureEventFilter,
     CreatureScopeController, CreatureScopeFilter, DamageDivision, DamagePreventionAdditionalEffect,
     DamagePreventionSubject, EffectDuration, EffectSubject, EntersTappedAffected, Evasion,
     FaceChangeAction, GameCondition, InterveningIf, Keyword, LifeAmount, PermanentTypeFilter,
@@ -246,6 +246,15 @@ struct TriggerSourceSnapshot {
     face_index: usize,
 }
 
+/// One attacker-blocker relation as it existed at the declaration event. Both endpoints retain
+/// generation and controller identity so resolving abilities neither bind to a returned object
+/// nor lose the event's controller when the related permanent has left the battlefield.
+#[derive(Clone, Copy)]
+struct BlockEdgeSnapshot {
+    attacker: TriggerObjectRef,
+    blocker: TriggerObjectRef,
+}
+
 /// The kind of stack object whose final target set was chosen. Cast spells and copied spells are
 /// distinct because "cast a spell that targets" and "target of a spell" are different trigger
 /// templates; activated and triggered abilities share the ability kind.
@@ -272,6 +281,11 @@ enum GameEvent {
     AttackersDeclared {
         attacking_player: PlayerId,
         attacker_ids: Vec<ObjectId>,
+    },
+    /// CR 509.3b/d: the complete simultaneous blocker declaration, represented as individual
+    /// edges because both "blocks" and "becomes blocked by a creature" trigger once per edge.
+    BlockersDeclared {
+        edges: Vec<BlockEdgeSnapshot>,
     },
     /// One source-recipient occurrence of damage that was actually dealt after prevention.
     DamageDealt {

@@ -124,6 +124,19 @@ pub enum TriggerCondition {
     /// of *other* creatures in the same declaration group. Zero is an ordinary self-attack
     /// trigger; two is Battalion (Makeshift Battalion, Firefist Striker, Haazda Marshal).
     WheneverSelfAttacks { minimum_other_attackers: u32 },
+    /// CR 509.3b: whenever this creature blocks a creature matching `attacker`. One occurrence
+    /// is created for each attacker-blocker edge, which also supports creatures that may block
+    /// more than one creature (Palace Guard, Guardian of the Gateless).
+    WheneverSelfBlocksCreature {
+        #[serde(default)]
+        attacker: CreatureEventFilter,
+    },
+    /// CR 509.3d: whenever this creature becomes blocked by a creature matching `blocker`. One
+    /// occurrence is created for each blocking creature (Gloom Sower, Engulfing Slagwurm).
+    WheneverSelfBecomesBlockedByCreature {
+        #[serde(default)]
+        blocker: CreatureEventFilter,
+    },
     /// Whenever this creature deals combat damage to a player (e.g. Scroll Thief).
     WheneverSelfDealsCombatDamageToPlayer,
     /// Whenever this creature deals damage to an opponent, combat or non-combat (e.g. Thieving Magpie).
@@ -256,6 +269,52 @@ pub enum TriggerCondition {
         #[serde(default)]
         player: CastTriggerPlayer,
     },
+}
+
+impl TriggerCondition {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        match self {
+            Self::WheneverSelfBlocksCreature { attacker } => attacker.validate(),
+            Self::WheneverSelfBecomesBlockedByCreature { blocker } => blocker.validate(),
+            _ => Ok(()),
+        }
+    }
+
+    /// Whether a matching event supplies the distinct object referenced by
+    /// `EffectSubject::TriggerObject` and `PlayerRecipient::TriggerObjectController`.
+    pub(crate) fn supplies_trigger_object(&self) -> bool {
+        matches!(
+            self,
+            Self::WheneverSelfBlocksCreature { .. }
+                | Self::WheneverSelfBecomesBlockedByCreature { .. }
+                | Self::WheneverSelfBecomesTarget { .. }
+                | Self::WheneverPermanentBecomesTarget { .. }
+        )
+    }
+}
+
+/// Derived creature characteristics captured by a discrete trigger event. Required and excluded
+/// keywords compose, supporting Snarespinner (requires flying) and flanking (excludes flanking)
+/// without putting either card-specific rule into the engine.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct CreatureEventFilter {
+    #[serde(default)]
+    pub required_keywords: Vec<Keyword>,
+    #[serde(default)]
+    pub excluded_keywords: Vec<Keyword>,
+}
+
+impl CreatureEventFilter {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        if self
+            .required_keywords
+            .iter()
+            .any(|keyword| self.excluded_keywords.contains(keyword))
+        {
+            return Err("creature event filter cannot require and exclude the same keyword".into());
+        }
+        Ok(())
+    }
 }
 
 fn any_player_trigger() -> CastTriggerPlayer {

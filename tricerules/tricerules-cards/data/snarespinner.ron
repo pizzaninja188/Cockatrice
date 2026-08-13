@@ -1,0 +1,18 @@
+// Oracle checked 2026-08-13. CR 509.3b/f: this triggers once for each Flying creature blocked,
+// using that creature's characteristics as the block is declared.
+(
+  id: "snarespinner",
+  name: "Snarespinner",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Spider"],
+  power: 1,
+  toughness: 3,
+  keywords: [Reach],
+  triggered_abilities: [
+    (
+      trigger: WheneverSelfBlocksCreature(attacker: (required_keywords: [Flying])),
+      effect: [PumpTarget(power: 2, toughness: 0, subject: Source)],
+      text: "Whenever this creature blocks a creature with flying, this creature gets +2/+0 until end of turn.",
+    ),
+  ],
+)

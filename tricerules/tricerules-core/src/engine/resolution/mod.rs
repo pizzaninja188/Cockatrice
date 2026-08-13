@@ -68,11 +68,13 @@ fn player_recipients(
     state: &GameState,
     controller: PlayerId,
     affected_player: PlayerId,
+    trigger_object_controller: Option<PlayerId>,
     who: PlayerRecipient,
 ) -> Vec<PlayerId> {
     match who {
         PlayerRecipient::Controller => vec![controller],
         PlayerRecipient::AffectedPlayer => vec![affected_player],
+        PlayerRecipient::TriggerObjectController => trigger_object_controller.into_iter().collect(),
         PlayerRecipient::EachOpponent => state
             .players
             .iter()
@@ -85,6 +87,27 @@ fn player_recipients(
             .filter(|player| !player.has_lost)
             .map(|player| player.id)
             .collect(),
+    }
+}
+
+fn trigger_object_controller(engine: &GameEngine, top: &StackItem) -> Option<PlayerId> {
+    let trigger_object = top.trigger_object?;
+    let is_current = engine
+        .state
+        .zone_change_generation
+        .get(&trigger_object.object_id)
+        .copied()
+        .unwrap_or(0)
+        == trigger_object.zone_change_generation
+        && engine
+            .state
+            .objects
+            .get(&trigger_object.object_id)
+            .is_some_and(|object| object.zone == Zone::Battlefield);
+    if is_current {
+        engine.controller_of(trigger_object.object_id)
+    } else {
+        Some(trigger_object.controller_at_event)
     }
 }
 
@@ -103,6 +126,22 @@ fn resolve_effect_subject(
             .source_permanent_id
             .filter(|_| engine.source_is_current_object(top)),
         EffectSubject::Chosen(_) => targets.first().copied(),
+        EffectSubject::TriggerObject => {
+            let trigger_object = top.trigger_object?;
+            let current_generation = engine
+                .state
+                .zone_change_generation
+                .get(&trigger_object.object_id)
+                .copied()
+                .unwrap_or(0);
+            (current_generation == trigger_object.zone_change_generation
+                && engine
+                    .state
+                    .objects
+                    .get(&trigger_object.object_id)
+                    .is_some_and(|object| object.zone == Zone::Battlefield))
+            .then_some(trigger_object.object_id)
+        }
         EffectSubject::AttachedObject => {
             let source_oid = top.source_permanent_id?;
             let (target_oid, expected_generation) = if engine.source_is_current_object(top) {
@@ -1753,6 +1792,59 @@ mod attached_subject_tests {
         assert_eq!(
             resolve_effect_subject(&engine, &item, &[], &EffectSubject::AttachedObject),
             None
+        );
+    }
+
+    #[test]
+    fn trigger_object_subject_rejects_a_leave_and_return_generation() {
+        let mut engine = GameEngine::new_with_default_decks(82_104, &[0, 1], 20).expect("engine");
+        let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        let related = add_battlefield_object(&mut engine, 1, "grizzly_bears");
+        let related_generation = engine
+            .state
+            .zone_change_generation
+            .get(&related)
+            .copied()
+            .unwrap_or(0);
+        let mut item = triggered_item(
+            source,
+            engine
+                .state
+                .zone_change_generation
+                .get(&source)
+                .copied()
+                .unwrap_or(0),
+        );
+        item.trigger_object = Some(TriggerObjectRef {
+            object_id: related,
+            zone_change_generation: related_generation,
+            controller_at_event: 1,
+        });
+
+        assert_eq!(
+            resolve_effect_subject(&engine, &item, &[], &EffectSubject::TriggerObject),
+            Some(related)
+        );
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            related,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("move related object out");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            related,
+            Zone::Battlefield,
+            None,
+        )
+        .expect("return related object");
+        assert_eq!(
+            resolve_effect_subject(&engine, &item, &[], &EffectSubject::TriggerObject),
+            None,
+            "CR 400.7 prevents the trigger from affecting the returned object"
         );
     }
 }

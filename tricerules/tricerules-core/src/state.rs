@@ -9,6 +9,15 @@ use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
 pub type PlayerId = i32;
 pub type ObjectId = u32;
 
+/// Generation-aware identity for the distinct permanent observed by a trigger event. The
+/// controller snapshot supplies CR 608.2h last known information if that permanent is gone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TriggerObjectRef {
+    pub object_id: ObjectId,
+    pub zone_change_generation: u64,
+    pub controller_at_event: PlayerId,
+}
+
 /// The game entity an Aura or Equipment is attached to. Players are represented explicitly;
 /// their numeric ids must never be confused with engine object ids.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -287,7 +296,7 @@ pub struct StagedTrigger {
     pub trigger_player: Option<PlayerId>,
     /// The distinct permanent whose becoming a target caused this trigger. Kept separate from
     /// `targets`: this object was observed by the trigger and was not chosen as its CR 115 target.
-    pub trigger_object: Option<ObjectId>,
+    pub trigger_object: Option<TriggerObjectRef>,
     /// CR 603.5: an optional triggered ability may be declined before it is put on the stack.
     pub may: bool,
 }
@@ -353,7 +362,7 @@ pub struct PendingTrigger {
     /// draw-step-style trigger keeps its beneficiary when it finally reaches the stack.
     pub trigger_player: Option<PlayerId>,
     /// Mirror of [`StackItem::trigger_object`], carried across any CR 603.3d target choice.
-    pub trigger_object: Option<ObjectId>,
+    pub trigger_object: Option<TriggerObjectRef>,
 }
 
 /// A tier-3 custom resolution (CR 608) parked mid-way, waiting on a player choice. Mirrors
@@ -577,7 +586,7 @@ pub struct StackItem {
     /// The permanent whose becoming a target caused this triggered ability. This is event
     /// identity, not one of this stack item's own CR 115 targets, and therefore remains available
     /// even for a non-targeted observer trigger.
-    pub trigger_object: Option<ObjectId>,
+    pub trigger_object: Option<TriggerObjectRef>,
 }
 
 /// Pre-game: choose first player, then London-style mulligans (redraw to 7, then put N on bottom).

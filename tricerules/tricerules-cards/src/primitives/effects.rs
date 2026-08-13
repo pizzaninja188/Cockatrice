@@ -472,6 +472,9 @@ pub enum EffectSubject {
     /// The object the source Aura or Equipment is currently attached to. This is an untargeted
     /// rules reference ("enchanted creature" / "equipped creature"), not a CR 115 target.
     AttachedObject,
+    /// The distinct permanent named by the trigger event. This is an untargeted rules reference
+    /// (for example, the blocking creature affected by flanking), not a CR 115 target.
+    TriggerObject,
     Chosen(TargetFilter),
 }
 
@@ -1000,6 +1003,9 @@ pub enum PlayerRecipient {
     /// `StackItem::trigger_player` (whose upkeep/draw step it is), falling back to the controller
     /// when the item names nobody. Sulfuric Vortex, Underworld Dreams, Ebony Owl Netsuke.
     AffectedPlayer,
+    /// The current controller of the permanent named by the trigger event, using its controller
+    /// at the event as last known information if that object has since left the battlefield.
+    TriggerObjectController,
     /// "each opponent" — every other player still in the game. Pestilence-style drains.
     EachOpponent,
     /// "each player" — everyone still in the game, controller included. Earthquake's player half.
@@ -1025,6 +1031,37 @@ impl SpellEffectKind {
                 subject: EffectSubject::AttachedObject,
             } | SpellEffectKind::Regenerate {
                 subject: EffectSubject::AttachedObject,
+            }
+        )
+    }
+
+    pub(crate) fn uses_trigger_object_reference(&self) -> bool {
+        matches!(
+            self,
+            SpellEffectKind::PumpTarget {
+                subject: EffectSubject::TriggerObject,
+                ..
+            } | SpellEffectKind::PutCounters {
+                subject: EffectSubject::TriggerObject,
+                ..
+            } | SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::TriggerObject,
+                ..
+            } | SpellEffectKind::Tap {
+                subject: EffectSubject::TriggerObject,
+            } | SpellEffectKind::Untap {
+                subject: EffectSubject::TriggerObject,
+            } | SpellEffectKind::Regenerate {
+                subject: EffectSubject::TriggerObject,
+            } | SpellEffectKind::LoseLife {
+                who: PlayerRecipient::TriggerObjectController,
+                ..
+            } | SpellEffectKind::DamagePlayer {
+                who: PlayerRecipient::TriggerObjectController,
+                ..
+            } | SpellEffectKind::Mill {
+                who: PlayerRecipient::TriggerObjectController,
+                ..
             }
         )
     }
@@ -1227,23 +1264,47 @@ impl SpellEffectKind {
         let source_bound = matches!(
             self,
             SpellEffectKind::PumpTarget {
-                subject: EffectSubject::Source | EffectSubject::AttachedObject,
+                subject: EffectSubject::Source
+                    | EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject,
                 ..
             } | SpellEffectKind::PutCounters {
-                subject: EffectSubject::Source | EffectSubject::AttachedObject,
+                subject: EffectSubject::Source
+                    | EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject,
                 ..
             } | SpellEffectKind::GrantKeywords {
-                subject: EffectSubject::Source | EffectSubject::AttachedObject,
+                subject: EffectSubject::Source
+                    | EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject,
                 ..
             } | SpellEffectKind::Regenerate {
-                subject: EffectSubject::Source | EffectSubject::AttachedObject,
+                subject: EffectSubject::Source
+                    | EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject,
             } | SpellEffectKind::Untap {
-                subject: EffectSubject::Source | EffectSubject::AttachedObject,
+                subject: EffectSubject::Source
+                    | EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject,
             } | SpellEffectKind::Tap {
-                subject: EffectSubject::Source | EffectSubject::AttachedObject,
+                subject: EffectSubject::Source
+                    | EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject,
             } | SpellEffectKind::ChangeSourceFace { .. }
                 | SpellEffectKind::ApplyCombatRestriction {
                     scope: CombatRestrictionScope::Source,
+                    ..
+                }
+                | SpellEffectKind::LoseLife {
+                    who: PlayerRecipient::TriggerObjectController,
+                    ..
+                }
+                | SpellEffectKind::DamagePlayer {
+                    who: PlayerRecipient::TriggerObjectController,
+                    ..
+                }
+                | SpellEffectKind::Mill {
+                    who: PlayerRecipient::TriggerObjectController,
                     ..
                 }
         );

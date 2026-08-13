@@ -762,7 +762,9 @@ pub(super) fn validate_effect_targets(
         | SpellEffectKind::PutCounters { subject, .. }
         | SpellEffectKind::GrantKeywords { subject, .. }
         | SpellEffectKind::Regenerate { subject } => match subject {
-            EffectSubject::Source | EffectSubject::AttachedObject => {
+            EffectSubject::Source
+            | EffectSubject::AttachedObject
+            | EffectSubject::TriggerObject => {
                 if !targets.is_empty() {
                     return Err(EngineError::Illegal("this effect takes no targets"));
                 }
@@ -901,10 +903,14 @@ pub(super) fn validate_effect_targets(
         | SpellEffectKind::TapAllCreatures { .. }
         | SpellEffectKind::UntapAll { .. }
         | SpellEffectKind::Untap {
-            subject: EffectSubject::Source | EffectSubject::AttachedObject,
+            subject: EffectSubject::Source
+                | EffectSubject::AttachedObject
+                | EffectSubject::TriggerObject,
         }
         | SpellEffectKind::Tap {
-            subject: EffectSubject::Source | EffectSubject::AttachedObject,
+            subject: EffectSubject::Source
+                | EffectSubject::AttachedObject
+                | EffectSubject::TriggerObject,
         }
         | SpellEffectKind::PumpAll { .. }
         | SpellEffectKind::GrantKeywordsAll { .. }

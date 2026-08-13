@@ -1,0 +1,20 @@
+// Oracle and ruling checked 2026-08-13. CR 509.3d creates one trigger per blocking creature;
+// CR 608.2h uses that creature's LKI if it leaves before the trigger resolves.
+(
+  id: "gloom_sower",
+  name: "Gloom Sower",
+  mana_cost: "{5}{B}{B}",
+  types: ["Creature", "Horror"],
+  power: 8,
+  toughness: 6,
+  triggered_abilities: [
+    (
+      trigger: WheneverSelfBecomesBlockedByCreature(blocker: ()),
+      effect: [
+        LoseLife(amount: Fixed(2), who: TriggerObjectController),
+        GainLife(amount: 2),
+      ],
+      text: "Whenever this creature becomes blocked by a creature, that creature's controller loses 2 life and you gain 2 life.",
+    ),
+  ],
+)

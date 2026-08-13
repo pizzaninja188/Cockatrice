@@ -157,9 +157,13 @@ pub(super) fn grant_keywords(
                 .filter(|_| cx.engine.source_is_current_object(cx.top)),
             cx.top.source_permanent_id,
         ),
-        EffectSubject::AttachedObject => (
+        EffectSubject::AttachedObject | EffectSubject::TriggerObject => (
             resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject),
-            cx.top.source_permanent_id,
+            if matches!(subject, EffectSubject::AttachedObject) {
+                cx.top.source_permanent_id
+            } else {
+                Some(cx.top.id)
+            },
         ),
         EffectSubject::Chosen(target) => {
             let tid = cx.targets.first().copied().filter(|tid| {

@@ -601,6 +601,19 @@ impl GameEngine {
                 }
             }
         }
+        let block_edges: Vec<BlockEdgeSnapshot> = pairs
+            .iter()
+            .map(|pair| {
+                Ok(BlockEdgeSnapshot {
+                    attacker: self
+                        .trigger_object_ref(pair.attacker_id)
+                        .ok_or(EngineError::Illegal("attacker characteristics missing"))?,
+                    blocker: self
+                        .trigger_object_ref(pair.blocker_id)
+                        .ok_or(EngineError::Illegal("blocker characteristics missing"))?,
+                })
+            })
+            .collect::<Result<_, EngineError>>()?;
         // CR 702.19: trample attackers with 1+ blockers also require explicit damage assignment
         // (to split damage between blockers and the defending player).
         let damage_assignment_needed = attacker_to_blockers.iter().any(|(atk_id, blks)| {
@@ -646,6 +659,7 @@ impl GameEngine {
         self.state.passes_since_stack_change = 0;
         b.events
             .push(ev_log(format!("P{} {}", defending_player, block_line)));
+        self.fire_triggers(&[GameEvent::BlockersDeclared { edges: block_edges }]);
         b.events.push(ev_priority_changed(self));
         fill_legal(&mut b, self);
         Ok(b)
