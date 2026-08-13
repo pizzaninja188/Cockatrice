@@ -27,7 +27,7 @@ use tricerules_cards::primitives::{
     DamagePreventionAdditionalEffect, DamagePreventionSubject, EffectDuration, EffectSubject,
     EntersTappedAffected, Evasion, FaceChangeAction, GameCondition, InterveningIf, Keyword,
     LifeAmount, PermanentTypeFilter, PlayerRecipient, PowerComparison, PreventionAmountBasis,
-    RelativePlayerSet, SearchDestination, SpellEffectKind, StaticAbilityDef,
+    RelativePlayerSet, SearchDestination, SpellCostModifier, SpellEffectKind, StaticAbilityDef,
     StaticDamagePreventionAmount, TargetController, TargetFilter, TargetKind,
     TargetingSourceFilter, TokenController, TriggerCondition,
 };

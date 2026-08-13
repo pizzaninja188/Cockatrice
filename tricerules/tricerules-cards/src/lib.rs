@@ -14,8 +14,8 @@ pub use primitives::{
     Amount, BattlefieldAggregate, BattlefieldCreatureCountFilter, BattlefieldPermanentFilter,
     CastTriggerPlayer, Color, ContinuousEffectKind, ControllerReference, CountExpression,
     CounterKind, EffectContext, EffectDuration, Evasion, GameCondition, Keyword, ManaAmount,
-    PermanentTypeFilter, PtScale, RelativePlayerSet, TokenController, TriggerCondition,
-    TriggeredAbilityDef, TypeLineAddition,
+    PermanentTypeFilter, PtScale, RelativePlayerSet, SpellCostModifier, TokenController,
+    TriggerCondition, TriggeredAbilityDef, TypeLineAddition,
 };
 pub use registry::CardRegistry;
 pub use slug::slugify;

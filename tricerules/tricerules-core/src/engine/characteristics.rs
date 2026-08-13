@@ -296,6 +296,10 @@ impl CharacteristicsEvaluator<'_> {
             GameCondition::CreatureDeathsThisTurn { .. } => {
                 condition.matches_value(self.state.turn_history.current.creatures_died)
             }
+            // Registry validation rejects this dependency-sensitive condition for the only
+            // current producer of conditional characteristic effects. Normal condition users
+            // evaluate it through `GameEngine::condition_holds` instead.
+            GameCondition::BattlefieldCreatureCount { .. } => false,
             GameCondition::BattlefieldAggregate {
                 filter,
                 aggregate: BattlefieldAggregate::Count,

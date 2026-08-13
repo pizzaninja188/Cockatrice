@@ -168,6 +168,30 @@ fn plan_mana_payment(
     extra_generic: u32,
     flex_payments: &[rv1::FlexPipPayment],
 ) -> Result<ManaPaymentPlan, EngineError> {
+    plan_mana_payment_with_reduction(
+        state,
+        player_idx,
+        cost,
+        x_value,
+        extra_generic,
+        0,
+        flex_payments,
+    )
+}
+
+/// Determine a mana payment after applying CR 601.2f's generic increases-then-reductions order.
+/// The reduction is applied only after the printed generic pips, X, and dynamic increases have
+/// been combined, and `saturating_sub` implements CR 118.7's {0} floor.
+#[allow(clippy::too_many_arguments)]
+fn plan_mana_payment_with_reduction(
+    state: &GameState,
+    player_idx: usize,
+    cost: &ManaCost,
+    x_value: u32,
+    extra_generic: u32,
+    generic_reduction: u32,
+    flex_payments: &[rv1::FlexPipPayment],
+) -> Result<ManaPaymentPlan, EngineError> {
     let life_pips: HashSet<usize> = flex_payments
         .iter()
         .filter(|fp| fp.pay_life)
@@ -186,8 +210,8 @@ fn plan_mana_payment(
             ManaSymbol::R => need_color[color_index(ColorPip::R)] += 1,
             ManaSymbol::G => need_color[color_index(ColorPip::G)] += 1,
             ManaSymbol::C => need_color[POOL_C] += 1,
-            ManaSymbol::Generic(n) => need_generic += n,
-            ManaSymbol::X => need_generic += x_value,
+            ManaSymbol::Generic(n) => need_generic = need_generic.saturating_add(*n),
+            ManaSymbol::X => need_generic = need_generic.saturating_add(x_value),
             ManaSymbol::Hybrid(a, b) => flex.push(FlexPip::Hybrid(*a, *b)),
             ManaSymbol::MonoHybrid(n, c) => flex.push(FlexPip::Mono(*n, *c)),
             ManaSymbol::Phyrexian(c) => {
@@ -199,6 +223,7 @@ fn plan_mana_payment(
             }
         }
     }
+    need_generic = need_generic.saturating_sub(generic_reduction);
 
     // CR 119.4: a player can pay life only if they have at least that much.
     if life_cost > 0 && state.players[player_idx].life < life_cost as i32 {
@@ -270,6 +295,64 @@ pub(super) fn pay_mana(
 }
 
 impl GameEngine {
+    fn spell_generic_reduction(
+        &self,
+        player: PlayerId,
+        source_oid: ObjectId,
+        modifiers: &[SpellCostModifier],
+    ) -> u32 {
+        let context = ConditionContext {
+            controller: player,
+            source_object_id: source_oid,
+            source_zone_change: self
+                .state
+                .zone_change_generation
+                .get(&source_oid)
+                .copied()
+                .unwrap_or(0),
+        };
+        modifiers
+            .iter()
+            .fold(0u32, |total, modifier| match modifier {
+                SpellCostModifier::ConditionalGenericReduction { amount, condition }
+                    if self.condition_holds(condition, context) =>
+                {
+                    total.saturating_add(*amount)
+                }
+                SpellCostModifier::ConditionalGenericReduction { .. } => total,
+            })
+    }
+
+    /// The fixed cost string published in legal actions. Registry validation currently excludes
+    /// X and target-count surcharges on modified faces, so reducing authored generic pips here is
+    /// the exact cost the existing client must stage.
+    pub(super) fn effective_fixed_spell_cost(
+        &self,
+        player: PlayerId,
+        source_oid: ObjectId,
+        base_cost: &ManaCost,
+        modifiers: &[SpellCostModifier],
+    ) -> ManaCost {
+        let mut remaining_reduction = self.spell_generic_reduction(player, source_oid, modifiers);
+        let mut pips = Vec::with_capacity(base_cost.pips.len());
+        for pip in &base_cost.pips {
+            match pip {
+                ManaSymbol::Generic(amount) => {
+                    let remaining = amount.saturating_sub(remaining_reduction);
+                    remaining_reduction = remaining_reduction.saturating_sub(*amount);
+                    if remaining > 0 {
+                        pips.push(ManaSymbol::Generic(remaining));
+                    }
+                }
+                _ => pips.push(pip.clone()),
+            }
+        }
+        if pips.is_empty() && !base_cost.pips.is_empty() {
+            pips.push(ManaSymbol::Generic(0));
+        }
+        ManaCost { pips }
+    }
+
     pub(super) fn can_pay_generic_mana(&self, player: PlayerId, amount: u32) -> bool {
         self.state.player_idx(player).is_some_and(|player_idx| {
             plan_mana_payment(
@@ -400,6 +483,7 @@ impl GameEngine {
         let face_targeting = face.targeting.clone();
         let modal_spell = face.modal_spell.clone();
         let additional_costs = face.additional_costs.clone();
+        let cost_modifiers = face.cost_modifiers.clone();
         let sorcery_ok = super::priority::sorcery_speed_available(&self.state, player);
         let instant_ok = super::priority::instant_timing_step_allowed(self.state.turn_step);
         if face_is_sorcery {
@@ -580,6 +664,7 @@ impl GameEngine {
             &face_mana,
             chosen_x,
             extra_generic,
+            self.spell_generic_reduction(player, oid, &cost_modifiers),
             flex_payments,
             &additional_costs,
             cost_selections,
@@ -728,6 +813,7 @@ impl GameEngine {
         mana_cost: &ManaCost,
         x_value: u32,
         extra_generic: u32,
+        generic_reduction: u32,
         flex_payments: &[rv1::FlexPipPayment],
         costs: &[AdditionalCost],
         selections: &[rv1::CostSelection],
@@ -792,12 +878,13 @@ impl GameEngine {
         }
 
         Ok(SpellCostPaymentPlan {
-            mana: plan_mana_payment(
+            mana: plan_mana_payment_with_reduction(
                 &self.state,
                 player_idx,
                 mana_cost,
                 x_value,
                 extra_generic,
+                generic_reduction,
                 flex_payments,
             )?,
             components,
@@ -1792,6 +1879,67 @@ mod mana_payment_tests {
             pay_mana(&mut e.state, 0, &cost, 0, 0, &[]),
             Err(EngineError::Illegal(_))
         ));
+    }
+
+    #[test]
+    fn generic_reduction_applies_after_increases_and_floors_without_touching_colored_pips() {
+        let mut e = engine_with_priority();
+        e.state.players[0].mana_pool.blue = 1;
+        e.state.players[0].mana_pool.colorless = 4;
+        let cost = ManaCost::parse("{1}{U}").expect("cost");
+
+        let plan = plan_mana_payment_with_reduction(&e.state, 0, &cost, 0, 2, 3, &[])
+            .expect("the reduction applies after the increase");
+        commit_mana_payment(&mut e.state, 0, plan);
+        assert_eq!(e.state.players[0].mana_pool.blue, 0);
+        assert_eq!(e.state.players[0].mana_pool.colorless, 4);
+
+        e.state.players[0].mana_pool.blue = 1;
+        let colored_only = ManaCost::parse("{U}").expect("cost");
+        let plan =
+            plan_mana_payment_with_reduction(&e.state, 0, &colored_only, 0, 0, u32::MAX, &[])
+                .expect("an oversized generic reduction floors at zero");
+        commit_mana_payment(&mut e.state, 0, plan);
+        assert_eq!(e.state.players[0].mana_pool.blue, 0);
+        assert_eq!(e.state.players[0].mana_pool.colorless, 4);
+    }
+
+    #[test]
+    fn reduced_mana_and_discard_cost_are_planned_and_committed_together() {
+        use rv1::cost_selection::Selection;
+
+        let mut e = engine_with_priority();
+        let source_oid = e.state.players[0].hand[0];
+        let discarded_oid = e.state.players[0].hand[1];
+        e.state.players[0].mana_pool.blue = 1;
+        let costs = [AdditionalCost::DiscardCard];
+        let selections = [rv1::CostSelection {
+            cost_index: 0,
+            selection: Some(Selection::HandIndex(1)),
+        }];
+
+        let plan = e
+            .plan_spell_costs(
+                0,
+                0,
+                source_oid,
+                &ManaCost::parse("{1}{U}").expect("cost"),
+                0,
+                0,
+                1,
+                &[],
+                &costs,
+                &selections,
+            )
+            .expect("reduced mana and discard cost should validate together");
+        let payment = e
+            .commit_spell_costs(0, 0, plan)
+            .expect("validated costs should commit");
+
+        assert_eq!(e.state.players[0].mana_pool.blue, 0);
+        assert_eq!(e.state.objects[&source_oid].zone, Zone::Hand);
+        assert_eq!(e.state.objects[&discarded_oid].zone, Zone::Graveyard);
+        assert_eq!(payment.paid_card_costs.len(), 1);
     }
 
     #[test]

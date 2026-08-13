@@ -155,6 +155,33 @@ mod tests {
     }
 
     #[test]
+    fn spell_cost_conditions_require_valid_counts_and_nonzero_reductions() {
+        let condition = |min, max| GameCondition::BattlefieldCreatureCount {
+            filter: BattlefieldCreatureCountFilter {
+                controllers: RelativePlayerSet::Controller,
+                subtype: None,
+                required_keywords: vec![Keyword::Flying],
+                exclude_source: false,
+            },
+            min,
+            max,
+        };
+        assert!(condition(None, None).validate().is_err());
+        assert!(condition(Some(2), Some(1)).validate().is_err());
+
+        let zero = SpellCostModifier::ConditionalGenericReduction {
+            amount: 0,
+            condition: condition(Some(1), None),
+        };
+        assert!(zero.validate().is_err());
+        let winged_words = SpellCostModifier::ConditionalGenericReduction {
+            amount: 1,
+            condition: condition(Some(1), None),
+        };
+        assert!(winged_words.validate().is_ok());
+    }
+
+    #[test]
     fn explicit_and_intrinsic_sorcery_speed_share_one_query() {
         let explicit = ActivatedAbilityDef {
             costs: vec![],

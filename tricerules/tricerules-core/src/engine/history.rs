@@ -66,6 +66,13 @@ impl GameEngine {
             GameCondition::CreatureDeathsThisTurn { .. } => {
                 condition.matches_value(self.state.turn_history.current.creatures_died)
             }
+            GameCondition::BattlefieldCreatureCount { filter, .. } => {
+                condition.matches_value(self.battlefield_creature_count(
+                    filter,
+                    context.controller,
+                    context.source_object_id,
+                ))
+            }
             GameCondition::BattlefieldAggregate {
                 filter, aggregate, ..
             } => condition

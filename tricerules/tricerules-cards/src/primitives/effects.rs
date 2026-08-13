@@ -27,6 +27,16 @@ pub enum GameCondition {
         #[serde(default)]
         max: Option<u32>,
     },
+    /// Compare the number of battlefield creatures matching derived characteristics against
+    /// inclusive bounds. Winged Words uses `min: 1` plus Flying; subtype-based cost reductions
+    /// and public activation/trigger conditions reuse the same filter.
+    BattlefieldCreatureCount {
+        filter: BattlefieldCreatureCountFilter,
+        #[serde(default)]
+        min: Option<u32>,
+        #[serde(default)]
+        max: Option<u32>,
+    },
     /// Compare an aggregate of public battlefield permanents against inclusive bounds. This is
     /// the shared condition vocabulary for Scholar of Stars (count artifacts), Faerie Miscreant
     /// (count another permanent by effective name), and the power checks on Ornery Dilophosaur
@@ -58,6 +68,22 @@ impl GameCondition {
                 }
                 Ok(())
             }
+            GameCondition::BattlefieldCreatureCount { filter, min, max } => {
+                filter.validate()?;
+                if min.is_none() && max.is_none() {
+                    return Err(
+                        "BattlefieldCreatureCount requires at least one of min or max".into(),
+                    );
+                }
+                if min
+                    .as_ref()
+                    .zip(max.as_ref())
+                    .is_some_and(|(minimum, maximum)| minimum > maximum)
+                {
+                    return Err("BattlefieldCreatureCount min cannot exceed max".into());
+                }
+                Ok(())
+            }
             GameCondition::BattlefieldAggregate {
                 filter, min, max, ..
             } => {
@@ -81,6 +107,7 @@ impl GameCondition {
         match self {
             GameCondition::ActivePlayer { .. } => false,
             GameCondition::CreatureDeathsThisTurn { min, max }
+            | GameCondition::BattlefieldCreatureCount { min, max, .. }
             | GameCondition::BattlefieldAggregate { min, max, .. } => {
                 min.is_none_or(|minimum| value >= minimum)
                     && max.is_none_or(|maximum| value <= maximum)

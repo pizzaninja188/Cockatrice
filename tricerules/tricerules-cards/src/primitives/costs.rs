@@ -1,6 +1,6 @@
 //! Costs paid to activate abilities.
 
-use super::TargetFilter;
+use super::{GameCondition, TargetFilter};
 use crate::mana::ManaCost;
 use serde::{Deserialize, Serialize};
 
@@ -34,4 +34,32 @@ pub enum AdditionalCost {
     DiscardCard,
     /// Sacrifice one permanent the caster controls that matches `filter`.
     SacrificePermanent { filter: TargetFilter },
+}
+
+/// A face-authored modifier applied while determining that spell's total cost (CR 601.2f).
+///
+/// The condition vocabulary is shared with triggers, activated abilities, and conditional
+/// effects so card data never reimplements public game-state queries. Winged Words uses a
+/// controller-owned flying-creature condition; Purple Worm and Bone Picker can reuse the same
+/// modifier with the existing creature-deaths-this-turn condition.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SpellCostModifier {
+    /// Reduce only the generic component of the selected normal or alternative mana cost.
+    ConditionalGenericReduction {
+        amount: u32,
+        condition: GameCondition,
+    },
+}
+
+impl SpellCostModifier {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        match self {
+            SpellCostModifier::ConditionalGenericReduction { amount, condition } => {
+                if *amount == 0 {
+                    return Err("conditional generic cost reduction must be nonzero".into());
+                }
+                condition.validate()
+            }
+        }
+    }
 }

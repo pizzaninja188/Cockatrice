@@ -1,7 +1,8 @@
 use crate::card_def::{CardDefinition, CardFace, Layout, RawCardDefinition};
 use crate::primitives::{
     AbilityCost, AdditionalCost, BattlefieldAggregate, EffectContext, FaceChangeAction,
-    InterveningIf, SpellEffectKind, StaticAbilityDef, TargetController, TargetKind, TargetingDef,
+    GameCondition, InterveningIf, SpellEffectKind, StaticAbilityDef, TargetController, TargetKind,
+    TargetingDef,
 };
 use crate::token_def::TokenDefinition;
 use once_cell::sync::Lazy;
@@ -189,6 +190,46 @@ impl CardRegistry {
             // subjects are rejected here (EffectContext::Spell); activated/triggered
             // effects bind to a source (Ability).
             for face in card.faces_iter() {
+                for modifier in &face.cost_modifiers {
+                    modifier
+                        .validate()
+                        .map_err(|reason| RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason,
+                        })?;
+                }
+                if !face.cost_modifiers.is_empty() {
+                    let has_x_cost = face.mana_cost.has_x()
+                        || face
+                            .flashback_cost
+                            .as_ref()
+                            .is_some_and(|cost| cost.has_x());
+                    let has_target_count_surcharge = face
+                        .spell_effect
+                        .iter()
+                        .chain(
+                            face.modal_spell
+                                .iter()
+                                .flat_map(|modal| &modal.modes)
+                                .flat_map(|mode| &mode.effects),
+                        )
+                        .any(|effect| {
+                            matches!(
+                                effect,
+                                SpellEffectKind::DamageTargets {
+                                    extra_mana_per_target,
+                                    ..
+                                } if *extra_mana_per_target > 0
+                            )
+                        });
+                    if has_x_cost || has_target_count_surcharge {
+                        return Err(RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason: "conditional cost modifiers cannot yet be combined with X or target-count surcharges"
+                                .into(),
+                        });
+                    }
+                }
                 // One resolution owner per face (CR 608): ordinary data, modal data, and a
                 // custom (tier-3) effect are mutually exclusive. The
                 // matching custom impl is validated to exist on the `tricerules-core` side
@@ -393,6 +434,12 @@ impl CardRegistry {
                             return Err(RegistryError::InvalidCard {
                                 id: card.id.clone(),
                                 reason: "conditional layer-6/7 modifiers cannot depend on battlefield power until CR 613.8 dependency ordering is implemented".into(),
+                            });
+                        }
+                        if matches!(condition, GameCondition::BattlefieldCreatureCount { .. }) {
+                            return Err(RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason: "conditional self modifiers cannot depend on derived creature counts until CR 613.8 dependency ordering is implemented".into(),
                             });
                         }
                     }
@@ -756,12 +803,81 @@ mod tests {
     use crate::primitives::{
         Amount, BattlefieldCreatureCountFilter, CastTriggerPlayer, CountExpression, CounterKind,
         EffectSubject, EntersTappedAffected, GameCondition, InterveningIf, RelativePlayerSet,
-        SpellEffectKind, StaticAbilityDef, TargetFilter, TargetKind, TriggerCondition,
+        SpellCostModifier, SpellEffectKind, StaticAbilityDef, TargetFilter, TargetKind,
+        TriggerCondition,
     };
 
     #[test]
     fn embedded_registry_loads() {
         CardRegistry::from_embedded().unwrap();
+    }
+
+    #[test]
+    fn winged_words_loads_its_conditional_reduction() {
+        let registry = CardRegistry::from_embedded().expect("embedded registry");
+        let card = registry.get("winged_words").expect("Winged Words");
+        assert!(matches!(
+            card.primary_face().cost_modifiers.as_slice(),
+            [SpellCostModifier::ConditionalGenericReduction {
+                amount: 1,
+                condition: GameCondition::BattlefieldCreatureCount {
+                    min: Some(1),
+                    max: None,
+                    ..
+                },
+            }]
+        ));
+    }
+
+    #[test]
+    fn conditional_reductions_reject_costs_with_unpublished_later_choices() {
+        let x_cost = r#"(
+            id: "bad_x_reduction",
+            name: "Bad X Reduction",
+            mana_cost: "{X}{U}",
+            cost_modifiers: [ConditionalGenericReduction(
+                amount: 1,
+                condition: BattlefieldCreatureCount(
+                    filter: (controllers: Controller, required_keywords: [Flying]),
+                    min: Some(1),
+                ),
+            )],
+            types: ["Sorcery"],
+            spell_effect: [Draw(count: 1)],
+        )"#;
+        let err = CardRegistry::from_chunks(&[x_cost]).expect_err("X is not published yet");
+        assert!(matches!(
+            err,
+            RegistryError::InvalidCard { reason, .. }
+                if reason.contains("X or target-count surcharges")
+        ));
+
+        let target_surcharge = r#"(
+            id: "bad_target_surcharge_reduction",
+            name: "Bad Target Surcharge Reduction",
+            mana_cost: "{U}",
+            cost_modifiers: [ConditionalGenericReduction(
+                amount: 1,
+                condition: BattlefieldCreatureCount(
+                    filter: (controllers: Controller, required_keywords: [Flying]),
+                    min: Some(1),
+                ),
+            )],
+            types: ["Sorcery"],
+            spell_effect: [DamageTargets(
+                amount: 1,
+                target: (kind: AnyTarget),
+                division: EvenAtResolution,
+                extra_mana_per_target: 1,
+            )],
+        )"#;
+        let err = CardRegistry::from_chunks(&[target_surcharge])
+            .expect_err("target-count surcharge is not published yet");
+        assert!(matches!(
+            err,
+            RegistryError::InvalidCard { reason, .. }
+                if reason.contains("X or target-count surcharges")
+        ));
     }
 
     #[test]

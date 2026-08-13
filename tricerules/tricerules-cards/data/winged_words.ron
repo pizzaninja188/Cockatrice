@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-08-13. CR 118.7a and 601.2f: the conditional reduction
+// affects only generic mana, applies once, floors at {0}, and locks before costs are paid.
+(
+  id: "winged_words",
+  name: "Winged Words",
+  mana_cost: "{2}{U}",
+  cost_modifiers: [
+    ConditionalGenericReduction(
+      amount: 1,
+      condition: BattlefieldCreatureCount(
+        filter: (controllers: Controller, required_keywords: [Flying]),
+        min: Some(1),
+      ),
+    ),
+  ],
+  types: ["Sorcery"],
+  spell_effect: [Draw(count: 2)],
+)

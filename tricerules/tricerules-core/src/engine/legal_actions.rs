@@ -492,7 +492,9 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                     face_index,
                     face.spell_effect.iter().any(spell_effect_kind_needs_target),
                 );
-                action.cost = face.mana_cost.to_string();
+                action.cost = eng
+                    .effective_fixed_spell_cost(pid, oid, &face.mana_cost, &face.cost_modifiers)
+                    .to_string();
                 let cost_choices = legal_spell_cost_choices(eng, pid, oid, &face.additional_costs);
                 if !cost_choices.non_mana_costs_payable {
                     continue;
@@ -590,7 +592,10 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                 cost: face
                     .flashback_cost
                     .as_ref()
-                    .map(ToString::to_string)
+                    .map(|cost| {
+                        eng.effective_fixed_spell_cost(pid, oid, cost, &face.cost_modifiers)
+                            .to_string()
+                    })
                     .unwrap_or_default(),
                 cost_choices: None,
             };
@@ -680,7 +685,9 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
             min_modes: 0,
             max_modes: 0,
             modes: vec![],
-            cost: face.mana_cost.to_string(),
+            cost: eng
+                .effective_fixed_spell_cost(pid, object.id, &face.mana_cost, &face.cost_modifiers)
+                .to_string(),
             cost_choices: None,
         };
         let cost_choices = legal_spell_cost_choices(eng, pid, object.id, &face.additional_costs);
