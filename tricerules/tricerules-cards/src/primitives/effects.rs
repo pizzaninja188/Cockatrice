@@ -478,6 +478,40 @@ pub enum EffectSubject {
     Chosen(TargetFilter),
 }
 
+/// A battlefield attachment subtype that an effect may enumerate through the authoritative
+/// attachment-recipient relation. Aura and Equipment are deliberately distinct: both
+/// attach to another game entity, but they have different legality and state-based actions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AttachmentKind {
+    Aura,
+    Equipment,
+}
+
+/// OR-combined attachment kinds for effects that act on the current attachments of one object.
+/// Turn to Slag selects Equipment; Flickerform and Rhuk, Hexgold Nabber establish reuse across
+/// Aura and Equipment cohorts. Empty and duplicate filters are rejected at registry load.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AttachmentFilter {
+    pub kinds: Vec<AttachmentKind>,
+}
+
+impl AttachmentFilter {
+    fn validate(&self) -> Result<(), String> {
+        if self.kinds.is_empty() {
+            return Err("attachment filter requires at least one kind".into());
+        }
+        if self
+            .kinds
+            .iter()
+            .enumerate()
+            .any(|(index, kind)| self.kinds[..index].contains(kind))
+        {
+            return Err("attachment filter cannot contain duplicate kinds".into());
+        }
+        Ok(())
+    }
+}
+
 /// An affine P/T bonus applied by [`SpellEffectKind::PumpTarget`]: resolve `amount` once, multiply
 /// it by the signed per-unit deltas, then add those results to the effect's fixed P/T bonus.
 /// Growth Cycle and Lavakin Brawler are the first spell and triggered-ability users.
@@ -605,6 +639,14 @@ pub enum SpellEffectKind {
     DestroyTarget {
         #[serde(default = "TargetFilter::default_creature")]
         target: TargetFilter,
+    },
+    /// Destroy every current Aura and/or Equipment attached to one chosen permanent. The target
+    /// is revalidated normally under CR 608.2b; the untargeted attachment cohort is determined
+    /// once when this instruction is applied (CR 608.2h). Turn to Slag uses `Equipment`.
+    DestroyAttached {
+        #[serde(default = "TargetFilter::default_creature")]
+        target: TargetFilter,
+        attachments: AttachmentFilter,
     },
     /// Give +power/+toughness until end of turn to `subject`. The default is a chosen creature
     /// target (Giant Growth); `Source` auto-binds an ability to its source permanent.
@@ -1083,6 +1125,7 @@ impl SpellEffectKind {
             | SpellEffectKind::CreatureDealsDamageEqualToPower { .. }
             | SpellEffectKind::DamageTargets { .. }
             | SpellEffectKind::DestroyTarget { .. }
+            | SpellEffectKind::DestroyAttached { .. }
             | SpellEffectKind::ExileTarget
             | SpellEffectKind::ExileTargetGainLifeEqualToPower
             | SpellEffectKind::ReturnTargetCreatureToHand
@@ -1116,6 +1159,7 @@ impl SpellEffectKind {
             SpellEffectKind::DamageTarget { target, .. }
             | SpellEffectKind::DamageTargets { target, .. }
             | SpellEffectKind::DestroyTarget { target }
+            | SpellEffectKind::DestroyAttached { target, .. }
             | SpellEffectKind::SkipNextUntap { target }
             | SpellEffectKind::GainControlUntilEndOfTurn { target }
             | SpellEffectKind::TargetPlayerGainsLife { target, .. }
@@ -1253,6 +1297,18 @@ impl SpellEffectKind {
                 return Err(
                     "CreatureDealsDamageEqualToPower requires two creature target filters".into(),
                 );
+            }
+            SpellEffectKind::DestroyAttached {
+                target,
+                attachments,
+            } => {
+                if target.is_player() {
+                    return Err(format!(
+                        "DestroyAttached cannot target players, got {:?}",
+                        target.kind
+                    ));
+                }
+                attachments.validate()?;
             }
             SpellEffectKind::PumpAll { filter, .. }
             | SpellEffectKind::GrantKeywordsAll { filter, .. } => filter.validate()?,
@@ -1564,6 +1620,26 @@ impl SpellEffectKind {
 /// Serde default for `CopyTargetSpell.count` — the overwhelmingly common "make one copy".
 fn one() -> u32 {
     1
+}
+
+#[cfg(test)]
+mod attachment_filter_tests {
+    use super::*;
+
+    #[test]
+    fn attachment_filter_requires_unique_nonempty_kinds() {
+        assert!(AttachmentFilter { kinds: vec![] }.validate().is_err());
+        assert!(AttachmentFilter {
+            kinds: vec![AttachmentKind::Aura, AttachmentKind::Aura],
+        }
+        .validate()
+        .is_err());
+        assert!(AttachmentFilter {
+            kinds: vec![AttachmentKind::Aura, AttachmentKind::Equipment],
+        }
+        .validate()
+        .is_ok());
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,136 @@
 use super::*;
 use crate::engine::set_tapped;
 
+fn attachment_kind_matches(
+    characteristics: &super::super::characteristics::Characteristics,
+    kind: AttachmentKind,
+) -> bool {
+    match kind {
+        AttachmentKind::Aura => characteristics.is_aura(),
+        AttachmentKind::Equipment => characteristics.has_type("Equipment"),
+    }
+}
+
+fn attached_objects_matching(
+    engine: &GameEngine,
+    target: ObjectId,
+    filter: &AttachmentFilter,
+) -> Vec<ObjectId> {
+    let mut matches = engine
+        .state
+        .objects
+        .iter()
+        .filter_map(|(&oid, object)| {
+            (object.zone == Zone::Battlefield
+                && object.attached_to == Some(AttachmentRecipient::Object(target))
+                && engine.characteristics(oid).is_some_and(|characteristics| {
+                    filter
+                        .kinds
+                        .iter()
+                        .any(|&kind| attachment_kind_matches(&characteristics, kind))
+                }))
+            .then_some(oid)
+        })
+        .collect::<Vec<_>>();
+    matches.sort_unstable();
+    matches
+}
+
+pub(super) fn destroy_attached(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::DestroyAttached { attachments, .. } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let Some(&target) = cx.targets.first() else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let engine = &mut *cx.engine;
+    let events = &mut *cx.events;
+    let spell_label = cx.spell_label;
+
+    // CR 608.2h: determine this untargeted cohort once, using current derived characteristics.
+    // Sorting ObjectIds gives deterministic movement/log order while dies triggers are collected
+    // and fired as one logical destruction batch after every successful move.
+    let victims = attached_objects_matching(engine, target, &attachments);
+    let snapshots = victims
+        .into_iter()
+        .map(|oid| {
+            let name = object_display_name(&engine.state, engine.registry, oid);
+            let indestructible = engine.effective_has_keyword(oid, Keyword::Indestructible);
+            let owner = engine.state.objects.get(&oid).map(|object| object.owner);
+            let controller = engine
+                .state
+                .objects
+                .get(&oid)
+                .map(|object| object.controller);
+            let effective_identity = engine
+                .effective_card_identity(oid)
+                .map(|(card_id, face_index)| (card_id.to_string(), face_index));
+            let was_creature = engine
+                .characteristics(oid)
+                .is_some_and(|characteristics| characteristics.is_creature());
+            (
+                oid,
+                name,
+                indestructible,
+                owner,
+                controller,
+                effective_identity,
+                was_creature,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let mut destroyed = Vec::new();
+    for (oid, name, indestructible, owner, controller, effective_identity, was_creature) in
+        snapshots
+    {
+        if indestructible {
+            events.push(ev_log(format!(
+                "{name} is indestructible and survives {spell_label}."
+            )));
+            continue;
+        }
+        if consume_regen_shield(&mut engine.state, oid, events) {
+            events.push(ev_log(format!("{name} regenerates.")));
+            continue;
+        }
+        destroy_permanent(&mut engine.state, engine.registry, oid)?;
+        events.push(ev_log(format!("{spell_label} destroys {name}")));
+        if let Some(owner_id) = owner {
+            events.push(permanent_moved_event(
+                &engine.state,
+                oid,
+                owner_id,
+                rv1::permanent_moved::Destination::Graveyard,
+            ));
+        }
+        if let (Some((card_id, face_index)), Some(controller)) = (effective_identity, controller) {
+            destroyed.push((oid, card_id, controller, face_index, was_creature));
+        }
+    }
+
+    let trigger_events = destroyed
+        .into_iter()
+        .map(
+            |(object_id, card_id, controller, face_index, was_creature)| GameEvent::Dies {
+                source: TriggerSourceSnapshot {
+                    object_id,
+                    card_id,
+                    controller,
+                    face_index,
+                },
+                was_creature,
+            },
+        )
+        .collect::<Vec<_>>();
+    engine.fire_triggers(&trigger_events);
+
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn destroy_all(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -157,4 +287,96 @@ pub(super) fn damage_all(
     engine.commit_completed_damage_batch(&completed, events);
 
     Ok(EffectOutcome::Continue)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn move_to_battlefield(engine: &mut GameEngine, player: usize, card_id: &str) -> ObjectId {
+        let oid = if let Some(index) = engine.state.players[player]
+            .library
+            .iter()
+            .position(|oid| engine.state.objects[oid].card_id == card_id)
+        {
+            engine.state.players[player]
+                .library
+                .remove(index)
+                .expect("known library index")
+        } else {
+            let index = engine.state.players[player]
+                .hand
+                .iter()
+                .position(|oid| engine.state.objects[oid].card_id == card_id)
+                .expect("card in library or hand");
+            engine.state.players[player].hand.remove(index)
+        };
+        engine.state.players[player].battlefield.push(oid);
+        engine.state.objects.get_mut(&oid).expect("object").zone = Zone::Battlefield;
+        oid
+    }
+
+    #[test]
+    fn attached_object_filter_handles_aura_equipment_and_combined_cohorts() {
+        let mut deck = vec![
+            "colossal_dreadmaw".to_string(),
+            "holy_strength".to_string(),
+            "bonesplitter".to_string(),
+            "bottle_gnomes".to_string(),
+        ];
+        deck.resize(20, "forest".to_string());
+        let mut engine = GameEngine::new(
+            83_101,
+            &[0, 1],
+            20,
+            Some(vec![deck, vec!["island".to_string(); 20]]),
+            true,
+        )
+        .expect("engine");
+        let target = move_to_battlefield(&mut engine, 0, "colossal_dreadmaw");
+        let aura = move_to_battlefield(&mut engine, 0, "holy_strength");
+        let equipment = move_to_battlefield(&mut engine, 0, "bonesplitter");
+        let ordinary_artifact = move_to_battlefield(&mut engine, 0, "bottle_gnomes");
+        for oid in [aura, equipment, ordinary_artifact] {
+            engine
+                .state
+                .objects
+                .get_mut(&oid)
+                .expect("attachment")
+                .attached_to = Some(AttachmentRecipient::Object(target));
+        }
+
+        assert_eq!(
+            attached_objects_matching(
+                &engine,
+                target,
+                &AttachmentFilter {
+                    kinds: vec![AttachmentKind::Aura],
+                },
+            ),
+            vec![aura]
+        );
+        assert_eq!(
+            attached_objects_matching(
+                &engine,
+                target,
+                &AttachmentFilter {
+                    kinds: vec![AttachmentKind::Equipment],
+                },
+            ),
+            vec![equipment]
+        );
+        let mut combined = vec![aura, equipment];
+        combined.sort_unstable();
+        assert_eq!(
+            attached_objects_matching(
+                &engine,
+                target,
+                &AttachmentFilter {
+                    kinds: vec![AttachmentKind::Aura, AttachmentKind::Equipment],
+                },
+            ),
+            combined
+        );
+    }
 }

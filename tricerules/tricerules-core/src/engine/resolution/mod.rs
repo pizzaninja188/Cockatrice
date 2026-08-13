@@ -843,6 +843,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::DestroyTarget { .. } => {
                         misc::destroy_target(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::DestroyAttached { .. } => {
+                        mass::destroy_attached(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::CounterTargetSpell { .. } => {
                         stack_ops::counter_target_spell(&mut cx, effect)?
                     }

@@ -606,7 +606,9 @@ pub(super) fn effect_target_legal_at_resolution(
         | SpellEffectKind::PreventNextDamage { target, .. } => {
             target_filter_legal(engine, target, tid, caster, source)
         }
-        SpellEffectKind::DestroyTarget { target } | SpellEffectKind::Equip { target } => {
+        SpellEffectKind::DestroyTarget { target }
+        | SpellEffectKind::DestroyAttached { target, .. }
+        | SpellEffectKind::Equip { target } => {
             target_filter_legal(engine, target, tid, caster, source)
         }
         SpellEffectKind::PumpTarget {
@@ -705,7 +707,8 @@ pub(super) fn validate_effect_targets(
                 "creature damage targets require grouped target-role validation",
             ));
         }
-        SpellEffectKind::DestroyTarget { target: filter } => {
+        SpellEffectKind::DestroyTarget { target: filter }
+        | SpellEffectKind::DestroyAttached { target: filter, .. } => {
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one target"));
             }
@@ -1119,6 +1122,7 @@ pub(super) fn spell_target_legality_error(
         // Filter-based targeted effects share one legality path; the filter carries any
         // characteristic restriction (creature/player, `tapped`, `not_artifact`, hexproof/shroud).
         SpellEffectKind::DestroyTarget { target: filter }
+        | SpellEffectKind::DestroyAttached { target: filter, .. }
         | SpellEffectKind::DamageTarget { target: filter, .. }
         | SpellEffectKind::DamageTargets { target: filter, .. }
         | SpellEffectKind::SkipNextUntap { target: filter }
