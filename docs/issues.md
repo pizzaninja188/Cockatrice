@@ -85,10 +85,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Add a reusable way for resolution effects to enumerate and affect attachments of a specified kind on a chosen permanent. Calibration evidence: Turn to Slag. Revalidate the target and attachment set independently, preserve deterministic ordering for simultaneous zone moves, and satisfy the two-card-or-mechanic reuse gate before adding a new effect primitive.
   - Priority: Low
 
-- [ ] #85 [feature] Creature-deals-damage-equal-to-power effects
-  - Details: Add a reusable effect in which a selected creature deals damage equal to its current power to another selected creature, using the shipped grouped-targeting model for independently filtered distinct targets. Calibration evidence: Hunter's Edge and Rabid Bite. Determine power and source characteristics at resolution, handle a missing source or target legally, and attribute damage to the creature for downstream triggers and prevention.
-  - Priority: Low
-
 - [ ] #86 [feature] Related-player effect recipients
   - Details: Add recipient expressions for the controller of a target or blocking creature, the defending player or planeswalker associated with an attacker, and each opponent attacking an enchanted player. Calibration evidence: Chandra's Outrage, Gloom Sower's secondary controller-recipient gap, Scorch Spitter, Curse of Opulence, and Curse of Disturbance. Issue #94 shipped typed player attachment identity and the two Curses as partial cards; this issue retains their controller-created reward plus each-attacking-opponent reward after #63 supplies the attack trigger context. Derive recipients from engine identities at the event or resolution time required by the effect, with controller-aware multiplayer coverage.
   - Priority: Low

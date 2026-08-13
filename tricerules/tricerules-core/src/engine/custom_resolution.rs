@@ -7,7 +7,9 @@ use super::resolution::{
     counter_stack_spell, permanent_moved_event, sacrifice_permanent,
     seat_resolved_spell_last_in_graveyard,
 };
-use super::targeting::{validate_ability_targets, validate_spell_targets, TargetSourceIdentity};
+use super::targeting::{
+    capture_stack_target, validate_ability_targets, validate_spell_targets, TargetSourceIdentity,
+};
 use super::*;
 
 impl GameEngine {
@@ -135,12 +137,7 @@ impl GameEngine {
             card_id: card_id.clone(),
             targets: targets
                 .iter()
-                .map(|target| StackTarget {
-                    object_id: target.object_id,
-                    group_index: target.group_index,
-                    damage_amount: target.damage_amount,
-                    kind: target.kind,
-                })
+                .map(|target| capture_stack_target(self, target))
                 .collect(),
             ability_text: Some(ability_text.clone()),
             source_permanent_id: Some(source_id),

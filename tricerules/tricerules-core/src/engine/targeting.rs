@@ -28,6 +28,68 @@ pub(super) fn effective_target_groups(
     }
 }
 
+/// Resolve each authored group reference to the target-filter role it binds. Repeating one effect
+/// index in successive groups binds successive filters returned by `target_filters()`.
+pub(super) fn target_group_bindings(
+    effects: &[SpellEffectKind],
+    targeting: Option<&TargetingDef>,
+) -> Vec<Vec<(usize, usize)>> {
+    let groups = effective_target_groups(effects, targeting);
+    let mut occurrences = vec![0usize; effects.len()];
+    groups
+        .iter()
+        .map(|group| {
+            group
+                .effect_indices
+                .iter()
+                .filter_map(|&effect_index| {
+                    let effect_index = effect_index as usize;
+                    let filter_index = *occurrences.get(effect_index)?;
+                    occurrences[effect_index] += 1;
+                    Some((effect_index, filter_index))
+                })
+                .collect()
+        })
+        .collect()
+}
+
+pub(super) fn capture_stack_target(engine: &GameEngine, target: &rv1::TargetRef) -> StackTarget {
+    let kind = rv1::TargetRefKind::try_from(target.kind).unwrap_or(rv1::TargetRefKind::Unspecified);
+    let object_target = match kind {
+        rv1::TargetRefKind::Player => false,
+        rv1::TargetRefKind::Permanent
+        | rv1::TargetRefKind::Stack
+        | rv1::TargetRefKind::Graveyard => true,
+        rv1::TargetRefKind::Unspecified => engine.state.objects.contains_key(&target.object_id),
+    };
+    StackTarget {
+        object_id: target.object_id,
+        group_index: target.group_index,
+        damage_amount: target.damage_amount,
+        kind: target.kind,
+        zone_change_generation: object_target.then(|| {
+            engine
+                .state
+                .zone_change_generation
+                .get(&target.object_id)
+                .copied()
+                .unwrap_or(0)
+        }),
+    }
+}
+
+pub(super) fn stack_target_identity_is_current(engine: &GameEngine, target: &StackTarget) -> bool {
+    target.zone_change_generation.is_none_or(|generation| {
+        engine
+            .state
+            .zone_change_generation
+            .get(&target.object_id)
+            .copied()
+            .unwrap_or(0)
+            == generation
+    })
+}
+
 /// The object that sourced a targeted spell or ability, captured at the moment targets are
 /// chosen. Object ids are stable across zone changes in this engine, so CR 400.7 identity also
 /// requires the source's zone-change generation.
@@ -231,6 +293,62 @@ fn target_controller_matches(
         TargetController::Any => true,
         TargetController::You => target_controller == ability_controller,
         TargetController::Opponent => state.are_opponents(target_controller, ability_controller),
+        TargetController::NotYou => target_controller != ability_controller,
+    }
+}
+
+pub(super) fn effect_target_legal_for_binding(
+    engine: &GameEngine,
+    effect: &SpellEffectKind,
+    filter_index: usize,
+    tid: ObjectId,
+    caster: PlayerId,
+    source: TargetSourceIdentity,
+) -> bool {
+    match effect {
+        SpellEffectKind::CreatureDealsDamageEqualToPower {
+            source: source_filter,
+            target,
+        } => [source_filter, target]
+            .get(filter_index)
+            .is_some_and(|filter| target_filter_legal(engine, filter, tid, caster, source)),
+        _ if filter_index == 0 => {
+            effect_target_legal_at_resolution(engine, effect, tid, caster, source)
+        }
+        _ => false,
+    }
+}
+
+fn spell_target_legality_error_for_binding(
+    engine: &GameEngine,
+    effect: &SpellEffectKind,
+    filter_index: usize,
+    tid: ObjectId,
+    caster: PlayerId,
+    source: TargetSourceIdentity,
+) -> Result<(), EngineError> {
+    match effect {
+        SpellEffectKind::CreatureDealsDamageEqualToPower {
+            source: source_filter,
+            target,
+        } => {
+            let filter = match filter_index {
+                0 => source_filter,
+                1 => target,
+                _ => {
+                    return Err(EngineError::Illegal(
+                        "unknown target role for damage effect",
+                    ))
+                }
+            };
+            if target_filter_legal(engine, filter, tid, caster, source) {
+                Ok(())
+            } else {
+                Err(EngineError::Illegal("illegal creature damage target"))
+            }
+        }
+        _ if filter_index == 0 => spell_target_legality_error(engine, effect, tid, caster, source),
+        _ => Err(EngineError::Illegal("unknown target role for effect")),
     }
 }
 
@@ -468,6 +586,13 @@ pub(super) fn effect_target_legal_at_resolution(
     source: TargetSourceIdentity,
 ) -> bool {
     match effect {
+        SpellEffectKind::CreatureDealsDamageEqualToPower {
+            source: damage_source,
+            target,
+        } => {
+            target_filter_legal(engine, damage_source, tid, caster, source)
+                || target_filter_legal(engine, target, tid, caster, source)
+        }
         SpellEffectKind::DamageTarget { target, .. }
         | SpellEffectKind::DamageTargets { target, .. }
         | SpellEffectKind::TargetPlayerGainsLife { target, .. }
@@ -570,6 +695,11 @@ pub(super) fn validate_effect_targets(
     targets: &[rv1::TargetRef],
 ) -> Result<(), EngineError> {
     match effect {
+        SpellEffectKind::CreatureDealsDamageEqualToPower { .. } => {
+            return Err(EngineError::Illegal(
+                "creature damage targets require grouped target-role validation",
+            ));
+        }
         SpellEffectKind::DestroyTarget { target: filter } => {
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one target"));
@@ -830,6 +960,7 @@ fn validate_grouped_targets(
     ability: bool,
 ) -> Result<(), EngineError> {
     let groups = effective_target_groups(effects, targeting);
+    let bindings = target_group_bindings(effects, targeting);
     if groups.is_empty() {
         return if targets.is_empty() {
             Ok(())
@@ -871,13 +1002,17 @@ fn validate_grouped_targets(
             if !seen.insert(target.object_id) {
                 return Err(EngineError::Illegal("duplicate target in target group"));
             }
-            for &effect_index in &group.effect_indices {
-                let effect = effects
-                    .get(effect_index as usize)
-                    .ok_or(EngineError::Illegal(
-                        "target group references an unknown effect",
-                    ))?;
-                if ability {
+            for &(effect_index, filter_index) in &bindings[group_index] {
+                let effect = effects.get(effect_index).ok_or(EngineError::Illegal(
+                    "target group references an unknown effect",
+                ))?;
+                if ability
+                    && !matches!(
+                        effect,
+                        SpellEffectKind::CreatureDealsDamageEqualToPower { .. }
+                    )
+                {
+                    debug_assert_eq!(filter_index, 0);
                     validate_effect_targets(
                         engine,
                         caster,
@@ -886,7 +1021,14 @@ fn validate_grouped_targets(
                         std::slice::from_ref(*target),
                     )?;
                 } else {
-                    spell_target_legality_error(engine, effect, target.object_id, caster, source)?;
+                    spell_target_legality_error_for_binding(
+                        engine,
+                        effect,
+                        filter_index,
+                        target.object_id,
+                        caster,
+                        source,
+                    )?;
                 }
             }
         }
@@ -953,6 +1095,11 @@ pub(super) fn spell_target_legality_error(
     source: TargetSourceIdentity,
 ) -> Result<(), EngineError> {
     match effect {
+        SpellEffectKind::CreatureDealsDamageEqualToPower { .. } => {
+            return Err(EngineError::Illegal(
+                "creature damage targets require grouped target-role validation",
+            ));
+        }
         // Filter-based targeted effects share one legality path; the filter carries any
         // characteristic restriction (creature/player, `tapped`, `not_artifact`, hexproof/shroud).
         SpellEffectKind::DestroyTarget { target: filter }
@@ -1132,18 +1279,30 @@ pub(super) fn compute_spell_targets(
         }
     }
 
+    let bindings = target_group_bindings(effects, targeting);
     let groups = effective_target_groups(effects, targeting)
         .into_iter()
         .enumerate()
         .map(|(group_index, group)| {
-            let referenced = group
-                .effect_indices
+            let referenced = bindings[group_index]
                 .iter()
-                .filter_map(|&index| effects.get(index as usize))
+                .filter_map(|&(effect_index, filter_index)| {
+                    effects
+                        .get(effect_index)
+                        .map(|effect| (effect, filter_index))
+                })
                 .collect::<Vec<_>>();
             let legal = |object_id| {
-                referenced.iter().all(|effect| {
-                    spell_target_legality_error(engine, effect, object_id, caster, source).is_ok()
+                referenced.iter().all(|(effect, filter_index)| {
+                    spell_target_legality_error_for_binding(
+                        engine,
+                        effect,
+                        *filter_index,
+                        object_id,
+                        caster,
+                        source,
+                    )
+                    .is_ok()
                 })
             };
             let mut permanent_ids = Vec::new();

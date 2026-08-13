@@ -1,7 +1,7 @@
 use crate::card_def::{CardDefinition, Layout, RawCardDefinition};
 use crate::primitives::{
     AbilityCost, AdditionalCost, EffectContext, FaceChangeAction, InterveningIf, SpellEffectKind,
-    StaticAbilityDef, TargetController, TargetKind,
+    StaticAbilityDef, TargetController, TargetKind, TargetingDef,
 };
 use crate::token_def::TokenDefinition;
 use once_cell::sync::Lazy;
@@ -183,14 +183,11 @@ impl CardRegistry {
                         reason,
                     }
                 })?;
-                if let Some(targeting) = &face.targeting {
-                    targeting.validate(&face.spell_effect).map_err(|reason| {
-                        RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason,
-                        }
+                TargetingDef::validate_optional(face.targeting.as_ref(), &face.spell_effect)
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
                     })?;
-                }
                 if let Some(modal) = &face.modal_spell {
                     if modal.min_modes == 0
                         || modal.max_modes < modal.min_modes
@@ -239,14 +236,11 @@ impl CardRegistry {
                                 reason,
                             }
                         })?;
-                        if let Some(targeting) = &mode.targeting {
-                            targeting.validate(&mode.effects).map_err(|reason| {
-                                RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason,
-                                }
+                        TargetingDef::validate_optional(mode.targeting.as_ref(), &mode.effects)
+                            .map_err(|reason| RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason,
                             })?;
-                        }
                     }
                 }
                 // CR 604.2: static abilities exist only on permanents (they generate continuous
@@ -482,14 +476,12 @@ impl CardRegistry {
                             .map(|ability| (&ability.effect, ability.targeting.as_ref())),
                     )
                 {
-                    if let Some(targeting) = targeting {
-                        targeting.validate(effects).map_err(|reason| {
-                            RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason,
-                            }
-                        })?;
-                    }
+                    TargetingDef::validate_optional(targeting, effects).map_err(|reason| {
+                        RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason,
+                        }
+                    })?;
                 }
                 // Every CreateTokens effect must name a loaded token (an uncreatable id is a bug).
                 let all_effects = face

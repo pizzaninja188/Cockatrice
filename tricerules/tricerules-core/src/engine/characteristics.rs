@@ -288,6 +288,7 @@ pub(super) fn effect_affects(
                     TargetController::Opponent => {
                         state.are_opponents(characteristics.controller, *reference_player)
                     }
+                    TargetController::NotYou => characteristics.controller != *reference_player,
                 }
                 && permanent_matches_filter_characteristics(state, filter, oid, characteristics)
         }

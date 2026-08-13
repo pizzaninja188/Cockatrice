@@ -273,9 +273,9 @@ enum GameEvent {
         attacking_player: PlayerId,
         attacker_ids: Vec<ObjectId>,
     },
-    CombatDamageToPlayer {
-        attacker_id: ObjectId,
-        defender_id: PlayerId,
+    /// One source-recipient occurrence of damage that was actually dealt after prevention.
+    DamageDealt {
+        event: damage::DamageEvent,
     },
     /// CR 503.1a: an upkeep step began. Fired before the active player gets priority, so every
     /// ability that triggered at the beginning of the upkeep is already on the stack when they

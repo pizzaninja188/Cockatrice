@@ -804,54 +804,7 @@ impl GameEngine {
                 return Ok(finish_with_events(self, events));
             }
         };
-        let has_combat = completed
-            .iter()
-            .any(|damage| damage.spec.event.classification == DamageClassification::Combat);
-        let mut lifelink_by_source: BTreeMap<(ObjectId, PlayerId), u32> = BTreeMap::new();
-        let mut trigger_events = Vec::new();
-        for damage in &completed {
-            self.commit_damage_result(
-                &damage.spec.event,
-                damage.result,
-                damage.spec.source_has_deathtouch,
-                &mut events,
-            );
-            if damage.spec.event.classification == DamageClassification::Combat
-                && damage.spec.source_has_lifelink
-                && damage.result.dealt > 0
-            {
-                *lifelink_by_source
-                    .entry((
-                        damage.spec.event.source.object_id,
-                        damage.spec.event.source.controller,
-                    ))
-                    .or_insert(0) += damage.result.dealt;
-            }
-            if damage.spec.event.classification == DamageClassification::Combat {
-                if let DamageRecipient::Player(defender_id) = damage.spec.event.recipient {
-                    if damage.result.dealt > 0 {
-                        trigger_events.push(GameEvent::CombatDamageToPlayer {
-                            attacker_id: damage.spec.event.source.object_id,
-                            defender_id,
-                        });
-                    }
-                }
-            }
-        }
-        if has_combat {
-            for ((_, controller), dealt) in lifelink_by_source {
-                if let Some(event) = super::resolution::life::apply_life_gain_without_triggers(
-                    self,
-                    &mut events,
-                    controller,
-                    dealt,
-                    "lifelink",
-                ) {
-                    trigger_events.push(event);
-                }
-            }
-            self.fire_triggers(&trigger_events);
-        }
+        self.commit_completed_damage_batch(&completed, &mut events);
         self.complete_parked_resolution(pending.item, pending.resume_effect_index, events)
     }
 
@@ -914,14 +867,38 @@ impl GameEngine {
         completed: &[CompletedDamage],
         events: &mut Vec<rv1::RuledEvent>,
     ) {
+        let mut lifelink_by_source: BTreeMap<(ObjectId, PlayerId), u32> = BTreeMap::new();
+        let mut trigger_events = Vec::new();
         for damage in completed {
-            self.commit_damage_result(
+            let dealt = self.commit_damage_result(
                 &damage.spec.event,
                 damage.result,
                 damage.spec.source_has_deathtouch,
                 events,
             );
+            if dealt == 0 {
+                continue;
+            }
+            if damage.spec.source_has_lifelink {
+                *lifelink_by_source
+                    .entry((
+                        damage.spec.event.source.object_id,
+                        damage.spec.event.source.controller,
+                    ))
+                    .or_insert(0) += dealt;
+            }
+            let mut event = damage.spec.event.clone();
+            event.amount = dealt;
+            trigger_events.push(GameEvent::DamageDealt { event });
         }
+        for ((_, controller), dealt) in lifelink_by_source {
+            if let Some(event) = super::resolution::life::apply_life_gain_without_triggers(
+                self, events, controller, dealt, "lifelink",
+            ) {
+                trigger_events.push(event);
+            }
+        }
+        self.fire_triggers(&trigger_events);
     }
 
     pub(crate) fn add_damage_prevention(

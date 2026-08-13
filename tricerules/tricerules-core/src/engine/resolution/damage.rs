@@ -1,25 +1,6 @@
 use super::*;
 use crate::engine::damage::{DamageEvent, DamageRecipient, DamageSpec};
 
-/// The single funnel for non-combat damage dealt to a creature. Prevention is applied before
-/// either marked damage or the CR 702.2b deathtouch history bit is recorded.
-pub(super) fn apply_damage_to_permanent(
-    engine: &mut GameEngine,
-    events: &mut Vec<rv1::RuledEvent>,
-    item: &StackItem,
-    event: DamageEvent,
-    source_has_deathtouch: bool,
-) -> Option<u32> {
-    let DamageRecipient::Permanent(target) = event.recipient else {
-        return Some(0);
-    };
-    let result =
-        engine.process_or_park_damage_event(item, event.clone(), source_has_deathtouch, events)?;
-    let dealt = engine.commit_damage_result(&event, result, source_has_deathtouch, events);
-    debug_assert_eq!(event.recipient, DamageRecipient::Permanent(target));
-    Some(dealt)
-}
-
 pub(super) fn damage_target(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -30,6 +11,9 @@ pub(super) fn damage_target(
     let source_has_deathtouch = cx
         .engine
         .resolving_source_has_keyword(cx.top, Keyword::Deathtouch);
+    let source_has_lifelink = cx
+        .engine
+        .resolving_source_has_keyword(cx.top, Keyword::Lifelink);
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let targets = cx.targets;
@@ -42,46 +26,85 @@ pub(super) fn damage_target(
         AmountContext::for_stack_item(top, top.controller)
             .with_previous_effect_result(cx.previous_effect_result),
     );
-    if let Some(&tid) = targets.first() {
-        if let Some(pi) = engine.state.player_idx(tid as i32) {
-            let pid = engine.state.players[pi].id;
-            let event = DamageEvent::noncombat(
-                resolving_damage_source_id(top),
-                top.controller,
-                spell_label,
-                DamageRecipient::Player(pid),
-                amount,
-            );
-            let Some(result) = engine.process_or_park_damage_event(
-                top,
-                event.clone(),
-                source_has_deathtouch,
-                events,
-            ) else {
-                return Ok(EffectOutcome::Suspended);
-            };
-            engine.commit_damage_result(&event, result, source_has_deathtouch, events);
-        } else {
-            if apply_damage_to_permanent(
-                engine,
-                events,
-                top,
-                DamageEvent::noncombat(
-                    resolving_damage_source_id(top),
-                    top.controller,
-                    spell_label,
-                    DamageRecipient::Permanent(tid),
-                    amount,
-                ),
-                source_has_deathtouch,
-            )
-            .is_none()
-            {
-                return Ok(EffectOutcome::Suspended);
-            }
-        }
-    }
+    let Some(&tid) = targets.first() else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let recipient = engine
+        .state
+        .player_idx(tid as i32)
+        .map(|index| DamageRecipient::Player(engine.state.players[index].id))
+        .unwrap_or(DamageRecipient::Permanent(tid));
+    let damage = vec![DamageSpec {
+        event: DamageEvent::noncombat(
+            resolving_damage_source_id(top),
+            top.controller,
+            spell_label,
+            recipient,
+            amount,
+        ),
+        source_has_deathtouch,
+        source_has_lifelink,
+    }];
+    let Some(completed) = engine.process_or_park_damage_batch(top, damage, events) else {
+        return Ok(EffectOutcome::Suspended);
+    };
+    engine.commit_completed_damage_batch(&completed, events);
 
+    Ok(EffectOutcome::Continue)
+}
+
+pub(super) fn creature_deals_damage_equal_to_power(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::CreatureDealsDamageEqualToPower { .. } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let Some(source) = cx
+        .targets_by_filter
+        .first()
+        .and_then(|targets| targets.first())
+        .copied()
+    else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let Some(recipient) = cx
+        .targets_by_filter
+        .get(1)
+        .and_then(|targets| targets.first())
+        .copied()
+    else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let Some(characteristics) = cx.engine.characteristics(source) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    if !characteristics.is_creature() {
+        return Ok(EffectOutcome::Continue);
+    }
+    let amount = characteristics.power.unwrap_or(0);
+    let controller = characteristics.controller;
+    let source_has_deathtouch = cx.engine.effective_has_keyword(source, Keyword::Deathtouch);
+    let source_has_lifelink = cx.engine.effective_has_keyword(source, Keyword::Lifelink);
+    let damage = vec![DamageSpec {
+        event: DamageEvent::noncombat(
+            source,
+            controller,
+            object_display_name(&cx.engine.state, cx.engine.registry, source),
+            DamageRecipient::Permanent(recipient),
+            amount,
+        ),
+        source_has_deathtouch,
+        source_has_lifelink,
+    }];
+    let Some(completed) = cx
+        .engine
+        .process_or_park_damage_batch(cx.top, damage, cx.events)
+    else {
+        return Ok(EffectOutcome::Suspended);
+    };
+    cx.engine
+        .commit_completed_damage_batch(&completed, cx.events);
     Ok(EffectOutcome::Continue)
 }
 
@@ -101,6 +124,9 @@ pub(super) fn damage_targets(
     let source_has_deathtouch = cx
         .engine
         .resolving_source_has_keyword(cx.top, Keyword::Deathtouch);
+    let source_has_lifelink = cx
+        .engine
+        .resolving_source_has_keyword(cx.top, Keyword::Lifelink);
     let target_source = TargetSourceIdentity::for_stack_item(cx.engine, cx.top);
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
@@ -177,7 +203,7 @@ pub(super) fn damage_targets(
                 damage_amount,
             ),
             source_has_deathtouch,
-            source_has_lifelink: false,
+            source_has_lifelink,
         });
     }
     let Some(completed) = engine.process_or_park_damage_batch(cx.top, damage, events) else {
@@ -205,6 +231,9 @@ pub(super) fn damage_player(
         AmountContext::for_stack_item(cx.top, cx.controller)
             .with_previous_effect_result(cx.previous_effect_result),
     );
+    let source_has_lifelink = cx
+        .engine
+        .resolving_source_has_keyword(cx.top, Keyword::Lifelink);
     // CR 101.4: APNAP for the multi-player recipients, so the log and the life-loss order are
     // reproducible in a replay.
     let recipients: Vec<PlayerId> = match who {
@@ -238,7 +267,7 @@ pub(super) fn damage_player(
                 amount,
             ),
             source_has_deathtouch: false,
-            source_has_lifelink: false,
+            source_has_lifelink,
         })
         .collect();
     let Some(completed) = cx

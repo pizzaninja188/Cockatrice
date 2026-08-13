@@ -899,8 +899,9 @@ impl GameEngine {
         let mut total_life_lost: i32 = 0;
         // (controller_id, amount) pairs — collected during damage assignment, applied after.
         let mut lifelink_gains: Vec<(PlayerId, u32)> = Vec::new();
-        // (attacker_id, defending_player_id) — collected for combat-damage-to-player triggers.
-        let mut combat_dmg_to_player: Vec<(ObjectId, PlayerId)> = Vec::new();
+        // Finalized source-recipient occurrences, collected for damage triggers after the
+        // simultaneous combat batch has been applied.
+        let mut damage_dealt_events: Vec<DamageEvent> = Vec::new();
 
         // CR 510.4 ASSIGNMENT rule: in the first-strike pass, only creatures with FirstStrike
         // or DoubleStrike assign damage; in the regular pass, creatures that did NOT assign
@@ -958,7 +959,13 @@ impl GameEngine {
                         total_life_lost += p as i32;
                     }
                     if p > 0 {
-                        combat_dmg_to_player.push((att, dfd));
+                        damage_dealt_events.push(DamageEvent::combat(
+                            att,
+                            att_controller,
+                            object_display_name(&self.state, self.registry, att),
+                            DamageRecipient::Player(dfd),
+                            p,
+                        ));
                     }
                     // CR 702.15b: attacker with lifelink causes its controller to gain that much life.
                     if att_has_lifelink && p > 0 {
@@ -997,6 +1004,15 @@ impl GameEngine {
                         return Ok(());
                     };
                     let dmg_to_att = result.dealt;
+                    if dmg_to_att > 0 {
+                        damage_dealt_events.push(DamageEvent::combat(
+                            blk,
+                            blk_controller,
+                            object_display_name(&self.state, self.registry, blk),
+                            DamageRecipient::Permanent(att),
+                            dmg_to_att,
+                        ));
+                    }
                     if let Some(af) = self.state.objects.get_mut(&att) {
                         af.damage += dmg_to_att;
                         // CR 702.2b / CR 704.5h: any damage from a deathtouch source is lethal.
@@ -1025,6 +1041,15 @@ impl GameEngine {
                         return Ok(());
                     };
                     let dmg_to_blk = result.dealt;
+                    if dmg_to_blk > 0 {
+                        damage_dealt_events.push(DamageEvent::combat(
+                            att,
+                            att_controller,
+                            object_display_name(&self.state, self.registry, att),
+                            DamageRecipient::Permanent(blk),
+                            dmg_to_blk,
+                        ));
+                    }
                     if let Some(bf) = self.state.objects.get_mut(&blk) {
                         bf.damage += dmg_to_blk;
                         // CR 702.2b: any damage from attacker with deathtouch is lethal.
@@ -1095,6 +1120,15 @@ impl GameEngine {
                     };
                     let dealt = result.dealt;
                     total_blocker_damage += dealt;
+                    if dealt > 0 {
+                        damage_dealt_events.push(DamageEvent::combat(
+                            *blocker_id,
+                            *blocker_controller,
+                            object_display_name(&self.state, self.registry, *blocker_id),
+                            DamageRecipient::Permanent(att),
+                            dealt,
+                        ));
+                    }
                     if *has_deathtouch && dealt > 0 {
                         any_blocker_deathtouch_hit = true;
                     }
@@ -1129,6 +1163,15 @@ impl GameEngine {
                             return Ok(());
                         };
                         let dmg_to_blk = result.dealt;
+                        if dmg_to_blk > 0 {
+                            damage_dealt_events.push(DamageEvent::combat(
+                                att,
+                                att_controller,
+                                object_display_name(&self.state, self.registry, att),
+                                DamageRecipient::Permanent(blk),
+                                dmg_to_blk,
+                            ));
+                        }
                         if let Some(bf) = self.state.objects.get_mut(&blk) {
                             bf.damage += dmg_to_blk;
                             // CR 702.2b: any damage from attacker with deathtouch is lethal.
@@ -1165,7 +1208,13 @@ impl GameEngine {
                             // CR 510: trample excess is combat damage the attacker deals to the
                             // defending player, so it fires "deals combat damage to a player" triggers
                             // exactly like an unblocked hit.
-                            combat_dmg_to_player.push((att, dfd));
+                            damage_dealt_events.push(DamageEvent::combat(
+                                att,
+                                att_controller,
+                                object_display_name(&self.state, self.registry, att),
+                                DamageRecipient::Player(dfd),
+                                trample_after,
+                            ));
                         }
                         total_att_lifelink += trample_after;
                     }
@@ -1206,12 +1255,11 @@ impl GameEngine {
                 trigger_events.push(event);
             }
         }
-        trigger_events.extend(combat_dmg_to_player.into_iter().map(
-            |(attacker_id, defender_id)| GameEvent::CombatDamageToPlayer {
-                attacker_id,
-                defender_id,
-            },
-        ));
+        trigger_events.extend(
+            damage_dealt_events
+                .into_iter()
+                .map(|event| GameEvent::DamageDealt { event }),
+        );
         self.fire_triggers(&trigger_events);
         Ok(())
     }

@@ -64,9 +64,32 @@ impl TargetingDef {
             }
         }
         for (index, effect) in effects.iter().enumerate() {
-            if effect.needs_target() && referenced[index] != 1 {
-                return Err("every targeted effect must belong to exactly one target group".into());
+            let expected = if effect.needs_target() {
+                effect.target_filters().len().max(1) as u32
+            } else {
+                0
+            };
+            if referenced[index] != expected {
+                return Err(format!(
+                    "targeted effect {index} must belong to exactly {expected} target group(s)"
+                ));
             }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn validate_optional(
+        targeting: Option<&Self>,
+        effects: &[SpellEffectKind],
+    ) -> Result<(), String> {
+        if let Some(targeting) = targeting {
+            return targeting.validate(effects);
+        }
+        if effects
+            .iter()
+            .any(|effect| effect.target_filters().len() > 1)
+        {
+            return Err("an effect with multiple target roles requires grouped targeting".into());
         }
         Ok(())
     }
@@ -114,6 +137,9 @@ pub enum TargetController {
     You,
     /// A permanent controlled by an opponent of the spell or ability's controller.
     Opponent,
+    /// A permanent not controlled by the spell or ability's controller. Unlike `Opponent`, this
+    /// remains correct for teammates in player-set-aware formats.
+    NotYou,
 }
 
 /// Inclusive comparison against a permanent's current derived power.

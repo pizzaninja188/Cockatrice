@@ -528,6 +528,13 @@ pub enum SpellEffectKind {
         amount: Amount,
         target: TargetFilter,
     },
+    /// A chosen creature deals noncombat damage equal to its current power to another chosen
+    /// creature. Both roles are targets, but the selected creature rather than the resolving
+    /// spell is the damage source. Cards: Rabid Bite and Hunter's Edge.
+    CreatureDealsDamageEqualToPower {
+        source: TargetFilter,
+        target: TargetFilter,
+    },
     /// CR 120.3a: deal `amount` damage to a player, chosen by `who`. **Untargeted** — "that
     /// player" and "you" name a player without targeting it (CR 115.1), so this is deliberately
     /// absent from `spell_effect_kind_needs_target` and from [`Self::target_filters`], exactly
@@ -1000,6 +1007,7 @@ impl SpellEffectKind {
                 matches!(scope, CombatRestrictionScope::Chosen(_))
             }
             SpellEffectKind::DamageTarget { .. }
+            | SpellEffectKind::CreatureDealsDamageEqualToPower { .. }
             | SpellEffectKind::DamageTargets { .. }
             | SpellEffectKind::DestroyTarget { .. }
             | SpellEffectKind::ExileTarget
@@ -1030,6 +1038,9 @@ impl SpellEffectKind {
     /// variants instead of repeating the list).
     pub fn target_filters(&self) -> Vec<&TargetFilter> {
         match self {
+            SpellEffectKind::CreatureDealsDamageEqualToPower { source, target } => {
+                vec![source, target]
+            }
             SpellEffectKind::DamageTarget { target, .. }
             | SpellEffectKind::DamageTargets { target, .. }
             | SpellEffectKind::DestroyTarget { target }
@@ -1161,6 +1172,13 @@ impl SpellEffectKind {
                             .into(),
                     );
                 }
+            }
+            SpellEffectKind::CreatureDealsDamageEqualToPower { source, target }
+                if source.kind != TargetKind::Creature || target.kind != TargetKind::Creature =>
+            {
+                return Err(
+                    "CreatureDealsDamageEqualToPower requires two creature target filters".into(),
+                );
             }
             SpellEffectKind::PumpAll { filter, .. }
             | SpellEffectKind::GrantKeywordsAll { filter, .. } => filter.validate()?,

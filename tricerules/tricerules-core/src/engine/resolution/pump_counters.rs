@@ -218,6 +218,11 @@ pub(super) fn grant_keywords_all_permanents(
                 "opponent scope is not supported by GrantKeywordsAllPermanents",
             ));
         }
+        TargetController::NotYou => affected.retain(|oid| {
+            cx.engine
+                .characteristics(*oid)
+                .is_some_and(|value| value.controller != cx.controller)
+        }),
     }
     let keyword_names: Vec<&str> = keywords.iter().map(|keyword| keyword.as_str()).collect();
     for oid in affected {

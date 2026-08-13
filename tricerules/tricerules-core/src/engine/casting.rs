@@ -2,7 +2,9 @@ use super::combat::priority_locked_for_combat_declaration;
 use super::events::{ev_log, ev_priority_changed, format_spell_targets_log, object_display_name};
 use super::legal_actions::fill_legal;
 use super::resolution::{permanent_moved_event, sacrifice_permanent};
-use super::targeting::{validate_ability_targets, validate_spell_targets, TargetSourceIdentity};
+use super::targeting::{
+    capture_stack_target, validate_ability_targets, validate_spell_targets, TargetSourceIdentity,
+};
 use super::*;
 
 #[derive(Debug, Clone)]
@@ -521,12 +523,7 @@ impl GameEngine {
                     targets: selection
                         .targets
                         .iter()
-                        .map(|target| StackTarget {
-                            object_id: target.object_id,
-                            group_index: target.group_index,
-                            damage_amount: target.damage_amount,
-                            kind: target.kind,
-                        })
+                        .map(|target| capture_stack_target(self, target))
                         .collect(),
                 });
             }
@@ -606,12 +603,7 @@ impl GameEngine {
 
         let stack_targets = public_targets
             .iter()
-            .map(|target| StackTarget {
-                object_id: target.object_id,
-                group_index: target.group_index,
-                damage_amount: target.damage_amount,
-                kind: target.kind,
-            })
+            .map(|target| capture_stack_target(self, target))
             .collect();
         let tgt_line = format_spell_targets_log(&self.state, self.registry, &trefs);
 
@@ -1022,12 +1014,7 @@ impl GameEngine {
             card_id: card_id.clone(),
             targets: targets
                 .iter()
-                .map(|target| StackTarget {
-                    object_id: target.object_id,
-                    group_index: target.group_index,
-                    damage_amount: target.damage_amount,
-                    kind: target.kind,
-                })
+                .map(|target| capture_stack_target(self, target))
                 .collect(),
             ability_text: Some(ability_text.clone()),
             source_permanent_id: Some(permanent_id),

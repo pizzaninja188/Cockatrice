@@ -1,3 +1,4 @@
+use super::damage::{DamageClassification, DamageRecipient};
 use super::events::{ev_log, ev_trigger_order_required};
 use super::targeting::{
     compute_spell_targets, spell_effect_kind_needs_target, TargetSourceIdentity,
@@ -395,28 +396,30 @@ impl GameEngine {
                 }
                 out
             }
-            GameEvent::CombatDamageToPlayer {
-                attacker_id,
-                defender_id,
-            } => {
-                let Some(obj) = self.state.objects.get(attacker_id) else {
+            GameEvent::DamageDealt { event } => {
+                let DamageRecipient::Player(defender_id) = event.recipient else {
+                    return vec![];
+                };
+                let source_id = event.source.object_id;
+                let Some(obj) = self.state.objects.get(&source_id) else {
                     return vec![];
                 };
                 let (card_id, face_index) = self
-                    .effective_card_identity(*attacker_id)
+                    .effective_card_identity(source_id)
                     .map(|(card_id, face_index)| (card_id.to_string(), face_index))
                     .unwrap_or_else(|| (obj.card_id.clone(), obj.face_up_index));
-                let controller = obj.controller;
-                let defender = *defender_id;
+                let controller = event.source.controller;
                 self.matching_triggered_abilities(
                     &card_id,
-                    *attacker_id,
+                    source_id,
                     controller,
                     face_index,
                     |tc| match tc {
-                        TriggerCondition::WheneverSelfDealsCombatDamageToPlayer => true,
+                        TriggerCondition::WheneverSelfDealsCombatDamageToPlayer => {
+                            event.classification == DamageClassification::Combat
+                        }
                         TriggerCondition::WheneverSelfDealsDamageToOpponent => {
-                            self.state.are_opponents(defender, controller)
+                            self.state.are_opponents(defender_id, controller)
                         }
                         _ => false,
                     },

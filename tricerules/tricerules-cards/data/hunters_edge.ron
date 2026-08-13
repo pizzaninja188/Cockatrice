@@ -1,0 +1,32 @@
+(
+  id: "hunters_edge",
+  name: "Hunter's Edge",
+  mana_cost: "{3}{G}",
+  types: ["Sorcery"],
+  spell_effect: [
+    PutCounters(
+      counter: PlusOnePlusOne,
+      count: 1,
+      subject: Chosen((kind: Creature, controller: You)),
+    ),
+    CreatureDealsDamageEqualToPower(
+      source: (kind: Creature, controller: You),
+      target: (kind: Creature, controller: NotYou),
+    ),
+  ],
+  targeting: Some((groups: [
+    (
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature you control",
+      effect_indices: [0, 1],
+    ),
+    (
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature you don't control",
+      effect_indices: [1],
+      distinct_from: [0],
+    ),
+  ])),
+)

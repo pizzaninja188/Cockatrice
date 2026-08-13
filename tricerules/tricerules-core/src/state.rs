@@ -525,6 +525,8 @@ pub struct StackTarget {
     pub damage_amount: u32,
     /// Authoritative presentation domain for clients. ObjectId and PlayerId share integers.
     pub kind: i32,
+    /// Generation captured when an object target was chosen. Player targets have no generation.
+    pub zone_change_generation: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
