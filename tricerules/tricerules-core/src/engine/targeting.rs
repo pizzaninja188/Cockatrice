@@ -626,6 +626,10 @@ pub(super) fn effect_target_legal_at_resolution(
             subject: EffectSubject::Chosen(target),
             ..
         }
+        | SpellEffectKind::AddTypes {
+            subject: EffectSubject::Chosen(target),
+            ..
+        }
         | SpellEffectKind::Untap {
             subject: EffectSubject::Chosen(target),
         }
@@ -645,6 +649,10 @@ pub(super) fn effect_target_legal_at_resolution(
             ..
         }
         | SpellEffectKind::GrantKeywords {
+            subject: EffectSubject::Source | EffectSubject::AttachedObject,
+            ..
+        }
+        | SpellEffectKind::AddTypes {
             subject: EffectSubject::Source | EffectSubject::AttachedObject,
             ..
         }
@@ -764,6 +772,7 @@ pub(super) fn validate_effect_targets(
         SpellEffectKind::PumpTarget { subject, .. }
         | SpellEffectKind::PutCounters { subject, .. }
         | SpellEffectKind::GrantKeywords { subject, .. }
+        | SpellEffectKind::AddTypes { subject, .. }
         | SpellEffectKind::Regenerate { subject } => match subject {
             EffectSubject::Source
             | EffectSubject::AttachedObject
@@ -1138,6 +1147,10 @@ pub(super) fn spell_target_legality_error(
             ..
         }
         | SpellEffectKind::GrantKeywords {
+            subject: EffectSubject::Chosen(filter),
+            ..
+        }
+        | SpellEffectKind::AddTypes {
             subject: EffectSubject::Chosen(filter),
             ..
         }

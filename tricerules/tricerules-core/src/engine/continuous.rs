@@ -122,6 +122,7 @@ impl GameEngine {
                     });
                 }
                 StaticAbilityDef::AttachedModifier {
+                    add_types,
                     delta_power,
                     delta_toughness,
                     keywords,
@@ -130,6 +131,16 @@ impl GameEngine {
                     doesnt_untap_during_untap_step,
                 } => {
                     let affected = AffectedScope::AttachedTo(object_id);
+                    if !add_types.is_empty() {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            source_id: Some(object_id),
+                            affected: affected.clone(),
+                            kind: ContinuousEffectKind::Layer4AddTypes(add_types),
+                            condition: None,
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
                     if delta_power != 0 || delta_toughness != 0 {
                         self.state.continuous_effects.push(ContinuousEffect {
                             source_id: Some(object_id),

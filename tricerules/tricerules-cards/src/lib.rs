@@ -15,7 +15,7 @@ pub use primitives::{
     CastTriggerPlayer, Color, ContinuousEffectKind, ControllerReference, CountExpression,
     CounterKind, EffectContext, EffectDuration, Evasion, GameCondition, Keyword, ManaAmount,
     PermanentTypeFilter, PtScale, RelativePlayerSet, TokenController, TriggerCondition,
-    TriggeredAbilityDef,
+    TriggeredAbilityDef, TypeLineAddition,
 };
 pub use registry::CardRegistry;
 pub use slug::slugify;

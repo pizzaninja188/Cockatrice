@@ -202,6 +202,68 @@ pub(super) fn grant_keywords(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn add_types(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::AddTypes { subject, addition } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let (tid, effect_source_id) = match &subject {
+        EffectSubject::Source => (
+            cx.top
+                .source_permanent_id
+                .filter(|_| cx.engine.source_is_current_object(cx.top)),
+            cx.top.source_permanent_id,
+        ),
+        EffectSubject::AttachedObject | EffectSubject::TriggerObject => (
+            resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject),
+            if matches!(subject, EffectSubject::AttachedObject) {
+                cx.top.source_permanent_id
+            } else {
+                Some(cx.top.id)
+            },
+        ),
+        EffectSubject::Chosen(target) => {
+            let tid = cx.targets.first().copied().filter(|tid| {
+                target_filter_legal_at_resolution(
+                    cx.engine,
+                    target,
+                    *tid,
+                    cx.controller,
+                    TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
+                )
+            });
+            (tid, Some(cx.top.id))
+        }
+    };
+    let Some(tid) = tid else {
+        return Ok(EffectOutcome::Continue);
+    };
+
+    let target_name = object_display_name(&cx.engine.state, cx.engine.registry, tid);
+    let mut type_names: Vec<String> = addition
+        .card_types
+        .iter()
+        .map(|card_type| card_type.as_str().to_string())
+        .collect();
+    type_names.extend(addition.creature_types.iter().cloned());
+    cx.engine.state.continuous_effects.push(ContinuousEffect {
+        source_id: effect_source_id,
+        affected: AffectedScope::Single(tid),
+        kind: ContinuousEffectKind::Layer4AddTypes(addition),
+        condition: None,
+        duration: EffectDuration::UntilEndOfTurn,
+        timestamp: cx.engine.state.command_index,
+    });
+    cx.events.push(ev_log(format!(
+        "{} adds {} to {target_name} until end of turn",
+        cx.spell_label,
+        type_names.join(", ")
+    )));
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn grant_keywords_all_permanents(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

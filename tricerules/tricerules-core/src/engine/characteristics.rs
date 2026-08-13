@@ -12,7 +12,7 @@
 //! 6. ability-adding/removing effects;
 //! 7. power/toughness CDAs, setters, modifiers, counters, then switches.
 //!
-//! Layers 1-5 and the unimplemented layer-7 sublayers are explicit identity stages today.
+//! Layers 1-3, layer 5, and the unimplemented layer-7 sublayers are explicit identity stages.
 //! CR 613.8 dependency ordering is intentionally deferred until the first effect that needs it;
 //! the `ordered_effects` boundary is the insertion point. Replacement/prevention choice ordering
 //! (CR 616) is the separate shared pipeline in `engine/replacement.rs`.
@@ -130,7 +130,7 @@ impl CharacteristicsEvaluator<'_> {
         self.apply_layer_1_copy(&mut result);
         self.apply_layer_2_control(oid, &mut result);
         self.apply_layer_3_text(&mut result);
-        self.apply_layer_4_type(&mut result);
+        self.apply_layer_4_type(oid, &mut result);
         self.apply_layer_5_color(&mut result);
         Some(result)
     }
@@ -206,7 +206,39 @@ impl CharacteristicsEvaluator<'_> {
 
     fn apply_layer_3_text(&self, _result: &mut Characteristics) {}
 
-    fn apply_layer_4_type(&self, _result: &mut Characteristics) {}
+    /// CR 205.1b / 613.1d: additive type-changing effects retain every printed and previously
+    /// added type. Equal timestamps use insertion order so replay remains deterministic.
+    fn apply_layer_4_type(&self, oid: ObjectId, result: &mut Characteristics) {
+        let mut effects: Vec<(usize, &ContinuousEffect)> = self
+            .state
+            .continuous_effects
+            .iter()
+            .enumerate()
+            .filter(|(_, effect)| matches!(effect.kind, ContinuousEffectKind::Layer4AddTypes(_)))
+            .filter(|(_, effect)| effect_affects(self.state, self.registry, effect, oid, result))
+            .filter(|(_, effect)| self.characteristic_effect_condition_holds(effect, oid, result))
+            .collect();
+        effects.sort_by_key(|(index, effect)| (effect.timestamp, *index));
+
+        for (_, effect) in effects {
+            let ContinuousEffectKind::Layer4AddTypes(addition) = &effect.kind else {
+                continue;
+            };
+            for card_type in &addition.card_types {
+                let card_type = card_type.as_str();
+                if !result.types.iter().any(|existing| existing == card_type) {
+                    result.types.push(card_type.to_string());
+                }
+            }
+            if result.is_creature() {
+                for creature_type in &addition.creature_types {
+                    if !result.types.contains(creature_type) {
+                        result.types.push(creature_type.clone());
+                    }
+                }
+            }
+        }
+    }
 
     fn apply_layer_5_color(&self, _result: &mut Characteristics) {}
 
@@ -651,6 +683,111 @@ impl GameEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tricerules_cards::TypeLineAddition;
+
+    #[test]
+    fn layer_4_additions_are_ordered_deduplicated_and_feed_later_scopes() {
+        let mut engine =
+            GameEngine::new_with_default_decks(81_003, &[0, 1], 20).expect("new engine");
+        let oid = engine.state.next_object_id;
+        engine.state.next_object_id += 1;
+        engine.state.objects.insert(
+            oid,
+            GameObject {
+                id: oid,
+                owner: 0,
+                base_controller: 0,
+                controller: 0,
+                card_id: "cavalry_drillmaster".to_string(),
+                copiable_values: None,
+                copy_revision: 0,
+                zone: Zone::Battlefield,
+                tapped: false,
+                summoning_sick: false,
+                power: Some(2),
+                toughness: Some(2),
+                damage: 0,
+                deathtouch_damage: false,
+                counters: BTreeMap::new(),
+                attached_to: None,
+                regeneration_shields: 0,
+                must_attack_if_able: false,
+                must_block_if_able: false,
+                face_up_index: 0,
+                adventure_cast_permission: None,
+            },
+        );
+        engine.state.players[0].battlefield.push(oid);
+        engine.state.continuous_effects.extend([
+            ContinuousEffect {
+                source_id: None,
+                affected: AffectedScope::Single(oid),
+                kind: ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+                    card_types: vec![PermanentTypeFilter::Artifact],
+                    creature_types: vec!["Knight".to_string()],
+                }),
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: 2,
+            },
+            ContinuousEffect {
+                source_id: None,
+                affected: AffectedScope::Single(oid),
+                kind: ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+                    card_types: vec![PermanentTypeFilter::Enchantment],
+                    creature_types: vec!["Knight".to_string()],
+                }),
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: 1,
+            },
+            ContinuousEffect {
+                source_id: None,
+                affected: AffectedScope::Single(oid),
+                kind: ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+                    card_types: vec![PermanentTypeFilter::Artifact],
+                    creature_types: vec!["Knight".to_string()],
+                }),
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: 2,
+            },
+            ContinuousEffect {
+                source_id: None,
+                affected: AffectedScope::CreaturesMatching {
+                    reference_player: 0,
+                    filter: CreatureScopeFilter {
+                        subtype: Some("Knight".to_string()),
+                        ..CreatureScopeFilter::default()
+                    },
+                    exclude: None,
+                },
+                kind: ContinuousEffectKind::PtModify {
+                    delta_power: 1,
+                    delta_toughness: 1,
+                },
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: 3,
+            },
+        ]);
+
+        let characteristics = engine.characteristics(oid).expect("bear characteristics");
+        assert_eq!(
+            characteristics.types,
+            vec!["Creature", "Human", "Knight", "Enchantment", "Artifact"]
+        );
+        assert_eq!(
+            characteristics
+                .types
+                .iter()
+                .filter(|value| value.as_str() == "Knight")
+                .count(),
+            1
+        );
+        assert_eq!(engine.effective_power(oid), Some(3));
+        assert_eq!(engine.effective_toughness(oid), Some(3));
+    }
 
     #[test]
     fn one_snapshot_applies_types_colors_layer_6_and_layer_7() {

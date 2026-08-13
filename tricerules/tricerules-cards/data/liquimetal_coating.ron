@@ -1,0 +1,20 @@
+(
+  id: "liquimetal_coating",
+  name: "Liquimetal Coating",
+  mana_cost: "{2}",
+  // Oracle checked 2026-08-13: {T}: Target permanent becomes an artifact in addition to its
+  // other types until end of turn. CR 205.1b and 613.1d.
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      costs: [Tap],
+      effect: [
+        AddTypes(
+          subject: Chosen((kind: AnyPermanent)),
+          addition: (card_types: [Artifact]),
+        ),
+      ],
+      text: "{T}: Target permanent becomes an artifact in addition to its other types until end of turn.",
+    ),
+  ],
+)

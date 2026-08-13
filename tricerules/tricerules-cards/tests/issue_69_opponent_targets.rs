@@ -41,6 +41,7 @@ fn glaring_aegis_has_complete_oracle_behavior() {
     assert_eq!(
         face.static_abilities,
         [StaticAbilityDef::AttachedModifier {
+            add_types: Default::default(),
             delta_power: 1,
             delta_toughness: 3,
             keywords: vec![],

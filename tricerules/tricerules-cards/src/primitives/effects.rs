@@ -2,7 +2,7 @@
 
 use super::{
     CardTypeFilter, Color, CreatureScopeFilter, GraveyardDestination, GraveyardFilter, Keyword,
-    TargetController, TargetFilter, TargetKind,
+    TargetController, TargetFilter, TargetKind, TypeLineAddition,
 };
 use serde::de::{EnumAccess, MapAccess, SeqAccess, VariantAccess};
 use serde::ser::SerializeStructVariant;
@@ -760,6 +760,14 @@ pub enum SpellEffectKind {
         subject: EffectSubject,
         keywords: Vec<Keyword>,
     },
+    /// CR 205.1b / 613.1d: add card types or creature subtypes until end of turn without
+    /// replacing the permanent's existing type line. Liquimetal Coating uses a chosen permanent;
+    /// source- and event-bound ability effects reuse the same subject vocabulary.
+    AddTypes {
+        #[serde(default)]
+        subject: EffectSubject,
+        addition: TypeLineAddition,
+    },
     /// CR 613 layer 6: grant keywords until end of turn to the permanents matching `filter`.
     /// The affected set is snapshotted as this effect resolves, rather than remaining dynamic.
     /// Covers Boros Charm and Heroic Intervention.
@@ -1067,6 +1075,9 @@ impl SpellEffectKind {
             } | SpellEffectKind::GrantKeywords {
                 subject: EffectSubject::AttachedObject,
                 ..
+            } | SpellEffectKind::AddTypes {
+                subject: EffectSubject::AttachedObject,
+                ..
             } | SpellEffectKind::Tap {
                 subject: EffectSubject::AttachedObject,
             } | SpellEffectKind::Untap {
@@ -1087,6 +1098,9 @@ impl SpellEffectKind {
                 subject: EffectSubject::TriggerObject,
                 ..
             } | SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::TriggerObject,
+                ..
+            } | SpellEffectKind::AddTypes {
                 subject: EffectSubject::TriggerObject,
                 ..
             } | SpellEffectKind::Tap {
@@ -1113,6 +1127,7 @@ impl SpellEffectKind {
             SpellEffectKind::PumpTarget { subject, .. }
             | SpellEffectKind::PutCounters { subject, .. }
             | SpellEffectKind::GrantKeywords { subject, .. }
+            | SpellEffectKind::AddTypes { subject, .. }
             | SpellEffectKind::Tap { subject }
             | SpellEffectKind::Untap { subject }
             | SpellEffectKind::Regenerate { subject } => {
@@ -1189,6 +1204,10 @@ impl SpellEffectKind {
                 subject: EffectSubject::Chosen(target),
             }
             | SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::Chosen(target),
+                ..
+            }
+            | SpellEffectKind::AddTypes {
                 subject: EffectSubject::Chosen(target),
                 ..
             }
@@ -1330,6 +1349,11 @@ impl SpellEffectKind {
                     | EffectSubject::TriggerObject,
                 ..
             } | SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::Source
+                    | EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject,
+                ..
+            } | SpellEffectKind::AddTypes {
                 subject: EffectSubject::Source
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject,
@@ -1489,6 +1513,28 @@ impl SpellEffectKind {
                 } else {
                     Ok(())
                 }
+            }
+            SpellEffectKind::AddTypes { subject, addition } => {
+                if let EffectSubject::Chosen(target) = subject {
+                    if !matches!(target.kind, TargetKind::Creature | TargetKind::AnyPermanent) {
+                        return Err(format!(
+                            "AddTypes requires a permanent-only target, got {:?}",
+                            target.kind
+                        ));
+                    }
+                    if !addition.creature_types.is_empty()
+                        && target.kind == TargetKind::AnyPermanent
+                        && !addition
+                            .card_types
+                            .contains(&super::PermanentTypeFilter::Creature)
+                    {
+                        return Err(
+                            "AddTypes creature types require a Creature target or adding Creature"
+                                .into(),
+                        );
+                    }
+                }
+                addition.validate()
             }
             SpellEffectKind::GrantKeywordsAllPermanents { filter, keywords } => {
                 filter.validate_characteristic_constraints()?;
@@ -1675,6 +1721,8 @@ pub enum ContinuousEffectKind {
     Layer2Control {
         controller: ControllerReference,
     },
+    /// CR 205.1b / 613.1d layer 4 — retain the existing type line and append these values.
+    Layer4AddTypes(TypeLineAddition),
     /// CR 613 layer 7c — modifying effects (+N/+N, -N/-N).
     PtModify {
         delta_power: i32,

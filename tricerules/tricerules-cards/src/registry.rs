@@ -430,6 +430,7 @@ impl CardRegistry {
                             })?;
                     }
                     if let StaticAbilityDef::AttachedModifier {
+                        add_types,
                         delta_power,
                         delta_toughness,
                         keywords,
@@ -447,6 +448,7 @@ impl CardRegistry {
                         }
                         if *delta_power == 0
                             && *delta_toughness == 0
+                            && add_types.is_empty()
                             && keywords.is_empty()
                             && !cant_attack
                             && !cant_block
@@ -456,6 +458,14 @@ impl CardRegistry {
                                 id: card.id.clone(),
                                 reason: "AttachedModifier must modify at least one value".into(),
                             });
+                        }
+                        if !add_types.is_empty() {
+                            add_types
+                                .validate()
+                                .map_err(|reason| RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason,
+                                })?;
                         }
                     }
                     if matches!(ability, StaticAbilityDef::ControlsAttached) && !face.is_aura {
@@ -1836,6 +1846,111 @@ mod tests {
                     Err(RegistryError::InvalidCard { .. })
                 ),
                 "expected malformed attachment definition to be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn load_rejects_malformed_type_additions() {
+        let invalid = [
+            r#"(
+                id: "duplicate_added_card_type",
+                name: "Duplicate Added Card Type",
+                mana_cost: "{1}",
+                types: ["Artifact"],
+                activated_abilities: [(
+                    costs: [Tap],
+                    effect: [AddTypes(
+                        subject: Chosen((kind: AnyPermanent)),
+                        addition: (card_types: [Artifact, Artifact]),
+                    )],
+                    text: "Duplicate.",
+                )],
+            )"#,
+            r#"(
+                id: "duplicate_added_creature_type",
+                name: "Duplicate Added Creature Type",
+                mana_cost: "{W}",
+                types: ["Enchantment", "Aura"],
+                spell_effect: [AuraAttach(target: (kind: Creature))],
+                static_abilities: [AttachedModifier(
+                    add_types: (creature_types: ["Knight", "Knight"]),
+                )],
+            )"#,
+            r#"(
+                id: "blank_added_creature_type",
+                name: "Blank Added Creature Type",
+                mana_cost: "{W}",
+                types: ["Enchantment", "Aura"],
+                spell_effect: [AuraAttach(target: (kind: Creature))],
+                static_abilities: [AttachedModifier(
+                    add_types: (creature_types: [" "]),
+                )],
+            )"#,
+            r#"(
+                id: "empty_type_addition",
+                name: "Empty Type Addition",
+                mana_cost: "{1}",
+                types: ["Artifact"],
+                activated_abilities: [(
+                    costs: [Tap],
+                    effect: [AddTypes(
+                        subject: Chosen((kind: AnyPermanent)),
+                        addition: (),
+                    )],
+                    text: "Empty.",
+                )],
+            )"#,
+            r#"(
+                id: "player_type_addition",
+                name: "Player Type Addition",
+                mana_cost: "{1}",
+                types: ["Artifact"],
+                activated_abilities: [(
+                    costs: [Tap],
+                    effect: [AddTypes(
+                        subject: Chosen((kind: AnyPlayer)),
+                        addition: (card_types: [Artifact]),
+                    )],
+                    text: "Player.",
+                )],
+            )"#,
+            r#"(
+                id: "mixed_target_type_addition",
+                name: "Mixed Target Type Addition",
+                mana_cost: "{1}",
+                types: ["Artifact"],
+                activated_abilities: [(
+                    costs: [Tap],
+                    effect: [AddTypes(
+                        subject: Chosen((kind: AnyTarget)),
+                        addition: (card_types: [Artifact]),
+                    )],
+                    text: "Mixed.",
+                )],
+            )"#,
+            r#"(
+                id: "subtype_on_noncreature",
+                name: "Subtype On Noncreature",
+                mana_cost: "{1}",
+                types: ["Artifact"],
+                activated_abilities: [(
+                    costs: [Tap],
+                    effect: [AddTypes(
+                        subject: Chosen((kind: AnyPermanent)),
+                        addition: (creature_types: ["Knight"]),
+                    )],
+                    text: "Subtype.",
+                )],
+            )"#,
+        ];
+        for bad in invalid {
+            assert!(
+                matches!(
+                    CardRegistry::from_chunks(&[bad]),
+                    Err(RegistryError::InvalidCard { .. })
+                ),
+                "expected malformed type addition to be rejected"
             );
         }
     }

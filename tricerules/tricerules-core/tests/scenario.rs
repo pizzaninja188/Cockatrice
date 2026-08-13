@@ -109,6 +109,8 @@ mod triggers;
 mod turn_history;
 #[path = "scenario/tutor_search.rs"]
 mod tutor_search;
+#[path = "scenario/type_adding_effects.rs"]
+mod type_adding_effects;
 #[path = "scenario/untap.rs"]
 mod untap;
 #[path = "scenario/x_multi_target.rs"]

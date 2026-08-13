@@ -1,0 +1,17 @@
+(
+  id: "dub",
+  name: "Dub",
+  mana_cost: "{2}{W}",
+  // Oracle checked 2026-08-13: Enchant creature. Enchanted creature gets +2/+2, has first
+  // strike, and is a Knight in addition to its other types. CR 205.1b, 205.3d, 613.1d.
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach(target: (kind: Creature))],
+  static_abilities: [
+    AttachedModifier(
+      add_types: (creature_types: ["Knight"]),
+      delta_power: 2,
+      delta_toughness: 2,
+      keywords: [FirstStrike],
+    ),
+  ],
+)

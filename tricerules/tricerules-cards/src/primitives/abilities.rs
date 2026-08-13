@@ -324,12 +324,65 @@ fn any_player_trigger() -> CastTriggerPlayer {
 /// Permanent card-type filter for [`TriggerCondition::WheneverPermanentEntersBattlefield`].
 /// Only types that can exist on the battlefield (CR 110.4) — instants/sorceries are excluded
 /// by construction, unlike [`CardTypeFilter`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PermanentTypeFilter {
     Creature,
     Artifact,
     Enchantment,
     Land,
+}
+
+impl PermanentTypeFilter {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Creature => "Creature",
+            Self::Artifact => "Artifact",
+            Self::Enchantment => "Enchantment",
+            Self::Land => "Land",
+        }
+    }
+}
+
+/// An additive CR 205.1b type-line change. Card types and creature subtypes stay distinct in the
+/// authored vocabulary even though the current characteristics snapshot stores their canonical
+/// names in one ordered list. Dub exercises `creature_types`; Liquimetal Coating exercises
+/// `card_types`.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct TypeLineAddition {
+    #[serde(default)]
+    pub card_types: Vec<PermanentTypeFilter>,
+    #[serde(default)]
+    pub creature_types: Vec<String>,
+}
+
+impl TypeLineAddition {
+    pub fn is_empty(&self) -> bool {
+        self.card_types.is_empty() && self.creature_types.is_empty()
+    }
+
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        if self.is_empty() {
+            return Err("type-line addition must add a card type or creature type".into());
+        }
+        let unique_card_types: std::collections::HashSet<_> =
+            self.card_types.iter().copied().collect();
+        if unique_card_types.len() != self.card_types.len() {
+            return Err("type-line addition repeats a card type".into());
+        }
+        if self
+            .creature_types
+            .iter()
+            .any(|creature_type| creature_type.trim().is_empty())
+        {
+            return Err("type-line addition creature type cannot be empty".into());
+        }
+        let unique_creature_types: std::collections::HashSet<_> =
+            self.creature_types.iter().collect();
+        if unique_creature_types.len() != self.creature_types.len() {
+            return Err("type-line addition repeats a creature type".into());
+        }
+        Ok(())
+    }
 }
 
 /// Which player's spell casts trigger a `WheneverPlayerCastsSpell` ability.
@@ -561,10 +614,13 @@ pub enum StaticAbilityDef {
         delta_toughness: i32,
     },
     /// Continuous modifiers supplied to the permanent currently attached to this Aura or
-    /// Equipment. P/T changes apply in layer 7c, keywords in layer 6, and combat prohibitions as
-    /// rule restrictions. The dynamic attachment scope moves every modifier together when an
-    /// Equipment is re-equipped. Holy Strength/Oakenform, Flight/Swiftfoot Boots, and Pacifism.
+    /// Equipment. Type additions apply in layer 4, keywords in layer 6, P/T changes in layer 7c,
+    /// and combat prohibitions as rule restrictions. The dynamic attachment scope moves every
+    /// modifier together when an Equipment is re-equipped. Dub, Holy Strength/Oakenform,
+    /// Flight/Swiftfoot Boots, and Pacifism.
     AttachedModifier {
+        #[serde(default)]
+        add_types: TypeLineAddition,
         #[serde(default)]
         delta_power: i32,
         #[serde(default)]
