@@ -564,6 +564,7 @@ impl GameEngine {
                 .copied()
                 .unwrap_or(0),
             ability_index: None,
+            triggered_ability: None,
             is_triggered: false,
             is_copy: false,
             face_index: 0,
@@ -725,6 +726,7 @@ impl GameEngine {
             source_zone_change: 0,
             source_face_change: 0,
             ability_index: None,
+            triggered_ability: None,
             is_triggered: false,
             is_copy: false,
             face_index: 0,

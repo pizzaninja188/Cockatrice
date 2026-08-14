@@ -2,7 +2,7 @@
 
 use super::{
     CardTypeFilter, Color, CreatureScopeFilter, GraveyardDestination, GraveyardFilter, Keyword,
-    TargetController, TargetFilter, TargetKind, TypeLineAddition,
+    TargetController, TargetFilter, TargetKind, TriggeredAbilityDef, TypeLineAddition,
 };
 use serde::de::{EnumAccess, MapAccess, SeqAccess, VariantAccess};
 use serde::ser::SerializeStructVariant;
@@ -787,6 +787,30 @@ pub enum SpellEffectKind {
         subject: EffectSubject,
         keywords: Vec<Keyword>,
     },
+    /// CR 611.2c / 613.1f: the subject gains a triggered ability until end of turn. The complete
+    /// definition is embedded because the ability must keep functioning after the effect or its
+    /// source leaves the battlefield. Abnormal Endurance and Fake Your Own Death share this.
+    GrantTriggeredAbility {
+        #[serde(default)]
+        subject: EffectSubject,
+        ability: Box<TriggeredAbilityDef>,
+    },
+    /// Return the permanent that sourced this resolving triggered ability, but only when it is
+    /// still the immediate graveyard object created by that death. Abnormal Endurance returns
+    /// under its owner; Fake Your Own Death uses the ability controller.
+    ReturnAbilitySourceFromGraveyard {
+        #[serde(default)]
+        tapped: bool,
+        #[serde(default)]
+        controller: ReturnController,
+    },
+    /// CR 603.7: create a one-shot delayed triggered ability that observes `subject`. The
+    /// definition must use a delayed-only trigger condition.
+    CreateDelayedTrigger {
+        #[serde(default)]
+        subject: EffectSubject,
+        ability: Box<TriggeredAbilityDef>,
+    },
     /// CR 205.1b / 613.1d: add card types or creature subtypes until end of turn without
     /// replacing the permanent's existing type line. Liquimetal Coating uses a chosen permanent;
     /// source- and event-bound ability effects reuse the same subject vocabulary.
@@ -1169,6 +1193,12 @@ impl SpellEffectKind {
             } | SpellEffectKind::GrantKeywords {
                 subject: EffectSubject::AttachedObject,
                 ..
+            } | SpellEffectKind::GrantTriggeredAbility {
+                subject: EffectSubject::AttachedObject,
+                ..
+            } | SpellEffectKind::CreateDelayedTrigger {
+                subject: EffectSubject::AttachedObject,
+                ..
             } | SpellEffectKind::AddTypes {
                 subject: EffectSubject::AttachedObject,
                 ..
@@ -1192,6 +1222,12 @@ impl SpellEffectKind {
                 subject: EffectSubject::TriggerObject,
                 ..
             } | SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::TriggerObject,
+                ..
+            } | SpellEffectKind::GrantTriggeredAbility {
+                subject: EffectSubject::TriggerObject,
+                ..
+            } | SpellEffectKind::CreateDelayedTrigger {
                 subject: EffectSubject::TriggerObject,
                 ..
             } | SpellEffectKind::AddTypes {
@@ -1221,6 +1257,8 @@ impl SpellEffectKind {
             SpellEffectKind::PumpTarget { subject, .. }
             | SpellEffectKind::PutCounters { subject, .. }
             | SpellEffectKind::GrantKeywords { subject, .. }
+            | SpellEffectKind::GrantTriggeredAbility { subject, .. }
+            | SpellEffectKind::CreateDelayedTrigger { subject, .. }
             | SpellEffectKind::AddTypes { subject, .. }
             | SpellEffectKind::Tap { subject }
             | SpellEffectKind::Untap { subject }
@@ -1298,6 +1336,14 @@ impl SpellEffectKind {
                 subject: EffectSubject::Chosen(target),
             }
             | SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::Chosen(target),
+                ..
+            }
+            | SpellEffectKind::GrantTriggeredAbility {
+                subject: EffectSubject::Chosen(target),
+                ..
+            }
+            | SpellEffectKind::CreateDelayedTrigger {
                 subject: EffectSubject::Chosen(target),
                 ..
             }
@@ -1447,6 +1493,16 @@ impl SpellEffectKind {
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject,
                 ..
+            } | SpellEffectKind::GrantTriggeredAbility {
+                subject: EffectSubject::Source
+                    | EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject,
+                ..
+            } | SpellEffectKind::CreateDelayedTrigger {
+                subject: EffectSubject::Source
+                    | EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject,
+                ..
             } | SpellEffectKind::AddTypes {
                 subject: EffectSubject::Source
                     | EffectSubject::AttachedObject
@@ -1465,6 +1521,7 @@ impl SpellEffectKind {
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject,
             } | SpellEffectKind::ChangeSourceFace { .. }
+                | SpellEffectKind::ReturnAbilitySourceFromGraveyard { .. }
                 | SpellEffectKind::ApplyCombatRestriction {
                     scope: CombatRestrictionScope::Source,
                     ..
@@ -1607,6 +1664,40 @@ impl SpellEffectKind {
                 } else {
                     Ok(())
                 }
+            }
+            SpellEffectKind::GrantTriggeredAbility { subject, ability } => {
+                if let EffectSubject::Chosen(target) = subject {
+                    if !matches!(target.kind, TargetKind::Creature | TargetKind::AnyPermanent) {
+                        return Err(format!(
+                            "GrantTriggeredAbility requires a permanent-only target, got {:?}",
+                            target.kind
+                        ));
+                    }
+                }
+                if ability.trigger.is_delayed_only() {
+                    return Err(
+                        "GrantTriggeredAbility cannot use a delayed trigger condition".into(),
+                    );
+                }
+                ability.validate_shape()
+            }
+            SpellEffectKind::CreateDelayedTrigger { subject, ability } => {
+                if let EffectSubject::Chosen(target) = subject {
+                    if !matches!(target.kind, TargetKind::Creature | TargetKind::AnyPermanent) {
+                        return Err(format!(
+                            "CreateDelayedTrigger requires a permanent-only target, got {:?}",
+                            target.kind
+                        ));
+                    }
+                }
+                if !matches!(
+                    ability.trigger,
+                    super::TriggerCondition::AtBeginningOfNextEndStep
+                        | super::TriggerCondition::WhenControllerLosesControlOf
+                ) {
+                    return Err("CreateDelayedTrigger requires a delayed trigger condition".into());
+                }
+                ability.validate_shape()
             }
             SpellEffectKind::AddTypes { subject, addition } => {
                 if let EffectSubject::Chosen(target) = subject {
@@ -1824,6 +1915,13 @@ pub enum ControllerReference {
     SourceController,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum ReturnController {
+    #[default]
+    Owner,
+    AbilityController,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ContinuousEffectKind {
     /// CR 613.1b layer 2 — change control of the affected permanent.
@@ -1841,6 +1939,8 @@ pub enum ContinuousEffectKind {
     /// (Goblin Chieftain → Haste), pump sorceries (Overrun → Trample), and any
     /// "creatures you control gain [keyword] until end of turn" effect.
     Layer6AddKeyword(Keyword),
+    /// CR 613.1f: grant an ordinary triggered ability to the affected permanent.
+    GrantTriggeredAbility(Box<TriggeredAbilityDef>),
     CombatRestriction(CombatRestriction),
     /// CR 502.3: the affected permanent is excluded from its controller's normal untap-step
     /// turn-based action. This does not prohibit other spells or abilities from untapping it.

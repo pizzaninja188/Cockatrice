@@ -1,0 +1,19 @@
+(
+  id: "infernal_scarring",
+  name: "Infernal Scarring",
+  mana_cost: "{1}{B}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach(target: (kind: Creature))],
+  static_abilities: [
+    AttachedModifier(
+      delta_power: 2,
+      triggered_abilities: [
+        (
+          trigger: WhenSelfDies,
+          effect: [Draw(count: 1)],
+          text: "When this creature dies, draw a card.",
+        ),
+      ],
+    ),
+  ],
+)

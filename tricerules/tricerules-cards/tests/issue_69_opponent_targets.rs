@@ -45,6 +45,7 @@ fn glaring_aegis_has_complete_oracle_behavior() {
             delta_power: 1,
             delta_toughness: 3,
             keywords: vec![],
+            triggered_abilities: vec![],
             cant_attack: false,
             cant_block: false,
             doesnt_untap_during_untap_step: false,

@@ -41,10 +41,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Let Equipment and Auras define triggers keyed to events involving the object or player they are attached to, while snapshotting the attachment relation needed at trigger time. Calibration evidence: Heart-Piercer Bow, Unholy Indenture, Curse of Opulence, and Curse of Disturbance. Issue #94 shipped typed player attachment identity and the two Curses as partial cards; this issue retains their "enchanted player is attacked" trigger generation, attachment snapshot, and attack-participant context. Cover attack and death events, detachment or zone changes before resolution, and multiple attachments without hard-coding card names.
   - Priority: Low
 
-- [ ] #64 [feature] Granted and delayed triggered abilities
-  - Details: Represent continuous and turn-scoped effects that grant a triggered ability to another object, including a delayed expiry boundary. Calibration evidence: Infernal Scarring, Abnormal Endurance, and Ray of Command's delayed end-step tap/damage rider. The granted trigger must use the affected object's identity and LKI, survive its source leaving when appropriate, expire deterministically, and participate in simultaneous trigger/APNAP collection. Ray of Command should reuse the shipped #37 temporary-control, untap, and haste primitives rather than reopening layer-2 control.
-  - Priority: Low
-
 - [ ] #65 [feature] Granted activated abilities
   - Details: Allow continuous effects to grant a parameterized activated ability to an affected permanent and expose it through that permanent's legal actions. Calibration evidence: Gift of Paradise. Preserve the granted ability's source identity, controller, costs, and mana-ability timing, remove it when the effect ends, and satisfy the two-card-or-mechanic reuse gate before adding the primitive.
   - Priority: Low

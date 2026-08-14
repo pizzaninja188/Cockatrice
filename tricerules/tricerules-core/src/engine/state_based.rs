@@ -65,7 +65,7 @@ impl GameEngine {
         out: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
         let mut changed = self.reindex_battlefield_control(out);
-        let mut dies = Vec::new();
+        let mut dies: Vec<(TriggerSourceSnapshot, bool)> = Vec::new();
         // CR 122.3: counter annihilation (+1/+1 and -1/-1 pairs cancel).
         for o in self.state.objects.values_mut() {
             if o.zone != Zone::Battlefield {
@@ -116,6 +116,20 @@ impl GameEngine {
                 to_destroy_lethal.push(id);
             }
         }
+        // CR 603.6/603.10: snapshot every object that will die in this simultaneous SBA set
+        // before moving any of them. This preserves granted abilities even if their granting Aura
+        // is another member of the same destruction set.
+        let death_snapshots: HashMap<ObjectId, (TriggerSourceSnapshot, bool)> = to_destroy_t0
+            .iter()
+            .chain(&to_destroy_lethal)
+            .filter_map(|&id| {
+                let was_creature = self
+                    .characteristics(id)
+                    .is_some_and(|value| value.is_creature());
+                self.trigger_source_snapshot(id)
+                    .map(|snapshot| (id, (snapshot, was_creature)))
+            })
+            .collect();
         // Toughness-0: bypass regeneration (CR 704.5f — not a "destroy" trigger).
         // CR 702.2b / 704.5h look only for deathtouch damage dealt since the previous SBA
         // check. Preserve the decisions collected above, then expire the history bit on every
@@ -129,13 +143,6 @@ impl GameEngine {
         }
         for id in to_destroy_t0 {
             let owner = self.state.objects.get(&id).map(|o| o.owner);
-            let controller = self.state.objects.get(&id).map(|o| o.controller);
-            let effective_identity = self
-                .effective_card_identity(id)
-                .map(|(card_id, face_index)| (card_id.to_string(), face_index));
-            let was_creature = self
-                .characteristics(id)
-                .is_some_and(|value| value.is_creature());
             if destroy_permanent(&mut self.state, self.registry, id).is_ok() {
                 changed = true;
                 if let Some(owner_id) = owner {
@@ -146,26 +153,20 @@ impl GameEngine {
                         rv1::permanent_moved::Destination::Graveyard,
                     ));
                 }
-                if let (Some((cid, face_index)), Some(ctrl)) = (effective_identity, controller) {
-                    dies.push((id, cid, ctrl, face_index, was_creature));
+                if let Some(snapshot) = death_snapshots.get(&id).cloned() {
+                    dies.push(snapshot);
                 }
             }
         }
         // Lethal-damage destroy: CR 614.8 / 701.19 regeneration shields apply before destruction.
         for id in to_destroy_lethal {
             let owner = self.state.objects.get(&id).map(|o| o.owner);
-            let controller = self.state.objects.get(&id).map(|o| o.controller);
-            let effective_identity = self
-                .effective_card_identity(id)
-                .map(|(card_id, face_index)| (card_id.to_string(), face_index));
-            let was_creature = self
-                .characteristics(id)
-                .is_some_and(|value| value.is_creature());
+            let snapshot = death_snapshots.get(&id).cloned();
             if consume_regen_shield(&mut self.state, id, out) {
                 changed = true;
-                let name = effective_identity
+                let name = snapshot
                     .as_ref()
-                    .map(|(card_id, _)| card_id.as_str())
+                    .map(|(source, _)| source.card_id.as_str())
                     .unwrap_or("creature");
                 out.push(super::events::ev_log(format!("{name} regenerates.")));
             } else if destroy_permanent(&mut self.state, self.registry, id).is_ok() {
@@ -178,8 +179,8 @@ impl GameEngine {
                         rv1::permanent_moved::Destination::Graveyard,
                     ));
                 }
-                if let (Some((cid, face_index)), Some(ctrl)) = (effective_identity, controller) {
-                    dies.push((id, cid, ctrl, face_index, was_creature));
+                if let Some(snapshot) = snapshot {
+                    dies.push(snapshot);
                 }
             }
         }
@@ -187,17 +188,10 @@ impl GameEngine {
         if !dies.is_empty() {
             let trigger_events: Vec<GameEvent> = dies
                 .into_iter()
-                .map(
-                    |(object_id, card_id, controller, face_index, was_creature)| GameEvent::Dies {
-                        source: TriggerSourceSnapshot {
-                            object_id,
-                            card_id,
-                            controller,
-                            face_index,
-                        },
-                        was_creature,
-                    },
-                )
+                .map(|(source, was_creature)| GameEvent::Dies {
+                    source,
+                    was_creature,
+                })
                 .collect();
             self.fire_triggers(&trigger_events);
         }
@@ -293,10 +287,7 @@ impl GameEngine {
             .collect();
         for id in orphaned_auras {
             let owner = self.state.objects.get(&id).map(|o| o.owner);
-            let controller = self.state.objects.get(&id).map(|o| o.controller);
-            let effective_identity = self
-                .effective_card_identity(id)
-                .map(|(card_id, face_index)| (card_id.to_string(), face_index));
+            let snapshot = self.trigger_source_snapshot(id);
             let was_creature = self
                 .characteristics(id)
                 .is_some_and(|value| value.is_creature());
@@ -310,14 +301,9 @@ impl GameEngine {
                         rv1::permanent_moved::Destination::Graveyard,
                     ));
                 }
-                if let (Some((cid, face_index)), Some(ctrl)) = (effective_identity, controller) {
+                if let Some(source) = snapshot {
                     self.fire_triggers(&[GameEvent::Dies {
-                        source: TriggerSourceSnapshot {
-                            object_id: id,
-                            card_id: cid,
-                            controller: ctrl,
-                            face_index,
-                        },
+                        source,
                         was_creature,
                     }]);
                 }
@@ -365,12 +351,14 @@ impl GameEngine {
             })
             .collect();
         let mut changed_ids = Vec::new();
+        let mut control_transitions = Vec::new();
         for &(oid, controller) in &desired {
             if self.state.player_idx(controller).is_none() {
                 continue;
             }
             if let Some(object) = self.state.objects.get_mut(&oid) {
                 if object.controller != controller {
+                    control_transitions.push((oid, object.controller, Some(controller)));
                     object.controller = controller;
                     object.summoning_sick = true;
                     changed_ids.push(oid);
@@ -418,6 +406,7 @@ impl GameEngine {
                 });
             }
         }
+        self.state.stage_delayed_control_loss(&control_transitions);
         true
     }
 
@@ -503,6 +492,7 @@ impl GameEngine {
                 source_zone_change: 0,
                 source_face_change: 0,
                 ability_index: None,
+                triggered_ability: None,
                 is_triggered: false,
                 is_copy: false,
                 face_index: 0,

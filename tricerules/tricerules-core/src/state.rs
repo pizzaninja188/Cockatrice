@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use tricerules_cards::primitives::{
     ContinuousEffectKind, CounterKind, CreatureScopeFilter, DamagePreventionAdditionalEffect,
     EffectDuration, GameCondition, Keyword, ManaAmount, ManaSpendingRestriction, SearchDestination,
-    TargetFilter,
+    TargetFilter, TriggerCondition, TriggeredAbilityDef,
 };
 use tricerules_cards::CardFace;
 use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
@@ -302,6 +302,7 @@ pub struct StagedTrigger {
     /// CR 603.3d: the ability's controller — the controller of its source permanent.
     pub controller: PlayerId,
     pub ability_index: usize,
+    pub ability: TriggeredAbilityDef,
     pub ability_text: String,
     /// The event's beneficiary when the trigger names a player other than its controller
     /// ("**that player** draws a card"); `None` means the controller.
@@ -365,6 +366,7 @@ pub struct PendingTrigger {
     pub source_zone_change: u64,
     pub source_face_change: u64,
     pub ability_index: usize,
+    pub ability: TriggeredAbilityDef,
     pub ability_text: String,
     pub card_id: String,
     pub controller: PlayerId,
@@ -568,6 +570,9 @@ pub struct StackItem {
     pub source_face_change: u64,
     /// Index into the card's `activated_abilities` or `triggered_abilities` list. `None` for spells.
     pub ability_index: Option<usize>,
+    /// Snapshot of a triggered ability's complete definition. Printed and granted triggers both
+    /// resolve from this value after their source or granting effect has disappeared.
+    pub triggered_ability: Option<TriggeredAbilityDef>,
     /// `true` = this is a triggered ability; `false` = activated ability or spell.
     pub is_triggered: bool,
     /// CR 707.10: this stack item is a *copy* of a spell (Twincast/Fork), not a cast object. A
@@ -683,6 +688,17 @@ pub struct ContinuousEffect {
     pub duration: EffectDuration,
     /// `command_index` at creation; used for layer sublayer timestamp ordering (CR 613.7).
     pub timestamp: u64,
+}
+
+/// A one-shot delayed triggered ability created by a resolving effect (CR 603.7).
+#[derive(Debug, Clone)]
+pub struct ActiveDelayedTrigger {
+    pub controller: PlayerId,
+    pub card_id: String,
+    pub card_name: String,
+    pub source_face_index: usize,
+    pub watched: TriggerObjectRef,
+    pub ability: TriggeredAbilityDef,
 }
 
 /// During combat, after attack/block declarations.
@@ -811,6 +827,9 @@ pub struct GameState {
     pub winner: Option<PlayerId>,
     /// CR 514.1: active player who must discard during their cleanup step, if any.
     pub cleanup_discard_player: Option<PlayerId>,
+    /// CR 514.3: a trigger occurred during cleanup, so players receive priority and another
+    /// cleanup step follows once the stack is empty and everyone passes.
+    pub cleanup_priority_active: bool,
     /// Pre-game flow; `None` once the duel has started (upkeep of turn 1).
     pub opening: Option<OpeningSequence>,
     /// Seat index of the player who takes the first turn (CR 103.8: only they skip their first draw step).
@@ -825,6 +844,8 @@ pub struct GameState {
     /// independently. Drained by `flush_staged_triggers` at the two points where the engine is
     /// between actions.
     pub staged_trigger_groups: VecDeque<StagedTriggerGroup>,
+    /// One-shot delayed triggers waiting for their event boundary.
+    pub active_delayed_triggers: Vec<ActiveDelayedTrigger>,
     /// The outstanding CR 603.3b ordering prompt, or `None`. At most one at a time; while set it
     /// blocks every command but `SubmitTriggerOrder`.
     pub pending_trigger_order: Option<PendingTriggerOrder>,
@@ -961,6 +982,80 @@ impl GameState {
             return seats;
         };
         (idx + seats - self.active_player_idx) % seats
+    }
+
+    pub(crate) fn stage_delayed_control_loss(
+        &mut self,
+        transitions: &[(ObjectId, PlayerId, Option<PlayerId>)],
+    ) {
+        let mut waiting = std::mem::take(&mut self.active_delayed_triggers);
+        let mut fired = Vec::new();
+        for delayed in waiting.drain(..) {
+            let matches = delayed.ability.trigger == TriggerCondition::WhenControllerLosesControlOf
+                && transitions
+                    .iter()
+                    .any(|&(object_id, old_controller, new_controller)| {
+                        object_id == delayed.watched.object_id
+                            && self
+                                .zone_change_generation
+                                .get(&object_id)
+                                .copied()
+                                .unwrap_or(0)
+                                == delayed.watched.zone_change_generation
+                            && old_controller == delayed.controller
+                            && new_controller != Some(delayed.controller)
+                    });
+            if matches {
+                fired.push(delayed);
+            } else {
+                self.active_delayed_triggers.push(delayed);
+            }
+        }
+        self.stage_delayed_batch(fired);
+    }
+
+    pub(crate) fn take_next_end_step_delayed(&mut self) -> Vec<ActiveDelayedTrigger> {
+        let mut waiting = std::mem::take(&mut self.active_delayed_triggers);
+        let mut fired = Vec::new();
+        for delayed in waiting.drain(..) {
+            if delayed.ability.trigger == TriggerCondition::AtBeginningOfNextEndStep {
+                fired.push(delayed);
+            } else {
+                self.active_delayed_triggers.push(delayed);
+            }
+        }
+        fired
+    }
+
+    fn stage_delayed_batch(&mut self, delayed: Vec<ActiveDelayedTrigger>) {
+        let mut triggers = delayed
+            .into_iter()
+            .map(|delayed| {
+                let object_id = self.next_object_id;
+                self.next_object_id += 1;
+                StagedTrigger {
+                    object_id,
+                    source_permanent_id: delayed.watched.object_id,
+                    source_face_index: delayed.source_face_index,
+                    source_zone_change: delayed.watched.zone_change_generation,
+                    source_face_change: 0,
+                    card_id: delayed.card_id,
+                    card_name: delayed.card_name,
+                    controller: delayed.controller,
+                    ability_index: 0,
+                    ability_text: delayed.ability.text.clone(),
+                    trigger_player: None,
+                    trigger_object: Some(delayed.watched),
+                    may: delayed.ability.may,
+                    ability: delayed.ability,
+                }
+            })
+            .collect::<Vec<_>>();
+        triggers.sort_by_key(|trigger| self.apnap_rank(trigger.controller));
+        if !triggers.is_empty() {
+            self.staged_trigger_groups
+                .push_back(StagedTriggerGroup { triggers });
+        }
     }
 
     /// Every defending player under the current duel/free-for-all combat policy (CR 506.2): each

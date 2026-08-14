@@ -60,33 +60,16 @@ pub(super) fn destroy_attached(
             let name = object_display_name(&engine.state, engine.registry, oid);
             let indestructible = engine.effective_has_keyword(oid, Keyword::Indestructible);
             let owner = engine.state.objects.get(&oid).map(|object| object.owner);
-            let controller = engine
-                .state
-                .objects
-                .get(&oid)
-                .map(|object| object.controller);
-            let effective_identity = engine
-                .effective_card_identity(oid)
-                .map(|(card_id, face_index)| (card_id.to_string(), face_index));
+            let source = engine.trigger_source_snapshot(oid);
             let was_creature = engine
                 .characteristics(oid)
                 .is_some_and(|characteristics| characteristics.is_creature());
-            (
-                oid,
-                name,
-                indestructible,
-                owner,
-                controller,
-                effective_identity,
-                was_creature,
-            )
+            (oid, name, indestructible, owner, source, was_creature)
         })
         .collect::<Vec<_>>();
 
     let mut destroyed = Vec::new();
-    for (oid, name, indestructible, owner, controller, effective_identity, was_creature) in
-        snapshots
-    {
+    for (oid, name, indestructible, owner, source, was_creature) in snapshots {
         if indestructible {
             events.push(ev_log(format!(
                 "{name} is indestructible and survives {spell_label}."
@@ -107,24 +90,17 @@ pub(super) fn destroy_attached(
                 rv1::permanent_moved::Destination::Graveyard,
             ));
         }
-        if let (Some((card_id, face_index)), Some(controller)) = (effective_identity, controller) {
-            destroyed.push((oid, card_id, controller, face_index, was_creature));
+        if let Some(source) = source {
+            destroyed.push((source, was_creature));
         }
     }
 
     let trigger_events = destroyed
         .into_iter()
-        .map(
-            |(object_id, card_id, controller, face_index, was_creature)| GameEvent::Dies {
-                source: TriggerSourceSnapshot {
-                    object_id,
-                    card_id,
-                    controller,
-                    face_index,
-                },
-                was_creature,
-            },
-        )
+        .map(|(source, was_creature)| GameEvent::Dies {
+            source,
+            was_creature,
+        })
         .collect::<Vec<_>>();
     engine.fire_triggers(&trigger_events);
 
@@ -150,9 +126,18 @@ pub(super) fn destroy_all(
     // then their "dies" triggers fire together. Indestructible permanents survive
     // (CR 702.12b). `prevent_regeneration` bypasses shields (Wrath of God).
     // Untargeted, so hexproof/shroud are irrelevant.
-    let victims = battlefield_objects_matching(engine, &kind);
-    let mut destroyed: Vec<(ObjectId, String, PlayerId, usize, bool)> = Vec::new();
-    for tid in victims {
+    let victims = battlefield_objects_matching(engine, &kind)
+        .into_iter()
+        .map(|tid| {
+            let source = engine.trigger_source_snapshot(tid);
+            let was_creature = engine
+                .characteristics(tid)
+                .is_some_and(|value| value.is_creature());
+            (tid, source, was_creature)
+        })
+        .collect::<Vec<_>>();
+    let mut destroyed: Vec<(TriggerSourceSnapshot, bool)> = Vec::new();
+    for (tid, source, was_creature) in victims {
         let indestructible = engine.effective_has_keyword(tid, Keyword::Indestructible);
         let tgt = object_display_name(&engine.state, engine.registry, tid);
         if indestructible {
@@ -167,13 +152,6 @@ pub(super) fn destroy_all(
             continue;
         }
         let owner = engine.state.objects.get(&tid).map(|o| o.owner);
-        let controller = engine.state.objects.get(&tid).map(|o| o.controller);
-        let effective_identity = engine
-            .effective_card_identity(tid)
-            .map(|(card_id, face_index)| (card_id.to_string(), face_index));
-        let was_creature = engine
-            .characteristics(tid)
-            .is_some_and(|value| value.is_creature());
         destroy_permanent(&mut engine.state, engine.registry, tid)?;
         events.push(ev_log(format!("{spell_label} destroys {tgt}")));
         if let Some(owner_id) = owner {
@@ -184,23 +162,16 @@ pub(super) fn destroy_all(
                 rv1::permanent_moved::Destination::Graveyard,
             ));
         }
-        if let (Some((cid, face_index)), Some(ctrl)) = (effective_identity, controller) {
-            destroyed.push((tid, cid, ctrl, face_index, was_creature));
+        if let Some(source) = source {
+            destroyed.push((source, was_creature));
         }
     }
     let trigger_events: Vec<GameEvent> = destroyed
         .into_iter()
-        .map(
-            |(object_id, card_id, controller, face_index, was_creature)| GameEvent::Dies {
-                source: TriggerSourceSnapshot {
-                    object_id,
-                    card_id,
-                    controller,
-                    face_index,
-                },
-                was_creature,
-            },
-        )
+        .map(|(source, was_creature)| GameEvent::Dies {
+            source,
+            was_creature,
+        })
         .collect();
     engine.fire_triggers(&trigger_events);
 

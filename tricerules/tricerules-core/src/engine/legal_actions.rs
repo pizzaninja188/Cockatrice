@@ -435,7 +435,7 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
     let Some(player_index) = eng.state.player_idx(pid) else {
         return Vec::new();
     };
-    if eng.state.turn_step == TurnStep::Cleanup {
+    if eng.state.turn_step == TurnStep::Cleanup && !eng.state.cleanup_priority_active {
         if eng.state.cleanup_discard_player == Some(pid)
             && eng.state.players[player_index].hand.len() > MAX_HAND_SIZE
         {
@@ -458,7 +458,7 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
         return Vec::new();
     }
 
-    let instant_ok = instant_timing_step_allowed(eng.state.turn_step);
+    let instant_ok = instant_timing_step_allowed(&eng.state);
     let sorcery_ok = sorcery_speed_available(&eng.state, pid);
     let combat_decl_lock = priority_locked_for_combat_declaration(&eng.state);
     let mut actions = Vec::new();
@@ -570,7 +570,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
     let Some(player_index) = eng.state.player_idx(pid) else {
         return Vec::new();
     };
-    let instant_ok = instant_timing_step_allowed(eng.state.turn_step);
+    let instant_ok = instant_timing_step_allowed(&eng.state);
     let sorcery_ok = sorcery_speed_available(&eng.state, pid);
     let mut actions = Vec::new();
     for &oid in &eng.state.players[player_index].graveyard {
@@ -867,7 +867,7 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
         Some(i) => i,
         None => return v,
     };
-    let instant_ok = instant_timing_step_allowed(eng.state.turn_step);
+    let instant_ok = instant_timing_step_allowed(&eng.state);
     let sorcery_ok = sorcery_speed_available(&eng.state, pid);
     let combat_decl_lock = priority_locked_for_combat_declaration(&eng.state);
     for (i, &oid) in eng.state.players[idx].hand.iter().enumerate() {

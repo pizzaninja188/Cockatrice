@@ -585,6 +585,75 @@ pub(super) fn return_from_graveyard(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn return_ability_source_from_graveyard(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::ReturnAbilitySourceFromGraveyard { tapped, controller } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let Some(source_id) = cx.top.source_permanent_id else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let current_generation = cx
+        .engine
+        .state
+        .zone_change_generation
+        .get(&source_id)
+        .copied()
+        .unwrap_or(0);
+    let Some(object) = cx.engine.state.objects.get(&source_id) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    if object.zone != Zone::Graveyard
+        || current_generation != cx.top.source_zone_change.saturating_add(1)
+    {
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let owner = object.owner;
+    let destination_controller = match controller {
+        ReturnController::Owner => owner,
+        ReturnController::AbilityController => cx.controller,
+    };
+    let object_label = object_display_name(&cx.engine.state, cx.engine.registry, source_id);
+    match cx.engine.begin_battlefield_entry(
+        cx.top.clone(),
+        BattlefieldEntryEvent {
+            object_id: source_id,
+            deciding_player: owner,
+            destination_controller,
+            face_index: 0,
+            chosen_x: 0,
+            tapped,
+            entry_counters: BTreeMap::new(),
+            applied_effects: Vec::new(),
+        },
+        BattlefieldEntryCompletion::ResolutionEffect {
+            owner,
+            spell_label: cx.spell_label.to_string(),
+            object_label: object_label.clone(),
+        },
+        cx.events,
+    ) {
+        super::super::replacement::BattlefieldEntryProgress::Parked => Ok(EffectOutcome::Suspended),
+        super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
+            cx.engine.commit_battlefield_entry(entry, None)?;
+            cx.events.push(ev_log(format!(
+                "{} returns {object_label} from graveyard to battlefield.",
+                cx.spell_label
+            )));
+            cx.events.push(permanent_moved_event(
+                &cx.engine.state,
+                source_id,
+                owner,
+                rv1::permanent_moved::Destination::Battlefield,
+            ));
+            Ok(EffectOutcome::Continue)
+        }
+    }
+}
+
 /// CR 701.18: look at the top N cards of your library, then decide which go to the bottom and in
 /// what order the rest sit on top.
 ///

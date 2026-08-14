@@ -295,7 +295,10 @@ impl GameEngine {
 
         let (effects, targeting) = if top.ability_text.is_some() {
             if top.is_triggered {
-                let Some(ability) = face.triggered_abilities.get(top.ability_index.unwrap_or(0))
+                let Some(ability) = top
+                    .triggered_ability
+                    .as_ref()
+                    .or_else(|| face.triggered_abilities.get(top.ability_index.unwrap_or(0)))
                 else {
                     return;
                 };
@@ -518,11 +521,15 @@ impl GameEngine {
         // does nothing if the clause is false as it resolves, even though it was true when the
         // ability triggered (Howling Mine tapped in response to its own trigger).
         if top.is_triggered {
-            let clause = self
-                .registry
-                .get(&card_id)
-                .and_then(|d| d.face(top.face_index))
-                .and_then(|f| f.triggered_abilities.get(top.ability_index.unwrap_or(0)))
+            let clause = top
+                .triggered_ability
+                .as_ref()
+                .or_else(|| {
+                    self.registry
+                        .get(&card_id)
+                        .and_then(|d| d.face(top.face_index))
+                        .and_then(|f| f.triggered_abilities.get(top.ability_index.unwrap_or(0)))
+                })
                 .and_then(|ta| ta.intervening_if.as_ref());
             let source_id = top.source_permanent_id.unwrap_or(top.id);
             let holds = if top.source_permanent_id.is_some() {
@@ -633,7 +640,9 @@ impl GameEngine {
             // and the trigger scan read them from.
             let face = def.and_then(|d| d.face(top.face_index));
             let abilities = if top.is_triggered {
-                face.and_then(|f| f.triggered_abilities.get(ability_index))
+                top.triggered_ability
+                    .as_ref()
+                    .or_else(|| face.and_then(|f| f.triggered_abilities.get(ability_index)))
                     .map(|a| a.effect.clone())
             } else {
                 face.and_then(|f| f.activated_abilities.get(ability_index))
@@ -728,8 +737,11 @@ impl GameEngine {
                     .and_then(|definition| definition.face(top.face_index))
                     .and_then(|face| {
                         if top.is_triggered {
-                            face.triggered_abilities
-                                .get(top.ability_index.unwrap_or(0))
+                            top.triggered_ability
+                                .as_ref()
+                                .or_else(|| {
+                                    face.triggered_abilities.get(top.ability_index.unwrap_or(0))
+                                })
                                 .and_then(|ability| ability.targeting.as_ref())
                         } else {
                             face.activated_abilities
@@ -831,6 +843,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::GrantKeywords { .. } => {
                         pump_counters::grant_keywords(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::GrantTriggeredAbility { .. } => {
+                        pump_counters::grant_triggered_ability(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::AddTypes { .. } => {
                         pump_counters::add_types(&mut cx, effect)?
                     }
@@ -895,6 +910,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::GainControlUntilEndOfTurn { .. } => {
                         misc::gain_control_until_end_of_turn(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::CreateDelayedTrigger { .. } => {
+                        misc::create_delayed_trigger(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::TapAllCreatures { .. } => {
                         misc::tap_all_creatures(&mut cx, effect)?
                     }
@@ -920,6 +938,9 @@ impl GameEngine {
                     }
                     effect @ SpellEffectKind::ReturnFromGraveyard { .. } => {
                         zones::return_from_graveyard(&mut cx, effect)?
+                    }
+                    effect @ SpellEffectKind::ReturnAbilitySourceFromGraveyard { .. } => {
+                        zones::return_ability_source_from_graveyard(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::ProduceMana { .. } => {
                         misc::produce_mana(&mut cx, effect)?
@@ -1300,6 +1321,11 @@ pub(crate) fn move_object_to_zone(
                 })
         })
         .flatten();
+    if leaving_battlefield {
+        if let Some(old_controller) = state.objects.get(&oid).map(|object| object.controller) {
+            state.stage_delayed_control_loss(&[(oid, old_controller, None)]);
+        }
+    }
     if old_zone != Some(z) {
         *state.zone_change_generation.entry(oid).or_insert(0) += 1;
         if let Some(object) = state.objects.get_mut(&oid) {
@@ -1685,6 +1711,7 @@ mod attached_subject_tests {
             source_zone_change: generation,
             source_face_change: 0,
             ability_index: Some(0),
+            triggered_ability: None,
             is_triggered: true,
             is_copy: false,
             face_index: 0,
@@ -1871,6 +1898,7 @@ mod source_keyword_tests {
             source_zone_change: generation,
             source_face_change: 0,
             ability_index: Some(0),
+            triggered_ability: None,
             is_triggered: false,
             is_copy: false,
             face_index: 0,
@@ -1893,6 +1921,7 @@ mod source_keyword_tests {
             source_zone_change: 0,
             source_face_change: 0,
             ability_index: None,
+            triggered_ability: None,
             is_triggered: false,
             is_copy: false,
             face_index: 0,

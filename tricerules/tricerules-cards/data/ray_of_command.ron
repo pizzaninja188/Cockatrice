@@ -1,0 +1,22 @@
+(
+  id: "ray_of_command",
+  name: "Ray of Command",
+  mana_cost: "{3}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    Untap(subject: Chosen((kind: Creature, controller: Opponent))),
+    GainControlUntilEndOfTurn(target: (kind: Creature, controller: Opponent)),
+    GrantKeywords(
+      subject: Chosen((kind: Creature)),
+      keywords: [Haste],
+    ),
+    CreateDelayedTrigger(
+      subject: Chosen((kind: Creature)),
+      ability: (
+        trigger: WhenControllerLosesControlOf,
+        effect: [Tap(subject: TriggerObject)],
+        text: "When you lose control of the creature, tap it.",
+      ),
+    ),
+  ],
+)

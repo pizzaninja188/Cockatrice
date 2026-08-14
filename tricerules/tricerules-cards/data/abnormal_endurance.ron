@@ -1,0 +1,19 @@
+(
+  id: "abnormal_endurance",
+  name: "Abnormal Endurance",
+  mana_cost: "{1}{B}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 2, toughness: 0, subject: Chosen((kind: Creature))),
+    GrantTriggeredAbility(
+      subject: Chosen((kind: Creature)),
+      ability: (
+        trigger: WhenSelfDies,
+        effect: [
+          ReturnAbilitySourceFromGraveyard(tapped: true, controller: Owner),
+        ],
+        text: "When this creature dies, return it to the battlefield tapped under its owner's control.",
+      ),
+    ),
+  ],
+)

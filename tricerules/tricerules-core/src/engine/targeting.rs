@@ -626,6 +626,14 @@ pub(super) fn effect_target_legal_at_resolution(
             subject: EffectSubject::Chosen(target),
             ..
         }
+        | SpellEffectKind::GrantTriggeredAbility {
+            subject: EffectSubject::Chosen(target),
+            ..
+        }
+        | SpellEffectKind::CreateDelayedTrigger {
+            subject: EffectSubject::Chosen(target),
+            ..
+        }
         | SpellEffectKind::AddTypes {
             subject: EffectSubject::Chosen(target),
             ..
@@ -652,6 +660,14 @@ pub(super) fn effect_target_legal_at_resolution(
             subject: EffectSubject::Source | EffectSubject::AttachedObject,
             ..
         }
+        | SpellEffectKind::GrantTriggeredAbility {
+            subject: EffectSubject::Source | EffectSubject::AttachedObject,
+            ..
+        }
+        | SpellEffectKind::CreateDelayedTrigger {
+            subject: EffectSubject::Source | EffectSubject::AttachedObject,
+            ..
+        }
         | SpellEffectKind::AddTypes {
             subject: EffectSubject::Source | EffectSubject::AttachedObject,
             ..
@@ -668,7 +684,8 @@ pub(super) fn effect_target_legal_at_resolution(
         | SpellEffectKind::ApplyCombatRestriction {
             scope: CombatRestrictionScope::Source | CombatRestrictionScope::Matching(_),
             ..
-        } => false,
+        }
+        | SpellEffectKind::ReturnAbilitySourceFromGraveyard { .. } => false,
         SpellEffectKind::ExileTarget
         | SpellEffectKind::ExileTargetGainLifeEqualToPower
         | SpellEffectKind::ReturnTargetCreatureToHand => {
@@ -772,6 +789,8 @@ pub(super) fn validate_effect_targets(
         SpellEffectKind::PumpTarget { subject, .. }
         | SpellEffectKind::PutCounters { subject, .. }
         | SpellEffectKind::GrantKeywords { subject, .. }
+        | SpellEffectKind::GrantTriggeredAbility { subject, .. }
+        | SpellEffectKind::CreateDelayedTrigger { subject, .. }
         | SpellEffectKind::AddTypes { subject, .. }
         | SpellEffectKind::Regenerate { subject } => match subject {
             EffectSubject::Source
@@ -940,6 +959,7 @@ pub(super) fn validate_effect_targets(
         | SpellEffectKind::SearchLibrary { .. }
         | SpellEffectKind::Scry { .. }
         | SpellEffectKind::ChangeSourceFace { .. }
+        | SpellEffectKind::ReturnAbilitySourceFromGraveyard { .. }
         | SpellEffectKind::None => {
             if !targets.is_empty() {
                 return Err(EngineError::Illegal("this effect takes no targets"));
@@ -1150,6 +1170,14 @@ pub(super) fn spell_target_legality_error(
             subject: EffectSubject::Chosen(filter),
             ..
         }
+        | SpellEffectKind::GrantTriggeredAbility {
+            subject: EffectSubject::Chosen(filter),
+            ..
+        }
+        | SpellEffectKind::CreateDelayedTrigger {
+            subject: EffectSubject::Chosen(filter),
+            ..
+        }
         | SpellEffectKind::AddTypes {
             subject: EffectSubject::Chosen(filter),
             ..
@@ -1174,6 +1202,14 @@ pub(super) fn spell_target_legality_error(
             ..
         }
         | SpellEffectKind::PutCounters {
+            subject: EffectSubject::Source | EffectSubject::AttachedObject,
+            ..
+        }
+        | SpellEffectKind::GrantTriggeredAbility {
+            subject: EffectSubject::Source | EffectSubject::AttachedObject,
+            ..
+        }
+        | SpellEffectKind::CreateDelayedTrigger {
             subject: EffectSubject::Source | EffectSubject::AttachedObject,
             ..
         }

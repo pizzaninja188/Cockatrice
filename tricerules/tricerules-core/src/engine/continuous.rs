@@ -126,6 +126,7 @@ impl GameEngine {
                     delta_power,
                     delta_toughness,
                     keywords,
+                    triggered_abilities,
                     cant_attack,
                     cant_block,
                     doesnt_untap_during_untap_step,
@@ -159,6 +160,16 @@ impl GameEngine {
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
+                            condition: None,
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
+                    for ability in triggered_abilities {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            source_id: Some(object_id),
+                            affected: affected.clone(),
+                            kind: ContinuousEffectKind::GrantTriggeredAbility(Box::new(ability)),
                             condition: None,
                             duration: EffectDuration::WhileSourceOnBattlefield,
                             timestamp,

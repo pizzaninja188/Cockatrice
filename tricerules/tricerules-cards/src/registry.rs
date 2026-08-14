@@ -93,6 +93,12 @@ impl CardRegistry {
             let face = token.primary_face();
             let can_reference_attached_object = face_can_reference_attached_object(face);
             for ability in &face.triggered_abilities {
+                if ability.trigger.is_delayed_only() {
+                    return Err(RegistryError::InvalidCard {
+                        id: id.clone(),
+                        reason: "delayed trigger conditions require CreateDelayedTrigger".into(),
+                    });
+                }
                 ability
                     .trigger
                     .validate()
@@ -481,6 +487,7 @@ impl CardRegistry {
                         delta_power,
                         delta_toughness,
                         keywords,
+                        triggered_abilities,
                         cant_attack,
                         cant_block,
                         doesnt_untap_during_untap_step,
@@ -497,6 +504,7 @@ impl CardRegistry {
                             && *delta_toughness == 0
                             && add_types.is_empty()
                             && keywords.is_empty()
+                            && triggered_abilities.is_empty()
                             && !cant_attack
                             && !cant_block
                             && !doesnt_untap_during_untap_step
@@ -514,6 +522,21 @@ impl CardRegistry {
                                     reason,
                                 })?;
                         }
+                        for granted in triggered_abilities {
+                            if granted.trigger.is_delayed_only() {
+                                return Err(RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason: "AttachedModifier cannot grant a delayed trigger"
+                                        .into(),
+                                });
+                            }
+                            granted.validate_shape().map_err(|reason| {
+                                RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason,
+                                }
+                            })?;
+                        }
                     }
                     if matches!(ability, StaticAbilityDef::ControlsAttached) && !face.is_aura {
                         return Err(RegistryError::InvalidCard {
@@ -523,6 +546,13 @@ impl CardRegistry {
                     }
                 }
                 for ability in &face.triggered_abilities {
+                    if ability.trigger.is_delayed_only() {
+                        return Err(RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason: "delayed trigger conditions require CreateDelayedTrigger"
+                                .into(),
+                        });
+                    }
                     ability
                         .trigger
                         .validate()

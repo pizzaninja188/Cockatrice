@@ -2,7 +2,7 @@
 
 use super::{
     AbilityCost, Amount, BattlefieldCreatureCountFilter, CardTypeFilter, Color, CounterKind,
-    GameCondition, Keyword, SpellEffectKind, TargetFilter, TargetingDef,
+    EffectContext, GameCondition, Keyword, SpellEffectKind, TargetFilter, TargetingDef,
 };
 use crate::ManaAmount;
 use serde::{Deserialize, Serialize};
@@ -134,6 +134,11 @@ pub enum TriggerCondition {
     WhenSelfEntersBattlefield,
     /// When this permanent is put into a graveyard from the battlefield.
     WhenSelfDies,
+    /// Delayed-trigger-only condition: the next end step that begins after creation.
+    AtBeginningOfNextEndStep,
+    /// Delayed-trigger-only condition: the controller that created the delayed trigger stops
+    /// controlling the observed permanent.
+    WhenControllerLosesControlOf,
     /// CR 508.1m / 508.3a: whenever this creature attacks, optionally requiring a minimum number
     /// of *other* creatures in the same declaration group. Zero is an ordinary self-attack
     /// trigger; two is Battalion (Makeshift Battalion, Firefist Striker, Haazda Marshal).
@@ -286,6 +291,13 @@ pub enum TriggerCondition {
 }
 
 impl TriggerCondition {
+    pub(crate) fn is_delayed_only(&self) -> bool {
+        matches!(
+            self,
+            Self::AtBeginningOfNextEndStep | Self::WhenControllerLosesControlOf
+        )
+    }
+
     pub(crate) fn validate(&self) -> Result<(), String> {
         match self {
             Self::WheneverSelfBlocksCreature { attacker } => attacker.validate(),
@@ -303,6 +315,8 @@ impl TriggerCondition {
                 | Self::WheneverSelfBecomesBlockedByCreature { .. }
                 | Self::WheneverSelfBecomesTarget { .. }
                 | Self::WheneverPermanentBecomesTarget { .. }
+                | Self::AtBeginningOfNextEndStep
+                | Self::WhenControllerLosesControlOf
         )
     }
 }
@@ -473,6 +487,36 @@ pub struct TriggeredAbilityDef {
     pub intervening_if: Option<InterveningIf>,
 }
 
+impl TriggeredAbilityDef {
+    pub(crate) fn validate_shape(&self) -> Result<(), String> {
+        self.trigger.validate()?;
+        if self.text.trim().is_empty() {
+            return Err("triggered ability text must not be empty".into());
+        }
+        if self.effect.is_empty() {
+            return Err("triggered ability must contain at least one effect".into());
+        }
+        if self
+            .effect
+            .iter()
+            .any(SpellEffectKind::uses_trigger_object_reference)
+            && !self.trigger.supplies_trigger_object()
+        {
+            return Err(
+                "trigger-object effect requires a trigger that supplies an observed object".into(),
+            );
+        }
+        if let Some(InterveningIf::GameCondition(condition)) = self.intervening_if.as_ref() {
+            condition.validate()?;
+        }
+        for effect in &self.effect {
+            effect.validate(EffectContext::Ability)?;
+        }
+        SpellEffectKind::validate_list(&self.effect)?;
+        TargetingDef::validate_optional(self.targeting.as_ref(), &self.effect)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Static abilities (CR 604) and shared creature scopes
 // ---------------------------------------------------------------------------
@@ -641,6 +685,11 @@ pub enum StaticAbilityDef {
         delta_toughness: i32,
         #[serde(default)]
         keywords: Vec<Keyword>,
+        /// Triggered abilities the attached permanent has while this static ability applies.
+        /// Infernal Scarring and similar Auras use the enchanted permanent's controller and
+        /// last-known identity when the granted ability triggers.
+        #[serde(default)]
+        triggered_abilities: Vec<TriggeredAbilityDef>,
         #[serde(default)]
         cant_attack: bool,
         #[serde(default)]

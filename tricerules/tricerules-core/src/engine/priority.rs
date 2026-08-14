@@ -11,9 +11,9 @@ pub(super) fn sorcery_speed_available(state: &GameState, player: PlayerId) -> bo
         && player == state.active_player_id()
 }
 
-pub(super) fn instant_timing_step_allowed(step: TurnStep) -> bool {
+pub(super) fn instant_timing_step_allowed(state: &GameState) -> bool {
     matches!(
-        step,
+        state.turn_step,
         TurnStep::Main1
             | TurnStep::Main2
             | TurnStep::Upkeep
@@ -24,7 +24,7 @@ pub(super) fn instant_timing_step_allowed(step: TurnStep) -> bool {
             | TurnStep::CombatDamage
             | TurnStep::EndCombat
             | TurnStep::EndStep
-    )
+    ) || (state.turn_step == TurnStep::Cleanup && state.cleanup_priority_active)
 }
 
 impl GameEngine {
@@ -414,6 +414,10 @@ impl GameEngine {
                 self.apply_sbas(ev)?;
                 return self.start_cleanup_or_roll_turn(std::mem::take(ev));
             }
+            Cleanup if self.state.cleanup_priority_active => {
+                self.state.cleanup_priority_active = false;
+                return self.start_cleanup_or_roll_turn(std::mem::take(ev));
+            }
             _ => {
                 self.clear_all_mana_pools();
                 if let Some(i) = self.state.player_idx(ap) {
@@ -538,6 +542,19 @@ impl GameEngine {
         self.reindex_battlefield_control(&mut ev);
         self.cleanup_marked_damage();
         self.clear_all_mana_pools();
+        self.flush_staged_triggers(&mut ev);
+        if !self.state.stack.is_empty() || self.state.blocking_choice().is_some() {
+            self.state.cleanup_priority_active = true;
+            if let Some(index) = self.state.player_idx(self.state.active_player_id()) {
+                self.state.priority_idx = index;
+            }
+            self.state.passes_since_stack_change = 0;
+            if self.state.blocking_choice().is_none() {
+                ev.push(ev_priority_changed(self));
+            }
+            return Ok(finish_with_events(self, ev));
+        }
+        self.state.cleanup_priority_active = false;
         self.state.lands_played_this_turn = 0;
         self.state.turn_history.finish_turn();
         let n = self.state.players.len();

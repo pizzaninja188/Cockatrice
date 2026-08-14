@@ -51,10 +51,7 @@ pub(super) fn destroy_target(
         } else {
             events.push(ev_log(format!("{spell_label} destroys {tgt}")));
             let owner = engine.state.objects.get(&tid).map(|o| o.owner);
-            let controller = engine.state.objects.get(&tid).map(|o| o.controller);
-            let effective_identity = engine
-                .effective_card_identity(tid)
-                .map(|(card_id, face_index)| (card_id.to_string(), face_index));
+            let source = engine.trigger_source_snapshot(tid);
             let was_creature = engine
                 .characteristics(tid)
                 .is_some_and(|value| value.is_creature());
@@ -67,14 +64,9 @@ pub(super) fn destroy_target(
                     rv1::permanent_moved::Destination::Graveyard,
                 ));
             }
-            if let (Some((cid, face_index)), Some(ctrl)) = (effective_identity, controller) {
+            if let Some(source) = source {
                 engine.fire_triggers(&[GameEvent::Dies {
-                    source: TriggerSourceSnapshot {
-                        object_id: tid,
-                        card_id: cid,
-                        controller: ctrl,
-                        face_index,
-                    },
+                    source,
                     was_creature,
                 }]);
             }
@@ -233,6 +225,67 @@ pub(super) fn gain_control_until_end_of_turn(
         "{} changes control of {target} until end of turn",
         cx.spell_label
     )));
+    Ok(EffectOutcome::Continue)
+}
+
+pub(super) fn create_delayed_trigger(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::CreateDelayedTrigger { subject, ability } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let watched_id = match &subject {
+        EffectSubject::Source | EffectSubject::AttachedObject | EffectSubject::TriggerObject => {
+            resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject)
+        }
+        EffectSubject::Chosen(target) => cx.targets.first().copied().filter(|object_id| {
+            target_filter_legal_at_resolution(
+                cx.engine,
+                target,
+                *object_id,
+                cx.controller,
+                TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
+            )
+        }),
+    };
+    let Some(watched_id) = watched_id else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let Some(watched_object) = cx.engine.state.objects.get(&watched_id) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    if watched_object.zone != Zone::Battlefield {
+        return Ok(EffectOutcome::Continue);
+    }
+    let watched = TriggerObjectRef {
+        object_id: watched_id,
+        zone_change_generation: cx
+            .engine
+            .state
+            .zone_change_generation
+            .get(&watched_id)
+            .copied()
+            .unwrap_or(0),
+        controller_at_event: watched_object.controller,
+    };
+    let card_name = cx
+        .engine
+        .registry
+        .get(&cx.top.card_id)
+        .map(|definition| definition.name.clone())
+        .unwrap_or_else(|| cx.spell_label.to_string());
+    cx.engine
+        .state
+        .active_delayed_triggers
+        .push(ActiveDelayedTrigger {
+            controller: cx.controller,
+            card_id: cx.top.card_id.clone(),
+            card_name,
+            source_face_index: cx.top.face_index,
+            watched,
+            ability: *ability,
+        });
     Ok(EffectOutcome::Continue)
 }
 

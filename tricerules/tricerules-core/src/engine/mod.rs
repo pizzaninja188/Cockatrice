@@ -2,9 +2,9 @@
 
 use crate::custom::{self, ResolutionChoice, ResolutionCtx, ResolutionStep};
 use crate::state::{
-    ActiveDamagePrevention, AdventureCastPermission, AffectedScope, AttachmentRecipient,
-    BattlefieldEntryCompletion, BattlefieldEntryEvent, BlockingChoice, ChosenSpellMode,
-    CombatState, ContinuousEffect, CopiableValues, DamagePreventionAmount,
+    ActiveDamagePrevention, ActiveDelayedTrigger, AdventureCastPermission, AffectedScope,
+    AttachmentRecipient, BattlefieldEntryCompletion, BattlefieldEntryEvent, BlockingChoice,
+    ChosenSpellMode, CombatState, ContinuousEffect, CopiableValues, DamagePreventionAmount,
     DamagePreventionProhibition, DamagePreventionScope, EntryReplacementApplication,
     EntryReplacementEffectId, GameObject, GameState, ObjectId, OpeningSequence,
     PendingBattlefieldEntry, PendingManaPayment, PendingResolution, PendingTrigger,
@@ -27,9 +27,10 @@ use tricerules_cards::primitives::{
     DamagePreventionAdditionalEffect, DamagePreventionSubject, EffectDuration, EffectSubject,
     EntersTappedAffected, Evasion, FaceChangeAction, GameCondition, InterveningIf, Keyword,
     LifeAmount, ManaAmount, ManaSpendFilter, PermanentTypeFilter, PlayerRecipient, PowerComparison,
-    PreventionAmountBasis, RelativePlayerSet, SearchDestination, SpellCostModifier,
-    SpellEffectKind, StaticAbilityDef, StaticDamagePreventionAmount, TargetController,
-    TargetFilter, TargetKind, TargetingSourceFilter, TokenController, TriggerCondition,
+    PreventionAmountBasis, RelativePlayerSet, ReturnController, SearchDestination,
+    SpellCostModifier, SpellEffectKind, StaticAbilityDef, StaticDamagePreventionAmount,
+    TargetController, TargetFilter, TargetKind, TargetingSourceFilter, TokenController,
+    TriggerCondition, TriggeredAbilityDef,
 };
 use tricerules_cards::{CardFace, CardRegistry, FaceRef, Layout};
 use tricerules_proto::ruled::v1 as rv1;
@@ -239,12 +240,15 @@ pub enum EngineError {
 
 /// Internal game events emitted at state-change sites to drive the unified trigger-collection pass
 /// (CR 603.2). Each variant carries the minimum data needed to identify which triggers match.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct TriggerSourceSnapshot {
     object_id: ObjectId,
     card_id: String,
     controller: PlayerId,
     face_index: usize,
+    zone_change_generation: u64,
+    face_change_generation: u64,
+    triggered_abilities: Vec<(usize, TriggeredAbilityDef)>,
 }
 
 /// One attacker-blocker relation as it existed at the declaration event. Both endpoints retain
@@ -621,10 +625,12 @@ impl GameEngine {
             combat: None,
             winner: None,
             cleanup_discard_player: None,
+            cleanup_priority_active: false,
             opening,
             starting_player_idx: 0,
             pending_triggers: VecDeque::new(),
             staged_trigger_groups: VecDeque::new(),
+            active_delayed_triggers: Vec::new(),
             pending_trigger_order: None,
             pending_resolution: None,
             pending_replacement_event: None,

@@ -9,10 +9,7 @@ use super::*;
 
 #[derive(Debug, Clone)]
 struct SacrificeSnapshot {
-    object_id: ObjectId,
-    card_id: String,
-    controller: PlayerId,
-    face_index: usize,
+    source: TriggerSourceSnapshot,
     was_creature: bool,
 }
 
@@ -798,7 +795,7 @@ impl GameEngine {
         let cost_modifiers = face.cost_modifiers.clone();
         let eligible_restricted_mana = self.eligible_restricted_mana_for_spell(idx, face);
         let sorcery_ok = super::priority::sorcery_speed_available(&self.state, player);
-        let instant_ok = super::priority::instant_timing_step_allowed(self.state.turn_step);
+        let instant_ok = super::priority::instant_timing_step_allowed(&self.state);
         if face_is_sorcery {
             if !sorcery_ok {
                 return Err(EngineError::Illegal("sorcery speed only"));
@@ -1017,6 +1014,7 @@ impl GameEngine {
             source_zone_change: 0,
             source_face_change: 0,
             ability_index: None,
+            triggered_ability: None,
             is_triggered: false,
             is_copy: false,
             chosen_x,
@@ -1257,7 +1255,9 @@ impl GameEngine {
         for component in plan.components {
             let (oid, sacrificed) = match component {
                 ValidatedSpellCost::Discard(oid) => (oid, None),
-                ValidatedSpellCost::Sacrifice(snapshot) => (snapshot.object_id, Some(snapshot)),
+                ValidatedSpellCost::Sacrifice(snapshot) => {
+                    (snapshot.source.object_id, Some(snapshot))
+                }
             };
             let card_name = object_display_name(&self.state, self.registry, oid);
             let owner = self
@@ -1460,6 +1460,7 @@ impl GameEngine {
             source_zone_change,
             source_face_change,
             ability_index: Some(ability_index),
+            triggered_ability: None,
             is_triggered: false,
             is_copy: false,
             chosen_x: 0,
@@ -1730,16 +1731,9 @@ impl GameEngine {
     /// is paid, because CR 603.6 reads the dying object's last-known information and the object is
     /// already in the graveyard (controller reset, characteristics gone) by the time it fires.
     fn sacrifice_snapshot(&self, permanent_id: ObjectId) -> Option<SacrificeSnapshot> {
-        let object = self.state.objects.get(&permanent_id)?;
-        let (card_id, face_index) = self
-            .effective_card_identity(permanent_id)
-            .map(|(card_id, face_index)| (card_id.to_string(), face_index))
-            .unwrap_or_else(|| (object.card_id.clone(), object.face_up_index));
+        let source = self.trigger_source_snapshot(permanent_id)?;
         Some(SacrificeSnapshot {
-            object_id: permanent_id,
-            card_id,
-            controller: object.controller,
-            face_index,
+            source,
             was_creature: self
                 .characteristics(permanent_id)
                 .is_some_and(|value| value.is_creature()),
@@ -1757,12 +1751,7 @@ impl GameEngine {
         let events: Vec<_> = snapshots
             .into_iter()
             .map(|snapshot| GameEvent::Dies {
-                source: TriggerSourceSnapshot {
-                    object_id: snapshot.object_id,
-                    card_id: snapshot.card_id,
-                    controller: snapshot.controller,
-                    face_index: snapshot.face_index,
-                },
+                source: snapshot.source,
                 was_creature: snapshot.was_creature,
             })
             .collect();
@@ -2142,6 +2131,7 @@ impl GameEngine {
                 .unwrap_or(0),
             source_face_change: 0,
             ability_index: None,
+            triggered_ability: None,
             is_triggered: false,
             is_copy: false,
             face_index,

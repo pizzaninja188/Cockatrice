@@ -76,32 +76,20 @@ impl GameEngine {
         // permanent, or answering the wrong trigger when two are queued) silently destroys the
         // trigger while the client is still showing its prompt — and Decline then fails too,
         // because the engine no longer believes anything is pending.
-        let validated: Result<String, EngineError> = match self.registry.get(&pending.card_id) {
-            None => Err(EngineError::MissingCard(pending.card_id.clone())),
-            Some(def) => {
-                let name = def.name.clone();
-                match def
-                    .face(pending.source_face_index)
-                    .expect("pending trigger captured a registry-valid face")
-                    .triggered_abilities
-                    .get(pending.ability_index)
-                {
-                    Some(ability) => validate_ability_targets(
-                        self,
-                        player,
-                        TargetSourceIdentity::captured(
-                            pending.source_permanent_id,
-                            pending.source_zone_change,
-                        ),
-                        &ability.effect,
-                        ability.targeting.as_ref(),
-                        targets,
-                    )
-                    .map(|()| name),
-                    None => Ok(name),
-                }
-            }
-        };
+        let card_name = self
+            .registry
+            .get(&pending.card_id)
+            .map(|definition| definition.name.clone())
+            .unwrap_or_else(|| pending.card_id.clone());
+        let validated = validate_ability_targets(
+            self,
+            player,
+            TargetSourceIdentity::captured(pending.source_permanent_id, pending.source_zone_change),
+            &pending.ability.effect,
+            pending.ability.targeting.as_ref(),
+            targets,
+        )
+        .map(|()| card_name);
         let card_name = match validated {
             Ok(name) => name,
             Err(e) => {
@@ -121,6 +109,7 @@ impl GameEngine {
         let source_zone_change = pending.source_zone_change;
         let source_face_change = pending.source_face_change;
         let ability_index = pending.ability_index;
+        let ability = pending.ability;
         let controller = pending.controller;
         let trigger_player = pending.trigger_player;
         let trigger_object = pending.trigger_object;
@@ -144,6 +133,7 @@ impl GameEngine {
             source_zone_change,
             source_face_change,
             ability_index: Some(ability_index),
+            triggered_ability: Some(ability),
             is_triggered: true,
             is_copy: false,
             chosen_x: 0,
@@ -694,22 +684,15 @@ impl GameEngine {
     ) -> Result<RuledEventBatch, EngineError> {
         let oid = chosen[0];
         let card_name = super::events::object_display_name(&self.state, self.registry, oid);
-        // Capture card_id and controller before the zone move clears transient state.
+        // Capture last-known information before the zone move clears transient state.
         let owner = self
             .state
             .objects
             .get(&oid)
             .map(|o| o.owner)
             .ok_or(EngineError::Illegal("sacrificed object missing"))?;
-        let (card_id, face_index) = self
-            .effective_card_identity(oid)
-            .map(|(card_id, face_index)| (card_id.to_string(), face_index))
-            .unwrap_or_default();
-        let controller = self
-            .state
-            .objects
-            .get(&oid)
-            .map(|o| o.controller)
+        let source = self
+            .trigger_source_snapshot(oid)
             .ok_or(EngineError::Illegal("sacrificed object missing"))?;
         let was_creature = self
             .characteristics(oid)
@@ -731,12 +714,7 @@ impl GameEngine {
         ];
 
         self.fire_triggers(&[GameEvent::Dies {
-            source: TriggerSourceSnapshot {
-                object_id: oid,
-                card_id,
-                controller,
-                face_index,
-            },
+            source,
             was_creature,
         }]);
         let _ = self.apply_sbas(&mut ev);
@@ -759,10 +737,7 @@ impl GameEngine {
                 continue;
             }
             let owner = self.state.objects.get(&oid).map(|o| o.owner);
-            let controller = self.state.objects.get(&oid).map(|o| o.controller);
-            let effective_identity = self
-                .effective_card_identity(oid)
-                .map(|(card_id, face_index)| (card_id.to_string(), face_index));
+            let source = self.trigger_source_snapshot(oid);
             let was_creature = self
                 .characteristics(oid)
                 .is_some_and(|value| value.is_creature());
@@ -775,14 +750,9 @@ impl GameEngine {
                         rv1::permanent_moved::Destination::Graveyard,
                     ));
                 }
-                if let (Some((cid, face_index)), Some(ctrl)) = (effective_identity, controller) {
+                if let Some(source) = source {
                     trigger_events.push(GameEvent::Dies {
-                        source: TriggerSourceSnapshot {
-                            object_id: oid,
-                            card_id: cid,
-                            controller: ctrl,
-                            face_index,
-                        },
+                        source,
                         was_creature,
                     });
                 }

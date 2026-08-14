@@ -8,9 +8,8 @@ use super::*;
 /// One triggered ability that matched an event and is about to go on the stack (or be parked for
 /// target selection) — the unit a trigger scan yields and [`GameEngine::push_trigger`] consumes.
 ///
-/// Identifies the ability by *source permanent + index*, never by a resolved effect: the effect is
-/// looked up from the registry at push and again at resolution, so a trigger surviving on the
-/// stack after its source leaves still knows what it does.
+/// The complete ability definition is captured when it triggers. This is required for abilities
+/// granted by continuous effects, which can disappear before the trigger reaches the stack.
 pub(super) struct CollectedTrigger {
     pub source_id: ObjectId,
     pub card_id: String,
@@ -20,6 +19,7 @@ pub(super) struct CollectedTrigger {
     /// CR 603.3d: the ability's controller — the controller of its source permanent.
     pub controller: PlayerId,
     pub ability_index: usize,
+    pub ability: TriggeredAbilityDef,
     pub ability_text: String,
     /// The event's affected player ("that player"), when distinct from the ability controller.
     pub trigger_player: Option<PlayerId>,
@@ -45,7 +45,28 @@ impl GameEngine {
             }
         }
 
-        let collected = self.collect_event_triggers(events);
+        let delayed = if events
+            .iter()
+            .any(|event| matches!(event, GameEvent::EndStepBegin { .. }))
+        {
+            self.state.take_next_end_step_delayed()
+        } else {
+            Vec::new()
+        };
+        let mut collected = self.collect_event_triggers(events);
+        collected.extend(delayed.into_iter().map(|delayed| CollectedTrigger {
+            source_id: delayed.watched.object_id,
+            card_id: delayed.card_id,
+            face_index: delayed.source_face_index,
+            source_zone_change: delayed.watched.zone_change_generation,
+            source_face_change: 0,
+            controller: delayed.controller,
+            ability_index: 0,
+            ability_text: delayed.ability.text.clone(),
+            trigger_player: None,
+            trigger_object: Some(delayed.watched),
+            ability: delayed.ability,
+        }));
         self.stage_triggers(collected);
     }
 
@@ -99,11 +120,7 @@ impl GameEngine {
                     .and_then(|d| d.face(trigger.face_index))
                     .map(|face| face.name.clone())
                     .unwrap_or_default();
-                let may = def
-                    .and_then(|d| d.face(trigger.face_index))
-                    .and_then(|face| face.triggered_abilities.get(trigger.ability_index))
-                    .map(|ta| ta.may)
-                    .unwrap_or(false);
+                let may = trigger.ability.may;
                 StagedTrigger {
                     object_id,
                     source_permanent_id: trigger.source_id,
@@ -114,6 +131,7 @@ impl GameEngine {
                     card_name,
                     controller: trigger.controller,
                     ability_index: trigger.ability_index,
+                    ability: trigger.ability,
                     ability_text: trigger.ability_text,
                     trigger_player: trigger.trigger_player,
                     trigger_object: trigger.trigger_object,
@@ -223,17 +241,8 @@ impl GameEngine {
         let mut sources = Vec::new();
         for pi in ordered {
             for &source_id in &self.state.players[pi].battlefield {
-                if let Some(object) = self.state.objects.get(&source_id) {
-                    let (card_id, face_index) = self
-                        .effective_card_identity(source_id)
-                        .map(|(card_id, face_index)| (card_id.to_string(), face_index))
-                        .unwrap_or_else(|| (object.card_id.clone(), object.face_up_index));
-                    sources.push(TriggerSourceSnapshot {
-                        object_id: source_id,
-                        card_id,
-                        controller: object.controller,
-                        face_index,
-                    });
+                if let Some(source) = self.trigger_source_snapshot(source_id) {
+                    sources.push(source);
                 }
             }
         }
@@ -272,50 +281,43 @@ impl GameEngine {
 
                 for source in sources {
                     let src_id = source.object_id;
-                    let src_card = &source.card_id;
                     let src_ctrl = source.controller;
-                    out.extend(self.matching_triggered_abilities(
-                        src_card,
-                        src_id,
-                        src_ctrl,
-                        source.face_index,
-                        |tc| {
-                            let TriggerCondition::WheneverPermanentEntersBattlefield {
-                                controller,
-                                permanent_type,
-                                exclude_self,
-                            } = tc
-                            else {
-                                return false;
-                            };
-                            if *exclude_self && src_id == entering_id {
-                                return false;
+                    out.extend(self.matching_snapshot_abilities(source, |tc| {
+                        let TriggerCondition::WheneverPermanentEntersBattlefield {
+                            controller,
+                            permanent_type,
+                            exclude_self,
+                        } = tc
+                        else {
+                            return false;
+                        };
+                        if *exclude_self && src_id == entering_id {
+                            return false;
+                        }
+                        let rel_ok = self.relative_player_matches(
+                            *controller,
+                            entering_controller,
+                            src_ctrl,
+                        );
+                        if !rel_ok {
+                            return false;
+                        }
+                        match permanent_type {
+                            Some(tricerules_cards::PermanentTypeFilter::Creature) => {
+                                entering_characteristics.is_creature()
                             }
-                            let rel_ok = self.relative_player_matches(
-                                *controller,
-                                entering_controller,
-                                src_ctrl,
-                            );
-                            if !rel_ok {
-                                return false;
+                            Some(tricerules_cards::PermanentTypeFilter::Artifact) => {
+                                entering_characteristics.is_artifact()
                             }
-                            match permanent_type {
-                                Some(tricerules_cards::PermanentTypeFilter::Creature) => {
-                                    entering_characteristics.is_creature()
-                                }
-                                Some(tricerules_cards::PermanentTypeFilter::Artifact) => {
-                                    entering_characteristics.is_artifact()
-                                }
-                                Some(tricerules_cards::PermanentTypeFilter::Enchantment) => {
-                                    entering_characteristics.has_type("Enchantment")
-                                }
-                                Some(tricerules_cards::PermanentTypeFilter::Land) => {
-                                    entering_characteristics.has_type("Land")
-                                }
-                                None => true,
+                            Some(tricerules_cards::PermanentTypeFilter::Enchantment) => {
+                                entering_characteristics.has_type("Enchantment")
                             }
-                        },
-                    ));
+                            Some(tricerules_cards::PermanentTypeFilter::Land) => {
+                                entering_characteristics.has_type("Land")
+                            }
+                            None => true,
+                        }
+                    }));
                 }
                 out
             }
@@ -323,40 +325,29 @@ impl GameEngine {
                 source: dying,
                 was_creature,
             } => {
-                let mut out = self.matching_triggered_abilities(
-                    &dying.card_id,
-                    dying.object_id,
-                    dying.controller,
-                    dying.face_index,
-                    |tc| *tc == TriggerCondition::WhenSelfDies,
-                );
+                let mut out = self
+                    .matching_snapshot_abilities(dying, |tc| *tc == TriggerCondition::WhenSelfDies);
                 if !was_creature {
                     return out;
                 }
                 for source in sources {
-                    out.extend(self.matching_triggered_abilities(
-                        &source.card_id,
-                        source.object_id,
-                        source.controller,
-                        source.face_index,
-                        |tc| {
-                            let TriggerCondition::WheneverCreatureDies {
-                                controller,
-                                exclude_self,
-                            } = tc
-                            else {
-                                return false;
-                            };
-                            if *exclude_self && source.object_id == dying.object_id {
-                                return false;
-                            }
-                            self.relative_player_matches(
-                                *controller,
-                                dying.controller,
-                                source.controller,
-                            )
-                        },
-                    ));
+                    out.extend(self.matching_snapshot_abilities(source, |tc| {
+                        let TriggerCondition::WheneverCreatureDies {
+                            controller,
+                            exclude_self,
+                        } = tc
+                        else {
+                            return false;
+                        };
+                        if *exclude_self && source.object_id == dying.object_id {
+                            return false;
+                        }
+                        self.relative_player_matches(
+                            *controller,
+                            dying.controller,
+                            source.controller,
+                        )
+                    }));
                 }
                 out
             }
@@ -408,12 +399,8 @@ impl GameEngine {
                             } else {
                                 continue;
                             };
-                        let mut matching = self.matching_triggered_abilities(
-                            &source.card_id,
-                            source.object_id,
-                            source.controller,
-                            source.face_index,
-                            |condition| match condition {
+                        let mut matching =
+                            self.matching_snapshot_abilities(source, |condition| match condition {
                                 TriggerCondition::WheneverSelfBlocksCreature { attacker }
                                     if source_is_blocker =>
                                 {
@@ -427,8 +414,7 @@ impl GameEngine {
                                 } if !source_is_blocker => self
                                     .creature_event_filter_matches(edge.blocker.object_id, blocker),
                                 _ => false,
-                            },
-                        );
+                            });
                         for trigger in &mut matching {
                             trigger.trigger_object = Some(related);
                         }
@@ -474,25 +460,15 @@ impl GameEngine {
                 sources
                     .iter()
                     .flat_map(|source| {
-                        self.matching_triggered_abilities(
-                            &source.card_id,
-                            source.object_id,
-                            source.controller,
-                            source.face_index,
-                            |tc| {
-                                let TriggerCondition::AtBeginningOfUpkeep {
-                                    player: player_filter,
-                                } = tc
-                                else {
-                                    return false;
-                                };
-                                self.relative_player_matches(
-                                    *player_filter,
-                                    *upkeep,
-                                    source.controller,
-                                )
-                            },
-                        )
+                        self.matching_snapshot_abilities(source, |tc| {
+                            let TriggerCondition::AtBeginningOfUpkeep {
+                                player: player_filter,
+                            } = tc
+                            else {
+                                return false;
+                            };
+                            self.relative_player_matches(*player_filter, *upkeep, source.controller)
+                        })
                     })
                     .collect()
             }
@@ -503,46 +479,34 @@ impl GameEngine {
                 sources
                     .iter()
                     .flat_map(|source| {
-                        self.matching_triggered_abilities(
-                            &source.card_id,
-                            source.object_id,
-                            source.controller,
-                            source.face_index,
-                            |tc| {
-                                let TriggerCondition::AtBeginningOfDrawStep {
-                                    player: player_filter,
-                                } = tc
-                                else {
-                                    return false;
-                                };
-                                self.relative_player_matches(
-                                    *player_filter,
-                                    *drawing,
-                                    source.controller,
-                                )
-                            },
-                        )
+                        self.matching_snapshot_abilities(source, |tc| {
+                            let TriggerCondition::AtBeginningOfDrawStep {
+                                player: player_filter,
+                            } = tc
+                            else {
+                                return false;
+                            };
+                            self.relative_player_matches(
+                                *player_filter,
+                                *drawing,
+                                source.controller,
+                            )
+                        })
                     })
                     .collect()
             }
             GameEvent::EndStepBegin { player: active } => sources
                 .iter()
                 .flat_map(|source| {
-                    self.matching_triggered_abilities(
-                        &source.card_id,
-                        source.object_id,
-                        source.controller,
-                        source.face_index,
-                        |tc| {
-                            let TriggerCondition::AtBeginningOfEndStep {
-                                player: player_filter,
-                            } = tc
-                            else {
-                                return false;
-                            };
-                            self.relative_player_matches(*player_filter, *active, source.controller)
-                        },
-                    )
+                    self.matching_snapshot_abilities(source, |tc| {
+                        let TriggerCondition::AtBeginningOfEndStep {
+                            player: player_filter,
+                        } = tc
+                        else {
+                            return false;
+                        };
+                        self.relative_player_matches(*player_filter, *active, source.controller)
+                    })
                 })
                 .collect(),
             GameEvent::LifeGained { player: gaining } => {
@@ -551,25 +515,19 @@ impl GameEngine {
                 sources
                     .iter()
                     .flat_map(|source| {
-                        self.matching_triggered_abilities(
-                            &source.card_id,
-                            source.object_id,
-                            source.controller,
-                            source.face_index,
-                            |tc| {
-                                let TriggerCondition::WheneverPlayerGainsLife {
-                                    player: player_filter,
-                                } = tc
-                                else {
-                                    return false;
-                                };
-                                self.relative_player_matches(
-                                    *player_filter,
-                                    *gaining,
-                                    source.controller,
-                                )
-                            },
-                        )
+                        self.matching_snapshot_abilities(source, |tc| {
+                            let TriggerCondition::WheneverPlayerGainsLife {
+                                player: player_filter,
+                            } = tc
+                            else {
+                                return false;
+                            };
+                            self.relative_player_matches(
+                                *player_filter,
+                                *gaining,
+                                source.controller,
+                            )
+                        })
                     })
                     .collect()
             }
@@ -603,40 +561,34 @@ impl GameEngine {
                             continue;
                         };
                         let target_controller = target_characteristics.controller;
-                        let mut matching = self.matching_triggered_abilities(
-                            &source.card_id,
-                            source.object_id,
-                            source.controller,
-                            source.face_index,
-                            |condition| {
-                                let Some(permanent_type) = self.target_trigger_permanent_filter(
-                                    condition,
-                                    *targeting_source,
-                                    *targeting_controller,
-                                    source.object_id,
-                                    source.controller,
-                                    *target_id,
-                                    target_controller,
-                                ) else {
-                                    return false;
-                                };
-                                match permanent_type {
-                                    Some(PermanentTypeFilter::Creature) => {
-                                        target_characteristics.is_creature()
-                                    }
-                                    Some(PermanentTypeFilter::Artifact) => {
-                                        target_characteristics.is_artifact()
-                                    }
-                                    Some(PermanentTypeFilter::Enchantment) => {
-                                        target_characteristics.has_type("Enchantment")
-                                    }
-                                    Some(PermanentTypeFilter::Land) => {
-                                        target_characteristics.has_type("Land")
-                                    }
-                                    None => true,
+                        let mut matching = self.matching_snapshot_abilities(source, |condition| {
+                            let Some(permanent_type) = self.target_trigger_permanent_filter(
+                                condition,
+                                *targeting_source,
+                                *targeting_controller,
+                                source.object_id,
+                                source.controller,
+                                *target_id,
+                                target_controller,
+                            ) else {
+                                return false;
+                            };
+                            match permanent_type {
+                                Some(PermanentTypeFilter::Creature) => {
+                                    target_characteristics.is_creature()
                                 }
-                            },
-                        );
+                                Some(PermanentTypeFilter::Artifact) => {
+                                    target_characteristics.is_artifact()
+                                }
+                                Some(PermanentTypeFilter::Enchantment) => {
+                                    target_characteristics.has_type("Enchantment")
+                                }
+                                Some(PermanentTypeFilter::Land) => {
+                                    target_characteristics.has_type("Land")
+                                }
+                                None => true,
+                            }
+                        });
                         for trigger in &mut matching {
                             trigger.trigger_object = self.trigger_object_ref(*target_id);
                         }
@@ -659,34 +611,29 @@ impl GameEngine {
                 sources
                     .iter()
                     .flat_map(|source| {
-                        self.matching_triggered_abilities(
-                            &source.card_id,
-                            source.object_id,
-                            source.controller,
-                            source.face_index,
-                            |tc| {
-                                let TriggerCondition::WheneverPlayerCastsSpell {
-                                    caster: caster_filter,
-                                    spell_type,
-                                } = tc
-                                else {
-                                    return false;
-                                };
-                                let caster_ok = self.relative_player_matches(
-                                    *caster_filter,
-                                    *caster,
-                                    source.controller,
-                                );
-                                if !caster_ok {
-                                    return false;
+                        self.matching_snapshot_abilities(source, |tc| {
+                            let TriggerCondition::WheneverPlayerCastsSpell {
+                                caster: caster_filter,
+                                spell_type,
+                            } = tc
+                            else {
+                                return false;
+                            };
+                            let caster_ok = self.relative_player_matches(
+                                *caster_filter,
+                                *caster,
+                                source.controller,
+                            );
+                            if !caster_ok {
+                                return false;
+                            }
+                            match spell_type {
+                                None => true,
+                                Some(filter) => {
+                                    cast_face.is_some_and(|face| face.matches_card_type(*filter))
                                 }
-                                match spell_type {
-                                    None => true,
-                                    Some(filter) => cast_face
-                                        .is_some_and(|face| face.matches_card_type(*filter)),
-                                }
-                            },
-                        )
+                            }
+                        })
                     })
                     .collect()
             }
@@ -778,15 +725,9 @@ impl GameEngine {
         face_index: usize,
         filter: impl Fn(&TriggerCondition) -> bool,
     ) -> Vec<CollectedTrigger> {
-        let Some(def) = self.registry.get(card_id) else {
-            return vec![];
-        };
-        let Some(face) = def.face(face_index) else {
-            return vec![];
-        };
-        face.triggered_abilities
-            .iter()
-            .enumerate()
+        let abilities = self.effective_triggered_abilities(source_id, card_id, face_index);
+        abilities
+            .into_iter()
             .filter(|(_, ta)| filter(&ta.trigger))
             // CR 603.4, first of the two checks: an intervening-"if" clause that is false as the
             // ability would go on the stack means it never triggers at all.
@@ -823,7 +764,115 @@ impl GameEngine {
                     .unwrap_or(0),
                 controller,
                 ability_index: idx,
+                ability: ta.clone(),
                 ability_text: ta.text.clone(),
+                trigger_player: None,
+                trigger_object: None,
+            })
+            .collect()
+    }
+
+    pub(super) fn trigger_source_snapshot(
+        &self,
+        source_id: ObjectId,
+    ) -> Option<TriggerSourceSnapshot> {
+        let object = self.state.objects.get(&source_id)?;
+        let (card_id, face_index) = self
+            .effective_card_identity(source_id)
+            .map(|(card_id, face_index)| (card_id.to_string(), face_index))
+            .unwrap_or_else(|| (object.card_id.clone(), object.face_up_index));
+        let controller = self
+            .characteristics(source_id)
+            .map(|characteristics| characteristics.controller)
+            .unwrap_or(object.controller);
+        Some(TriggerSourceSnapshot {
+            object_id: source_id,
+            triggered_abilities: self
+                .effective_triggered_abilities(source_id, &card_id, face_index),
+            card_id,
+            controller,
+            face_index,
+            zone_change_generation: self
+                .state
+                .zone_change_generation
+                .get(&source_id)
+                .copied()
+                .unwrap_or(0),
+            face_change_generation: self
+                .state
+                .face_change_generation
+                .get(&source_id)
+                .copied()
+                .unwrap_or(0),
+        })
+    }
+
+    fn effective_triggered_abilities(
+        &self,
+        source_id: ObjectId,
+        card_id: &str,
+        face_index: usize,
+    ) -> Vec<(usize, TriggeredAbilityDef)> {
+        let mut abilities: Vec<(usize, TriggeredAbilityDef)> = self
+            .registry
+            .get(card_id)
+            .and_then(|definition| definition.face(face_index))
+            .map(|face| {
+                face.triggered_abilities
+                    .iter()
+                    .cloned()
+                    .enumerate()
+                    .collect()
+            })
+            .unwrap_or_default();
+        let mut next_index = abilities.len();
+        let Some(characteristics) = self.characteristics(source_id) else {
+            return abilities;
+        };
+        for effect in &self.state.continuous_effects {
+            let ContinuousEffectKind::GrantTriggeredAbility(ability) = &effect.kind else {
+                continue;
+            };
+            if super::characteristics::effect_affects(
+                &self.state,
+                self.registry,
+                effect,
+                source_id,
+                &characteristics,
+            ) {
+                abilities.push((next_index, (**ability).clone()));
+                next_index += 1;
+            }
+        }
+        abilities
+    }
+
+    fn matching_snapshot_abilities(
+        &self,
+        source: &TriggerSourceSnapshot,
+        filter: impl Fn(&TriggerCondition) -> bool,
+    ) -> Vec<CollectedTrigger> {
+        source
+            .triggered_abilities
+            .iter()
+            .filter(|(_, ability)| filter(&ability.trigger))
+            .filter(|(_, ability)| {
+                self.intervening_if_holds(
+                    source.object_id,
+                    source.controller,
+                    ability.intervening_if.as_ref(),
+                )
+            })
+            .map(|(ability_index, ability)| CollectedTrigger {
+                source_id: source.object_id,
+                card_id: source.card_id.clone(),
+                face_index: source.face_index,
+                source_zone_change: source.zone_change_generation,
+                source_face_change: source.face_change_generation,
+                controller: source.controller,
+                ability_index: *ability_index,
+                ability: ability.clone(),
+                ability_text: ability.text.clone(),
                 trigger_player: None,
                 trigger_object: None,
             })
@@ -978,31 +1027,21 @@ impl GameEngine {
             card_name,
             controller,
             ability_index,
+            ability,
             ability_text,
             trigger_player,
             trigger_object,
             may,
         } = trigger;
-        let def = match self.registry.get(&card_id) {
-            Some(d) => d.clone(),
-            None => return,
-        };
-        let trigger_def = def
-            .face(source_face_index)
-            .and_then(|face| face.triggered_abilities.get(ability_index));
-        let needs_target = trigger_def
-            .map(|ta| ta.effect.iter().any(spell_effect_kind_needs_target))
-            .unwrap_or(false);
+        let needs_target = ability.effect.iter().any(spell_effect_kind_needs_target);
         let legal_targets = if needs_target {
-            trigger_def.map(|ta| {
-                compute_spell_targets(
-                    self,
-                    controller,
-                    TargetSourceIdentity::captured(source_id, source_zone_change),
-                    &ta.effect,
-                    ta.targeting.as_ref(),
-                )
-            })
+            Some(compute_spell_targets(
+                self,
+                controller,
+                TargetSourceIdentity::captured(source_id, source_zone_change),
+                &ability.effect,
+                ability.targeting.as_ref(),
+            ))
         } else {
             None
         };
@@ -1027,6 +1066,7 @@ impl GameEngine {
                 source_zone_change,
                 source_face_change,
                 ability_index,
+                ability,
                 ability_text: ability_text.clone(),
                 card_id,
                 controller,
@@ -1065,6 +1105,7 @@ impl GameEngine {
                 source_zone_change,
                 source_face_change,
                 ability_index: Some(ability_index),
+                triggered_ability: Some(ability),
                 is_triggered: true,
                 is_copy: false,
                 chosen_x: 0,
