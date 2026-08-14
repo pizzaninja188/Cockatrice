@@ -119,7 +119,7 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src)
         RuledCostChoice parsed;
         parsed.costIndex = static_cast<int>(choice.cost_index());
         parsed.zone = choice.zone() == ruled::v1::COST_CHOICE_ZONE_HAND ? RuledCostChoiceZone::Hand
-                                                                       : RuledCostChoiceZone::Battlefield;
+                                                                        : RuledCostChoiceZone::Battlefield;
         for (const quint32 candidate : choice.candidate_ids()) {
             parsed.candidateIds.insert(candidate);
         }
@@ -144,6 +144,11 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
         if (action.has_cost_choices()) {
             set.costDataByCastKey.insert(castKey, parseCostData(action.cost_choices()));
         }
+        QSet<quint32> eligibleGroups;
+        for (const quint32 groupId : action.eligible_restricted_mana_group_ids()) {
+            eligibleGroups.insert(groupId);
+        }
+        set.eligibleRestrictedManaByCastKey.insert(castKey, eligibleGroups);
         if (action.needs_target()) {
             set.needsTargetCastKeys.insert(castKey);
         }
@@ -192,6 +197,7 @@ void RuledEventDispatcher::resetPerBatchLegalActions()
     state->validTargetsByZoneObject.clear();
     state->validTargetsByAbility.clear();
     state->abilityCostData.clear();
+    state->eligibleRestrictedManaByAbility.clear();
     state->openingBottomSelectedIndices.clear();
     state->openingPickSeatIds.clear();
     state->openingUiKind = RuledOpeningUiKind::None;
@@ -266,6 +272,9 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
         }
         if (e.has_life_changed()) {
             applyLifeChanged(e.life_changed(), ctx);
+        }
+        if (e.has_mana_pool_updated()) {
+            applyManaPoolUpdated(e.mana_pool_updated(), ctx);
         }
     }
 
@@ -1011,6 +1020,22 @@ void RuledEventDispatcher::applyLifeChanged(const ruled::v1::LifeChanged &lc, Ba
         QStringLiteral("Life: P%1 is now %2 (%3)\n").arg(lc.player_id()).arg(lc.new_total()).arg(lc.delta());
 }
 
+void RuledEventDispatcher::applyManaPoolUpdated(const ruled::v1::ManaPoolUpdated &mpu, BatchContext &ctx)
+{
+    QVector<RuledRestrictedManaGroup> groups;
+    groups.reserve(mpu.restricted_groups_size());
+    for (const auto &group : mpu.restricted_groups()) {
+        groups.append({group.restriction_group_id(), static_cast<int>(group.w()), static_cast<int>(group.u()),
+                       static_cast<int>(group.b()), static_cast<int>(group.r()), static_cast<int>(group.g()),
+                       static_cast<int>(group.c()), QString::fromStdString(group.display_label())});
+    }
+    std::sort(groups.begin(), groups.end(),
+              [](const auto &left, const auto &right) { return left.groupId < right.groupId; });
+    const int playerId = static_cast<int>(mpu.player_id());
+    state->restrictedManaByPlayer.insert(playerId, groups);
+    ctx.restrictedManaDirtyPlayers.insert(playerId);
+}
+
 // ---------------------------------------------------------------------------------------
 // Legal actions
 // ---------------------------------------------------------------------------------------
@@ -1036,6 +1061,11 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
         if (action.has_cost_choices()) {
             state->zoneCastActions.costDataByCastKey.insert(castKey, parseCostData(action.cost_choices()));
         }
+        QSet<quint32> eligibleGroups;
+        for (const quint32 groupId : action.eligible_restricted_mana_group_ids()) {
+            eligibleGroups.insert(groupId);
+        }
+        state->zoneCastActions.eligibleRestrictedManaByCastKey.insert(castKey, eligibleGroups);
         if (action.modes_size() > 0) {
             state->zoneCastActions.modalMinModesByCastKey.insert(castKey, static_cast<int>(action.min_modes()));
             state->zoneCastActions.modalMaxModesByCastKey.insert(castKey, static_cast<int>(action.max_modes()));
@@ -1067,6 +1097,14 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
     state->abilityCostData.clear();
     for (const auto &entry : actions.cost_choices_by_ability()) {
         state->abilityCostData.insert(static_cast<quint64>(entry.first), parseCostData(entry.second));
+    }
+    state->eligibleRestrictedManaByAbility.clear();
+    for (const auto &entry : actions.mana_payment_by_ability()) {
+        QSet<quint32> eligibleGroups;
+        for (const quint32 groupId : entry.second.eligible_restricted_mana_group_ids()) {
+            eligibleGroups.insert(groupId);
+        }
+        state->eligibleRestrictedManaByAbility.insert(static_cast<quint64>(entry.first), eligibleGroups);
     }
 
     state->openingUiKind = RuledOpeningUiKind::None;
@@ -1156,6 +1194,9 @@ void RuledEventDispatcher::finishBatch(BatchContext &ctx)
     }
     if (ctx.combatStateDirty) {
         emit state->combatStateChanged();
+    }
+    for (const int playerId : ctx.restrictedManaDirtyPlayers) {
+        emit state->restrictedManaChanged(playerId);
     }
     // One emit per batch from the settled state (CR 603.3b). A batch that places the picked trigger
     // and immediately offers the rest nets out to "still ordering, here is what's left", so the

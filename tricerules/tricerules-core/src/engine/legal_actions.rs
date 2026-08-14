@@ -20,6 +20,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
         let mut valid_targets_by_zone_object = BTreeMap::new();
         let mut valid_targets_by_ability = BTreeMap::new();
         let mut cost_choices_by_ability = BTreeMap::new();
+        let mut mana_payment_by_ability = BTreeMap::new();
 
         if let Some(idx) = eng.state.player_idx(p.id) {
             for (slot, &oid) in eng.state.players[idx].hand.iter().enumerate() {
@@ -56,6 +57,13 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 };
                 for (ai, ability) in face.activated_abilities.iter().enumerate() {
                     let key = (poid as u64) << 32 | ai as u64;
+                    mana_payment_by_ability.insert(
+                        key,
+                        rv1::ManaPaymentEligibility {
+                            eligible_restricted_mana_group_ids: eng
+                                .eligible_restricted_mana_for_ability(idx, poid),
+                        },
+                    );
                     cost_choices_by_ability
                         .insert(key, legal_ability_cost_choices(eng, p.id, poid, ability));
                     if ability.effect.iter().any(spell_effect_kind_needs_target) {
@@ -193,6 +201,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 valid_targets_by_zone_object,
                 cost_choices_by_ability,
                 legal_block_pairs,
+                mana_payment_by_ability,
             },
         );
     }
@@ -343,6 +352,7 @@ fn hand_action(
         modes: vec![],
         cost: String::new(),
         cost_choices: None,
+        eligible_restricted_mana_group_ids: vec![],
     }
 }
 
@@ -492,6 +502,8 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                     face_index,
                     face.spell_effect.iter().any(spell_effect_kind_needs_target),
                 );
+                action.eligible_restricted_mana_group_ids =
+                    eng.eligible_restricted_mana_for_spell(player_index, face);
                 action.cost = eng
                     .effective_fixed_spell_cost(pid, oid, &face.mana_cost, &face.cost_modifiers)
                     .to_string();
@@ -598,6 +610,8 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                     })
                     .unwrap_or_default(),
                 cost_choices: None,
+                eligible_restricted_mana_group_ids: eng
+                    .eligible_restricted_mana_for_spell(player_index, face),
             };
             let cost_choices = legal_spell_cost_choices(eng, pid, oid, &face.additional_costs);
             if !cost_choices.non_mana_costs_payable {
@@ -689,6 +703,8 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                 .effective_fixed_spell_cost(pid, object.id, &face.mana_cost, &face.cost_modifiers)
                 .to_string(),
             cost_choices: None,
+            eligible_restricted_mana_group_ids: eng
+                .eligible_restricted_mana_for_spell(player_index, face),
         };
         let cost_choices = legal_spell_cost_choices(eng, pid, object.id, &face.additional_costs);
         if !cost_choices.non_mana_costs_payable {

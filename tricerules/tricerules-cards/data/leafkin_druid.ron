@@ -1,0 +1,26 @@
+// Oracle checked 2026-08-13. CR 605.3b resolves the mana ability immediately; the live
+// four-creature condition replaces its ordinary {G} output with {G}{G}.
+(
+  id: "leafkin_druid",
+  name: "Leafkin Druid",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Elemental", "Druid"],
+  power: 0,
+  toughness: 3,
+  activated_abilities: [
+    (
+      costs: [Tap],
+      effect: [ProduceMana(
+        options: [(g: 1)],
+        conditional: Some((
+          condition: BattlefieldCreatureCount(
+            filter: (controllers: Controller),
+            min: Some(4),
+          ),
+          options: [(g: 2)],
+        )),
+      )],
+      text: "{T}: Add {G}. If you control four or more creatures, add {G}{G} instead.",
+    ),
+  ],
+)

@@ -121,6 +121,7 @@ impl GameEngine {
                     }
                     CardTypeFilter::Creature => characteristics.is_creature(),
                     CardTypeFilter::Artifact => characteristics.is_artifact(),
+                    CardTypeFilter::Planeswalker => characteristics.has_type("Planeswalker"),
                     CardTypeFilter::Noncreature => !characteristics.is_creature(),
                 }) && filter
                     .color

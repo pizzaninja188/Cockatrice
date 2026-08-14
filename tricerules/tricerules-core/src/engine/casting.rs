@@ -152,10 +152,86 @@ pub(super) fn solve_flex(
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+fn solve_flex_with_required_spend(
+    pool: PoolVec,
+    flex: &[FlexPip],
+    idx: usize,
+    generic: u32,
+    max_remaining: PoolVec,
+) -> Option<PoolVec> {
+    if idx == flex.len() {
+        let mut p = pool;
+        let mut g = generic;
+        // Any amount above `max_remaining` came from an explicitly selected restricted group and
+        // must be consumed. Generic mana pays those pips first so the command cannot silently
+        // leave selected restricted mana behind while spending unrestricted mana instead.
+        for i in 0..6 {
+            let required = p[i].saturating_sub(max_remaining[i]);
+            if required > g {
+                return None;
+            }
+            p[i] -= required;
+            g -= required;
+        }
+        for &i in &[POOL_C, 0, 1, 2, 3, 4] {
+            let t = g.min(p[i]);
+            p[i] -= t;
+            g -= t;
+        }
+        return (g == 0 && (0..6).all(|i| p[i] <= max_remaining[i])).then_some(p);
+    }
+    match &flex[idx] {
+        FlexPip::Hybrid(a, b) => {
+            for &color in &[*a, *b] {
+                let i = color_index(color);
+                if pool[i] > 0 {
+                    let mut next = pool;
+                    next[i] -= 1;
+                    if let Some(result) =
+                        solve_flex_with_required_spend(next, flex, idx + 1, generic, max_remaining)
+                    {
+                        return Some(result);
+                    }
+                }
+            }
+            None
+        }
+        FlexPip::Color(color) => {
+            let i = color_index(*color);
+            if pool[i] == 0 {
+                return None;
+            }
+            let mut next = pool;
+            next[i] -= 1;
+            solve_flex_with_required_spend(next, flex, idx + 1, generic, max_remaining)
+        }
+        FlexPip::Mono(amount, color) => {
+            let i = color_index(*color);
+            if pool[i] > 0 {
+                let mut next = pool;
+                next[i] -= 1;
+                if let Some(result) =
+                    solve_flex_with_required_spend(next, flex, idx + 1, generic, max_remaining)
+                {
+                    return Some(result);
+                }
+            }
+            solve_flex_with_required_spend(
+                pool,
+                flex,
+                idx + 1,
+                generic.saturating_add(*amount),
+                max_remaining,
+            )
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 struct ManaPaymentPlan {
     remaining: PoolVec,
     life_cost: u32,
+    restricted_spent: Vec<(u32, ManaAmount)>,
 }
 
 /// Validate a mana payment without mutating the pool or life total. Activated costs use this
@@ -191,6 +267,31 @@ fn plan_mana_payment_with_reduction(
     extra_generic: u32,
     generic_reduction: u32,
     flex_payments: &[rv1::FlexPipPayment],
+) -> Result<ManaPaymentPlan, EngineError> {
+    plan_mana_payment_with_restricted_reduction(
+        state,
+        player_idx,
+        cost,
+        x_value,
+        extra_generic,
+        generic_reduction,
+        flex_payments,
+        &[],
+        &[],
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn plan_mana_payment_with_restricted_reduction(
+    state: &GameState,
+    player_idx: usize,
+    cost: &ManaCost,
+    x_value: u32,
+    extra_generic: u32,
+    generic_reduction: u32,
+    flex_payments: &[rv1::FlexPipPayment],
+    restricted_selections: &[rv1::ManaSpendSelection],
+    eligible_group_ids: &[u32],
 ) -> Result<ManaPaymentPlan, EngineError> {
     let life_pips: HashSet<usize> = flex_payments
         .iter()
@@ -232,8 +333,9 @@ fn plan_mana_payment_with_reduction(
         ));
     }
 
-    let pool = &state.players[player_idx].mana_pool;
-    let mut working: PoolVec = [
+    let player = &state.players[player_idx];
+    let pool = &player.mana_pool;
+    let unrestricted: PoolVec = [
         pool.white,
         pool.blue,
         pool.black,
@@ -241,6 +343,63 @@ fn plan_mana_payment_with_reduction(
         pool.green,
         pool.colorless,
     ];
+    let mut working = unrestricted;
+    let mut restricted_spent = Vec::with_capacity(restricted_selections.len());
+    let mut seen_groups = HashSet::new();
+    for selection in restricted_selections {
+        let group_id = selection.restriction_group_id;
+        if group_id == 0 || !seen_groups.insert(group_id) || !eligible_group_ids.contains(&group_id)
+        {
+            return Err(EngineError::Illegal(
+                "invalid or ineligible restricted mana selection",
+            ));
+        }
+        let amount = ManaAmount {
+            w: selection.w,
+            u: selection.u,
+            b: selection.b,
+            r: selection.r,
+            g: selection.g,
+            c: selection.c,
+        };
+        if [amount.w, amount.u, amount.b, amount.r, amount.g, amount.c]
+            .iter()
+            .all(|count| *count == 0)
+        {
+            return Err(EngineError::Illegal("restricted mana selection is empty"));
+        }
+        let available = player
+            .restricted_mana
+            .iter()
+            .filter(|entry| entry.restriction_group_id == group_id)
+            .fold(ManaAmount::default(), |mut total, entry| {
+                total.w += entry.amount.w;
+                total.u += entry.amount.u;
+                total.b += entry.amount.b;
+                total.r += entry.amount.r;
+                total.g += entry.amount.g;
+                total.c += entry.amount.c;
+                total
+            });
+        if amount.w > available.w
+            || amount.u > available.u
+            || amount.b > available.b
+            || amount.r > available.r
+            || amount.g > available.g
+            || amount.c > available.c
+        {
+            return Err(EngineError::Illegal(
+                "restricted mana selection exceeds pool",
+            ));
+        }
+        for (slot, count) in [amount.w, amount.u, amount.b, amount.r, amount.g, amount.c]
+            .into_iter()
+            .enumerate()
+        {
+            working[slot] = working[slot].saturating_add(count);
+        }
+        restricted_spent.push((group_id, amount));
+    }
     for i in 0..6 {
         if working[i] < need_color[i] {
             return Err(EngineError::Illegal(
@@ -249,7 +408,12 @@ fn plan_mana_payment_with_reduction(
         }
         working[i] -= need_color[i];
     }
-    let Some(remaining) = solve_flex(working, &flex, 0, need_generic) else {
+    let remaining = if restricted_spent.is_empty() {
+        solve_flex(working, &flex, 0, need_generic)
+    } else {
+        solve_flex_with_required_spend(working, &flex, 0, need_generic, unrestricted)
+    };
+    let Some(remaining) = remaining else {
         return Err(EngineError::Illegal(
             "not enough mana in pool; tap your lands first",
         ));
@@ -258,6 +422,7 @@ fn plan_mana_payment_with_reduction(
     Ok(ManaPaymentPlan {
         remaining,
         life_cost,
+        restricted_spent,
     })
 }
 
@@ -269,7 +434,99 @@ fn commit_mana_payment(state: &mut GameState, player_idx: usize, plan: ManaPayme
     pool.red = plan.remaining[3];
     pool.green = plan.remaining[4];
     pool.colorless = plan.remaining[POOL_C];
+    for (group_id, spent) in plan.restricted_spent {
+        let entries = &mut state.players[player_idx].restricted_mana;
+        for (slot, mut remaining) in [spent.w, spent.u, spent.b, spent.r, spent.g, spent.c]
+            .into_iter()
+            .enumerate()
+        {
+            for entry in entries
+                .iter_mut()
+                .filter(|entry| entry.restriction_group_id == group_id)
+            {
+                if remaining == 0 {
+                    break;
+                }
+                let field = match slot {
+                    0 => &mut entry.amount.w,
+                    1 => &mut entry.amount.u,
+                    2 => &mut entry.amount.b,
+                    3 => &mut entry.amount.r,
+                    4 => &mut entry.amount.g,
+                    _ => &mut entry.amount.c,
+                };
+                let take = remaining.min(*field);
+                *field -= take;
+                remaining -= take;
+            }
+            debug_assert_eq!(remaining, 0);
+        }
+        entries.retain(|entry| {
+            let amount = entry.amount;
+            amount.w + amount.u + amount.b + amount.r + amount.g + amount.c > 0
+        });
+    }
     state.players[player_idx].life -= plan.life_cost as i32;
+}
+
+fn mana_filter_matches_face(filter: &ManaSpendFilter, face: &CardFace) -> bool {
+    filter
+        .card_type
+        .is_none_or(|card_type| face.matches_card_type(card_type))
+        && filter
+            .subtype
+            .as_ref()
+            .is_none_or(|subtype| face.types.iter().any(|value| value == subtype))
+}
+
+fn mana_filter_matches_characteristics(
+    filter: &ManaSpendFilter,
+    characteristics: &Characteristics,
+) -> bool {
+    filter.card_type.is_none_or(|card_type| match card_type {
+        CardTypeFilter::Enchantment => characteristics.has_type("Enchantment"),
+        CardTypeFilter::Instant => characteristics.has_type("Instant"),
+        CardTypeFilter::Sorcery => characteristics.has_type("Sorcery"),
+        CardTypeFilter::InstantOrSorcery => {
+            characteristics.has_type("Instant") || characteristics.has_type("Sorcery")
+        }
+        CardTypeFilter::Creature => characteristics.is_creature(),
+        CardTypeFilter::Artifact => characteristics.is_artifact(),
+        CardTypeFilter::Planeswalker => characteristics.has_type("Planeswalker"),
+        CardTypeFilter::Noncreature => !characteristics.is_creature(),
+    }) && filter
+        .subtype
+        .as_ref()
+        .is_none_or(|subtype| characteristics.has_type(subtype))
+}
+
+#[cfg(test)]
+mod restricted_mana_filter_tests {
+    use super::*;
+
+    #[test]
+    fn planeswalker_subtype_filter_requires_both_characteristics() {
+        let filter = ManaSpendFilter {
+            card_type: Some(CardTypeFilter::Planeswalker),
+            subtype: Some("Chandra".into()),
+        };
+        let chandra = CardFace {
+            types: vec!["Planeswalker".into(), "Chandra".into()],
+            ..Default::default()
+        };
+        let jaya = CardFace {
+            types: vec!["Planeswalker".into(), "Jaya".into()],
+            ..Default::default()
+        };
+        let elemental_named_chandra = CardFace {
+            types: vec!["Creature".into(), "Elemental".into(), "Chandra".into()],
+            ..Default::default()
+        };
+
+        assert!(mana_filter_matches_face(&filter, &chandra));
+        assert!(!mana_filter_matches_face(&filter, &jaya));
+        assert!(!mana_filter_matches_face(&filter, &elemental_named_chandra));
+    }
 }
 
 /// Pays `cost` after first proving the whole mana component is affordable.
@@ -290,11 +547,65 @@ pub(super) fn pay_mana(
         extra_generic,
         flex_payments,
     )?;
+    let life_cost = plan.life_cost;
     commit_mana_payment(state, player_idx, plan);
-    Ok(plan.life_cost)
+    Ok(life_cost)
 }
 
 impl GameEngine {
+    pub(super) fn eligible_restricted_mana_for_spell(
+        &self,
+        player_idx: usize,
+        face: &CardFace,
+    ) -> Vec<u32> {
+        let mut ids: Vec<u32> = self.state.players[player_idx]
+            .restricted_mana
+            .iter()
+            .filter_map(|entry| {
+                let restriction = self
+                    .state
+                    .mana_restrictions
+                    .get(entry.restriction_group_id.checked_sub(1)? as usize)?;
+                restriction
+                    .cast_spell
+                    .iter()
+                    .any(|filter| mana_filter_matches_face(filter, face))
+                    .then_some(entry.restriction_group_id)
+            })
+            .collect();
+        ids.sort_unstable();
+        ids.dedup();
+        ids
+    }
+
+    pub(super) fn eligible_restricted_mana_for_ability(
+        &self,
+        player_idx: usize,
+        source_oid: ObjectId,
+    ) -> Vec<u32> {
+        let Some(characteristics) = self.characteristics(source_oid) else {
+            return Vec::new();
+        };
+        let mut ids: Vec<u32> = self.state.players[player_idx]
+            .restricted_mana
+            .iter()
+            .filter_map(|entry| {
+                let restriction = self
+                    .state
+                    .mana_restrictions
+                    .get(entry.restriction_group_id.checked_sub(1)? as usize)?;
+                restriction
+                    .activate_ability
+                    .iter()
+                    .any(|filter| mana_filter_matches_characteristics(filter, &characteristics))
+                    .then_some(entry.restriction_group_id)
+            })
+            .collect();
+        ids.sort_unstable();
+        ids.dedup();
+        ids
+    }
+
     fn spell_generic_reduction(
         &self,
         player: PlayerId,
@@ -399,6 +710,7 @@ impl GameEngine {
         let face_index = command.face_index as usize;
         let selected_modes = command.selected_modes.as_slice();
         let cost_selections = command.cost_selections.as_slice();
+        let restricted_mana = command.restricted_mana.as_slice();
         if self.state.turn_step == TurnStep::Cleanup {
             return Err(EngineError::Illegal("no spells during cleanup"));
         }
@@ -484,6 +796,7 @@ impl GameEngine {
         let modal_spell = face.modal_spell.clone();
         let additional_costs = face.additional_costs.clone();
         let cost_modifiers = face.cost_modifiers.clone();
+        let eligible_restricted_mana = self.eligible_restricted_mana_for_spell(idx, face);
         let sorcery_ok = super::priority::sorcery_speed_available(&self.state, player);
         let instant_ok = super::priority::instant_timing_step_allowed(self.state.turn_step);
         if face_is_sorcery {
@@ -668,6 +981,8 @@ impl GameEngine {
             flex_payments,
             &additional_costs,
             cost_selections,
+            restricted_mana,
+            &eligible_restricted_mana,
         )?;
 
         let trefs: Vec<ObjectId> = public_targets
@@ -804,6 +1119,36 @@ impl GameEngine {
         Ok(batch)
     }
 
+    pub(super) fn active_mana_options<'a>(
+        &self,
+        permanent_id: ObjectId,
+        ability: &'a tricerules_cards::ActivatedAbilityDef,
+    ) -> Option<&'a [tricerules_cards::ManaAmount]> {
+        let default_options = ability.mana_options()?;
+        let controller = self.state.objects.get(&permanent_id)?.controller;
+        Some(
+            ability
+                .conditional_mana_output()
+                .filter(|conditional| {
+                    self.condition_holds(
+                        &conditional.condition,
+                        ConditionContext {
+                            controller,
+                            source_object_id: permanent_id,
+                            source_zone_change: self
+                                .state
+                                .zone_change_generation
+                                .get(&permanent_id)
+                                .copied()
+                                .unwrap_or(0),
+                        },
+                    )
+                })
+                .map(|conditional| conditional.options.as_slice())
+                .unwrap_or(default_options.as_slice()),
+        )
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn plan_spell_costs(
         &self,
@@ -817,6 +1162,8 @@ impl GameEngine {
         flex_payments: &[rv1::FlexPipPayment],
         costs: &[AdditionalCost],
         selections: &[rv1::CostSelection],
+        restricted_mana: &[rv1::ManaSpendSelection],
+        eligible_restricted_mana: &[u32],
     ) -> Result<SpellCostPaymentPlan, EngineError> {
         use rv1::cost_selection::Selection;
 
@@ -878,7 +1225,7 @@ impl GameEngine {
         }
 
         Ok(SpellCostPaymentPlan {
-            mana: plan_mana_payment_with_reduction(
+            mana: plan_mana_payment_with_restricted_reduction(
                 &self.state,
                 player_idx,
                 mana_cost,
@@ -886,6 +1233,8 @@ impl GameEngine {
                 extra_generic,
                 generic_reduction,
                 flex_payments,
+                restricted_mana,
+                eligible_restricted_mana,
             )?,
             components,
         })
@@ -956,6 +1305,7 @@ impl GameEngine {
         let flex_payments = command.flex_payments.as_slice();
         let mana_option_index = command.mana_option_index;
         let cost_selections = command.cost_selections.as_slice();
+        let restricted_mana = command.restricted_mana.as_slice();
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("not your priority"));
         }
@@ -1031,6 +1381,7 @@ impl GameEngine {
                 targets,
                 flex_payments,
                 cost_selections,
+                restricted_mana,
             )?;
             if resolving_mana_payment {
                 batch.events.push(
@@ -1083,6 +1434,7 @@ impl GameEngine {
             &ability.costs,
             flex_payments,
             cost_selections,
+            restricted_mana,
         )?;
 
         let ability_text = ability.text.clone();
@@ -1168,6 +1520,7 @@ impl GameEngine {
         Ok(batch)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn pay_ability_costs(
         &mut self,
         player: PlayerId,
@@ -1176,6 +1529,7 @@ impl GameEngine {
         costs: &[AbilityCost],
         flex_payments: &[rv1::FlexPipPayment],
         selections: &[rv1::CostSelection],
+        restricted_mana: &[rv1::ManaSpendSelection],
     ) -> Result<AbilityCostPayment, EngineError> {
         use rv1::cost_selection::Selection;
 
@@ -1198,6 +1552,7 @@ impl GameEngine {
         let mut expected_selections = 0usize;
         let mut saw_mana = false;
         let mut saw_tap = false;
+        let eligible_restricted_mana = self.eligible_restricted_mana_for_ability(idx, permanent_id);
         for (cost_index, cost) in costs.iter().enumerate() {
             match cost {
                 AbilityCost::Tap => {
@@ -1213,14 +1568,19 @@ impl GameEngine {
                         return Err(EngineError::Illegal("multiple mana cost components"));
                     }
                     saw_mana = true;
-                    validated.push(ValidatedAbilityCost::Mana(plan_mana_payment(
-                        &self.state,
-                        idx,
-                        cost,
-                        0,
-                        0,
-                        flex_payments,
-                    )?));
+                    validated.push(ValidatedAbilityCost::Mana(
+                        plan_mana_payment_with_restricted_reduction(
+                            &self.state,
+                            idx,
+                            cost,
+                            0,
+                            0,
+                            0,
+                            flex_payments,
+                            restricted_mana,
+                            &eligible_restricted_mana,
+                        )?,
+                    ));
                 }
                 AbilityCost::Discard => {
                     expected_selections += 1;
@@ -1268,6 +1628,11 @@ impl GameEngine {
         }
         if selections.len() != expected_selections {
             return Err(EngineError::Illegal("unexpected cost selection"));
+        }
+        if !restricted_mana.is_empty() && !saw_mana {
+            return Err(EngineError::Illegal(
+                "restricted mana supplied for an ability with no mana cost",
+            ));
         }
 
         let mut payment = AbilityCostPayment {
@@ -1525,15 +1890,17 @@ impl GameEngine {
         targets: &[rv1::TargetRef],
         flex_payments: &[rv1::FlexPipPayment],
         cost_selections: &[rv1::CostSelection],
+        restricted_mana: &[rv1::ManaSpendSelection],
     ) -> Result<RuledEventBatch, EngineError> {
         if !targets.is_empty() {
             return Err(EngineError::Illegal("mana ability takes no targets"));
         }
-        let Some(options) = ability.mana_options() else {
+        let Some(options) = self.active_mana_options(permanent_id, ability) else {
             return Err(EngineError::Illegal("not a mana ability"));
         };
         let amount = options
             .get(mana_option_index as usize)
+            .copied()
             .ok_or(EngineError::Illegal("invalid mana option"))?;
 
         let payment = self.pay_ability_costs(
@@ -1543,15 +1910,38 @@ impl GameEngine {
             &ability.costs,
             flex_payments,
             cost_selections,
+            restricted_mana,
         )?;
 
-        let pool = &mut self.state.players[idx].mana_pool;
-        pool.white += amount.w;
-        pool.blue += amount.u;
-        pool.black += amount.b;
-        pool.red += amount.r;
-        pool.green += amount.g;
-        pool.colorless += amount.c;
+        let restriction_group_id = ability.mana_restriction().map(|restriction| {
+            if let Some(position) = self
+                .state
+                .mana_restrictions
+                .iter()
+                .position(|candidate| candidate == restriction)
+            {
+                (position + 1) as u32
+            } else {
+                self.state.mana_restrictions.push(restriction.clone());
+                self.state.mana_restrictions.len() as u32
+            }
+        });
+        if let Some(group_id) = restriction_group_id {
+            self.state.players[idx].restricted_mana.push(
+                crate::state::RestrictedManaContribution {
+                    restriction_group_id: group_id,
+                    amount,
+                },
+            );
+        } else {
+            let pool = &mut self.state.players[idx].mana_pool;
+            pool.white += amount.w;
+            pool.blue += amount.u;
+            pool.black += amount.b;
+            pool.red += amount.r;
+            pool.green += amount.g;
+            pool.colorless += amount.c;
+        }
 
         if matches!(ability.costs.as_slice(), [AbilityCost::Tap]) {
             self.state
@@ -1559,7 +1949,8 @@ impl GameEngine {
                 .push(UndoableManaAbility {
                     player,
                     source: permanent_id,
-                    produced: *amount,
+                    produced: amount,
+                    restriction_group_id,
                 });
         }
 
@@ -1641,23 +2032,38 @@ impl GameEngine {
             .ok_or(EngineError::Illegal("no mana ability to undo"))?;
         let entry = self.state.undoable_mana_abilities.remove(pos);
 
-        let pool = &mut self.state.players[idx].mana_pool;
         let p = &entry.produced;
-        if pool.white < p.w
-            || pool.blue < p.u
-            || pool.black < p.b
-            || pool.red < p.r
-            || pool.green < p.g
-            || pool.colorless < p.c
-        {
-            return Err(EngineError::Illegal("floated mana already spent"));
+        if let Some(group_id) = entry.restriction_group_id {
+            let contribution_pos = self.state.players[idx]
+                .restricted_mana
+                .iter()
+                .rposition(|contribution| {
+                    contribution.restriction_group_id == group_id && contribution.amount == *p
+                })
+                .ok_or(EngineError::Illegal(
+                    "floated restricted mana already spent",
+                ))?;
+            self.state.players[idx]
+                .restricted_mana
+                .remove(contribution_pos);
+        } else {
+            let pool = &mut self.state.players[idx].mana_pool;
+            if pool.white < p.w
+                || pool.blue < p.u
+                || pool.black < p.b
+                || pool.red < p.r
+                || pool.green < p.g
+                || pool.colorless < p.c
+            {
+                return Err(EngineError::Illegal("floated mana already spent"));
+            }
+            pool.white -= p.w;
+            pool.blue -= p.u;
+            pool.black -= p.b;
+            pool.red -= p.r;
+            pool.green -= p.g;
+            pool.colorless -= p.c;
         }
-        pool.white -= p.w;
-        pool.blue -= p.u;
-        pool.black -= p.b;
-        pool.red -= p.r;
-        pool.green -= p.g;
-        pool.colorless -= p.c;
 
         super::set_tapped(&mut self.state, entry.source, false);
 
@@ -1849,7 +2255,7 @@ mod mana_payment_tests {
         ];
 
         let err = e
-            .pay_ability_costs(0, 0, oid, &costs, &[], &selections)
+            .pay_ability_costs(0, 0, oid, &costs, &[], &selections, &[])
             .err()
             .expect("one object cannot be sacrificed twice");
         assert!(format!("{err:?}").contains("one object cannot pay two costs"));
@@ -1930,6 +2336,8 @@ mod mana_payment_tests {
                 &[],
                 &costs,
                 &selections,
+                &[],
+                &[],
             )
             .expect("reduced mana and discard cost should validate together");
         let payment = e

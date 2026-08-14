@@ -12,8 +12,10 @@
 #include <QGraphicsObject>
 
 class HandZone;
+class HandCounter;
 class PileZone;
 class PlayerTarget;
+class RuledRestrictedManaDisplay;
 class StackZone;
 class TableZone;
 class ZoneViewZone;
@@ -120,8 +122,13 @@ private:
     TableZone *tableZoneGraphicsItem;
     StackZone *stackZoneGraphicsItem;
     HandZone *handZoneGraphicsItem;
+    HandCounter *handCounter;
+    RuledRestrictedManaDisplay *restrictedManaDisplay = nullptr;
     QRectF bRect;
     bool mirrored;
+
+    [[nodiscard]] qreal restrictedManaExtraWidth() const;
+    void rearrangeSidebar();
 
 private slots:
     void updateBoundingRect();

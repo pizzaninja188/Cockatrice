@@ -25,10 +25,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
 
 ## Open
 
-- [ ] #55 [feature] Conditional mana output and restricted mana spending
-  - Details: Represent mana abilities whose output depends on current battlefield state and mana whose spending is restricted by spell or ability characteristics. Calibration evidence: Leafkin Druid, Chandra's Embercat, and Vodalian Arcanist. Track restrictions on individual mana contributions through payment selection, reject illegal mixed payments, and keep unrestricted mana behavior unchanged.
-  - Priority: Low
-
 - [ ] #57 [feature] Targeting cost increases
   - Details: Add a reusable cost modifier for spells or abilities that target a protected object or player, with the surcharge included while legal casts and payments are computed. Calibration evidence: Boreal Elemental. The implementation should also serve ward-style mechanics, handle multiple taxed targets deterministically, and reject a cast when the selected targets make its total cost unpayable.
   - Priority: Low

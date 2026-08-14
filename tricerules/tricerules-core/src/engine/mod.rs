@@ -26,10 +26,10 @@ use tricerules_cards::primitives::{
     CounterKind, CreatureEventFilter, CreatureScopeController, CreatureScopeFilter, DamageDivision,
     DamagePreventionAdditionalEffect, DamagePreventionSubject, EffectDuration, EffectSubject,
     EntersTappedAffected, Evasion, FaceChangeAction, GameCondition, InterveningIf, Keyword,
-    LifeAmount, PermanentTypeFilter, PlayerRecipient, PowerComparison, PreventionAmountBasis,
-    RelativePlayerSet, SearchDestination, SpellCostModifier, SpellEffectKind, StaticAbilityDef,
-    StaticDamagePreventionAmount, TargetController, TargetFilter, TargetKind,
-    TargetingSourceFilter, TokenController, TriggerCondition,
+    LifeAmount, ManaAmount, ManaSpendFilter, PermanentTypeFilter, PlayerRecipient, PowerComparison,
+    PreventionAmountBasis, RelativePlayerSet, SearchDestination, SpellCostModifier,
+    SpellEffectKind, StaticAbilityDef, StaticDamagePreventionAmount, TargetController,
+    TargetFilter, TargetKind, TargetingSourceFilter, TokenController, TriggerCondition,
 };
 use tricerules_cards::{CardFace, CardRegistry, FaceRef, Layout};
 use tricerules_proto::ruled::v1 as rv1;
@@ -511,6 +511,7 @@ impl GameEngine {
     fn clear_all_mana_pools(&mut self) {
         for p in &mut self.state.players {
             p.mana_pool.clear();
+            p.restricted_mana.clear();
         }
     }
 
@@ -633,6 +634,7 @@ impl GameEngine {
             damage_prevention_prohibitions: Vec::new(),
             next_damage_prevention_effect_id: 1,
             next_replacement_application_id: 1,
+            mana_restrictions: Vec::new(),
             undoable_mana_abilities: Vec::new(),
             untapped_this_command: Vec::new(),
         };

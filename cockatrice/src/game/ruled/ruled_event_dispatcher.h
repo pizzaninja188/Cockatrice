@@ -16,6 +16,7 @@
 #define COCKATRICE_RULED_EVENT_DISPATCHER_H
 
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <string>
 
@@ -33,6 +34,7 @@ class GraveyardObjectMap;
 class HandSlotMap;
 class LegalActions;
 class LifeChanged;
+class ManaPoolUpdated;
 class PhaseChanged;
 class ResolutionChoiceRequired;
 class RuledEventBatch;
@@ -74,6 +76,7 @@ private:
         /// trigger just picked (which ends the old prompt) and raises the next one — emitting on
         /// each would tear the popup down and rebuild it, losing its position mid-choice.
         bool triggerOrderDirty = false;
+        QSet<int> restrictedManaDirtyPlayers;
     };
 
     /// Legal actions and the opening-UI kind are rebuilt from scratch every batch; clear them
@@ -98,6 +101,7 @@ private:
     void applyCombatDamageAssigned(const ruled::v1::CombatDamageAssigned &cda, BatchContext &ctx);
     void applyRemovedFromCombat(const ruled::v1::CreaturesRemovedFromCombat &rfc, BatchContext &ctx);
     void applyLifeChanged(const ruled::v1::LifeChanged &lc, BatchContext &ctx);
+    void applyManaPoolUpdated(const ruled::v1::ManaPoolUpdated &mpu, BatchContext &ctx);
 
     /// The local player's `LegalActions` entry: hand-action label parsing, targeting tables,
     /// opening-UI kind, and the must-attack / must-block requirement sets.

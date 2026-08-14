@@ -8,10 +8,10 @@ pub(crate) use tricerules_proto::ruled::v1::ruled_event::Ev;
 pub(crate) use tricerules_proto::ruled::v1::{
     ActivateAbility, AssignCombatDamage, BlockPair, CastSource, CastSpell, ChoiceKind,
     ChooseTriggerTarget, CostSelection, DamagePair, DeclareAttackers, DeclareBlockers,
-    DiscardToHandSize, FlexPipPayment, PassPriority, PlayLand, PreviewDeclareAttackers,
-    PreviewDeclareBlockers, PrimitiveYieldStructured, ResolutionChoiceRequired, RuledCommand,
-    RuledEventBatch, SelectedSpellMode, SubmitResolutionChoice, SubmitTriggerOrder, TargetRef,
-    TargetRefKind, UndoManaAbility,
+    DiscardToHandSize, FlexPipPayment, ManaSpendSelection, PassPriority, PlayLand,
+    PreviewDeclareAttackers, PreviewDeclareBlockers, PrimitiveYieldStructured,
+    ResolutionChoiceRequired, RuledCommand, RuledEventBatch, SelectedSpellMode,
+    SubmitResolutionChoice, SubmitTriggerOrder, TargetRef, TargetRefKind, UndoManaAbility,
 };
 
 pub(crate) fn pass() -> RuledCommand {
@@ -586,6 +586,42 @@ pub(crate) fn inject_permanent_on_battlefield(
         },
     );
     e.state.players[player].battlefield.push(id);
+    id
+}
+
+/// Inject a known registry card into a player's hand for scenarios that need exact cast identity
+/// without depending on opening-hand shuffle order.
+pub(crate) fn inject_card_into_hand(e: &mut GameEngine, player: usize, card_id: &str) -> u32 {
+    let id = e.state.next_object_id;
+    e.state.next_object_id += 1;
+    let player_id = e.state.players[player].id;
+    e.state.objects.insert(
+        id,
+        tricerules_core::state::GameObject {
+            id,
+            owner: player_id,
+            base_controller: player_id,
+            controller: player_id,
+            card_id: card_id.to_string(),
+            copiable_values: None,
+            copy_revision: 0,
+            zone: tricerules_core::Zone::Hand,
+            tapped: false,
+            summoning_sick: false,
+            power: None,
+            toughness: None,
+            damage: 0,
+            deathtouch_damage: false,
+            counters: std::collections::BTreeMap::new(),
+            attached_to: None,
+            regeneration_shields: 0,
+            must_attack_if_able: false,
+            must_block_if_able: false,
+            face_up_index: 0,
+            adventure_cast_permission: None,
+        },
+    );
+    e.state.players[player].hand.push(id);
     id
 }
 

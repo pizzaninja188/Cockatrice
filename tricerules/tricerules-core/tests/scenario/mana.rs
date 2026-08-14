@@ -235,6 +235,157 @@ fn undo_mana_ability_cleared_by_passing_priority() {
     );
 }
 
+/// Issue #55 / CR 605.3b: a mana ability whose effect says "instead" evaluates its live
+/// battlefield condition as it resolves immediately. Leafkin Druid counts itself, so three
+/// additional creatures cross the four-creature threshold and replace {G} with {G}{G}.
+#[test]
+fn leafkin_druid_uses_live_creature_count_for_mana_output() {
+    let mut e = GameEngine::new(5501, &[0, 1], 20, None, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let leafkin = inject_permanent_on_battlefield(&mut e, 0, "leafkin_druid");
+
+    e.apply_command(0, &activate_ability(leafkin, 0, vec![]))
+        .expect("activate below threshold");
+    assert_eq!(e.state.players[0].mana_pool.green, 1);
+    e.apply_command(0, &undo_mana_ability())
+        .expect("rewind first activation");
+
+    for _ in 0..3 {
+        inject_permanent_on_battlefield(&mut e, 0, "grizzly_bears");
+    }
+    e.apply_command(0, &activate_ability(leafkin, 0, vec![]))
+        .expect("activate at four creatures");
+    assert_eq!(e.state.players[0].mana_pool.green, 2);
+}
+
+/// Issue #55 / CR 106.6 and 601.2h: restricted mana stays outside the ordinary pool, is exposed
+/// as a labeled group, and may be spent only when the command names that group for a matching
+/// spell. An illegal mixed payment is atomic.
+#[test]
+fn embercat_restricted_mana_requires_matching_explicit_payment() {
+    let mut e = GameEngine::new(5502, &[0, 1], 20, None, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let embercat = inject_permanent_on_battlefield(&mut e, 0, "chandras_embercat");
+
+    let produced = e
+        .apply_command(0, &activate_ability(embercat, 0, vec![]))
+        .expect("activate Embercat");
+    assert_eq!(e.state.players[0].mana_pool.red, 0, "not unrestricted");
+    assert_eq!(e.state.players[0].restricted_mana.len(), 1);
+    let group = produced
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(Ev::ManaPoolUpdated(pool)) if pool.player_id == 0 => {
+                pool.restricted_groups.first()
+            }
+            _ => None,
+        })
+        .expect("restricted pool group");
+    assert_eq!(group.r, 1);
+    assert!(group.display_label.contains("Elemental"));
+    let group_id = group.restriction_group_id;
+
+    inject_card_into_hand(&mut e, 0, "hill_giant");
+    e.state.players[0].mana_pool.colorless = 3;
+    let hill_slot = hand_index_for_card(&e, 0, "hill_giant");
+    let mut illegal = cast_spell(hill_slot, vec![]);
+    let Some(Cmd::CastSpell(command)) = illegal.cmd.as_mut() else {
+        unreachable!()
+    };
+    command.restricted_mana.push(ManaSpendSelection {
+        restriction_group_id: group_id,
+        r: 1,
+        ..Default::default()
+    });
+    let error = e
+        .apply_command(0, &illegal)
+        .expect_err("Embercat mana cannot cast Hill Giant");
+    assert!(format!("{error:?}").contains("ineligible"));
+    assert_eq!(e.state.players[0].mana_pool.colorless, 3);
+    assert_eq!(e.state.players[0].restricted_mana.len(), 1);
+
+    inject_card_into_hand(&mut e, 0, "fire_elemental");
+    e.state.players[0].mana_pool.red = 1;
+    let elemental_slot = hand_index_for_card(&e, 0, "fire_elemental");
+    let mut legal = cast_spell(elemental_slot, vec![]);
+    let Some(Cmd::CastSpell(command)) = legal.cmd.as_mut() else {
+        unreachable!()
+    };
+    command.restricted_mana.push(ManaSpendSelection {
+        restriction_group_id: group_id,
+        r: 1,
+        ..Default::default()
+    });
+    e.apply_command(0, &legal)
+        .expect("Embercat mana casts an Elemental spell");
+    assert!(e.state.players[0].restricted_mana.is_empty());
+    assert_eq!(e.state.players[0].mana_pool.red, 0);
+    assert_eq!(e.state.players[0].mana_pool.colorless, 0);
+}
+
+/// Issue #55 / CR 106.6: a restriction can preserve colorless identity while constraining spell
+/// types. Vodalian Arcanist's {C} pays the generic portion of a sorcery, but not a creature with
+/// the same printed mana value.
+#[test]
+fn vodalian_arcanist_colorless_mana_only_pays_for_instant_or_sorcery_spells() {
+    let mut e = GameEngine::new(5503, &[0, 1], 20, None, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let arcanist = inject_permanent_on_battlefield(&mut e, 0, "vodalian_arcanist");
+    let produced = e
+        .apply_command(0, &activate_ability(arcanist, 0, vec![]))
+        .expect("activate Arcanist");
+    let group_id = produced
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(Ev::ManaPoolUpdated(pool)) if pool.player_id == 0 => {
+                pool.restricted_groups.first()
+            }
+            _ => None,
+        })
+        .expect("restricted pool group")
+        .restriction_group_id;
+    assert_eq!(e.state.players[0].mana_pool.colorless, 0);
+    assert_eq!(e.state.players[0].restricted_mana[0].amount.c, 1);
+
+    inject_card_into_hand(&mut e, 0, "coral_merfolk");
+    e.state.players[0].mana_pool.blue = 1;
+    let creature_slot = hand_index_for_card(&e, 0, "coral_merfolk");
+    let mut illegal = cast_spell(creature_slot, vec![]);
+    let Some(Cmd::CastSpell(command)) = illegal.cmd.as_mut() else {
+        unreachable!()
+    };
+    command.restricted_mana.push(ManaSpendSelection {
+        restriction_group_id: group_id,
+        c: 1,
+        ..Default::default()
+    });
+    e.apply_command(0, &illegal)
+        .expect_err("Arcanist mana cannot cast a creature");
+    assert_eq!(
+        e.state.players[0].mana_pool.blue, 1,
+        "failed cast is atomic"
+    );
+    assert_eq!(e.state.players[0].restricted_mana[0].amount.c, 1);
+
+    inject_card_into_hand(&mut e, 0, "mind_sculpt");
+    let sorcery_slot = hand_index_for_card(&e, 0, "mind_sculpt");
+    let mut legal = cast_spell(sorcery_slot, target_player(1));
+    let Some(Cmd::CastSpell(command)) = legal.cmd.as_mut() else {
+        unreachable!()
+    };
+    command.restricted_mana.push(ManaSpendSelection {
+        restriction_group_id: group_id,
+        c: 1,
+        ..Default::default()
+    });
+    e.apply_command(0, &legal)
+        .expect("Arcanist mana pays the generic part of a sorcery");
+    assert!(e.state.players[0].restricted_mana.is_empty());
+    assert_eq!(e.state.players[0].mana_pool.blue, 0);
+}
+
 /// CR 605: a multi-option mana ability (Tropical Island, "{T}: Add {G} or {U}") produces the
 /// option the player chose via `mana_option_index`; an out-of-range index is rejected.
 #[test]

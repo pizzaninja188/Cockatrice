@@ -90,7 +90,21 @@ impl ActivatedAbilityDef {
     /// answers `false` here rather than being silently mis-resolved.
     pub fn mana_options(&self) -> Option<&Vec<ManaAmount>> {
         match self.effect.as_slice() {
-            [SpellEffectKind::ProduceMana { options }] => Some(options),
+            [SpellEffectKind::ProduceMana { options, .. }] => Some(options),
+            _ => None,
+        }
+    }
+
+    pub fn mana_restriction(&self) -> Option<&super::ManaSpendingRestriction> {
+        match self.effect.as_slice() {
+            [SpellEffectKind::ProduceMana { restriction, .. }] => restriction.as_ref(),
+            _ => None,
+        }
+    }
+
+    pub fn conditional_mana_output(&self) -> Option<&super::ConditionalManaOutput> {
+        match self.effect.as_slice() {
+            [SpellEffectKind::ProduceMana { conditional, .. }] => conditional.as_ref(),
             _ => None,
         }
     }

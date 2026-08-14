@@ -229,6 +229,7 @@ impl CardFace {
             CardTypeFilter::InstantOrSorcery => self.is_instant || self.is_sorcery,
             CardTypeFilter::Creature => self.is_creature,
             CardTypeFilter::Artifact => self.is_artifact,
+            CardTypeFilter::Planeswalker => self.types.iter().any(|value| value == "Planeswalker"),
             CardTypeFilter::Noncreature => !self.is_creature,
         }
     }

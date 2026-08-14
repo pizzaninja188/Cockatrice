@@ -939,6 +939,15 @@ pub enum SpellEffectKind {
     /// picks at activation (dual/filter lands, any-color rocks). Untargeted.
     ProduceMana {
         options: Vec<ManaAmount>,
+        /// CR 106.6: every pip produced by this ability carries the same spending restriction.
+        /// Chandra's Embercat and Vodalian Arcanist are the first data consumers; the spell and
+        /// ability branches also cover Castle Garenbrig without a card-specific primitive.
+        #[serde(default)]
+        restriction: Option<ManaSpendingRestriction>,
+        /// A live replacement for `options` when its condition holds. Leafkin Druid is the first
+        /// consumer. This is intentionally an "instead" branch rather than additive output.
+        #[serde(default)]
+        conditional: Option<ConditionalManaOutput>,
     },
     /// CR 701.18: pause resolution, let the casting player search their library for a card
     /// matching `filter` (None = any card; Some = only cards of that spell type), move it to
@@ -1042,6 +1051,64 @@ pub struct ManaAmount {
     pub g: u32,
     #[serde(default)]
     pub c: u32,
+}
+
+/// One OR-branch in a spending restriction. A branch may constrain card type, subtype, or both;
+/// every specified predicate must match. Chandra's Embercat uses two branches (Elemental OR
+/// Chandra planeswalker), while Vodalian Arcanist uses one InstantOrSorcery branch.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ManaSpendFilter {
+    #[serde(default)]
+    pub card_type: Option<CardTypeFilter>,
+    #[serde(default)]
+    pub subtype: Option<String>,
+}
+
+impl ManaSpendFilter {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.card_type.is_none() && self.subtype.as_deref().is_none_or(str::is_empty) {
+            return Err("mana spending filter requires a card type or subtype".into());
+        }
+        if self.subtype.as_deref().is_some_and(str::is_empty) {
+            return Err("mana spending filter subtype cannot be empty".into());
+        }
+        Ok(())
+    }
+}
+
+/// CR 106.6 restriction carried by an individual mana contribution. Empty purpose lists mean
+/// that purpose is disallowed. Filters within one list are ORed so one contribution can cover
+/// wording such as "an Elemental spell or a Chandra planeswalker spell."
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ManaSpendingRestriction {
+    /// Engine-authored public hover text; clients display it verbatim and never parse Oracle.
+    pub label: String,
+    #[serde(default)]
+    pub cast_spell: Vec<ManaSpendFilter>,
+    #[serde(default)]
+    pub activate_ability: Vec<ManaSpendFilter>,
+}
+
+impl ManaSpendingRestriction {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.label.trim().is_empty() {
+            return Err("mana spending restriction label cannot be empty".into());
+        }
+        if self.cast_spell.is_empty() && self.activate_ability.is_empty() {
+            return Err("mana spending restriction must allow a spell or ability purpose".into());
+        }
+        self.cast_spell
+            .iter()
+            .chain(&self.activate_ability)
+            .try_for_each(ManaSpendFilter::validate)
+    }
+}
+
+/// Live conditional replacement for a mana ability's ordinary options.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConditionalManaOutput {
+    pub condition: GameCondition,
+    pub options: Vec<ManaAmount>,
 }
 
 /// Who receives the tokens made by [`SpellEffectKind::CreateTokens`].
@@ -1614,14 +1681,29 @@ impl SpellEffectKind {
             }
             // CR 605.1a: a mana ability is an activated/triggered ability — never a spell. An
             // empty option set would produce nothing and is rejected as malformed.
-            SpellEffectKind::ProduceMana { options } => {
+            SpellEffectKind::ProduceMana {
+                options,
+                restriction,
+                conditional,
+            } => {
                 if context == EffectContext::Spell {
-                    Err("ProduceMana is only valid on a mana ability, not a spell".into())
-                } else if options.is_empty() {
-                    Err("ProduceMana requires at least one mana option".into())
-                } else {
-                    Ok(())
+                    return Err("ProduceMana is only valid on a mana ability, not a spell".into());
                 }
+                if options.is_empty() {
+                    return Err("ProduceMana requires at least one mana option".into());
+                }
+                if let Some(restriction) = restriction {
+                    restriction.validate()?;
+                }
+                if let Some(conditional) = conditional {
+                    conditional.condition.validate()?;
+                    if conditional.options.is_empty() {
+                        return Err(
+                            "conditional ProduceMana requires at least one mana option".into()
+                        );
+                    }
+                }
+                Ok(())
             }
             SpellEffectKind::CounterTargetSpell {
                 unless_controller_pays: Some(0),

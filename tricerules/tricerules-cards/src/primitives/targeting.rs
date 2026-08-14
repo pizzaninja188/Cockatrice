@@ -122,6 +122,10 @@ pub enum CardTypeFilter {
     InstantOrSorcery,
     Creature,
     Artifact,
+    /// Matches planeswalker spells and permanents. Loyalty rules remain a separate engine
+    /// capability; this vocabulary is also needed by mana restrictions such as Chandra's
+    /// Embercat.
+    Planeswalker,
     /// Matches any object that does not have the creature card type.
     Noncreature,
 }

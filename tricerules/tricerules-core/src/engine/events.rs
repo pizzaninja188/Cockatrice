@@ -172,6 +172,37 @@ impl GameEngine {
     pub(super) fn ev_mana_pool_updated(&self, idx: usize) -> RuledEvent {
         let p = &self.state.players[idx];
         let pool = &p.mana_pool;
+        let mut grouped: BTreeMap<u32, ManaAmount> = BTreeMap::new();
+        for contribution in &p.restricted_mana {
+            let total = grouped
+                .entry(contribution.restriction_group_id)
+                .or_default();
+            total.w += contribution.amount.w;
+            total.u += contribution.amount.u;
+            total.b += contribution.amount.b;
+            total.r += contribution.amount.r;
+            total.g += contribution.amount.g;
+            total.c += contribution.amount.c;
+        }
+        let restricted_groups = grouped
+            .into_iter()
+            .filter_map(|(restriction_group_id, amount)| {
+                let restriction = self
+                    .state
+                    .mana_restrictions
+                    .get(restriction_group_id.checked_sub(1)? as usize)?;
+                Some(rv1::RestrictedManaGroup {
+                    restriction_group_id,
+                    w: amount.w,
+                    u: amount.u,
+                    b: amount.b,
+                    r: amount.r,
+                    g: amount.g,
+                    c: amount.c,
+                    display_label: restriction.label.clone(),
+                })
+            })
+            .collect();
         RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ManaPoolUpdated(
                 rv1::ManaPoolUpdated {
@@ -182,6 +213,7 @@ impl GameEngine {
                     r: pool.red,
                     g: pool.green,
                     c: pool.colorless,
+                    restricted_groups,
                 },
             )),
         }
@@ -362,8 +394,8 @@ impl GameEngine {
                                                 _ => None,
                                             })
                                             .unwrap_or_default();
-                                        let mana_produced = ability
-                                            .mana_options()
+                                        let mana_produced = self
+                                            .active_mana_options(oid, ability)
                                             .map(|options| {
                                                 options
                                                     .iter()

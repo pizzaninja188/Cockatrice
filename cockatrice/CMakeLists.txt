@@ -111,6 +111,7 @@ set(cockatrice_SOURCES
     src/game/ruled/ruled_dev_console.cpp
     src/game/ruled/ruled_event_dispatcher.cpp
     src/game/ruled/ruled_pending_cast.cpp
+    src/game/ruled/ruled_restricted_mana_display.cpp
     src/game/ruled/ruled_target_ui.cpp
     src/game/ruled/ruled_token_display.cpp
     src/game/zones/card_zone.cpp

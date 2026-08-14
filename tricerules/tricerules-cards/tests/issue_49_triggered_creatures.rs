@@ -421,6 +421,8 @@ fn issue_49_untargeted_etbs_compose_existing_effects() {
                 g: 1,
                 ..ManaAmount::default()
             }],
+            restriction: None,
+            conditional: None,
         }]
     );
 }

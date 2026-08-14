@@ -2,8 +2,8 @@
 
 #include "ruled_client_host.h"
 
-#include <algorithm>
 #include <QTimer>
+#include <algorithm>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 
 RuledClientState::RuledClientState(RuledClientHost *_host, QObject *parent) : QObject(parent), host(_host)
@@ -1183,6 +1183,8 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     exileOidToPlayerId.clear();
     exileOidToServerCardId.clear();
     pendingCastGraveyardOids.clear();
+    restrictedManaByPlayer.clear();
+    eligibleRestrictedManaByAbility.clear();
 
     // Legal actions + opening sequence. Skipped on the game-start transition: the incoming
     // session's first batch has already populated these (see SessionResetScope), and clearing

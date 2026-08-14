@@ -13,6 +13,7 @@
 #include "event_processing_options.h"
 #include "player.h"
 
+#include <QHash>
 #include <QMap>
 #include <QMenu>
 #include <QObject>
@@ -56,6 +57,8 @@ signals:
     void ruledAbilityActivationPendingChanged(bool pending);
     /// Emitted when `remainingCost` changes during ability mana payment (land or counter).
     void ruledAbilityManaPromptChanged();
+    /// Emitted when locally staged restricted-mana pips change.
+    void ruledRestrictedManaStagingChanged();
     /// Emitted as generic pips are staged for a resolution-time payment.
     void ruledResolutionManaPromptChanged();
     void ruledAbilityCostPromptChanged();
@@ -124,6 +127,9 @@ public:
     bool tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer);
     /// Click a pool mana counter to pay toward a pending activated ability. Returns true if consumed.
     bool tryPayRuledAbilityWithCounter(const QString &counterName);
+    /// Spend one pip from an engine-authored CR 106.6 restriction group toward the pending cast
+    /// or activated ability. Restricted mana is staged separately from legacy pool counters.
+    bool tryPayRuledRestrictedMana(quint32 groupId, QChar symbol);
     /// Click a pool mana counter toward the current generic resolution payment. The fourth pip
     /// submits payment automatically, matching ordinary spell-cost interaction.
     bool tryPayRuledResolutionWithCounter(const QString &counterName);
@@ -147,6 +153,9 @@ public:
     /// Pips already staged locally from this engine-owned counter but not yet deducted by the
     /// authoritative game state.
     [[nodiscard]] int ruledManaCounterOptimisticSpendCount(int counterId) const;
+    [[nodiscard]] int ruledRestrictedManaOptimisticSpendCount(quint32 groupId, QChar symbol) const;
+    [[nodiscard]] bool ruledRestrictedManaPaymentPending() const;
+    [[nodiscard]] bool ruledRestrictedManaGroupEligible(quint32 groupId) const;
     void cancelPendingActivatedAbility();
     /// Returns the mana-payment prompt text if an ability is pending and still needs mana, otherwise empty.
     [[nodiscard]] QString pendingRuledAbilityPromptText() const;
@@ -399,6 +408,7 @@ private:
     QVector<LandTapUndoEntry> landTapUndoStack;
     QVector<LandTapUndoEntry> midCastLandTapStack;
     QVector<int> manaPaymentCounterIds;
+    QHash<quint32, QMap<QChar, int>> restrictedManaPaymentSelections;
     bool resolutionPaymentActive = false;
     bool resolutionPaymentSubmissionPending = false;
     int resolutionPaymentRemaining = 0;
@@ -412,6 +422,7 @@ private:
     // True when the Undo affordance should currently be offered: engine count > 0 in ruled mode,
     // a non-empty local stack in freeform.
     [[nodiscard]] bool landTapUndoCurrentlyAvailable() const;
+    void clearRestrictedManaPaymentSelections();
 
     void moveTopCardsTo(const QString &targetZone, const QString &zoneDisplayName, bool faceDown);
     void moveBottomCardsTo(const QString &targetZone, const QString &zoneDisplayName, bool faceDown);

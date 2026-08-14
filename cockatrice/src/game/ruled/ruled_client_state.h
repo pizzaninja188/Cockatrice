@@ -124,6 +124,41 @@ struct RuledCostData
     QVector<RuledCostChoice> choices;
 };
 
+/// One engine-authored CR 106.6 pool group. Counts are absolute snapshots and remain separate
+/// from Cockatrice's legacy general counters.
+struct RuledRestrictedManaGroup
+{
+    quint32 groupId = 0;
+    int w = 0;
+    int u = 0;
+    int b = 0;
+    int r = 0;
+    int g = 0;
+    int c = 0;
+    QString displayLabel;
+
+    [[nodiscard]] int countForSymbol(QChar symbol) const
+    {
+        switch (symbol.toUpper().unicode()) {
+            case 'W':
+                return w;
+            case 'U':
+                return u;
+            case 'B':
+                return b;
+            case 'R':
+                return r;
+            case 'G':
+                return g;
+            case 'C':
+            case 'X':
+                return c;
+            default:
+                return 0;
+        }
+    }
+};
+
 /// CR 603.3b: one of the simultaneous triggered abilities a player is being asked to order.
 ///
 /// Not a card and not on the stack yet, so there is nothing in the client to look it up in — the
@@ -190,6 +225,7 @@ struct RuledHandActionSet
     QHash<int, int> modalMaxModesByCastKey;
     /// Mandatory nonmana costs keyed by (source slot/object << 8 | face index).
     QHash<int, RuledCostData> costDataByCastKey;
+    QHash<int, QSet<quint32>> eligibleRestrictedManaByCastKey;
 };
 
 class RuledClientState : public QObject
@@ -514,6 +550,13 @@ public:
     /// outside a sorcery-speed window (CR 702.6a). The menu greys these out instead of
     /// collecting mana for a command the engine rejects.
     QHash<quint32, QVector<bool>> engineOidToActivatedAbilityActivatable;
+    /// Exact CR 106.6 groups the engine permits for one activated ability, keyed by
+    /// `(source oid << 32 | ability index)`.
+    QHash<quint64, QSet<quint32>> eligibleRestrictedManaByAbility;
+
+    /// Public absolute snapshots for every seat. UI groups are ordered by `groupId` and render
+    /// as adjacent columns beside the ordinary mana-counter column.
+    QHash<int, QVector<RuledRestrictedManaGroup>> restrictedManaByPlayer;
 
     // -----------------------------------------------------------------------------------
     // Pending player choices.
@@ -565,9 +608,7 @@ public:
     /// Resolve a physical hand card only when the latest authoritative map binds it to a slot
     /// offered for this action. A missing binding is not recoverable from visual hand order:
     /// game-state and ruled-payload updates can briefly expose different generations.
-    [[nodiscard]] int legalHandSlotForServerCard(RuledHandActionKind kind,
-                                                 int ownerPlayerId,
-                                                 int serverCardId) const
+    [[nodiscard]] int legalHandSlotForServerCard(RuledHandActionKind kind, int ownerPlayerId, int serverCardId) const
     {
         const int handSlot = engineHandSlotForServerCard(ownerPlayerId, serverCardId);
         return handSlot >= 0 && isHandActionLegal(kind, handSlot) ? handSlot : -1;
@@ -697,18 +738,30 @@ public:
     [[nodiscard]] RuledCostData
     spellCostData(int sourceId, int faceIndex, RuledCastSource source = RuledCastSource::Hand) const
     {
-        const auto &set = source == RuledCastSource::Hand
-                              ? handActionSet(ruled::v1::HAND_ACTION_CAST_SPELL)
-                              : zoneCastActions;
+        const auto &set =
+            source == RuledCastSource::Hand ? handActionSet(ruled::v1::HAND_ACTION_CAST_SPELL) : zoneCastActions;
         return set.costDataByCastKey.value(spellTargetKey(sourceId, faceIndex));
+    }
+    [[nodiscard]] QSet<quint32> eligibleRestrictedManaForCast(int sourceId, int faceIndex, RuledCastSource source) const
+    {
+        const auto &set =
+            source == RuledCastSource::Hand ? handActionSet(ruled::v1::HAND_ACTION_CAST_SPELL) : zoneCastActions;
+        return set.eligibleRestrictedManaByCastKey.value(spellTargetKey(sourceId, faceIndex));
+    }
+    [[nodiscard]] QSet<quint32> eligibleRestrictedManaForAbility(quint32 oid, int abilityIndex) const
+    {
+        return eligibleRestrictedManaByAbility.value((static_cast<quint64>(oid) << 32) |
+                                                     static_cast<quint32>(abilityIndex));
+    }
+    [[nodiscard]] QVector<RuledRestrictedManaGroup> restrictedManaForPlayer(int playerId) const
+    {
+        return restrictedManaByPlayer.value(playerId);
     }
     /// Latest engine-published target group for one selected modal mode. The pending-cast UI keeps
     /// a display snapshot, but click legality must always consult this live copy after mana or
     /// other commands cause a fresh LegalActions batch.
-    [[nodiscard]] std::optional<SpellTargetData> modalSpellTargetData(int slot,
-                                                                      int faceIndex,
-                                                                      int modeIndex,
-                                                                      RuledCastSource source) const
+    [[nodiscard]] std::optional<SpellTargetData>
+    modalSpellTargetData(int slot, int faceIndex, int modeIndex, RuledCastSource source) const
     {
         const int key = spellTargetKey(slot, faceIndex);
         const RuledHandActionSet *set = nullptr;
@@ -724,10 +777,10 @@ public:
             return std::nullopt;
         }
         const auto modes = set->modalOptionsByCastKey.value(key);
-        const auto mode = std::find_if(modes.cbegin(), modes.cend(),
-                                       [modeIndex](const RuledModalSpellOption &candidate) {
-                                           return candidate.modeIndex == modeIndex && candidate.needsTarget;
-                                       });
+        const auto mode =
+            std::find_if(modes.cbegin(), modes.cend(), [modeIndex](const RuledModalSpellOption &candidate) {
+                return candidate.modeIndex == modeIndex && candidate.needsTarget;
+            });
         return mode == modes.cend() ? std::nullopt : std::optional<SpellTargetData>(mode->targets);
     }
     [[nodiscard]] bool
@@ -1263,6 +1316,8 @@ signals:
     /// mana abilities (LegalActions.undoable_mana_abilities, CR 605 float courtesy). Drives the
     /// Undo affordance: > 0 means a still-inconsequential mana float can be rewound.
     void undoableManaAbilitiesChanged(int count);
+    /// One player's public restricted pool snapshot changed.
+    void restrictedManaChanged(int playerId);
     /// Emitted at the end of each ruled event batch when the stack OID order changes.
     /// Front of list = most recently pushed = resolves first. Triggers a visual re-sort
     /// of the stack window, which may have received Event_MoveCard before stack_pushed.
@@ -1316,9 +1371,9 @@ private:
     /// good emit it themselves; the dispatcher replacing one pick with the next must not.
     void teardownPendingChoice();
     /// The one SubmitResolutionChoice sender: every non-trigger choice answers this way.
-    void sendResolutionChoice(const QVector<quint32> &chosenOids,
-                              ruled::v1::ResolutionChoiceDecision decision =
-                                  ruled::v1::RESOLUTION_CHOICE_DECISION_UNSPECIFIED);
+    void sendResolutionChoice(
+        const QVector<quint32> &chosenOids,
+        ruled::v1::ResolutionChoiceDecision decision = ruled::v1::RESOLUTION_CHOICE_DECISION_UNSPECIFIED);
     void submitResolutionPayment(ruled::v1::ResolutionChoiceDecision decision);
 
     RuledClientHost *host;

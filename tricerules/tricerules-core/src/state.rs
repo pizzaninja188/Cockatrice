@@ -1,7 +1,8 @@
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use tricerules_cards::primitives::{
     ContinuousEffectKind, CounterKind, CreatureScopeFilter, DamagePreventionAdditionalEffect,
-    EffectDuration, GameCondition, Keyword, ManaAmount, SearchDestination, TargetFilter,
+    EffectDuration, GameCondition, Keyword, ManaAmount, ManaSpendingRestriction, SearchDestination,
+    TargetFilter,
 };
 use tricerules_cards::CardFace;
 use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
@@ -234,6 +235,10 @@ pub struct PlayerState {
     pub graveyard: Vec<ObjectId>,
     pub exile: Vec<ObjectId>,
     pub mana_pool: ManaPool,
+    /// CR 106.6 mana that cannot be merged into the unrestricted aggregate. Entries retain the
+    /// activation that produced them for exact undo; events aggregate equal `restriction_group_id`
+    /// values for the adjacent UI columns.
+    pub restricted_mana: Vec<RestrictedManaContribution>,
 }
 
 impl PlayerState {
@@ -248,8 +253,15 @@ impl PlayerState {
             graveyard: Vec::new(),
             exile: Vec::new(),
             mana_pool: ManaPool::default(),
+            restricted_mana: Vec::new(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RestrictedManaContribution {
+    pub restriction_group_id: u32,
+    pub amount: ManaAmount,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -722,6 +734,9 @@ pub struct UndoableManaAbility {
     pub source: ObjectId,
     /// Mana added to `player`'s pool by this activation; removed verbatim on undo.
     pub produced: ManaAmount,
+    /// `None` means the contribution was added to the ordinary aggregate pool. Restricted
+    /// activations retain their group so undo cannot remove an unrestricted pip of the same color.
+    pub restriction_group_id: Option<u32>,
 }
 
 /// Public, identity-free facts accumulated during one turn. Counts are retained rather than
@@ -840,6 +855,9 @@ pub struct GameState {
     /// Opaque ids exposed by replacement-order prompts. Separate from effect identities so stale
     /// submissions cannot name a newly-applicable effect after recomputation.
     pub next_replacement_application_id: u32,
+    /// Session-lifetime interning table for structurally identical mana restrictions. The
+    /// one-based index is the stable public group id used by commands and UI snapshots.
+    pub mana_restrictions: Vec<ManaSpendingRestriction>,
     /// Mana abilities the priority player has activated this priority window that are still
     /// inconsequential and may be rewound by `UndoManaAbility` (CR 605 float courtesy). Newest
     /// last. Cleared by any consequential action (see [`UndoableManaAbility`]); empty whenever no

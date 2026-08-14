@@ -1516,6 +1516,7 @@ fn card_type_filter_desc(f: &CardTypeFilter) -> &'static str {
         CardTypeFilter::Creature => "creature",
         CardTypeFilter::Artifact => "artifact",
         CardTypeFilter::Enchantment => "enchantment",
+        CardTypeFilter::Planeswalker => "planeswalker",
         CardTypeFilter::Noncreature => "noncreature",
     }
 }

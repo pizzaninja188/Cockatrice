@@ -1,0 +1,26 @@
+// Oracle and ruling checked 2026-08-13. CR 106.6 keeps the mana red while restricting what it
+// may pay for; "Chandra planeswalker" means the subtype Chandra, not a name or illustration.
+(
+  id: "chandras_embercat",
+  name: "Chandra's Embercat",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Elemental", "Cat"],
+  power: 2,
+  toughness: 2,
+  activated_abilities: [
+    (
+      costs: [Tap],
+      effect: [ProduceMana(
+        options: [(r: 1)],
+        restriction: Some((
+          label: "Spend only to cast an Elemental spell or a Chandra planeswalker spell.",
+          cast_spell: [
+            (subtype: Some("Elemental")),
+            (card_type: Some(Planeswalker), subtype: Some("Chandra")),
+          ],
+        )),
+      )],
+      text: "{T}: Add {R}. Spend this mana only to cast an Elemental spell or a Chandra planeswalker spell.",
+    ),
+  ],
+)

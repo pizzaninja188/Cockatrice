@@ -285,6 +285,19 @@ message CastSpell {
   // Explicit choices for authored additional-cost components. `cost_index` indexes the face's
   // ordered additional_costs list; every choice-bearing component appears exactly once.
   repeated CostSelection cost_selections = 9;
+  // Exact CR 106.6 contribution groups the player chose to spend. Unlisted restricted groups are
+  // never auto-spent; the engine validates every selected group against this spell face.
+  repeated ManaSpendSelection restricted_mana = 10;
+}
+
+message ManaSpendSelection {
+  uint32 restriction_group_id = 1;
+  uint32 w = 2;
+  uint32 u = 3;
+  uint32 b = 4;
+  uint32 r = 5;
+  uint32 g = 6;
+  uint32 c = 7;
 }
 
 // A payment decision for one flexible mana pip (CR 107.4d–f). Currently only Phyrexian pips
@@ -455,6 +468,7 @@ message LegalHandAction {
   // the front face's Oracle display data to Cockatrice, so the client must not infer this value.
   string cost = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   LegalCostChoices cost_choices = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated uint32 eligible_restricted_mana_group_ids = 11 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // CR 702.34: a spell the player may cast from their own graveyard using flashback.
@@ -476,6 +490,11 @@ message LegalZoneCastAction {
   repeated LegalSpellMode modes = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   string cost = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   LegalCostChoices cost_choices = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated uint32 eligible_restricted_mana_group_ids = 11 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message ManaPaymentEligibility {
+  repeated uint32 eligible_restricted_mana_group_ids = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // Zone and authoritative candidates for one explicit activated-cost choice. Hand candidates are
@@ -545,6 +564,8 @@ message LegalActions {
   // derived from the same legality predicate used by DeclareBlockers, so pair-specific evasion and
   // restrictions are reflected without client-side rules inference.
   repeated BlockPair legal_block_pairs = 16 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Key = (permanent_id << 32 | ability_index), matching the other activated-ability maps.
+  map<uint64, ManaPaymentEligibility> mana_payment_by_ability = 17 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // Servatrice-injected each ruled broadcast: engine hand slot index -> Server_Card.id for that player,
@@ -726,6 +747,18 @@ message ManaPoolUpdated {
   uint32 r = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   uint32 g = 6 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   uint32 c = 7 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  repeated RestrictedManaGroup restricted_groups = 8 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+}
+
+message RestrictedManaGroup {
+  uint32 restriction_group_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 w = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 u = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 b = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 r = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 g = 6 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 c = 7 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  string display_label = 8 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // What the candidate object ids of a ResolutionChoiceRequired refer to, so the client can present
@@ -956,6 +989,7 @@ message ActivateAbility {
   // Explicit choices for authored cost components. `cost_index` indexes the ability's ordered
   // cost list; each component that requires a choice appears exactly once.
   repeated CostSelection cost_selections = 6;
+  repeated ManaSpendSelection restricted_mana = 7;
 }
 
 message CostSelection {

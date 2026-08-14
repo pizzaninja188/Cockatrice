@@ -909,6 +909,43 @@ TEST_F(RuledClientTest, LegalActionsForAnotherPlayerAreIgnored)
     EXPECT_FALSE(state->isHandActionLegal(ruled::v1::HAND_ACTION_CAST_SPELL, 1));
 }
 
+TEST_F(RuledClientTest, RestrictedManaSnapshotsAndPaymentEligibilityStaySeparate)
+{
+    QSignalSpy manaSpy(state, &RuledClientState::restrictedManaChanged);
+    ruled::v1::RuledEventBatch batch;
+    auto *pool = batch.add_events()->mutable_mana_pool_updated();
+    pool->set_player_id(kLocalPlayer);
+    pool->set_r(2); // unrestricted mana remains in the legacy counter snapshot
+    auto *restricted = pool->add_restricted_groups();
+    restricted->set_restriction_group_id(7);
+    restricted->set_r(1);
+    restricted->set_display_label("Spend this mana only to cast a creature spell.");
+
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    auto *cast = addHandAction(actions, ruled::v1::HAND_ACTION_CAST_SPELL, 3, "Fire Elemental", 0, false, "3RR");
+    cast->add_eligible_restricted_mana_group_ids(7);
+    auto &ability = (*actions.mutable_mana_payment_by_ability())[(quint64(100) << 32) | 2u];
+    ability.add_eligible_restricted_mana_group_ids(7);
+    apply(batch);
+
+    ASSERT_EQ(manaSpy.count(), 1);
+    EXPECT_EQ(manaSpy.at(0).at(0).toInt(), kLocalPlayer);
+    const auto groups = state->restrictedManaForPlayer(kLocalPlayer);
+    ASSERT_EQ(groups.size(), 1);
+    EXPECT_EQ(groups.at(0).groupId, 7u);
+    EXPECT_EQ(groups.at(0).r, 1);
+    EXPECT_EQ(groups.at(0).displayLabel, QStringLiteral("Spend this mana only to cast a creature spell."));
+    EXPECT_EQ(state->eligibleRestrictedManaForCast(3, 0, RuledCastSource::Hand), QSet<quint32>({7}));
+    EXPECT_EQ(state->eligibleRestrictedManaForAbility(100, 2), QSet<quint32>({7}));
+
+    ruled::v1::RuledEventBatch cleared;
+    cleared.add_events()->mutable_mana_pool_updated()->set_player_id(kLocalPlayer);
+    apply(cleared);
+    EXPECT_TRUE(state->restrictedManaForPlayer(kLocalPlayer).isEmpty());
+    EXPECT_TRUE(state->eligibleRestrictedManaForCast(3, 0, RuledCastSource::Hand).isEmpty());
+    EXPECT_TRUE(state->eligibleRestrictedManaForAbility(100, 2).isEmpty());
+}
+
 // ---------------------------------------------------------------------------------------
 // Stack tracking
 // ---------------------------------------------------------------------------------------
@@ -1768,8 +1805,7 @@ TEST_F(RuledClientTest, ActivatedAbilityMenuLabelsDoNotDuplicateStructuredCosts)
     apply(batch);
 
     EXPECT_EQ(state->activatedAbilityMenuLabel(100, 0), QStringLiteral("{2}{R}: Ability text."));
-    EXPECT_EQ(state->activatedAbilityMenuLabel(100, 1),
-              QStringLiteral("{2}, {T}, Sacrifice a creature: Draw a card."));
+    EXPECT_EQ(state->activatedAbilityMenuLabel(100, 1), QStringLiteral("{2}, {T}, Sacrifice a creature: Draw a card."));
 }
 
 TEST_F(RuledClientTest, ActivatedAbilityAvailabilityTracksTheEngineAcrossFullZoneViews)

@@ -3,6 +3,8 @@
 #include "../../interface/widgets/tabs/tab_game.h"
 #include "../board/abstract_card_item.h"
 #include "../hand_counter.h"
+#include "../ruled/ruled_actions.h"
+#include "../ruled/ruled_restricted_mana_display.h"
 #include "../zones/hand_zone.h"
 #include "../zones/pile_zone.h"
 #include "../zones/stack_zone.h"
@@ -19,11 +21,14 @@ PlayerGraphicsItem::PlayerGraphicsItem(Player *_player) : player(_player)
     playerArea = new PlayerArea(this);
 
     playerTarget = new PlayerTarget(player, playerArea);
-    qreal avatarMargin =
-        (counterAreaWidth + CardDimensions::HEIGHT_F + 15 - playerTarget->boundingRect().width()) / 2.0;
-    playerTarget->setPos(QPointF(avatarMargin, avatarMargin));
 
     initializeZones();
+
+    if (RuledActions::isRuledGame(player->getGame())) {
+        restrictedManaDisplay = new RuledRestrictedManaDisplay(player, this);
+        connect(restrictedManaDisplay, &RuledRestrictedManaDisplay::widthChanged, this,
+                &PlayerGraphicsItem::rearrangeZones);
+    }
 
     connect(tableZoneGraphicsItem, &TableZone::sizeChanged, this, &PlayerGraphicsItem::updateBoundingRect);
 
@@ -61,25 +66,15 @@ void PlayerGraphicsItem::setPriorityHighlighted(bool highlighted)
 void PlayerGraphicsItem::initializeZones()
 {
     deckZoneGraphicsItem = new PileZone(player->getDeckZone(), this);
-    auto base = QPointF(counterAreaWidth + (CardDimensions::HEIGHT_F - CardDimensions::WIDTH_F + 15) / 2.0,
-                        10 + playerTarget->boundingRect().height() + 5 -
-                            (CardDimensions::HEIGHT_F - CardDimensions::WIDTH_F) / 2.0);
-    deckZoneGraphicsItem->setPos(base);
-
-    qreal h = deckZoneGraphicsItem->boundingRect().width() + 5;
 
     sideboardGraphicsItem = new PileZone(player->getSideboardZone(), this);
     player->getSideboardZone()->setGraphicsVisibility(false);
 
-    auto *handCounter = new HandCounter(playerArea);
-    handCounter->setPos(base + QPointF(0, h + 10));
-    qreal h2 = handCounter->boundingRect().height();
+    handCounter = new HandCounter(playerArea);
 
     graveyardZoneGraphicsItem = new PileZone(player->getGraveZone(), this);
-    graveyardZoneGraphicsItem->setPos(base + QPointF(0, h + h2 + 10));
 
     rfgZoneGraphicsItem = new PileZone(player->getRfgZone(), this);
-    rfgZoneGraphicsItem->setPos(base + QPointF(0, 2 * h + h2 + 10));
 
     tableZoneGraphicsItem = new TableZone(player->getTableZone(), this);
     connect(tableZoneGraphicsItem, &TableZone::sizeChanged, this, &PlayerGraphicsItem::updateBoundingRect);
@@ -102,7 +97,8 @@ QRectF PlayerGraphicsItem::boundingRect() const
 
 qreal PlayerGraphicsItem::getMinimumWidth() const
 {
-    qreal result = tableZoneGraphicsItem->getMinimumWidth() + CardDimensions::HEIGHT_F + 15 + counterAreaWidth;
+    qreal result = tableZoneGraphicsItem->getMinimumWidth() + CardDimensions::HEIGHT_F + 15 + counterAreaWidth +
+                   restrictedManaExtraWidth();
     if (!SettingsCache::instance().getHorizontalHand()) {
         result += handZoneGraphicsItem->boundingRect().width();
     }
@@ -118,7 +114,7 @@ void PlayerGraphicsItem::paint(QPainter * /*painter*/,
 void PlayerGraphicsItem::processSceneSizeChange(int newPlayerWidth)
 {
     // Extend table (and hand, if horizontal) to accommodate the new player width.
-    qreal tableWidth = newPlayerWidth - CardDimensions::HEIGHT_F - 15 - counterAreaWidth;
+    qreal tableWidth = newPlayerWidth - CardDimensions::HEIGHT_F - 15 - counterAreaWidth - restrictedManaExtraWidth();
     if (!SettingsCache::instance().getHorizontalHand()) {
         tableWidth -= handZoneGraphicsItem->boundingRect().width();
     }
@@ -153,11 +149,15 @@ void PlayerGraphicsItem::rearrangeCounters()
         ctr->setPos((counterAreaWidth - br.width()) / 2, ySize);
         ySize += br.height() + padding;
     }
+    if (restrictedManaDisplay) {
+        restrictedManaDisplay->refresh();
+    }
 }
 
 void PlayerGraphicsItem::rearrangeZones()
 {
-    auto base = QPointF(CardDimensions::HEIGHT_F + counterAreaWidth + 15, 0);
+    rearrangeSidebar();
+    auto base = QPointF(CardDimensions::HEIGHT_F + counterAreaWidth + restrictedManaExtraWidth() + 15, 0);
     stackZoneGraphicsItem->setVisible(false);
     if (SettingsCache::instance().getHorizontalHand()) {
         if (mirrored) {
@@ -200,7 +200,7 @@ void PlayerGraphicsItem::rearrangeZones()
 void PlayerGraphicsItem::updateBoundingRect()
 {
     prepareGeometryChange();
-    qreal width = CardDimensions::HEIGHT_F + 15 + counterAreaWidth;
+    qreal width = CardDimensions::HEIGHT_F + 15 + counterAreaWidth + restrictedManaExtraWidth();
     if (SettingsCache::instance().getHorizontalHand()) {
         qreal handHeight =
             player->getPlayerInfo()->getHandVisible() ? handZoneGraphicsItem->boundingRect().height() : 0;
@@ -211,7 +211,35 @@ void PlayerGraphicsItem::updateBoundingRect()
             0, 0, width + handZoneGraphicsItem->boundingRect().width() + tableZoneGraphicsItem->boundingRect().width(),
             tableZoneGraphicsItem->boundingRect().height());
     }
-    playerArea->setSize(CardDimensions::HEIGHT_F + counterAreaWidth + 15, bRect.height());
+    playerArea->setSize(CardDimensions::HEIGHT_F + counterAreaWidth + restrictedManaExtraWidth() + 15, bRect.height());
 
     emit sizeChanged();
+}
+
+qreal PlayerGraphicsItem::restrictedManaExtraWidth() const
+{
+    return restrictedManaDisplay ? restrictedManaDisplay->displayWidth() : 0;
+}
+
+void PlayerGraphicsItem::rearrangeSidebar()
+{
+    const qreal counterColumnsWidth = counterAreaWidth + restrictedManaExtraWidth();
+    const qreal avatarMarginX =
+        (counterColumnsWidth + CardDimensions::HEIGHT_F + 15 - playerTarget->boundingRect().width()) / 2.0;
+    const qreal avatarMarginY =
+        (counterAreaWidth + CardDimensions::HEIGHT_F + 15 - playerTarget->boundingRect().width()) / 2.0;
+    playerTarget->setPos(QPointF(avatarMarginX, avatarMarginY));
+
+    const QPointF base(counterColumnsWidth + (CardDimensions::HEIGHT_F - CardDimensions::WIDTH_F + 15) / 2.0,
+                       10 + playerTarget->boundingRect().height() + 5 -
+                           (CardDimensions::HEIGHT_F - CardDimensions::WIDTH_F) / 2.0);
+    const qreal pileStep = deckZoneGraphicsItem->boundingRect().width() + 5;
+    const qreal handCounterHeight = handCounter->boundingRect().height();
+    deckZoneGraphicsItem->setPos(base);
+    handCounter->setPos(base + QPointF(0, pileStep + 10));
+    graveyardZoneGraphicsItem->setPos(base + QPointF(0, pileStep + handCounterHeight + 10));
+    rfgZoneGraphicsItem->setPos(base + QPointF(0, 2 * pileStep + handCounterHeight + 10));
+    if (restrictedManaDisplay) {
+        restrictedManaDisplay->setPos(counterAreaWidth, 0);
+    }
 }

@@ -1,0 +1,23 @@
+// Oracle checked 2026-08-13. CR 106.6: the produced colorless mana remains {C}, but can be spent
+// only while casting an instant or sorcery spell.
+(
+  id: "vodalian_arcanist",
+  name: "Vodalian Arcanist",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Merfolk", "Wizard"],
+  power: 1,
+  toughness: 3,
+  activated_abilities: [
+    (
+      costs: [Tap],
+      effect: [ProduceMana(
+        options: [(c: 1)],
+        restriction: Some((
+          label: "Spend only to cast an instant or sorcery spell.",
+          cast_spell: [(card_type: Some(InstantOrSorcery))],
+        )),
+      )],
+      text: "{T}: Add {C}. Spend this mana only to cast an instant or sorcery spell.",
+    ),
+  ],
+)

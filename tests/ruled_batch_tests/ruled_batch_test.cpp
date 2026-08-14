@@ -377,8 +377,7 @@ TEST_F(RuledBatchTest, AutoPassPoliciesAreAuthenticatedSortedAndDefaultMissingPl
     const auto &bob = canonical.auto_pass_policies(1);
     EXPECT_GT(bob.stop_on_own_turn_size(), 0);
     EXPECT_GT(bob.stop_on_opponent_turn_size(), 0);
-    EXPECT_NE(std::find(bob.stop_on_own_turn().begin(), bob.stop_on_own_turn().end(),
-                        ruled::v1::PHASE_ID_DRAW),
+    EXPECT_NE(std::find(bob.stop_on_own_turn().begin(), bob.stop_on_own_turn().end(), ruled::v1::PHASE_ID_DRAW),
               bob.stop_on_own_turn().end());
 
     ruled::v1::RuledCommand inner;
@@ -1356,8 +1355,7 @@ TEST_F(RuledBatchTest, RulesEffectsAnnotateOnlyTheBoundBattlefieldCardAndClearCl
     ASSERT_NE(enhanced, nullptr);
     ASSERT_NE(unaffected, enhanced);
     EXPECT_FALSE(unaffected->getAnnotation().contains(QStringLiteral("Effects:")));
-    EXPECT_EQ(enhanced->getAnnotation(),
-              QStringLiteral("Keep me\nEffects: Deathtouch, Can't be blocked"));
+    EXPECT_EQ(enhanced->getAnnotation(), QStringLiteral("Keep me\nEffects: Deathtouch, Can't be blocked"));
     EXPECT_FALSE(enhanced->getAnnotation().contains(QStringLiteral("Granted:")));
 
     {
@@ -1657,6 +1655,29 @@ TEST_F(RuledBatchTest, ApplyRuledBatchUsesUpperGeneralCounterForColorlessMana)
     EXPECT_EQ(storm->getCount(), 0);
 }
 
+TEST_F(RuledBatchTest, ApplyRuledBatchDoesNotMergeRestrictedManaIntoGeneralCounters)
+{
+    auto *red = new Server_Counter(4, "r", makeColor(255, 0, 0), 20, 0);
+    auto *colorless = new Server_Counter(6, "x", makeColor(255, 255, 255), 20, 0);
+    p2->addCounter(red);
+    p2->addCounter(colorless);
+
+    ruled::v1::IpcResponse resp;
+    resp.set_ok(true);
+    auto *pool = resp.mutable_batch()->add_events()->mutable_mana_pool_updated();
+    pool->set_player_id(2);
+    auto *restricted = pool->add_restricted_groups();
+    restricted->set_restriction_group_id(1);
+    restricted->set_r(1);
+    restricted->set_c(2);
+    restricted->set_display_label("Spend only to cast an instant or sorcery spell.");
+
+    callBatchApply(resp);
+
+    EXPECT_EQ(red->getCount(), 0);
+    EXPECT_EQ(colorless->getCount(), 0);
+}
+
 TEST_F(RuledBatchTest, ApplyRuledBatchMarksAttackers)
 {
     Server_Card *bear = addCardToTable(p1, "Grizzly Bears");
@@ -1756,9 +1777,7 @@ TEST_F(RuledBatchTest, ApplyRuledBatchClearsAttackersOnEmptyDeclare)
 TEST_F(RuledBatchTest, FaceChangedRenamesPermanentInPlace)
 {
     const QString cardId = "reckless_waif_merciless_predator";
-    seedMultifaceCatalog(cardId,
-                         "Reckless Waif // Merciless Predator",
-                         {"Reckless Waif", "Merciless Predator"},
+    seedMultifaceCatalog(cardId, "Reckless Waif // Merciless Predator", {"Reckless Waif", "Merciless Predator"},
                          {"Reckless Waif", "Merciless Predator"});
     Server_Card *card = addCardToTable(p1, "Reckless Waif");
     const int serverId = card->getId();
@@ -1794,9 +1813,7 @@ TEST_F(RuledBatchTest, FaceChangedRenamesPermanentInPlace)
 TEST_F(RuledBatchTest, FullSnapshotRestoresControlledPermanentActiveFace)
 {
     const QString cardId = "reckless_waif_merciless_predator";
-    seedMultifaceCatalog(cardId,
-                         "Reckless Waif // Merciless Predator",
-                         {"Reckless Waif", "Merciless Predator"},
+    seedMultifaceCatalog(cardId, "Reckless Waif // Merciless Predator", {"Reckless Waif", "Merciless Predator"},
                          {"Reckless Waif", "Merciless Predator"});
     Server_Card *card = addCardToTable(p1, "Reckless Waif");
     const int serverId = card->getId();
@@ -1940,9 +1957,7 @@ TEST_F(RuledBatchTest, CopiedPermanentLeavesAsItsPhysicalCardWithoutMovingTheSou
 TEST_F(RuledBatchTest, LeavingBattlefieldRestoresFrontFaceDisplay)
 {
     const QString cardId = "reckless_waif_merciless_predator";
-    seedMultifaceCatalog(cardId,
-                         "Reckless Waif // Merciless Predator",
-                         {"Reckless Waif", "Merciless Predator"},
+    seedMultifaceCatalog(cardId, "Reckless Waif // Merciless Predator", {"Reckless Waif", "Merciless Predator"},
                          {"Reckless Waif", "Merciless Predator"});
     Server_Card *card = addCardToTable(p1, "Reckless Waif");
     const int serverId = card->getId();
@@ -1984,9 +1999,7 @@ TEST_F(RuledBatchTest, LeavingBattlefieldRestoresFrontFaceDisplay)
 TEST_F(RuledBatchTest, AdventurePermanentKeepsWholeCardOracleDisplayName)
 {
     const QString cardId = "bonecrusher_giant_stomp";
-    seedMultifaceCatalog(cardId,
-                         "Bonecrusher Giant // Stomp",
-                         {"Bonecrusher Giant", "Stomp"},
+    seedMultifaceCatalog(cardId, "Bonecrusher Giant // Stomp", {"Bonecrusher Giant", "Stomp"},
                          {"Bonecrusher Giant // Stomp", "Bonecrusher Giant // Stomp"});
     Server_Card *card = addCardToTable(p1, "Bonecrusher Giant // Stomp");
     const int serverId = card->getId();
@@ -2012,10 +2025,7 @@ TEST_F(RuledBatchTest, AdventurePermanentKeepsWholeCardOracleDisplayName)
 TEST_F(RuledBatchTest, SplitCardKeepsWholeCardDisplayOutsideBattlefield)
 {
     const QString cardId = "fire_ice";
-    seedMultifaceCatalog(cardId,
-                         "Fire // Ice",
-                         {"Fire", "Ice"},
-                         {"Fire // Ice", "Fire // Ice"});
+    seedMultifaceCatalog(cardId, "Fire // Ice", {"Fire", "Ice"}, {"Fire // Ice", "Fire // Ice"});
     Server_Card *card = addCardToHand(p1, "Fire // Ice");
 
     ruled::v1::IpcResponse seed;
