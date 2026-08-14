@@ -1021,8 +1021,7 @@ impl GameEngine {
             face_index,
             chosen_modes,
             // A spell's effects always act on its controller.
-            trigger_player: None,
-            trigger_object: None,
+            trigger_context: TriggerContext::default(),
             flashback,
         });
         super::resolution::move_object_to_zone(
@@ -1467,8 +1466,7 @@ impl GameEngine {
             face_index: face_up_index,
             chosen_modes: vec![],
             // An activated ability's effects act on the player who activated it.
-            trigger_player: None,
-            trigger_object: None,
+            trigger_context: TriggerContext::default(),
             flashback: false,
         });
         self.state.passes_since_stack_change = 0;
@@ -2138,8 +2136,7 @@ impl GameEngine {
             flashback: false,
             chosen_x: 0,
             chosen_modes: Vec::new(),
-            trigger_player: None,
-            trigger_object: None,
+            trigger_context: TriggerContext::default(),
         };
         match self.begin_battlefield_entry(
             item,

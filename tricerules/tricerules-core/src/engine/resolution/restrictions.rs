@@ -15,7 +15,14 @@ pub(super) fn apply_combat_restriction(
             .iter()
             .copied()
             .filter(|oid| {
-                target_filter_legal_at_resolution(cx.engine, filter, *oid, cx.controller, source)
+                target_filter_legal_at_resolution(
+                    cx.engine,
+                    filter,
+                    *oid,
+                    cx.controller,
+                    source,
+                    cx.top.trigger_context,
+                )
             })
             .collect::<Vec<_>>();
         for oid in affected {

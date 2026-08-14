@@ -2,7 +2,7 @@ use crate::card_def::{CardDefinition, CardFace, Layout, RawCardDefinition};
 use crate::primitives::{
     AbilityCost, AdditionalCost, BattlefieldAggregate, EffectContext, FaceChangeAction,
     GameCondition, InterveningIf, SpellEffectKind, StaticAbilityDef, TargetController, TargetKind,
-    TargetingDef,
+    TargetingDef, TriggerCondition,
 };
 use crate::token_def::TokenDefinition;
 use once_cell::sync::Lazy;
@@ -58,6 +58,13 @@ fn face_can_reference_attached_object(face: &CardFace) -> bool {
         })
 }
 
+fn face_can_reference_attached_player(face: &CardFace) -> bool {
+    face.is_aura
+        && face.spell_effect.iter().any(
+            |effect| matches!(effect, SpellEffectKind::AuraAttach { target } if target.is_player()),
+        )
+}
+
 impl CardRegistry {
     pub fn from_embedded() -> Result<Self, RegistryError> {
         Self::from_chunks_and_tokens(EMBEDDED_RON_CHUNKS, EMBEDDED_TOKEN_CHUNKS)
@@ -92,6 +99,7 @@ impl CardRegistry {
         for (id, token) in &reg.tokens {
             let face = token.primary_face();
             let can_reference_attached_object = face_can_reference_attached_object(face);
+            let can_reference_attached_player = face_can_reference_attached_player(face);
             for ability in &face.triggered_abilities {
                 if ability.trigger.is_delayed_only() {
                     return Err(RegistryError::InvalidCard {
@@ -106,6 +114,29 @@ impl CardRegistry {
                         id: id.clone(),
                         reason,
                     })?;
+                match &ability.trigger {
+                    TriggerCondition::WheneverAttachedObjectAttacks
+                    | TriggerCondition::WheneverAttachedObjectDies
+                        if !can_reference_attached_object =>
+                    {
+                        return Err(RegistryError::InvalidCard {
+                            id: id.clone(),
+                            reason: "attached-object trigger requires an object-attaching Aura or Equipment source"
+                                .into(),
+                        });
+                    }
+                    TriggerCondition::WheneverAttachedPlayerIsAttacked
+                        if !can_reference_attached_player =>
+                    {
+                        return Err(RegistryError::InvalidCard {
+                            id: id.clone(),
+                            reason:
+                                "attached-player trigger requires a player-attaching Aura source"
+                                    .into(),
+                        });
+                    }
+                    _ => {}
+                }
                 if ability.text.trim().is_empty() {
                     return Err(RegistryError::InvalidCard {
                         id: id.clone(),
@@ -135,6 +166,15 @@ impl CardRegistry {
                         return Err(RegistryError::InvalidCard {
                             id: id.clone(),
                             reason: "trigger-object effect requires a trigger that supplies an observed object"
+                                .into(),
+                        });
+                    }
+                    if effect.uses_defending_player_reference()
+                        && !ability.trigger.supplies_defending_player()
+                    {
+                        return Err(RegistryError::InvalidCard {
+                            id: id.clone(),
+                            reason: "defending-player target requires an attack trigger that supplies a defender"
                                 .into(),
                         });
                     }
@@ -252,6 +292,13 @@ impl CardRegistry {
                     });
                 }
                 for effect in &face.spell_effect {
+                    if effect.uses_defending_player_reference() {
+                        return Err(RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason: "spell effects cannot reference a trigger's defending player"
+                                .into(),
+                        });
+                    }
                     effect.validate(EffectContext::Spell).map_err(|reason| {
                         RegistryError::InvalidCard {
                             id: card.id.clone(),
@@ -374,6 +421,7 @@ impl CardRegistry {
                 }
                 let attachment_source = face.is_aura || face.types.iter().any(|t| t == "Equipment");
                 let can_reference_attached_object = face_can_reference_attached_object(face);
+                let can_reference_attached_player = face_can_reference_attached_player(face);
                 let uses_attached_object = face
                     .activated_abilities
                     .iter()
@@ -560,6 +608,28 @@ impl CardRegistry {
                             id: card.id.clone(),
                             reason,
                         })?;
+                    match &ability.trigger {
+                        TriggerCondition::WheneverAttachedObjectAttacks
+                        | TriggerCondition::WheneverAttachedObjectDies
+                            if !can_reference_attached_object =>
+                        {
+                            return Err(RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason: "attached-object trigger requires an object-attaching Aura or Equipment source"
+                                    .into(),
+                            });
+                        }
+                        TriggerCondition::WheneverAttachedPlayerIsAttacked
+                            if !can_reference_attached_player =>
+                        {
+                            return Err(RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason: "attached-player trigger requires a player-attaching Aura source"
+                                    .into(),
+                            });
+                        }
+                        _ => {}
+                    }
                     if ability
                         .effect
                         .iter()
@@ -569,6 +639,18 @@ impl CardRegistry {
                         return Err(RegistryError::InvalidCard {
                             id: card.id.clone(),
                             reason: "trigger-object effect requires a trigger that supplies an observed object"
+                                .into(),
+                        });
+                    }
+                    if ability
+                        .effect
+                        .iter()
+                        .any(SpellEffectKind::uses_defending_player_reference)
+                        && !ability.trigger.supplies_defending_player()
+                    {
+                        return Err(RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason: "defending-player target requires an attack trigger that supplies a defender"
                                 .into(),
                         });
                     }
@@ -596,6 +678,18 @@ impl CardRegistry {
                         return Err(RegistryError::InvalidCard {
                             id: card.id.clone(),
                             reason: "activated abilities cannot reference a trigger object".into(),
+                        });
+                    }
+                    if ability
+                        .effect
+                        .iter()
+                        .any(SpellEffectKind::uses_defending_player_reference)
+                    {
+                        return Err(RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason:
+                                "activated abilities cannot reference a trigger's defending player"
+                                    .into(),
                         });
                     }
                     for condition in &ability.conditions {
@@ -957,6 +1051,106 @@ mod tests {
             RegistryError::InvalidCard { reason, .. }
                 if reason.contains("requires a trigger that supplies an observed object")
         ));
+    }
+
+    #[test]
+    fn attachment_trigger_shapes_and_event_context_are_validated() {
+        let ordinary_permanent = r#"(
+            id: "bad_attachment_trigger",
+            name: "Bad Attachment Trigger",
+            mana_cost: "{2}",
+            types: ["Artifact"],
+            triggered_abilities: [(
+                trigger: WheneverAttachedObjectAttacks,
+                effect: [Draw(count: 1)],
+                text: "Bad.",
+            )],
+        )"#;
+        let error = CardRegistry::from_chunks(&[ordinary_permanent])
+            .expect_err("ordinary permanent cannot carry an attachment trigger");
+        assert!(matches!(
+            error,
+            RegistryError::InvalidCard { reason, .. }
+                if reason.contains("object-attaching Aura or Equipment")
+        ));
+
+        let wrong_aura_recipient = r#"(
+            id: "bad_player_attachment_trigger",
+            name: "Bad Player Attachment Trigger",
+            mana_cost: "{1}{U}",
+            types: ["Enchantment", "Aura"],
+            spell_effect: [AuraAttach(target: (kind: Creature))],
+            triggered_abilities: [(
+                trigger: WheneverAttachedPlayerIsAttacked,
+                effect: [Draw(count: 1)],
+                text: "Bad.",
+            )],
+        )"#;
+        let error = CardRegistry::from_chunks(&[wrong_aura_recipient])
+            .expect_err("creature Aura cannot observe an attached player");
+        assert!(matches!(
+            error,
+            RegistryError::InvalidCard { reason, .. }
+                if reason.contains("player-attaching Aura")
+        ));
+
+        let missing_defender = r#"(
+            id: "bad_defender_target",
+            name: "Bad Defender Target",
+            mana_cost: "{1}{R}",
+            types: ["Creature"],
+            power: 1,
+            toughness: 1,
+            triggered_abilities: [(
+                trigger: WhenSelfEntersBattlefield,
+                effect: [DamageTarget(
+                    amount: 1,
+                    target: (kind: Creature, controller: DefendingPlayer),
+                )],
+                text: "Bad.",
+            )],
+        )"#;
+        let error = CardRegistry::from_chunks(&[missing_defender])
+            .expect_err("nonattack trigger has no defending player");
+        assert!(matches!(
+            error,
+            RegistryError::InvalidCard { reason, .. }
+                if reason.contains("attack trigger that supplies a defender")
+        ));
+    }
+
+    #[test]
+    fn triggered_graveyard_return_rejects_invalid_entry_counter_lists() {
+        for entry_counters in [
+            "[(counter: PlusOnePlusOne, count: 0)]",
+            "[(counter: PlusOnePlusOne, count: 1), (counter: PlusOnePlusOne, count: 2)]",
+        ] {
+            let card = format!(
+                r#"(
+                    id: "bad_entry_counters",
+                    name: "Bad Entry Counters",
+                    mana_cost: "{{1}}{{B}}",
+                    types: ["Enchantment", "Aura"],
+                    spell_effect: [AuraAttach(target: (kind: Creature))],
+                    triggered_abilities: [(
+                        trigger: WheneverAttachedObjectDies,
+                        effect: [ReturnTriggeredCardFromGraveyard(
+                            reference: TriggerObject,
+                            controller: AbilityController,
+                            entry_counters: {entry_counters},
+                        )],
+                        text: "Bad.",
+                    )],
+                )"#
+            );
+            let error = CardRegistry::from_chunks(&[&card])
+                .expect_err("invalid entry counter list must fail registry load");
+            assert!(matches!(
+                error,
+                RegistryError::InvalidCard { reason, .. }
+                    if reason.contains("entry counter")
+            ));
+        }
     }
 
     #[test]

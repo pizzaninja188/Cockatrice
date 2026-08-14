@@ -2144,9 +2144,12 @@ fn issue_47_bonecrusher_target_trigger_is_above_spell() {
     assert!(trigger.is_triggered);
     assert_eq!(trigger.source_permanent_id, Some(giant));
     assert_eq!(trigger.controller, 0);
-    assert_eq!(trigger.trigger_player, Some(1));
+    assert_eq!(trigger.trigger_context.affected_player, Some(1));
     assert_eq!(
-        trigger.trigger_object.map(|object| object.object_id),
+        trigger
+            .trigger_context
+            .observed_object
+            .map(|object| object.object_id),
         Some(giant)
     );
 }
@@ -2321,7 +2324,7 @@ fn issue_47_targeted_trigger_preserves_existing_placement_flow() {
         "the original trigger remains on the stack"
     );
     assert!(e.state.stack[0].is_triggered);
-    assert_eq!(e.state.stack[0].trigger_object, None);
+    assert_eq!(e.state.stack[0].trigger_context.observed_object, None);
 }
 
 #[test]
@@ -2386,9 +2389,12 @@ fn issue_47_spell_copy_targeting_bonecrusher_creates_a_new_trigger() {
     assert!(e.state.stack[1].is_copy);
     let trigger = e.state.stack.last().expect("copy target trigger");
     assert!(trigger.is_triggered);
-    assert_eq!(trigger.trigger_player, Some(1));
+    assert_eq!(trigger.trigger_context.affected_player, Some(1));
     assert_eq!(
-        trigger.trigger_object.map(|object| object.object_id),
+        trigger
+            .trigger_context
+            .observed_object
+            .map(|object| object.object_id),
         Some(giant)
     );
 }

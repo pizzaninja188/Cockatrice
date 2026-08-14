@@ -10,7 +10,11 @@
       ability: (
         trigger: WhenSelfDies,
         effect: [
-          ReturnAbilitySourceFromGraveyard(tapped: true, controller: Owner),
+          ReturnTriggeredCardFromGraveyard(
+            reference: AbilitySource,
+            tapped: true,
+            controller: Owner,
+          ),
         ],
         text: "When this creature dies, return it to the battlefield tapped under its owner's control.",
       ),

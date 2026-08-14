@@ -173,6 +173,7 @@ pub(super) fn grant_keywords(
                     *tid,
                     cx.controller,
                     TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
+                    cx.top.trigger_context,
                 )
             });
             (tid, Some(cx.top.id))
@@ -232,6 +233,7 @@ pub(super) fn grant_triggered_ability(
                     *tid,
                     cx.controller,
                     TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
+                    cx.top.trigger_context,
                 )
             });
             (tid, Some(cx.top.id))
@@ -288,6 +290,7 @@ pub(super) fn add_types(
                     *tid,
                     cx.controller,
                     TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
+                    cx.top.trigger_context,
                 )
             });
             (tid, Some(cx.top.id))
@@ -348,6 +351,11 @@ pub(super) fn grant_keywords_all_permanents(
                 .characteristics(*oid)
                 .is_some_and(|value| value.controller != cx.controller)
         }),
+        TargetController::DefendingPlayer => {
+            return Err(EngineError::Illegal(
+                "defending-player scope is only valid for triggered targets",
+            ));
+        }
     }
     let keyword_names: Vec<&str> = keywords.iter().map(|keyword| keyword.as_str()).collect();
     for oid in affected {

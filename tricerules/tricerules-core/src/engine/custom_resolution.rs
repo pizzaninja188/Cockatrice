@@ -8,7 +8,8 @@ use super::resolution::{
     seat_resolved_spell_last_in_graveyard,
 };
 use super::targeting::{
-    capture_stack_target, validate_ability_targets, validate_spell_targets, TargetSourceIdentity,
+    capture_stack_target, validate_ability_targets_with_context, validate_spell_targets,
+    TargetSourceIdentity,
 };
 use super::*;
 
@@ -81,13 +82,14 @@ impl GameEngine {
             .get(&pending.card_id)
             .map(|definition| definition.name.clone())
             .unwrap_or_else(|| pending.card_id.clone());
-        let validated = validate_ability_targets(
+        let validated = validate_ability_targets_with_context(
             self,
             player,
             TargetSourceIdentity::captured(pending.source_permanent_id, pending.source_zone_change),
             &pending.ability.effect,
             pending.ability.targeting.as_ref(),
             targets,
+            pending.trigger_context,
         )
         .map(|()| card_name);
         let card_name = match validated {
@@ -111,8 +113,7 @@ impl GameEngine {
         let ability_index = pending.ability_index;
         let ability = pending.ability;
         let controller = pending.controller;
-        let trigger_player = pending.trigger_player;
-        let trigger_object = pending.trigger_object;
+        let trigger_context = pending.trigger_context;
 
         let trefs = targets
             .iter()
@@ -139,8 +140,7 @@ impl GameEngine {
             chosen_x: 0,
             face_index: source_face_index,
             chosen_modes: vec![],
-            trigger_player,
-            trigger_object,
+            trigger_context,
             flashback: false,
         });
         self.state.passes_since_stack_change = 0;

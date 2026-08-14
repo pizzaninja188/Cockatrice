@@ -215,8 +215,7 @@ pub(super) fn copy_target_spell(
                     chosen_modes: src.chosen_modes.clone(),
                     // CR 707.2: the copy has the original's characteristics and choices. `None`
                     // for every spell today, but copying inherits it rather than dropping it.
-                    trigger_player: src.trigger_player,
-                    trigger_object: src.trigger_object,
+                    trigger_context: src.trigger_context,
                     flashback: false,
                 };
                 // CR 707.10c: prompt for new targets on the first copy; push any

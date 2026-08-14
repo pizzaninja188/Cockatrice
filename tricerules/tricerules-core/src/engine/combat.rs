@@ -439,6 +439,10 @@ impl GameEngine {
             fill_legal(&mut b2, self);
             return Ok(b2);
         }
+        let defending_player = self
+            .state
+            .sole_defending_player_id()
+            .ok_or(EngineError::Illegal("combat requires one defending player"))?;
         let mut list = Vec::new();
         let mut seen_attackers = HashSet::new();
         for &oid in ids {
@@ -512,9 +516,19 @@ impl GameEngine {
             ap,
             atk_names.join(", ")
         )));
+        let attacks = attackers_for_event
+            .into_iter()
+            .filter_map(|attacker_id| {
+                self.trigger_object_ref(attacker_id)
+                    .map(|attacker| AttackEdgeSnapshot {
+                        attacker,
+                        defending_player,
+                    })
+            })
+            .collect();
         self.fire_triggers(&[GameEvent::AttackersDeclared {
             attacking_player: ap,
-            attacker_ids: attackers_for_event,
+            attacks,
         }]);
         b.events.push(ev_priority_changed(self));
         Ok(b)

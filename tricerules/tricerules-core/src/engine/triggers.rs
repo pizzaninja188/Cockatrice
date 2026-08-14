@@ -1,7 +1,7 @@
 use super::damage::{DamageClassification, DamageRecipient};
 use super::events::{ev_log, ev_trigger_order_required};
 use super::targeting::{
-    compute_spell_targets, spell_effect_kind_needs_target, TargetSourceIdentity,
+    compute_spell_targets_with_context, spell_effect_kind_needs_target, TargetSourceIdentity,
 };
 use super::*;
 
@@ -22,9 +22,7 @@ pub(super) struct CollectedTrigger {
     pub ability: TriggeredAbilityDef,
     pub ability_text: String,
     /// The event's affected player ("that player"), when distinct from the ability controller.
-    pub trigger_player: Option<PlayerId>,
-    /// The distinct permanent whose becoming a target caused this trigger, if any.
-    pub trigger_object: Option<TriggerObjectRef>,
+    pub trigger_context: TriggerContext,
 }
 
 impl GameEngine {
@@ -63,8 +61,10 @@ impl GameEngine {
             controller: delayed.controller,
             ability_index: 0,
             ability_text: delayed.ability.text.clone(),
-            trigger_player: None,
-            trigger_object: Some(delayed.watched),
+            trigger_context: TriggerContext {
+                observed_object: Some(delayed.watched),
+                ..TriggerContext::default()
+            },
             ability: delayed.ability,
         }));
         self.stage_triggers(collected);
@@ -87,7 +87,7 @@ impl GameEngine {
             let trigger_player = Self::trigger_player_for(event);
             let mut event_triggers = self.collect_triggers(event, &sources);
             for trigger in &mut event_triggers {
-                trigger.trigger_player = trigger_player;
+                trigger.trigger_context.affected_player = trigger_player;
             }
             collected.extend(event_triggers);
         }
@@ -133,8 +133,7 @@ impl GameEngine {
                     ability_index: trigger.ability_index,
                     ability: trigger.ability,
                     ability_text: trigger.ability_text,
-                    trigger_player: trigger.trigger_player,
-                    trigger_object: trigger.trigger_object,
+                    trigger_context: trigger.trigger_context,
                     may,
                 }
             })
@@ -330,7 +329,26 @@ impl GameEngine {
                 if !was_creature {
                     return out;
                 }
+                let dying_ref = TriggerObjectRef {
+                    object_id: dying.object_id,
+                    zone_change_generation: dying.zone_change_generation,
+                    controller_at_event: dying.controller,
+                };
                 for source in sources {
+                    if source.attached_to
+                        == Some(AttachmentSnapshot::Object(
+                            dying_ref.object_id,
+                            dying_ref.zone_change_generation,
+                        ))
+                    {
+                        let mut matching = self.matching_snapshot_abilities(source, |condition| {
+                            *condition == TriggerCondition::WheneverAttachedObjectDies
+                        });
+                        for trigger in &mut matching {
+                            trigger.trigger_context.observed_object = Some(dying_ref);
+                        }
+                        out.extend(matching);
+                    }
                     out.extend(self.matching_snapshot_abilities(source, |tc| {
                         let TriggerCondition::WheneverCreatureDies {
                             controller,
@@ -353,25 +371,26 @@ impl GameEngine {
             }
             GameEvent::AttackersDeclared {
                 attacking_player,
-                attacker_ids,
+                attacks,
             } => {
                 let other_attacker_count =
-                    u32::try_from(attacker_ids.len().saturating_sub(1)).unwrap_or(u32::MAX);
+                    u32::try_from(attacks.len().saturating_sub(1)).unwrap_or(u32::MAX);
                 let mut out = Vec::new();
-                for attacker_id in attacker_ids {
-                    let Some(obj) = self.state.objects.get(attacker_id) else {
+                for attack in attacks {
+                    let attacker_id = attack.attacker.object_id;
+                    let Some(obj) = self.state.objects.get(&attacker_id) else {
                         continue;
                     };
                     if obj.controller != *attacking_player {
                         continue;
                     }
                     let (card_id, face_index) = self
-                        .effective_card_identity(*attacker_id)
+                        .effective_card_identity(attacker_id)
                         .map(|(card_id, face_index)| (card_id.to_string(), face_index))
                         .unwrap_or_else(|| (obj.card_id.clone(), obj.face_up_index));
-                    out.extend(self.matching_triggered_abilities(
+                    let mut matching = self.matching_triggered_abilities(
                         &card_id,
-                        *attacker_id,
+                        attacker_id,
                         obj.controller,
                         face_index,
                         |tc| {
@@ -383,7 +402,54 @@ impl GameEngine {
                             };
                             other_attacker_count >= *minimum_other_attackers
                         },
-                    ));
+                    );
+                    for trigger in &mut matching {
+                        trigger.trigger_context.attacking_player = Some(*attacking_player);
+                        trigger.trigger_context.defending_player = Some(attack.defending_player);
+                    }
+                    out.extend(matching);
+
+                    for source in sources {
+                        if source.attached_to
+                            != Some(AttachmentSnapshot::Object(
+                                attack.attacker.object_id,
+                                attack.attacker.zone_change_generation,
+                            ))
+                        {
+                            continue;
+                        }
+                        let mut matching = self.matching_snapshot_abilities(source, |condition| {
+                            *condition == TriggerCondition::WheneverAttachedObjectAttacks
+                        });
+                        for trigger in &mut matching {
+                            trigger.trigger_context.observed_object = Some(attack.attacker);
+                            trigger.trigger_context.attacking_player = Some(*attacking_player);
+                            trigger.trigger_context.defending_player =
+                                Some(attack.defending_player);
+                        }
+                        out.extend(matching);
+                    }
+                }
+
+                for source in sources {
+                    let Some(AttachmentSnapshot::Player(attached_player)) = source.attached_to
+                    else {
+                        continue;
+                    };
+                    let Some(attack) = attacks
+                        .iter()
+                        .find(|attack| attack.defending_player == attached_player)
+                    else {
+                        continue;
+                    };
+                    let mut matching = self.matching_snapshot_abilities(source, |condition| {
+                        *condition == TriggerCondition::WheneverAttachedPlayerIsAttacked
+                    });
+                    for trigger in &mut matching {
+                        trigger.trigger_context.attacking_player = Some(*attacking_player);
+                        trigger.trigger_context.defending_player = Some(attack.defending_player);
+                    }
+                    out.extend(matching);
                 }
                 out
             }
@@ -416,7 +482,7 @@ impl GameEngine {
                                 _ => false,
                             });
                         for trigger in &mut matching {
-                            trigger.trigger_object = Some(related);
+                            trigger.trigger_context.observed_object = Some(related);
                         }
                         out.extend(matching);
                     }
@@ -590,7 +656,8 @@ impl GameEngine {
                             }
                         });
                         for trigger in &mut matching {
-                            trigger.trigger_object = self.trigger_object_ref(*target_id);
+                            trigger.trigger_context.observed_object =
+                                self.trigger_object_ref(*target_id);
                         }
                         out.extend(matching);
                     }
@@ -766,8 +833,7 @@ impl GameEngine {
                 ability_index: idx,
                 ability: ta.clone(),
                 ability_text: ta.text.clone(),
-                trigger_player: None,
-                trigger_object: None,
+                trigger_context: TriggerContext::default(),
             })
             .collect()
     }
@@ -785,6 +851,25 @@ impl GameEngine {
             .characteristics(source_id)
             .map(|characteristics| characteristics.controller)
             .unwrap_or(object.controller);
+        let attached_to = object.attached_to.map(|recipient| match recipient {
+            AttachmentRecipient::Object(object_id) => {
+                let current_generation = self
+                    .state
+                    .zone_change_generation
+                    .get(&object_id)
+                    .copied()
+                    .unwrap_or(0);
+                let attached_generation = self
+                    .state
+                    .objects
+                    .get(&object_id)
+                    .filter(|target| target.zone == Zone::Battlefield)
+                    .map(|_| current_generation)
+                    .unwrap_or_else(|| current_generation.saturating_sub(1));
+                AttachmentSnapshot::Object(object_id, attached_generation)
+            }
+            AttachmentRecipient::Player(player_id) => AttachmentSnapshot::Player(player_id),
+        });
         Some(TriggerSourceSnapshot {
             object_id: source_id,
             triggered_abilities: self
@@ -804,6 +889,7 @@ impl GameEngine {
                 .get(&source_id)
                 .copied()
                 .unwrap_or(0),
+            attached_to,
         })
     }
 
@@ -873,8 +959,7 @@ impl GameEngine {
                 ability_index: *ability_index,
                 ability: ability.clone(),
                 ability_text: ability.text.clone(),
-                trigger_player: None,
-                trigger_object: None,
+                trigger_context: TriggerContext::default(),
             })
             .collect()
     }
@@ -1029,18 +1114,18 @@ impl GameEngine {
             ability_index,
             ability,
             ability_text,
-            trigger_player,
-            trigger_object,
+            trigger_context,
             may,
         } = trigger;
         let needs_target = ability.effect.iter().any(spell_effect_kind_needs_target);
         let legal_targets = if needs_target {
-            Some(compute_spell_targets(
+            Some(compute_spell_targets_with_context(
                 self,
                 controller,
                 TargetSourceIdentity::captured(source_id, source_zone_change),
                 &ability.effect,
                 ability.targeting.as_ref(),
+                trigger_context,
             ))
         } else {
             None
@@ -1070,8 +1155,7 @@ impl GameEngine {
                 ability_text: ability_text.clone(),
                 card_id,
                 controller,
-                trigger_player,
-                trigger_object,
+                trigger_context,
                 may,
             });
             if was_empty {
@@ -1111,8 +1195,7 @@ impl GameEngine {
                 chosen_x: 0,
                 face_index: source_face_index,
                 chosen_modes: vec![],
-                trigger_player,
-                trigger_object,
+                trigger_context,
                 flashback: false,
             });
             self.state.passes_since_stack_change = 0;
@@ -1290,15 +1373,83 @@ mod tests {
         assert!(group
             .triggers
             .iter()
-            .all(|trigger| trigger.trigger_player == Some(1)));
+            .all(|trigger| trigger.trigger_context.affected_player == Some(1)));
         assert_eq!(
             group
                 .triggers
                 .iter()
-                .filter_map(|trigger| trigger.trigger_object)
+                .filter_map(|trigger| trigger.trigger_context.observed_object)
                 .map(|object| object.object_id)
                 .collect::<BTreeSet<_>>(),
             giants.into_iter().collect()
+        );
+    }
+
+    #[test]
+    fn attached_player_attack_trigger_fires_once_for_the_declaration_group() {
+        let engine = GameEngine::new(6303, &[0, 1], 20, None, true).expect("engine");
+        let source = TriggerSourceSnapshot {
+            object_id: 100,
+            card_id: "curse_of_disturbance".into(),
+            controller: 0,
+            face_index: 0,
+            zone_change_generation: 0,
+            face_change_generation: 0,
+            attached_to: Some(AttachmentSnapshot::Player(1)),
+            triggered_abilities: vec![(
+                0,
+                TriggeredAbilityDef {
+                    trigger: TriggerCondition::WheneverAttachedPlayerIsAttacked,
+                    effect: vec![SpellEffectKind::Draw {
+                        count: Amount::Fixed(1),
+                    }],
+                    targeting: None,
+                    text: "Whenever enchanted player is attacked, draw a card.".into(),
+                    may: false,
+                    intervening_if: None,
+                },
+            )],
+        };
+        let attacker = |object_id| TriggerObjectRef {
+            object_id,
+            zone_change_generation: 0,
+            controller_at_event: 0,
+        };
+        let event = GameEvent::AttackersDeclared {
+            attacking_player: 0,
+            attacks: vec![
+                AttackEdgeSnapshot {
+                    attacker: attacker(200),
+                    defending_player: 1,
+                },
+                AttackEdgeSnapshot {
+                    attacker: attacker(201),
+                    defending_player: 1,
+                },
+            ],
+        };
+
+        let triggers = engine.collect_triggers(&event, std::slice::from_ref(&source));
+        assert_eq!(
+            triggers.len(),
+            1,
+            "the Curse triggers once, not once per attacker"
+        );
+        assert_eq!(triggers[0].trigger_context.attacking_player, Some(0));
+        assert_eq!(triggers[0].trigger_context.defending_player, Some(1));
+
+        let other_defender = GameEvent::AttackersDeclared {
+            attacking_player: 0,
+            attacks: vec![AttackEdgeSnapshot {
+                attacker: attacker(202),
+                defending_player: 2,
+            }],
+        };
+        assert!(
+            engine
+                .collect_triggers(&other_defender, std::slice::from_ref(&source))
+                .is_empty(),
+            "attacking another participant does not trigger the attached player's Curse"
         );
     }
 

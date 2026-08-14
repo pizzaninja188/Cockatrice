@@ -498,8 +498,7 @@ impl GameEngine {
                 face_index: 0,
                 chosen_x: 0,
                 chosen_modes: vec![],
-                trigger_player: None,
-                trigger_object: None,
+                trigger_context: TriggerContext::default(),
                 flashback: false,
             };
             self.state.pending_resolution = Some(PendingResolution {

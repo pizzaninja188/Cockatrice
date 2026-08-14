@@ -288,12 +288,16 @@ fn target_controller_matches(
     relation: TargetController,
     ability_controller: PlayerId,
     target_controller: PlayerId,
+    defending_player: Option<PlayerId>,
 ) -> bool {
     match relation {
         TargetController::Any => true,
         TargetController::You => target_controller == ability_controller,
         TargetController::Opponent => state.are_opponents(target_controller, ability_controller),
         TargetController::NotYou => target_controller != ability_controller,
+        TargetController::DefendingPlayer => defending_player
+            .map(|defender| defender == target_controller)
+            .unwrap_or(false),
     }
 }
 
@@ -304,6 +308,7 @@ pub(super) fn effect_target_legal_for_binding(
     tid: ObjectId,
     caster: PlayerId,
     source: TargetSourceIdentity,
+    trigger_context: TriggerContext,
 ) -> bool {
     match effect {
         SpellEffectKind::CreatureDealsDamageEqualToPower {
@@ -311,10 +316,24 @@ pub(super) fn effect_target_legal_for_binding(
             target,
         } => [source_filter, target]
             .get(filter_index)
-            .is_some_and(|filter| target_filter_legal(engine, filter, tid, caster, source)),
-        _ if filter_index == 0 => {
-            effect_target_legal_at_resolution(engine, effect, tid, caster, source)
-        }
+            .is_some_and(|filter| {
+                target_filter_legal_with_context(
+                    engine,
+                    filter,
+                    tid,
+                    caster,
+                    source,
+                    trigger_context,
+                )
+            }),
+        _ if filter_index == 0 => effect_target_legal_at_resolution_with_context(
+            engine,
+            effect,
+            tid,
+            caster,
+            source,
+            trigger_context,
+        ),
         _ => false,
     }
 }
@@ -326,6 +345,7 @@ fn spell_target_legality_error_for_binding(
     tid: ObjectId,
     caster: PlayerId,
     source: TargetSourceIdentity,
+    trigger_context: TriggerContext,
 ) -> Result<(), EngineError> {
     match effect {
         SpellEffectKind::CreatureDealsDamageEqualToPower {
@@ -341,13 +361,27 @@ fn spell_target_legality_error_for_binding(
                     ))
                 }
             };
-            if target_filter_legal(engine, filter, tid, caster, source) {
+            if target_filter_legal_with_context(
+                engine,
+                filter,
+                tid,
+                caster,
+                source,
+                trigger_context,
+            ) {
                 Ok(())
             } else {
                 Err(EngineError::Illegal("illegal creature damage target"))
             }
         }
-        _ if filter_index == 0 => spell_target_legality_error(engine, effect, tid, caster, source),
+        _ if filter_index == 0 => spell_target_legality_error_with_context(
+            engine,
+            effect,
+            tid,
+            caster,
+            source,
+            trigger_context,
+        ),
         _ => Err(EngineError::Illegal("unknown target role for effect")),
     }
 }
@@ -400,6 +434,7 @@ pub(super) fn attachment_filter_legal(
             filter.controller,
             attachment_controller,
             characteristics.controller,
+            None,
         )
 }
 
@@ -476,16 +511,18 @@ pub(super) fn target_filter_legal_at_resolution(
     tid: ObjectId,
     caster: PlayerId,
     source: TargetSourceIdentity,
+    trigger_context: TriggerContext,
 ) -> bool {
-    target_filter_legal(engine, filter, tid, caster, source)
+    target_filter_legal_with_context(engine, filter, tid, caster, source, trigger_context)
 }
 
-fn target_filter_legal(
+fn target_filter_legal_with_context(
     engine: &GameEngine,
     filter: &TargetFilter,
     tid: ObjectId,
     caster: PlayerId,
     source: TargetSourceIdentity,
+    trigger_context: TriggerContext,
 ) -> bool {
     let kind_ok = match filter.kind {
         TargetKind::AnyTarget => damage_spell_target_legal(engine, tid),
@@ -526,6 +563,7 @@ fn target_filter_legal(
             filter.controller,
             caster,
             characteristics.controller,
+            trigger_context.defending_player,
         ) {
             return false;
         }
@@ -585,13 +623,44 @@ pub(super) fn effect_target_legal_at_resolution(
     caster: PlayerId,
     source: TargetSourceIdentity,
 ) -> bool {
+    effect_target_legal_at_resolution_with_context(
+        engine,
+        effect,
+        tid,
+        caster,
+        source,
+        TriggerContext::default(),
+    )
+}
+
+fn effect_target_legal_at_resolution_with_context(
+    engine: &GameEngine,
+    effect: &SpellEffectKind,
+    tid: ObjectId,
+    caster: PlayerId,
+    source: TargetSourceIdentity,
+    trigger_context: TriggerContext,
+) -> bool {
     match effect {
         SpellEffectKind::CreatureDealsDamageEqualToPower {
             source: damage_source,
             target,
         } => {
-            target_filter_legal(engine, damage_source, tid, caster, source)
-                || target_filter_legal(engine, target, tid, caster, source)
+            target_filter_legal_with_context(
+                engine,
+                damage_source,
+                tid,
+                caster,
+                source,
+                trigger_context,
+            ) || target_filter_legal_with_context(
+                engine,
+                target,
+                tid,
+                caster,
+                source,
+                trigger_context,
+            )
         }
         SpellEffectKind::DamageTarget { target, .. }
         | SpellEffectKind::DamageTargets { target, .. }
@@ -604,12 +673,12 @@ pub(super) fn effect_target_legal_at_resolution(
         | SpellEffectKind::SkipNextUntap { target }
         | SpellEffectKind::GainControlUntilEndOfTurn { target }
         | SpellEffectKind::PreventNextDamage { target, .. } => {
-            target_filter_legal(engine, target, tid, caster, source)
+            target_filter_legal_with_context(engine, target, tid, caster, source, trigger_context)
         }
         SpellEffectKind::DestroyTarget { target }
         | SpellEffectKind::DestroyAttached { target, .. }
         | SpellEffectKind::Equip { target } => {
-            target_filter_legal(engine, target, tid, caster, source)
+            target_filter_legal_with_context(engine, target, tid, caster, source, trigger_context)
         }
         SpellEffectKind::PumpTarget {
             subject: EffectSubject::Chosen(target),
@@ -647,7 +716,7 @@ pub(super) fn effect_target_legal_at_resolution(
         | SpellEffectKind::ApplyCombatRestriction {
             scope: CombatRestrictionScope::Chosen(target),
             ..
-        } => target_filter_legal(engine, target, tid, caster, source),
+        } => target_filter_legal_with_context(engine, target, tid, caster, source, trigger_context),
         SpellEffectKind::PumpTarget {
             subject: EffectSubject::Source | EffectSubject::AttachedObject,
             ..
@@ -685,7 +754,7 @@ pub(super) fn effect_target_legal_at_resolution(
             scope: CombatRestrictionScope::Source | CombatRestrictionScope::Matching(_),
             ..
         }
-        | SpellEffectKind::ReturnAbilitySourceFromGraveyard { .. } => false,
+        | SpellEffectKind::ReturnTriggeredCardFromGraveyard { .. } => false,
         SpellEffectKind::ExileTarget
         | SpellEffectKind::ExileTargetGainLifeEqualToPower
         | SpellEffectKind::ReturnTargetCreatureToHand => {
@@ -705,7 +774,7 @@ pub(super) fn effect_target_legal_at_resolution(
             stack_spell_target_legal(&engine.state, engine.registry, tid, *spell_filter)
         }
         SpellEffectKind::AuraAttach { target } => {
-            target_filter_legal(engine, target, tid, caster, source)
+            target_filter_legal_with_context(engine, target, tid, caster, source, trigger_context)
         }
         SpellEffectKind::ReturnFromGraveyard { filter, .. } => {
             graveyard_target_legal(engine, filter, tid, caster)
@@ -718,13 +787,14 @@ pub(super) fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
     kind.needs_target()
 }
 
-/// Validate targets for a `SpellEffectKind` directly (used by ability activation/trigger target selection).
-pub(super) fn validate_effect_targets(
+/// Validate one effect's targets with the event context carried by a triggered ability.
+fn validate_effect_targets(
     engine: &GameEngine,
     caster: PlayerId,
     source: TargetSourceIdentity,
     effect: &SpellEffectKind,
     targets: &[rv1::TargetRef],
+    trigger_context: TriggerContext,
 ) -> Result<(), EngineError> {
     match effect {
         SpellEffectKind::CreatureDealsDamageEqualToPower { .. } => {
@@ -737,7 +807,14 @@ pub(super) fn validate_effect_targets(
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one target"));
             }
-            if !target_filter_legal(engine, filter, targets[0].object_id, caster, source) {
+            if !target_filter_legal_with_context(
+                engine,
+                filter,
+                targets[0].object_id,
+                caster,
+                source,
+                trigger_context,
+            ) {
                 return Err(EngineError::Illegal(
                     "target must be a creature on the battlefield",
                 ));
@@ -754,7 +831,14 @@ pub(super) fn validate_effect_targets(
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one target"));
             }
-            if !target_filter_legal(engine, filter, targets[0].object_id, caster, source) {
+            if !target_filter_legal_with_context(
+                engine,
+                filter,
+                targets[0].object_id,
+                caster,
+                source,
+                trigger_context,
+            ) {
                 return Err(EngineError::Illegal(
                     "target must be a permanent on the battlefield",
                 ));
@@ -764,7 +848,14 @@ pub(super) fn validate_effect_targets(
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one target"));
             }
-            if !target_filter_legal(engine, filter, targets[0].object_id, caster, source) {
+            if !target_filter_legal_with_context(
+                engine,
+                filter,
+                targets[0].object_id,
+                caster,
+                source,
+                trigger_context,
+            ) {
                 return Err(EngineError::Illegal("illegal target for damage effect"));
             }
         }
@@ -781,7 +872,14 @@ pub(super) fn validate_effect_targets(
                 if !seen.insert(t.object_id) {
                     return Err(EngineError::Illegal("duplicate target"));
                 }
-                if !target_filter_legal(engine, filter, t.object_id, caster, source) {
+                if !target_filter_legal_with_context(
+                    engine,
+                    filter,
+                    t.object_id,
+                    caster,
+                    source,
+                    trigger_context,
+                ) {
                     return Err(EngineError::Illegal("illegal target for damage effect"));
                 }
             }
@@ -804,7 +902,14 @@ pub(super) fn validate_effect_targets(
                 if targets.len() != 1 {
                     return Err(EngineError::Illegal("requires exactly one target"));
                 }
-                if !target_filter_legal(engine, filter, targets[0].object_id, caster, source) {
+                if !target_filter_legal_with_context(
+                    engine,
+                    filter,
+                    targets[0].object_id,
+                    caster,
+                    source,
+                    trigger_context,
+                ) {
                     return Err(EngineError::Illegal(
                         "target must be a creature on the battlefield",
                     ));
@@ -821,7 +926,14 @@ pub(super) fn validate_effect_targets(
                 if targets.len() != 1 {
                     return Err(EngineError::Illegal("requires exactly one target"));
                 }
-                if !target_filter_legal(engine, filter, targets[0].object_id, caster, source) {
+                if !target_filter_legal_with_context(
+                    engine,
+                    filter,
+                    targets[0].object_id,
+                    caster,
+                    source,
+                    trigger_context,
+                ) {
                     return Err(EngineError::Illegal(
                         "target must be a creature on the battlefield",
                     ));
@@ -867,7 +979,14 @@ pub(super) fn validate_effect_targets(
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one player target"));
             }
-            if !target_filter_legal(engine, filter, targets[0].object_id, caster, source) {
+            if !target_filter_legal_with_context(
+                engine,
+                filter,
+                targets[0].object_id,
+                caster,
+                source,
+                trigger_context,
+            ) {
                 return Err(EngineError::Illegal("target must be a player in the game"));
             }
             if matches!(filter.kind, TargetKind::OpponentPlayer)
@@ -882,7 +1001,14 @@ pub(super) fn validate_effect_targets(
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("aura requires exactly one enchant target"));
             }
-            if !target_filter_legal(engine, filter, targets[0].object_id, caster, source) {
+            if !target_filter_legal_with_context(
+                engine,
+                filter,
+                targets[0].object_id,
+                caster,
+                source,
+                trigger_context,
+            ) {
                 return Err(EngineError::Illegal(
                     "enchant target must be a valid permanent on the battlefield",
                 ));
@@ -892,7 +1018,14 @@ pub(super) fn validate_effect_targets(
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one target"));
             }
-            if !target_filter_legal(engine, filter, targets[0].object_id, caster, source) {
+            if !target_filter_legal_with_context(
+                engine,
+                filter,
+                targets[0].object_id,
+                caster,
+                source,
+                trigger_context,
+            ) {
                 return Err(EngineError::Illegal(
                     "equip target must be a creature you control on the battlefield",
                 ));
@@ -902,7 +1035,14 @@ pub(super) fn validate_effect_targets(
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one target"));
             }
-            if !target_filter_legal(engine, filter, targets[0].object_id, caster, source) {
+            if !target_filter_legal_with_context(
+                engine,
+                filter,
+                targets[0].object_id,
+                caster,
+                source,
+                trigger_context,
+            ) {
                 return Err(EngineError::Illegal("illegal target for damage prevention"));
             }
         }
@@ -959,7 +1099,7 @@ pub(super) fn validate_effect_targets(
         | SpellEffectKind::SearchLibrary { .. }
         | SpellEffectKind::Scry { .. }
         | SpellEffectKind::ChangeSourceFace { .. }
-        | SpellEffectKind::ReturnAbilitySourceFromGraveyard { .. }
+        | SpellEffectKind::ReturnTriggeredCardFromGraveyard { .. }
         | SpellEffectKind::None => {
             if !targets.is_empty() {
                 return Err(EngineError::Illegal("this effect takes no targets"));
@@ -984,7 +1124,38 @@ pub(super) fn validate_ability_targets(
     targeting: Option<&TargetingDef>,
     targets: &[rv1::TargetRef],
 ) -> Result<(), EngineError> {
-    validate_grouped_targets(engine, caster, source, effects, targeting, targets, true)
+    validate_ability_targets_with_context(
+        engine,
+        caster,
+        source,
+        effects,
+        targeting,
+        targets,
+        TriggerContext::default(),
+    )
+}
+
+pub(super) fn validate_ability_targets_with_context(
+    engine: &GameEngine,
+    caster: PlayerId,
+    source: TargetSourceIdentity,
+    effects: &[SpellEffectKind],
+    targeting: Option<&TargetingDef>,
+    targets: &[rv1::TargetRef],
+    trigger_context: TriggerContext,
+) -> Result<(), EngineError> {
+    validate_grouped_targets(
+        engine,
+        caster,
+        source,
+        effects,
+        targeting,
+        targets,
+        GroupedTargetContext {
+            ability: true,
+            trigger: trigger_context,
+        },
+    )
 }
 
 pub(super) fn validate_spell_targets(
@@ -995,7 +1166,24 @@ pub(super) fn validate_spell_targets(
     targeting: Option<&TargetingDef>,
     targets: &[rv1::TargetRef],
 ) -> Result<(), EngineError> {
-    validate_grouped_targets(engine, caster, source, effects, targeting, targets, false)
+    validate_grouped_targets(
+        engine,
+        caster,
+        source,
+        effects,
+        targeting,
+        targets,
+        GroupedTargetContext {
+            ability: false,
+            trigger: TriggerContext::default(),
+        },
+    )
+}
+
+#[derive(Clone, Copy)]
+struct GroupedTargetContext {
+    ability: bool,
+    trigger: TriggerContext,
 }
 
 fn validate_grouped_targets(
@@ -1005,7 +1193,7 @@ fn validate_grouped_targets(
     effects: &[SpellEffectKind],
     targeting: Option<&TargetingDef>,
     targets: &[rv1::TargetRef],
-    ability: bool,
+    context: GroupedTargetContext,
 ) -> Result<(), EngineError> {
     let groups = effective_target_groups(effects, targeting);
     let bindings = target_group_bindings(effects, targeting);
@@ -1054,7 +1242,7 @@ fn validate_grouped_targets(
                 let effect = effects.get(effect_index).ok_or(EngineError::Illegal(
                     "target group references an unknown effect",
                 ))?;
-                if ability
+                if context.ability
                     && !matches!(
                         effect,
                         SpellEffectKind::CreatureDealsDamageEqualToPower { .. }
@@ -1067,6 +1255,7 @@ fn validate_grouped_targets(
                         source,
                         effect,
                         std::slice::from_ref(*target),
+                        context.trigger,
                     )?;
                 } else {
                     spell_target_legality_error_for_binding(
@@ -1076,6 +1265,7 @@ fn validate_grouped_targets(
                         target.object_id,
                         caster,
                         source,
+                        context.trigger,
                     )?;
                 }
             }
@@ -1135,12 +1325,13 @@ fn target_ref_domain_exists(engine: &GameEngine, target: &rv1::TargetRef) -> boo
 /// target is fine". A targeted primitive added without an arm here is rejected (and trips a
 /// `debug_assert` in tests) instead of silently accepting graveyard cards, players and stack
 /// objects — the CR 115.1 defect that issue #42 recorded for targeted keyword grants.
-pub(super) fn spell_target_legality_error(
+fn spell_target_legality_error_with_context(
     engine: &GameEngine,
     effect: &SpellEffectKind,
     tid: ObjectId,
     caster: PlayerId,
     source: TargetSourceIdentity,
+    trigger_context: TriggerContext,
 ) -> Result<(), EngineError> {
     match effect {
         SpellEffectKind::CreatureDealsDamageEqualToPower { .. } => {
@@ -1191,7 +1382,14 @@ pub(super) fn spell_target_legality_error(
             ..
         }
         | SpellEffectKind::PreventNextDamage { target: filter, .. } => {
-            if !target_filter_legal(engine, filter, tid, caster, source) {
+            if !target_filter_legal_with_context(
+                engine,
+                filter,
+                tid,
+                caster,
+                source,
+                trigger_context,
+            ) {
                 return Err(EngineError::Illegal(
                     "target must be a creature or player on the battlefield",
                 ));
@@ -1277,7 +1475,14 @@ pub(super) fn spell_target_legality_error(
             }
         }
         SpellEffectKind::AuraAttach { target: filter } => {
-            if !target_filter_legal(engine, filter, tid, caster, source) {
+            if !target_filter_legal_with_context(
+                engine,
+                filter,
+                tid,
+                caster,
+                source,
+                trigger_context,
+            ) {
                 return Err(EngineError::Illegal(
                     "enchant target must be a valid permanent on the battlefield",
                 ));
@@ -1325,6 +1530,24 @@ pub(super) fn compute_spell_targets(
     source: TargetSourceIdentity,
     effects: &[SpellEffectKind],
     targeting: Option<&TargetingDef>,
+) -> rv1::SpellTargets {
+    compute_spell_targets_with_context(
+        engine,
+        caster,
+        source,
+        effects,
+        targeting,
+        TriggerContext::default(),
+    )
+}
+
+pub(super) fn compute_spell_targets_with_context(
+    engine: &GameEngine,
+    caster: PlayerId,
+    source: TargetSourceIdentity,
+    effects: &[SpellEffectKind],
+    targeting: Option<&TargetingDef>,
+    trigger_context: TriggerContext,
 ) -> rv1::SpellTargets {
     // DamageTargets metadata controls the allocation UI. Cardinality lives exclusively on groups.
     let mut fixed_damage: u32 = 0;
@@ -1375,6 +1598,7 @@ pub(super) fn compute_spell_targets(
                         object_id,
                         caster,
                         source,
+                        trigger_context,
                     )
                     .is_ok()
                 })
@@ -1545,37 +1769,43 @@ mod tests {
             &engine.state,
             TargetController::Opponent,
             10,
-            20
+            20,
+            None,
         ));
         assert!(!target_controller_matches(
             &engine.state,
             TargetController::Opponent,
             10,
-            10
+            10,
+            None,
         ));
         assert!(target_controller_matches(
             &engine.state,
             TargetController::You,
             10,
-            10
+            10,
+            None,
         ));
         assert!(!target_controller_matches(
             &engine.state,
             TargetController::You,
             10,
-            20
+            20,
+            None,
         ));
         assert!(target_controller_matches(
             &engine.state,
             TargetController::Any,
             10,
-            10
+            10,
+            None,
         ));
         assert!(target_controller_matches(
             &engine.state,
             TargetController::Any,
             10,
-            20
+            20,
+            None,
         ));
 
         engine.state.players[1].has_lost = true;
@@ -1671,28 +1901,31 @@ mod tests {
             ..TargetFilter::default()
         };
         let original_source = TargetSourceIdentity::current(&engine, bear);
-        assert!(!target_filter_legal(
+        assert!(!target_filter_legal_with_context(
             &engine,
             &filter,
             bear,
             0,
             original_source,
+            TriggerContext::default(),
         ));
 
         *engine.state.zone_change_generation.entry(bear).or_default() += 1;
-        assert!(target_filter_legal(
+        assert!(target_filter_legal_with_context(
             &engine,
             &filter,
             bear,
             0,
             original_source,
+            TriggerContext::default(),
         ));
-        assert!(!target_filter_legal(
+        assert!(!target_filter_legal_with_context(
             &engine,
             &filter,
             bear,
             0,
             TargetSourceIdentity::current(&engine, bear),
+            TriggerContext::default(),
         ));
 
         assert!(!attachment_filter_legal(

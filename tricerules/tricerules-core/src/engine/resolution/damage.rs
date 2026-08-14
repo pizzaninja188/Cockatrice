@@ -147,6 +147,7 @@ pub(super) fn damage_targets(
                     tid,
                     controller,
                     target_source,
+                    cx.top.trigger_context,
                 )
             })
             .count() as u32;
@@ -181,6 +182,7 @@ pub(super) fn damage_targets(
             tid,
             controller,
             target_source,
+            cx.top.trigger_context,
         ) {
             events.push(ev_log(format!(
                 "{spell_label}: target {} is no longer legal, skipping.",
@@ -290,8 +292,7 @@ mod damage_source_tests {
             flashback: false,
             chosen_x: 0,
             chosen_modes: Vec::new(),
-            trigger_player: None,
-            trigger_object: None,
+            trigger_context: TriggerContext::default(),
         }
     }
 

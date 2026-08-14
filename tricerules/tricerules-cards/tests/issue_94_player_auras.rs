@@ -35,7 +35,7 @@ fn curses_have_exact_attachment_data_and_track_only_deferred_rewards() {
             }]
         );
         let partial = definition.partial.as_deref().expect("reward is partial");
-        assert!(partial.contains("#63"));
+        assert!(!partial.contains("#63"));
         assert!(partial.contains("#86"));
         assert!(partial.contains(deferred_reward));
     }

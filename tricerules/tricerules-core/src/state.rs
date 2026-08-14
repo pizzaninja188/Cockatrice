@@ -19,6 +19,17 @@ pub struct TriggerObjectRef {
     pub controller_at_event: PlayerId,
 }
 
+/// Event-time facts carried by a triggered ability from collection through resolution. Keeping
+/// these together prevents target publication, target validation, and effect resolution from
+/// reconstructing relationships after objects detach, change controller, or leave a zone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct TriggerContext {
+    pub affected_player: Option<PlayerId>,
+    pub observed_object: Option<TriggerObjectRef>,
+    pub attacking_player: Option<PlayerId>,
+    pub defending_player: Option<PlayerId>,
+}
+
 /// The game entity an Aura or Equipment is attached to. Players are represented explicitly;
 /// their numeric ids must never be confused with engine object ids.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -304,12 +315,9 @@ pub struct StagedTrigger {
     pub ability_index: usize,
     pub ability: TriggeredAbilityDef,
     pub ability_text: String,
-    /// The event's beneficiary when the trigger names a player other than its controller
-    /// ("**that player** draws a card"); `None` means the controller.
-    pub trigger_player: Option<PlayerId>,
-    /// The distinct permanent whose becoming a target caused this trigger. Kept separate from
-    /// `targets`: this object was observed by the trigger and was not chosen as its CR 115 target.
-    pub trigger_object: Option<TriggerObjectRef>,
+    /// The event's affected players and observed objects, kept separate from CR 115 targets and
+    /// preserved while this trigger waits for APNAP ordering or target selection.
+    pub trigger_context: TriggerContext,
     /// CR 603.5: an optional triggered ability may be declined before it is put on the stack.
     pub may: bool,
 }
@@ -372,11 +380,9 @@ pub struct PendingTrigger {
     pub controller: PlayerId,
     /// CR 603.5: an optional triggered ability may be declined before it is put on the stack.
     pub may: bool,
-    /// Mirror of [`StackItem::trigger_player`], carried across target selection so a targeted
-    /// draw-step-style trigger keeps its beneficiary when it finally reaches the stack.
-    pub trigger_player: Option<PlayerId>,
-    /// Mirror of [`StackItem::trigger_object`], carried across any CR 603.3d target choice.
-    pub trigger_object: Option<TriggerObjectRef>,
+    /// Mirror of [`StackItem::trigger_context`], carried across target selection so a targeted
+    /// event-dependent trigger keeps its event references when it finally reaches the stack.
+    pub trigger_context: TriggerContext,
 }
 
 /// A tier-3 custom resolution (CR 608) parked mid-way, waiting on a player choice. Mirrors
@@ -593,17 +599,11 @@ pub struct StackItem {
     pub chosen_x: u32,
     /// Atomic modal choices in printed order. Empty for nonmodal spells and abilities.
     pub chosen_modes: Vec<ChosenSpellMode>,
-    /// The player a triggered ability's effects act on when the trigger names someone other than
-    /// its controller — "at the beginning of each player's draw step, **that player** draws an
-    /// additional card" (Howling Mine, Kami of the Crescent Moon). `None` (spells, activated
-    /// abilities, and every other trigger) means the effects act on [`Self::controller`].
-    /// Controllership itself is unaffected: the Mine's controller still controls the ability and
-    /// decides its stack ordering.
-    pub trigger_player: Option<PlayerId>,
-    /// The permanent whose becoming a target caused this triggered ability. This is event
-    /// identity, not one of this stack item's own CR 115 targets, and therefore remains available
-    /// even for a non-targeted observer trigger.
-    pub trigger_object: Option<TriggerObjectRef>,
+    /// Event-time player and object identity for triggered abilities. This includes an affected
+    /// player (Howling Mine), an observed object distinct from CR 115 targets, and attack
+    /// participants. Empty for spells and activated abilities. Trigger context never changes who
+    /// controls the stack item.
+    pub trigger_context: TriggerContext,
 }
 
 /// Pre-game: choose first player, then London-style mulligans (redraw to 7, then put N on bottom).
@@ -1044,8 +1044,10 @@ impl GameState {
                     controller: delayed.controller,
                     ability_index: 0,
                     ability_text: delayed.ability.text.clone(),
-                    trigger_player: None,
-                    trigger_object: Some(delayed.watched),
+                    trigger_context: TriggerContext {
+                        observed_object: Some(delayed.watched),
+                        ..TriggerContext::default()
+                    },
                     may: delayed.ability.may,
                     ability: delayed.ability,
                 }

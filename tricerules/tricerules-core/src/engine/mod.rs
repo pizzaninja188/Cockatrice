@@ -9,8 +9,8 @@ use crate::state::{
     EntryReplacementEffectId, GameObject, GameState, ObjectId, OpeningSequence,
     PendingBattlefieldEntry, PendingManaPayment, PendingResolution, PendingTrigger,
     PendingTriggerOrder, PlayerId, PlayerState, ReplacementPriority, StackItem, StackTarget,
-    StagedTrigger, StagedTriggerGroup, TokenBattlefieldEntry, TriggerObjectRef, TurnHistory,
-    TurnStep, UndoableManaAbility, Zone,
+    StagedTrigger, StagedTriggerGroup, TokenBattlefieldEntry, TriggerContext, TriggerObjectRef,
+    TurnHistory, TurnStep, UndoableManaAbility, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -30,7 +30,7 @@ use tricerules_cards::primitives::{
     PreventionAmountBasis, RelativePlayerSet, ReturnController, SearchDestination,
     SpellCostModifier, SpellEffectKind, StaticAbilityDef, StaticDamagePreventionAmount,
     TargetController, TargetFilter, TargetKind, TargetingSourceFilter, TokenController,
-    TriggerCondition, TriggeredAbilityDef,
+    TriggerCondition, TriggeredAbilityDef, TriggeredCardReference,
 };
 use tricerules_cards::{CardFace, CardRegistry, FaceRef, Layout};
 use tricerules_proto::ruled::v1 as rv1;
@@ -248,7 +248,25 @@ struct TriggerSourceSnapshot {
     face_index: usize,
     zone_change_generation: u64,
     face_change_generation: u64,
+    attached_to: Option<AttachmentSnapshot>,
     triggered_abilities: Vec<(usize, TriggeredAbilityDef)>,
+}
+
+/// Event-time attachment identity captured with a trigger source. Object recipients include
+/// their zone-change generation so a leave-and-return permanent cannot satisfy the old relation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AttachmentSnapshot {
+    Object(ObjectId, u64),
+    Player(PlayerId),
+}
+
+/// One declared attacker and its defending player. The current command model supplies one shared
+/// player defender in two-player games; the per-attacker shape avoids baking that limitation into
+/// trigger semantics.
+#[derive(Clone, Copy, Debug)]
+struct AttackEdgeSnapshot {
+    attacker: TriggerObjectRef,
+    defending_player: PlayerId,
 }
 
 /// One attacker-blocker relation as it existed at the declaration event. Both endpoints retain
@@ -285,7 +303,7 @@ enum GameEvent {
     /// canonical event instead of reconstructing a group from per-creature edges.
     AttackersDeclared {
         attacking_player: PlayerId,
-        attacker_ids: Vec<ObjectId>,
+        attacks: Vec<AttackEdgeSnapshot>,
     },
     /// CR 509.3b/d: the complete simultaneous blocker declaration, represented as individual
     /// edges because both "blocks" and "becomes blocked by a creature" trigger once per edge.

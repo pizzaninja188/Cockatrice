@@ -585,15 +585,32 @@ pub(super) fn return_from_graveyard(
     Ok(EffectOutcome::Continue)
 }
 
-pub(super) fn return_ability_source_from_graveyard(
+pub(super) fn return_triggered_card_from_graveyard(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::ReturnAbilitySourceFromGraveyard { tapped, controller } = effect else {
+    let SpellEffectKind::ReturnTriggeredCardFromGraveyard {
+        reference,
+        tapped,
+        controller,
+        entry_counters,
+    } = effect
+    else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let Some(source_id) = cx.top.source_permanent_id else {
-        return Ok(EffectOutcome::Continue);
+    let (source_id, event_generation) = match reference {
+        TriggeredCardReference::AbilitySource => {
+            let Some(source_id) = cx.top.source_permanent_id else {
+                return Ok(EffectOutcome::Continue);
+            };
+            (source_id, cx.top.source_zone_change)
+        }
+        TriggeredCardReference::TriggerObject => {
+            let Some(observed) = cx.top.trigger_context.observed_object else {
+                return Ok(EffectOutcome::Continue);
+            };
+            (observed.object_id, observed.zone_change_generation)
+        }
     };
     let current_generation = cx
         .engine
@@ -605,9 +622,7 @@ pub(super) fn return_ability_source_from_graveyard(
     let Some(object) = cx.engine.state.objects.get(&source_id) else {
         return Ok(EffectOutcome::Continue);
     };
-    if object.zone != Zone::Graveyard
-        || current_generation != cx.top.source_zone_change.saturating_add(1)
-    {
+    if object.zone != Zone::Graveyard || current_generation != event_generation.saturating_add(1) {
         return Ok(EffectOutcome::Continue);
     }
 
@@ -617,16 +632,20 @@ pub(super) fn return_ability_source_from_graveyard(
         ReturnController::AbilityController => cx.controller,
     };
     let object_label = object_display_name(&cx.engine.state, cx.engine.registry, source_id);
+    let entry_counters = entry_counters
+        .into_iter()
+        .map(|placement| (placement.counter, placement.count))
+        .collect();
     match cx.engine.begin_battlefield_entry(
         cx.top.clone(),
         BattlefieldEntryEvent {
             object_id: source_id,
-            deciding_player: owner,
+            deciding_player: destination_controller,
             destination_controller,
             face_index: 0,
             chosen_x: 0,
             tapped,
-            entry_counters: BTreeMap::new(),
+            entry_counters,
             applied_effects: Vec::new(),
         },
         BattlefieldEntryCompletion::ResolutionEffect {

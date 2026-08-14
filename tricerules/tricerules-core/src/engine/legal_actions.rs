@@ -3,7 +3,8 @@ use super::combat::priority_locked_for_combat_declaration;
 use super::events::object_display_name;
 use super::priority::{instant_timing_step_allowed, sorcery_speed_available};
 use super::targeting::{
-    compute_spell_targets, spell_effect_kind_needs_target, TargetSourceIdentity,
+    compute_spell_targets, compute_spell_targets_with_context, spell_effect_kind_needs_target,
+    TargetSourceIdentity,
 };
 use super::*;
 
@@ -121,7 +122,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                     .and_then(|def| def.primary_face().triggered_abilities.get(pt.ability_index))
                     .map(|ta| (&ta.effect, ta.targeting.as_ref()))
                 {
-                    let targets = compute_spell_targets(
+                    let targets = compute_spell_targets_with_context(
                         eng,
                         p.id,
                         TargetSourceIdentity::captured(
@@ -130,6 +131,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                         ),
                         effects.0,
                         effects.1,
+                        pt.trigger_context,
                     );
                     let key = (pt.source_permanent_id as u64) << 32 | pt.ability_index as u64;
                     valid_targets_by_ability.insert(key, targets);

@@ -40,7 +40,8 @@ struct EffectCx<'a> {
     controller: PlayerId,
     /// The player an untargeted, player-scoped effect acts on. Equals `controller` for spells,
     /// activated abilities, and every trigger that doesn't name another player; differs only when
-    /// a triggered ability says "**that player** …" ([`StackItem::trigger_player`] — Howling Mine).
+    /// a triggered ability says "**that player** …"
+    /// ([`StackItem::trigger_context`] — Howling Mine).
     /// Effects that act on the *controller* by rule (Brainstorm's draw, a self-pump) keep using
     /// `controller`.
     affected_player: PlayerId,
@@ -91,7 +92,7 @@ fn player_recipients(
 }
 
 fn trigger_object_controller(engine: &GameEngine, top: &StackItem) -> Option<PlayerId> {
-    let trigger_object = top.trigger_object?;
+    let trigger_object = top.trigger_context.observed_object?;
     let is_current = engine
         .state
         .zone_change_generation
@@ -127,7 +128,7 @@ fn resolve_effect_subject(
             .filter(|_| engine.source_is_current_object(top)),
         EffectSubject::Chosen(_) => targets.first().copied(),
         EffectSubject::TriggerObject => {
-            let trigger_object = top.trigger_object?;
+            let trigger_object = top.trigger_context.observed_object?;
             let current_generation = engine
                 .state
                 .zone_change_generation
@@ -264,6 +265,7 @@ impl GameEngine {
                         target.object_id,
                         controller,
                         source,
+                        top.trigger_context,
                     )
                 })
         };
@@ -811,7 +813,7 @@ impl GameEngine {
                     target_damage: &effect_target_damage,
                     top,
                     controller,
-                    affected_player: top.trigger_player.unwrap_or(controller),
+                    affected_player: top.trigger_context.affected_player.unwrap_or(controller),
                     spell_label,
                     previous_effect_result: &previous_effect_result,
                     effect_result: &mut effect_result,
@@ -939,8 +941,8 @@ impl GameEngine {
                     effect @ SpellEffectKind::ReturnFromGraveyard { .. } => {
                         zones::return_from_graveyard(&mut cx, effect)?
                     }
-                    effect @ SpellEffectKind::ReturnAbilitySourceFromGraveyard { .. } => {
-                        zones::return_ability_source_from_graveyard(&mut cx, effect)?
+                    effect @ SpellEffectKind::ReturnTriggeredCardFromGraveyard { .. } => {
+                        zones::return_triggered_card_from_graveyard(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::ProduceMana { .. } => {
                         misc::produce_mana(&mut cx, effect)?
@@ -1718,8 +1720,7 @@ mod attached_subject_tests {
             flashback: false,
             chosen_x: 0,
             chosen_modes: vec![],
-            trigger_player: None,
-            trigger_object: None,
+            trigger_context: TriggerContext::default(),
         }
     }
 
@@ -1849,7 +1850,7 @@ mod attached_subject_tests {
                 .copied()
                 .unwrap_or(0),
         );
-        item.trigger_object = Some(TriggerObjectRef {
+        item.trigger_context.observed_object = Some(TriggerObjectRef {
             object_id: related,
             zone_change_generation: related_generation,
             controller_at_event: 1,
@@ -1905,8 +1906,7 @@ mod source_keyword_tests {
             flashback: false,
             chosen_x: 0,
             chosen_modes: vec![],
-            trigger_player: None,
-            trigger_object: None,
+            trigger_context: TriggerContext::default(),
         }
     }
 
@@ -1928,8 +1928,7 @@ mod source_keyword_tests {
             flashback: false,
             chosen_x,
             chosen_modes: vec![],
-            trigger_player: None,
-            trigger_object: None,
+            trigger_context: TriggerContext::default(),
         }
     }
 

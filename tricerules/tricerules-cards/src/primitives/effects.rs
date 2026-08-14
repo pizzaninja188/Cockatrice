@@ -480,6 +480,14 @@ impl CounterKind {
     }
 }
 
+/// Counters applied as part of a battlefield-entry event. Keeping these on the proposed entry
+/// composes with replacement effects before the permanent exists on the battlefield (CR 122.6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CounterPlacement {
+    pub counter: CounterKind,
+    pub count: u32,
+}
+
 /// Where an effect is being resolved from. Controls validation that depends on context —
 /// e.g. [`EffectSubject::Source`] is only meaningful for an ability bound to a source permanent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -795,14 +803,17 @@ pub enum SpellEffectKind {
         subject: EffectSubject,
         ability: Box<TriggeredAbilityDef>,
     },
-    /// Return the permanent that sourced this resolving triggered ability, but only when it is
-    /// still the immediate graveyard object created by that death. Abnormal Endurance returns
-    /// under its owner; Fake Your Own Death uses the ability controller.
-    ReturnAbilitySourceFromGraveyard {
+    /// Return the card referenced by this death trigger, but only while it remains the immediate
+    /// graveyard object produced by that death. Abnormal Endurance references the granted
+    /// ability's source; Unholy Indenture references the enchanted creature observed by its Aura.
+    ReturnTriggeredCardFromGraveyard {
+        reference: TriggeredCardReference,
         #[serde(default)]
         tapped: bool,
         #[serde(default)]
         controller: ReturnController,
+        #[serde(default)]
+        entry_counters: Vec<CounterPlacement>,
     },
     /// CR 603.7: create a one-shot delayed triggered ability that observes `subject`. The
     /// definition must use a delayed-only trigger condition.
@@ -1168,8 +1179,9 @@ pub enum PlayerRecipient {
     #[default]
     Controller,
     /// "that player" — the player the resolving item is *about*: a trigger's
-    /// `StackItem::trigger_player` (whose upkeep/draw step it is), falling back to the controller
-    /// when the item names nobody. Sulfuric Vortex, Underworld Dreams, Ebony Owl Netsuke.
+    /// `StackItem::trigger_context.affected_player` (whose upkeep/draw step it is), falling back
+    /// to the controller when the item names nobody. Sulfuric Vortex, Underworld Dreams, Ebony
+    /// Owl Netsuke.
     AffectedPlayer,
     /// The current controller of the permanent named by the trigger event, using its controller
     /// at the event as last known information if that object has since left the battlefield.
@@ -1248,8 +1260,17 @@ impl SpellEffectKind {
             } | SpellEffectKind::Mill {
                 who: PlayerRecipient::TriggerObjectController,
                 ..
+            } | SpellEffectKind::ReturnTriggeredCardFromGraveyard {
+                reference: TriggeredCardReference::TriggerObject,
+                ..
             }
         )
+    }
+
+    pub(crate) fn uses_defending_player_reference(&self) -> bool {
+        self.target_filters()
+            .iter()
+            .any(|filter| filter.controller == TargetController::DefendingPlayer)
     }
 
     pub fn needs_target(&self) -> bool {
@@ -1471,6 +1492,17 @@ impl SpellEffectKind {
             }
             SpellEffectKind::PumpAll { filter, .. }
             | SpellEffectKind::GrantKeywordsAll { filter, .. } => filter.validate()?,
+            SpellEffectKind::ReturnTriggeredCardFromGraveyard { entry_counters, .. } => {
+                let mut kinds = std::collections::HashSet::new();
+                for placement in entry_counters {
+                    if placement.count == 0 {
+                        return Err("entry counter placement count must be positive".into());
+                    }
+                    if !kinds.insert(placement.counter) {
+                        return Err("entry counter placements cannot repeat a counter kind".into());
+                    }
+                }
+            }
             _ => {}
         }
 
@@ -1521,7 +1553,7 @@ impl SpellEffectKind {
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject,
             } | SpellEffectKind::ChangeSourceFace { .. }
-                | SpellEffectKind::ReturnAbilitySourceFromGraveyard { .. }
+                | SpellEffectKind::ReturnTriggeredCardFromGraveyard { .. }
                 | SpellEffectKind::ApplyCombatRestriction {
                     scope: CombatRestrictionScope::Source,
                     ..
@@ -1920,6 +1952,13 @@ pub enum ReturnController {
     #[default]
     Owner,
     AbilityController,
+}
+
+/// Which event-bound card a graveyard-return trigger follows through its first zone change.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TriggeredCardReference {
+    AbilitySource,
+    TriggerObject,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

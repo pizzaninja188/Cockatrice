@@ -246,6 +246,7 @@ pub(super) fn create_delayed_trigger(
                 *object_id,
                 cx.controller,
                 TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
+                cx.top.trigger_context,
             )
         }),
     };

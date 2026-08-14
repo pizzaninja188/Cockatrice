@@ -143,6 +143,18 @@ pub enum TriggerCondition {
     /// of *other* creatures in the same declaration group. Zero is an ordinary self-attack
     /// trigger; two is Battalion (Makeshift Battalion, Firefist Striker, Haazda Marshal).
     WheneverSelfAttacks { minimum_other_attackers: u32 },
+    /// CR 508.1m / 508.3a: whenever the object this Aura or Equipment is attached to attacks.
+    /// Heart-Piercer Bow and Battle Mastery establish Equipment/Aura reuse of the event-time
+    /// attachment relation; the observed attacker is available as `TriggerObject`.
+    WheneverAttachedObjectAttacks,
+    /// CR 603.6e / 603.10a: when the creature this Aura is attached to dies. The attachment and
+    /// creature identity are captured immediately before the zone change. Unholy Indenture and
+    /// Fool's Demise use this shape.
+    WheneverAttachedObjectDies,
+    /// CR 508.3b: whenever the player this Aura is attached to is attacked. This fires once for
+    /// the declaration event regardless of the number of creatures attacking that player.
+    /// Curse of Opulence and Curse of Disturbance use this shape.
+    WheneverAttachedPlayerIsAttacked,
     /// CR 509.3b: whenever this creature blocks a creature matching `attacker`. One occurrence
     /// is created for each attacker-blocker edge, which also supports creatures that may block
     /// more than one creature (Palace Guard, Guardian of the Gateless).
@@ -167,7 +179,7 @@ pub enum TriggerCondition {
     /// upkeep" (Ebony Owl Netsuke).
     ///
     /// The player whose upkeep it is becomes the trigger's *affected* player (via
-    /// `StackItem::trigger_player`), which is what makes "**that player**" work when the
+    /// `StackItem::trigger_context.affected_player`), which is what makes "**that player**" work when the
     /// source's controller is somebody else. Note the corollary, shared with
     /// [`Self::AtBeginningOfDrawStep`]: for an `Opponent`-scoped trigger whose effect is meant
     /// to benefit the *controller*, `affected_player` is the wrong player — such a card needs an
@@ -187,7 +199,7 @@ pub enum TriggerCondition {
     ///
     /// The player whose draw step it is becomes the trigger's *affected* player
     /// ([`crate::TriggeredAbilityDef`] effects resolve against it via
-    /// `StackItem::trigger_player`), which is what makes "**that player** draws" work when the
+    /// `StackItem::trigger_context.affected_player`), which is what makes "**that player** draws" work when the
     /// source's controller is somebody else.
     AtBeginningOfDrawStep {
         /// Whose draw step fires this, relative to the source permanent's controller.
@@ -313,10 +325,22 @@ impl TriggerCondition {
             self,
             Self::WheneverSelfBlocksCreature { .. }
                 | Self::WheneverSelfBecomesBlockedByCreature { .. }
+                | Self::WheneverAttachedObjectAttacks
+                | Self::WheneverAttachedObjectDies
                 | Self::WheneverSelfBecomesTarget { .. }
                 | Self::WheneverPermanentBecomesTarget { .. }
                 | Self::AtBeginningOfNextEndStep
                 | Self::WhenControllerLosesControlOf
+        )
+    }
+
+    /// Whether a matching attack event supplies an event-time defending player.
+    pub(crate) fn supplies_defending_player(&self) -> bool {
+        matches!(
+            self,
+            Self::WheneverSelfAttacks { .. }
+                | Self::WheneverAttachedObjectAttacks
+                | Self::WheneverAttachedPlayerIsAttacked
         )
     }
 }
@@ -504,6 +528,17 @@ impl TriggeredAbilityDef {
         {
             return Err(
                 "trigger-object effect requires a trigger that supplies an observed object".into(),
+            );
+        }
+        if self
+            .effect
+            .iter()
+            .any(SpellEffectKind::uses_defending_player_reference)
+            && !self.trigger.supplies_defending_player()
+        {
+            return Err(
+                "defending-player target requires an attack trigger that supplies a defender"
+                    .into(),
             );
         }
         if let Some(InterveningIf::GameCondition(condition)) = self.intervening_if.as_ref() {

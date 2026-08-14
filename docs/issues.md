@@ -37,10 +37,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Extend resumable resolution choices with reusable mode selection and optional nonmana payment/cost branches. Calibration evidence: Trufflesnout, Sparktongue Dragon, and Crypt Lurker. Issue #88 shipped the shared generic-mana pay/decline foundation, including mana abilities during resolution, normal mana-counter payment, automatic acceptance when fully paid, and rollback on decline. Legal choice payloads must describe the remaining branches and required objects, stale submissions must be rejected atomically, and declining an optional branch must remain legal.
   - Priority: Low
 
-- [ ] #63 [feature] Triggers from the object carrying an attachment
-  - Details: Let Equipment and Auras define triggers keyed to events involving the object or player they are attached to, while snapshotting the attachment relation needed at trigger time. Calibration evidence: Heart-Piercer Bow, Unholy Indenture, Curse of Opulence, and Curse of Disturbance. Issue #94 shipped typed player attachment identity and the two Curses as partial cards; this issue retains their "enchanted player is attacked" trigger generation, attachment snapshot, and attack-participant context. Cover attack and death events, detachment or zone changes before resolution, and multiple attachments without hard-coding card names.
-  - Priority: Low
-
 - [ ] #65 [feature] Granted activated abilities
   - Details: Allow continuous effects to grant a parameterized activated ability to an affected permanent and expose it through that permanent's legal actions. Calibration evidence: Gift of Paradise. Preserve the granted ability's source identity, controller, costs, and mana-ability timing, remove it when the effect ends, and satisfy the two-card-or-mechanic reuse gate before adding the primitive.
   - Priority: Low
@@ -54,7 +50,7 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Priority: Low
 
 - [ ] #86 [feature] Related-player effect recipients
-  - Details: Add recipient expressions for the controller of a target, the defending player or planeswalker associated with an attacker, and each opponent attacking an enchanted player. Calibration evidence: Chandra's Outrage, Scorch Spitter, Curse of Opulence, and Curse of Disturbance. Issue #62 shipped the controller of a blocking-creature recipient with generation-aware last known information; issue #94 shipped typed player attachment identity and the two Curses as partial cards. This issue retains the Curses' controller-created reward plus each-attacking-opponent reward after #63 supplies the attack trigger context. Derive recipients from engine identities at the event or resolution time required by the effect, with controller-aware multiplayer coverage.
+  - Details: Add recipient expressions for the controller of a target, the defending player or planeswalker associated with an attacker, and each opponent attacking an enchanted player. Calibration evidence: Chandra's Outrage, Scorch Spitter, Curse of Opulence, and Curse of Disturbance. Issue #62 shipped the controller of a blocking-creature recipient with generation-aware last known information; issue #94 shipped typed player attachment identity and the two Curses as partial cards; issue #63 shipped event-time attacking/defending-player context and the attacked-player attachment trigger. This issue retains the Curses' controller-created reward plus each-attacking-opponent reward. Derive recipients from engine identities at the event or resolution time required by the effect, with controller-aware multiplayer coverage.
   - Priority: Low
 
 - [ ] #89 [feature] Battlefield-to-library zone moves

@@ -144,6 +144,9 @@ pub enum TargetController {
     /// A permanent not controlled by the spell or ability's controller. Unlike `Opponent`, this
     /// remains correct for teammates in player-set-aware formats.
     NotYou,
+    /// A permanent controlled by the event-time defending player of the attack that caused this
+    /// triggered ability. Valid only on attack triggers that publish that context.
+    DefendingPlayer,
 }
 
 /// Inclusive comparison against a permanent's current derived power.
