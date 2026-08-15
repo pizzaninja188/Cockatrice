@@ -492,6 +492,7 @@ impl GameEngine {
                 source_zone_change: 0,
                 source_face_change: 0,
                 ability_index: None,
+                activated_ability: None,
                 triggered_ability: None,
                 is_triggered: false,
                 is_copy: false,

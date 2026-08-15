@@ -59,6 +59,8 @@ mod helpers;
 mod issue_63_attachment_event_triggers;
 #[path = "scenario/issue_64_granted_delayed_triggers.rs"]
 mod issue_64_granted_delayed_triggers;
+#[path = "scenario/issue_65_granted_activated_abilities.rs"]
+mod issue_65_granted_activated_abilities;
 #[path = "scenario/issue_71_filters.rs"]
 mod issue_71_filters;
 #[path = "scenario/issue_73_grouped_targets.rs"]

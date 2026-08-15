@@ -1014,6 +1014,7 @@ impl GameEngine {
             source_zone_change: 0,
             source_face_change: 0,
             ability_index: None,
+            activated_ability: None,
             triggered_ability: None,
             is_triggered: false,
             is_copy: false,
@@ -1335,12 +1336,11 @@ impl GameEngine {
             .map(|(card_id, face_index)| (card_id.to_string(), face_index))
             .ok_or(EngineError::Illegal("bad face index on permanent"))?;
         let ability = self
-            .effective_face(permanent_id)
-            .ok_or(EngineError::Illegal("bad face index on permanent"))?
-            .activated_abilities
-            .get(ability_index)
-            .ok_or(EngineError::Illegal("no such activated ability"))?
-            .clone();
+            .effective_activated_abilities(permanent_id)
+            .into_iter()
+            .find(|(index, _, _)| *index == ability_index)
+            .map(|(_, ability, _)| ability)
+            .ok_or(EngineError::Illegal("no such activated ability"))?;
         let resolving_mana_payment =
             self.state
                 .pending_resolution
@@ -1459,6 +1459,7 @@ impl GameEngine {
             source_zone_change,
             source_face_change,
             ability_index: Some(ability_index),
+            activated_ability: Some(ability.clone()),
             triggered_ability: None,
             is_triggered: false,
             is_copy: false,
@@ -2129,6 +2130,7 @@ impl GameEngine {
                 .unwrap_or(0),
             source_face_change: 0,
             ability_index: None,
+            activated_ability: None,
             triggered_ability: None,
             is_triggered: false,
             is_copy: false,

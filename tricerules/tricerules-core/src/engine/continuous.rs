@@ -126,6 +126,7 @@ impl GameEngine {
                     delta_power,
                     delta_toughness,
                     keywords,
+                    activated_abilities,
                     triggered_abilities,
                     cant_attack,
                     cant_block,
@@ -160,6 +161,16 @@ impl GameEngine {
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
+                            condition: None,
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
+                    for ability in activated_abilities {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            source_id: Some(object_id),
+                            affected: affected.clone(),
+                            kind: ContinuousEffectKind::GrantActivatedAbility(Box::new(ability)),
                             condition: None,
                             duration: EffectDuration::WhileSourceOnBattlefield,
                             timestamp,
@@ -276,6 +287,55 @@ impl GameEngine {
                 }
             }
         }
+    }
+
+    /// CR 113.10 / 613.1f: printed abilities retain their card-definition order, followed by
+    /// applicable granted abilities in continuous-effect timestamp and insertion order.
+    pub(super) fn effective_activated_abilities(
+        &self,
+        source_id: ObjectId,
+    ) -> Vec<(usize, ActivatedAbilityDef, bool)> {
+        let mut abilities: Vec<(usize, ActivatedAbilityDef, bool)> = self
+            .effective_face(source_id)
+            .map(|face| {
+                face.activated_abilities
+                    .iter()
+                    .cloned()
+                    .enumerate()
+                    .map(|(index, ability)| (index, ability, false))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let Some(characteristics) = self.characteristics(source_id) else {
+            return abilities;
+        };
+        let mut granted: Vec<(u64, usize, ActivatedAbilityDef)> = self
+            .state
+            .continuous_effects
+            .iter()
+            .enumerate()
+            .filter_map(|(insertion_index, effect)| {
+                let ContinuousEffectKind::GrantActivatedAbility(ability) = &effect.kind else {
+                    return None;
+                };
+                super::characteristics::effect_affects(
+                    &self.state,
+                    self.registry,
+                    effect,
+                    source_id,
+                    &characteristics,
+                )
+                .then(|| (effect.timestamp, insertion_index, (**ability).clone()))
+            })
+            .collect();
+        granted.sort_by_key(|(timestamp, insertion_index, _)| (*timestamp, *insertion_index));
+        let mut next_index = abilities.len();
+        abilities.extend(granted.into_iter().map(|(_, _, ability)| {
+            let indexed = (next_index, ability, true);
+            next_index += 1;
+            indexed
+        }));
+        abilities
     }
 
     /// CR 514.2: drain all until-end-of-turn continuous effects.

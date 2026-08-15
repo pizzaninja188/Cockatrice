@@ -98,6 +98,7 @@ fn cartouche_requires_a_creature_its_aura_controller_controls() {
             delta_power: 1,
             delta_toughness: 1,
             keywords: vec![Keyword::Flying],
+            activated_abilities: Vec::new(),
             triggered_abilities: Vec::new(),
             cant_attack: false,
             cant_block: false,

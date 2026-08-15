@@ -1,8 +1,9 @@
 //! Spell and continuous-effect vocabulary plus shared effect parameters.
 
 use super::{
-    CardTypeFilter, Color, CreatureScopeFilter, GraveyardDestination, GraveyardFilter, Keyword,
-    TargetController, TargetFilter, TargetKind, TriggeredAbilityDef, TypeLineAddition,
+    ActivatedAbilityDef, CardTypeFilter, Color, CreatureScopeFilter, GraveyardDestination,
+    GraveyardFilter, Keyword, TargetController, TargetFilter, TargetKind, TriggeredAbilityDef,
+    TypeLineAddition,
 };
 use serde::de::{EnumAccess, MapAccess, SeqAccess, VariantAccess};
 use serde::ser::SerializeStructVariant;
@@ -1978,6 +1979,8 @@ pub enum ContinuousEffectKind {
     /// (Goblin Chieftain → Haste), pump sorceries (Overrun → Trample), and any
     /// "creatures you control gain [keyword] until end of turn" effect.
     Layer6AddKeyword(Keyword),
+    /// CR 113.10 / 613.1f: grant an ordinary activated ability to the affected permanent.
+    GrantActivatedAbility(Box<ActivatedAbilityDef>),
     /// CR 613.1f: grant an ordinary triggered ability to the affected permanent.
     GrantTriggeredAbility(Box<TriggeredAbilityDef>),
     CombatRestriction(CombatRestriction),

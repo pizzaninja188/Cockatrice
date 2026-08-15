@@ -2,7 +2,8 @@
 
 use super::{
     AbilityCost, Amount, BattlefieldCreatureCountFilter, CardTypeFilter, Color, CounterKind,
-    EffectContext, GameCondition, Keyword, SpellEffectKind, TargetFilter, TargetingDef,
+    EffectContext, GameCondition, Keyword, SpellEffectKind, TargetController, TargetFilter,
+    TargetKind, TargetingDef,
 };
 use crate::ManaAmount;
 use serde::{Deserialize, Serialize};
@@ -120,6 +121,57 @@ impl ActivatedAbilityDef {
     /// one query instead of maintaining separate explicit/keyword timing paths.
     pub fn requires_sorcery_speed(&self) -> bool {
         self.timing == ActivationTiming::SorcerySpeed || self.is_equip()
+    }
+
+    pub(crate) fn validate_shape(&self) -> Result<(), String> {
+        if self.text.trim().is_empty() {
+            return Err("activated ability text must not be empty".into());
+        }
+        if self.effect.is_empty() {
+            return Err("activated ability must contain at least one effect".into());
+        }
+        if self
+            .effect
+            .iter()
+            .any(SpellEffectKind::uses_trigger_object_reference)
+        {
+            return Err("activated abilities cannot reference a trigger object".into());
+        }
+        if self
+            .effect
+            .iter()
+            .any(SpellEffectKind::uses_defending_player_reference)
+        {
+            return Err("activated abilities cannot reference a trigger's defending player".into());
+        }
+        for condition in &self.conditions {
+            condition.validate()?;
+        }
+        if self
+            .costs
+            .iter()
+            .filter(|cost| matches!(cost, AbilityCost::Mana(_)))
+            .count()
+            > 1
+        {
+            return Err("activated ability may have at most one mana cost component".into());
+        }
+        for cost in &self.costs {
+            if let AbilityCost::SacrificePermanent { filter } = cost {
+                filter.validate_characteristic_constraints()?;
+                if !matches!(filter.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+                    || filter.controller != TargetController::You
+                    || filter.exclude_source
+                {
+                    return Err("sacrifice cost filter requires Creature or AnyPermanent, controller: You, and may include its source".into());
+                }
+            }
+        }
+        for effect in &self.effect {
+            effect.validate(EffectContext::Ability)?;
+        }
+        SpellEffectKind::validate_list(&self.effect)?;
+        TargetingDef::validate_optional(self.targeting.as_ref(), &self.effect)
     }
 }
 
@@ -725,6 +777,10 @@ pub enum StaticAbilityDef {
         /// last-known identity when the granted ability triggers.
         #[serde(default)]
         triggered_abilities: Vec<TriggeredAbilityDef>,
+        /// Activated abilities the attached permanent has while this static ability applies.
+        /// Gift of Paradise and Hermetic Study exercise mana and targeted nonmana abilities.
+        #[serde(default)]
+        activated_abilities: Vec<ActivatedAbilityDef>,
         #[serde(default)]
         cant_attack: bool,
         #[serde(default)]

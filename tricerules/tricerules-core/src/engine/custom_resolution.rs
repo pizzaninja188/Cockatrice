@@ -134,6 +134,7 @@ impl GameEngine {
             source_zone_change,
             source_face_change,
             ability_index: Some(ability_index),
+            activated_ability: None,
             triggered_ability: Some(ability),
             is_triggered: true,
             is_copy: false,

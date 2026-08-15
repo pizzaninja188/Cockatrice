@@ -48,6 +48,12 @@ impl GameEngine {
             labels.push("Doesn't untap during its controller's untap step".to_string());
         }
 
+        for (_, ability, granted) in self.effective_activated_abilities(oid) {
+            if granted && !labels.contains(&ability.text) {
+                labels.push(ability.text);
+            }
+        }
+
         match object.regeneration_shields {
             0 => {}
             1 => labels.push("Regeneration shield".to_string()),
@@ -381,58 +387,51 @@ impl GameEngine {
                             characteristics.as_ref(),
                             face,
                         );
-                        let activated_abilities = face
-                            .map(|face| {
-                                face.activated_abilities
+                        let activated_abilities = self
+                            .effective_activated_abilities(oid)
+                            .into_iter()
+                            .map(|(_, ability, _)| {
+                                let mana_cost = ability
+                                    .costs
                                     .iter()
-                                    .map(|ability| {
-                                        let mana_cost = ability
-                                            .costs
+                                    .find_map(|cost| match cost {
+                                        AbilityCost::Mana(cost) => Some(cost.to_string()),
+                                        _ => None,
+                                    })
+                                    .unwrap_or_default();
+                                let mana_produced = self
+                                    .active_mana_options(oid, &ability)
+                                    .map(|options| {
+                                        options
                                             .iter()
-                                            .find_map(|cost| match cost {
-                                                AbilityCost::Mana(cost) => Some(cost.to_string()),
-                                                _ => None,
-                                            })
-                                            .unwrap_or_default();
-                                        let mana_produced = self
-                                            .active_mana_options(oid, ability)
-                                            .map(|options| {
-                                                options
-                                                    .iter()
-                                                    .map(mana_amount_symbols)
-                                                    .collect::<Vec<_>>()
-                                                    .join("/")
-                                            })
-                                            .unwrap_or_default();
-                                        let cost_label = ability
-                                            .costs
-                                            .iter()
-                                            .map(|cost| match cost {
-                                                AbilityCost::Tap => "{T}".to_string(),
-                                                AbilityCost::Mana(cost) => cost.to_string(),
-                                                AbilityCost::Discard => {
-                                                    "Discard a card".to_string()
-                                                }
-                                                AbilityCost::SacrificeSelf => {
-                                                    "Sacrifice this".to_string()
-                                                }
-                                                AbilityCost::SacrificePermanent { .. } => {
-                                                    "Sacrifice a permanent".to_string()
-                                                }
-                                            })
+                                            .map(mana_amount_symbols)
                                             .collect::<Vec<_>>()
-                                            .join(", ");
-                                        rv1::AbilityInfo {
-                                            text: ability.text.clone(),
-                                            mana_cost,
-                                            mana_produced,
-                                            cost_label,
-                                            activatable: self.ability_activatable(oid, ability),
+                                            .join("/")
+                                    })
+                                    .unwrap_or_default();
+                                let cost_label = ability
+                                    .costs
+                                    .iter()
+                                    .map(|cost| match cost {
+                                        AbilityCost::Tap => "{T}".to_string(),
+                                        AbilityCost::Mana(cost) => cost.to_string(),
+                                        AbilityCost::Discard => "Discard a card".to_string(),
+                                        AbilityCost::SacrificeSelf => "Sacrifice this".to_string(),
+                                        AbilityCost::SacrificePermanent { .. } => {
+                                            "Sacrifice a permanent".to_string()
                                         }
                                     })
-                                    .collect()
+                                    .collect::<Vec<_>>()
+                                    .join(", ");
+                                rv1::AbilityInfo {
+                                    text: ability.text.clone(),
+                                    mana_cost,
+                                    mana_produced,
+                                    cost_label,
+                                    activatable: self.ability_activatable(oid, &ability),
+                                }
                             })
-                            .unwrap_or_default();
+                            .collect();
                         let keywords = [
                             tricerules_cards::Keyword::Flying,
                             tricerules_cards::Keyword::Reach,

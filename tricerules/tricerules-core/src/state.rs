@@ -1,8 +1,9 @@
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use tricerules_cards::primitives::{
-    ContinuousEffectKind, CounterKind, CreatureScopeFilter, DamagePreventionAdditionalEffect,
-    EffectDuration, GameCondition, Keyword, ManaAmount, ManaSpendingRestriction, SearchDestination,
-    TargetFilter, TriggerCondition, TriggeredAbilityDef,
+    ActivatedAbilityDef, ContinuousEffectKind, CounterKind, CreatureScopeFilter,
+    DamagePreventionAdditionalEffect, EffectDuration, GameCondition, Keyword, ManaAmount,
+    ManaSpendingRestriction, SearchDestination, TargetFilter, TriggerCondition,
+    TriggeredAbilityDef,
 };
 use tricerules_cards::CardFace;
 use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
@@ -574,8 +575,11 @@ pub struct StackItem {
     pub source_zone_change: u64,
     /// Face-change generation captured when an ability was put on the stack (CR 701.27f).
     pub source_face_change: u64,
-    /// Index into the card's `activated_abilities` or `triggered_abilities` list. `None` for spells.
+    /// Index in the source's effective activated- or triggered-ability list. `None` for spells.
     pub ability_index: Option<usize>,
+    /// Snapshot of an activated ability's complete definition. Granted abilities resolve from
+    /// this value after their granting effect has disappeared.
+    pub activated_ability: Option<ActivatedAbilityDef>,
     /// Snapshot of a triggered ability's complete definition. Printed and granted triggers both
     /// resolve from this value after their source or granting effect has disappeared.
     pub triggered_ability: Option<TriggeredAbilityDef>,

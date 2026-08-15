@@ -53,10 +53,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 if !eng.state.objects.contains_key(&poid) {
                     continue;
                 }
-                let Some(face) = eng.effective_face(poid) else {
-                    continue;
-                };
-                for (ai, ability) in face.activated_abilities.iter().enumerate() {
+                for (ai, ability, _) in eng.effective_activated_abilities(poid) {
                     let key = (poid as u64) << 32 | ai as u64;
                     mana_payment_by_ability.insert(
                         key,
@@ -66,7 +63,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                         },
                     );
                     cost_choices_by_ability
-                        .insert(key, legal_ability_cost_choices(eng, p.id, poid, ability));
+                        .insert(key, legal_ability_cost_choices(eng, p.id, poid, &ability));
                     if ability.effect.iter().any(spell_effect_kind_needs_target) {
                         let targets = compute_spell_targets(
                             eng,

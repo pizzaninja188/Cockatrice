@@ -1,0 +1,20 @@
+(
+  id: "gift_of_paradise",
+  name: "Gift of Paradise",
+  mana_cost: "{2}{G}",
+  // Oracle: Enchant land. When Gift of Paradise enters, you gain 3 life. Enchanted land has
+  // "{T}: Add two mana of any one color."
+  // CR 113.10a, 303.4, 605.1a, 611.3, and 613.1f.
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach(target: (kind: AnyPermanent, permanent_types: [Land]))],
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [GainLife(amount: 3)],
+    text: "When Gift of Paradise enters, you gain 3 life.",
+  )],
+  static_abilities: [AttachedModifier(activated_abilities: [(
+    costs: [Tap],
+    effect: [ProduceMana(options: [(w: 2), (u: 2), (b: 2), (r: 2), (g: 2)])],
+    text: "{T}: Add two mana of any one color.",
+  )])],
+)

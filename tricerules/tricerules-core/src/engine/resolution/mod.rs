@@ -306,7 +306,10 @@ impl GameEngine {
                 };
                 (&ability.effect[..], ability.targeting.as_ref())
             } else {
-                let Some(ability) = face.activated_abilities.get(top.ability_index.unwrap_or(0))
+                let Some(ability) = top
+                    .activated_ability
+                    .as_ref()
+                    .or_else(|| face.activated_abilities.get(top.ability_index.unwrap_or(0)))
                 else {
                     return;
                 };
@@ -647,7 +650,9 @@ impl GameEngine {
                     .or_else(|| face.and_then(|f| f.triggered_abilities.get(ability_index)))
                     .map(|a| a.effect.clone())
             } else {
-                face.and_then(|f| f.activated_abilities.get(ability_index))
+                top.activated_ability
+                    .as_ref()
+                    .or_else(|| face.and_then(|f| f.activated_abilities.get(ability_index)))
                     .map(|a| a.effect.clone())
             };
             (
@@ -1713,6 +1718,7 @@ mod attached_subject_tests {
             source_zone_change: generation,
             source_face_change: 0,
             ability_index: Some(0),
+            activated_ability: None,
             triggered_ability: None,
             is_triggered: true,
             is_copy: false,
@@ -1899,6 +1905,7 @@ mod source_keyword_tests {
             source_zone_change: generation,
             source_face_change: 0,
             ability_index: Some(0),
+            activated_ability: None,
             triggered_ability: None,
             is_triggered: false,
             is_copy: false,
@@ -1921,6 +1928,7 @@ mod source_keyword_tests {
             source_zone_change: 0,
             source_face_change: 0,
             ability_index: None,
+            activated_ability: None,
             triggered_ability: None,
             is_triggered: false,
             is_copy: false,

@@ -20,17 +20,18 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use thiserror::Error;
 use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
-    AbilityCost, AdditionalCost, Amount, AttachmentFilter, AttachmentKind, BattlefieldAggregate,
-    BattlefieldPermanentFilter, CardTypeFilter, CastTriggerPlayer, Color, CombatRestriction,
-    CombatRestrictionScope, ContinuousEffectKind, ControllerReference, CountExpression,
-    CounterKind, CreatureEventFilter, CreatureScopeController, CreatureScopeFilter, DamageDivision,
-    DamagePreventionAdditionalEffect, DamagePreventionSubject, EffectDuration, EffectSubject,
-    EntersTappedAffected, Evasion, FaceChangeAction, GameCondition, InterveningIf, Keyword,
-    LifeAmount, ManaAmount, ManaSpendFilter, PermanentTypeFilter, PlayerRecipient, PowerComparison,
-    PreventionAmountBasis, RelativePlayerSet, ReturnController, SearchDestination,
-    SpellCostModifier, SpellEffectKind, StaticAbilityDef, StaticDamagePreventionAmount,
-    TargetController, TargetFilter, TargetKind, TargetingSourceFilter, TokenController,
-    TriggerCondition, TriggeredAbilityDef, TriggeredCardReference,
+    AbilityCost, ActivatedAbilityDef, AdditionalCost, Amount, AttachmentFilter, AttachmentKind,
+    BattlefieldAggregate, BattlefieldPermanentFilter, CardTypeFilter, CastTriggerPlayer, Color,
+    CombatRestriction, CombatRestrictionScope, ContinuousEffectKind, ControllerReference,
+    CountExpression, CounterKind, CreatureEventFilter, CreatureScopeController,
+    CreatureScopeFilter, DamageDivision, DamagePreventionAdditionalEffect, DamagePreventionSubject,
+    EffectDuration, EffectSubject, EntersTappedAffected, Evasion, FaceChangeAction, GameCondition,
+    InterveningIf, Keyword, LifeAmount, ManaAmount, ManaSpendFilter, PermanentTypeFilter,
+    PlayerRecipient, PowerComparison, PreventionAmountBasis, RelativePlayerSet, ReturnController,
+    SearchDestination, SpellCostModifier, SpellEffectKind, StaticAbilityDef,
+    StaticDamagePreventionAmount, TargetController, TargetFilter, TargetKind,
+    TargetingSourceFilter, TokenController, TriggerCondition, TriggeredAbilityDef,
+    TriggeredCardReference,
 };
 use tricerules_cards::{CardFace, CardRegistry, FaceRef, Layout};
 use tricerules_proto::ruled::v1 as rv1;

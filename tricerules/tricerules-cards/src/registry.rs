@@ -1,8 +1,8 @@
 use crate::card_def::{CardDefinition, CardFace, Layout, RawCardDefinition};
 use crate::primitives::{
-    AbilityCost, AdditionalCost, BattlefieldAggregate, EffectContext, FaceChangeAction,
-    GameCondition, InterveningIf, SpellEffectKind, StaticAbilityDef, TargetController, TargetKind,
-    TargetingDef, TriggerCondition,
+    AdditionalCost, BattlefieldAggregate, EffectContext, FaceChangeAction, GameCondition,
+    InterveningIf, SpellEffectKind, StaticAbilityDef, TargetController, TargetKind, TargetingDef,
+    TriggerCondition,
 };
 use crate::token_def::TokenDefinition;
 use once_cell::sync::Lazy;
@@ -536,6 +536,7 @@ impl CardRegistry {
                         delta_toughness,
                         keywords,
                         triggered_abilities,
+                        activated_abilities,
                         cant_attack,
                         cant_block,
                         doesnt_untap_during_untap_step,
@@ -553,6 +554,7 @@ impl CardRegistry {
                             && add_types.is_empty()
                             && keywords.is_empty()
                             && triggered_abilities.is_empty()
+                            && activated_abilities.is_empty()
                             && !cant_attack
                             && !cant_block
                             && !doesnt_untap_during_untap_step
@@ -578,6 +580,14 @@ impl CardRegistry {
                                         .into(),
                                 });
                             }
+                            granted.validate_shape().map_err(|reason| {
+                                RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason,
+                                }
+                            })?;
+                        }
+                        for granted in activated_abilities {
                             granted.validate_shape().map_err(|reason| {
                                 RegistryError::InvalidCard {
                                     id: card.id.clone(),
@@ -670,69 +680,12 @@ impl CardRegistry {
                 // together, so a cross-effect requirement like `LoseLife(TargetManaValue)` must
                 // find its object-targeting sibling inside this one ability).
                 for ability in &face.activated_abilities {
-                    if ability
-                        .effect
-                        .iter()
-                        .any(SpellEffectKind::uses_trigger_object_reference)
-                    {
-                        return Err(RegistryError::InvalidCard {
+                    ability
+                        .validate_shape()
+                        .map_err(|reason| RegistryError::InvalidCard {
                             id: card.id.clone(),
-                            reason: "activated abilities cannot reference a trigger object".into(),
-                        });
-                    }
-                    if ability
-                        .effect
-                        .iter()
-                        .any(SpellEffectKind::uses_defending_player_reference)
-                    {
-                        return Err(RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason:
-                                "activated abilities cannot reference a trigger's defending player"
-                                    .into(),
-                        });
-                    }
-                    for condition in &ability.conditions {
-                        condition
-                            .validate()
-                            .map_err(|reason| RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason,
-                            })?;
-                    }
-                    let mana_components = ability
-                        .costs
-                        .iter()
-                        .filter(|cost| matches!(cost, AbilityCost::Mana(_)))
-                        .count();
-                    if mana_components > 1 {
-                        return Err(RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason: "activated ability may have at most one mana cost component"
-                                .into(),
-                        });
-                    }
-                    for cost in &ability.costs {
-                        if let AbilityCost::SacrificePermanent { filter } = cost {
-                            filter
-                                .validate_characteristic_constraints()
-                                .map_err(|reason| RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason,
-                                })?;
-                            if !matches!(
-                                filter.kind,
-                                TargetKind::Creature | TargetKind::AnyPermanent
-                            ) || filter.controller != TargetController::You
-                                || filter.exclude_source
-                            {
-                                return Err(RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason: "sacrifice cost filter requires Creature or AnyPermanent, controller: You, and may include its source".into(),
-                                });
-                            }
-                        }
-                    }
+                            reason,
+                        })?;
                 }
                 for cost in &face.additional_costs {
                     if let AdditionalCost::SacrificePermanent { filter } = cost {
