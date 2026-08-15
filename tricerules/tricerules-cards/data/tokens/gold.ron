@@ -1,0 +1,11 @@
+// Colorless Gold artifact token used by Curse of Opulence.
+(
+    id: "gold",
+    name: "Gold",
+    types: ["Artifact", "Gold"],
+    activated_abilities: [(
+        costs: [SacrificeSelf],
+        effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
+        text: "Sacrifice this token: Add one mana of any color.",
+    )],
+)

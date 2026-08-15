@@ -4,15 +4,11 @@ pub(super) fn create_tokens(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::CreateTokens {
-        token,
-        count,
-        controller: who,
-    } = effect
-    else {
+    let SpellEffectKind::CreateTokens { token, count, who } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let item = cx.top.clone();
+    let recipients = player_recipients(cx, who);
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let controller = cx.controller;
@@ -22,13 +18,11 @@ pub(super) fn create_tokens(
         AmountContext::for_stack_item(&item, controller)
             .with_previous_effect_result(cx.previous_effect_result),
     );
-
     if engine.create_tokens(
         TokenCreationRequest {
             token_id: &token,
             count,
-            recipients: who,
-            spell_controller: controller,
+            recipients,
             spell_label,
             item: &item,
         },

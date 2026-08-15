@@ -322,13 +322,7 @@ pub(super) fn mill(
     let amount_context = AmountContext::for_stack_item(cx.top, cx.controller)
         .with_previous_effect_result(cx.previous_effect_result);
     let count = cx.engine.resolve_amount(&count, amount_context);
-    let recipients = player_recipients(
-        &cx.engine.state,
-        cx.controller,
-        cx.affected_player,
-        trigger_object_controller(cx.engine, cx.top),
-        who,
-    );
+    let recipients = player_recipients(cx, who);
     let milled = mill_players(cx, &recipients, count);
     *cx.effect_result = EffectResult::MilledCards(milled);
 

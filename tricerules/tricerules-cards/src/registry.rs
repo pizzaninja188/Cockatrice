@@ -100,6 +100,24 @@ impl CardRegistry {
             let face = token.primary_face();
             let can_reference_attached_object = face_can_reference_attached_object(face);
             let can_reference_attached_player = face_can_reference_attached_player(face);
+            for ability in &face.activated_abilities {
+                ability
+                    .validate_shape()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: id.clone(),
+                        reason,
+                    })?;
+                for effect in &ability.effect {
+                    if let SpellEffectKind::CreateTokens { token, .. } = effect {
+                        if !reg.tokens.contains_key(token) {
+                            return Err(RegistryError::InvalidCard {
+                                id: id.clone(),
+                                reason: format!("CreateTokens references unknown token '{token}'"),
+                            });
+                        }
+                    }
+                }
+            }
             for ability in &face.triggered_abilities {
                 if ability.trigger.is_delayed_only() {
                     return Err(RegistryError::InvalidCard {
@@ -1422,6 +1440,29 @@ mod tests {
         )"#;
         let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
         assert!(matches!(err, RegistryError::InvalidCard { ref id, .. } if id == "bad_trigger"));
+    }
+
+    #[test]
+    fn load_rejects_attack_recipients_on_triggers_without_combat_context() {
+        let bad = r#"(
+            id: "bad_defender_recipient",
+            name: "Bad Defender Recipient",
+            mana_cost: "{R}",
+            types: ["Creature"],
+            power: 1,
+            toughness: 1,
+            triggered_abilities: [(
+                trigger: WhenSelfEntersBattlefield,
+                effect: [DamagePlayer(amount: 1, who: DefendingPlayer)],
+                text: "bad",
+            )],
+        )"#;
+        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        assert!(matches!(
+            err,
+            RegistryError::InvalidCard { ref id, ref reason }
+                if id == "bad_defender_recipient" && reason.contains("defending-player")
+        ));
     }
 
     /// CR 608.2: an ability may carry several effects, resolved in written order — the same

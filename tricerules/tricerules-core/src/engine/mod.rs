@@ -30,8 +30,7 @@ use tricerules_cards::primitives::{
     PlayerRecipient, PowerComparison, PreventionAmountBasis, RelativePlayerSet, ReturnController,
     SearchDestination, SpellCostModifier, SpellEffectKind, StaticAbilityDef,
     StaticDamagePreventionAmount, TargetController, TargetFilter, TargetKind,
-    TargetingSourceFilter, TokenController, TriggerCondition, TriggeredAbilityDef,
-    TriggeredCardReference,
+    TargetingSourceFilter, TriggerCondition, TriggeredAbilityDef, TriggeredCardReference,
 };
 use tricerules_cards::{CardFace, CardRegistry, FaceRef, Layout};
 use tricerules_proto::ruled::v1 as rv1;

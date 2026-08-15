@@ -1,0 +1,10 @@
+(
+  id: "chandras_outrage",
+  name: "Chandra's Outrage",
+  mana_cost: "{2}{R}{R}",
+  types: ["Instant"],
+  spell_effect: [
+    DamageTarget(amount: 4, target: (kind: Creature)),
+    DamagePlayer(amount: 2, who: ControllerOfTargetGroup(group_index: 0)),
+  ],
+)

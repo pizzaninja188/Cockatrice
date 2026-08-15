@@ -45,10 +45,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
   - Details: Implement protection as a parameterized keyword consumed by damage prevention, attachment legality, blocking legality, and targeting legality rather than four card-specific checks. Calibration evidence: Feat of Resistance. Cover an Aura or Equipment becoming illegal, already-declared blocks, damage sources with matching characteristics, and satisfy the two-card-or-mechanic reuse gate before adding the keyword.
   - Priority: Low
 
-- [ ] #86 [feature] Related-player effect recipients
-  - Details: Add recipient expressions for the controller of a target, the defending player or planeswalker associated with an attacker, and each opponent attacking an enchanted player. Calibration evidence: Chandra's Outrage, Scorch Spitter, Curse of Opulence, and Curse of Disturbance. Issue #62 shipped the controller of a blocking-creature recipient with generation-aware last known information; issue #94 shipped typed player attachment identity and the two Curses as partial cards; issue #63 shipped event-time attacking/defending-player context and the attacked-player attachment trigger. This issue retains the Curses' controller-created reward plus each-attacking-opponent reward. Derive recipients from engine identities at the event or resolution time required by the effect, with controller-aware multiplayer coverage.
-  - Priority: Low
-
 - [ ] #89 [feature] Battlefield-to-library zone moves
   - Details: Add a zone-move effect from battlefield to the top or bottom of a library with explicit owner destination and ordering. Calibration evidence: Totally Lost. Preserve object identity through the public-to-hidden transition, redact the resulting private library state, and satisfy the two-card-or-mechanic reuse gate before adding the primitive.
   - Priority: Low

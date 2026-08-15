@@ -2,9 +2,14 @@
   id: "curse_of_disturbance",
   name: "Curse of Disturbance",
   mana_cost: "{2}{B}",
-  // Oracle: Enchant player. Whenever enchanted player is attacked, create a 2/2 black Zombie
-  // creature token. Each opponent attacking that player does the same.
   types: ["Enchantment", "Aura", "Curse"],
   spell_effect: [AuraAttach(target: (kind: AnyPlayer))],
-  partial: "the Zombie reward effect and each-attacking-opponent recipient needed to author the attacked-player trigger are deferred to issue #86",
+  triggered_abilities: [(
+    trigger: WheneverAttachedPlayerIsAttacked,
+    effect: [
+      CreateTokens(token: "zombie_b_2_2", count: 1),
+      CreateTokens(token: "zombie_b_2_2", count: 1, who: AttackingOpponentsOfDefendingPlayer),
+    ],
+    text: "Whenever enchanted player is attacked, create a 2/2 black Zombie creature token. Each opponent attacking that player does the same.",
+  )],
 )

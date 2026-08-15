@@ -71,6 +71,8 @@ mod issue_82_attached_untap;
 mod issue_83_destroy_attached;
 #[path = "scenario/issue_85_creature_damage.rs"]
 mod issue_85_creature_damage;
+#[path = "scenario/issue_86_related_player_recipients.rs"]
+mod issue_86_related_player_recipients;
 #[path = "scenario/legend_rule.rs"]
 mod legend_rule;
 #[path = "scenario/mana.rs"]

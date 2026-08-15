@@ -25,6 +25,71 @@ pub struct TargetGroupDef {
 }
 
 impl TargetingDef {
+    fn validate_player_recipient_target_groups(
+        targeting: Option<&Self>,
+        effects: &[SpellEffectKind],
+    ) -> Result<(), String> {
+        let referenced_groups = effects.iter().filter_map(|effect| match effect {
+            SpellEffectKind::CreateTokens {
+                who: super::PlayerRecipient::ControllerOfTargetGroup { group_index },
+                ..
+            }
+            | SpellEffectKind::DamagePlayer {
+                who: super::PlayerRecipient::ControllerOfTargetGroup { group_index },
+                ..
+            }
+            | SpellEffectKind::LoseLife {
+                who: super::PlayerRecipient::ControllerOfTargetGroup { group_index },
+                ..
+            }
+            | SpellEffectKind::Mill {
+                who: super::PlayerRecipient::ControllerOfTargetGroup { group_index },
+                ..
+            } => Some(*group_index),
+            _ => None,
+        });
+
+        for group_index in referenced_groups {
+            let permanent_filters = if let Some(targeting) = targeting {
+                let group = targeting.groups.get(group_index as usize).ok_or_else(|| {
+                    "player recipient references an unknown target group".to_string()
+                })?;
+                if group.min != 1 || group.max != 1 {
+                    return Err(
+                        "controller-of-target-group recipient requires exactly one target".into(),
+                    );
+                }
+                group
+                    .effect_indices
+                    .iter()
+                    .filter_map(|effect_index| effects.get(*effect_index as usize))
+                    .flat_map(SpellEffectKind::target_filters)
+                    .collect::<Vec<_>>()
+            } else {
+                if group_index != 0 {
+                    return Err(
+                        "player recipient references an unknown implicit target group".into(),
+                    );
+                }
+                effects
+                    .iter()
+                    .flat_map(SpellEffectKind::target_filters)
+                    .collect::<Vec<_>>()
+            };
+            if permanent_filters.is_empty()
+                || permanent_filters.iter().any(|filter| {
+                    !matches!(filter.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+                })
+            {
+                return Err(
+                    "controller-of-target-group recipient requires a permanent-only target group"
+                        .into(),
+                );
+            }
+        }
+        Ok(())
+    }
+
     pub(crate) fn validate(&self, effects: &[SpellEffectKind]) -> Result<(), String> {
         if self.groups.is_empty() {
             return Err("targeting requires at least one group".into());
@@ -83,7 +148,8 @@ impl TargetingDef {
         effects: &[SpellEffectKind],
     ) -> Result<(), String> {
         if let Some(targeting) = targeting {
-            return targeting.validate(effects);
+            targeting.validate(effects)?;
+            return Self::validate_player_recipient_target_groups(Some(targeting), effects);
         }
         if effects
             .iter()
@@ -91,7 +157,7 @@ impl TargetingDef {
         {
             return Err("an effect with multiple target roles requires grouped targeting".into());
         }
-        Ok(())
+        Self::validate_player_recipient_target_groups(None, effects)
     }
 }
 
@@ -323,5 +389,66 @@ impl TargetFilter {
             self.kind,
             TargetKind::AnyPlayer | TargetKind::OpponentPlayer
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::primitives::{Amount, PlayerRecipient};
+
+    fn controller_of_target_effects(
+        target_kind: TargetKind,
+        group_index: u32,
+    ) -> Vec<SpellEffectKind> {
+        vec![
+            SpellEffectKind::DamageTarget {
+                amount: Amount::Fixed(4),
+                target: TargetFilter {
+                    kind: target_kind,
+                    ..Default::default()
+                },
+            },
+            SpellEffectKind::DamagePlayer {
+                amount: Amount::Fixed(2),
+                who: PlayerRecipient::ControllerOfTargetGroup { group_index },
+            },
+        ]
+    }
+
+    #[test]
+    fn controller_of_target_group_requires_an_existing_permanent_only_group() {
+        assert!(TargetingDef::validate_optional(
+            None,
+            &controller_of_target_effects(TargetKind::Creature, 0)
+        )
+        .is_ok());
+        assert!(TargetingDef::validate_optional(
+            None,
+            &controller_of_target_effects(TargetKind::Creature, 1)
+        )
+        .is_err());
+        assert!(TargetingDef::validate_optional(
+            None,
+            &controller_of_target_effects(TargetKind::AnyPlayer, 0)
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn controller_of_target_group_rejects_optional_or_multiple_targets() {
+        let effects = controller_of_target_effects(TargetKind::Creature, 0);
+        for (min, max) in [(0, 1), (1, 2)] {
+            let targeting = TargetingDef {
+                groups: vec![TargetGroupDef {
+                    min,
+                    max,
+                    prompt: "Choose a creature".into(),
+                    effect_indices: vec![0],
+                    distinct_from: Vec::new(),
+                }],
+            };
+            assert!(TargetingDef::validate_optional(Some(&targeting), &effects).is_err());
+        }
     }
 }

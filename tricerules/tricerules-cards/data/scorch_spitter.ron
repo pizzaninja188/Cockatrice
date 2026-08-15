@@ -1,0 +1,14 @@
+(
+  id: "scorch_spitter",
+  name: "Scorch Spitter",
+  mana_cost: "{R}",
+  types: ["Creature", "Elemental", "Lizard"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+    effect: [DamagePlayer(amount: 1, who: DefendingPlayer)],
+    text: "Whenever this creature attacks, it deals 1 damage to the player or planeswalker it's attacking.",
+  )],
+  partial: "planeswalker attack recipients are deferred to issue #72",
+)

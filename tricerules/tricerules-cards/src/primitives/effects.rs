@@ -938,15 +938,16 @@ pub enum SpellEffectKind {
     },
     /// CR 111: create `count` token permanents of the registry-defined [`token`](crate::token_def)
     /// under the chosen controller. Untargeted — the characteristics come from the
-    /// [`TokenDefinition`](crate::token_def::TokenDefinition); only `count` and `controller` vary
-    /// per maker. Covers Raise the Alarm / Dragon Fodder (`Controller`, count 2) and symmetrical
-    /// makers (`EachPlayer`). Token *copies* of existing permanents (CR 707) are a separate effect.
+    /// [`TokenDefinition`](crate::token_def::TokenDefinition); only `count` and `who` vary per
+    /// maker. Covers Raise the Alarm / Dragon Fodder (`Controller`, count 2), Curse of Opulence
+    /// (`AttackingOpponentsOfDefendingPlayer`), and symmetrical makers (`EachPlayer`). Token
+    /// *copies* of existing permanents (CR 707) are a separate effect.
     CreateTokens {
         /// Token id (slug of the token's name) in the registry's token namespace.
         token: String,
         count: Amount,
         #[serde(default)]
-        controller: TokenController,
+        who: PlayerRecipient,
     },
     /// CR 122/121.6: put `count` counters of `counter` on `subject` (default: a chosen creature
     /// target). The `counter` kind covers both +1/+1 counter spells
@@ -1147,16 +1148,6 @@ pub struct ConditionalManaOutput {
     pub options: Vec<ManaAmount>,
 }
 
-/// Who receives the tokens made by [`SpellEffectKind::CreateTokens`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub enum TokenController {
-    /// The spell/ability's controller (the common case: Raise the Alarm, Krenko).
-    #[default]
-    Controller,
-    /// Each player still in the game gets `count` tokens (symmetrical makers).
-    EachPlayer,
-}
-
 /// Which players' creatures a mass one-shot effect affects, relative to the effect controller.
 /// Kept separate from target selection because these effects do not target. Covers Cryptic
 /// Command / Tempest Caller (`Opponents`) and controller-only mass tap/untap effects (`Controller`).
@@ -1169,8 +1160,8 @@ pub enum RelativePlayerSet {
 
 /// Which player an **untargeted** effect affects.
 ///
-/// Sibling of [`RelativePlayerSet`] and [`TokenController`], and kept out of `TargetFilter` for
-/// the same reason they are: naming a player is not targeting it (CR 115.1), and borrowing
+/// Sibling of [`RelativePlayerSet`], and kept out of `TargetFilter` for the same reason: naming a
+/// player is not targeting it (CR 115.1), and borrowing
 /// targeting vocabulary for effects that do not target is what forced source-bound effects to
 /// masquerade as targets before [`EffectSubject`] separated the concepts. Sulfuric Vortex never
 /// says "target".
@@ -1187,6 +1178,17 @@ pub enum PlayerRecipient {
     /// The current controller of the permanent named by the trigger event, using its controller
     /// at the event as last known information if that object has since left the battlefield.
     TriggerObjectController,
+    /// The current controller of the sole legal permanent in an authored target group. Chandra's
+    /// Outrage and Searing Blaze-style effects evaluate this relationship at resolution rather
+    /// than snapshotting the target's controller when the spell was cast.
+    ControllerOfTargetGroup { group_index: u32 },
+    /// The event-time defending player of the attack that caused this trigger. Scorch Spitter and
+    /// similar attack triggers keep that player even if the source leaves before resolution.
+    DefendingPlayer,
+    /// The event-time attacking player when that player is an opponent of the defender and still
+    /// controls at least one current attacker. Curse of Opulence and Curse of Disturbance use this
+    /// for their one-per-attack-event reward.
+    AttackingOpponentsOfDefendingPlayer,
     /// "each opponent" — every other player still in the game. Pestilence-style drains.
     EachOpponent,
     /// "each player" — everyone still in the game, controller included. Earthquake's player half.
@@ -1258,6 +1260,9 @@ impl SpellEffectKind {
             } | SpellEffectKind::DamagePlayer {
                 who: PlayerRecipient::TriggerObjectController,
                 ..
+            } | SpellEffectKind::CreateTokens {
+                who: PlayerRecipient::TriggerObjectController,
+                ..
             } | SpellEffectKind::Mill {
                 who: PlayerRecipient::TriggerObjectController,
                 ..
@@ -1272,6 +1277,26 @@ impl SpellEffectKind {
         self.target_filters()
             .iter()
             .any(|filter| filter.controller == TargetController::DefendingPlayer)
+            || matches!(
+                self,
+                SpellEffectKind::LoseLife {
+                    who: PlayerRecipient::DefendingPlayer
+                        | PlayerRecipient::AttackingOpponentsOfDefendingPlayer,
+                    ..
+                } | SpellEffectKind::DamagePlayer {
+                    who: PlayerRecipient::DefendingPlayer
+                        | PlayerRecipient::AttackingOpponentsOfDefendingPlayer,
+                    ..
+                } | SpellEffectKind::Mill {
+                    who: PlayerRecipient::DefendingPlayer
+                        | PlayerRecipient::AttackingOpponentsOfDefendingPlayer,
+                    ..
+                } | SpellEffectKind::CreateTokens {
+                    who: PlayerRecipient::DefendingPlayer
+                        | PlayerRecipient::AttackingOpponentsOfDefendingPlayer,
+                    ..
+                }
+            )
     }
 
     pub fn needs_target(&self) -> bool {

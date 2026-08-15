@@ -36,6 +36,7 @@ struct EffectCx<'a> {
     targets: &'a [ObjectId],
     targets_by_filter: &'a [Vec<ObjectId>],
     target_damage: &'a [u32],
+    target_group_indices: &'a [u32],
     top: &'a StackItem,
     controller: PlayerId,
     /// The player an untargeted, player-scoped effect acts on. Equals `controller` for spells,
@@ -53,8 +54,7 @@ struct EffectCx<'a> {
 struct TokenCreationRequest<'a> {
     token_id: &'a str,
     count: u32,
-    recipients: TokenController,
-    spell_controller: PlayerId,
+    recipients: Vec<PlayerId>,
     spell_label: &'a str,
     item: &'a StackItem,
 }
@@ -65,7 +65,7 @@ enum EffectOutcome {
     Suspended,
 }
 
-fn player_recipients(
+fn simple_player_recipients(
     state: &GameState,
     controller: PlayerId,
     affected_player: PlayerId,
@@ -76,6 +76,9 @@ fn player_recipients(
         PlayerRecipient::Controller => vec![controller],
         PlayerRecipient::AffectedPlayer => vec![affected_player],
         PlayerRecipient::TriggerObjectController => trigger_object_controller.into_iter().collect(),
+        PlayerRecipient::ControllerOfTargetGroup { .. }
+        | PlayerRecipient::DefendingPlayer
+        | PlayerRecipient::AttackingOpponentsOfDefendingPlayer => Vec::new(),
         PlayerRecipient::EachOpponent => state
             .players
             .iter()
@@ -88,6 +91,74 @@ fn player_recipients(
             .filter(|player| !player.has_lost)
             .map(|player| player.id)
             .collect(),
+    }
+}
+
+fn player_recipients(cx: &EffectCx<'_>, who: PlayerRecipient) -> Vec<PlayerId> {
+    match who {
+        PlayerRecipient::ControllerOfTargetGroup { group_index } => cx
+            .targets
+            .iter()
+            .zip(cx.target_group_indices)
+            .find_map(|(&object_id, &target_group)| {
+                (target_group == group_index)
+                    .then(|| cx.engine.controller_of(object_id))
+                    .flatten()
+            })
+            .into_iter()
+            .collect(),
+        PlayerRecipient::DefendingPlayer => cx
+            .top
+            .trigger_context
+            .defending_player
+            .filter(|player_id| {
+                cx.engine
+                    .state
+                    .player_idx(*player_id)
+                    .is_some_and(|idx| !cx.engine.state.players[idx].has_lost)
+            })
+            .into_iter()
+            .collect(),
+        PlayerRecipient::AttackingOpponentsOfDefendingPlayer => {
+            let Some((attacking_player, defending_player)) = cx
+                .top
+                .trigger_context
+                .attacking_player
+                .zip(cx.top.trigger_context.defending_player)
+            else {
+                return Vec::new();
+            };
+            let attacker_is_eligible = cx
+                .engine
+                .state
+                .player_idx(attacking_player)
+                .is_some_and(|idx| !cx.engine.state.players[idx].has_lost)
+                && cx
+                    .engine
+                    .state
+                    .are_opponents(attacking_player, defending_player)
+                && cx.engine.state.combat.as_ref().is_some_and(|combat| {
+                    combat.attacking.iter().any(|&object_id| {
+                        cx.engine
+                            .state
+                            .objects
+                            .get(&object_id)
+                            .is_some_and(|object| object.zone == Zone::Battlefield)
+                            && cx.engine.controller_of(object_id) == Some(attacking_player)
+                    })
+                });
+            attacker_is_eligible
+                .then_some(attacking_player)
+                .into_iter()
+                .collect()
+        }
+        _ => simple_player_recipients(
+            &cx.engine.state,
+            cx.controller,
+            cx.affected_player,
+            trigger_object_controller(cx.engine, cx.top),
+            who,
+        ),
     }
 }
 
@@ -816,6 +887,7 @@ impl GameEngine {
                     targets: &effect_targets,
                     targets_by_filter: &targets_by_filter,
                     target_damage: &effect_target_damage,
+                    target_group_indices: &target_group_indices,
                     top,
                     controller,
                     affected_player: top.trigger_context.affected_player.unwrap_or(controller),
@@ -1005,8 +1077,7 @@ impl GameEngine {
         let TokenCreationRequest {
             token_id,
             count,
-            recipients: who,
-            spell_controller,
+            recipients,
             spell_label,
             item,
         } = request;
@@ -1041,18 +1112,6 @@ impl GameEngine {
             format!("{}/{}", power.unwrap_or(0), toughness.unwrap_or(0))
         } else {
             String::new()
-        };
-
-        let recipients: Vec<PlayerId> = match who {
-            TokenController::Controller => vec![spell_controller],
-            // CR 111.3: each token's owner/controller is the player it is created under.
-            TokenController::EachPlayer => self
-                .state
-                .players
-                .iter()
-                .filter(|p| !p.has_lost)
-                .map(|p| p.id)
-                .collect(),
         };
 
         let mut entries = Vec::new();
@@ -1888,6 +1947,65 @@ mod attached_subject_tests {
             "CR 400.7 prevents the trigger from affecting the returned object"
         );
     }
+
+    #[test]
+    fn issue_86_attacking_recipient_is_player_set_generic_and_distinct_from_controller() {
+        let mut engine =
+            GameEngine::new(86_107, &[10, 20], 20, None, true).expect("two-player engine");
+        engine.state.players.push(PlayerState::new(30, 20));
+        let source = add_battlefield_object(&mut engine, 10, "capture_sphere");
+        let attacker = add_battlefield_object(&mut engine, 30, "grizzly_bears");
+        engine.state.combat = Some(CombatState {
+            attacking: vec![attacker],
+            blockers: HashMap::new(),
+            damage_assignments: HashMap::new(),
+            trample_player_damage: HashMap::new(),
+            damage_assignment_needed: false,
+            attackers_declared: true,
+            blockers_declared: false,
+            assign_combat_damage_phase: false,
+            first_strike_attackers: Vec::new(),
+            first_strike_blockers: HashMap::new(),
+            first_strike_damage_done: false,
+        });
+        let mut item = triggered_item(source, 0);
+        item.controller = 10;
+        item.trigger_context.attacking_player = Some(30);
+        item.trigger_context.defending_player = Some(20);
+        let mut events = Vec::new();
+        let previous_effect_result = EffectResult::None;
+        let mut effect_result = EffectResult::None;
+        let cx = EffectCx {
+            engine: &mut engine,
+            events: &mut events,
+            targets: &[],
+            targets_by_filter: &[],
+            target_damage: &[],
+            target_group_indices: &[],
+            top: &item,
+            controller: 10,
+            affected_player: 10,
+            spell_label: "Curse",
+            previous_effect_result: &previous_effect_result,
+            effect_result: &mut effect_result,
+        };
+
+        assert_eq!(player_recipients(&cx, PlayerRecipient::Controller), [10]);
+        assert_eq!(
+            player_recipients(&cx, PlayerRecipient::AttackingOpponentsOfDefendingPlayer),
+            [30]
+        );
+        cx.engine
+            .state
+            .combat
+            .as_mut()
+            .expect("combat")
+            .attacking
+            .clear();
+        assert!(
+            player_recipients(&cx, PlayerRecipient::AttackingOpponentsOfDefendingPlayer).is_empty()
+        );
+    }
 }
 
 #[cfg(test)]
@@ -2063,6 +2181,7 @@ mod source_keyword_tests {
             targets: &targets,
             targets_by_filter: &[],
             target_damage: &[],
+            target_group_indices: &[],
             top: &top,
             controller: 0,
             affected_player: 0,
@@ -2102,6 +2221,7 @@ mod source_keyword_tests {
             targets: &[],
             targets_by_filter: &[],
             target_damage: &[],
+            target_group_indices: &[],
             top: &top,
             controller: 0,
             affected_player: 0,

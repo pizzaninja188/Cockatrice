@@ -1,21 +1,18 @@
-use tricerules_cards::primitives::{SpellEffectKind, TargetFilter, TargetKind};
+use tricerules_cards::primitives::{
+    Amount, PlayerRecipient, SpellEffectKind, TargetFilter, TargetKind, TriggerCondition,
+};
 use tricerules_cards::CardRegistry;
 
 #[test]
-fn curses_have_exact_attachment_data_and_track_only_deferred_rewards() {
+fn curses_have_exact_attachment_data_and_complete_rewards() {
     let registry = CardRegistry::global();
-    for (id, name, mana_cost, deferred_reward) in [
-        (
-            "curse_of_opulence",
-            "Curse of Opulence",
-            "{R}",
-            "Gold token",
-        ),
+    for (id, name, mana_cost, token) in [
+        ("curse_of_opulence", "Curse of Opulence", "{R}", "gold"),
         (
             "curse_of_disturbance",
             "Curse of Disturbance",
             "{2}{B}",
-            "Zombie reward",
+            "zombie_b_2_2",
         ),
     ] {
         let definition = registry
@@ -34,9 +31,27 @@ fn curses_have_exact_attachment_data_and_track_only_deferred_rewards() {
                 },
             }]
         );
-        let partial = definition.partial.as_deref().expect("reward is partial");
-        assert!(!partial.contains("#63"));
-        assert!(partial.contains("#86"));
-        assert!(partial.contains(deferred_reward));
+        assert!(definition.partial.is_none());
+        assert_eq!(face.triggered_abilities.len(), 1);
+        let ability = &face.triggered_abilities[0];
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::WheneverAttachedPlayerIsAttacked
+        );
+        assert_eq!(
+            ability.effect,
+            [
+                SpellEffectKind::CreateTokens {
+                    token: token.into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                },
+                SpellEffectKind::CreateTokens {
+                    token: token.into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::AttackingOpponentsOfDefendingPlayer,
+                },
+            ]
+        );
     }
 }

@@ -1,6 +1,6 @@
 use tricerules_cards::primitives::{
-    Amount, BattlefieldCreatureCountFilter, CountExpression, EffectSubject, Keyword, PtScale,
-    RelativePlayerSet, SpellEffectKind, TargetFilter, TargetKind, TokenController,
+    Amount, BattlefieldCreatureCountFilter, CountExpression, EffectSubject, Keyword,
+    PlayerRecipient, PtScale, RelativePlayerSet, SpellEffectKind, TargetFilter, TargetKind,
     TriggerCondition,
 };
 use tricerules_cards::CardRegistry;
@@ -151,7 +151,7 @@ fn issue_84_cards_have_complete_oracle_characteristics_and_shared_amounts() {
                 owners: RelativePlayerSet::Controller,
                 name: "Undead Servant".into(),
             }),
-            controller: TokenController::Controller,
+            who: PlayerRecipient::Controller,
         }]
     );
 }
