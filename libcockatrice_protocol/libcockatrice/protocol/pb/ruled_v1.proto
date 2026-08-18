@@ -201,6 +201,7 @@ enum ResolutionChoiceDecision {
   RESOLUTION_CHOICE_DECISION_UNSPECIFIED = 0;
   RESOLUTION_CHOICE_DECISION_DECLINE = 1;
   RESOLUTION_CHOICE_DECISION_PAY_MANA = 2;
+  RESOLUTION_CHOICE_DECISION_SELECT_BRANCH = 3;
 }
 
 // A player's answer to a ResolutionChoiceRequired. Object choices use chosen_object_ids (in
@@ -209,6 +210,9 @@ enum ResolutionChoiceDecision {
 message SubmitResolutionChoice {
   repeated uint32 chosen_object_ids = 1;
   ResolutionChoiceDecision decision = 2;
+  // Zero-based index into ResolutionChoiceRequired.resolution_branches. Used only with
+  // RESOLUTION_CHOICE_DECISION_SELECT_BRANCH.
+  uint32 selected_branch_index = 3;
 }
 
 // A player's answer to a TriggerOrderRequired (CR 603.3b): put THIS trigger on the stack next.
@@ -820,6 +824,23 @@ enum ChoiceKind {
   // A public resolution-time generic-mana payment. The decider receives the prompt; other players
   // receive the ordinary waiting state. No candidate objects are exposed for this choice.
   CHOICE_KIND_MANA_PAYMENT = 9;
+  // Opaque, engine-authored resolution branches rendered as labeled prompt buttons.
+  CHOICE_KIND_RESOLUTION_BRANCH = 10;
+}
+
+enum ResolutionBranchCostKind {
+  RESOLUTION_BRANCH_COST_KIND_UNSPECIFIED = 0;
+  RESOLUTION_BRANCH_COST_KIND_MANA = 1;
+  RESOLUTION_BRANCH_COST_KIND_DISCARD_CARD = 2;
+  RESOLUTION_BRANCH_COST_KIND_SACRIFICE_PERMANENT = 3;
+}
+
+message ResolutionBranchOption {
+  uint32 branch_index = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  string label = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  ResolutionBranchCostKind cost_kind = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  string cost_text = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool selectable = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // A parked custom resolution (CR 608) requesting input from one player. Reused by every tier-3
@@ -862,6 +883,10 @@ message ResolutionChoiceRequired {
   uint32 generic_mana_cost = 13 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // Engine-authoritative affordability for a mana payment. Clients must not recompute this.
   bool payment_currently_legal = 14 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  repeated ResolutionBranchOption resolution_branches = 15 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Canonical brace cost for colored resolution payments. Empty for generic-only legacy
+  // soft-counter payments and nonmana choices.
+  string mana_cost = 16 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // A token entered the battlefield (CR 111). Unlike a resolved permanent spell, a token has no
@@ -1025,6 +1050,8 @@ message ChooseTriggerTarget {
   // CR 603.5: decline an optional triggered ability. When true, targets is ignored.
   bool decline = 2;
   repeated TargetRef targets = 3;
+  // Triggered modes chosen while putting the ability on the stack (CR 603.3c).
+  repeated SelectedSpellMode selected_modes = 4;
 }
 
 message TriggerNeedsTarget {
@@ -1034,6 +1061,9 @@ message TriggerNeedsTarget {
   int32 controller_player_id = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC]; // PlayerId of the player who controls the trigger
   bool may_decline = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC]; // CR 603.5: "you may"
   SpellTargets targets = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 min_modes = 7 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 max_modes = 8 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  repeated LegalSpellMode modes = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // Where the resolved spell object ends up (Servatrice maps this to TABLE vs GRAVE).

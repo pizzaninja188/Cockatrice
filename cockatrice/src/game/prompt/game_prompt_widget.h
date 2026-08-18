@@ -45,6 +45,8 @@ public:
         ResolutionPick,
         /// CR 608.2g resolution-time mana payment; normal priority controls stay hidden.
         ResolutionPayment,
+        /// Engine-authored labeled choices rendered as ordinary buttons in this panel.
+        ChoiceOptions,
         /// Another player is answering a public parked resolution choice. No local action exists.
         WaitingForChoice,
         /// CR 603.3b: ordering this player's simultaneous triggers. The picking happens in the
@@ -59,6 +61,12 @@ public:
     /// The exclusive prompt mode plus its payload, pushed as one unit.
     struct RuledPromptState
     {
+        struct ChoiceOption
+        {
+            int index = -1;
+            QString label;
+            bool enabled = false;
+        };
         PromptMode mode = PromptMode::Normal;
         /// Cards required / selected — CleanupDiscard, OpeningBottom, ResolutionPick. For the
         /// opening modes `required` is the mulligan depth.
@@ -77,6 +85,7 @@ public:
         /// ResolutionPayment only; affordability is copied from the engine event.
         int genericManaCost = 0;
         bool paymentCurrentlyLegal = false;
+        QVector<ChoiceOption> choiceOptions;
     };
 
     /// Independent async inputs that all mean "mid-cast / mid-activation" and OR into
@@ -162,6 +171,8 @@ signals:
     void undoLandTapRequested();
     void ruledResolutionHandPickConfirmRequested();
     void ruledResolutionPaymentDeclineRequested();
+    void ruledResolutionPaymentPayRequested();
+    void ruledChoiceOptionRequested(int optionIndex);
 
 private:
     void updatePassPriorityButtonText();
@@ -219,6 +230,9 @@ private:
     QPushButton *openingBottomDoneButton = nullptr;
     QPushButton *resolutionHandPickConfirmButton = nullptr;
     QPushButton *resolutionPaymentDeclineButton = nullptr;
+    QPushButton *resolutionPaymentPayButton = nullptr;
+    QHBoxLayout *choiceOptionsRow = nullptr;
+    QVector<QPushButton *> choiceOptionButtons;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(GamePromptWidget::TargetingSources)

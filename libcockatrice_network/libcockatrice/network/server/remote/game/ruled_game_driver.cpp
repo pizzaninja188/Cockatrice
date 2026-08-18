@@ -1976,6 +1976,7 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
     }
     QHash<int, QString> routedLogText;
     QHash<int, ruled::v1::ResolutionChoiceRequired> routedChoices;
+    QHash<int, ruled::v1::TriggerNeedsTarget> routedTriggerChoices;
     QHash<int, ruled::v1::HandSlotMap> ownHandSlotMaps;
     for (int ei = 0; ei < filtered.events_size(); ++ei) {
         const auto &event = filtered.events(ei);
@@ -1983,6 +1984,9 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
             routedLogText.insert(ei, QString::fromStdString(event.log().text()));
         } else if (event.has_resolution_choice_required()) {
             routedChoices.insert(ei, event.resolution_choice_required());
+        } else if (event.has_trigger_needs_target() &&
+                   event.trigger_needs_target().controller_player_id() == participant->getPlayerId()) {
+            routedTriggerChoices.insert(ei, event.trigger_needs_target());
         } else if (event.has_hand_slot_map()) {
             ownHandSlotMaps.insert(ei, event.hand_slot_map());
         }
@@ -2002,6 +2006,15 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
         choice->mutable_candidate_card_ids()->CopyFrom(choiceIt.value().candidate_card_ids());
         choice->mutable_candidate_names()->CopyFrom(choiceIt.value().candidate_names());
         choice->mutable_candidate_server_card_ids()->CopyFrom(choiceIt.value().candidate_server_card_ids());
+        if (choiceIt.value().deciding_player_id() == participant->getPlayerId()) {
+            choice->mutable_resolution_branches()->CopyFrom(choiceIt.value().resolution_branches());
+        }
+    }
+    for (auto triggerIt = routedTriggerChoices.constBegin(); triggerIt != routedTriggerChoices.constEnd();
+         ++triggerIt) {
+        auto *trigger = filtered.mutable_events(triggerIt.key())->mutable_trigger_needs_target();
+        trigger->mutable_targets()->CopyFrom(triggerIt.value().targets());
+        trigger->mutable_modes()->CopyFrom(triggerIt.value().modes());
     }
     for (auto handMapIt = ownHandSlotMaps.constBegin(); handMapIt != ownHandSlotMaps.constEnd(); ++handMapIt) {
         filtered.mutable_events(handMapIt.key())->mutable_hand_slot_map()->CopyFrom(handMapIt.value());

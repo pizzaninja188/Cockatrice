@@ -2237,6 +2237,103 @@ TEST_F(RuledClientTest, ManaPaymentPromptsOnlyTheDecidingPlayer)
     EXPECT_FALSE(state->isWaitingForResolutionChoice());
 }
 
+TEST_F(RuledClientTest, TriggerModesBecomePromptOptionsAndSubmitTheChosenMode)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *tnt = batch.add_events()->mutable_trigger_needs_target();
+    tnt->set_source_permanent_id(100);
+    tnt->set_ability_index(2);
+    tnt->set_ability_text("Choose one.");
+    tnt->set_controller_player_id(kLocalPlayer);
+    auto *life = tnt->add_modes();
+    life->set_mode_index(0);
+    life->set_label("Gain 4 life");
+    life->set_selectable(true);
+    auto *counter = tnt->add_modes();
+    counter->set_mode_index(1);
+    counter->set_label("Put a counter on it");
+    counter->set_selectable(true);
+    apply(batch);
+
+    ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::TriggerMode));
+    ASSERT_EQ(state->pendingChoiceOptions().size(), 2);
+    state->submitPendingChoiceOption(1);
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    ASSERT_TRUE(host.sentCommands[0].has_choose_trigger_target());
+    ASSERT_EQ(host.sentCommands[0].choose_trigger_target().selected_modes_size(), 1);
+    EXPECT_EQ(host.sentCommands[0].choose_trigger_target().selected_modes(0).mode_index(), 1u);
+}
+
+TEST_F(RuledClientTest, TargetedTriggerModeCarriesItsModeIntoTheTargetCommand)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *tnt = batch.add_events()->mutable_trigger_needs_target();
+    tnt->set_source_permanent_id(100);
+    tnt->set_ability_index(2);
+    tnt->set_ability_text("Choose one.");
+    tnt->set_controller_player_id(kLocalPlayer);
+    auto *mode = tnt->add_modes();
+    mode->set_mode_index(3);
+    mode->set_label("Target creature gets +2/+2");
+    mode->set_selectable(true);
+    mode->set_needs_target(true);
+    mode->mutable_targets()->add_groups()->add_valid_permanent_ids(101);
+    apply(batch);
+
+    state->submitPendingChoiceOption(3);
+    ASSERT_TRUE(state->hasPendingTriggerTarget());
+    EXPECT_TRUE(state->abilityTargetData(100, 2).validPermanentIds.contains(101));
+    ruled::v1::ChooseTriggerTarget command;
+    state->appendPendingTriggerMode(&command);
+    ASSERT_EQ(command.selected_modes_size(), 1);
+    EXPECT_EQ(command.selected_modes(0).mode_index(), 3u);
+}
+
+TEST_F(RuledClientTest, NonModalTriggerPublishesItsClickTargets)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *tnt = batch.add_events()->mutable_trigger_needs_target();
+    tnt->set_source_permanent_id(100);
+    tnt->set_ability_index(2);
+    tnt->set_ability_text("Deal 3 damage to any target.");
+    tnt->set_controller_player_id(kLocalPlayer);
+    auto *group = tnt->mutable_targets()->add_groups();
+    group->set_group_index(0);
+    group->set_min(1);
+    group->set_max(1);
+    group->add_valid_permanent_ids(101);
+    group->set_can_target_opponent(true);
+    apply(batch);
+
+    ASSERT_TRUE(state->hasPendingTriggerTarget());
+    const auto targets = state->abilityTargetData(100, 2);
+    EXPECT_TRUE(targets.validPermanentIds.contains(101));
+    EXPECT_TRUE(targets.canTargetOpponent);
+}
+
+TEST_F(RuledClientTest, ResolutionBranchesSubmitOpaqueIndexWithoutOpeningADialog)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH);
+    choice->set_prompt_text("Choose a payment.");
+    choice->set_min(0);
+    auto *sacrifice = choice->add_resolution_branches();
+    sacrifice->set_branch_index(0);
+    sacrifice->set_label("Sacrifice a creature");
+    sacrifice->set_selectable(true);
+    apply(batch);
+
+    ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::ResolutionBranch));
+    EXPECT_EQ(host.dialogRequests, 0);
+    state->submitPendingChoiceOption(0);
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const auto &submission = host.sentCommands[0].submit_resolution_choice();
+    EXPECT_EQ(submission.decision(), ruled::v1::RESOLUTION_CHOICE_DECISION_SELECT_BRANCH);
+    EXPECT_EQ(submission.selected_branch_index(), 0u);
+}
+
 TEST_F(RuledClientTest, PrivateHandChoiceMakesTheNonDecidingPlayerWait)
 {
     ruled::v1::RuledEventBatch batch;

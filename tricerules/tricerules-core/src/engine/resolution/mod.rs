@@ -16,6 +16,7 @@ use rand::seq::SliceRandom;
 use rand::SeedableRng;
 use tricerules_cards::primitives::TargetingDef;
 
+mod choices;
 mod damage;
 /// `pub(super)` so the combat damage step can reach `life::apply_life_gain` — lifelink is the one
 /// life-gain edge outside stack resolution, and it must go through the same funnel.
@@ -791,13 +792,20 @@ impl GameEngine {
         };
 
         let mut resolution_effects: Vec<ResolutionEffect> = Vec::new();
-        if !is_ability && !top.chosen_modes.is_empty() {
-            if let Some(modal) = self
-                .registry
-                .get(card_id)
-                .and_then(|definition| definition.face(top.face_index))
-                .and_then(|face| face.modal_spell.as_ref())
-            {
+        if !top.chosen_modes.is_empty() {
+            let modal = if top.is_triggered {
+                top.triggered_ability
+                    .as_ref()
+                    .and_then(|ability| ability.modal.as_ref())
+            } else if !is_ability {
+                self.registry
+                    .get(card_id)
+                    .and_then(|definition| definition.face(top.face_index))
+                    .and_then(|face| face.modal_spell.as_ref())
+            } else {
+                None
+            };
+            if let Some(modal) = modal {
                 for chosen in &top.chosen_modes {
                     if let Some(mode) = modal.modes.get(chosen.mode_index) {
                         resolution_effects.extend(build_entries(
@@ -834,6 +842,25 @@ impl GameEngine {
                     .and_then(|face| face.targeting.as_ref())
             };
             resolution_effects.extend(build_entries(&effects, targeting, &top.targets));
+        }
+
+        if !top.resolution_branch_choices.is_empty() {
+            let mut expanded = Vec::new();
+            for (effect_index, entry) in resolution_effects.into_iter().enumerate() {
+                if let SpellEffectKind::ChooseResolutionBranch { branches, .. } = &entry.effect {
+                    if let Some(choice) = top.resolution_branch_choices.get(&(effect_index as u32))
+                    {
+                        if let Some(branch_index) = choice {
+                            if let Some(branch) = branches.get(*branch_index) {
+                                expanded.extend(build_entries(&branch.effects, None, &[]));
+                            }
+                        }
+                        continue;
+                    }
+                }
+                expanded.push(entry);
+            }
+            resolution_effects = expanded;
         }
 
         (resolution_effects, spell_label)
@@ -1042,6 +1069,12 @@ impl GameEngine {
                     effect @ SpellEffectKind::None => misc::none(&mut cx, effect)?,
                     effect @ SpellEffectKind::AuraAttach { .. } => {
                         misc::aura_attach(&mut cx, effect)?
+                    }
+                    effect @ SpellEffectKind::ChooseResolutionBranch { .. } => {
+                        choices::choose_resolution_branch(&mut cx, effect)?
+                    }
+                    effect @ SpellEffectKind::CreateReflexiveTrigger { .. } => {
+                        choices::create_reflexive_trigger(&mut cx, effect)?
                     }
                 }
             };
@@ -1792,6 +1825,7 @@ mod attached_subject_tests {
             flashback: false,
             chosen_x: 0,
             chosen_modes: vec![],
+            resolution_branch_choices: Default::default(),
             trigger_context: TriggerContext::default(),
         }
     }
@@ -2038,6 +2072,7 @@ mod source_keyword_tests {
             flashback: false,
             chosen_x: 0,
             chosen_modes: vec![],
+            resolution_branch_choices: Default::default(),
             trigger_context: TriggerContext::default(),
         }
     }
@@ -2061,6 +2096,7 @@ mod source_keyword_tests {
             flashback: false,
             chosen_x,
             chosen_modes: vec![],
+            resolution_branch_choices: Default::default(),
             trigger_context: TriggerContext::default(),
         }
     }

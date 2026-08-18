@@ -306,59 +306,12 @@ impl CardRegistry {
                         reason,
                     })?;
                 if let Some(modal) = &face.modal_spell {
-                    if modal.min_modes == 0
-                        || modal.max_modes < modal.min_modes
-                        || modal.max_modes as usize > modal.modes.len()
-                    {
-                        return Err(RegistryError::InvalidCard {
+                    modal.validate(EffectContext::Spell).map_err(|reason| {
+                        RegistryError::InvalidCard {
                             id: card.id.clone(),
-                            reason: format!(
-                                "modal_spell requires 1 <= min_modes <= max_modes <= mode count \
-                                 (got {}..={} with {} modes)",
-                                modal.min_modes,
-                                modal.max_modes,
-                                modal.modes.len()
-                            ),
-                        });
-                    }
-                    for mode in &modal.modes {
-                        if mode.label.trim().is_empty() {
-                            return Err(RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason: "modal_spell mode label must not be empty".into(),
-                            });
+                            reason,
                         }
-                        if mode.effects.is_empty() {
-                            return Err(RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason: format!(
-                                    "modal_spell mode '{}' must contain at least one effect",
-                                    mode.label
-                                ),
-                            });
-                        }
-                        for effect in &mode.effects {
-                            effect.validate(EffectContext::Spell).map_err(|reason| {
-                                RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason,
-                                }
-                            })?;
-                        }
-                        // A mode's effects are the resolution list for that mode (CR 700.2),
-                        // so the sibling-dependent rules apply per mode.
-                        SpellEffectKind::validate_list(&mode.effects).map_err(|reason| {
-                            RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason,
-                            }
-                        })?;
-                        TargetingDef::validate_optional(mode.targeting.as_ref(), &mode.effects)
-                            .map_err(|reason| RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason,
-                            })?;
-                    }
+                    })?;
                 }
                 // CR 604.2: static abilities exist only on permanents (they generate continuous
                 // effects while the source is on the battlefield). An instant/sorcery with one is

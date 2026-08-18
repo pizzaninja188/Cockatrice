@@ -1,0 +1,28 @@
+(
+  id: "trufflesnout",
+  name: "Trufflesnout",
+  mana_cost: "{2}{G}",
+  types: ["Creature", "Boar"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      modal: Some((
+        min_modes: 1,
+        max_modes: 1,
+        modes: [
+          (
+            label: "Put a +1/+1 counter on Trufflesnout",
+            effects: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+          ),
+          (
+            label: "Gain 4 life",
+            effects: [GainLife(amount: 4)],
+          ),
+        ],
+      )),
+      text: "When this creature enters, choose one — Put a +1/+1 counter on it; or you gain 4 life.",
+    ),
+  ],
+)

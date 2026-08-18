@@ -2,9 +2,10 @@
 
 use super::{
     ActivatedAbilityDef, CardTypeFilter, Color, CreatureScopeFilter, GraveyardDestination,
-    GraveyardFilter, Keyword, TargetController, TargetFilter, TargetKind, TriggeredAbilityDef,
-    TypeLineAddition,
+    GraveyardFilter, Keyword, ReflexiveTriggeredAbilityDef, TargetController, TargetFilter,
+    TargetKind, TriggeredAbilityDef, TypeLineAddition,
 };
+use crate::ManaCost;
 use serde::de::{EnumAccess, MapAccess, SeqAccess, VariantAccess};
 use serde::ser::SerializeStructVariant;
 use serde::{Deserialize, Serialize};
@@ -639,6 +640,29 @@ pub enum DrawDiscardOrder {
     DiscardThenDraw,
 }
 
+/// A single optional or mandatory cost offered while an effect resolves (CR 118.12, 608.2d/g).
+/// The initial branch vocabulary deliberately has one cost per branch, which covers alternate
+/// sacrifice/discard branches without introducing partial multi-cost payment state.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ResolutionCost {
+    Mana(ManaCost),
+    DiscardCard {
+        #[serde(default)]
+        filter: Option<CardTypeFilter>,
+    },
+    SacrificePermanent {
+        filter: TargetFilter,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResolutionBranchDef {
+    pub label: String,
+    pub cost: ResolutionCost,
+    #[serde(default)]
+    pub effects: Vec<SpellEffectKind>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpellEffectKind {
     DamageTarget {
@@ -704,6 +728,18 @@ pub enum SpellEffectKind {
         order: DrawDiscardOrder,
         #[serde(default)]
         optional: bool,
+    },
+    /// Present engine-authored branches as an in-resolution choice. The chosen branch's single
+    /// cost is validated and paid atomically, then its effects run in authored order.
+    ChooseResolutionBranch {
+        #[serde(default)]
+        optional: bool,
+        branches: Vec<ResolutionBranchDef>,
+    },
+    /// Stage a reflexive triggered ability created by the immediately preceding paid branch.
+    /// Sparktongue Dragon and Heart-Piercer Manticore share this CR 603.12 primitive.
+    CreateReflexiveTrigger {
+        ability: Box<ReflexiveTriggeredAbilityDef>,
     },
     /// CR 701.18: look at the top `count` cards of your library, put any number of them on the
     /// bottom of it in any order, and the rest back on top in any order. The cards never leave the
@@ -1480,6 +1516,14 @@ impl SpellEffectKind {
     /// effects). Rules that depend on *sibling* effects live here; per-effect rules live in
     /// [`SpellEffectKind::validate`], which the caller runs too.
     pub fn validate_list(effects: &[SpellEffectKind]) -> Result<(), String> {
+        if effects
+            .iter()
+            .filter(|effect| matches!(effect, SpellEffectKind::ChooseResolutionBranch { .. }))
+            .count()
+            > 1
+        {
+            return Err("an effect list may contain at most one resolution branch choice".into());
+        }
         // `TargetManaValue` reads the mana value of the spell's target, so the list must contain
         // an effect that declares an object target (Reanimate: `ReturnFromGraveyard`). Without
         // one there is nothing to read and the amount would silently resolve to 0.
@@ -1589,6 +1633,64 @@ impl SpellEffectKind {
                         return Err("entry counter placements cannot repeat a counter kind".into());
                     }
                 }
+            }
+            SpellEffectKind::ChooseResolutionBranch { branches, .. } => {
+                if branches.is_empty() {
+                    return Err("resolution choice requires at least one branch".into());
+                }
+                for branch in branches {
+                    if branch.label.trim().is_empty() || branch.effects.is_empty() {
+                        return Err(
+                            "resolution choice branches require a label and at least one effect"
+                                .into(),
+                        );
+                    }
+                    match &branch.cost {
+                        ResolutionCost::Mana(cost) => {
+                            if cost.pips.is_empty()
+                                || cost
+                                    .pips
+                                    .iter()
+                                    .any(|pip| matches!(pip, crate::ManaSymbol::X))
+                            {
+                                return Err(
+                                    "resolution mana cost must be nonempty and cannot contain X"
+                                        .into(),
+                                );
+                            }
+                        }
+                        ResolutionCost::DiscardCard { .. } => {}
+                        ResolutionCost::SacrificePermanent { filter } => {
+                            filter.validate_target_constraints()?;
+                            if !matches!(
+                                filter.kind,
+                                TargetKind::Creature | TargetKind::AnyPermanent
+                            ) || filter.controller != TargetController::You
+                            {
+                                return Err(
+                                    "resolution sacrifice cost must select a permanent you control"
+                                        .into(),
+                                );
+                            }
+                        }
+                    }
+                    for effect in &branch.effects {
+                        if effect.needs_target() {
+                            return Err(
+                                "resolution branch effects cannot target directly; create a reflexive trigger instead"
+                                    .into(),
+                            );
+                        }
+                        if matches!(effect, SpellEffectKind::ChooseResolutionBranch { .. }) {
+                            return Err("nested resolution branch choices are not supported".into());
+                        }
+                        effect.validate(context)?;
+                    }
+                    SpellEffectKind::validate_list(&branch.effects)?;
+                }
+            }
+            SpellEffectKind::CreateReflexiveTrigger { ability } => {
+                ability.validate_shape()?;
             }
             _ => {}
         }

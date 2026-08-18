@@ -897,6 +897,26 @@ impl GameEngine {
         Ok(())
     }
 
+    pub(super) fn can_pay_resolution_mana(&self, player: PlayerId, cost: &ManaCost) -> bool {
+        self.state.player_idx(player).is_some_and(|player_idx| {
+            plan_mana_payment(&self.state, player_idx, cost, 0, 0, &[]).is_ok()
+        })
+    }
+
+    pub(super) fn pay_resolution_mana(
+        &mut self,
+        player: PlayerId,
+        cost: &ManaCost,
+    ) -> Result<(), EngineError> {
+        let player_idx = self
+            .state
+            .player_idx(player)
+            .ok_or(EngineError::UnknownPlayer(player))?;
+        let plan = plan_mana_payment(&self.state, player_idx, cost, 0, 0, &[])?;
+        commit_mana_payment(&mut self.state, player_idx, plan);
+        Ok(())
+    }
+
     pub(super) fn cast_spell(
         &mut self,
         player: PlayerId,
@@ -1040,7 +1060,7 @@ impl GameEngine {
         let chosen_x = if has_x { x_value } else { 0 };
 
         let mut public_targets: Vec<rv1::TargetRef> = Vec::new();
-        let mut chosen_modes: Vec<ChosenSpellMode> = Vec::new();
+        let mut chosen_modes: Vec<ChosenMode> = Vec::new();
         let mut chosen_mode_indices: Vec<u32> = Vec::new();
         let mut chosen_mode_labels: Vec<String> = Vec::new();
         let mut extra_generic = 0;
@@ -1113,7 +1133,7 @@ impl GameEngine {
                 public_targets.extend(selection.targets.iter().cloned());
                 chosen_mode_indices.push(selection.mode_index);
                 chosen_mode_labels.push(mode.label.clone());
-                chosen_modes.push(ChosenSpellMode {
+                chosen_modes.push(ChosenMode {
                     mode_index: selection.mode_index as usize,
                     targets: selection
                         .targets
@@ -1228,6 +1248,7 @@ impl GameEngine {
             chosen_x,
             face_index,
             chosen_modes,
+            resolution_branch_choices: Default::default(),
             // A spell's effects always act on its controller.
             trigger_context: TriggerContext::default(),
             flashback,
@@ -1676,6 +1697,7 @@ impl GameEngine {
             chosen_x: 0,
             face_index: face_up_index,
             chosen_modes: vec![],
+            resolution_branch_choices: Default::default(),
             // An activated ability's effects act on the player who activated it.
             trigger_context: TriggerContext::default(),
             flashback: false,
@@ -2365,6 +2387,7 @@ impl GameEngine {
             flashback: false,
             chosen_x: 0,
             chosen_modes: Vec::new(),
+            resolution_branch_choices: Default::default(),
             trigger_context: TriggerContext::default(),
         };
         match self.begin_battlefield_entry(

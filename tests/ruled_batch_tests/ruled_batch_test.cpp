@@ -990,6 +990,49 @@ TEST_F(RuledBatchTest, ApplyRuledBatchMovesPermanentToGraveyard)
     }
 }
 
+TEST_F(RuledBatchTest, TriggerModeTargetsReachOnlyTheController)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_trigger_needs_target();
+    choice->set_controller_player_id(1);
+    choice->set_source_permanent_id(41);
+    choice->set_ability_text("Choose one.");
+    auto *mode = choice->add_modes();
+    mode->set_mode_index(0);
+    mode->set_label("Target creature gets +2/+2");
+    mode->set_selectable(true);
+    mode->set_needs_target(true);
+    mode->mutable_targets()->add_groups()->add_valid_permanent_ids(101);
+
+    const auto forController = redactFor(batch, p1);
+    ASSERT_EQ(forController.events(0).trigger_needs_target().modes_size(), 1);
+    EXPECT_EQ(forController.events(0).trigger_needs_target().modes(0).targets().groups(0).valid_permanent_ids(0),
+              101u);
+
+    const auto forOpponent = redactFor(batch, p2);
+    EXPECT_EQ(forOpponent.events(0).trigger_needs_target().modes_size(), 0);
+}
+
+TEST_F(RuledBatchTest, ResolutionBranchButtonsReachOnlyTheDecidingPlayer)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(1);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH);
+    choice->set_prompt_text("Choose one.");
+    auto *branch = choice->add_resolution_branches();
+    branch->set_branch_index(0);
+    branch->set_label("Discard a creature card");
+    branch->set_selectable(true);
+
+    const auto forController = redactFor(batch, p1);
+    ASSERT_EQ(forController.events(0).resolution_choice_required().resolution_branches_size(), 1);
+    EXPECT_EQ(forController.events(0).resolution_choice_required().resolution_branches(0).branch_index(), 0u);
+
+    const auto forOpponent = redactFor(batch, p2);
+    EXPECT_EQ(forOpponent.events(0).resolution_choice_required().resolution_branches_size(), 0);
+}
+
 TEST_F(RuledBatchTest, PermanentMovedToLibraryReordersTheOwnersPrivateDeckWithoutLeakingIds)
 {
     Server_Card *bear = addCardToTable(p1, "Grizzly Bears");

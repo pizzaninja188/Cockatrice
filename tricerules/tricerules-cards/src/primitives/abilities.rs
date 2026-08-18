@@ -5,7 +5,7 @@ use super::{
     EffectContext, GameCondition, Keyword, RelativePlayerSet, SpellEffectKind, TargetController,
     TargetFilter, TargetKind, TargetingDef,
 };
-use crate::ManaAmount;
+use crate::{ManaAmount, ModalDef};
 use serde::{Deserialize, Serialize};
 
 /// One activated ability on a permanent (RON data tier). Cost + effect compose freely.
@@ -548,7 +548,12 @@ pub struct TriggeredAbilityDef {
     /// CR 608.2: the ability's effects, resolved in the order written — the same shape and the
     /// same semantics as a spell's `spell_effect`. Phyrexian Arena's "you draw a card and you
     /// lose 1 life" is `[Draw(count: 1), LoseLife(amount: Fixed(1))]`.
+    #[serde(default)]
     pub effect: Vec<SpellEffectKind>,
+    /// CR 603.3c / 700.2b: modes selected as this triggered ability is put on the stack.
+    /// Mutually exclusive with `effect`; each mode owns its own effects and targeting.
+    #[serde(default)]
+    pub modal: Option<ModalDef>,
     #[serde(default)]
     pub targeting: Option<TargetingDef>,
     /// Oracle-style ability text shown as annotation on the stack card.
@@ -569,12 +574,22 @@ impl TriggeredAbilityDef {
         if self.text.trim().is_empty() {
             return Err("triggered ability text must not be empty".into());
         }
-        if self.effect.is_empty() {
-            return Err("triggered ability must contain at least one effect".into());
+        if self.effect.is_empty() == self.modal.is_none() {
+            return Err("triggered ability requires exactly one of effect or modal".into());
         }
-        if self
+        let effects = self
             .effect
             .iter()
+            .chain(
+                self.modal
+                    .iter()
+                    .flat_map(|modal| &modal.modes)
+                    .flat_map(|mode| &mode.effects),
+            )
+            .collect::<Vec<_>>();
+        if effects
+            .iter()
+            .copied()
             .any(SpellEffectKind::uses_trigger_object_reference)
             && !self.trigger.supplies_trigger_object()
         {
@@ -582,9 +597,9 @@ impl TriggeredAbilityDef {
                 "trigger-object effect requires a trigger that supplies an observed object".into(),
             );
         }
-        if self
-            .effect
+        if effects
             .iter()
+            .copied()
             .any(SpellEffectKind::uses_defending_player_reference)
             && !self.trigger.supplies_defending_player()
         {
@@ -595,6 +610,37 @@ impl TriggeredAbilityDef {
         }
         if let Some(InterveningIf::GameCondition(condition)) = self.intervening_if.as_ref() {
             condition.validate()?;
+        }
+        for effect in &self.effect {
+            effect.validate(EffectContext::Ability)?;
+        }
+        SpellEffectKind::validate_list(&self.effect)?;
+        if let Some(modal) = &self.modal {
+            if self.targeting.is_some() {
+                return Err("modal triggered ability uses per-mode targeting".into());
+            }
+            modal.validate(EffectContext::Ability)
+        } else {
+            TargetingDef::validate_optional(self.targeting.as_ref(), &self.effect)
+        }
+    }
+}
+
+/// A triggered ability created by an action taken during resolution (CR 603.12). It has no
+/// independent trigger condition: the creating effect stages it immediately after the qualifying
+/// payment, then normal target selection and stack placement apply.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReflexiveTriggeredAbilityDef {
+    pub effect: Vec<SpellEffectKind>,
+    #[serde(default)]
+    pub targeting: Option<TargetingDef>,
+    pub text: String,
+}
+
+impl ReflexiveTriggeredAbilityDef {
+    pub(crate) fn validate_shape(&self) -> Result<(), String> {
+        if self.text.trim().is_empty() || self.effect.is_empty() {
+            return Err("reflexive triggered ability requires text and effects".into());
         }
         for effect in &self.effect {
             effect.validate(EffectContext::Ability)?;

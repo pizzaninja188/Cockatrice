@@ -8,8 +8,8 @@ use super::resolution::{
     seat_resolved_spell_last_in_graveyard,
 };
 use super::targeting::{
-    capture_stack_target, validate_ability_targets_with_context, validate_spell_targets,
-    TargetSourceIdentity,
+    capture_stack_target, object_matches_mass_filter, validate_ability_targets_with_context,
+    validate_spell_targets, TargetSourceIdentity,
 };
 use super::*;
 
@@ -31,10 +31,18 @@ impl GameEngine {
                     ordered: false,
                     candidate_names: Vec::new(),
                     candidate_server_card_ids: Vec::new(),
+                    resolution_branches: Vec::new(),
                     unique_names: false,
                     generic_mana_cost: payment.generic_mana_cost,
-                    payment_currently_legal: self
-                        .can_pay_generic_mana(pending.deciding_player, payment.generic_mana_cost),
+                    payment_currently_legal: if payment.mana_cost.pips.is_empty() {
+                        self.can_pay_generic_mana(
+                            pending.deciding_player,
+                            payment.generic_mana_cost,
+                        )
+                    } else {
+                        self.can_pay_resolution_mana(pending.deciding_player, &payment.mana_cost)
+                    },
+                    mana_cost: payment.mana_cost.to_string(),
                 },
             )),
         })
@@ -44,6 +52,7 @@ impl GameEngine {
         &mut self,
         player: PlayerId,
         targets: &[rv1::TargetRef],
+        selected_modes: &[rv1::SelectedSpellMode],
         decline: bool,
     ) -> Result<RuledEventBatch, EngineError> {
         let pending = self
@@ -82,16 +91,73 @@ impl GameEngine {
             .get(&pending.card_id)
             .map(|definition| definition.name.clone())
             .unwrap_or_else(|| pending.card_id.clone());
-        let validated = validate_ability_targets_with_context(
-            self,
-            player,
-            TargetSourceIdentity::captured(pending.source_permanent_id, pending.source_zone_change),
-            &pending.ability.effect,
-            pending.ability.targeting.as_ref(),
-            targets,
-            pending.trigger_context,
-        )
-        .map(|()| card_name);
+        let target_source =
+            TargetSourceIdentity::captured(pending.source_permanent_id, pending.source_zone_change);
+        let mut chosen_modes = Vec::new();
+        let mut public_targets = Vec::new();
+        let mut chosen_mode_indices = Vec::new();
+        let mut chosen_mode_labels = Vec::new();
+        let validation = if let Some(modal) = &pending.ability.modal {
+            if !targets.is_empty()
+                || selected_modes.len() < modal.min_modes as usize
+                || selected_modes.len() > modal.max_modes as usize
+            {
+                Err(EngineError::Illegal("illegal triggered mode selection"))
+            } else {
+                let mut seen = HashSet::new();
+                let mut ordered = selected_modes.iter().collect::<Vec<_>>();
+                ordered.sort_by_key(|selection| selection.mode_index);
+                let mut result = Ok(());
+                for selection in ordered {
+                    if !seen.insert(selection.mode_index) {
+                        result = Err(EngineError::Illegal("a mode may be selected only once"));
+                        break;
+                    }
+                    let Some(mode) = modal.modes.get(selection.mode_index as usize) else {
+                        result = Err(EngineError::Illegal("bad triggered mode index"));
+                        break;
+                    };
+                    if let Err(error) = validate_ability_targets_with_context(
+                        self,
+                        player,
+                        target_source,
+                        &mode.effects,
+                        mode.targeting.as_ref(),
+                        &selection.targets,
+                        pending.trigger_context,
+                    ) {
+                        result = Err(error);
+                        break;
+                    }
+                    public_targets.extend(selection.targets.iter().cloned());
+                    chosen_mode_indices.push(selection.mode_index);
+                    chosen_mode_labels.push(mode.label.clone());
+                    chosen_modes.push(ChosenMode {
+                        mode_index: selection.mode_index as usize,
+                        targets: selection
+                            .targets
+                            .iter()
+                            .map(|target| capture_stack_target(self, target))
+                            .collect(),
+                    });
+                }
+                result
+            }
+        } else if selected_modes.is_empty() {
+            validate_ability_targets_with_context(
+                self,
+                player,
+                target_source,
+                &pending.ability.effect,
+                pending.ability.targeting.as_ref(),
+                targets,
+                pending.trigger_context,
+            )
+            .map(|()| public_targets.extend_from_slice(targets))
+        } else {
+            Err(EngineError::Illegal("nonmodal trigger cannot select modes"))
+        };
+        let validated = validation.map(|()| card_name);
         let card_name = match validated {
             Ok(name) => name,
             Err(e) => {
@@ -115,7 +181,7 @@ impl GameEngine {
         let controller = pending.controller;
         let trigger_context = pending.trigger_context;
 
-        let trefs = targets
+        let trefs = public_targets
             .iter()
             .map(|target| target.object_id)
             .collect::<Vec<_>>();
@@ -125,7 +191,7 @@ impl GameEngine {
             id: virtual_id,
             controller,
             card_id: card_id.clone(),
-            targets: targets
+            targets: public_targets
                 .iter()
                 .map(|target| capture_stack_target(self, target))
                 .collect(),
@@ -140,7 +206,8 @@ impl GameEngine {
             is_copy: false,
             chosen_x: 0,
             face_index: source_face_index,
-            chosen_modes: vec![],
+            chosen_modes,
+            resolution_branch_choices: Default::default(),
             trigger_context,
             flashback: false,
         });
@@ -154,14 +221,14 @@ impl GameEngine {
             ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
                 object_id: virtual_id,
                 description: card_name,
-                targets: targets.to_vec(),
+                targets: public_targets.clone(),
                 ability_annotation: ability_text,
                 card_id: String::new(),
                 is_copy: false,
                 is_triggered: true,
                 copy_source_object_id: 0,
-                chosen_mode_indices: vec![],
-                chosen_mode_labels: vec![],
+                chosen_mode_indices,
+                chosen_mode_labels,
             })),
         });
 
@@ -295,6 +362,11 @@ impl GameEngine {
                 return Err(EngineError::Illegal("unknown resolution choice decision"));
             }
         };
+        if pending.custom_key == "__resolution_branch"
+            && pending.choice_kind == rv1::ChoiceKind::ResolutionBranch
+        {
+            return self.select_resolution_branch(pending, answer, decision);
+        }
         if let Some(payment) = pending.mana_payment.clone() {
             if !answer.chosen_object_ids.is_empty() {
                 self.state.pending_resolution = Some(pending);
@@ -305,19 +377,33 @@ impl GameEngine {
             let mut events = Vec::new();
             match decision {
                 rv1::ResolutionChoiceDecision::PayMana => {
-                    if !self.can_pay_generic_mana(player, payment.generic_mana_cost) {
+                    let payable = if payment.mana_cost.pips.is_empty() {
+                        self.can_pay_generic_mana(player, payment.generic_mana_cost)
+                    } else {
+                        self.can_pay_resolution_mana(player, &payment.mana_cost)
+                    };
+                    if !payable {
                         self.state.pending_resolution = Some(pending);
                         return Err(EngineError::Illegal(
                             "resolution mana payment is not affordable",
                         ));
                     }
-                    if let Err(error) = self.pay_generic_mana(player, payment.generic_mana_cost) {
+                    let paid = if payment.mana_cost.pips.is_empty() {
+                        self.pay_generic_mana(player, payment.generic_mana_cost)
+                    } else {
+                        self.pay_resolution_mana(player, &payment.mana_cost)
+                    };
+                    if let Err(error) = paid {
                         self.state.pending_resolution = Some(pending);
                         return Err(error);
                     }
+                    let cost_label = if payment.mana_cost.pips.is_empty() {
+                        format!("{{{}}}", payment.generic_mana_cost)
+                    } else {
+                        payment.mana_cost.to_string()
+                    };
                     events.push(ev_log(format!(
-                        "P{player} pays {{{}}} during resolution.",
-                        payment.generic_mana_cost
+                        "P{player} pays {cost_label} during resolution."
                     )));
                     self.state.undoable_mana_abilities.clear();
                 }
@@ -331,17 +417,29 @@ impl GameEngine {
                     // Resolution is consequential even though the payment-time entries were
                     // rewound. Older float stays in the pool but is no longer eligible for Undo.
                     self.state.undoable_mana_abilities.clear();
-                    let counter_label = self
-                        .registry
-                        .get(&pending.item.card_id)
-                        .map(|definition| definition.name.clone())
-                        .unwrap_or_else(|| pending.item.card_id.clone());
-                    counter_stack_spell(
-                        self,
-                        payment.target_spell_id,
-                        &counter_label,
-                        &mut events,
-                    )?;
+                    if pending.resolution_branch.is_some() {
+                        let effect_index = pending
+                            .resume_effect_index
+                            .and_then(|next| next.checked_sub(1))
+                            .ok_or(EngineError::Illegal(
+                                "resolution branch continuation missing",
+                            ))?;
+                        let mut item = pending.item;
+                        item.resolution_branch_choices.insert(effect_index, None);
+                        return self.complete_parked_resolution(item, Some(effect_index), events);
+                    } else {
+                        let counter_label = self
+                            .registry
+                            .get(&pending.item.card_id)
+                            .map(|definition| definition.name.clone())
+                            .unwrap_or_else(|| pending.item.card_id.clone());
+                        counter_stack_spell(
+                            self,
+                            payment.target_spell_id,
+                            &counter_label,
+                            &mut events,
+                        )?;
+                    }
                 }
                 rv1::ResolutionChoiceDecision::Unspecified => {
                     self.state.pending_resolution = Some(pending);
@@ -349,12 +447,21 @@ impl GameEngine {
                         "mana payment choice requires pay or decline",
                     ));
                 }
+                rv1::ResolutionChoiceDecision::SelectBranch => {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "mana payment choice cannot select a branch",
+                    ));
+                }
             }
-            return self.complete_parked_resolution(
-                pending.item,
-                pending.resume_effect_index,
-                events,
-            );
+            let resume = if pending.resolution_branch.is_some() {
+                pending
+                    .resume_effect_index
+                    .and_then(|next| next.checked_sub(1))
+            } else {
+                pending.resume_effect_index
+            };
+            return self.complete_parked_resolution(pending.item, resume, events);
         }
         if decision != rv1::ResolutionChoiceDecision::Unspecified {
             self.state.pending_resolution = Some(pending);
@@ -421,6 +528,9 @@ impl GameEngine {
         // CR 701.17: sacrifice choice — target player picks which qualifying permanent to lose.
         if pending.custom_key == "__sacrifice_chosen" {
             return self.finish_sacrifice_chosen(pending, chosen);
+        }
+        if pending.custom_key == "__resolution_branch" {
+            return self.finish_resolution_branch_object(pending, chosen);
         }
         if pending.custom_key == "__entry_copy_source" {
             return self.finish_entry_copy_source_choice(pending, chosen);
@@ -895,6 +1005,8 @@ impl GameEngine {
                     ordered: true,
                     unique_names: false,
                     candidate_server_card_ids: Vec::new(),
+                    resolution_branches: Vec::new(),
+                    mana_cost: String::new(),
                     generic_mana_cost: 0,
                     payment_currently_legal: false,
                 },
@@ -919,6 +1031,288 @@ impl GameEngine {
         oids.iter()
             .map(|&oid| object_display_name(&self.state, self.registry, oid))
             .collect()
+    }
+
+    pub(super) fn resolution_cost_candidates(
+        &self,
+        player: PlayerId,
+        cost: &ResolutionCost,
+    ) -> Vec<ObjectId> {
+        let Some(index) = self.state.player_idx(player) else {
+            return Vec::new();
+        };
+        match cost {
+            ResolutionCost::Mana(_) => Vec::new(),
+            ResolutionCost::DiscardCard { filter } => self.state.players[index]
+                .hand
+                .iter()
+                .copied()
+                .filter(|oid| {
+                    resolution::library_card_matches_filter(
+                        &self.state,
+                        self.registry,
+                        *oid,
+                        filter.as_ref(),
+                    )
+                })
+                .collect(),
+            ResolutionCost::SacrificePermanent { filter } => self.state.players[index]
+                .battlefield
+                .iter()
+                .copied()
+                .filter(|oid| object_matches_mass_filter(self, *oid, filter))
+                .collect(),
+        }
+    }
+
+    fn select_resolution_branch(
+        &mut self,
+        mut pending: PendingResolution,
+        answer: &rv1::SubmitResolutionChoice,
+        decision: rv1::ResolutionChoiceDecision,
+    ) -> Result<RuledEventBatch, EngineError> {
+        if !answer.chosen_object_ids.is_empty() {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "resolution branch selection cannot include object ids",
+            ));
+        }
+        let branch_state = pending
+            .resolution_branch
+            .clone()
+            .ok_or(EngineError::Illegal(
+                "resolution branch continuation missing",
+            ))?;
+        let effect_index = pending
+            .resume_effect_index
+            .and_then(|next| next.checked_sub(1))
+            .ok_or(EngineError::Illegal(
+                "resolution branch effect index missing",
+            ))?;
+
+        if decision == rv1::ResolutionChoiceDecision::Decline {
+            if !branch_state.optional {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("resolution branch is not optional"));
+            }
+            pending
+                .item
+                .resolution_branch_choices
+                .insert(effect_index, None);
+            return self.complete_parked_resolution(
+                pending.item,
+                Some(effect_index),
+                vec![ev_log(format!(
+                    "P{} declines the optional resolution choice.",
+                    pending.deciding_player
+                ))],
+            );
+        }
+        if decision != rv1::ResolutionChoiceDecision::SelectBranch {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "resolution branch requires a branch selection or decline",
+            ));
+        }
+        let branch_index = answer.selected_branch_index as usize;
+        let Some(branch) = branch_state.branches.get(branch_index).cloned() else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("bad resolution branch index"));
+        };
+        let candidates = self.resolution_cost_candidates(pending.deciding_player, &branch.cost);
+        if !matches!(branch.cost, ResolutionCost::Mana(_)) && candidates.is_empty() {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "that resolution branch no longer has a legal payment",
+            ));
+        }
+        pending
+            .item
+            .resolution_branch_choices
+            .insert(effect_index, Some(branch_index));
+        if let Some(state) = pending.resolution_branch.as_mut() {
+            state.selected_branch = Some(branch_index);
+        }
+        let mut ev = vec![ev_log(format!(
+            "P{} chooses: {}.",
+            pending.deciding_player, branch.label
+        ))];
+        match branch.cost {
+            ResolutionCost::Mana(mana_cost) => {
+                pending.choice_kind = rv1::ChoiceKind::ManaPayment;
+                pending.prompt = format!("Pay {}?", mana_cost);
+                pending.mana_payment = Some(PendingManaPayment {
+                    target_spell_id: 0,
+                    generic_mana_cost: 0,
+                    mana_cost,
+                    undo_history_start: self.state.undoable_mana_abilities.len(),
+                });
+                self.state.pending_resolution = Some(pending);
+                ev.push(
+                    self.resolution_payment_choice_event()
+                        .expect("resolution branch payment remains parked"),
+                );
+            }
+            ResolutionCost::DiscardCard { .. } | ResolutionCost::SacrificePermanent { .. } => {
+                let is_discard = matches!(branch.cost, ResolutionCost::DiscardCard { .. });
+                pending.choice_kind = if is_discard {
+                    rv1::ChoiceKind::HandCards
+                } else {
+                    rv1::ChoiceKind::TargetObjects
+                };
+                pending.candidates = candidates.clone();
+                pending.min = u32::from(!branch_state.optional);
+                pending.max = 1;
+                pending.prompt = if is_discard {
+                    "Choose a card to discard, or decline.".into()
+                } else {
+                    "Choose a permanent to sacrifice, or decline.".into()
+                };
+                let candidate_card_ids = candidates
+                    .iter()
+                    .map(|oid| {
+                        self.state
+                            .objects
+                            .get(oid)
+                            .map(|object| object.card_id.clone())
+                            .unwrap_or_default()
+                    })
+                    .collect::<Vec<_>>();
+                ev.push(rv1::RuledEvent {
+                    ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                        rv1::ResolutionChoiceRequired {
+                            deciding_player_id: pending.deciding_player,
+                            source_object_id: pending.item.id,
+                            prompt_text: pending.prompt.clone(),
+                            choice_kind: pending.choice_kind as i32,
+                            candidate_object_ids: candidates.clone(),
+                            candidate_card_ids,
+                            min: pending.min,
+                            max: 1,
+                            ordered: false,
+                            candidate_names: self.object_names(&candidates),
+                            candidate_server_card_ids: Vec::new(),
+                            unique_names: false,
+                            generic_mana_cost: 0,
+                            payment_currently_legal: false,
+                            resolution_branches: Vec::new(),
+                            mana_cost: String::new(),
+                        },
+                    )),
+                });
+                self.state.pending_resolution = Some(pending);
+            }
+        }
+        Ok(finish_with_events(self, ev))
+    }
+
+    fn finish_resolution_branch_object(
+        &mut self,
+        mut pending: PendingResolution,
+        chosen: &[ObjectId],
+    ) -> Result<RuledEventBatch, EngineError> {
+        let branch_state = pending
+            .resolution_branch
+            .clone()
+            .ok_or(EngineError::Illegal(
+                "resolution branch continuation missing",
+            ))?;
+        let branch_index = branch_state
+            .selected_branch
+            .ok_or(EngineError::Illegal("resolution branch was not selected"))?;
+        let branch = branch_state
+            .branches
+            .get(branch_index)
+            .ok_or(EngineError::Illegal("resolution branch became stale"))?;
+        let effect_index = pending
+            .resume_effect_index
+            .and_then(|next| next.checked_sub(1))
+            .ok_or(EngineError::Illegal(
+                "resolution branch effect index missing",
+            ))?;
+        if chosen.is_empty() {
+            if !branch_state.optional {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "resolution branch payment is required",
+                ));
+            }
+            pending
+                .item
+                .resolution_branch_choices
+                .insert(effect_index, None);
+            return self.complete_parked_resolution(
+                pending.item,
+                Some(effect_index),
+                vec![ev_log(format!(
+                    "P{} declines the optional resolution choice.",
+                    pending.deciding_player
+                ))],
+            );
+        }
+        let current = self.resolution_cost_candidates(pending.deciding_player, &branch.cost);
+        if chosen.len() != 1 || !current.contains(&chosen[0]) {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("resolution payment choice is stale"));
+        }
+        let oid = chosen[0];
+        let name = object_display_name(&self.state, self.registry, oid);
+        let owner = self
+            .state
+            .objects
+            .get(&oid)
+            .map(|object| object.owner)
+            .ok_or(EngineError::Illegal("resolution payment object missing"))?;
+        let mut ev = Vec::new();
+        match &branch.cost {
+            ResolutionCost::DiscardCard { .. } => {
+                resolution::move_object_to_zone(
+                    &mut self.state,
+                    self.registry,
+                    oid,
+                    Zone::Graveyard,
+                    None,
+                )?;
+                ev.push(permanent_moved_event(
+                    &self.state,
+                    oid,
+                    owner,
+                    rv1::permanent_moved::Destination::Graveyard,
+                ));
+                ev.push(ev_log(format!(
+                    "P{} discards {name}.",
+                    pending.deciding_player
+                )));
+            }
+            ResolutionCost::SacrificePermanent { .. } => {
+                let source = self.trigger_source_snapshot(oid);
+                let was_creature = self
+                    .characteristics(oid)
+                    .is_some_and(|characteristics| characteristics.is_creature());
+                sacrifice_permanent(&mut self.state, self.registry, oid)?;
+                ev.push(permanent_moved_event(
+                    &self.state,
+                    oid,
+                    owner,
+                    rv1::permanent_moved::Destination::Graveyard,
+                ));
+                ev.push(ev_log(format!(
+                    "P{} sacrifices {name}.",
+                    pending.deciding_player
+                )));
+                if let Some(source) = source {
+                    self.fire_triggers(&[GameEvent::Dies {
+                        source,
+                        was_creature,
+                    }]);
+                }
+            }
+            ResolutionCost::Mana(_) => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("mana branch requires mana payment"));
+            }
+        }
+        self.complete_parked_resolution(pending.item, Some(effect_index), ev)
     }
 
     /// Close out a parked *primitive* resolution once its choice has been applied.
@@ -1011,6 +1405,8 @@ impl GameEngine {
                     unique_names: interrupt.unique_names,
                     // Populated by the server relay per-player; the engine never fills it.
                     candidate_server_card_ids: Vec::new(),
+                    resolution_branches: Vec::new(),
+                    mana_cost: String::new(),
                     generic_mana_cost: 0,
                     payment_currently_legal: false,
                 },
@@ -1029,6 +1425,7 @@ impl GameEngine {
             ordered: interrupt.ordered,
             unique_names: interrupt.unique_names,
             mana_payment: None,
+            resolution_branch: None,
             discard: None,
             prompt: interrupt.prompt,
             choice_kind: interrupt.choice_kind,

@@ -1650,6 +1650,7 @@ fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 decline: false,
+                selected_modes: Vec::new(),
                 targets: vec![TargetRef {
                     object_id: bears_oid,
                     damage_amount: 0,
@@ -1711,6 +1712,7 @@ fn choose_graveyard_return_target(engine: &mut GameEngine, object_id: u32) {
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                     decline: false,
+                    selected_modes: Vec::new(),
                     targets: vec![TargetRef {
                         object_id,
                         damage_amount: 0,
@@ -1776,6 +1778,7 @@ fn graveyard_card_type_salvager_targets_only_own_instants_and_sorceries() {
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                     decline: false,
+                    selected_modes: Vec::new(),
                     targets: vec![TargetRef {
                         object_id: artifact,
                         damage_amount: 0,

@@ -497,6 +497,8 @@ impl GameEngine {
                     ordered: false,
                     candidate_names,
                     candidate_server_card_ids: Vec::new(),
+                    resolution_branches: Vec::new(),
+                    mana_cost: String::new(),
                     unique_names: false,
                     generic_mana_cost: 0,
                     payment_currently_legal: false,
@@ -521,6 +523,7 @@ impl GameEngine {
             choice_kind: rv1::ChoiceKind::ReplacementEffect,
             unique_names: false,
             mana_payment: None,
+            resolution_branch: None,
             discard: None,
             copy_source_object_id: 0,
             search_destination: SearchDestination::Hand,
@@ -573,6 +576,7 @@ impl GameEngine {
             flashback: false,
             chosen_x: 0,
             chosen_modes: Vec::new(),
+            resolution_branch_choices: Default::default(),
             trigger_context: TriggerContext::default(),
         };
         let result = self.process_or_park_damage_event(&item, event, source_has_deathtouch, events);
@@ -735,6 +739,7 @@ impl GameEngine {
             flashback: false,
             chosen_x: 0,
             chosen_modes: Vec::new(),
+            resolution_branch_choices: Default::default(),
             trigger_context: TriggerContext::default(),
         };
         let completed = self.process_or_park_damage_batch(&item, damage, events);

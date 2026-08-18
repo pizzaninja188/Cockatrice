@@ -1126,6 +1126,7 @@ pub(crate) fn submit_resolution_choice(chosen: Vec<u32>) -> RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
             chosen_object_ids: chosen,
             decision: 0,
+            selected_branch_index: 0,
         })),
     }
 }
@@ -1135,6 +1136,7 @@ pub(crate) fn submit_resolution_decision(decision: rv1::ResolutionChoiceDecision
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
             chosen_object_ids: Vec::new(),
             decision: decision as i32,
+            selected_branch_index: 0,
         })),
     }
 }

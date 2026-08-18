@@ -308,6 +308,55 @@ TEST_F(GamePromptWidgetTest, ResolutionPaymentUsesNormalCostControlsAndSuppresse
     EXPECT_EQ(declineSpy.count(), 1);
 }
 
+TEST_F(GamePromptWidgetTest, ChoiceOptionsRenderAsOrdinaryLabeledButtons)
+{
+    QSignalSpy optionSpy(widget.get(), &GamePromptWidget::ruledChoiceOptionRequested);
+    QSignalSpy declineSpy(widget.get(), &GamePromptWidget::declineClickChoiceRequested);
+    GamePromptWidget::RuledPromptState state;
+    state.mode = PromptMode::ChoiceOptions;
+    state.text = "Choose one.";
+    state.canDecline = true;
+    state.choiceOptions = {{0, "Gain 4 life", true}, {1, "Put a +1/+1 counter on it", false}};
+    widget->setRuledPromptState(state);
+
+    auto *life = btn("ruledChoiceOptionButton_0");
+    auto *counter = btn("ruledChoiceOptionButton_1");
+    ASSERT_NE(life, nullptr);
+    ASSERT_NE(counter, nullptr);
+    EXPECT_FALSE(life->isHidden());
+    EXPECT_TRUE(life->isEnabled());
+    EXPECT_FALSE(counter->isEnabled());
+    EXPECT_TRUE(btn("passPriorityButton")->isHidden());
+    EXPECT_FALSE(btn("declineClickChoiceButton")->isHidden());
+
+    life->click();
+    ASSERT_EQ(optionSpy.count(), 1);
+    EXPECT_EQ(optionSpy.takeFirst().at(0).toInt(), 0);
+    btn("declineClickChoiceButton")->click();
+    EXPECT_EQ(declineSpy.count(), 1);
+}
+
+TEST_F(GamePromptWidgetTest, ResolutionPaymentPayButtonFollowsEngineAffordability)
+{
+    QSignalSpy paySpy(widget.get(), &GamePromptWidget::ruledResolutionPaymentPayRequested);
+    GamePromptWidget::RuledPromptState state;
+    state.mode = PromptMode::ResolutionPayment;
+    state.text = "Pay {2}{R}.";
+    state.paymentCurrentlyLegal = false;
+    widget->setRuledPromptState(state);
+    auto *pay = btn("resolutionPaymentPayButton");
+    ASSERT_NE(pay, nullptr);
+    EXPECT_FALSE(pay->isHidden());
+    EXPECT_FALSE(pay->isEnabled());
+
+    state.paymentCurrentlyLegal = true;
+    widget->setRuledPromptState(state);
+    pay = btn("resolutionPaymentPayButton");
+    ASSERT_TRUE(pay->isEnabled());
+    pay->click();
+    EXPECT_EQ(paySpy.count(), 1);
+}
+
 TEST_F(GamePromptWidgetTest, WaitingForResolutionChoiceSuppressesEveryActionControl)
 {
     widget->setLocalPlayerHasPriority(true);

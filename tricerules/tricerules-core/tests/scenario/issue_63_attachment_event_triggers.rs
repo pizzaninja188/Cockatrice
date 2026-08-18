@@ -11,6 +11,7 @@ fn choose_trigger_target(target: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
             decline: false,
+            selected_modes: Vec::new(),
             targets: target_object(target),
         })),
     }

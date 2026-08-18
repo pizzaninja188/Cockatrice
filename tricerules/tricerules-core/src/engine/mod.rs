@@ -4,7 +4,7 @@ use crate::custom::{self, ResolutionChoice, ResolutionCtx, ResolutionStep};
 use crate::state::{
     ActiveDamagePrevention, ActiveDelayedTrigger, AdventureCastPermission, AffectedScope,
     AttachmentRecipient, BattlefieldEntryCompletion, BattlefieldEntryEvent, BlockingChoice,
-    ChosenSpellMode, CombatState, ContinuousEffect, CopiableValues, DamagePreventionAmount,
+    ChosenMode, CombatState, ContinuousEffect, CopiableValues, DamagePreventionAmount,
     DamagePreventionProhibition, DamagePreventionScope, EntryReplacementApplication,
     EntryReplacementEffectId, GameObject, GameState, ObjectId, OpeningSequence,
     PendingBattlefieldEntry, PendingDiscard, PendingManaPayment, PendingResolution, PendingTrigger,
@@ -28,7 +28,7 @@ use tricerules_cards::primitives::{
     DiscardChooser, DrawDiscardOrder, EffectDuration, EffectSubject, EntersTappedAffected, Evasion,
     FaceChangeAction, GameCondition, InterveningIf, Keyword, LibraryPlacement, LifeAmount,
     ManaAmount, ManaSpendFilter, PermanentTypeFilter, PlayerRecipient, PowerComparison,
-    PreventionAmountBasis, RelativePlayerSet, ReturnController, SearchDestination,
+    PreventionAmountBasis, RelativePlayerSet, ResolutionCost, ReturnController, SearchDestination,
     SpellCostModifier, SpellEffectKind, StaticAbilityDef, StaticDamagePreventionAmount,
     TargetController, TargetFilter, TargetKind, TargetingCostAction, TargetingCostProtected,
     TargetingSourceFilter, TriggerCondition, TriggeredAbilityDef, TriggeredCardReference,
@@ -1298,7 +1298,7 @@ impl GameEngine {
             Some(Cmd::ActivateAbility(aa)) => self.activate_ability(player, aa),
             Some(Cmd::UndoManaAbility(_)) => self.undo_mana_ability(player),
             Some(Cmd::ChooseTriggerTarget(ctt)) => {
-                self.choose_trigger_target(player, &ctt.targets, ctt.decline)
+                self.choose_trigger_target(player, &ctt.targets, &ctt.selected_modes, ctt.decline)
             }
             Some(Cmd::SubmitResolutionChoice(s)) => self.submit_resolution_choice(player, s),
             Some(Cmd::SubmitTriggerOrder(s)) => {

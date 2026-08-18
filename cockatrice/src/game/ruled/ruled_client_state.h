@@ -119,6 +119,15 @@ struct RuledSpellTargetData : RuledTargetGroupData
     QVector<RuledTargetingCostApplication> targetingCostApplications;
 };
 
+struct RuledChoiceOption
+{
+    int index = -1;
+    QString label;
+    bool enabled = false;
+    bool needsTarget = false;
+    RuledSpellTargetData targets;
+};
+
 enum class RuledCostChoiceZone : int
 {
     Hand,
@@ -294,6 +303,8 @@ public:
             /// CR 603.3d: a triggered ability going on the stack needs its target chosen.
             /// Answered with ChooseTriggerTarget, not SubmitResolutionChoice.
             TriggerTarget,
+            /// CR 603.3c: choose a triggered ability's mode before putting it on the stack.
+            TriggerMode,
             /// CR 707.10c: the controller of a spell copy may redirect its targets.
             CopyTarget,
             /// CR 614.12 / 707.5: an entering permanent chooses an untargeted copy source.
@@ -304,6 +315,8 @@ public:
             ResolutionPick,
             /// CR 608.2g: a resolving effect offers a generic-mana payment.
             ResolutionPayment,
+            /// An engine-authored resolution branch rendered as labeled prompt buttons.
+            ResolutionBranch,
             /// CR 603.3b: the order this player's simultaneous triggers go on the stack.
             /// Answered with SubmitTriggerOrder; rendered in its own window, not on the board.
             TriggerOrder,
@@ -340,6 +353,15 @@ public:
         // --- ResolutionPayment payload -----------------------------------------------
         int genericManaCost = 0;
         bool paymentCurrentlyLegal = false;
+        QString manaCost;
+
+        // --- Labeled prompt options ---------------------------------------------------
+        QVector<RuledChoiceOption> choiceOptions;
+        int selectedTriggerMode = -1;
+        /// Root TriggerNeedsTarget candidates for a non-modal trigger. LegalActions does not own
+        /// a resolving trigger's one-shot target set, so the dispatcher restores this after the
+        /// batch's ordinary ability-target table is applied.
+        RuledSpellTargetData triggerTargets;
 
         // --- TriggerOrder payload -----------------------------------------------------
         /// The still-unplaced triggers, in the engine's APNAP order as offered. Re-sent (shorter)
@@ -1116,6 +1138,17 @@ public:
     /// Decline the current optional click choice. Trigger targets use ChooseTriggerTarget; copy
     /// sources use an empty SubmitResolutionChoice.
     void declinePendingClickChoice();
+    [[nodiscard]] bool hasPendingChoiceOptions() const
+    {
+        return hasPendingChoiceOfKind(ChoiceKind::TriggerMode) ||
+               hasPendingChoiceOfKind(ChoiceKind::ResolutionBranch);
+    }
+    [[nodiscard]] QVector<RuledChoiceOption> pendingChoiceOptions() const
+    {
+        return hasPendingChoiceOptions() ? pendingChoice->choiceOptions : QVector<RuledChoiceOption>{};
+    }
+    void submitPendingChoiceOption(int optionIndex);
+    void appendPendingTriggerMode(ruled::v1::ChooseTriggerTarget *command) const;
 
     [[nodiscard]] bool hasPendingTriggerTarget() const
     {
@@ -1203,6 +1236,10 @@ public:
     [[nodiscard]] bool isWaitingForResolutionChoice() const
     {
         return resolutionChoiceWaitingPlayerId >= 0;
+    }
+    [[nodiscard]] QString resolutionPaymentManaCost() const
+    {
+        return isResolutionPaymentActive() ? pendingChoice->manaCost : QString{};
     }
     [[nodiscard]] int resolutionChoiceWaitingPlayer() const
     {

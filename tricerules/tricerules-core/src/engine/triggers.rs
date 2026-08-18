@@ -1118,6 +1118,42 @@ impl GameEngine {
             may,
         } = trigger;
         let needs_target = ability.effect.iter().any(spell_effect_kind_needs_target);
+        let modal_modes = ability.modal.as_ref().map(|modal| {
+            modal
+                .modes
+                .iter()
+                .enumerate()
+                .map(|(mode_index, mode)| {
+                    let mode_needs_target = mode.effects.iter().any(spell_effect_kind_needs_target);
+                    let targets = compute_spell_targets_with_context(
+                        self,
+                        controller,
+                        TargetSourceIdentity::captured(source_id, source_zone_change),
+                        &mode.effects,
+                        mode.targeting.as_ref(),
+                        trigger_context,
+                        None,
+                    );
+                    let selectable = !mode_needs_target
+                        || targets.groups.iter().all(|group| {
+                            let players = u32::from(group.can_target_self)
+                                + u32::from(group.can_target_opponent);
+                            group.min
+                                <= group.valid_permanent_ids.len() as u32
+                                    + group.valid_stack_ids.len() as u32
+                                    + group.valid_graveyard_ids.len() as u32
+                                    + players
+                        });
+                    rv1::LegalSpellMode {
+                        mode_index: mode_index as u32,
+                        label: mode.label.clone(),
+                        selectable,
+                        needs_target: mode_needs_target,
+                        targets: Some(targets),
+                    }
+                })
+                .collect::<Vec<_>>()
+        });
         let legal_targets = if needs_target {
             Some(compute_spell_targets_with_context(
                 self,
@@ -1143,7 +1179,17 @@ impl GameEngine {
             })
         });
 
-        if needs_target && (has_legal_target || may) {
+        let needs_choice = needs_target || modal_modes.is_some();
+        let (min_modes, max_modes) = ability
+            .modal
+            .as_ref()
+            .map_or((0, 0), |modal| (modal.min_modes, modal.max_modes));
+        let modal_has_enough_choices = ability.modal.as_ref().is_none_or(|modal| {
+            modal_modes.as_ref().is_some_and(|modes| {
+                modes.iter().filter(|mode| mode.selectable).count() >= modal.min_modes as usize
+            })
+        });
+        if needs_choice && ((has_legal_target && modal_has_enough_choices) || may) {
             let was_empty = self.state.pending_triggers.is_empty();
             self.state.pending_triggers.push_back(PendingTrigger {
                 object_id: virtual_id,
@@ -1169,14 +1215,17 @@ impl GameEngine {
                             controller_player_id: controller,
                             may_decline: may,
                             targets: legal_targets.clone(),
+                            min_modes,
+                            max_modes,
+                            modes: modal_modes.unwrap_or_default(),
                         },
                     )),
                 });
                 events.push(ev_log(format!(
-                    "Triggered: {card_name} — choose a target for: {ability_text}"
+                    "Triggered: {card_name} — choose for: {ability_text}"
                 )));
             }
-        } else if needs_target {
+        } else if needs_choice {
             // CR 603.3d: a targeted trigger with no legal target is removed from the stack. An
             // optional trigger remains pending so its controller can explicitly decline it.
         } else {
@@ -1197,6 +1246,7 @@ impl GameEngine {
                 chosen_x: 0,
                 face_index: source_face_index,
                 chosen_modes: vec![],
+                resolution_branch_choices: Default::default(),
                 trigger_context,
                 flashback: false,
             });
@@ -1405,6 +1455,7 @@ mod tests {
                     effect: vec![SpellEffectKind::Draw {
                         count: Amount::Fixed(1),
                     }],
+                    modal: None,
                     targeting: None,
                     text: "Whenever enchanted player is attacked, draw a card.".into(),
                     may: false,

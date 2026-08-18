@@ -25,10 +25,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
 
 ## Open
 
-- [ ] #59 [feature] Resolution-time modes, optional payments, and costs
-  - Details: Extend resumable resolution choices with reusable mode selection and optional nonmana payment/cost branches. Calibration evidence: Trufflesnout, Sparktongue Dragon, and Crypt Lurker. Issue #88 shipped the shared generic-mana pay/decline foundation, including mana abilities during resolution, normal mana-counter payment, automatic acceptance when fully paid, and rollback on decline. Legal choice payloads must describe the remaining branches and required objects, stale submissions must be rejected atomically, and declining an optional branch must remain legal.
-  - Priority: Low
-
 - [ ] #72 [feature] Planeswalker and battle objects as rules targets
   - Details: Add the missing nonplayer object kinds and legal target vocabulary so damage and destroy effects can include planeswalkers and battles where Oracle permits. Calibration evidence: Chandra's Magmutt, Finishing Blow, Goblin Arsonist, Pitchburn Devils, Scorch Spitter, Shock, Sorcerer of the Fang, and Viashino Pyromancer. This requires engine-owned card types, battlefield identity, damage/defeat state-based actions, proto/relay/client representation, and end-to-end target selection; do not approximate these objects as players.
   - Priority: Low

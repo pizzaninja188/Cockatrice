@@ -445,6 +445,7 @@ fn dev_entry_item(controller: PlayerId, object_id: ObjectId, card_id: &str) -> S
         flashback: false,
         chosen_x: 0,
         chosen_modes: Vec::new(),
+        resolution_branch_choices: Default::default(),
         trigger_context: TriggerContext::default(),
     }
 }

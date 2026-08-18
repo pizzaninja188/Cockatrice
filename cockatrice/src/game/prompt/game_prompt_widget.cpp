@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QPushButton>
 #include <QVBoxLayout>
+#include <QtAlgorithms>
 
 namespace {
 QString extractPrimaryPrompt(const QString &ruledLog)
@@ -166,7 +167,18 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     connect(resolutionPaymentDeclineButton, &QPushButton::clicked, this,
             &GamePromptWidget::ruledResolutionPaymentDeclineRequested);
     resolutionPaymentRow->addWidget(resolutionPaymentDeclineButton);
+    resolutionPaymentPayButton = new QPushButton(this);
+    resolutionPaymentPayButton->setObjectName("resolutionPaymentPayButton");
+    resolutionPaymentPayButton->hide();
+    connect(resolutionPaymentPayButton, &QPushButton::clicked, this,
+            &GamePromptWidget::ruledResolutionPaymentPayRequested);
+    resolutionPaymentRow->addWidget(resolutionPaymentPayButton);
     layout->addLayout(resolutionPaymentRow);
+
+    choiceOptionsRow = new QHBoxLayout;
+    choiceOptionsRow->setContentsMargins(0, 0, 0, 0);
+    choiceOptionsRow->setSpacing(4);
+    layout->addLayout(choiceOptionsRow);
 
     passPriorityButton = new QPushButton(this);
     passPriorityButton->setObjectName("passPriorityButton");
@@ -262,6 +274,7 @@ void GamePromptWidget::retranslateUi()
     }
     resolutionHandPickConfirmButton->setText(tr("Confirm"));
     resolutionPaymentDeclineButton->setText(tr("Decline"));
+    resolutionPaymentPayButton->setText(tr("Pay"));
 }
 
 // ---------------------------------------------------------------------------------------
@@ -277,6 +290,7 @@ GamePromptWidget::PromptMode GamePromptWidget::effectiveMode() const
         case PromptMode::UpdatingGame:
         case PromptMode::ResolutionPick:
         case PromptMode::ResolutionPayment:
+        case PromptMode::ChoiceOptions:
         case PromptMode::WaitingForChoice:
         // The engine is hard-blocked on the ordering answer, so a leftover mid-cast targeting
         // state cannot legitimately coexist with it — this takes over.
@@ -301,6 +315,17 @@ GamePromptWidget::PromptMode GamePromptWidget::effectiveMode() const
 void GamePromptWidget::setRuledPromptState(RuledPromptState newState)
 {
     promptState = std::move(newState);
+    qDeleteAll(choiceOptionButtons);
+    choiceOptionButtons.clear();
+    for (const auto &option : promptState.choiceOptions) {
+        auto *button = new QPushButton(option.label, this);
+        button->setObjectName(QStringLiteral("ruledChoiceOptionButton_%1").arg(option.index));
+        button->setEnabled(option.enabled);
+        connect(button, &QPushButton::clicked, this,
+                [this, index = option.index] { emit ruledChoiceOptionRequested(index); });
+        choiceOptionsRow->addWidget(button);
+        choiceOptionButtons.append(button);
+    }
     // The seat buttons carry the seat ids in their click handlers, so rewire them on entry.
     openingPickSeatButton1->disconnect();
     openingPickSeatButton2->disconnect();
@@ -350,6 +375,7 @@ void GamePromptWidget::applyPromptStateText()
         case PromptMode::ClickChoice:
         case PromptMode::ResolutionPick:
         case PromptMode::ResolutionPayment:
+        case PromptMode::ChoiceOptions:
         case PromptMode::WaitingForChoice:
         case PromptMode::TriggerOrder:
             // Engine-authored: the caller passed the prompt the engine wrote.
@@ -571,6 +597,7 @@ void GamePromptWidget::hideActionAndCombatButtons()
     confirmTargetsButton->setVisible(false);
     undoLandTapButton->setVisible(false);
     resolutionPaymentDeclineButton->setVisible(false);
+    resolutionPaymentPayButton->setVisible(false);
 }
 
 void GamePromptWidget::updateCombatButtonsVisibility()
@@ -590,7 +617,13 @@ void GamePromptWidget::updateCombatButtonsVisibility()
                                         promptState.selected == promptState.required);
     resolutionHandPickConfirmButton->setVisible(mode == PromptMode::ResolutionPick);
     resolutionPaymentDeclineButton->setVisible(mode == PromptMode::ResolutionPayment);
-    declineClickChoiceButton->setVisible(mode == PromptMode::ClickChoice && promptState.canDecline);
+    resolutionPaymentPayButton->setVisible(mode == PromptMode::ResolutionPayment);
+    resolutionPaymentPayButton->setEnabled(promptState.paymentCurrentlyLegal);
+    for (auto *button : choiceOptionButtons) {
+        button->setVisible(mode == PromptMode::ChoiceOptions);
+    }
+    declineClickChoiceButton->setVisible(
+        (mode == PromptMode::ClickChoice || mode == PromptMode::ChoiceOptions) && promptState.canDecline);
     if (mode == PromptMode::ResolutionPick) {
         resolutionHandPickConfirmButton->setEnabled(promptState.selected >= promptState.required);
     }
@@ -598,8 +631,11 @@ void GamePromptWidget::updateCombatButtonsVisibility()
     // Every take-over mode suppresses the priority / combat / targeting controls.
     if (mode != PromptMode::Normal && mode != PromptMode::Targeting) {
         hideActionAndCombatButtons();
-        declineClickChoiceButton->setVisible(mode == PromptMode::ClickChoice && promptState.canDecline);
+        declineClickChoiceButton->setVisible(
+            (mode == PromptMode::ClickChoice || mode == PromptMode::ChoiceOptions) && promptState.canDecline);
         resolutionPaymentDeclineButton->setVisible(mode == PromptMode::ResolutionPayment);
+        resolutionPaymentPayButton->setVisible(mode == PromptMode::ResolutionPayment);
+        resolutionPaymentPayButton->setEnabled(promptState.paymentCurrentlyLegal);
         undoLandTapButton->setVisible(mode == PromptMode::ResolutionPayment && landTapUndoAvailable);
         return;
     }

@@ -4897,6 +4897,7 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
             return true;
         }
         ruled::v1::RuledCommand cmd;
+        handler->appendPendingTriggerMode(cmd.mutable_choose_trigger_target());
         auto *target = cmd.mutable_choose_trigger_target()->add_targets();
         target->set_object_id(targetOid);
         target->set_group_index(0);
@@ -5078,6 +5079,7 @@ bool PlayerActions::tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer)
             return true;
         }
         ruled::v1::RuledCommand cmd;
+        handler->appendPendingTriggerMode(cmd.mutable_choose_trigger_target());
         auto *target = cmd.mutable_choose_trigger_target()->add_targets();
         target->set_object_id(targetOid);
         target->set_group_index(0);

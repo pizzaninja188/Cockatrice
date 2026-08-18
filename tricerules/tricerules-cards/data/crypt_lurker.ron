@@ -1,0 +1,29 @@
+(
+  id: "crypt_lurker",
+  name: "Crypt Lurker",
+  mana_cost: "{3}{B}",
+  types: ["Creature", "Horror"],
+  power: 3,
+  toughness: 4,
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [ChooseResolutionBranch(
+        optional: true,
+        branches: [
+          (
+            label: "Sacrifice a creature",
+            cost: SacrificePermanent(filter: (kind: Creature, controller: You)),
+            effects: [Draw(count: 1)],
+          ),
+          (
+            label: "Discard a creature card",
+            cost: DiscardCard(filter: Some(Creature)),
+            effects: [Draw(count: 1)],
+          ),
+        ],
+      )],
+      text: "When this creature enters, you may sacrifice a creature or discard a creature card. If you do, draw a card.",
+    ),
+  ],
+)

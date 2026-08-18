@@ -1101,6 +1101,8 @@ fn validate_effect_targets(
         // acts on are the top of the controller's own library, decided at resolution.
         | SpellEffectKind::SearchLibrary { .. }
         | SpellEffectKind::Scry { .. }
+        | SpellEffectKind::ChooseResolutionBranch { .. }
+        | SpellEffectKind::CreateReflexiveTrigger { .. }
         | SpellEffectKind::ChangeSourceFace { .. }
         | SpellEffectKind::ReturnTriggeredCardFromGraveyard { .. }
         | SpellEffectKind::None => {

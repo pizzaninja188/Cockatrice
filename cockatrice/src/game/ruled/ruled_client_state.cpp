@@ -414,18 +414,85 @@ void RuledClientState::declinePendingClickChoice()
         return;
     }
     const ChoiceKind kind = pendingChoice->kind;
-    if (kind == ChoiceKind::CopySource) {
+    if (kind == ChoiceKind::CopySource || kind == ChoiceKind::CopyTarget ||
+        kind == ChoiceKind::ResolutionPick) {
         clearPendingChoiceOfKind(kind);
         sendResolutionChoice({});
         return;
     }
-    if (kind != ChoiceKind::TriggerTarget) {
+    if (kind == ChoiceKind::ResolutionBranch) {
+        const RuledPendingChoice restore = *pendingChoice;
+        clearPendingChoiceOfKind(kind);
+        ruled::v1::RuledCommand command;
+        command.mutable_submit_resolution_choice()->set_decision(
+            ruled::v1::RESOLUTION_CHOICE_DECISION_DECLINE);
+        host->sendRuledCommandExpectingAck(command, [this, restore](bool accepted) {
+            if (!accepted && !pendingChoice.has_value()) {
+                setPendingChoice(restore);
+                emit combatStateChanged();
+            }
+        });
+        return;
+    }
+    if (kind != ChoiceKind::TriggerTarget && kind != ChoiceKind::TriggerMode) {
         return;
     }
     ruled::v1::RuledCommand command;
     command.mutable_choose_trigger_target()->set_decline(true);
     clearPendingChoiceOfKind(kind);
     host->sendRuledCommand(command);
+}
+
+void RuledClientState::submitPendingChoiceOption(int optionIndex)
+{
+    if (!hasPendingChoiceOptions()) {
+        return;
+    }
+    const auto it = std::find_if(pendingChoice->choiceOptions.cbegin(), pendingChoice->choiceOptions.cend(),
+                                 [optionIndex](const RuledChoiceOption &option) {
+                                     return option.index == optionIndex;
+                                 });
+    if (it == pendingChoice->choiceOptions.cend() || !it->enabled) {
+        return;
+    }
+    if (pendingChoice->kind == ChoiceKind::TriggerMode) {
+        if (it->needsTarget) {
+            pendingChoice->kind = ChoiceKind::TriggerTarget;
+            pendingChoice->selectedTriggerMode = optionIndex;
+            validTargetsByAbility.insert(abilityTargetKey(lastTriggerSourceOid, static_cast<int>(lastTriggerAbilityIndex)),
+                                         it->targets);
+            emit combatStateChanged();
+            return;
+        }
+        ruled::v1::RuledCommand command;
+        auto *mode = command.mutable_choose_trigger_target()->add_selected_modes();
+        mode->set_mode_index(static_cast<quint32>(optionIndex));
+        clearPendingChoiceOfKind(ChoiceKind::TriggerMode);
+        host->sendRuledCommand(command);
+        return;
+    }
+
+    const RuledPendingChoice restore = *pendingChoice;
+    clearPendingChoiceOfKind(ChoiceKind::ResolutionBranch);
+    ruled::v1::RuledCommand command;
+    auto *submission = command.mutable_submit_resolution_choice();
+    submission->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_SELECT_BRANCH);
+    submission->set_selected_branch_index(static_cast<quint32>(optionIndex));
+    host->sendRuledCommandExpectingAck(command, [this, restore](bool accepted) {
+        if (!accepted && !pendingChoice.has_value()) {
+            setPendingChoice(restore);
+            emit combatStateChanged();
+        }
+    });
+}
+
+void RuledClientState::appendPendingTriggerMode(ruled::v1::ChooseTriggerTarget *command) const
+{
+    if (!command || !hasPendingTriggerTarget() || pendingChoice->selectedTriggerMode < 0) {
+        return;
+    }
+    command->add_selected_modes()->set_mode_index(
+        static_cast<quint32>(pendingChoice->selectedTriggerMode));
 }
 
 // ---------------------------------------------------------------------------------------

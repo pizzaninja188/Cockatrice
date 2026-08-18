@@ -5,6 +5,7 @@ fn choose_trigger_target(target_object_id: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
             decline: false,
+            selected_modes: Vec::new(),
             targets: vec![TargetRef {
                 object_id: target_object_id,
                 damage_amount: 0,

@@ -305,6 +305,7 @@ fn targeted_trigger_resolves_after_target_chosen() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 decline: false,
+                selected_modes: Vec::new(),
                 targets: trigger_targets(bears_oid),
             })),
         },
@@ -538,6 +539,7 @@ fn blood_artist_triggers_on_opponent_creature_dying() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 decline: false,
+                selected_modes: Vec::new(),
                 targets: trigger_targets(p1_id as u32),
             })),
         },
@@ -606,6 +608,7 @@ fn blood_artist_triggers_on_own_death() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 decline: false,
+                selected_modes: Vec::new(),
                 targets: trigger_targets(p1_id as u32),
             })),
         },
@@ -660,6 +663,7 @@ fn blood_artist_triggers_on_own_creature_dying() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 decline: false,
+                selected_modes: Vec::new(),
                 targets: trigger_targets(p1_id as u32),
             })),
         },
@@ -721,6 +725,7 @@ fn two_blood_artists_both_trigger_on_one_death() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 decline: false,
+                selected_modes: Vec::new(),
                 targets: trigger_targets(p1_id as u32),
             })),
         },
@@ -732,6 +737,7 @@ fn two_blood_artists_both_trigger_on_one_death() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 decline: false,
+                selected_modes: Vec::new(),
                 targets: trigger_targets(p1_id as u32),
             })),
         },
@@ -1613,6 +1619,7 @@ fn each_picked_trigger_is_targeted_before_the_next_is_chosen() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 decline: false,
+                selected_modes: Vec::new(),
                 targets: trigger_targets(p1_id as u32),
             })),
         },
@@ -1628,6 +1635,7 @@ fn each_picked_trigger_is_targeted_before_the_next_is_chosen() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 decline: false,
+                selected_modes: Vec::new(),
                 targets: trigger_targets(p1_id as u32),
             })),
         },
@@ -1971,6 +1979,7 @@ fn stack_pushed_distinguishes_triggered_from_activated_abilities() {
             &RuledCommand {
                 cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                     decline: false,
+                    selected_modes: Vec::new(),
                     targets: trigger_targets(p1_id as u32),
                 })),
             },
@@ -2028,6 +2037,7 @@ fn rejected_trigger_target_leaves_the_trigger_pending() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 decline: false,
+                selected_modes: Vec::new(),
                 targets: trigger_targets(on_battlefield),
             })),
         },
@@ -2045,6 +2055,7 @@ fn rejected_trigger_target_leaves_the_trigger_pending() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 decline: true,
+                selected_modes: Vec::new(),
                 targets: vec![],
             })),
         },
@@ -2089,6 +2100,7 @@ fn trigger_target_can_be_retried_after_a_rejection() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 decline: false,
+                selected_modes: Vec::new(),
                 targets: trigger_targets(on_battlefield),
             })),
         },
@@ -2098,6 +2110,7 @@ fn trigger_target_can_be_retried_after_a_rejection() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 decline: false,
+                selected_modes: Vec::new(),
                 targets: trigger_targets(bears),
             })),
         },
@@ -2312,6 +2325,7 @@ fn issue_47_targeted_trigger_preserves_existing_placement_flow() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 decline: false,
+                selected_modes: Vec::new(),
                 targets: trigger_targets(giant),
             })),
         },
@@ -2519,6 +2533,7 @@ fn issue_49_cavalry_drillmaster_applies_both_effects_to_one_trigger_target() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 decline: false,
+                selected_modes: Vec::new(),
                 targets: trigger_targets(bears),
             })),
         },
@@ -2553,6 +2568,7 @@ fn issue_49_skymarch_bloodletter_rejects_its_controller_as_target() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 decline: false,
+                selected_modes: Vec::new(),
                 targets: trigger_targets(controller),
             })),
         },
@@ -2569,6 +2585,7 @@ fn issue_49_skymarch_bloodletter_rejects_its_controller_as_target() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 decline: false,
+                selected_modes: Vec::new(),
                 targets: trigger_targets(opponent),
             })),
         },
@@ -2615,6 +2632,7 @@ fn issue_49_steadfast_sentry_cannot_target_a_creature_that_died_with_it() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 decline: false,
+                selected_modes: Vec::new(),
                 targets: trigger_targets(died_too),
             })),
         },
@@ -2630,6 +2648,7 @@ fn issue_49_steadfast_sentry_cannot_target_a_creature_that_died_with_it() {
         &RuledCommand {
             cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
                 decline: false,
+                selected_modes: Vec::new(),
                 targets: trigger_targets(survivor),
             })),
         },

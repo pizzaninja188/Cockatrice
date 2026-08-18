@@ -1,0 +1,28 @@
+(
+  id: "sparktongue_dragon",
+  name: "Sparktongue Dragon",
+  mana_cost: "{3}{R}{R}",
+  types: ["Creature", "Dragon"],
+  power: 3,
+  toughness: 3,
+  keywords: [Flying],
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [ChooseResolutionBranch(
+        optional: true,
+        branches: [
+          (
+            label: "Pay {2}{R}",
+            cost: Mana("{2}{R}"),
+            effects: [CreateReflexiveTrigger(ability: (
+              effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
+              text: "When you do, Sparktongue Dragon deals 3 damage to any target.",
+            ))],
+          ),
+        ],
+      )],
+      text: "When this creature enters, you may pay {2}{R}. When you do, it deals 3 damage to any target.",
+    ),
+  ],
+)

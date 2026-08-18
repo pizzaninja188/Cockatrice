@@ -423,6 +423,10 @@ void TabGame::connectToGameEventHandler()
                 localPlayer->getPlayerActions()->declineRuledResolutionPayment();
             }
         });
+        connect(gamePromptWidget, &GamePromptWidget::ruledResolutionPaymentPayRequested,
+                game->getGameEventHandler()->ruled(), &RuledClientState::payResolutionMana);
+        connect(gamePromptWidget, &GamePromptWidget::ruledChoiceOptionRequested,
+                game->getGameEventHandler()->ruled(), &RuledClientState::submitPendingChoiceOption);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::resolutionPaymentSubmissionFinished, this,
                 [this](bool accepted) {
                     const int localId = game->getPlayerManager()->getLocalPlayerId();
@@ -690,12 +694,25 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.text = localActions->pendingRuledAbilityCostPromptText();
     } else if (h->isResolutionPaymentActive()) {
         state.mode = PromptMode::ResolutionPayment;
+        const QString coloredCost = h->resolutionPaymentManaCost();
         const int remaining = localActions ? localActions->ruledResolutionPaymentRemaining()
                                            : h->resolutionPaymentGenericCost();
-        state.text = tr("Pay mana: {%1} remaining (click mana counters or activate mana abilities).")
-                         .arg(remaining);
+        state.text = coloredCost.isEmpty()
+                         ? tr("Pay mana: {%1} remaining (click mana counters or activate mana abilities).")
+                               .arg(remaining)
+                         : tr("Pay %1 (activate mana abilities, then click Pay).").arg(coloredCost);
         state.genericManaCost = remaining;
         state.paymentCurrentlyLegal = h->resolutionPaymentCurrentlyLegal();
+    } else if (h->hasPendingChoiceOptions()) {
+        state.mode = PromptMode::ChoiceOptions;
+        const ChoiceKind kind = h->hasPendingChoiceOfKind(ChoiceKind::TriggerMode)
+                                    ? ChoiceKind::TriggerMode
+                                    : ChoiceKind::ResolutionBranch;
+        state.text = h->pendingChoicePromptText(kind);
+        state.canDecline = h->pendingClickChoiceMayDecline();
+        for (const auto &option : h->pendingChoiceOptions()) {
+            state.choiceOptions.append({option.index, option.label, option.enabled});
+        }
     } else if (h->isWaitingForResolutionChoice()) {
         state.mode = PromptMode::WaitingForChoice;
         if (Player *decider = game->getPlayerManager()->getPlayer(h->resolutionChoiceWaitingPlayer())) {

@@ -295,6 +295,13 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
     } else {
         applyNoLegalActions();
     }
+    if (state->hasPendingTriggerTarget() && state->pendingChoice.has_value() &&
+        !state->pendingChoice->triggerTargets.groups.isEmpty()) {
+        state->validTargetsByAbility.insert(
+            RuledClientState::abilityTargetKey(state->lastTriggerSourceOid,
+                                               static_cast<int>(state->lastTriggerAbilityIndex)),
+            state->pendingChoice->triggerTargets);
+    }
 
     finishBatch(ctx);
 }
@@ -438,6 +445,7 @@ void RuledEventDispatcher::applyStackPushed(const ruled::v1::StackPushed &sp, Ba
             // wiped by the very ability that caused it, stranding the player with no way to answer.
             if (sp.is_triggered()) {
                 state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::TriggerTarget);
+                state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::TriggerMode);
             }
             // Record the source permanent so the targeting arrow starts from it.
             if (state->lastTriggerSourceOid != 0) {
@@ -503,13 +511,30 @@ void RuledEventDispatcher::applyTriggerNeedsTarget(const ruled::v1::TriggerNeeds
     // Only the controller parks the choice, so that only they can send ChooseTriggerTarget.
     if (state->lastTriggerControllerPlayerId == host->localPlayerId()) {
         RuledClientState::RuledPendingChoice choice;
-        choice.kind = RuledClientState::ChoiceKind::TriggerTarget;
+        choice.kind = tnt.modes_size() > 0 ? RuledClientState::ChoiceKind::TriggerMode
+                                           : RuledClientState::ChoiceKind::TriggerTarget;
         choice.promptText = abilityText;
         choice.mayDecline = tnt.may_decline();
+        if (tnt.has_targets()) {
+            choice.triggerTargets = parseSpellTargets(tnt.targets());
+        }
+        for (const auto &mode : tnt.modes()) {
+            RuledChoiceOption option;
+            option.index = static_cast<int>(mode.mode_index());
+            option.label = QString::fromStdString(mode.label());
+            option.enabled = mode.selectable();
+            option.needsTarget = mode.needs_target();
+            if (mode.has_targets()) {
+                option.targets = parseSpellTargets(mode.targets());
+            }
+            choice.choiceOptions.append(option);
+        }
         state->setPendingChoice(std::move(choice));
-        ctx.promptFeed += QStringLiteral("Choose a target for “%1”.\n").arg(abilityText);
+        ctx.promptFeed += tnt.modes_size() > 0 ? QStringLiteral("Choose a mode for “%1”.\n").arg(abilityText)
+                                               : QStringLiteral("Choose a target for “%1”.\n").arg(abilityText);
     } else {
         state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::TriggerTarget);
+        state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::TriggerMode);
     }
     emit state->triggerNeedsTarget(abilityText);
 }
@@ -572,8 +597,26 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     // clearPendingChoice(): a parked trigger/copy/legend choice belongs to a different flow.
     state->clearPendingChoiceOfKind(ChoiceKind::ResolutionPick);
     state->clearPendingChoiceOfKind(ChoiceKind::ResolutionPayment);
+    state->clearPendingChoiceOfKind(ChoiceKind::ResolutionBranch);
     if (static_cast<int>(rcr.deciding_player_id()) != host->localPlayerId()) {
         state->resolutionChoiceWaitingPlayerId = static_cast<int>(rcr.deciding_player_id());
+        return;
+    }
+
+    if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH) {
+        PendingChoice choice;
+        choice.kind = ChoiceKind::ResolutionBranch;
+        choice.promptText = QString::fromStdString(rcr.prompt_text());
+        choice.mayDecline = rcr.min() == 0;
+        for (const auto &branch : rcr.resolution_branches()) {
+            RuledChoiceOption option;
+            option.index = static_cast<int>(branch.branch_index());
+            option.label = QString::fromStdString(branch.label());
+            option.enabled = branch.selectable();
+            choice.choiceOptions.append(option);
+        }
+        state->setPendingChoice(std::move(choice));
+        emit state->combatStateChanged();
         return;
     }
 
@@ -583,6 +626,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         payment.promptText = QString::fromStdString(rcr.prompt_text());
         payment.genericManaCost = static_cast<int>(rcr.generic_mana_cost());
         payment.paymentCurrentlyLegal = rcr.payment_currently_legal();
+        payment.manaCost = QString::fromStdString(rcr.mana_cost());
         state->setPendingChoice(std::move(payment));
         emit state->resolutionPaymentUiChanged(true);
         emit state->combatStateChanged();

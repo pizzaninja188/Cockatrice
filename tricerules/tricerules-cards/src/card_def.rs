@@ -15,7 +15,7 @@
 
 use crate::mana::ManaCost;
 use crate::primitives::{
-    ActivatedAbilityDef, AdditionalCost, CardTypeFilter, Color, Evasion, Keyword,
+    ActivatedAbilityDef, AdditionalCost, CardTypeFilter, Color, EffectContext, Evasion, Keyword,
     PermanentTypeFilter, SpellCostModifier, SpellEffectKind, StaticAbilityDef, TargetingDef,
     TriggeredAbilityDef,
 };
@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 
 /// One printed mode of a modal spell. Its effects resolve in authored order.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SpellModeDef {
+pub struct ModeDef {
     /// Short client-facing description of the mode, without the card name.
     pub label: String,
     /// Data-driven effects for this mode, resolved from this mode's own target group.
@@ -35,12 +35,45 @@ pub struct SpellModeDef {
 
 /// The choose-N definition of a modal spell (CR 700.2).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ModalSpellDef {
+pub struct ModalDef {
     pub min_modes: u32,
     pub max_modes: u32,
     /// Modes in printed order. A mode may be selected at most once in the initial implementation.
     #[serde(default)]
-    pub modes: Vec<SpellModeDef>,
+    pub modes: Vec<ModeDef>,
+}
+
+impl ModalDef {
+    pub(crate) fn validate(&self, context: EffectContext) -> Result<(), String> {
+        if self.min_modes == 0
+            || self.max_modes < self.min_modes
+            || self.max_modes as usize > self.modes.len()
+        {
+            return Err(format!(
+                "modal definition requires 1 <= min_modes <= max_modes <= mode count (got {}..={} with {} modes)",
+                self.min_modes,
+                self.max_modes,
+                self.modes.len()
+            ));
+        }
+        for mode in &self.modes {
+            if mode.label.trim().is_empty() {
+                return Err("modal mode label must not be empty".into());
+            }
+            if mode.effects.is_empty() {
+                return Err(format!(
+                    "modal mode '{}' must contain at least one effect",
+                    mode.label
+                ));
+            }
+            for effect in &mode.effects {
+                effect.validate(context)?;
+            }
+            SpellEffectKind::validate_list(&mode.effects)?;
+            TargetingDef::validate_optional(mode.targeting.as_ref(), &mode.effects)?;
+        }
+        Ok(())
+    }
 }
 
 /// Physical card layout (CR 709/710/712/715). Drives how many faces a card has and how each
@@ -104,7 +137,7 @@ pub struct CardFace {
     /// Modal data-driven spell effects. Mutually exclusive with `spell_effect` and
     /// `custom_effect`; selected modes resolve in printed order.
     #[serde(default)]
-    pub modal_spell: Option<ModalSpellDef>,
+    pub modal_spell: Option<ModalDef>,
     /// Tier-3 escape hatch (CR-faithful per-card algorithm). `Some(key)` routes this face's
     /// resolution to a `CardEffect` in `tricerules-core`'s `custom` module instead of the
     /// data-driven `spell_effect` list — for cards whose resolution is a unique algorithm
@@ -290,7 +323,7 @@ pub struct RawCardDefinition {
     #[serde(default)]
     pub targeting: Option<TargetingDef>,
     #[serde(default)]
-    pub modal_spell: Option<ModalSpellDef>,
+    pub modal_spell: Option<ModalDef>,
     #[serde(default)]
     pub custom_effect: Option<String>,
     #[serde(default)]

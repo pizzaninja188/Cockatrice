@@ -167,6 +167,7 @@ fn try_drain_stack(e: &mut GameEngine) {
                 cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
                     chosen_object_ids,
                     decision: 0,
+                    selected_branch_index: 0,
                 })),
             };
             if e.apply_command(deciding_player, &answer).is_err() {

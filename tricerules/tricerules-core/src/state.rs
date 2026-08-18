@@ -1,11 +1,12 @@
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use tricerules_cards::primitives::ResolutionBranchDef;
 use tricerules_cards::primitives::{
     ActivatedAbilityDef, ContinuousEffectKind, CounterKind, CreatureScopeFilter,
     DamagePreventionAdditionalEffect, EffectDuration, GameCondition, Keyword, ManaAmount,
     ManaSpendingRestriction, SearchDestination, TargetFilter, TriggerCondition,
     TriggeredAbilityDef,
 };
-use tricerules_cards::CardFace;
+use tricerules_cards::{CardFace, ManaCost};
 use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
 
 pub type PlayerId = i32;
@@ -397,9 +398,20 @@ pub struct PendingManaPayment {
     pub target_spell_id: ObjectId,
     /// Generic mana required to preserve that spell.
     pub generic_mana_cost: u32,
+    /// Printed colored/colorless cost for a resolution branch. Empty for legacy generic soft
+    /// counters, whose requirement remains in `generic_mana_cost`.
+    pub mana_cost: ManaCost,
     /// First entry in `undoable_mana_abilities` created while this payment prompt was active.
     /// Undo and Decline may rewind entries at or after this boundary, never earlier float.
     pub undo_history_start: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct PendingResolutionBranch {
+    pub optional: bool,
+    pub branches: Vec<ResolutionBranchDef>,
+    /// Set after a branch button is accepted and while its object or mana cost is pending.
+    pub selected_branch: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -431,6 +443,9 @@ pub struct PendingResolution {
     /// Resolution-time payment metadata for an "unless its controller pays" effect. Object-choice
     /// resolutions leave this unset and continue to use candidates/min/max.
     pub mana_payment: Option<PendingManaPayment>,
+    /// Generic authored branch continuation for issue #59. The branch selection itself and any
+    /// subsequent object/mana payment share this one pending resolution transaction.
+    pub resolution_branch: Option<PendingResolutionBranch>,
     /// Typed continuation for a discard choice. `draw_after` is nonzero for a
     /// discard-then-draw instruction; `draw_only_if_discarded` implements "if you do".
     pub discard: Option<PendingDiscard>,
@@ -559,7 +574,7 @@ pub(crate) struct PendingBattlefieldEntry {
 }
 
 #[derive(Debug, Clone)]
-pub struct ChosenSpellMode {
+pub struct ChosenMode {
     pub mode_index: usize,
     pub targets: Vec<StackTarget>,
 }
@@ -618,7 +633,10 @@ pub struct StackItem {
     /// at resolution this feeds [`Amount::X`](tricerules_cards::Amount) effect amounts.
     pub chosen_x: u32,
     /// Atomic modal choices in printed order. Empty for nonmodal spells and abilities.
-    pub chosen_modes: Vec<ChosenSpellMode>,
+    pub chosen_modes: Vec<ChosenMode>,
+    /// Resolution branches already answered, keyed by their index in the original effect list.
+    /// `None` records an optional decline; `Some(i)` records the chosen authored branch.
+    pub resolution_branch_choices: BTreeMap<u32, Option<usize>>,
     /// Event-time player and object identity for triggered abilities. This includes an affected
     /// player (Howling Mine), an observed object distinct from CR 115 targets, and attack
     /// participants. Empty for spells and activated abilities. Trigger context never changes who
