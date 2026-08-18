@@ -223,6 +223,9 @@ impl CardFace {
     /// [`CardDefinition::matches_card_type_outside_stack`].
     pub fn matches_card_type(&self, filter: CardTypeFilter) -> bool {
         match filter {
+            CardTypeFilter::BasicLand => {
+                self.is_land && self.supertypes.iter().any(|value| value == "Basic")
+            }
             CardTypeFilter::Enchantment => self.is_enchantment,
             CardTypeFilter::Instant => self.is_instant,
             CardTypeFilter::Sorcery => self.is_sorcery,

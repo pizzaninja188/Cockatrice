@@ -515,6 +515,12 @@ pub(crate) enum BattlefieldEntryCompletion {
         spell_label: String,
         object_label: String,
     },
+    LibrarySearch {
+        owner: PlayerId,
+        card_label: String,
+        shuffle: bool,
+        resume_effect_index: Option<u32>,
+    },
     TokenBatch {
         current_created: TokenCreated,
         ready: Vec<TokenBattlefieldEntry>,

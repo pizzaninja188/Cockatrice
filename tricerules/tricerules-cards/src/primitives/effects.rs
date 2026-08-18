@@ -1007,8 +1007,9 @@ pub enum SpellEffectKind {
     /// matching `filter` (None = any card; Some = only cards of that spell type), move it to
     /// `destination`, then shuffle if `shuffle` is true. Uses the tier-3 interrupt mechanism
     /// (`ResolutionChoiceRequired` / `SubmitResolutionChoice`) with `ChoiceKind::LibrarySearch`
-    /// (private to the searching player). Named two: Demonic Tutor (any → hand),
-    /// Mystical Tutor (instant or sorcery → top of library).
+    /// (private to the searching player). Named examples include Demonic Tutor (any → hand),
+    /// Mystical Tutor (instant or sorcery → top of library), and Evolving Wilds (basic land →
+    /// battlefield tapped).
     SearchLibrary {
         /// `None` = any card is valid; `Some(f)` = only cards of this type qualify.
         #[serde(default)]
@@ -1083,6 +1084,13 @@ pub enum SearchDestination {
     Hand,
     /// The card is placed on top of the searching player's library (Mystical Tutor).
     TopOfLibrary,
+    /// The card enters the battlefield under the searching player's control. Entry replacement
+    /// effects are applied before the search resumes and shuffles (Evolving Wilds, Rampant Growth).
+    Battlefield {
+        /// Whether the search effect instructs the card to enter tapped.
+        #[serde(default)]
+        tapped: bool,
+    },
 }
 
 /// One bag of mana a mana ability can produce (CR 106): a count per mana type. A mana ability's
@@ -1877,15 +1885,9 @@ impl SpellEffectKind {
                 unless_controller_pays: Some(0),
                 ..
             } => Err("CounterTargetSpell unless_controller_pays must be at least 1".into()),
-            // CR 701.18: library search uses the stack interrupt machinery; it is a spell effect
-            // only — using it on a mana ability makes no sense.
-            SpellEffectKind::SearchLibrary { .. } => {
-                if context != EffectContext::Spell {
-                    Err("SearchLibrary is only valid on a spell, not a mana ability".into())
-                } else {
-                    Ok(())
-                }
-            }
+            // Library searches use the resolution-interrupt machinery and are legal on spells
+            // and nonmana abilities alike (Demonic Tutor, Evolving Wilds).
+            SpellEffectKind::SearchLibrary { .. } => Ok(()),
             // CR 701.18: scry is legal on spells and on abilities alike (scry lands, Sensei's
             // Divining Top-style activations), so the only malformed case is scrying zero cards.
             SpellEffectKind::Scry { count } => {

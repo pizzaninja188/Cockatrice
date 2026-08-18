@@ -1605,6 +1605,7 @@ pub(super) fn library_card_matches_filter(
 /// Human-readable description of a [`CardTypeFilter`] for prompt text.
 fn card_type_filter_desc(f: &CardTypeFilter) -> &'static str {
     match f {
+        CardTypeFilter::BasicLand => "basic land",
         CardTypeFilter::Instant => "instant",
         CardTypeFilter::Sorcery => "sorcery",
         CardTypeFilter::InstantOrSorcery => "instant or sorcery",

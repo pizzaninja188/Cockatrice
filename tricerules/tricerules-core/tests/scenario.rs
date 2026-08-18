@@ -77,6 +77,8 @@ mod issue_85_creature_damage;
 mod issue_86_related_player_recipients;
 #[path = "scenario/issue_89_battlefield_to_library.rs"]
 mod issue_89_battlefield_to_library;
+#[path = "scenario/issue_90_evolving_wilds.rs"]
+mod issue_90_evolving_wilds;
 #[path = "scenario/legend_rule.rs"]
 mod legend_rule;
 #[path = "scenario/mana.rs"]

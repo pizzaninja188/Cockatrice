@@ -181,6 +181,8 @@ pub enum TargetKind {
 /// containing field means no type restriction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CardTypeFilter {
+    /// A land card with the Basic supertype (Evolving Wilds, Rampant Growth).
+    BasicLand,
     Enchantment,
     Instant,
     Sorcery,

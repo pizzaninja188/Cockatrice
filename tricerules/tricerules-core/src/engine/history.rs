@@ -113,6 +113,13 @@ impl GameEngine {
                     context.controller,
                     characteristics.controller,
                 ) && filter.card_type.is_none_or(|card_type| match card_type {
+                    CardTypeFilter::BasicLand => {
+                        characteristics.has_type("Land")
+                            && characteristics
+                                .supertypes
+                                .iter()
+                                .any(|value| value == "Basic")
+                    }
                     CardTypeFilter::Enchantment => characteristics.has_type("Enchantment"),
                     CardTypeFilter::Instant => characteristics.has_type("Instant"),
                     CardTypeFilter::Sorcery => characteristics.has_type("Sorcery"),

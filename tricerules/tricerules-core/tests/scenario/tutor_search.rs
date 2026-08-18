@@ -126,6 +126,10 @@ fn mystical_tutor_filters_to_instant_or_sorcery() {
 
     let req = find_resolution_choice(&batch).expect("resolution choice required");
     assert_eq!(req.choice_kind(), ChoiceKind::LibrarySearch);
+    assert_eq!(
+        req.min, 0,
+        "a search constrained by card characteristics may fail to find"
+    );
     // The creature must NOT appear in candidates.
     assert!(
         !req.candidate_object_ids.contains(&bear_oid),

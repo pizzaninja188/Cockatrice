@@ -591,6 +591,33 @@ impl GameEngine {
                 ));
                 self.complete_parked_resolution(pending.item, pending.resume_effect_index, events)
             }
+            BattlefieldEntryCompletion::LibrarySearch {
+                owner,
+                card_label,
+                shuffle,
+                resume_effect_index,
+            } => {
+                let object_id = event.object_id;
+                let controller = event.destination_controller;
+                self.commit_battlefield_entry(event, None)?;
+                events.push(ev_log(format!(
+                    "P{controller} puts {card_label} onto the battlefield."
+                )));
+                events.push(permanent_moved_event(
+                    &self.state,
+                    object_id,
+                    owner,
+                    rv1::permanent_moved::Destination::Battlefield,
+                ));
+                if shuffle {
+                    crate::engine::shuffle_player_library_for_current_command(
+                        &mut self.state,
+                        controller,
+                    );
+                    events.push(ev_log(format!("P{controller} shuffles their library.")));
+                }
+                self.complete_parked_resolution(pending.item, resume_effect_index, events)
+            }
             BattlefieldEntryCompletion::TokenBatch {
                 current_created,
                 ready,

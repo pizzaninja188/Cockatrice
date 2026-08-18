@@ -1139,6 +1139,58 @@ impl GameEngine {
                         ));
                     }
                 }
+                SearchDestination::Battlefield { tapped } => {
+                    let owner = self
+                        .state
+                        .objects
+                        .get(&oid)
+                        .map(|object| object.owner)
+                        .ok_or(EngineError::Illegal("searched card is stale"))?;
+                    let completion = BattlefieldEntryCompletion::LibrarySearch {
+                        owner,
+                        card_label: card_name.clone(),
+                        shuffle: pending.search_shuffle,
+                        resume_effect_index: pending.resume_effect_index,
+                    };
+                    match self.begin_battlefield_entry(
+                        pending.item.clone(),
+                        BattlefieldEntryEvent {
+                            object_id: oid,
+                            deciding_player: controller,
+                            destination_controller: controller,
+                            face_index: 0,
+                            chosen_x: 0,
+                            tapped,
+                            entry_counters: BTreeMap::new(),
+                            applied_effects: Vec::new(),
+                        },
+                        completion,
+                        &mut ev,
+                    ) {
+                        super::replacement::BattlefieldEntryProgress::Parked => {
+                            return Ok(finish_with_events(self, ev));
+                        }
+                        super::replacement::BattlefieldEntryProgress::Ready(entry) => {
+                            self.commit_battlefield_entry(entry, None)?;
+                        }
+                    }
+                    ev.push(ev_log(format!(
+                        "P{controller} puts {card_name} onto the battlefield."
+                    )));
+                    ev.push(permanent_moved_event(
+                        &self.state,
+                        oid,
+                        owner,
+                        rv1::permanent_moved::Destination::Battlefield,
+                    ));
+                    if pending.search_shuffle {
+                        crate::engine::shuffle_player_library_for_current_command(
+                            &mut self.state,
+                            controller,
+                        );
+                        ev.push(ev_log(format!("P{controller} shuffles their library.")));
+                    }
+                }
             }
         }
 

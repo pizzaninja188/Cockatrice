@@ -866,7 +866,14 @@ pub(super) fn search_library(
             })
             .collect()
     };
-    let min = if candidates.is_empty() { 0u32 } else { 1u32 };
+    // When a hidden-zone search requires a stated quality, the searching player may fail to find
+    // even when a matching card is present. An unrestricted search must still find a card when
+    // the library is nonempty.
+    let min = if filter.is_some() || candidates.is_empty() {
+        0u32
+    } else {
+        1u32
+    };
     let prompt = match &filter {
         None => format!("P{controller}: search your library for a card."),
         Some(f) => format!(

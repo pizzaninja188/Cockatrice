@@ -299,6 +299,16 @@ public:
     bool sawLibraryPermanentMoved = false;
     bool sawLibraryTargetAbsentFromBattlefield = false;
     bool sawTopPermanentDrawn = false;
+    bool devEvolvingWildsSent = false;
+    bool evolvingWildsActivated = false;
+    bool sawOwnLibrarySearchCandidates = false;
+    bool sawOpponentLibrarySearchRedacted = false;
+    bool submittedEvolvingWildsChoice = false;
+    bool sawEvolvingWildsPermanentMoved = false;
+    bool sawEvolvingWildsPhysicalDeckToTable = false;
+    bool evolvingWildsPhysicalIdentityContinuous = true;
+    quint32 evolvingWildsChosenOid = 0;
+    int evolvingWildsPhysicalCardId = -1;
     bool sawCursePlayerAttachment = false;
     quint32 curseOid = 0;
     std::map<quint32, int> serverCardByEngineOid;
@@ -528,6 +538,15 @@ public:
                 const QLatin1String stack(ZoneNames::STACK);
                 const QLatin1String exile(ZoneNames::EXILE);
                 const QLatin1String table(ZoneNames::TABLE);
+                const QLatin1String deck(ZoneNames::DECK);
+                if (name == QLatin1String("Mountain") && from == deck && to == table) {
+                    sawEvolvingWildsPhysicalDeckToTable = true;
+                    if (evolvingWildsPhysicalCardId >= 0 &&
+                        mc.new_card_id() != evolvingWildsPhysicalCardId) {
+                        evolvingWildsPhysicalIdentityContinuous = false;
+                    }
+                    evolvingWildsPhysicalCardId = mc.new_card_id();
+                }
                 if (name == QLatin1String("Grizzly Bears") && from == table && to == table) {
                     if (mc.start_player_id() == oppId && mc.target_player_id() == myId) {
                         sawPhysicalControlTransfer = true;
@@ -695,6 +714,19 @@ public:
                 }
             } else if (ev.has_resolution_choice_required()) {
                 const auto &rcr = ev.resolution_choice_required();
+                if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH) {
+                    if (rcr.deciding_player_id() == myId) {
+                        sawOwnLibrarySearchCandidates =
+                            rcr.candidate_object_ids_size() > 0 &&
+                            rcr.candidate_object_ids_size() == rcr.candidate_card_ids_size() &&
+                            rcr.candidate_object_ids_size() == rcr.candidate_names_size() &&
+                            rcr.candidate_object_ids_size() == rcr.candidate_server_card_ids_size();
+                    } else {
+                        sawOpponentLibrarySearchRedacted =
+                            rcr.candidate_object_ids_size() == 0 && rcr.candidate_card_ids_size() == 0 &&
+                            rcr.candidate_names_size() == 0 && rcr.candidate_server_card_ids_size() == 0;
+                    }
+                }
                 if (rcr.deciding_player_id() == myId &&
                     (rcr.candidate_object_ids_size() > 0 ||
                      rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANA_PAYMENT)) {
@@ -708,6 +740,15 @@ public:
                 }
             } else if (ev.has_permanent_moved()) {
                 const auto &moved = ev.permanent_moved();
+                if (moved.destination() == ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD &&
+                    moved.card_id() == "mountain") {
+                    sawEvolvingWildsPermanentMoved = true;
+                    if (evolvingWildsChosenOid == 0) {
+                        evolvingWildsChosenOid = moved.object_id();
+                    } else if (evolvingWildsChosenOid != moved.object_id()) {
+                        evolvingWildsPhysicalIdentityContinuous = false;
+                    }
+                }
                 if (moved.object_id() == controlTargetOid &&
                     moved.destination() == ruled::v1::PermanentMoved::DESTINATION_LIBRARY) {
                     sawLibraryPermanentMoved = true;
@@ -1262,6 +1303,7 @@ public:
                 return;
             }
             const bool isReplacement = rcr.choice_kind() == ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT;
+            const bool isLibrarySearch = rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH;
             const QString prompt = QString::fromStdString(rcr.prompt_text());
             const bool isEntryReplacement = isReplacement && prompt.contains(QStringLiteral("entering the battlefield"));
             const bool isDamagePrevention = isReplacement && !isEntryReplacement;
@@ -1276,9 +1318,15 @@ public:
             }
             ruled::v1::RuledCommand cmd;
             auto *choice = cmd.mutable_submit_resolution_choice();
-            const int need = static_cast<int>(rcr.min());
+            const int need = isLibrarySearch && rcr.candidate_object_ids_size() > 0
+                                 ? 1
+                                 : static_cast<int>(rcr.min());
             for (int i = 0; i < need && i < rcr.candidate_object_ids_size(); ++i) {
                 choice->add_chosen_object_ids(rcr.candidate_object_ids(i));
+            }
+            if (isLibrarySearch && need == 1) {
+                evolvingWildsChosenOid = rcr.candidate_object_ids(0);
+                submittedEvolvingWildsChoice = true;
             }
             pendingChoice.reset();
             if (isDamagePrevention) {
@@ -1694,7 +1742,33 @@ public:
                 }
             }
             if (sawControlReturn && paidSoftCounter && sawSoftCounterResolveAfterChoice &&
-                !sawLibraryTargetAbsentFromBattlefield) {
+                !sawEvolvingWildsPermanentMoved) {
+                if (!devEvolvingWildsSent) {
+                    devEvolvingWildsSent = true;
+                    ruled::v1::RuledCommand cmd;
+                    auto *dev = cmd.mutable_dev_command();
+                    dev->set_target_player_id(myId);
+                    auto *put = dev->mutable_put_card_in_zone();
+                    put->set_card_name("Evolving Wilds");
+                    put->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+                    put->set_ready(true);
+                    sendRuled(cmd, QStringLiteral("dev: conjure Evolving Wilds onto the battlefield"));
+                    return;
+                }
+                if (!evolvingWildsActivated) {
+                    const auto wilds = firstOwnUntapped(QStringLiteral("evolving_wilds"));
+                    if (wilds) {
+                        ruled::v1::RuledCommand cmd;
+                        auto *ability = cmd.mutable_activate_ability();
+                        ability->set_permanent_id(*wilds);
+                        ability->set_ability_index(0);
+                        evolvingWildsActivated = true;
+                        sendRuled(cmd, QStringLiteral("activate Evolving Wilds oid %1").arg(*wilds));
+                        return;
+                    }
+                }
+            }
+            if (sawEvolvingWildsPermanentMoved && !sawLibraryTargetAbsentFromBattlefield) {
                 if (!devTotallyLostSent) {
                     devTotallyLostSent = true;
                     ruled::v1::RuledCommand cmd;
@@ -2111,6 +2185,10 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
                p1.sawLibraryPermanentMoved && p2.sawLibraryPermanentMoved &&
                p1.sawLibraryTargetAbsentFromBattlefield && p2.sawLibraryTargetAbsentFromBattlefield &&
                p2.sawTopPermanentDrawn &&
+               p1.sawOwnLibrarySearchCandidates && p2.sawOpponentLibrarySearchRedacted &&
+               p1.submittedEvolvingWildsChoice && p1.sawEvolvingWildsPermanentMoved &&
+               p2.sawEvolvingWildsPermanentMoved && p1.sawEvolvingWildsPhysicalDeckToTable &&
+               p2.sawEvolvingWildsPhysicalDeckToTable &&
                p1.sawSoftCounterPaymentChoice && p1.activatedManaDuringSoftCounterPayment && p1.paidSoftCounter &&
                p1.sawSoftCounterResolveAfterChoice &&
                p2.softCounterConvoluteCast &&
@@ -2195,6 +2273,29 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     EXPECT_TRUE(p1.sawLibraryTargetAbsentFromBattlefield && p2.sawLibraryTargetAbsentFromBattlefield)
         << "both clients did not remove the target from their battlefield views";
     EXPECT_TRUE(p2.sawTopPermanentDrawn) << "the owner did not draw the permanent placed on top";
+    EXPECT_TRUE(p1.sawOwnLibrarySearchCandidates)
+        << "Evolving Wilds' controller did not receive aligned private library candidates";
+    EXPECT_TRUE(p2.sawOpponentLibrarySearchRedacted)
+        << "the opponent received private Evolving Wilds library identities";
+    EXPECT_TRUE(p1.submittedEvolvingWildsChoice) << "Evolving Wilds' private candidate was never selected";
+    EXPECT_TRUE(p1.sawEvolvingWildsPermanentMoved && p2.sawEvolvingWildsPermanentMoved)
+        << "both clients did not receive the public library-to-battlefield move";
+    EXPECT_TRUE(p1.sawEvolvingWildsPhysicalDeckToTable && p2.sawEvolvingWildsPhysicalDeckToTable)
+        << "the chosen physical Mountain did not move from DECK to TABLE for both clients";
+    EXPECT_TRUE(p1.evolvingWildsPhysicalIdentityContinuous && p2.evolvingWildsPhysicalIdentityContinuous)
+        << "Evolving Wilds moved a different physical card than the chosen library candidate";
+    ASSERT_NE(p1.evolvingWildsChosenOid, 0u);
+    EXPECT_EQ(p1.evolvingWildsChosenOid, p2.evolvingWildsChosenOid)
+        << "clients disagreed on the searched-for Mountain's engine ObjectId";
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(p1.evolvingWildsChosenOid));
+    ASSERT_TRUE(p2.serverCardByEngineOid.count(p2.evolvingWildsChosenOid));
+    EXPECT_EQ(p1.serverCardByEngineOid[p1.evolvingWildsChosenOid],
+              p2.serverCardByEngineOid[p2.evolvingWildsChosenOid])
+        << "clients disagreed on the searched-for Mountain's physical Server_Card mapping";
+    EXPECT_EQ(p1.serverCardByEngineOid[p1.evolvingWildsChosenOid], p1.evolvingWildsPhysicalCardId)
+        << "the selected engine ObjectId was not bound to the physical DECK-to-TABLE card";
+    EXPECT_EQ(p2.serverCardByEngineOid[p2.evolvingWildsChosenOid], p2.evolvingWildsPhysicalCardId)
+        << "the opponent did not retain the same physical DECK-to-TABLE binding";
     EXPECT_TRUE(p1.flashbackCast) << "seat 1 never sent its flashback cast";
     EXPECT_TRUE(p2.flashbackCast) << "seat 2 never sent its flashback cast";
     // One of these two seats does not own the canonical stack, so its cast crosses players.
