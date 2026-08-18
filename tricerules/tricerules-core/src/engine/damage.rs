@@ -521,6 +521,7 @@ impl GameEngine {
             choice_kind: rv1::ChoiceKind::ReplacementEffect,
             unique_names: false,
             mana_payment: None,
+            discard: None,
             copy_source_object_id: 0,
             search_destination: SearchDestination::Hand,
             search_shuffle: false,

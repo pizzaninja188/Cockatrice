@@ -618,6 +618,27 @@ pub enum LibraryPlacement {
     Shuffle,
 }
 
+/// Who chooses cards for a discard instruction.
+///
+/// CR 701.9b makes the affected player the default chooser. Coercion and Thoughtseize override
+/// that default by instructing their controller to choose, while Hymn to Tourach uses a seeded
+/// random choice. Keeping these as typed modes prevents hand visibility from being inferred by
+/// the client or relay.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DiscardChooser {
+    #[default]
+    AffectedPlayer,
+    Controller,
+    Random,
+}
+
+/// Written order for a draw/discard sequence whose discard may suspend resolution.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DrawDiscardOrder {
+    DrawThenDiscard,
+    DiscardThenDraw,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpellEffectKind {
     DamageTarget {
@@ -669,6 +690,20 @@ pub enum SpellEffectKind {
     },
     Draw {
         count: Amount,
+    },
+    /// Draw and discard as one resumable instruction. This is intentionally untargeted: `who`
+    /// identifies the affected player and that player chooses from their private hand.
+    ///
+    /// Rousing Read and Teferi's Protege draw then discard. Keldon Raider optionally discards,
+    /// then draws only if a card was actually discarded.
+    DrawDiscard {
+        #[serde(default)]
+        who: PlayerRecipient,
+        draw_count: u32,
+        discard_count: u32,
+        order: DrawDiscardOrder,
+        #[serde(default)]
+        optional: bool,
     },
     /// CR 701.18: look at the top `count` cards of your library, put any number of them on the
     /// bottom of it in any order, and the rest back on top in any order. The cards never leave the
@@ -913,17 +948,16 @@ pub enum SpellEffectKind {
         #[serde(default)]
         who: PlayerRecipient,
     },
-    /// CR 701.7a: force `count` cards from the target player's hand to their graveyard.
-    /// `random: true` chooses cards at random (Hymn to Tourach); `random: false` lets
-    /// the spell's controller choose from the revealed hand (Coercion, Thoughtseize).
+    /// CR 701.9: force `count` cards from the target player's hand to their graveyard.
+    /// `chooser` distinguishes the affected-player default (Mind Rot), controller-selected
+    /// revealed cards (Coercion, Thoughtseize), and seeded random choice (Hymn to Tourach).
     /// When `count` exceeds the hand size, the player discards all remaining cards.
-    /// Two cards covered: Hymn to Tourach (`random: true`); Coercion (`random: false`).
+    /// Cards covered: Mind Rot, Hymn to Tourach, Coercion, and Thoughtseize.
     DiscardCards {
         count: u32,
         target: TargetFilter,
-        /// True = at random (Hymn to Tourach). False = caster chooses from revealed hand (Coercion).
         #[serde(default)]
-        random: bool,
+        chooser: DiscardChooser,
     },
     /// Destroy every battlefield permanent matching `kind` (CR 701.7). Untargeted, so it
     /// ignores hexproof/shroud and never fizzles. `kind` selects the affected set — `Creature`
@@ -1559,6 +1593,33 @@ impl SpellEffectKind {
             _ => {}
         }
 
+        if let SpellEffectKind::DrawDiscard {
+            who,
+            draw_count,
+            discard_count,
+            order,
+            optional,
+            ..
+        } = self
+        {
+            if *draw_count == 0 || *discard_count == 0 {
+                return Err("DrawDiscard counts must be at least 1".into());
+            }
+            if *optional && (*order != DrawDiscardOrder::DiscardThenDraw || *discard_count != 1) {
+                return Err(
+                    "optional DrawDiscard requires DiscardThenDraw with discard_count 1".into(),
+                );
+            }
+            if matches!(
+                who,
+                PlayerRecipient::EachOpponent
+                    | PlayerRecipient::EachPlayer
+                    | PlayerRecipient::AttackingOpponentsOfDefendingPlayer
+            ) {
+                return Err("DrawDiscard requires a single player recipient".into());
+            }
+        }
+
         // CR 115: a source-bound ability effect is not targeting and only exists where there is
         // a source permanent — never in a spell's effect list.
         let source_bound = matches!(
@@ -1620,6 +1681,10 @@ impl SpellEffectKind {
                     ..
                 }
                 | SpellEffectKind::Mill {
+                    who: PlayerRecipient::TriggerObjectController,
+                    ..
+                }
+                | SpellEffectKind::DrawDiscard {
                     who: PlayerRecipient::TriggerObjectController,
                     ..
                 }

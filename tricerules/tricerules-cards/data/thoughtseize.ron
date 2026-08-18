@@ -3,11 +3,11 @@
   name: "Thoughtseize",
   mana_cost: "{B}",
   types: ["Sorcery"],
-  // Oracle order. `DiscardCards(random: false)` suspends resolution for the caster's choice;
+  // Oracle order. `DiscardCards(chooser: Controller)` suspends for the caster's choice;
   // the life loss after it runs when the choice comes back, via the resume path in
   // `complete_parked_resolution` (`PendingResolution::resume_effect_index`).
   spell_effect: [
-    DiscardCards(count: 1, target: (kind: AnyPlayer)),
+    DiscardCards(count: 1, target: (kind: AnyPlayer), chooser: Controller),
     LoseLife(amount: Fixed(2)),
   ],
   partial: "nonland restriction not enforced",

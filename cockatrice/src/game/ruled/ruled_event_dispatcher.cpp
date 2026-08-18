@@ -212,7 +212,7 @@ void RuledEventDispatcher::resetPerBatchLegalActions()
     state->openingBottomSelectedIndices.clear();
     state->openingPickSeatIds.clear();
     state->openingUiKind = RuledOpeningUiKind::None;
-    state->resolutionPaymentWaitingPlayerId = -1;
+    state->resolutionChoiceWaitingPlayerId = -1;
 }
 
 void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
@@ -573,9 +573,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     state->clearPendingChoiceOfKind(ChoiceKind::ResolutionPick);
     state->clearPendingChoiceOfKind(ChoiceKind::ResolutionPayment);
     if (static_cast<int>(rcr.deciding_player_id()) != host->localPlayerId()) {
-        if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANA_PAYMENT) {
-            state->resolutionPaymentWaitingPlayerId = static_cast<int>(rcr.deciding_player_id());
-        }
+        state->resolutionChoiceWaitingPlayerId = static_cast<int>(rcr.deciding_player_id());
         return;
     }
 

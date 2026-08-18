@@ -1029,6 +1029,7 @@ impl GameEngine {
             ordered: interrupt.ordered,
             unique_names: interrupt.unique_names,
             mana_payment: None,
+            discard: None,
             prompt: interrupt.prompt,
             choice_kind: interrupt.choice_kind,
             copy_source_object_id: 0,
@@ -1204,6 +1205,9 @@ impl GameEngine {
         pending: PendingResolution,
         chosen: &[u32],
     ) -> Result<RuledEventBatch, EngineError> {
+        let discard = pending
+            .discard
+            .ok_or(EngineError::Illegal("discard continuation missing"))?;
         let card_name = self
             .registry
             .get(&pending.item.card_id)
@@ -1213,13 +1217,17 @@ impl GameEngine {
 
         let mut ev = vec![];
         for &oid in chosen {
-            // Owner is the target player (the one whose hand these cards came from).
             let owner = self
                 .state
                 .objects
                 .get(&oid)
                 .map(|o| o.owner)
                 .ok_or(EngineError::Illegal("chosen card object not found"))?;
+            if owner != discard.affected_player {
+                return Err(EngineError::Illegal(
+                    "chosen card is not owned by the affected player",
+                ));
+            }
             let discard_name = object_display_name(&self.state, self.registry, oid);
             move_object_to_zone(&mut self.state, self.registry, oid, Zone::Graveyard, None)?;
             ev.push(permanent_moved_event(
@@ -1231,6 +1239,15 @@ impl GameEngine {
             ev.push(ev_log(format!(
                 "P{owner} discards {discard_name} ({card_name})."
             )));
+        }
+        if discard.draw_after > 0 && (!discard.draw_only_if_discarded || !chosen.is_empty()) {
+            resolution::zones::draw_cards_for_player(
+                self,
+                &mut ev,
+                discard.affected_player,
+                discard.draw_after,
+                &card_name,
+            )?;
         }
         self.complete_parked_resolution(pending.item, pending.resume_effect_index, ev)
     }

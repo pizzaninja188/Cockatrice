@@ -696,9 +696,9 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
                          .arg(remaining);
         state.genericManaCost = remaining;
         state.paymentCurrentlyLegal = h->resolutionPaymentCurrentlyLegal();
-    } else if (h->isWaitingForResolutionPayment()) {
+    } else if (h->isWaitingForResolutionChoice()) {
         state.mode = PromptMode::WaitingForChoice;
-        if (Player *decider = game->getPlayerManager()->getPlayer(h->resolutionPaymentWaitingPlayer())) {
+        if (Player *decider = game->getPlayerManager()->getPlayer(h->resolutionChoiceWaitingPlayer())) {
             state.text = tr("Waiting for %1...").arg(decider->getPlayerInfo()->getName());
         } else {
             state.text = tr("Waiting for opponent...");

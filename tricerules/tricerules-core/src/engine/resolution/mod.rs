@@ -27,7 +27,7 @@ mod restrictions;
 mod stack_ops;
 pub(super) use stack_ops::counter_stack_spell;
 mod tokens;
-mod zones;
+pub(in crate::engine) mod zones;
 
 /// Shared resolution context for one primitive effect.
 struct EffectCx<'a> {
@@ -909,6 +909,9 @@ impl GameEngine {
                         damage::damage_player(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::Draw { .. } => zones::draw(&mut cx, effect)?,
+                    effect @ SpellEffectKind::DrawDiscard { .. } => {
+                        zones::draw_discard(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::Scry { .. } => zones::scry(&mut cx, effect)?,
                     effect @ SpellEffectKind::PumpTarget { .. } => {
                         pump_counters::pump_target(&mut cx, effect)?

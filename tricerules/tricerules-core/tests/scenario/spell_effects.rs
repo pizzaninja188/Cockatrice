@@ -2191,6 +2191,242 @@ fn coercion_caster_chooses_which_card_to_discard() {
         "grizzly_bears is in P1 graveyard"
     );
 }
+
+#[test]
+fn issue_58_mind_rot_affected_player_chooses_cards_to_discard() {
+    let decks = Some(vec![
+        deck_with("swamp", &["mind_rot"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(3004, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let cleared: Vec<_> = e.state.players[1].hand.drain(..).collect();
+    e.state.players[1].library.extend(cleared);
+    inject_card_into_hand(&mut e, 1, 1, "grizzly_bears");
+    inject_card_into_hand(&mut e, 1, 1, "storm_crow");
+    inject_card_into_hand(&mut e, 1, 1, "forest");
+
+    relocate_to_hand(&mut e, 0, "mind_rot");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "mind_rot");
+    e.apply_command(0, &cast_spell(idx, target_player(1)))
+        .expect("cast mind rot");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    let resolve_batch = e
+        .apply_command(1, &pass())
+        .expect("p1 pass parks mind rot for a discard choice");
+
+    let choice =
+        find_resolution_choice(&resolve_batch).expect("Mind Rot requires a discard choice");
+    assert_eq!(
+        choice.deciding_player_id, 1,
+        "the affected player chooses the cards they discard (CR 701.9b)"
+    );
+    assert_eq!(choice.choice_kind(), ChoiceKind::HandCards);
+    assert_eq!((choice.min, choice.max), (2, 2));
+}
+
+#[test]
+fn issue_58_teferis_protege_draws_before_discard_choice() {
+    let decks = Some(vec![
+        deck_with("island", &["teferis_protege"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(3005, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let protege = inject_creature_on_battlefield(&mut e, 0, "teferis_protege");
+    e.state
+        .objects
+        .get_mut(&protege)
+        .expect("protege")
+        .summoning_sick = false;
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            u: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let hand_before = e.state.players[0].hand.len();
+    let library_before = e.state.players[0].library.len();
+
+    e.apply_command(0, &activate_ability(protege, 0, vec![]))
+        .expect("activate Teferi's Protege");
+    e.apply_command(0, &pass()).expect("p0 pass");
+    let batch = e
+        .apply_command(1, &pass())
+        .expect("p1 pass parks after the draw");
+
+    let choice = find_resolution_choice(&batch).expect("discard choice");
+    assert_eq!(choice.deciding_player_id, 0);
+    assert_eq!(choice.choice_kind(), ChoiceKind::HandCards);
+    assert_eq!((choice.min, choice.max), (1, 1));
+    assert_eq!(
+        e.state.players[0].library.len(),
+        library_before - 1,
+        "the draw occurs before the discard choice"
+    );
+    assert_eq!(e.state.players[0].hand.len(), hand_before + 1);
+}
+
+#[test]
+fn issue_58_keldon_raider_decline_does_not_draw() {
+    let decks = Some(vec![
+        deck_with("mountain", &["keldon_raider"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(3006, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    relocate_to_hand(&mut e, 0, "keldon_raider");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 2,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "keldon_raider");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast Keldon Raider");
+    pass_both_players(&mut e);
+    let library_before = e.state.players[0].library.len();
+    e.apply_command(0, &pass()).expect("p0 pass on trigger");
+    let batch = e.apply_command(1, &pass()).expect("p1 pass on trigger");
+
+    let choice = find_resolution_choice(&batch).expect("optional discard choice");
+    assert_eq!((choice.min, choice.max), (0, 1));
+    e.apply_command(0, &submit_resolution_choice(vec![]))
+        .expect("decline discard");
+    assert_eq!(
+        e.state.players[0].library.len(),
+        library_before,
+        "declining the discard must not draw"
+    );
+}
+
+#[test]
+fn issue_58_keldon_raider_discard_then_draws() {
+    let decks = Some(vec![
+        deck_with("mountain", &["keldon_raider"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(3007, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    relocate_to_hand(&mut e, 0, "keldon_raider");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 2,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "keldon_raider");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast Keldon Raider");
+    pass_both_players(&mut e);
+    let library_before = e.state.players[0].library.len();
+    e.apply_command(0, &pass()).expect("p0 pass on trigger");
+    let batch = e.apply_command(1, &pass()).expect("p1 pass on trigger");
+    let choice = find_resolution_choice(&batch).expect("optional discard choice");
+    let discarded = choice.candidate_object_ids[0];
+    e.apply_command(0, &submit_resolution_choice(vec![discarded]))
+        .expect("discard then draw");
+    assert_eq!(e.state.players[0].library.len(), library_before - 1);
+    assert!(e.state.players[0].graveyard.contains(&discarded));
+}
+
+#[test]
+fn issue_58_lilianas_steward_sacrifices_and_affected_opponent_chooses() {
+    let decks = Some(vec![
+        deck_with("swamp", &["lilianas_steward"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(3008, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let steward = inject_creature_on_battlefield(&mut e, 0, "lilianas_steward");
+    let cleared: Vec<_> = e.state.players[1].hand.drain(..).collect();
+    e.state.players[1].library.extend(cleared);
+    inject_card_into_hand(&mut e, 1, 1, "grizzly_bears");
+    inject_card_into_hand(&mut e, 1, 1, "storm_crow");
+
+    e.apply_command(0, &activate_ability(steward, 0, target_player(1)))
+        .expect("activate Liliana's Steward");
+    assert!(
+        e.state.players[0].graveyard.contains(&steward),
+        "the source is sacrificed as an activation cost"
+    );
+    e.apply_command(0, &pass()).expect("p0 pass");
+    let batch = e.apply_command(1, &pass()).expect("p1 pass");
+    let choice = find_resolution_choice(&batch).expect("opponent discard choice");
+    assert_eq!(choice.deciding_player_id, 1);
+    assert_eq!(choice.choice_kind(), ChoiceKind::HandCards);
+    assert_eq!((choice.min, choice.max), (1, 1));
+}
+
+#[test]
+fn issue_58_lilianas_steward_is_sorcery_speed_only() {
+    let decks = Some(vec![
+        deck_with("swamp", &["lilianas_steward"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(3012, &[0, 1], 20, decks, true).expect("new");
+    let steward = inject_creature_on_battlefield(&mut e, 0, "lilianas_steward");
+
+    let result = e.apply_command(0, &activate_ability(steward, 0, target_player(1)));
+    assert!(result.is_err(), "the ability is illegal during upkeep");
+    assert!(e.state.players[0].battlefield.contains(&steward));
+    assert!(!e.state.objects.get(&steward).expect("steward").tapped);
+}
+
+#[test]
+fn issue_58_rousing_read_draws_then_discards_and_buffs_attached_creature() {
+    let decks = Some(vec![
+        deck_with("island", &["rousing_read"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(3009, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    relocate_to_hand(&mut e, 0, "rousing_read");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            u: 1,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "rousing_read");
+    e.apply_command(0, &cast_spell(idx, target_object(bear)))
+        .expect("cast Rousing Read");
+    pass_both_players(&mut e);
+    assert_eq!(e.effective_power(bear), Some(3));
+    assert_eq!(e.effective_toughness(bear), Some(3));
+    assert!(e.effective_has_keyword(bear, Keyword::Flying));
+
+    let library_before = e.state.players[0].library.len();
+    e.apply_command(0, &pass()).expect("p0 pass on trigger");
+    let batch = e.apply_command(1, &pass()).expect("p1 pass on trigger");
+    let choice = find_resolution_choice(&batch).expect("discard after drawing two");
+    assert_eq!((choice.min, choice.max), (1, 1));
+    assert_eq!(e.state.players[0].library.len(), library_before - 2);
+}
 // ---------------------------------------------------------------------------
 // ReturnFromGraveyard -> Battlefield (Zombify)
 

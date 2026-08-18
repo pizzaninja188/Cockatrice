@@ -1,0 +1,20 @@
+(
+  id: "keldon_raider",
+  name: "Keldon Raider",
+  mana_cost: "{2}{R}{R}",
+  types: ["Creature", "Human", "Warrior"],
+  power: 4,
+  toughness: 3,
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [DrawDiscard(
+        draw_count: 1,
+        discard_count: 1,
+        order: DiscardThenDraw,
+        optional: true,
+      )],
+      text: "When this creature enters, you may discard a card. If you do, draw a card.",
+    ),
+  ],
+)

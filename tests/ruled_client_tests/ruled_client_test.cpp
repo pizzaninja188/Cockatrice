@@ -2229,12 +2229,30 @@ TEST_F(RuledClientTest, ManaPaymentPromptsOnlyTheDecidingPlayer)
     rcr->set_payment_currently_legal(true);
     apply(batch);
     EXPECT_FALSE(state->isResolutionPaymentActive());
-    EXPECT_TRUE(state->isWaitingForResolutionPayment());
-    EXPECT_EQ(state->resolutionPaymentWaitingPlayer(), kOpponent);
+    EXPECT_TRUE(state->isWaitingForResolutionChoice());
+    EXPECT_EQ(state->resolutionChoiceWaitingPlayer(), kOpponent);
 
     ruled::v1::RuledEventBatch completed;
     apply(completed);
-    EXPECT_FALSE(state->isWaitingForResolutionPayment());
+    EXPECT_FALSE(state->isWaitingForResolutionChoice());
+}
+
+TEST_F(RuledClientTest, PrivateHandChoiceMakesTheNonDecidingPlayerWait)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+    rcr->set_deciding_player_id(kLocalPlayer + 1);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
+    rcr->set_prompt_text("Opponent is making a resolution choice.");
+    apply(batch);
+
+    EXPECT_FALSE(state->isResolutionHandPickActive());
+    EXPECT_TRUE(state->isWaitingForResolutionChoice());
+    EXPECT_EQ(state->resolutionChoiceWaitingPlayer(), kOpponent);
+
+    ruled::v1::RuledEventBatch completed;
+    apply(completed);
+    EXPECT_FALSE(state->isWaitingForResolutionChoice());
 }
 
 TEST(RuledManaPoolTrackerTest, OptimisticStagingDoesNotTurnOldManaIntoNewProduction)

@@ -1,0 +1,19 @@
+(
+  id: "teferis_protege",
+  name: "Teferi's Protege",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Human", "Wizard"],
+  power: 2,
+  toughness: 3,
+  activated_abilities: [
+    (
+      costs: [Mana("{1}{U}"), Tap],
+      effect: [DrawDiscard(
+        draw_count: 1,
+        discard_count: 1,
+        order: DrawThenDiscard,
+      )],
+      text: "{1}{U}, {T}: Draw a card, then discard a card.",
+    ),
+  ],
+)

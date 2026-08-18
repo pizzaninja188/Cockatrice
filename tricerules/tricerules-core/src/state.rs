@@ -431,6 +431,9 @@ pub struct PendingResolution {
     /// Resolution-time payment metadata for an "unless its controller pays" effect. Object-choice
     /// resolutions leave this unset and continue to use candidates/min/max.
     pub mana_payment: Option<PendingManaPayment>,
+    /// Typed continuation for a discard choice. `draw_after` is nonzero for a
+    /// discard-then-draw instruction; `draw_only_if_discarded` implements "if you do".
+    pub discard: Option<PendingDiscard>,
     /// For `__copy_targets` only: the object id of the spell being copied, so `StackPushed` can
     /// carry `copy_source_object_id` for the client's printing-inheritance logic.
     pub copy_source_object_id: ObjectId,
@@ -446,6 +449,13 @@ pub struct PendingResolution {
     /// themselves always write `None`. Stays `None` for parks that own no primitive effect list:
     /// tier-3 [`crate::custom::CardEffect`]s, `__copy_targets`, and the `__legend_sba` SBA.
     pub resume_effect_index: Option<u32>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct PendingDiscard {
+    pub affected_player: PlayerId,
+    pub draw_after: u32,
+    pub draw_only_if_discarded: bool,
 }
 
 /// CR 616.1 priority groups. The current card set exercises `Other`; the complete ordering

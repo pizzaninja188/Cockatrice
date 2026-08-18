@@ -516,6 +516,7 @@ impl GameEngine {
                 choice_kind: custom::ChoiceKind::LegendKeep,
                 unique_names: false,
                 mana_payment: None,
+                discard: None,
                 copy_source_object_id: 0,
                 search_destination: SearchDestination::default(),
                 search_shuffle: false,

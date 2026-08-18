@@ -1060,6 +1060,7 @@ fn validate_effect_targets(
         }
         // Non-targeted effects require no targets.
         SpellEffectKind::Draw { .. }
+        | SpellEffectKind::DrawDiscard { .. }
         | SpellEffectKind::GainLife { .. }
         | SpellEffectKind::Mill { .. }
         // CR 115.1: "you lose life" does not target. `LifeAmount::TargetManaValue` reads a

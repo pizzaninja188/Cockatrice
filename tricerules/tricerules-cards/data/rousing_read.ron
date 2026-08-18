@@ -1,0 +1,21 @@
+(
+  id: "rousing_read",
+  name: "Rousing Read",
+  mana_cost: "{2}{U}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach(target: (kind: Creature))],
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [DrawDiscard(
+        draw_count: 2,
+        discard_count: 1,
+        order: DrawThenDiscard,
+      )],
+      text: "When this Aura enters, draw two cards, then discard a card.",
+    ),
+  ],
+  static_abilities: [
+    AttachedModifier(delta_power: 1, delta_toughness: 1, keywords: [Flying]),
+  ],
+)

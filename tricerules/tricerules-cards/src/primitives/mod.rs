@@ -34,6 +34,44 @@ mod tests {
     }
 
     #[test]
+    fn optional_draw_discard_is_only_single_card_discard_then_draw() {
+        let effect = |who, discard_count, order| SpellEffectKind::DrawDiscard {
+            who,
+            draw_count: 1,
+            discard_count,
+            order,
+            optional: true,
+        };
+        assert!(effect(
+            PlayerRecipient::Controller,
+            1,
+            DrawDiscardOrder::DiscardThenDraw
+        )
+        .validate(EffectContext::Ability)
+        .is_ok());
+
+        for invalid in [
+            effect(
+                PlayerRecipient::Controller,
+                1,
+                DrawDiscardOrder::DrawThenDiscard,
+            ),
+            effect(
+                PlayerRecipient::Controller,
+                2,
+                DrawDiscardOrder::DiscardThenDraw,
+            ),
+            effect(
+                PlayerRecipient::EachPlayer,
+                1,
+                DrawDiscardOrder::DiscardThenDraw,
+            ),
+        ] {
+            assert!(invalid.validate(EffectContext::Ability).is_err());
+        }
+    }
+
+    #[test]
     fn amount_serde_preserves_literals_x_and_named_conditionals() {
         assert_eq!(ron::from_str::<Amount>("4").unwrap(), Amount::Fixed(4));
         assert_eq!(ron::from_str::<Amount>(r#""X""#).unwrap(), Amount::X);

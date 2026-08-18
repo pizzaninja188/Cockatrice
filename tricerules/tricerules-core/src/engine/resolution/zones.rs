@@ -23,7 +23,22 @@ pub(super) fn draw(
         AmountContext::for_stack_item(top, cx.controller)
             .with_previous_effect_result(cx.previous_effect_result),
     );
-    let idx = engine.state.player_idx(drawer).unwrap();
+    draw_cards_for_player(engine, events, drawer, count, spell_label)?;
+
+    Ok(EffectOutcome::Continue)
+}
+
+pub(in crate::engine) fn draw_cards_for_player(
+    engine: &mut GameEngine,
+    events: &mut Vec<rv1::RuledEvent>,
+    drawer: PlayerId,
+    count: u32,
+    spell_label: &str,
+) -> Result<(), EngineError> {
+    let idx = engine
+        .state
+        .player_idx(drawer)
+        .ok_or(EngineError::Illegal("draw recipient not found"))?;
     // CR 120.3 / 104.3c: drawing from an empty library does NOT fail the spell —
     // draw as many as possible, then the player loses as a state-based action
     // (swept in by `sweep_life`). Aborting resolution here would corrupt state
@@ -49,7 +64,7 @@ pub(super) fn draw(
         )));
     }
 
-    Ok(EffectOutcome::Continue)
+    Ok(())
 }
 
 pub(super) fn exile_target(
@@ -222,145 +237,196 @@ pub(super) fn discard_cards(
     let SpellEffectKind::DiscardCards {
         count,
         target: _,
-        random,
+        chooser,
     } = effect
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    let Some(&target) = cx.targets.first() else {
+        return Ok(EffectOutcome::Continue);
+    };
+    discard_for_player(cx, target as PlayerId, count, chooser, false, 0)
+}
+
+pub(super) fn draw_discard(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::DrawDiscard {
+        who,
+        draw_count,
+        discard_count,
+        order,
+        optional,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let recipients = player_recipients(cx, who);
+    let [player] = recipients.as_slice() else {
+        return if recipients.is_empty() {
+            Ok(EffectOutcome::Continue)
+        } else {
+            Err(EngineError::Illegal(
+                "DrawDiscard requires exactly one affected player",
+            ))
+        };
+    };
+    let player = *player;
+
+    match order {
+        DrawDiscardOrder::DrawThenDiscard => {
+            draw_cards_for_player(cx.engine, cx.events, player, draw_count, cx.spell_label)?;
+            discard_for_player(
+                cx,
+                player,
+                discard_count,
+                DiscardChooser::AffectedPlayer,
+                false,
+                0,
+            )
+        }
+        DrawDiscardOrder::DiscardThenDraw => discard_for_player(
+            cx,
+            player,
+            discard_count,
+            DiscardChooser::AffectedPlayer,
+            optional,
+            draw_count,
+        ),
+    }
+}
+
+fn discard_for_player(
+    cx: &mut EffectCx<'_>,
+    affected_player: PlayerId,
+    count: u32,
+    chooser: DiscardChooser,
+    optional: bool,
+    draw_after: u32,
+) -> Result<EffectOutcome, EngineError> {
+    let controller = cx.controller;
+    let top = cx.top;
+    let spell_label = cx.spell_label;
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
-    let targets = cx.targets;
-    let top = cx.top;
-    let controller = cx.controller;
-    let spell_label = cx.spell_label;
+    let Some(pi) = engine.state.player_idx(affected_player) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let hand = engine.state.players[pi].hand.clone();
 
-    if let Some(&tid) = targets.first() {
-        if let Some(pi) = engine.state.player_idx(tid as i32) {
-            let pid = engine.state.players[pi].id;
-            if random {
-                // CR 701.7a "at random": engine chooses using a seeded RNG so
-                // replays reconstruct the same discard (Hymn to Tourach).
-                let hand = engine.state.players[pi].hand.clone();
-                let discard_count = (count as usize).min(hand.len());
-                if discard_count == 0 {
-                    events.push(ev_log(format!(
-                        "P{pid} has no cards to discard ({spell_label})."
-                    )));
-                } else {
-                    let mix = engine
-                        .state
-                        .command_index
-                        .wrapping_mul(0x9E37_79B9_7F4A_7C15);
-                    let mut rng = rand::rngs::StdRng::seed_from_u64(mix);
-                    let mut shuffled = hand;
-                    shuffled.shuffle(&mut rng);
-                    let to_discard: Vec<ObjectId> =
-                        shuffled.into_iter().take(discard_count).collect();
-                    for oid in &to_discard {
-                        let card_name = object_display_name(&engine.state, engine.registry, *oid);
-                        move_object_to_zone(
-                            &mut engine.state,
-                            engine.registry,
-                            *oid,
-                            Zone::Graveyard,
-                            None,
-                        )?;
-                        events.push(permanent_moved_event(
-                            &engine.state,
-                            *oid,
-                            pid,
-                            rv1::permanent_moved::Destination::Graveyard,
-                        ));
-                        events.push(ev_log(format!(
-                            "P{pid} discards {card_name} ({spell_label})."
-                        )));
-                    }
-                }
-            } else {
-                // Caster-chooses: emit ResolutionChoiceRequired so the caster
-                // sees the target's revealed hand and picks which cards to discard
-                // (Coercion, Thoughtseize). choice_kind 1 = RevealedCards (public).
-                let hand: Vec<ObjectId> = engine.state.players[pi].hand.clone();
-                if hand.is_empty() {
-                    events.push(ev_log(format!(
-                        "P{pid} has no cards to discard ({spell_label})."
-                    )));
-                } else {
-                    let n = (hand.len() as u32).min(count);
-                    let candidate_card_ids: Vec<String> = hand
-                        .iter()
-                        .map(|&oid| {
-                            engine
-                                .state
-                                .objects
-                                .get(&oid)
-                                .map(|o| o.card_id.clone())
-                                .unwrap_or_default()
-                        })
-                        .collect();
-                    let candidate_names: Vec<String> = candidate_card_ids
-                        .iter()
-                        .map(|cid| {
-                            engine
-                                .registry
-                                .get(cid)
-                                .map(|d| d.name.clone())
-                                .unwrap_or_else(|| cid.clone())
-                        })
-                        .collect();
-                    let prompt =
-                        format!("P{controller}: choose {n} card(s) to discard from P{pid}'s hand.");
-                    events.push(rv1::RuledEvent {
-                        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
-                            rv1::ResolutionChoiceRequired {
-                                deciding_player_id: controller,
-                                source_object_id: top.id,
-                                prompt_text: prompt.clone(),
-                                // Private: "look at target player's hand" reveals
-                                // it only to the caster, not the table (CR 701.7).
-                                choice_kind: custom::ChoiceKind::OpponentHand as i32,
-                                candidate_object_ids: hand.clone(),
-                                candidate_card_ids,
-                                candidate_names,
-                                min: n,
-                                max: n,
-                                ordered: false,
-                                unique_names: false,
-                                candidate_server_card_ids: Vec::new(),
-                                generic_mana_cost: 0,
-                                payment_currently_legal: false,
-                            },
-                        )),
-                    });
-                    events.push(ev_log(prompt.clone()));
-                    engine.state.pending_resolution = Some(PendingResolution {
-                        item: top.clone(),
-                        custom_key: "__discard_chosen".to_string(),
-                        step: 0,
-                        scratch: vec![],
-                        deciding_player: controller,
-                        candidates: hand,
-                        min: n,
-                        max: n,
-                        ordered: false,
-                        unique_names: false,
-                        mana_payment: None,
-                        prompt,
-                        choice_kind: custom::ChoiceKind::OpponentHand,
-                        copy_source_object_id: 0,
-                        search_destination: SearchDestination::Hand,
-                        search_shuffle: false,
-                        search_reveal: false,
-                        // Stamped by `run_effect_list` once it sees the `Suspended` below.
-                        resume_effect_index: None,
-                    });
-                    return Ok(EffectOutcome::Suspended);
-                }
+    if chooser == DiscardChooser::Random {
+        let discard_count = (count as usize).min(hand.len());
+        if discard_count == 0 {
+            events.push(ev_log(format!(
+                "P{affected_player} has no cards to discard ({spell_label})."
+            )));
+        } else {
+            let mix = engine
+                .state
+                .command_index
+                .wrapping_mul(0x9E37_79B9_7F4A_7C15);
+            let mut rng = rand::rngs::StdRng::seed_from_u64(mix);
+            let mut shuffled = hand;
+            shuffled.shuffle(&mut rng);
+            for oid in shuffled.into_iter().take(discard_count) {
+                let card_name = object_display_name(&engine.state, engine.registry, oid);
+                move_object_to_zone(
+                    &mut engine.state,
+                    engine.registry,
+                    oid,
+                    Zone::Graveyard,
+                    None,
+                )?;
+                events.push(permanent_moved_event(
+                    &engine.state,
+                    oid,
+                    affected_player,
+                    rv1::permanent_moved::Destination::Graveyard,
+                ));
+                events.push(ev_log(format!(
+                    "P{affected_player} discards {card_name} ({spell_label})."
+                )));
             }
         }
+        return Ok(EffectOutcome::Continue);
     }
 
-    Ok(EffectOutcome::Continue)
+    if hand.is_empty() {
+        events.push(ev_log(format!(
+            "P{affected_player} has no cards to discard ({spell_label})."
+        )));
+        if draw_after > 0 && !optional {
+            draw_cards_for_player(engine, events, affected_player, draw_after, spell_label)?;
+        }
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let n = (hand.len() as u32).min(count);
+    let min = if optional { 0 } else { n };
+    let deciding_player = match chooser {
+        DiscardChooser::AffectedPlayer => affected_player,
+        DiscardChooser::Controller => controller,
+        DiscardChooser::Random => unreachable!("handled above"),
+    };
+    let choice_kind = match chooser {
+        DiscardChooser::AffectedPlayer => custom::ChoiceKind::HandCards,
+        DiscardChooser::Controller => custom::ChoiceKind::OpponentHand,
+        DiscardChooser::Random => unreachable!("handled above"),
+    };
+    let (candidate_card_ids, candidate_names) = candidate_identities(engine, &hand);
+    let prompt = if optional {
+        format!("P{deciding_player}: you may choose a card for P{affected_player} to discard.")
+    } else {
+        format!("P{deciding_player}: choose {n} card(s) for P{affected_player} to discard.")
+    };
+    events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                deciding_player_id: deciding_player,
+                source_object_id: top.id,
+                prompt_text: prompt.clone(),
+                choice_kind: choice_kind as i32,
+                candidate_object_ids: hand.clone(),
+                candidate_card_ids,
+                candidate_names,
+                min,
+                max: n,
+                ordered: false,
+                unique_names: false,
+                candidate_server_card_ids: Vec::new(),
+                generic_mana_cost: 0,
+                payment_currently_legal: false,
+            },
+        )),
+    });
+    events.push(ev_log(prompt.clone()));
+    engine.state.pending_resolution = Some(PendingResolution {
+        item: top.clone(),
+        custom_key: "__discard_chosen".to_string(),
+        step: 0,
+        scratch: vec![],
+        deciding_player,
+        candidates: hand,
+        min,
+        max: n,
+        ordered: false,
+        unique_names: false,
+        mana_payment: None,
+        discard: Some(PendingDiscard {
+            affected_player,
+            draw_after,
+            draw_only_if_discarded: optional,
+        }),
+        prompt,
+        choice_kind,
+        copy_source_object_id: 0,
+        search_destination: SearchDestination::Hand,
+        search_shuffle: false,
+        search_reveal: false,
+        resume_effect_index: None,
+    });
+    Ok(EffectOutcome::Suspended)
 }
 
 pub(super) fn mill_target_player(
@@ -517,6 +583,7 @@ pub(super) fn target_player_sacrifices(
                     ordered: false,
                     unique_names: false,
                     mana_payment: None,
+                    discard: None,
                     prompt,
                     choice_kind: custom::ChoiceKind::Revealed,
                     copy_source_object_id: 0,
@@ -820,6 +887,7 @@ pub(super) fn scry(
         ordered: true,
         unique_names: false,
         mana_payment: None,
+        discard: None,
         prompt,
         choice_kind: custom::ChoiceKind::LibraryTop,
         copy_source_object_id: 0,
@@ -915,6 +983,7 @@ pub(super) fn search_library(
         ordered: false,
         unique_names: false,
         mana_payment: None,
+        discard: None,
         prompt,
         choice_kind: custom::ChoiceKind::LibrarySearch,
         copy_source_object_id: 0,

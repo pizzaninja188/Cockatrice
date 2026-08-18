@@ -1,0 +1,16 @@
+(
+  id: "lilianas_steward",
+  name: "Liliana's Steward",
+  mana_cost: "{B}",
+  types: ["Creature", "Zombie"],
+  power: 1,
+  toughness: 2,
+  activated_abilities: [
+    (
+      costs: [Tap, SacrificeSelf],
+      effect: [DiscardCards(count: 1, target: (kind: OpponentPlayer))],
+      timing: SorcerySpeed,
+      text: "{T}, Sacrifice this creature: Target opponent discards a card. Activate only as a sorcery.",
+    ),
+  ],
+)

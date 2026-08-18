@@ -3,5 +3,5 @@
   name: "Hymn to Tourach",
   mana_cost: "{B}{B}",
   types: ["Sorcery"],
-  spell_effect: [DiscardCards(count: 2, target: (kind: AnyPlayer), random: true)],
+  spell_effect: [DiscardCards(count: 2, target: (kind: AnyPlayer), chooser: Random)],
 )
