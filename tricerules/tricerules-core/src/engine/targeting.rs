@@ -677,6 +677,7 @@ fn effect_target_legal_at_resolution_with_context(
         }
         SpellEffectKind::DestroyTarget { target }
         | SpellEffectKind::DestroyAttached { target, .. }
+        | SpellEffectKind::PutTargetPermanentInOwnersLibrary { target, .. }
         | SpellEffectKind::Equip { target } => {
             target_filter_legal_with_context(engine, target, tid, caster, source, trigger_context)
         }
@@ -803,7 +804,8 @@ fn validate_effect_targets(
             ));
         }
         SpellEffectKind::DestroyTarget { target: filter }
-        | SpellEffectKind::DestroyAttached { target: filter, .. } => {
+        | SpellEffectKind::DestroyAttached { target: filter, .. }
+        | SpellEffectKind::PutTargetPermanentInOwnersLibrary { target: filter, .. } => {
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one target"));
             }
@@ -1343,6 +1345,7 @@ fn spell_target_legality_error_with_context(
         // characteristic restriction (creature/player, `tapped`, `not_artifact`, hexproof/shroud).
         SpellEffectKind::DestroyTarget { target: filter }
         | SpellEffectKind::DestroyAttached { target: filter, .. }
+        | SpellEffectKind::PutTargetPermanentInOwnersLibrary { target: filter, .. }
         | SpellEffectKind::DamageTarget { target: filter, .. }
         | SpellEffectKind::DamageTargets { target: filter, .. }
         | SpellEffectKind::SkipNextUntap { target: filter }

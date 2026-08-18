@@ -11,6 +11,19 @@ pub(crate) fn shuffle_player_library(state: &mut GameState, player_idx: usize, m
     state.players[player_idx].library = v.into_iter().collect();
 }
 
+/// Shuffle a player's library using the deterministic mix shared by effects resolved during an
+/// accepted command. Keeping this derivation in one place preserves replay behavior for searches,
+/// custom effects, and battlefield-to-library moves.
+pub(crate) fn shuffle_player_library_for_current_command(state: &mut GameState, player: PlayerId) {
+    let mix = state
+        .seed
+        .wrapping_add(state.command_index.wrapping_mul(0x9E37_79B9_7F4A_7C15))
+        ^ (player as u64);
+    if let Some(idx) = state.player_idx(player) {
+        shuffle_player_library(state, idx, mix);
+    }
+}
+
 fn mulligan_redraw(
     state: &mut GameState,
     registry: &'static CardRegistry,

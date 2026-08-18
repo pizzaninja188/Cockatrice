@@ -1,0 +1,10 @@
+(
+  id: "deglamer",
+  name: "Deglamer",
+  mana_cost: "{1}{G}",
+  types: ["Instant"],
+  spell_effect: [PutTargetPermanentInOwnersLibrary(
+    target: (kind: AnyPermanent, permanent_types: [Artifact, Enchantment]),
+    placement: Shuffle,
+  )],
+)

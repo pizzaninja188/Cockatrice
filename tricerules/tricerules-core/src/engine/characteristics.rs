@@ -487,6 +487,9 @@ pub(super) fn permanent_matches_filter_characteristics(
     {
         return false;
     }
+    if filter.not_land && characteristics.has_type("Land") {
+        return false;
+    }
     if filter
         .excluded_subtypes
         .iter()

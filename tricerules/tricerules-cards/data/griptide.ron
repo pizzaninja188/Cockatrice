@@ -1,0 +1,10 @@
+(
+  id: "griptide",
+  name: "Griptide",
+  mana_cost: "{3}{U}",
+  types: ["Instant"],
+  spell_effect: [PutTargetPermanentInOwnersLibrary(
+    target: (kind: Creature),
+    placement: Top,
+  )],
+)

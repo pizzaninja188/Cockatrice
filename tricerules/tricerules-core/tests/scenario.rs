@@ -75,6 +75,8 @@ mod issue_83_destroy_attached;
 mod issue_85_creature_damage;
 #[path = "scenario/issue_86_related_player_recipients.rs"]
 mod issue_86_related_player_recipients;
+#[path = "scenario/issue_89_battlefield_to_library.rs"]
+mod issue_89_battlefield_to_library;
 #[path = "scenario/legend_rule.rs"]
 mod legend_rule;
 #[path = "scenario/mana.rs"]

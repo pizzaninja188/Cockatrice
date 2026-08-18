@@ -607,6 +607,17 @@ pub enum CombatRestrictionScope {
     Matching(TargetFilter),
 }
 
+/// Where a battlefield permanent is placed in its owner's library.
+///
+/// `Shuffle` means the permanent is moved first and the complete library is then shuffled.
+/// Totally Lost and Griptide use `Top`; Deglamer and Unravel the Aether use `Shuffle`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LibraryPlacement {
+    Top,
+    Bottom,
+    Shuffle,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpellEffectKind {
     DamageTarget {
@@ -876,6 +887,12 @@ pub enum SpellEffectKind {
     ExileTargetGainLifeEqualToPower,
     ReturnTargetCreatureToHand,
     ReturnTargetPermanentToHand,
+    /// Move a chosen battlefield permanent to its owner's library (CR 400.3). The target filter
+    /// carries card-specific restrictions; placement controls library ordering or shuffling.
+    PutTargetPermanentInOwnersLibrary {
+        target: TargetFilter,
+        placement: LibraryPlacement,
+    },
     /// Move a card from a graveyard to hand or battlefield (CR 400.1: graveyard is public).
     /// Raise Dead / Disentomb (creature → hand); future reanimation (creature → battlefield).
     /// The `filter` selects which graveyard and which card types are legal targets; the engine
@@ -1324,6 +1341,7 @@ impl SpellEffectKind {
             | SpellEffectKind::ExileTargetGainLifeEqualToPower
             | SpellEffectKind::ReturnTargetCreatureToHand
             | SpellEffectKind::ReturnTargetPermanentToHand
+            | SpellEffectKind::PutTargetPermanentInOwnersLibrary { .. }
             | SpellEffectKind::ReturnFromGraveyard { .. }
             | SpellEffectKind::TargetPlayerGainsLife { .. }
             | SpellEffectKind::TargetPlayerLosesLife { .. }
@@ -1354,6 +1372,7 @@ impl SpellEffectKind {
             | SpellEffectKind::DamageTargets { target, .. }
             | SpellEffectKind::DestroyTarget { target }
             | SpellEffectKind::DestroyAttached { target, .. }
+            | SpellEffectKind::PutTargetPermanentInOwnersLibrary { target, .. }
             | SpellEffectKind::SkipNextUntap { target }
             | SpellEffectKind::GainControlUntilEndOfTurn { target }
             | SpellEffectKind::TargetPlayerGainsLife { target, .. }

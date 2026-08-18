@@ -24,6 +24,8 @@
 //     is the only cross-language check that a C++-built DevCommand decodes and applies in Rust.
 //   * continuous control change: Act of Treason moves one physical permanent to the caster's
 //     TABLE for the turn, grants haste, then returns it to the owner's TABLE at cleanup
+//   * battlefield-to-library placement: Totally Lost moves that permanent to the top of its
+//     owner's private DECK; both clients see the public move and only the owner sees its next draw
 //   * player-attached Aura: Curse of Disturbance targets the other seat, stays on its controller's
 //     TABLE, and publishes the same typed recipient / physical mapping to both clients
 //
@@ -291,6 +293,12 @@ public:
     bool sawControlReturn = false;
     bool sawPhysicalControlTransfer = false;
     bool sawPhysicalControlReturn = false;
+    bool devTotallyLostSent = false;
+    bool devTotallyLostManaSent = false;
+    bool totallyLostCast = false;
+    bool sawLibraryPermanentMoved = false;
+    bool sawLibraryTargetAbsentFromBattlefield = false;
+    bool sawTopPermanentDrawn = false;
     bool sawCursePlayerAttachment = false;
     quint32 curseOid = 0;
     std::map<quint32, int> serverCardByEngineOid;
@@ -698,6 +706,12 @@ public:
                             .arg(rcr.ordered())
                             .arg(rcr.candidate_object_ids_size()));
                 }
+            } else if (ev.has_permanent_moved()) {
+                const auto &moved = ev.permanent_moved();
+                if (moved.object_id() == controlTargetOid &&
+                    moved.destination() == ruled::v1::PermanentMoved::DESTINATION_LIBRARY) {
+                    sawLibraryPermanentMoved = true;
+                }
             } else if (ev.has_zone_view()) {
                 if (ev.zone_view().battlefields_unchanged()) {
                     sawBattlefieldOmission = true;
@@ -779,6 +793,9 @@ public:
                     text.endsWith(QStringLiteral(" (cleanup)"))) {
                     sawOpponentCleanupDiscard = true;
                 }
+                if (text == QStringLiteral("Totally Lost puts Grizzly Bears on top of its owner's library.")) {
+                    sawLibraryPermanentMoved = true;
+                }
                 log(QStringLiteral("gamelog: %1").arg(text.left(160)));
             }
         }
@@ -800,6 +817,9 @@ public:
         if (sawControlTransfer && playerHasControlTarget(oppId)) {
             sawControlReturn = true;
         }
+        if (sawLibraryPermanentMoved && !playerHasControlTarget(myId) && !playerHasControlTarget(oppId)) {
+            sawLibraryTargetAbsentFromBattlefield = true;
+        }
         EXPECT_LE(phaseEvents, 1) << "one settled ruled batch published multiple phase states";
         const auto it = batch.legal_by_player().find(myId);
         if (it != batch.legal_by_player().end()) {
@@ -808,6 +828,12 @@ public:
                 labels.append(QString::fromStdString(l));
             }
             latestLegal = it->second;
+            if (role == Role::Hoarder && sawLibraryPermanentMoved &&
+                std::any_of(latestLegal.hand_actions().begin(), latestLegal.hand_actions().end(), [](const auto &action) {
+                    return QString::fromStdString(action.card_name()) == QLatin1String("Grizzly Bears");
+                })) {
+                sawTopPermanentDrawn = true;
+            }
         }
     }
 
@@ -1667,6 +1693,42 @@ public:
                     }
                 }
             }
+            if (sawControlReturn && paidSoftCounter && sawSoftCounterResolveAfterChoice &&
+                !sawLibraryTargetAbsentFromBattlefield) {
+                if (!devTotallyLostSent) {
+                    devTotallyLostSent = true;
+                    ruled::v1::RuledCommand cmd;
+                    auto *dev = cmd.mutable_dev_command();
+                    dev->set_target_player_id(myId);
+                    auto *put = dev->mutable_put_card_in_zone();
+                    put->set_card_name("Totally Lost");
+                    put->set_zone(ruled::v1::DEV_ZONE_HAND);
+                    sendRuled(cmd, QStringLiteral("dev: conjure Totally Lost into hand"));
+                    return;
+                }
+                if (!devTotallyLostManaSent) {
+                    devTotallyLostManaSent = true;
+                    ruled::v1::RuledCommand cmd;
+                    auto *dev = cmd.mutable_dev_command();
+                    dev->set_target_player_id(myId);
+                    dev->mutable_add_mana()->set_u(1);
+                    dev->mutable_add_mana()->set_c(4);
+                    sendRuled(cmd, QStringLiteral("dev: add {4}{U} for Totally Lost"));
+                    return;
+                }
+                if (!totallyLostCast) {
+                    if (const auto *spell =
+                            handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Totally Lost"))) {
+                        ruled::v1::RuledCommand cmd;
+                        auto *cast = cmd.mutable_cast_spell();
+                        cast->mutable_source()->set_hand_index(spell->hand_index());
+                        cast->add_targets()->set_object_id(controlTargetOid);
+                        totallyLostCast = true;
+                        sendRuled(cmd, QStringLiteral("cast Totally Lost on oid %1").arg(controlTargetOid));
+                        return;
+                    }
+                }
+            }
             if (!devWaifSent) {
                 devWaifSent = true;
                 ruled::v1::RuledCommand cmd;
@@ -2046,6 +2108,9 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
                p1.sawEntryReplacementChoice && p1.submittedEntryReplacementChoice && p1.sawDiregrafEnterTapped &&
                p1.sawDamagePreventionChoice && p1.submittedDamagePreventionChoice && p1.sawControlTransfer &&
                p1.sawControlReturn && p1.sawPhysicalControlTransfer && p1.sawPhysicalControlReturn &&
+               p1.sawLibraryPermanentMoved && p2.sawLibraryPermanentMoved &&
+               p1.sawLibraryTargetAbsentFromBattlefield && p2.sawLibraryTargetAbsentFromBattlefield &&
+               p2.sawTopPermanentDrawn &&
                p1.sawSoftCounterPaymentChoice && p1.activatedManaDuringSoftCounterPayment && p1.paidSoftCounter &&
                p1.sawSoftCounterResolveAfterChoice &&
                p2.softCounterConvoluteCast &&
@@ -2124,6 +2189,12 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     EXPECT_TRUE(p1.sawPhysicalControlTransfer) << "the physical control target never crossed TABLE zones";
     EXPECT_TRUE(p1.sawControlReturn) << "the control target did not return at cleanup";
     EXPECT_TRUE(p1.sawPhysicalControlReturn) << "the physical control target did not return to its owner's TABLE";
+    EXPECT_TRUE(p1.totallyLostCast) << "Totally Lost was never cast";
+    EXPECT_TRUE(p1.sawLibraryPermanentMoved && p2.sawLibraryPermanentMoved)
+        << "both clients did not receive the public battlefield-to-library move";
+    EXPECT_TRUE(p1.sawLibraryTargetAbsentFromBattlefield && p2.sawLibraryTargetAbsentFromBattlefield)
+        << "both clients did not remove the target from their battlefield views";
+    EXPECT_TRUE(p2.sawTopPermanentDrawn) << "the owner did not draw the permanent placed on top";
     EXPECT_TRUE(p1.flashbackCast) << "seat 1 never sent its flashback cast";
     EXPECT_TRUE(p2.flashbackCast) << "seat 2 never sent its flashback cast";
     // One of these two seats does not own the canonical stack, so its cast crosses players.

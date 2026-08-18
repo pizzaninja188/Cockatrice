@@ -148,6 +148,73 @@ pub(super) fn return_target_to_hand(
     Ok(EffectOutcome::Continue)
 }
 
+fn move_permanent_to_owners_library(
+    engine: &mut GameEngine,
+    events: &mut Vec<rv1::RuledEvent>,
+    tid: ObjectId,
+    placement: LibraryPlacement,
+    spell_label: &str,
+) -> Result<(), EngineError> {
+    let target_name = object_display_name(&engine.state, engine.registry, tid);
+    let owner = engine
+        .state
+        .objects
+        .get(&tid)
+        .map(|object| object.owner)
+        .ok_or(EngineError::Illegal("no target object"))?;
+
+    move_object_to_zone(&mut engine.state, engine.registry, tid, Zone::Library, None)?;
+    let owner_idx = engine
+        .state
+        .player_idx(owner)
+        .ok_or(EngineError::UnknownPlayer(owner))?;
+    match placement {
+        LibraryPlacement::Top => {
+            engine.state.players[owner_idx]
+                .library
+                .retain(|&oid| oid != tid);
+            engine.state.players[owner_idx].library.push_front(tid);
+            events.push(ev_log(format!(
+                "{spell_label} puts {target_name} on top of its owner's library."
+            )));
+        }
+        LibraryPlacement::Bottom => {
+            events.push(ev_log(format!(
+                "{spell_label} puts {target_name} on the bottom of its owner's library."
+            )));
+        }
+        LibraryPlacement::Shuffle => {
+            crate::engine::shuffle_player_library_for_current_command(&mut engine.state, owner);
+            events.push(ev_log(format!("P{owner} shuffles their library.")));
+        }
+    }
+    events.push(permanent_moved_event(
+        &engine.state,
+        tid,
+        owner,
+        rv1::permanent_moved::Destination::Library,
+    ));
+    Ok(())
+}
+
+pub(super) fn put_target_permanent_in_owners_library(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::PutTargetPermanentInOwnersLibrary {
+        target: _,
+        placement,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    if let Some(&tid) = cx.targets.first() {
+        move_permanent_to_owners_library(cx.engine, cx.events, tid, placement, cx.spell_label)?;
+    }
+
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn discard_cards(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -852,4 +919,50 @@ pub(super) fn search_library(
     });
     // Resolution is now parked; the "resolves." log is emitted by finish_library_search.
     Ok(EffectOutcome::Suspended)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bottom_placement_appends_to_the_owners_library() {
+        let decks = Some(vec![
+            vec!["forest".to_string(); 12],
+            vec!["forest".to_string(); 12],
+        ]);
+        let mut engine = GameEngine::new(8906, &[0, 1], 20, decks, true).expect("new game");
+        let target = engine.state.players[1]
+            .library
+            .front()
+            .copied()
+            .expect("card in library");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            target,
+            Zone::Battlefield,
+            Some(1),
+        )
+        .expect("put target on battlefield");
+
+        let mut events = Vec::new();
+        move_permanent_to_owners_library(
+            &mut engine,
+            &mut events,
+            target,
+            LibraryPlacement::Bottom,
+            "test effect",
+        )
+        .expect("put target on bottom");
+
+        assert_eq!(
+            engine.state.players[1].library.back().copied(),
+            Some(target)
+        );
+        assert_eq!(
+            engine.state.objects.get(&target).expect("target").zone,
+            Zone::Library
+        );
+    }
 }

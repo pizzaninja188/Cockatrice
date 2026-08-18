@@ -282,6 +282,9 @@ pub struct TargetFilter {
     /// If true, the target must not be an artifact.
     #[serde(default)]
     pub not_artifact: bool,
+    /// If true, the target must not be a land. Totally Lost uses this with `AnyPermanent`.
+    #[serde(default)]
+    pub not_land: bool,
     /// If Some(true), target must be tapped; Some(false) must be untapped; None = either.
     #[serde(default)]
     pub tapped: Option<bool>,

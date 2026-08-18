@@ -1,0 +1,10 @@
+(
+  id: "totally_lost",
+  name: "Totally Lost",
+  mana_cost: "{4}{U}",
+  types: ["Instant"],
+  spell_effect: [PutTargetPermanentInOwnersLibrary(
+    target: (kind: AnyPermanent, not_land: true),
+    placement: Top,
+  )],
+)

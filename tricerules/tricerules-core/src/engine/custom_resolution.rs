@@ -1056,14 +1056,10 @@ impl GameEngine {
         if chosen.is_empty() {
             ev.push(ev_log(format!("P{controller} finds no card.")));
             if pending.search_shuffle {
-                let mix = self
-                    .state
-                    .seed
-                    .wrapping_add(self.state.command_index.wrapping_mul(0x9E37_79B9_7F4A_7C15))
-                    ^ (controller as u64);
-                if let Some(idx) = self.state.player_idx(controller) {
-                    crate::engine::shuffle_player_library(&mut self.state, idx, mix);
-                }
+                crate::engine::shuffle_player_library_for_current_command(
+                    &mut self.state,
+                    controller,
+                );
                 ev.push(ev_log(format!("P{controller} shuffles their library.")));
             }
         } else {
@@ -1102,12 +1098,10 @@ impl GameEngine {
                         ));
                     }
                     if pending.search_shuffle {
-                        let mix = self.state.seed.wrapping_add(
-                            self.state.command_index.wrapping_mul(0x9E37_79B9_7F4A_7C15),
-                        ) ^ (controller as u64);
-                        if let Some(idx) = self.state.player_idx(controller) {
-                            crate::engine::shuffle_player_library(&mut self.state, idx, mix);
-                        }
+                        crate::engine::shuffle_player_library_for_current_command(
+                            &mut self.state,
+                            controller,
+                        );
                         ev.push(ev_log(format!("P{controller} shuffles their library.")));
                     }
                 }
@@ -1117,12 +1111,10 @@ impl GameEngine {
                         self.state.players[idx].library.retain(|&x| x != oid);
                     }
                     if pending.search_shuffle {
-                        let mix = self.state.seed.wrapping_add(
-                            self.state.command_index.wrapping_mul(0x9E37_79B9_7F4A_7C15),
-                        ) ^ (controller as u64);
-                        if let Some(idx) = self.state.player_idx(controller) {
-                            crate::engine::shuffle_player_library(&mut self.state, idx, mix);
-                        }
+                        crate::engine::shuffle_player_library_for_current_command(
+                            &mut self.state,
+                            controller,
+                        );
                         ev.push(ev_log(format!("P{controller} shuffles their library.")));
                     }
                     if let Some(idx) = self.state.player_idx(controller) {

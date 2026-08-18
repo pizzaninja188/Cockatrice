@@ -217,14 +217,7 @@ impl<'a> ResolutionCtx<'a> {
     /// game seed with the command index so replay reproduces the order, while distinct searches
     /// in one game shuffle differently.
     pub fn shuffle_library(&mut self, player: PlayerId) {
-        if let Some(idx) = self.state.player_idx(player) {
-            let mix = self
-                .state
-                .seed
-                .wrapping_add(self.state.command_index.wrapping_mul(0x9E37_79B9_7F4A_7C15))
-                ^ (player as u64);
-            crate::engine::shuffle_player_library(self.state, idx, mix);
-        }
+        crate::engine::shuffle_player_library_for_current_command(self.state, player);
     }
 
     /// Move `oid` to `zone` (graveyard/hand/exile/…), maintaining zone membership lists. Emits a

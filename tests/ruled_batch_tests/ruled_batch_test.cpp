@@ -990,6 +990,53 @@ TEST_F(RuledBatchTest, ApplyRuledBatchMovesPermanentToGraveyard)
     }
 }
 
+TEST_F(RuledBatchTest, PermanentMovedToLibraryReordersTheOwnersPrivateDeckWithoutLeakingIds)
+{
+    Server_Card *bear = addCardToTable(p1, "Grizzly Bears");
+
+    ruled::v1::IpcResponse seedResp;
+    seedResp.set_ok(true);
+    auto *seedZoneView = seedResp.mutable_batch()->add_events()->mutable_zone_view();
+    *seedZoneView->add_per_player() = buildPerPlayerView(p1, {211u}, {false});
+    *seedZoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    ASSERT_TRUE(callBatchApply(seedResp).zoneViewApplied);
+    ASSERT_EQ(findCardByEngineOid(p1, 211u), bear);
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *batch = response.mutable_batch();
+    auto *moved = batch->add_events()->mutable_permanent_moved();
+    moved->set_object_id(211u);
+    moved->set_owner_player_id(p1->getPlayerId());
+    moved->set_controller_player_id(p1->getPlayerId());
+    moved->set_destination(ruled::v1::PermanentMoved::DESTINATION_LIBRARY);
+    moved->set_card_id("grizzly_bears");
+
+    auto *zoneView = batch->add_events()->mutable_zone_view();
+    auto *ownerView = zoneView->add_per_player();
+    ownerView->set_player_id(p1->getPlayerId());
+    ownerView->add_library_card_ids("grizzly_bears");
+    *zoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+
+    const auto forOpponent = redactFor(*batch, p2);
+    const auto redactedZoneView = std::find_if(forOpponent.events().begin(), forOpponent.events().end(),
+                                               [](const auto &event) { return event.has_zone_view(); });
+    ASSERT_NE(redactedZoneView, forOpponent.events().end());
+    ASSERT_EQ(redactedZoneView->zone_view().per_player_size(), 2);
+    EXPECT_EQ(redactedZoneView->zone_view().per_player(0).library_card_ids_size(), 0);
+
+    const BatchOutcome outcome = callBatchApply(response);
+    EXPECT_TRUE(outcome.zoneViewApplied);
+    Server_CardZone *table = p1->getZones().value(ZoneNames::TABLE);
+    Server_CardZone *deck = p1->getZones().value(ZoneNames::DECK);
+    ASSERT_NE(table, nullptr);
+    ASSERT_NE(deck, nullptr);
+    EXPECT_TRUE(table->getCards().isEmpty());
+    ASSERT_EQ(deck->getCards().size(), 1);
+    EXPECT_EQ(deck->getCards().first(), bear);
+    EXPECT_EQ(findCardByEngineOid(p1, 211u), nullptr);
+}
+
 // --------------------------------------------------------------------------------------------
 // CR 110.2 control vs CR 108.3 ownership across the relay (reanimation).
 

@@ -971,6 +971,9 @@ impl GameEngine {
                     | SpellEffectKind::ReturnTargetPermanentToHand) => {
                         zones::return_target_to_hand(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::PutTargetPermanentInOwnersLibrary { .. } => {
+                        zones::put_target_permanent_in_owners_library(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::DiscardCards { .. } => {
                         zones::discard_cards(&mut cx, effect)?
                     }
