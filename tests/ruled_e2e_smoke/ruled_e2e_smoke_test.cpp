@@ -592,6 +592,7 @@ public:
         const ruled::v1::PhaseId previousPhase = phase;
         int phaseEvents = 0;
         bool batchDeclaredAttackers = false;
+        bool batchCombatDamage = false;
         for (const ruled::v1::RuledEvent &ev : batch.events()) {
             if (ev.has_phase_changed()) {
                 ++phaseEvents;
@@ -659,7 +660,7 @@ public:
                 if (lc.delta() == -4 && borosCharmOid != 0 && !sawBorosCharmLifeLoss && !inCombatDamageWindow) {
                     sawBorosCharmLifeLoss = true;
                 }
-                if (lc.delta() < 0 && batchDeclaredAttackers) {
+                if (lc.delta() < 0 && (batchDeclaredAttackers || batchCombatDamage)) {
                     sawCombatLifeLoss = true;
                 }
             } else if (ev.has_attackers_declared()) {
@@ -771,6 +772,9 @@ public:
                 }
             } else if (ev.has_log()) {
                 const QString text = QString::fromStdString(ev.log().text());
+                if (text == QStringLiteral("Combat damage dealt.")) {
+                    batchCombatDamage = true;
+                }
                 if (oppId >= 0 && text.startsWith(QStringLiteral("P%1 discards ").arg(oppId)) &&
                     text.endsWith(QStringLiteral(" (cleanup)"))) {
                     sawOpponentCleanupDiscard = true;

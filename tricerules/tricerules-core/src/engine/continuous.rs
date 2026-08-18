@@ -121,6 +121,9 @@ impl GameEngine {
                         timestamp,
                     });
                 }
+                StaticAbilityDef::TargetingCostIncrease { .. } => {
+                    // Evaluated live while an action's targets and total cost are finalized.
+                }
                 StaticAbilityDef::AttachedModifier {
                     add_types,
                     delta_power,

@@ -320,7 +320,9 @@ private:
                              int faceIndex,
                              const QString &castName,
                              const QString &castCost,
+                             int genericCostReduction,
                              RuledCastSource source = RuledCastSource::Hand);
+    void finalizePendingSpellManaCost();
     bool storeCurrentModalTargetsAndAdvance();
     bool storeCurrentTargetGroupAndAdvance();
     void loadCurrentTargetGroup();

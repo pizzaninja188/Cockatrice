@@ -550,6 +550,230 @@ pub(super) fn pay_mana(
 }
 
 impl GameEngine {
+    fn targeting_cost_increase(
+        &self,
+        actor: PlayerId,
+        action: TargetingCostAction,
+        targets: &[rv1::TargetRef],
+    ) -> u32 {
+        let mut sources = self
+            .state
+            .players
+            .iter()
+            .flat_map(|player| player.battlefield.iter().copied())
+            .collect::<Vec<_>>();
+        sources.sort_unstable();
+
+        sources.into_iter().fold(0u32, |total, source_id| {
+            let Some(source_controller) = self.controller_of(source_id) else {
+                return total;
+            };
+            let actor_matches = |set: RelativePlayerSet| match set {
+                RelativePlayerSet::Controller => actor == source_controller,
+                RelativePlayerSet::Opponents => self.state.are_opponents(actor, source_controller),
+                RelativePlayerSet::All => true,
+            };
+            let Some(face) = self.effective_face(source_id) else {
+                return total;
+            };
+            face.static_abilities
+                .iter()
+                .filter_map(|ability| {
+                    let StaticAbilityDef::TargetingCostIncrease {
+                        protected,
+                        actors,
+                        actions,
+                        amount,
+                    } = ability
+                    else {
+                        return None;
+                    };
+                    let action_matches =
+                        matches!(actions, TargetingCostAction::SpellsAndActivatedAbilities)
+                            || actions == &action;
+                    if !action_matches || !actor_matches(*actors) {
+                        return None;
+                    }
+                    targets
+                        .iter()
+                        .any(|target| {
+                            self.target_is_protected(
+                                source_id,
+                                source_controller,
+                                protected,
+                                target,
+                            )
+                        })
+                        .then_some(*amount)
+                })
+                .fold(total, u32::saturating_add)
+        })
+    }
+
+    fn target_is_protected(
+        &self,
+        source_id: ObjectId,
+        source_controller: PlayerId,
+        protected: &TargetingCostProtected,
+        target: &rv1::TargetRef,
+    ) -> bool {
+        let kind =
+            rv1::TargetRefKind::try_from(target.kind).unwrap_or(rv1::TargetRefKind::Unspecified);
+        let is_object = match kind {
+            rv1::TargetRefKind::Player => false,
+            rv1::TargetRefKind::Permanent
+            | rv1::TargetRefKind::Stack
+            | rv1::TargetRefKind::Graveyard => true,
+            rv1::TargetRefKind::Unspecified => self.state.objects.contains_key(&target.object_id),
+        };
+        match protected {
+            TargetingCostProtected::Source => is_object && target.object_id == source_id,
+            TargetingCostProtected::Creatures(filter) => {
+                if !is_object {
+                    return false;
+                }
+                let Some(object) = self.state.objects.get(&target.object_id) else {
+                    return false;
+                };
+                if object.zone != Zone::Battlefield {
+                    return false;
+                }
+                let Some(characteristics) = self.characteristics(target.object_id) else {
+                    return false;
+                };
+                super::characteristics::creature_matches_scope(
+                    &self.state,
+                    self.registry,
+                    filter,
+                    source_controller,
+                    filter.exclude_self.then_some(source_id),
+                    target.object_id,
+                    &characteristics,
+                )
+            }
+            TargetingCostProtected::Players(set) => {
+                if is_object {
+                    return false;
+                }
+                let target_player = target.object_id as PlayerId;
+                self.state.player_idx(target_player).is_some()
+                    && match set {
+                        RelativePlayerSet::Controller => target_player == source_controller,
+                        RelativePlayerSet::Opponents => {
+                            self.state.are_opponents(target_player, source_controller)
+                        }
+                        RelativePlayerSet::All => true,
+                    }
+            }
+        }
+    }
+
+    pub(super) fn targeting_cost_applications(
+        &self,
+        actor: PlayerId,
+        action: TargetingCostAction,
+        groups: &[rv1::LegalTargetGroup],
+    ) -> Vec<rv1::TargetingCostApplication> {
+        let mut candidates = Vec::new();
+        for group in groups {
+            candidates.extend(group.valid_permanent_ids.iter().map(|&object_id| {
+                rv1::TargetCandidateRef {
+                    kind: rv1::TargetRefKind::Permanent as i32,
+                    object_id,
+                }
+            }));
+            candidates.extend(group.valid_stack_ids.iter().map(|&object_id| {
+                rv1::TargetCandidateRef {
+                    kind: rv1::TargetRefKind::Stack as i32,
+                    object_id,
+                }
+            }));
+            candidates.extend(group.valid_graveyard_ids.iter().map(|&object_id| {
+                rv1::TargetCandidateRef {
+                    kind: rv1::TargetRefKind::Graveyard as i32,
+                    object_id,
+                }
+            }));
+            for player in &self.state.players {
+                if (group.can_target_self && player.id == actor)
+                    || (group.can_target_opponent && self.state.are_opponents(player.id, actor))
+                {
+                    candidates.push(rv1::TargetCandidateRef {
+                        kind: rv1::TargetRefKind::Player as i32,
+                        object_id: player.id as ObjectId,
+                    });
+                }
+            }
+        }
+        candidates.sort_by_key(|candidate| (candidate.kind, candidate.object_id));
+        candidates.dedup_by_key(|candidate| (candidate.kind, candidate.object_id));
+
+        let mut sources = self
+            .state
+            .players
+            .iter()
+            .flat_map(|player| player.battlefield.iter().copied())
+            .collect::<Vec<_>>();
+        sources.sort_unstable();
+        let mut applications = Vec::new();
+        for source_id in sources {
+            let Some(source_controller) = self.controller_of(source_id) else {
+                continue;
+            };
+            let Some(face) = self.effective_face(source_id) else {
+                continue;
+            };
+            for (ability_index, ability) in face.static_abilities.iter().enumerate() {
+                let StaticAbilityDef::TargetingCostIncrease {
+                    protected,
+                    actors,
+                    actions,
+                    amount,
+                } = ability
+                else {
+                    continue;
+                };
+                let actor_matches = match actors {
+                    RelativePlayerSet::Controller => actor == source_controller,
+                    RelativePlayerSet::Opponents => {
+                        self.state.are_opponents(actor, source_controller)
+                    }
+                    RelativePlayerSet::All => true,
+                };
+                let action_matches =
+                    matches!(actions, TargetingCostAction::SpellsAndActivatedAbilities)
+                        || actions == &action;
+                if !actor_matches || !action_matches {
+                    continue;
+                }
+                let affected_targets = candidates
+                    .iter()
+                    .filter(|candidate| {
+                        self.target_is_protected(
+                            source_id,
+                            source_controller,
+                            protected,
+                            &rv1::TargetRef {
+                                object_id: candidate.object_id,
+                                kind: candidate.kind,
+                                ..Default::default()
+                            },
+                        )
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>();
+                if !affected_targets.is_empty() {
+                    applications.push(rv1::TargetingCostApplication {
+                        application_id: (u64::from(source_id) << 32) | ability_index as u64,
+                        generic_mana: *amount,
+                        affected_targets,
+                    });
+                }
+            }
+        }
+        applications
+    }
+
     pub(super) fn eligible_restricted_mana_for_spell(
         &self,
         player_idx: usize,
@@ -603,7 +827,7 @@ impl GameEngine {
         ids
     }
 
-    fn spell_generic_reduction(
+    pub(super) fn spell_generic_reduction(
         &self,
         player: PlayerId,
         source_oid: ObjectId,
@@ -629,36 +853,6 @@ impl GameEngine {
                 }
                 SpellCostModifier::ConditionalGenericReduction { .. } => total,
             })
-    }
-
-    /// The fixed cost string published in legal actions. Registry validation currently excludes
-    /// X and target-count surcharges on modified faces, so reducing authored generic pips here is
-    /// the exact cost the existing client must stage.
-    pub(super) fn effective_fixed_spell_cost(
-        &self,
-        player: PlayerId,
-        source_oid: ObjectId,
-        base_cost: &ManaCost,
-        modifiers: &[SpellCostModifier],
-    ) -> ManaCost {
-        let mut remaining_reduction = self.spell_generic_reduction(player, source_oid, modifiers);
-        let mut pips = Vec::with_capacity(base_cost.pips.len());
-        for pip in &base_cost.pips {
-            match pip {
-                ManaSymbol::Generic(amount) => {
-                    let remaining = amount.saturating_sub(remaining_reduction);
-                    remaining_reduction = remaining_reduction.saturating_sub(*amount);
-                    if remaining > 0 {
-                        pips.push(ManaSymbol::Generic(remaining));
-                    }
-                }
-                _ => pips.push(pip.clone()),
-            }
-        }
-        if pips.is_empty() && !base_cost.pips.is_empty() {
-            pips.push(ManaSymbol::Generic(0));
-        }
-        ManaCost { pips }
     }
 
     pub(super) fn can_pay_generic_mana(&self, player: PlayerId, amount: u32) -> bool {
@@ -966,6 +1160,12 @@ impl GameEngine {
             }
             public_targets.extend_from_slice(targets);
         }
+
+        extra_generic = extra_generic.saturating_add(self.targeting_cost_increase(
+            player,
+            TargetingCostAction::Spells,
+            &public_targets,
+        ));
 
         let payment_plan = self.plan_spell_costs(
             player,
@@ -1426,6 +1626,8 @@ impl GameEngine {
             .get(&permanent_id)
             .copied()
             .unwrap_or(0);
+        let targeting_cost =
+            self.targeting_cost_increase(player, TargetingCostAction::ActivatedAbilities, targets);
         let payment = self.pay_ability_costs(
             player,
             idx,
@@ -1434,6 +1636,7 @@ impl GameEngine {
             flex_payments,
             cost_selections,
             restricted_mana,
+            targeting_cost,
         )?;
 
         let ability_text = ability.text.clone();
@@ -1530,6 +1733,7 @@ impl GameEngine {
         flex_payments: &[rv1::FlexPipPayment],
         selections: &[rv1::CostSelection],
         restricted_mana: &[rv1::ManaSpendSelection],
+        extra_generic: u32,
     ) -> Result<AbilityCostPayment, EngineError> {
         use rv1::cost_selection::Selection;
 
@@ -1574,7 +1778,7 @@ impl GameEngine {
                             idx,
                             cost,
                             0,
-                            0,
+                            extra_generic,
                             0,
                             flex_payments,
                             restricted_mana,
@@ -1626,10 +1830,25 @@ impl GameEngine {
                 }
             }
         }
+        if !saw_mana && extra_generic > 0 {
+            validated.push(ValidatedAbilityCost::Mana(
+                plan_mana_payment_with_restricted_reduction(
+                    &self.state,
+                    idx,
+                    &ManaCost::default(),
+                    0,
+                    extra_generic,
+                    0,
+                    flex_payments,
+                    restricted_mana,
+                    &eligible_restricted_mana,
+                )?,
+            ));
+        }
         if selections.len() != expected_selections {
             return Err(EngineError::Illegal("unexpected cost selection"));
         }
-        if !restricted_mana.is_empty() && !saw_mana {
+        if !restricted_mana.is_empty() && !saw_mana && extra_generic == 0 {
             return Err(EngineError::Illegal(
                 "restricted mana supplied for an ability with no mana cost",
             ));
@@ -1899,6 +2118,7 @@ impl GameEngine {
             flex_payments,
             cost_selections,
             restricted_mana,
+            0,
         )?;
 
         let restriction_group_id = ability.mana_restriction().map(|restriction| {
@@ -2244,7 +2464,7 @@ mod mana_payment_tests {
         ];
 
         let err = e
-            .pay_ability_costs(0, 0, oid, &costs, &[], &selections, &[])
+            .pay_ability_costs(0, 0, oid, &costs, &[], &selections, &[], 0)
             .err()
             .expect("one object cannot be sacrificed twice");
         assert!(format!("{err:?}").contains("one object cannot pay two costs"));

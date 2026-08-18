@@ -407,6 +407,22 @@ message SpellTargets {
   DamageDivision damage_division = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Ordered, independently prompted groups. Empty only when the action has no targets.
   repeated LegalTargetGroup groups = 11 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // One application per live static ability. The client activates an application when at least
+  // one selected typed target is in affected_targets, and deduplicates by application_id across
+  // target groups and selected modes. The engine independently recomputes the cost.
+  repeated TargetingCostApplication targeting_cost_applications = 12
+      [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message TargetCandidateRef {
+  TargetRefKind kind = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 object_id = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message TargetingCostApplication {
+  uint64 application_id = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 generic_mana = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated TargetCandidateRef affected_targets = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message LegalTargetGroup {
@@ -469,6 +485,9 @@ message LegalHandAction {
   string cost = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   LegalCostChoices cost_choices = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated uint32 eligible_restricted_mana_group_ids = 11 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Generic reductions are published separately so clients can apply CR 601.2f after X and all
+  // cost increases have been added. `cost` remains the raw base or alternative mana cost.
+  uint32 generic_cost_reduction = 12 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // CR 702.34: a spell the player may cast from their own graveyard using flashback.
@@ -491,6 +510,7 @@ message LegalZoneCastAction {
   string cost = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   LegalCostChoices cost_choices = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated uint32 eligible_restricted_mana_group_ids = 11 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 generic_cost_reduction = 12 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message ManaPaymentEligibility {

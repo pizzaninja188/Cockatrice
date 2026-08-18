@@ -891,6 +891,17 @@ void PlayerActions::continuePendingActivatedAbilityAfterChoice()
     if (!pendingActivatedAbility.valid || pendingActivatedAbility.waitingForTarget) {
         return;
     }
+    if (!pendingActivatedAbility.targetingCostApplied && pendingActivatedAbility.selectedTargetOid != 0) {
+        RuledClientState *const state = player->getGame()->getGameEventHandler()->ruled();
+        const auto data = state->abilityTargetData(pendingActivatedAbility.permanentOid,
+                                                   pendingActivatedAbility.abilityIndex);
+        const int increase = ruledTargetingCostForSelection(
+            data, {}, {pendingActivatedAbility.selectedTargetOid}, player->getPlayerInfo()->getId());
+        if (increase > 0) {
+            pendingActivatedAbility.remainingCost[QChar('X')] += increase;
+        }
+        pendingActivatedAbility.targetingCostApplied = true;
+    }
     if (pendingActivatedAbility.nextCostChoice < pendingActivatedAbility.costChoices.size()) {
         pendingActivatedAbility.waitingForCost = true;
         emit ruledAbilityCostPromptChanged();
@@ -1715,7 +1726,7 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
             return false;
         }
         return beginRuledSpellCast(card, static_cast<int>(objectId), option.faceIndex, option.faceName, cost,
-                                   geh->zoneActionSource(objectId));
+                                   option.genericCostReduction, geh->zoneActionSource(objectId));
     }
 
     const int ruledHandIndex = RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_CAST_SPELL, card);
@@ -1731,7 +1742,8 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
         return false;
     }
     const auto &face = faces.first();
-    return beginRuledSpellCast(card, ruledHandIndex, face.faceIndex, face.faceName, face.manaCost);
+    return beginRuledSpellCast(card, ruledHandIndex, face.faceIndex, face.faceName, face.manaCost,
+                               face.genericCostReduction);
 }
 
 bool PlayerActions::beginRuledSpellCast(CardItem *,
@@ -1739,6 +1751,7 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
                                         int faceIndex,
                                         const QString &castName,
                                         const QString &castCost,
+                                        int genericCostReduction,
                                         RuledCastSource source)
 {
     RuledClientState *const geh = player->getGame()->getGameEventHandler()->ruled();
@@ -1807,6 +1820,7 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
     pendingRuledSpellCast.xValue = 0;
     pendingRuledSpellCast.cardName = castName;
     pendingRuledSpellCast.remainingCost = parseSimpleManaCost(castCost);
+    pendingRuledSpellCast.genericCostReduction = genericCostReduction;
     pendingRuledSpellCast.costChoices = geh->spellCostData(ruledHandIndex, faceIndex, source).choices;
     pendingRuledSpellCast.selectedModes = selectedModes;
 
@@ -1896,6 +1910,7 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
 
     // CR 107.4d–f: front-load hybrid/Phyrexian choices before paying, so the player picks one side
     // of each flexible pip and the mana prompt then shows only the resolved (fixed) cost.
+    finalizePendingSpellManaCost();
     continuePendingSpellAfterChoice();
     return true;
 }
@@ -1934,13 +1949,15 @@ bool PlayerActions::tryRuledSpellCastFaceMenu(CardItem *card)
             return false;
         }
         const auto &face = faces.first();
-        return beginRuledSpellCast(card, handIndex, face.faceIndex, face.faceName, face.manaCost);
+        return beginRuledSpellCast(card, handIndex, face.faceIndex, face.faceName, face.manaCost,
+                                   face.genericCostReduction);
     }
     const auto chosen = RuledPendingCast::chooseFace(player->getGame()->getTab(), card->getName(), faces);
     if (!chosen.has_value()) {
         return true; // menu was shown, player cancelled
     }
-    beginRuledSpellCast(card, handIndex, chosen->faceIndex, chosen->faceName, chosen->manaCost);
+    beginRuledSpellCast(card, handIndex, chosen->faceIndex, chosen->faceName, chosen->manaCost,
+                        chosen->genericCostReduction);
     return true;
 }
 
@@ -2327,18 +2344,7 @@ bool PlayerActions::finalizeTargetSelectionAndContinue()
     emit ruledMultiTargetSelectionUpdated(0, 0, -1);
     player->getGameScene()->update();
 
-    // CR 601.2f: DamageTargets surcharge — extra generic mana per target beyond the first
-    // (Fireball costs {1} more per extra target). Fold it into the generic bucket now that the
-    // target count is fixed, so the mana prompt matches the engine's real cost. The engine
-    // recomputes this independently in cast_spell; this only keeps the local display honest.
-    if (pendingRuledSpellCast.isDamageTargets && pendingRuledSpellCast.extraManaPerTarget > 0) {
-        const int extra =
-            pendingRuledSpellCast.extraManaPerTarget * qMax(0, pendingRuledSpellCast.selectedTargetOids.size() - 1);
-        if (extra > 0) {
-            pendingRuledSpellCast.remainingCost[QChar('X')] += extra;
-        }
-    }
-
+    // CR 601.2f cost increases are finalized after every group and selected mode is stored below.
     // DamageTargets: allocate damage among chosen targets interactively.
     if (pendingRuledSpellCast.isDamageTargets) {
         const int total =
@@ -2391,8 +2397,46 @@ bool PlayerActions::finalizeTargetSelectionAndContinue()
     }
 
     // CR 107.4d–f: front-load hybrid/Phyrexian choices.
+    finalizePendingSpellManaCost();
     continuePendingSpellAfterChoice();
     return true;
+}
+
+void PlayerActions::finalizePendingSpellManaCost()
+{
+    if (!pendingRuledSpellCast.valid || pendingRuledSpellCast.manaCostFinalized) {
+        return;
+    }
+    RuledClientState *const state = player->getGame()->getGameEventHandler()->ruled();
+    if (!state) {
+        return;
+    }
+    const int localPlayerId = player->getPlayerInfo()->getId();
+    int increases = 0;
+    if (pendingRuledSpellCast.selectedModes.isEmpty()) {
+        const auto data = state->spellTargetData(pendingRuledSpellCast.handIndex, pendingRuledSpellCast.faceIndex,
+                                                 pendingRuledSpellCast.source);
+        increases += ruledTargetingCostForSelection(data, pendingRuledSpellCast.selectedTargetOidsByGroup,
+                                                    pendingRuledSpellCast.selectedTargetOids, localPlayerId);
+        if (data.isDamageTargets && data.extraManaPerTarget > 0) {
+            increases += data.extraManaPerTarget * qMax(0, pendingRuledSpellCast.selectedTargetOids.size() - 1);
+        }
+    } else {
+        increases += ruledModalSpellTargetingCost(pendingRuledSpellCast, localPlayerId);
+        for (const auto &mode : pendingRuledSpellCast.selectedModes) {
+            if (mode.targets.isDamageTargets && mode.targets.extraManaPerTarget > 0) {
+                increases += mode.targets.extraManaPerTarget * qMax(0, mode.selectedTargetOids.size() - 1);
+            }
+        }
+    }
+    const int reducedGeneric = ruledFinalGenericCost(pendingRuledSpellCast.remainingCost.value(QChar('X'), 0),
+                                                      increases, pendingRuledSpellCast.genericCostReduction);
+    if (reducedGeneric == 0) {
+        pendingRuledSpellCast.remainingCost.remove(QChar('X'));
+    } else {
+        pendingRuledSpellCast.remainingCost[QChar('X')] = reducedGeneric;
+    }
+    pendingRuledSpellCast.manaCostFinalized = true;
 }
 
 bool PlayerActions::isInSpellDamageAllocationMode() const
@@ -2503,6 +2547,7 @@ void PlayerActions::confirmSpellDamageAllocation()
     pendingRuledSpellCast.activeTargetGroupPosition = -1;
     if (storeCurrentModalTargetsAndAdvance())
         return;
+    finalizePendingSpellManaCost();
     continuePendingSpellAfterChoice();
 }
 

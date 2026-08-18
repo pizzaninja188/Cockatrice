@@ -29,8 +29,9 @@ use tricerules_cards::primitives::{
     InterveningIf, Keyword, LifeAmount, ManaAmount, ManaSpendFilter, PermanentTypeFilter,
     PlayerRecipient, PowerComparison, PreventionAmountBasis, RelativePlayerSet, ReturnController,
     SearchDestination, SpellCostModifier, SpellEffectKind, StaticAbilityDef,
-    StaticDamagePreventionAmount, TargetController, TargetFilter, TargetKind,
-    TargetingSourceFilter, TriggerCondition, TriggeredAbilityDef, TriggeredCardReference,
+    StaticDamagePreventionAmount, TargetController, TargetFilter, TargetKind, TargetingCostAction,
+    TargetingCostProtected, TargetingSourceFilter, TriggerCondition, TriggeredAbilityDef,
+    TriggeredCardReference,
 };
 use tricerules_cards::{CardFace, CardRegistry, FaceRef, Layout};
 use tricerules_proto::ruled::v1 as rv1;

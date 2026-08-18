@@ -262,38 +262,6 @@ impl CardRegistry {
                             reason,
                         })?;
                 }
-                if !face.cost_modifiers.is_empty() {
-                    let has_x_cost = face.mana_cost.has_x()
-                        || face
-                            .flashback_cost
-                            .as_ref()
-                            .is_some_and(|cost| cost.has_x());
-                    let has_target_count_surcharge = face
-                        .spell_effect
-                        .iter()
-                        .chain(
-                            face.modal_spell
-                                .iter()
-                                .flat_map(|modal| &modal.modes)
-                                .flat_map(|mode| &mode.effects),
-                        )
-                        .any(|effect| {
-                            matches!(
-                                effect,
-                                SpellEffectKind::DamageTargets {
-                                    extra_mana_per_target,
-                                    ..
-                                } if *extra_mana_per_target > 0
-                            )
-                        });
-                    if has_x_cost || has_target_count_surcharge {
-                        return Err(RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason: "conditional cost modifiers cannot yet be combined with X or target-count surcharges"
-                                .into(),
-                        });
-                    }
-                }
                 // One resolution owner per face (CR 608): ordinary data, modal data, and a
                 // custom (tier-3) effect are mutually exclusive. The
                 // matching custom impl is validated to exist on the `tricerules-core` side
@@ -458,6 +426,27 @@ impl CardRegistry {
                     });
                 }
                 for ability in &face.static_abilities {
+                    if let StaticAbilityDef::TargetingCostIncrease {
+                        protected, amount, ..
+                    } = ability
+                    {
+                        if *amount == 0 {
+                            return Err(RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason: "TargetingCostIncrease amount must be nonzero".into(),
+                            });
+                        }
+                        if let crate::primitives::TargetingCostProtected::Creatures(filter) =
+                            protected
+                        {
+                            filter
+                                .validate()
+                                .map_err(|reason| RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason,
+                                })?;
+                        }
+                    }
                     if let StaticAbilityDef::AnthemPt { filter, .. }
                     | StaticAbilityDef::AnthemKeyword { filter, .. } = ability
                     {
@@ -925,7 +914,7 @@ mod tests {
     }
 
     #[test]
-    fn conditional_reductions_reject_costs_with_unpublished_later_choices() {
+    fn conditional_reductions_allow_x_and_target_count_increases() {
         let x_cost = r#"(
             id: "bad_x_reduction",
             name: "Bad X Reduction",
@@ -940,12 +929,7 @@ mod tests {
             types: ["Sorcery"],
             spell_effect: [Draw(count: 1)],
         )"#;
-        let err = CardRegistry::from_chunks(&[x_cost]).expect_err("X is not published yet");
-        assert!(matches!(
-            err,
-            RegistryError::InvalidCard { reason, .. }
-                if reason.contains("X or target-count surcharges")
-        ));
+        CardRegistry::from_chunks(&[x_cost]).expect("X is quoted separately from reductions");
 
         let target_surcharge = r#"(
             id: "bad_target_surcharge_reduction",
@@ -966,13 +950,8 @@ mod tests {
                 extra_mana_per_target: 1,
             )],
         )"#;
-        let err = CardRegistry::from_chunks(&[target_surcharge])
-            .expect_err("target-count surcharge is not published yet");
-        assert!(matches!(
-            err,
-            RegistryError::InvalidCard { reason, .. }
-                if reason.contains("X or target-count surcharges")
-        ));
+        CardRegistry::from_chunks(&[target_surcharge])
+            .expect("target-count increases are quoted before reductions");
     }
 
     #[test]

@@ -1126,6 +1126,7 @@ impl GameEngine {
                 &ability.effect,
                 ability.targeting.as_ref(),
                 trigger_context,
+                None,
             ))
         } else {
             None

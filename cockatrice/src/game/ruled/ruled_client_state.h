@@ -92,6 +92,19 @@ struct RuledTargetGroupData
     QVector<int> distinctFromGroupIndices;
 };
 
+struct RuledTargetingCostCandidate
+{
+    ruled::v1::TargetRefKind kind = ruled::v1::TARGET_REF_KIND_UNSPECIFIED;
+    quint32 oid = 0;
+};
+
+struct RuledTargetingCostApplication
+{
+    quint64 applicationId = 0;
+    int genericMana = 0;
+    QVector<RuledTargetingCostCandidate> affectedTargets;
+};
+
 /// Engine-authoritative targeting data for one spell, mode, activated ability, or trigger.
 struct RuledSpellTargetData : RuledTargetGroupData
 {
@@ -103,6 +116,7 @@ struct RuledSpellTargetData : RuledTargetGroupData
     /// resolution among the targets still legal then, so the client must not prompt for an
     /// allocation, must not demand one damage per target, and may send zero targets.
     bool damageDividedEvenly = false;
+    QVector<RuledTargetingCostApplication> targetingCostApplications;
 };
 
 enum class RuledCostChoiceZone : int
@@ -191,6 +205,7 @@ struct RuledFaceOption
     int faceIndex;
     QString faceName;
     QString manaCost;
+    int genericCostReduction = 0;
 };
 
 /// Shared engine/client hand-action kind from ruled_v1.proto. Labels are display-only.

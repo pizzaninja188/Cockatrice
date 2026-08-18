@@ -2,8 +2,8 @@
 
 use super::{
     AbilityCost, Amount, BattlefieldCreatureCountFilter, CardTypeFilter, Color, CounterKind,
-    EffectContext, GameCondition, Keyword, SpellEffectKind, TargetController, TargetFilter,
-    TargetKind, TargetingDef,
+    EffectContext, GameCondition, Keyword, RelativePlayerSet, SpellEffectKind, TargetController,
+    TargetFilter, TargetKind, TargetingDef,
 };
 use crate::ManaAmount;
 use serde::{Deserialize, Serialize};
@@ -716,6 +716,23 @@ pub enum EntersTappedAffected {
     Permanents,
 }
 
+/// The object or player protected by a targeting cost increase. `Creatures` is evaluated from
+/// current derived characteristics, so Kopala follows control, copy, and type-changing effects.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TargetingCostProtected {
+    Source,
+    Creatures(#[serde(default)] CreatureScopeFilter),
+    Players(RelativePlayerSet),
+}
+
+/// Which announced game actions a targeting cost increase taxes (CR 601.2f / 602.2b).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TargetingCostAction {
+    Spells,
+    ActivatedAbilities,
+    SpellsAndActivatedAbilities,
+}
+
 /// One static ability on a permanent (CR 604). Most entries generate a continuous effect while
 /// its source is on the battlefield. An ability that modifies how its own object enters is the
 /// CR 113.6h/614.12 exception and is inspected during the proposed entry event. Static abilities
@@ -749,6 +766,15 @@ pub enum StaticAbilityDef {
         amount: StaticDamagePreventionAmount,
         #[serde(default)]
         additional_effect: Option<DamagePreventionAdditionalEffect>,
+    },
+    /// CR 601.2f / 602.2b: one generic cost increase is applied once for this static ability if
+    /// an affected opponent's spell or activated ability targets at least one protected subject.
+    /// Boreal Elemental and Kopala exercise source-only and creature-cohort protection.
+    TargetingCostIncrease {
+        protected: TargetingCostProtected,
+        actors: RelativePlayerSet,
+        actions: TargetingCostAction,
+        amount: u32,
     },
     /// CR 613.4 layer 7c: every creature matching `filter` gets +`delta_power`/+`delta_toughness`
     /// (negative values for a debuff anthem). Anthems (Glorious Anthem) and lords (Crusade, Bad Moon).

@@ -3,8 +3,8 @@ use super::combat::priority_locked_for_combat_declaration;
 use super::events::object_display_name;
 use super::priority::{instant_timing_step_allowed, sorcery_speed_available};
 use super::targeting::{
-    compute_spell_targets, compute_spell_targets_with_context, spell_effect_kind_needs_target,
-    TargetSourceIdentity,
+    compute_ability_targets, compute_spell_targets, compute_spell_targets_with_context,
+    spell_effect_kind_needs_target, TargetSourceIdentity,
 };
 use super::*;
 
@@ -65,7 +65,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                     cost_choices_by_ability
                         .insert(key, legal_ability_cost_choices(eng, p.id, poid, &ability));
                     if ability.effect.iter().any(spell_effect_kind_needs_target) {
-                        let targets = compute_spell_targets(
+                        let targets = compute_ability_targets(
                             eng,
                             p.id,
                             TargetSourceIdentity::current(eng, poid),
@@ -129,6 +129,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                         effects.0,
                         effects.1,
                         pt.trigger_context,
+                        None,
                     );
                     let key = (pt.source_permanent_id as u64) << 32 | pt.ability_index as u64;
                     valid_targets_by_ability.insert(key, targets);
@@ -352,6 +353,7 @@ fn hand_action(
         cost: String::new(),
         cost_choices: None,
         eligible_restricted_mana_group_ids: vec![],
+        generic_cost_reduction: 0,
     }
 }
 
@@ -503,9 +505,9 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                 );
                 action.eligible_restricted_mana_group_ids =
                     eng.eligible_restricted_mana_for_spell(player_index, face);
-                action.cost = eng
-                    .effective_fixed_spell_cost(pid, oid, &face.mana_cost, &face.cost_modifiers)
-                    .to_string();
+                action.cost = face.mana_cost.to_string();
+                action.generic_cost_reduction =
+                    eng.spell_generic_reduction(pid, oid, &face.cost_modifiers);
                 let cost_choices = legal_spell_cost_choices(eng, pid, oid, &face.additional_costs);
                 if !cost_choices.non_mana_costs_payable {
                     continue;
@@ -603,14 +605,12 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                 cost: face
                     .flashback_cost
                     .as_ref()
-                    .map(|cost| {
-                        eng.effective_fixed_spell_cost(pid, oid, cost, &face.cost_modifiers)
-                            .to_string()
-                    })
+                    .map(ToString::to_string)
                     .unwrap_or_default(),
                 cost_choices: None,
                 eligible_restricted_mana_group_ids: eng
                     .eligible_restricted_mana_for_spell(player_index, face),
+                generic_cost_reduction: eng.spell_generic_reduction(pid, oid, &face.cost_modifiers),
             };
             let cost_choices = legal_spell_cost_choices(eng, pid, oid, &face.additional_costs);
             if !cost_choices.non_mana_costs_payable {
@@ -698,12 +698,15 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
             min_modes: 0,
             max_modes: 0,
             modes: vec![],
-            cost: eng
-                .effective_fixed_spell_cost(pid, object.id, &face.mana_cost, &face.cost_modifiers)
-                .to_string(),
+            cost: face.mana_cost.to_string(),
             cost_choices: None,
             eligible_restricted_mana_group_ids: eng
                 .eligible_restricted_mana_for_spell(player_index, face),
+            generic_cost_reduction: eng.spell_generic_reduction(
+                pid,
+                object.id,
+                &face.cost_modifiers,
+            ),
         };
         let cost_choices = legal_spell_cost_choices(eng, pid, object.id, &face.additional_costs);
         if !cost_choices.non_mana_costs_payable {

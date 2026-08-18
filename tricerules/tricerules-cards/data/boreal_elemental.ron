@@ -1,0 +1,17 @@
+(
+  id: "boreal_elemental",
+  name: "Boreal Elemental",
+  mana_cost: "{4}{U}",
+  types: ["Creature", "Elemental"],
+  power: 3,
+  toughness: 4,
+  keywords: [Flying],
+  static_abilities: [
+    TargetingCostIncrease(
+      protected: Source,
+      actors: Opponents,
+      actions: Spells,
+      amount: 2,
+    ),
+  ],
+)

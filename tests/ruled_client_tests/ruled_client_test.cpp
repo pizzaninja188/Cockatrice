@@ -1003,6 +1003,89 @@ TEST(RuledTargetRefKindTest, UsesGraveyardCandidateDomainForSelectionPresentatio
     EXPECT_EQ(ruledTargetRefKind(group, 7, kLocalPlayer), ruled::v1::TARGET_REF_KIND_GRAVEYARD);
 }
 
+TEST(RuledTargetingCostTest, DeduplicatesOneApplicationAcrossGroupsAndTypedIdCollisions)
+{
+    RuledSpellTargetData data;
+    RuledTargetGroupData first;
+    first.validPermanentIds.insert(1); // Deliberately collides with kOpponent.
+    first.validPermanentIds.insert(10);
+    RuledTargetGroupData second;
+    second.validPermanentIds.insert(11);
+    data.groups = {first, second};
+
+    RuledTargetingCostApplication kopala;
+    kopala.applicationId = 99;
+    kopala.genericMana = 2;
+    kopala.affectedTargets = {
+        {ruled::v1::TARGET_REF_KIND_PLAYER, 1},
+        {ruled::v1::TARGET_REF_KIND_PERMANENT, 10},
+        {ruled::v1::TARGET_REF_KIND_PERMANENT, 11},
+    };
+    data.targetingCostApplications = {kopala};
+
+    EXPECT_EQ(ruledTargetingCostForSelection(data, {{1, 10}, {11}}, {}, kLocalPlayer), 2);
+    EXPECT_EQ(ruledTargetingCostForSelection(data, {{1}, {}}, {}, kLocalPlayer), 0);
+}
+
+TEST(RuledTargetingCostTest, SumsDistinctApplicationsButDeduplicatesAcrossModes)
+{
+    RuledSpellTargetData data;
+    RuledTargetGroupData group;
+    group.validPermanentIds.insert(20);
+    data.groups = {group};
+    data.targetingCostApplications = {
+        {100, 2, {{ruled::v1::TARGET_REF_KIND_PERMANENT, 20}}},
+        {101, 2, {{ruled::v1::TARGET_REF_KIND_PERMANENT, 20}}},
+    };
+    EXPECT_EQ(ruledTargetingCostForSelection(data, {{20}}, {}, kLocalPlayer), 4);
+
+    PendingRuledSpellCast spell;
+    spell.valid = true;
+    PendingRuledSpellCast::SelectedMode first;
+    first.targets = data;
+    first.selectedTargetOids = {20};
+    first.selectedTargetOidsByGroup = {{20}};
+    PendingRuledSpellCast::SelectedMode second = first;
+    spell.selectedModes = {first, second};
+    EXPECT_EQ(ruledModalSpellTargetingCost(spell, kLocalPlayer), 4);
+}
+
+TEST(RuledTargetingCostTest, AppliesReductionsAfterXAndAllIncreases)
+{
+    // Base generic includes the chosen X (2); Fireball and targeting taxes add 3; reduction is 4.
+    EXPECT_EQ(ruledFinalGenericCost(2, 3, 4), 1);
+    EXPECT_EQ(ruledFinalGenericCost(0, 2, 5), 0);
+}
+
+TEST_F(RuledClientTest, ParsesRawCostReductionAndTargetingApplications)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    auto *cast = addHandAction(actions, ruled::v1::HAND_ACTION_CAST_SPELL, 4, "Test Spell", 0, true, "{3}{U}");
+    cast->set_generic_cost_reduction(1);
+    auto &targets = (*actions.mutable_valid_targets_by_hand_slot())[quint32(4) << 8];
+    auto *group = targets.add_groups();
+    group->set_group_index(0);
+    group->add_valid_permanent_ids(30);
+    auto *application = targets.add_targeting_cost_applications();
+    application->set_application_id(700);
+    application->set_generic_mana(2);
+    auto *candidate = application->add_affected_targets();
+    candidate->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    candidate->set_object_id(30);
+
+    apply(batch);
+
+    const auto faces = state->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, 4);
+    ASSERT_EQ(faces.size(), 1);
+    EXPECT_EQ(faces.first().manaCost, QStringLiteral("{3}{U}"));
+    EXPECT_EQ(faces.first().genericCostReduction, 1);
+    const auto parsed = state->spellTargetData(4, 0, RuledCastSource::Hand);
+    ASSERT_EQ(parsed.targetingCostApplications.size(), 1);
+    EXPECT_EQ(parsed.targetingCostApplications.first().applicationId, 700u);
+    EXPECT_EQ(parsed.targetingCostApplications.first().genericMana, 2);
+}
+
 // CR 608.2b: a target that changes zones becomes a new object, so the arrow endpoint recorded when
 // the target was chosen is never revised. Without the write-once latch, an oid that enters the
 // graveyard map after its permanent dies re-resolves to the graveyard pile and the arrow points

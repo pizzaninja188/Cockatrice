@@ -1538,6 +1538,25 @@ pub(super) fn compute_spell_targets(
         effects,
         targeting,
         TriggerContext::default(),
+        Some(TargetingCostAction::Spells),
+    )
+}
+
+pub(super) fn compute_ability_targets(
+    engine: &GameEngine,
+    caster: PlayerId,
+    source: TargetSourceIdentity,
+    effects: &[SpellEffectKind],
+    targeting: Option<&TargetingDef>,
+) -> rv1::SpellTargets {
+    compute_spell_targets_with_context(
+        engine,
+        caster,
+        source,
+        effects,
+        targeting,
+        TriggerContext::default(),
+        Some(TargetingCostAction::ActivatedAbilities),
     )
 }
 
@@ -1548,6 +1567,7 @@ pub(super) fn compute_spell_targets_with_context(
     effects: &[SpellEffectKind],
     targeting: Option<&TargetingDef>,
     trigger_context: TriggerContext,
+    targeting_cost_action: Option<TargetingCostAction>,
 ) -> rv1::SpellTargets {
     // DamageTargets metadata controls the allocation UI. Cardinality lives exclusively on groups.
     let mut fixed_damage: u32 = 0;
@@ -1655,14 +1675,18 @@ pub(super) fn compute_spell_targets_with_context(
                 distinct_from_group_indices: group.distinct_from,
             }
         })
-        .collect();
+        .collect::<Vec<_>>();
 
+    let targeting_cost_applications = targeting_cost_action
+        .map(|action| engine.targeting_cost_applications(caster, action, &groups))
+        .unwrap_or_default();
     rv1::SpellTargets {
         fixed_damage,
         is_damage_targets,
         extra_mana_per_target,
         damage_division: damage_division as i32,
         groups,
+        targeting_cost_applications,
     }
 }
 

@@ -14,10 +14,12 @@
 #include "ruled_client_state.h"
 
 #include <QChar>
+#include <QHash>
 #include <QMap>
 #include <QString>
 #include <QVector>
 #include <QtGlobal>
+#include <algorithm>
 #include <optional>
 
 class QWidget;
@@ -61,6 +63,7 @@ struct PendingActivatedAbility
     QMap<QChar, int> remainingCost;
     QVector<RuledFlexPip> flexPips;
     QVector<quint32> lifePipIndices;
+    bool targetingCostApplied = false;
 };
 
 struct PendingRuledSpellCast
@@ -102,6 +105,8 @@ struct PendingRuledSpellCast
     QVector<int> targetDamageAllocations;
     int xPips = 0;
     int xValue = 0;
+    int genericCostReduction = 0;
+    bool manaCostFinalized = false;
     QVector<RuledFlexPip> flexPips;
     QVector<quint32> lifePipIndices;
     bool waitingForCost = false;
@@ -174,6 +179,66 @@ enum class RuledTargetClickEligibility
         return ruled::v1::TARGET_REF_KIND_PLAYER;
     }
     return ruled::v1::TARGET_REF_KIND_UNSPECIFIED;
+}
+
+inline void ruledAccumulateTargetingCosts(const RuledSpellTargetData &data,
+                                          const QVector<QVector<quint32>> &selectedByGroup,
+                                          const QVector<quint32> &fallbackSelected,
+                                          int localPlayerId,
+                                          QHash<quint64, int> &activeApplications)
+{
+    for (int groupPosition = 0; groupPosition < data.groups.size(); ++groupPosition) {
+        const auto &group = data.groups.at(groupPosition);
+        const QVector<quint32> selected = groupPosition < selectedByGroup.size()
+                                                ? selectedByGroup.at(groupPosition)
+                                                : (data.groups.size() == 1 ? fallbackSelected : QVector<quint32>{});
+        for (const quint32 oid : selected) {
+            const auto kind = ruledTargetRefKind(group, oid, localPlayerId);
+            for (const auto &application : data.targetingCostApplications) {
+                const bool affected = std::any_of(
+                    application.affectedTargets.cbegin(), application.affectedTargets.cend(),
+                    [kind, oid](const auto &candidate) { return candidate.kind == kind && candidate.oid == oid; });
+                if (affected) {
+                    activeApplications.insert(application.applicationId, application.genericMana);
+                }
+            }
+        }
+    }
+}
+
+[[nodiscard]] inline int ruledModalSpellTargetingCost(const PendingRuledSpellCast &spell, int localPlayerId)
+{
+    QHash<quint64, int> active;
+    for (const auto &mode : spell.selectedModes) {
+        ruledAccumulateTargetingCosts(mode.targets, mode.selectedTargetOidsByGroup, mode.selectedTargetOids,
+                                      localPlayerId, active);
+    }
+    int total = 0;
+    for (auto it = active.cbegin(); it != active.cend(); ++it) {
+        total += it.value();
+    }
+    return total;
+}
+
+[[nodiscard]] inline int ruledTargetingCostForSelection(const RuledSpellTargetData &data,
+                                                        const QVector<QVector<quint32>> &selectedByGroup,
+                                                        const QVector<quint32> &fallbackSelected,
+                                                        int localPlayerId)
+{
+    QHash<quint64, int> active;
+    ruledAccumulateTargetingCosts(data, selectedByGroup, fallbackSelected, localPlayerId, active);
+    int total = 0;
+    for (auto it = active.cbegin(); it != active.cend(); ++it) {
+        total += it.value();
+    }
+    return total;
+}
+
+/// CR 601.2f quote arithmetic: the caller's base generic already includes chosen X; all generic
+/// increases are added before reductions, and reductions cannot make the generic component negative.
+[[nodiscard]] inline int ruledFinalGenericCost(int baseGeneric, int genericIncreases, int genericReduction)
+{
+    return qMax(0, baseGeneric + genericIncreases - genericReduction);
 }
 
 [[nodiscard]] inline std::optional<RuledSpellTargetData>

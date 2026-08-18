@@ -55,6 +55,8 @@ mod enters_with_counters;
 mod equipment;
 #[path = "scenario/helpers.rs"]
 mod helpers;
+#[path = "scenario/issue_57_targeting_costs.rs"]
+mod issue_57_targeting_costs;
 #[path = "scenario/issue_63_attachment_event_triggers.rs"]
 mod issue_63_attachment_event_triggers;
 #[path = "scenario/issue_64_granted_delayed_triggers.rs"]

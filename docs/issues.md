@@ -25,10 +25,6 @@ it records progress in `AUTOMATION_STATUS.md` instead.
 
 ## Open
 
-- [ ] #57 [feature] Targeting cost increases
-  - Details: Add a reusable cost modifier for spells or abilities that target a protected object or player, with the surcharge included while legal casts and payments are computed. Calibration evidence: Boreal Elemental. The implementation should also serve ward-style mechanics, handle multiple taxed targets deterministically, and reject a cast when the selected targets make its total cost unpayable.
-  - Priority: Low
-
 - [ ] #58 [feature] Non-targeted discard and loot choices
   - Details: Generalize discard effects so the affected player chooses cards from their own hand and optional discard-then-draw sequences can branch without turning discard into targeting. Calibration evidence: Mind Rot, Rousing Read, Teferi's Protege, and Keldon Raider. The shared composite activated-cost and sorcery-speed timing paths are shipped; Liliana's Steward remains blocked here only on its opponent-controlled resolution-time discard choice. Reuse resumable resolution choices, enforce exact cardinality, and preserve hidden information in multiplayer views.
   - Priority: Low

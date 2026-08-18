@@ -108,6 +108,16 @@ RuledClientState::SpellTargetData parseSpellTargets(const ruled::v1::SpellTarget
     data.isDamageTargets = src.is_damage_targets();
     data.extraManaPerTarget = static_cast<int>(src.extra_mana_per_target());
     data.damageDividedEvenly = src.damage_division() == ruled::v1::DAMAGE_DIVISION_EVEN_AT_RESOLUTION;
+    for (const auto &application : src.targeting_cost_applications()) {
+        RuledTargetingCostApplication parsed;
+        parsed.applicationId = static_cast<quint64>(application.application_id());
+        parsed.genericMana = static_cast<int>(application.generic_mana());
+        for (const auto &candidate : application.affected_targets()) {
+            parsed.affectedTargets.append(
+                {candidate.kind(), static_cast<quint32>(candidate.object_id())});
+        }
+        data.targetingCostApplications.append(parsed);
+    }
     return data;
 }
 
@@ -140,7 +150,8 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
         set.handIndices.insert(handIndex);
         const QString cardName = QString::fromStdString(action.card_name());
         set.indicesByCardName.insert(cardName, handIndex);
-        set.faceOptionsByIndex[handIndex].append({faceIndex, cardName, QString::fromStdString(action.cost())});
+        set.faceOptionsByIndex[handIndex].append({faceIndex, cardName, QString::fromStdString(action.cost()),
+                                                 static_cast<int>(action.generic_cost_reduction())});
         if (action.has_cost_choices()) {
             set.costDataByCastKey.insert(castKey, parseCostData(action.cost_choices()));
         }
@@ -1050,7 +1061,9 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
         state->zoneCastActions.handIndices.insert(objectId);
         const QString cardName = QString::fromStdString(action.card_name());
         state->zoneCastActions.indicesByCardName.insert(cardName, objectId);
-        state->zoneCastActions.faceOptionsByIndex[objectId].append({faceIndex, cardName});
+        state->zoneCastActions.faceOptionsByIndex[objectId].append(
+            {faceIndex, cardName, QString::fromStdString(action.cost()),
+             static_cast<int>(action.generic_cost_reduction())});
         state->zoneCastSourceByOid.insert(objectId, action.source_zone() == ruled::v1::CAST_SOURCE_ZONE_EXILE
                                                         ? RuledCastSource::Exile
                                                         : RuledCastSource::Graveyard);

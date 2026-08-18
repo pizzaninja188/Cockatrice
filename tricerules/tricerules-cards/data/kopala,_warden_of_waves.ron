@@ -1,0 +1,17 @@
+(
+  id: "kopala,_warden_of_waves",
+  name: "Kopala, Warden of Waves",
+  mana_cost: "{1}{U}{U}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Merfolk", "Wizard"],
+  power: 2,
+  toughness: 2,
+  static_abilities: [
+    TargetingCostIncrease(
+      protected: Creatures((controller: Some(YouControl), subtype: Some("Merfolk"))),
+      actors: Opponents,
+      actions: SpellsAndActivatedAbilities,
+      amount: 2,
+    ),
+  ],
+)

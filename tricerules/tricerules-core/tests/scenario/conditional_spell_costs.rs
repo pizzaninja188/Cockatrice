@@ -1,15 +1,15 @@
 use super::helpers::*;
 use tricerules_core::{GameEngine, Zone};
 
-fn winged_words_action_cost(engine: &mut GameEngine) -> String {
+fn winged_words_action_cost(engine: &mut GameEngine) -> (String, u32) {
     let hand_index = hand_index_for_card(engine, 0, "winged_words") as u32;
-    engine.initial_response_batch().legal_by_player[&0]
+    let batch = engine.initial_response_batch();
+    let action = batch.legal_by_player[&0]
         .hand_actions
         .iter()
         .find(|action| action.hand_index == hand_index)
-        .expect("Winged Words cast action")
-        .cost
-        .clone()
+        .expect("Winged Words cast action");
+    (action.cost.clone(), action.generic_cost_reduction)
 }
 
 #[test]
@@ -23,7 +23,7 @@ fn winged_words_uses_the_flying_reduction_for_preview_and_payment() {
     ensure_in_hand(&mut engine, 0, "winged_words");
     relocate_to_battlefield(&mut engine, 0, "cloudkin_seer", false);
 
-    assert_eq!(winged_words_action_cost(&mut engine), "{1}{U}");
+    assert_eq!(winged_words_action_cost(&mut engine), ("{2}{U}".into(), 1));
 
     engine.state.players[0].mana_pool.blue = 1;
     engine.state.players[0].mana_pool.colorless = 1;
@@ -52,13 +52,13 @@ fn winged_words_counts_only_its_controllers_flyers_and_reduces_only_once() {
     advance_to_main1_from_game_start(&mut engine);
     ensure_in_hand(&mut engine, 0, "winged_words");
 
-    assert_eq!(winged_words_action_cost(&mut engine), "{2}{U}");
+    assert_eq!(winged_words_action_cost(&mut engine), ("{2}{U}".into(), 0));
     relocate_to_battlefield(&mut engine, 1, "cloudkin_seer", false);
-    assert_eq!(winged_words_action_cost(&mut engine), "{2}{U}");
+    assert_eq!(winged_words_action_cost(&mut engine), ("{2}{U}".into(), 0));
     relocate_to_battlefield(&mut engine, 0, "cloudkin_seer", false);
-    assert_eq!(winged_words_action_cost(&mut engine), "{1}{U}");
+    assert_eq!(winged_words_action_cost(&mut engine), ("{2}{U}".into(), 1));
     relocate_to_battlefield(&mut engine, 0, "cloudkin_seer", false);
-    assert_eq!(winged_words_action_cost(&mut engine), "{1}{U}");
+    assert_eq!(winged_words_action_cost(&mut engine), ("{2}{U}".into(), 1));
 }
 
 #[test]
@@ -73,7 +73,7 @@ fn winged_words_tracks_gained_and_lost_flying_and_revalidates_payment_atomically
     ensure_in_hand(&mut engine, 0, "flight");
     let bear = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
 
-    assert_eq!(winged_words_action_cost(&mut engine), "{2}{U}");
+    assert_eq!(winged_words_action_cost(&mut engine), ("{2}{U}".into(), 0));
     grant_pool(&mut engine, 0);
     let flight_index = hand_index_for_card(&engine, 0, "flight");
     engine
@@ -81,7 +81,7 @@ fn winged_words_tracks_gained_and_lost_flying_and_revalidates_payment_atomically
         .expect("cast Flight");
     resolve_entire_stack_two_player(&mut engine);
     engine.state.players[0].mana_pool.clear();
-    assert_eq!(winged_words_action_cost(&mut engine), "{1}{U}");
+    assert_eq!(winged_words_action_cost(&mut engine), ("{2}{U}".into(), 1));
 
     let battlefield_pos = engine.state.players[0]
         .battlefield
@@ -96,7 +96,7 @@ fn winged_words_tracks_gained_and_lost_flying_and_revalidates_payment_atomically
         .get_mut(&bear)
         .expect("bear object")
         .zone = Zone::Graveyard;
-    assert_eq!(winged_words_action_cost(&mut engine), "{2}{U}");
+    assert_eq!(winged_words_action_cost(&mut engine), ("{2}{U}".into(), 0));
 
     engine.state.players[0].mana_pool.blue = 1;
     engine.state.players[0].mana_pool.colorless = 1;
