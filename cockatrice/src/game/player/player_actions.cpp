@@ -58,9 +58,19 @@ PlayerActions::PlayerActions(Player *_player)
     moveTopCardTimer->setSingleShot(true);
     connect(moveTopCardTimer, &QTimer::timeout, [this]() { actMoveTopCardToPlay(); });
     if (auto *state = player->getGame()->getGameEventHandler()->ruled()) {
-        connect(state, &RuledClientState::restrictedManaChanged, this, [this](int playerId) {
+        restrictedManaTracker.observe(state->restrictedManaForPlayer(player->getPlayerInfo()->getId()));
+        connect(state, &RuledClientState::restrictedManaChanged, this, [this, state](int playerId) {
             if (playerId == player->getPlayerInfo()->getId()) {
-                clearRestrictedManaPaymentSelections();
+                const auto produced = restrictedManaTracker.observe(state->restrictedManaForPlayer(playerId));
+                if (player->getPlayerInfo()->getLocal()) {
+                    for (const auto &contribution : produced) {
+                        autoApplyRestrictedManaToPendingCost(contribution.groupId, contribution.symbol,
+                                                             contribution.amount);
+                    }
+                }
+                if (!pendingRuledSpellCast.valid && !pendingActivatedAbility.valid) {
+                    clearRestrictedManaPaymentSelections();
+                }
             }
         });
         connect(state, &RuledClientState::legalActionsChanged, this, [this] {
@@ -68,7 +78,10 @@ PlayerActions::PlayerActions(Player *_player)
                 clearRestrictedManaPaymentSelections();
             }
         });
-        connect(state, &RuledClientState::sessionReset, this, &PlayerActions::clearRestrictedManaPaymentSelections);
+        connect(state, &RuledClientState::sessionReset, this, [this] {
+            restrictedManaTracker.reset();
+            clearRestrictedManaPaymentSelections();
+        });
     }
 }
 
@@ -2400,6 +2413,57 @@ bool PlayerActions::finalizeTargetSelectionAndContinue()
     finalizePendingSpellManaCost();
     continuePendingSpellAfterChoice();
     return true;
+}
+
+void PlayerActions::autoApplyRestrictedManaToPendingCost(quint32 groupId, QChar symbol, int amount)
+{
+    if (amount <= 0) {
+        return;
+    }
+    const QChar normalized = symbol.toUpper() == QLatin1Char('X') ? QLatin1Char('C') : symbol.toUpper();
+    if (!QStringLiteral("WUBRGC").contains(normalized)) {
+        return;
+    }
+    const auto *state = player->getGame()->getGameEventHandler()->ruled();
+    if (!state) {
+        return;
+    }
+
+    bool appliedToSpell = false;
+    bool appliedToAbility = false;
+    for (int i = 0; i < amount; ++i) {
+        bool reduced = false;
+        if (pendingRuledSpellCast.valid && !pendingRuledSpellCast.waitingForTarget &&
+            !pendingRuledSpellCast.waitingForCost &&
+            state
+                ->eligibleRestrictedManaForCast(pendingRuledSpellCast.handIndex, pendingRuledSpellCast.faceIndex,
+                                                pendingRuledSpellCast.source)
+                .contains(groupId)) {
+            reduced = tryReducePendingSpellRemainingCostOnePip(normalized == QLatin1Char('C'), normalized);
+            appliedToSpell = appliedToSpell || reduced;
+        } else if (pendingActivatedAbility.valid && pendingActivatedAbility.waitingForMana &&
+                   state
+                       ->eligibleRestrictedManaForAbility(pendingActivatedAbility.permanentOid,
+                                                          pendingActivatedAbility.abilityIndex)
+                       .contains(groupId)) {
+            reduced = tryReducePendingAbilityRemainingCostOnePip(normalized == QLatin1Char('C'), normalized);
+            appliedToAbility = appliedToAbility || reduced;
+        }
+        if (!reduced) {
+            break;
+        }
+        restrictedManaPaymentSelections[groupId][normalized] += 1;
+    }
+
+    if (!appliedToSpell && !appliedToAbility) {
+        return;
+    }
+    emit ruledRestrictedManaStagingChanged();
+    if (appliedToSpell) {
+        finishPendingSpellManaPaymentStep();
+    } else {
+        finishPendingAbilityManaPaymentStep();
+    }
 }
 
 void PlayerActions::finalizePendingSpellManaCost()

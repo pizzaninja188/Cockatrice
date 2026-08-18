@@ -10,6 +10,7 @@
 #include "../dialogs/dlg_create_token.h"
 #include "../dialogs/dlg_move_top_cards_until.h"
 #include "../ruled/ruled_pending_cast.h"
+#include "../ruled/ruled_restricted_mana_model.h"
 #include "event_processing_options.h"
 #include "player.h"
 
@@ -139,6 +140,9 @@ public:
     /// through the same step a pool-counter click uses; pips the pending cost cannot use are left in
     /// the pool. No-op when nothing is pending payment, so pre-floated mana keeps the manual-click path.
     void autoApplyFloatedManaToPendingCost(const QString &counterName, int amount);
+    /// Route newly produced restricted contributions through the same pending-cost staging used by
+    /// a manual restricted-pip click. Engine-published eligibility remains the sole legality source.
+    void autoApplyRestrictedManaToPendingCost(quint32 groupId, QChar symbol, int amount);
     /// Resume the cast/activation whose last pip was paid by an engine mana-ability response while
     /// the one-command lock was still active. No-op unless a staged action is fully paid.
     void resumePendingRuledPaymentAfterEngineCommand();
@@ -410,7 +414,8 @@ private:
     QVector<LandTapUndoEntry> landTapUndoStack;
     QVector<LandTapUndoEntry> midCastLandTapStack;
     QVector<int> manaPaymentCounterIds;
-    QHash<quint32, QMap<QChar, int>> restrictedManaPaymentSelections;
+    RuledRestrictedManaSelections restrictedManaPaymentSelections;
+    RuledRestrictedManaTracker restrictedManaTracker;
     bool resolutionPaymentActive = false;
     bool resolutionPaymentSubmissionPending = false;
     int resolutionPaymentRemaining = 0;

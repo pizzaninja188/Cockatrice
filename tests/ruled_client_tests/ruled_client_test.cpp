@@ -17,6 +17,7 @@
 #include "game/ruled/ruled_event_dispatcher.h"
 #include "game/ruled/ruled_mana_pool_tracker.h"
 #include "game/ruled/ruled_pending_cast.h"
+#include "game/ruled/ruled_restricted_mana_model.h"
 
 #include <QSignalSpy>
 #include <QString>
@@ -1001,6 +1002,41 @@ TEST(RuledTargetRefKindTest, UsesGraveyardCandidateDomainForSelectionPresentatio
     group.validGraveyardIds.insert(7);
 
     EXPECT_EQ(ruledTargetRefKind(group, 7, kLocalPlayer), ruled::v1::TARGET_REF_KIND_GRAVEYARD);
+}
+
+TEST(RuledRestrictedManaModelTest, FullyStagedGroupConsumesNoLayoutColumn)
+{
+    RuledRestrictedManaGroup group;
+    group.groupId = 7;
+    group.r = 1;
+    RuledRestrictedManaSelections staged;
+    staged[7][QChar('R')] = 1;
+
+    EXPECT_EQ(ruledVisibleRestrictedManaColumnCount({group}, staged), 0);
+}
+
+TEST(RuledRestrictedManaModelTest, ReportsOnlyNewlyProducedContributions)
+{
+    RuledRestrictedManaTracker tracker;
+    EXPECT_TRUE(tracker.observe({}).isEmpty());
+
+    RuledRestrictedManaGroup group;
+    group.groupId = 7;
+    group.r = 1;
+    const auto firstProduction = tracker.observe({group});
+    ASSERT_EQ(firstProduction.size(), 1);
+    EXPECT_EQ(firstProduction.at(0).groupId, 7u);
+    EXPECT_EQ(firstProduction.at(0).symbol, QChar('R'));
+    EXPECT_EQ(firstProduction.at(0).amount, 1);
+
+    EXPECT_TRUE(tracker.observe({group}).isEmpty());
+    group.r = 2;
+    const auto secondProduction = tracker.observe({group});
+    ASSERT_EQ(secondProduction.size(), 1);
+    EXPECT_EQ(secondProduction.at(0).amount, 1);
+
+    group.r = 0;
+    EXPECT_TRUE(tracker.observe({group}).isEmpty());
 }
 
 TEST(RuledTargetingCostTest, DeduplicatesOneApplicationAcrossGroupsAndTypedIdCollisions)

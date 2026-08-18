@@ -7,6 +7,7 @@
 #include "../player/player.h"
 #include "../player/player_actions.h"
 #include "ruled_client_state.h"
+#include "ruled_restricted_mana_model.h"
 
 #include <QGraphicsSceneMouseEvent>
 #include <QPainter>
@@ -160,16 +161,7 @@ qreal RuledRestrictedManaDisplay::displayWidth() const
 
 void RuledRestrictedManaDisplay::paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWidget *)
 {
-    painter->save();
-    QPen pen(QColor(70, 70, 70, 170), 1.5, Qt::DashLine);
-    painter->setPen(pen);
-    painter->setBrush(Qt::NoBrush);
-    const int columns = static_cast<int>(bounds.width() / COLUMN_WIDTH);
-    for (int column = 0; column < columns; ++column) {
-        painter->drawRoundedRect(
-            QRectF(column * COLUMN_WIDTH + 3, bounds.top() + 3, COLUMN_WIDTH - 6, bounds.height() - 6), 6, 6);
-    }
-    painter->restore();
+    Q_UNUSED(painter);
 }
 
 void RuledRestrictedManaDisplay::refresh()
@@ -186,28 +178,38 @@ void RuledRestrictedManaDisplay::refresh()
     std::sort(groups.begin(), groups.end(),
               [](const auto &left, const auto &right) { return left.groupId < right.groupId; });
 
+    RuledRestrictedManaSelections stagedSelections;
+    for (const auto &group : groups) {
+        for (const QChar symbol : QStringLiteral("WUBRGC")) {
+            stagedSelections[group.groupId][symbol] =
+                player->getPlayerActions()->ruledRestrictedManaOptimisticSpendCount(group.groupId, symbol);
+        }
+    }
+
     qreal bottom = 0;
     int column = 0;
     for (const auto &group : groups) {
+        bool groupVisible = false;
         for (const QChar symbol : QStringLiteral("WUBRGC")) {
             const int authoritative = group.countForSymbol(symbol);
-            const int staged =
-                player->getPlayerActions()->ruledRestrictedManaOptimisticSpendCount(group.groupId, symbol);
+            const int staged = stagedSelections.value(group.groupId).value(symbol);
             const int visible = qMax(0, authoritative - staged);
             if (visible == 0) {
                 continue;
             }
+            groupVisible = true;
             const CounterRow row = rowForSymbol(player, symbol);
             auto *pip =
                 new RestrictedManaPip(player, group.groupId, symbol, visible, group.displayLabel, row.size, this);
             pip->setPos(column * COLUMN_WIDTH + (COLUMN_WIDTH - row.size) / 2.0, row.y);
             bottom = qMax(bottom, row.y + row.size);
         }
-        ++column;
+        column += groupVisible ? 1 : 0;
     }
 
     prepareGeometryChange();
-    bounds = QRectF(0, 0, groups.size() * COLUMN_WIDTH, qMax(bottom + 5, DEFAULT_FIRST_ROW_Y));
+    bounds = QRectF(0, 0, ruledVisibleRestrictedManaColumnCount(groups, stagedSelections) * COLUMN_WIDTH,
+                    qMax(bottom + 5, DEFAULT_FIRST_ROW_Y));
     update();
     if (!qFuzzyCompare(oldWidth + 1.0, bounds.width() + 1.0)) {
         emit widthChanged();
