@@ -1,0 +1,12 @@
+(
+  id: "dragonstorm_globe",
+  name: "Dragonstorm Globe",
+  mana_cost: "{3}",
+  types: ["Artifact"],
+  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])], text: "{T}: Add one mana of any color.")],
+  static_abilities: [EntersWithCounters(
+    affected: Creatures((controller: Some(YouControl), subtype: Some("Dragon"))),
+    counter: PlusOnePlusOne,
+    amount: 1,
+  )],
+)

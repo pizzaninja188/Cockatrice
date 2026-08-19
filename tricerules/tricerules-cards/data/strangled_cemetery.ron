@@ -1,0 +1,11 @@
+(
+  id: "strangled_cemetery",
+  name: "Strangled Cemetery",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(b: 1), (g: 1)])], text: "{T}: Add {B} or {G}.")],
+  static_abilities: [EntersTapped(
+    affected: Self_,
+    condition: Some(PlayerLifeAggregate(players: All, aggregate: Minimum, min: Some(14))),
+  )],
+)

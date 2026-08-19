@@ -1,0 +1,11 @@
+(
+  id: "neglected_manor",
+  name: "Neglected Manor",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(w: 1), (b: 1)])], text: "{T}: Add {W} or {B}.")],
+  static_abilities: [EntersTapped(
+    affected: Self_,
+    condition: Some(PlayerLifeAggregate(players: All, aggregate: Minimum, min: Some(14))),
+  )],
+)

@@ -1,0 +1,11 @@
+(
+  id: "razortrap_gorge",
+  name: "Razortrap Gorge",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(b: 1), (r: 1)])], text: "{T}: Add {B} or {R}.")],
+  static_abilities: [EntersTapped(
+    affected: Self_,
+    condition: Some(PlayerLifeAggregate(players: All, aggregate: Minimum, min: Some(14))),
+  )],
+)

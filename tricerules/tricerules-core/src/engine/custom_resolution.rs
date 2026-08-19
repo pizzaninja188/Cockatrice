@@ -1710,6 +1710,7 @@ impl GameEngine {
                             destination_controller: controller,
                             face_index: 0,
                             chosen_x: 0,
+                            player_life_snapshot: self.player_life_snapshot(),
                             tapped,
                             entry_counters: BTreeMap::new(),
                             applied_effects: Vec::new(),

@@ -379,6 +379,18 @@ impl CardRegistry {
                     });
                 }
                 for ability in &face.static_abilities {
+                    if let StaticAbilityDef::EntersTapped {
+                        condition: Some(condition),
+                        ..
+                    } = ability
+                    {
+                        condition
+                            .validate()
+                            .map_err(|reason| RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason,
+                            })?;
+                    }
                     if let StaticAbilityDef::TargetingCostIncrease {
                         protected, amount, ..
                     } = ability
@@ -475,7 +487,20 @@ impl CardRegistry {
                             });
                         }
                     }
-                    if let StaticAbilityDef::EntersWithCounters { amount, .. } = ability {
+                    if let StaticAbilityDef::EntersWithCounters {
+                        affected, amount, ..
+                    } = ability
+                    {
+                        if let crate::primitives::EntersWithCountersAffected::Creatures(filter) =
+                            affected
+                        {
+                            filter
+                                .validate()
+                                .map_err(|reason| RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason,
+                                })?;
+                        }
                         if amount.uses_milled_result() {
                             return Err(RegistryError::InvalidCard {
                                 id: card.id.clone(),
@@ -839,9 +864,11 @@ mod tests {
     use super::*;
     use crate::primitives::{
         Amount, BattlefieldCreatureCountFilter, CastTriggerPlayer, CountExpression, CounterKind,
-        CreatureEventFilter, EffectSubject, EntersTappedAffected, GameCondition, InterveningIf,
-        PermanentTypeFilter, PowerComparison, RelativePlayerSet, SpellCostModifier,
-        SpellEffectKind, StaticAbilityDef, TargetFilter, TargetKind, TriggerCondition,
+        CreatureEventFilter, CreatureScopeController, CreatureScopeFilter, EffectSubject,
+        EntersTappedAffected, EntersWithCountersAffected, GameCondition, InterveningIf, ManaAmount,
+        PermanentTypeFilter, PlayerLifeAggregate, PowerComparison, RelativePlayerSet,
+        SpellCostModifier, SpellEffectKind, StaticAbilityDef, TargetFilter, TargetKind,
+        TriggerCondition,
     };
 
     #[test]
@@ -1891,7 +1918,8 @@ mod tests {
             assert!(face.static_abilities.iter().any(|ability| matches!(
                 ability,
                 StaticAbilityDef::EntersTapped {
-                    affected: EntersTappedAffected::Self_
+                    affected: EntersTappedAffected::Self_,
+                    ..
                 }
             )));
             assert_eq!(face.activated_abilities.len(), 1, "{id}");
@@ -1923,15 +1951,180 @@ mod tests {
         assert!(ghoul.static_abilities.iter().any(|ability| matches!(
             ability,
             StaticAbilityDef::EntersTapped {
-                affected: EntersTappedAffected::Self_
+                affected: EntersTappedAffected::Self_,
+                ..
             }
         )));
         let orb = reg.get("orb_of_dreams").unwrap().primary_face();
         assert!(orb.static_abilities.iter().any(|ability| matches!(
             ability,
             StaticAbilityDef::EntersTapped {
-                affected: EntersTappedAffected::Permanents
+                affected: EntersTappedAffected::Permanents,
+                ..
             }
+        )));
+    }
+
+    #[test]
+    fn issue_97_entry_replacement_cards_have_exact_shared_data_shapes() {
+        let registry = CardRegistry::from_embedded().unwrap();
+        let expected_condition = GameCondition::PlayerLifeAggregate {
+            players: RelativePlayerSet::All,
+            aggregate: PlayerLifeAggregate::Minimum,
+            min: Some(14),
+            max: None,
+        };
+        let lands = [
+            (
+                "abandoned_campground",
+                [
+                    ManaAmount {
+                        w: 1,
+                        ..ManaAmount::default()
+                    },
+                    ManaAmount {
+                        u: 1,
+                        ..ManaAmount::default()
+                    },
+                ],
+            ),
+            (
+                "bleeding_woods",
+                [
+                    ManaAmount {
+                        r: 1,
+                        ..ManaAmount::default()
+                    },
+                    ManaAmount {
+                        g: 1,
+                        ..ManaAmount::default()
+                    },
+                ],
+            ),
+            (
+                "lakeside_shack",
+                [
+                    ManaAmount {
+                        g: 1,
+                        ..ManaAmount::default()
+                    },
+                    ManaAmount {
+                        u: 1,
+                        ..ManaAmount::default()
+                    },
+                ],
+            ),
+            (
+                "murky_sewer",
+                [
+                    ManaAmount {
+                        u: 1,
+                        ..ManaAmount::default()
+                    },
+                    ManaAmount {
+                        b: 1,
+                        ..ManaAmount::default()
+                    },
+                ],
+            ),
+            (
+                "neglected_manor",
+                [
+                    ManaAmount {
+                        w: 1,
+                        ..ManaAmount::default()
+                    },
+                    ManaAmount {
+                        b: 1,
+                        ..ManaAmount::default()
+                    },
+                ],
+            ),
+            (
+                "razortrap_gorge",
+                [
+                    ManaAmount {
+                        b: 1,
+                        ..ManaAmount::default()
+                    },
+                    ManaAmount {
+                        r: 1,
+                        ..ManaAmount::default()
+                    },
+                ],
+            ),
+            (
+                "strangled_cemetery",
+                [
+                    ManaAmount {
+                        b: 1,
+                        ..ManaAmount::default()
+                    },
+                    ManaAmount {
+                        g: 1,
+                        ..ManaAmount::default()
+                    },
+                ],
+            ),
+        ];
+
+        for (id, expected_mana) in lands {
+            let face = registry.get(id).unwrap().primary_face();
+            assert_eq!(
+                face.activated_abilities[0].mana_options().unwrap(),
+                &expected_mana,
+                "{id} mana options"
+            );
+            assert!(
+                face.static_abilities.iter().any(|ability| matches!(
+                    ability,
+                    StaticAbilityDef::EntersTapped {
+                        affected: EntersTappedAffected::Self_,
+                        condition: Some(condition),
+                    } if condition == &expected_condition
+                )),
+                "{id} condition"
+            );
+        }
+
+        let globe = registry.get("dragonstorm_globe").unwrap().primary_face();
+        assert_eq!(globe.mana_cost.to_string(), "{3}");
+        assert_eq!(
+            globe.activated_abilities[0].mana_options().unwrap(),
+            &[
+                ManaAmount {
+                    w: 1,
+                    ..ManaAmount::default()
+                },
+                ManaAmount {
+                    u: 1,
+                    ..ManaAmount::default()
+                },
+                ManaAmount {
+                    b: 1,
+                    ..ManaAmount::default()
+                },
+                ManaAmount {
+                    r: 1,
+                    ..ManaAmount::default()
+                },
+                ManaAmount {
+                    g: 1,
+                    ..ManaAmount::default()
+                },
+            ]
+        );
+        assert!(globe.static_abilities.iter().any(|ability| matches!(
+            ability,
+            StaticAbilityDef::EntersWithCounters {
+                affected: EntersWithCountersAffected::Creatures(CreatureScopeFilter {
+                    controller: Some(CreatureScopeController::YouControl),
+                    subtype: Some(subtype),
+                    ..
+                }),
+                counter: CounterKind::PlusOnePlusOne,
+                amount: Amount::Fixed(1),
+            } if subtype == "Dragon"
         )));
     }
 
@@ -2005,11 +2198,9 @@ mod tests {
                 .static_abilities
                 .iter()
                 .find_map(|ability| match ability {
-                    StaticAbilityDef::EntersWithCounters { counter, amount }
-                        if *counter == CounterKind::PlusOnePlusOne =>
-                    {
-                        Some(amount.clone())
-                    }
+                    StaticAbilityDef::EntersWithCounters {
+                        counter, amount, ..
+                    } if *counter == CounterKind::PlusOnePlusOne => Some(amount.clone()),
                     _ => None,
                 })
                 .unwrap_or_else(|| panic!("{id} lacks its entry-counter ability"))

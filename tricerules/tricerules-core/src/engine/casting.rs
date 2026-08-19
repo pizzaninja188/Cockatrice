@@ -2463,6 +2463,7 @@ impl GameEngine {
                 destination_controller: player,
                 face_index,
                 chosen_x: 0,
+                player_life_snapshot: self.player_life_snapshot(),
                 tapped: false,
                 entry_counters: BTreeMap::new(),
                 applied_effects: Vec::new(),

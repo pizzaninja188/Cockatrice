@@ -517,6 +517,9 @@ pub(crate) struct BattlefieldEntryEvent {
     pub face_index: usize,
     /// X chosen for the entering permanent spell. Non-spell entry paths carry zero.
     pub chosen_x: u32,
+    /// Public life totals captured when this event is proposed. Simultaneous entries receive the
+    /// same snapshot, so replacement ordering cannot retroactively change an entry predicate.
+    pub player_life_snapshot: BTreeMap<PlayerId, i32>,
     pub tapped: bool,
     /// Counter state accumulated by entry replacement effects before zone commitment.
     pub entry_counters: BTreeMap<CounterKind, u32>,

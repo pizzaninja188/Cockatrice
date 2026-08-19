@@ -1,0 +1,11 @@
+(
+  id: "abandoned_campground",
+  name: "Abandoned Campground",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(w: 1), (u: 1)])], text: "{T}: Add {W} or {U}.")],
+  static_abilities: [EntersTapped(
+    affected: Self_,
+    condition: Some(PlayerLifeAggregate(players: All, aggregate: Minimum, min: Some(14))),
+  )],
+)

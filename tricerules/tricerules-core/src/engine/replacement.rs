@@ -1,6 +1,8 @@
 //! Shared CR 614/616 replacement ordering and battlefield-entry preprocessing.
 
+use super::characteristics::creature_matches_scope;
 use super::events::{ev_log, finish_with_events};
+use super::history::player_life_aggregate_value;
 use super::resolution::{move_object_to_zone, permanent_moved_event};
 use super::targeting::{battlefield_objects_matching, object_matches_mass_filter};
 use super::*;
@@ -30,6 +32,72 @@ pub(super) enum BattlefieldEntryProgress {
 }
 
 impl GameEngine {
+    pub(super) fn player_life_snapshot(&self) -> BTreeMap<PlayerId, i32> {
+        self.state
+            .players
+            .iter()
+            .map(|player| (player.id, player.life))
+            .collect()
+    }
+
+    fn entry_condition_holds(
+        &self,
+        condition: &GameCondition,
+        event: &BattlefieldEntryEvent,
+    ) -> bool {
+        match condition {
+            GameCondition::PlayerLifeAggregate {
+                players, aggregate, ..
+            } => player_life_aggregate_value(
+                &self.state,
+                *players,
+                *aggregate,
+                event.destination_controller,
+                |player_id| event.player_life_snapshot.get(&player_id).copied(),
+            )
+            .is_some_and(|value| condition.matches_life_value(value)),
+            _ => self.condition_holds(
+                condition,
+                ConditionContext {
+                    controller: event.destination_controller,
+                    source_object_id: event.object_id,
+                    source_zone_change: self
+                        .state
+                        .zone_change_generation
+                        .get(&event.object_id)
+                        .copied()
+                        .unwrap_or(0),
+                    resolving_spell_id: None,
+                },
+            ),
+        }
+    }
+
+    fn battlefield_counter_replacement_affects(
+        &self,
+        source_id: ObjectId,
+        filter: &CreatureScopeFilter,
+        event: &BattlefieldEntryEvent,
+    ) -> bool {
+        let Some(source_controller) = self.controller_of(source_id) else {
+            return false;
+        };
+        let Some(mut characteristics) = self.characteristics_through_layer_5(event.object_id)
+        else {
+            return false;
+        };
+        characteristics.controller = event.destination_controller;
+        creature_matches_scope(
+            &self.state,
+            self.registry,
+            filter,
+            source_controller,
+            filter.exclude_self.then_some(source_id),
+            event.object_id,
+            &characteristics,
+        )
+    }
+
     fn battlefield_entry_candidates(
         &self,
         event: &BattlefieldEntryEvent,
@@ -47,11 +115,21 @@ impl GameEngine {
                     ),
                     StaticAbilityDef::EntersTapped {
                         affected: EntersTappedAffected::Self_,
-                    } if !event.tapped => (
-                        ReplacementPriority::Other,
-                        Some(format!("{} — enters tapped", face.name)),
-                    ),
-                    StaticAbilityDef::EntersWithCounters { .. } => (
+                        condition,
+                    } if !event.tapped
+                        && condition.as_ref().is_none_or(|condition| {
+                            self.entry_condition_holds(condition, event)
+                        }) =>
+                    {
+                        (
+                            ReplacementPriority::Other,
+                            Some(format!("{} — enters tapped", face.name)),
+                        )
+                    }
+                    StaticAbilityDef::EntersWithCounters {
+                        affected: EntersWithCountersAffected::Self_,
+                        ..
+                    } => (
                         ReplacementPriority::Other,
                         Some(format!("{} — enters with counters", face.name)),
                     ),
@@ -83,13 +161,32 @@ impl GameEngine {
                 continue;
             };
             for (ability_index, ability) in face.static_abilities.iter().enumerate() {
-                if matches!(
-                    ability,
+                let label = match ability {
                     StaticAbilityDef::EntersTapped {
-                        affected: EntersTappedAffected::Permanents
+                        affected: EntersTappedAffected::Permanents,
+                        condition,
+                    } if !event.tapped
+                        && condition.as_ref().is_none_or(|condition| {
+                            self.entry_condition_holds(condition, event)
+                        }) =>
+                    {
+                        Some(format!(
+                            "{} (P{}, object {}) — permanents enter tapped",
+                            face.name, source.controller, source.id
+                        ))
                     }
-                ) && !event.tapped
-                {
+                    StaticAbilityDef::EntersWithCounters {
+                        affected: EntersWithCountersAffected::Creatures(filter),
+                        ..
+                    } if self.battlefield_counter_replacement_affects(source.id, filter, event) => {
+                        Some(format!(
+                            "{} (P{}, object {}) — enters with counters",
+                            face.name, source.controller, source.id
+                        ))
+                    }
+                    _ => None,
+                };
+                if let Some(label) = label {
                     let effect_id = EntryReplacementEffectId::Battlefield {
                         source_id: source.id,
                         source_generation: self
@@ -101,14 +198,7 @@ impl GameEngine {
                         ability_index,
                     };
                     if !event.applied_effects.contains(&effect_id) {
-                        candidates.push((
-                            effect_id,
-                            ReplacementPriority::Other,
-                            format!(
-                                "{} (P{}, object {}) — permanents enter tapped",
-                                face.name, source.controller, source.id
-                            ),
-                        ));
+                        candidates.push((effect_id, ReplacementPriority::Other, label));
                     }
                 }
             }
@@ -277,8 +367,13 @@ impl GameEngine {
                     }
                     Some(StaticAbilityDef::EntersTapped {
                         affected: EntersTappedAffected::Self_,
+                        ..
                     }) => event.tapped = true,
-                    Some(StaticAbilityDef::EntersWithCounters { counter, amount }) => {
+                    Some(StaticAbilityDef::EntersWithCounters {
+                        affected: EntersWithCountersAffected::Self_,
+                        counter,
+                        amount,
+                    }) => {
                         let count = self.resolve_amount(
                             amount,
                             AmountContext {
@@ -300,7 +395,55 @@ impl GameEngine {
                     _ => debug_assert!(false, "stale intrinsic entry replacement"),
                 }
             }
-            EntryReplacementEffectId::Battlefield { .. } => event.tapped = true,
+            EntryReplacementEffectId::Battlefield {
+                source_id,
+                source_generation,
+                ability_index,
+            } => {
+                let ability = self
+                    .state
+                    .objects
+                    .get(source_id)
+                    .filter(|source| source.zone == Zone::Battlefield)
+                    .filter(|_| {
+                        self.state
+                            .zone_change_generation
+                            .get(source_id)
+                            .copied()
+                            .unwrap_or(0)
+                            == *source_generation
+                    })
+                    .and_then(|_| self.effective_face(*source_id))
+                    .and_then(|face| face.static_abilities.get(*ability_index));
+                match ability {
+                    Some(StaticAbilityDef::EntersTapped {
+                        affected: EntersTappedAffected::Permanents,
+                        ..
+                    }) => event.tapped = true,
+                    Some(StaticAbilityDef::EntersWithCounters {
+                        affected: EntersWithCountersAffected::Creatures(_),
+                        counter,
+                        amount,
+                    }) => {
+                        let controller = self
+                            .controller_of(*source_id)
+                            .unwrap_or(event.destination_controller);
+                        let count = self.resolve_amount(
+                            amount,
+                            AmountContext {
+                                controller,
+                                source_object_id: *source_id,
+                                source_zone_change: *source_generation,
+                                resolving_spell_id: None,
+                                chosen_x: event.chosen_x,
+                                previous_effect_result: None,
+                            },
+                        );
+                        accumulate_entry_counters(&mut event.entry_counters, *counter, count);
+                    }
+                    _ => debug_assert!(false, "stale battlefield entry replacement"),
+                }
+            }
         }
         event.applied_effects.push(effect_id);
     }
@@ -826,5 +969,88 @@ mod tests {
         accumulate_entry_counters(&mut counters, CounterKind::PlusOnePlusOne, u32::MAX - 1);
         accumulate_entry_counters(&mut counters, CounterKind::PlusOnePlusOne, 4);
         assert_eq!(counters[&CounterKind::PlusOnePlusOne], u32::MAX);
+    }
+
+    #[test]
+    fn conditional_entry_uses_the_captured_life_snapshot() {
+        let mut engine = GameEngine::new(97_007, &[0, 1], 20, None, true).expect("engine");
+        let snapshot = engine.player_life_snapshot();
+        engine.state.players[1].life = 1;
+        let event = BattlefieldEntryEvent {
+            object_id: 999,
+            deciding_player: 0,
+            destination_controller: 0,
+            face_index: 0,
+            chosen_x: 0,
+            player_life_snapshot: snapshot,
+            tapped: false,
+            entry_counters: BTreeMap::new(),
+            applied_effects: Vec::new(),
+        };
+        let condition = GameCondition::PlayerLifeAggregate {
+            players: RelativePlayerSet::All,
+            aggregate: PlayerLifeAggregate::Minimum,
+            min: Some(14),
+            max: None,
+        };
+
+        assert!(engine.entry_condition_holds(&condition, &event));
+        assert!(!engine.condition_holds(
+            &condition,
+            ConditionContext {
+                controller: 0,
+                source_object_id: 999,
+                source_zone_change: 0,
+                resolving_spell_id: None,
+            }
+        ));
+    }
+
+    #[test]
+    fn a_globe_in_the_same_proposed_batch_is_not_a_battlefield_source() {
+        let decks = Some(vec![
+            vec![
+                "dragonstorm_globe".into(),
+                "sparktongue_dragon".into(),
+                "mountain".into(),
+                "mountain".into(),
+                "mountain".into(),
+                "mountain".into(),
+                "mountain".into(),
+            ],
+            vec!["forest".into(); 7],
+        ]);
+        let mut engine = GameEngine::new(97_008, &[0, 1], 20, decks, true).expect("engine");
+        let globe = engine
+            .state
+            .objects
+            .values()
+            .find(|object| object.card_id == "dragonstorm_globe")
+            .expect("Globe")
+            .id;
+        let dragon = engine
+            .state
+            .objects
+            .values()
+            .find(|object| object.card_id == "sparktongue_dragon")
+            .expect("Dragon")
+            .id;
+        engine.state.objects.get_mut(&globe).unwrap().zone = Zone::Stack;
+        engine.state.objects.get_mut(&dragon).unwrap().zone = Zone::Stack;
+        let event = BattlefieldEntryEvent {
+            object_id: dragon,
+            deciding_player: 0,
+            destination_controller: 0,
+            face_index: 0,
+            chosen_x: 0,
+            player_life_snapshot: engine.player_life_snapshot(),
+            tapped: false,
+            entry_counters: BTreeMap::new(),
+            applied_effects: Vec::new(),
+        };
+
+        assert!(engine.battlefield_entry_candidates(&event).is_empty());
+        engine.state.objects.get_mut(&globe).unwrap().zone = Zone::Battlefield;
+        assert_eq!(engine.battlefield_entry_candidates(&event).len(), 1);
     }
 }

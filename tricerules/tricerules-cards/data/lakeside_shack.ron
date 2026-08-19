@@ -1,0 +1,11 @@
+(
+  id: "lakeside_shack",
+  name: "Lakeside Shack",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(g: 1), (u: 1)])], text: "{T}: Add {G} or {U}.")],
+  static_abilities: [EntersTapped(
+    affected: Self_,
+    condition: Some(PlayerLifeAggregate(players: All, aggregate: Minimum, min: Some(14))),
+  )],
+)

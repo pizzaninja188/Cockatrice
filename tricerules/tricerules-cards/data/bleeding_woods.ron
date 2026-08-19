@@ -1,0 +1,11 @@
+(
+  id: "bleeding_woods",
+  name: "Bleeding Woods",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(r: 1), (g: 1)])], text: "{T}: Add {R} or {G}.")],
+  static_abilities: [EntersTapped(
+    affected: Self_,
+    condition: Some(PlayerLifeAggregate(players: All, aggregate: Minimum, min: Some(14))),
+  )],
+)

@@ -531,6 +531,7 @@ impl GameEngine {
                         destination_controller: top.controller,
                         face_index: top.face_index,
                         chosen_x: top.chosen_x,
+                        player_life_snapshot: self.player_life_snapshot(),
                         tapped: false,
                         entry_counters: BTreeMap::new(),
                         applied_effects: Vec::new(),
@@ -1171,6 +1172,7 @@ impl GameEngine {
             String::new()
         };
 
+        let player_life_snapshot = self.player_life_snapshot();
         let mut entries = Vec::new();
         let mut logs = Vec::new();
         for pid in recipients {
@@ -1230,6 +1232,7 @@ impl GameEngine {
                         destination_controller: pid,
                         face_index: 0,
                         chosen_x: 0,
+                        player_life_snapshot: player_life_snapshot.clone(),
                         tapped: false,
                         entry_counters: BTreeMap::new(),
                         applied_effects: Vec::new(),

@@ -817,6 +817,15 @@ pub enum EntersTappedAffected {
     Permanents,
 }
 
+/// Which proposed entrant receives counters from an enters-with-counters replacement. Intrinsic
+/// abilities default to `Self_`; battlefield sources use a derived-characteristic creature scope.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum EntersWithCountersAffected {
+    #[default]
+    Self_,
+    Creatures(#[serde(default)] CreatureScopeFilter),
+}
+
 /// The object or player protected by a targeting cost increase. `Creatures` is evaluated from
 /// current derived characteristics, so Kopala follows control, copy, and type-changing effects.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -850,12 +859,18 @@ pub enum StaticAbilityDef {
     /// CR 614.1d: modify a proposed battlefield-entry event rather than tapping the permanent
     /// after it enters. Intrinsic examples include Diregraf Ghoul and the gainland cycle;
     /// `Permanents` is the global Orb of Dreams form.
-    EntersTapped { affected: EntersTappedAffected },
+    EntersTapped {
+        affected: EntersTappedAffected,
+        #[serde(default)]
+        condition: Option<GameCondition>,
+    },
     /// CR 614.1c / 122.6: modify the proposed battlefield-entry event so this permanent starts
     /// with `amount` counters of `counter`. `Amount` keeps fixed, X, conditional, and counted
     /// values on the same numeric vocabulary used by resolving effects. Endless One, Squad
     /// Captain, and Bloodcrazed Paladin exercise three distinct amount sources.
     EntersWithCounters {
+        #[serde(default)]
+        affected: EntersWithCountersAffected,
         counter: CounterKind,
         amount: Amount,
     },

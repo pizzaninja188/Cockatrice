@@ -21,7 +21,9 @@
 //! queried object id. Its owned result and single ordered-effect pass make it straightforward
 //! to memoize later without changing callers.
 
-use super::history::{graveyard_aggregate_value, relative_player_set_contains};
+use super::history::{
+    graveyard_aggregate_value, player_life_aggregate_value, relative_player_set_contains,
+};
 use super::*;
 
 /// The complete rules-visible characteristic snapshot currently modeled for a permanent.
@@ -296,6 +298,22 @@ impl CharacteristicsEvaluator<'_> {
                 controller,
                 self.state.active_player_id(),
             ),
+            GameCondition::PlayerLifeAggregate {
+                players, aggregate, ..
+            } => player_life_aggregate_value(
+                self.state,
+                *players,
+                *aggregate,
+                controller,
+                |player_id| {
+                    self.state
+                        .players
+                        .iter()
+                        .find(|player| player.id == player_id)
+                        .map(|player| player.life)
+                },
+            )
+            .is_some_and(|value| condition.matches_life_value(value)),
             GameCondition::CreatureDeathsThisTurn { .. } => {
                 condition.matches_value(self.state.turn_history.current.creatures_died)
             }
@@ -684,6 +702,16 @@ impl GameEngine {
     /// Compute the rules-visible characteristics of `oid` through the ordered layer pipeline.
     pub fn characteristics(&self, oid: ObjectId) -> Option<Characteristics> {
         characteristics_from(&self.state, self.registry, oid)
+    }
+
+    /// Project an object through the copy, control, text, type, and color layers used by
+    /// battlefield-entry replacement predicates (CR 614.12).
+    pub(super) fn characteristics_through_layer_5(&self, oid: ObjectId) -> Option<Characteristics> {
+        CharacteristicsEvaluator {
+            state: &self.state,
+            registry: self.registry,
+        }
+        .characteristics_through_layer_5(oid)
     }
 
     /// CR 110.2 controller of `oid`, through the layer pipeline.

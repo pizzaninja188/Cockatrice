@@ -17,6 +17,24 @@ pub(super) fn relative_player_set_contains(
     }
 }
 
+pub(super) fn player_life_aggregate_value(
+    state: &GameState,
+    players: RelativePlayerSet,
+    aggregate: PlayerLifeAggregate,
+    reference: PlayerId,
+    mut life_of: impl FnMut(PlayerId) -> Option<i32>,
+) -> Option<i32> {
+    let values = state
+        .players
+        .iter()
+        .filter(|player| relative_player_set_contains(state, players, reference, player.id))
+        .filter_map(|player| life_of(player.id));
+    match aggregate {
+        PlayerLifeAggregate::Minimum => values.min(),
+        PlayerLifeAggregate::Maximum => values.max(),
+    }
+}
+
 pub(super) fn graveyard_aggregate_value(
     state: &GameState,
     registry: &CardRegistry,
@@ -94,6 +112,22 @@ impl GameEngine {
                 context.controller,
                 self.state.active_player_id(),
             ),
+            GameCondition::PlayerLifeAggregate {
+                players, aggregate, ..
+            } => player_life_aggregate_value(
+                &self.state,
+                *players,
+                *aggregate,
+                context.controller,
+                |player_id| {
+                    self.state
+                        .players
+                        .iter()
+                        .find(|player| player.id == player_id)
+                        .map(|player| player.life)
+                },
+            )
+            .is_some_and(|value| condition.matches_life_value(value)),
             GameCondition::CreatureDeathsThisTurn { .. } => {
                 condition.matches_value(self.state.turn_history.current.creatures_died)
             }

@@ -23,6 +23,17 @@ pub enum GameCondition {
     /// `Controller` is "during your turn" (Daggersail Aeronaut); `Opponents` supports the inverse
     /// without assuming a two-player game.
     ActivePlayer { players: RelativePlayerSet },
+    /// Compare the minimum or maximum life total among a multiplayer-safe relative player set
+    /// against signed inclusive bounds. Signed values preserve rules-correct comparisons after a
+    /// player reaches zero or negative life but remains in the game until state-based actions.
+    PlayerLifeAggregate {
+        players: RelativePlayerSet,
+        aggregate: PlayerLifeAggregate,
+        #[serde(default)]
+        min: Option<i32>,
+        #[serde(default)]
+        max: Option<i32>,
+    },
     CreatureDeathsThisTurn {
         #[serde(default)]
         min: Option<u32>,
@@ -67,6 +78,19 @@ impl GameCondition {
     pub fn validate(&self) -> Result<(), String> {
         match self {
             GameCondition::ActivePlayer { .. } => Ok(()),
+            GameCondition::PlayerLifeAggregate { min, max, .. } => {
+                if min.is_none() && max.is_none() {
+                    return Err("PlayerLifeAggregate requires at least one of min or max".into());
+                }
+                if min
+                    .as_ref()
+                    .zip(max.as_ref())
+                    .is_some_and(|(minimum, maximum)| minimum > maximum)
+                {
+                    return Err("PlayerLifeAggregate min cannot exceed max".into());
+                }
+                Ok(())
+            }
             GameCondition::CreatureDeathsThisTurn { min, max } => {
                 if min.is_none() && max.is_none() {
                     return Err("CreatureDeathsThisTurn requires at least one of min or max".into());
@@ -130,7 +154,7 @@ impl GameCondition {
 
     pub fn matches_value(&self, value: u32) -> bool {
         match self {
-            GameCondition::ActivePlayer { .. } => false,
+            GameCondition::ActivePlayer { .. } | GameCondition::PlayerLifeAggregate { .. } => false,
             GameCondition::CreatureDeathsThisTurn { min, max }
             | GameCondition::BattlefieldCreatureCount { min, max, .. }
             | GameCondition::BattlefieldAggregate { min, max, .. }
@@ -140,6 +164,23 @@ impl GameCondition {
             }
         }
     }
+
+    pub fn matches_life_value(&self, value: i32) -> bool {
+        match self {
+            GameCondition::PlayerLifeAggregate { min, max, .. } => {
+                min.is_none_or(|minimum| value >= minimum)
+                    && max.is_none_or(|maximum| value <= maximum)
+            }
+            _ => false,
+        }
+    }
+}
+
+/// How selected players' public life totals collapse to one condition value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PlayerLifeAggregate {
+    Minimum,
+    Maximum,
 }
 
 /// Public characteristics used to select battlefield permanents for a [`GameCondition`].
