@@ -262,6 +262,7 @@ impl CardFace {
             CardTypeFilter::BasicLand => {
                 self.is_land && self.supertypes.iter().any(|value| value == "Basic")
             }
+            CardTypeFilter::Land => self.is_land,
             CardTypeFilter::Enchantment => self.is_enchantment,
             CardTypeFilter::Instant => self.is_instant,
             CardTypeFilter::Sorcery => self.is_sorcery,

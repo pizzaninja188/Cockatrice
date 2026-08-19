@@ -476,10 +476,11 @@ impl CardRegistry {
                                 id: card.id.clone(),
                                 reason,
                             })?;
-                        if !matches!(filter.kind, TargetKind::Creature | TargetKind::AnyPermanent)
-                            || filter.controller != TargetController::Any
-                            || filter.exclude_source
-                        {
+                        if !filter.all_terminal_filters_match(|leaf| {
+                            matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+                                && leaf.controller == TargetController::Any
+                                && !leaf.exclude_source
+                        }) {
                             return Err(RegistryError::InvalidCard {
                                 id: card.id.clone(),
                                 reason: "EntersAsCopy requires an untargeted Creature or AnyPermanent filter"
@@ -680,10 +681,11 @@ impl CardRegistry {
                                 id: card.id.clone(),
                                 reason,
                             })?;
-                        if !matches!(filter.kind, TargetKind::Creature | TargetKind::AnyPermanent)
-                            || filter.controller != TargetController::You
-                            || filter.exclude_source
-                        {
+                        if !filter.all_terminal_filters_match(|leaf| {
+                            matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+                                && leaf.controller == TargetController::You
+                                && !leaf.exclude_source
+                        }) {
                             return Err(RegistryError::InvalidCard {
                                 id: card.id.clone(),
                                 reason: "additional sacrifice cost filter requires Creature or AnyPermanent, controller: You, and may include its source".into(),

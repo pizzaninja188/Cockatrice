@@ -1500,29 +1500,30 @@ impl SpellEffectKind {
     }
 
     pub(crate) fn uses_defending_player_reference(&self) -> bool {
-        self.target_filters()
-            .iter()
-            .any(|filter| filter.controller == TargetController::DefendingPlayer)
-            || matches!(
-                self,
-                SpellEffectKind::LoseLife {
-                    who: PlayerRecipient::DefendingPlayer
-                        | PlayerRecipient::AttackingOpponentsOfDefendingPlayer,
-                    ..
-                } | SpellEffectKind::DamagePlayer {
-                    who: PlayerRecipient::DefendingPlayer
-                        | PlayerRecipient::AttackingOpponentsOfDefendingPlayer,
-                    ..
-                } | SpellEffectKind::Mill {
-                    who: PlayerRecipient::DefendingPlayer
-                        | PlayerRecipient::AttackingOpponentsOfDefendingPlayer,
-                    ..
-                } | SpellEffectKind::CreateTokens {
-                    who: PlayerRecipient::DefendingPlayer
-                        | PlayerRecipient::AttackingOpponentsOfDefendingPlayer,
-                    ..
-                }
-            )
+        self.target_filters().iter().any(|filter| {
+            filter.any_terminal_filter_matches(|leaf| {
+                leaf.controller == TargetController::DefendingPlayer
+            })
+        }) || matches!(
+            self,
+            SpellEffectKind::LoseLife {
+                who: PlayerRecipient::DefendingPlayer
+                    | PlayerRecipient::AttackingOpponentsOfDefendingPlayer,
+                ..
+            } | SpellEffectKind::DamagePlayer {
+                who: PlayerRecipient::DefendingPlayer
+                    | PlayerRecipient::AttackingOpponentsOfDefendingPlayer,
+                ..
+            } | SpellEffectKind::Mill {
+                who: PlayerRecipient::DefendingPlayer
+                    | PlayerRecipient::AttackingOpponentsOfDefendingPlayer,
+                ..
+            } | SpellEffectKind::CreateTokens {
+                who: PlayerRecipient::DefendingPlayer
+                    | PlayerRecipient::AttackingOpponentsOfDefendingPlayer,
+                ..
+            }
+        )
     }
 
     pub fn needs_target(&self) -> bool {
@@ -1731,6 +1732,9 @@ impl SpellEffectKind {
         for filter in self.target_filters() {
             filter.validate_target_constraints()?;
         }
+        if let SpellEffectKind::ReturnFromGraveyard { filter, .. } = self {
+            filter.validate()?;
+        }
 
         match self {
             SpellEffectKind::DamageTarget { amount, .. }
@@ -1752,7 +1756,9 @@ impl SpellEffectKind {
                 }
             }
             SpellEffectKind::CreatureDealsDamageEqualToPower { source, target }
-                if source.kind != TargetKind::Creature || target.kind != TargetKind::Creature =>
+                if !source.all_terminal_filters_match(|leaf| leaf.kind == TargetKind::Creature)
+                    || !target
+                        .all_terminal_filters_match(|leaf| leaf.kind == TargetKind::Creature) =>
             {
                 return Err(
                     "CreatureDealsDamageEqualToPower requires two creature target filters".into(),
@@ -1761,7 +1767,9 @@ impl SpellEffectKind {
             SpellEffectKind::Fight { first, second } => {
                 for subject in [first, second] {
                     if let EffectSubject::Chosen(filter) = subject {
-                        if filter.kind != TargetKind::Creature {
+                        if !filter
+                            .all_terminal_filters_match(|leaf| leaf.kind == TargetKind::Creature)
+                        {
                             return Err(
                                 "Fight chosen subjects require creature target filters".into()
                             );
@@ -1773,7 +1781,7 @@ impl SpellEffectKind {
                 target,
                 attachments,
             } => {
-                if target.is_player() {
+                if !target.is_permanent_only() {
                     return Err(format!(
                         "DestroyAttached cannot target players, got {:?}",
                         target.kind
@@ -1823,11 +1831,10 @@ impl SpellEffectKind {
                         ResolutionCost::DiscardCard { .. } => {}
                         ResolutionCost::SacrificePermanent { filter } => {
                             filter.validate_target_constraints()?;
-                            if !matches!(
-                                filter.kind,
-                                TargetKind::Creature | TargetKind::AnyPermanent
-                            ) || filter.controller != TargetController::You
-                            {
+                            if !filter.all_terminal_filters_match(|leaf| {
+                                matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+                                    && leaf.controller == TargetController::You
+                            }) {
                                 return Err(
                                     "resolution sacrifice cost must select a permanent you control"
                                         .into(),
@@ -1993,7 +2000,7 @@ impl SpellEffectKind {
             | SpellEffectKind::Untap {
                 subject: EffectSubject::Chosen(target),
             } => {
-                if target.is_player() {
+                if !target.is_permanent_only() {
                     Err(format!(
                         "tap/untap cannot target players, got {:?}",
                         target.kind
@@ -2007,7 +2014,7 @@ impl SpellEffectKind {
                 subject: EffectSubject::Chosen(target),
                 ..
             } => {
-                if target.is_player() {
+                if !target.is_permanent_only() {
                     Err(format!(
                         "PutCounters cannot target players, got {:?}",
                         target.kind
@@ -2026,19 +2033,21 @@ impl SpellEffectKind {
                         target.kind
                     ));
                 }
-                if filter.is_player() {
+                if !filter.is_permanent_only() {
                     return Err(format!(
                         "TargetPlayerSacrifices.filter must select permanents, not players, got {:?}",
                         filter.kind
                     ));
                 }
-                if filter.controller != TargetController::Any {
+                if !filter
+                    .all_terminal_filters_match(|leaf| leaf.controller == TargetController::Any)
+                {
                     return Err(
                         "TargetPlayerSacrifices.filter cannot use a controller-relative target filter"
                             .into(),
                     );
                 }
-                if filter.exclude_source {
+                if filter.any_terminal_filter_matches(|leaf| leaf.exclude_source) {
                     return Err(
                         "TargetPlayerSacrifices.filter cannot exclude the effect source".into(),
                     );
@@ -2051,7 +2060,9 @@ impl SpellEffectKind {
             | SpellEffectKind::DamageAll { kind, .. }
             | SpellEffectKind::UntapAll { filter: kind, .. } => {
                 kind.validate_characteristic_constraints()?;
-                if !matches!(kind.kind, TargetKind::Creature | TargetKind::AnyPermanent) {
+                if !kind.all_terminal_filters_match(|leaf| {
+                    matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+                }) {
                     return Err(format!(
                         "mass effect kind must be Creature or AnyPermanent, got {:?}",
                         kind.kind
@@ -2061,21 +2072,22 @@ impl SpellEffectKind {
                 // no activating player to compare a controller against — controller scope belongs
                 // in the effect's own `players` (RelativePlayerSet) or `CreatureScopeFilter`, not here.
                 // Rejecting it beats silently ignoring it.
-                if kind.controller != TargetController::Any {
+                if !kind.all_terminal_filters_match(|leaf| leaf.controller == TargetController::Any)
+                {
                     return Err(
                         "mass effect filter cannot use a controller relationship; scope the effect with \
                          `players` (RelativePlayerSet) instead"
                             .into(),
                     );
                 }
-                if kind.exclude_source {
+                if kind.any_terminal_filter_matches(|leaf| leaf.exclude_source) {
                     return Err("mass effect filter cannot exclude the effect source".into());
                 }
                 Ok(())
             }
             SpellEffectKind::GrantKeywords { subject, keywords } => {
                 if let EffectSubject::Chosen(target) = subject {
-                    if target.is_player() {
+                    if !target.is_permanent_only() {
                         return Err(format!(
                             "GrantKeywords cannot target players, got {:?}",
                             target.kind
@@ -2093,7 +2105,7 @@ impl SpellEffectKind {
                 protection,
             } => {
                 if let EffectSubject::Chosen(target) = subject {
-                    if target.is_player() {
+                    if !target.is_permanent_only() {
                         return Err(format!(
                             "GrantProtection cannot target players, got {:?}",
                             target.kind
@@ -2116,7 +2128,9 @@ impl SpellEffectKind {
             }
             SpellEffectKind::GrantTriggeredAbility { subject, ability } => {
                 if let EffectSubject::Chosen(target) = subject {
-                    if !matches!(target.kind, TargetKind::Creature | TargetKind::AnyPermanent) {
+                    if !target.all_terminal_filters_match(|leaf| {
+                        matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+                    }) {
                         return Err(format!(
                             "GrantTriggeredAbility requires a permanent-only target, got {:?}",
                             target.kind
@@ -2132,7 +2146,9 @@ impl SpellEffectKind {
             }
             SpellEffectKind::CreateDelayedTrigger { subject, ability } => {
                 if let EffectSubject::Chosen(target) = subject {
-                    if !matches!(target.kind, TargetKind::Creature | TargetKind::AnyPermanent) {
+                    if !target.all_terminal_filters_match(|leaf| {
+                        matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+                    }) {
                         return Err(format!(
                             "CreateDelayedTrigger requires a permanent-only target, got {:?}",
                             target.kind
@@ -2150,14 +2166,18 @@ impl SpellEffectKind {
             }
             SpellEffectKind::AddTypes { subject, addition } => {
                 if let EffectSubject::Chosen(target) = subject {
-                    if !matches!(target.kind, TargetKind::Creature | TargetKind::AnyPermanent) {
+                    if !target.all_terminal_filters_match(|leaf| {
+                        matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+                    }) {
                         return Err(format!(
                             "AddTypes requires a permanent-only target, got {:?}",
                             target.kind
                         ));
                     }
                     if !addition.creature_types.is_empty()
-                        && target.kind == TargetKind::AnyPermanent
+                        && target.any_terminal_filter_matches(|leaf| {
+                            leaf.kind == TargetKind::AnyPermanent
+                        })
                         && !addition
                             .card_types
                             .contains(&super::PermanentTypeFilter::Creature)
@@ -2172,17 +2192,21 @@ impl SpellEffectKind {
             }
             SpellEffectKind::GrantKeywordsAllPermanents { filter, keywords } => {
                 filter.validate_characteristic_constraints()?;
-                if !matches!(filter.kind, TargetKind::Creature | TargetKind::AnyPermanent) {
+                if !filter.all_terminal_filters_match(|leaf| {
+                    matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+                }) {
                     Err(format!(
                         "GrantKeywordsAllPermanents filter must be Creature or AnyPermanent, got {:?}",
                         filter.kind
                     ))
-                } else if filter.controller == TargetController::Opponent {
+                } else if filter.any_terminal_filter_matches(|leaf| {
+                    leaf.controller == TargetController::Opponent
+                }) {
                     Err(
                         "GrantKeywordsAllPermanents does not support opponent scope; use the dedicated untargeted player scope"
                             .into(),
                     )
-                } else if filter.exclude_source {
+                } else if filter.any_terminal_filter_matches(|leaf| leaf.exclude_source) {
                     Err("GrantKeywordsAllPermanents filter cannot exclude the effect source".into())
                 } else if keywords.is_empty() {
                     Err("GrantKeywordsAllPermanents requires at least one keyword".into())
@@ -2197,7 +2221,7 @@ impl SpellEffectKind {
                 match scope {
                     CombatRestrictionScope::Source => Ok(()),
                     CombatRestrictionScope::Chosen(target) => {
-                        if target.is_player() {
+                        if !target.is_permanent_only() {
                             Err(format!(
                                 "ApplyCombatRestriction cannot target players, got {:?}",
                                 target.kind
@@ -2208,7 +2232,9 @@ impl SpellEffectKind {
                     }
                     CombatRestrictionScope::Matching(filter) => {
                         filter.validate_characteristic_constraints()?;
-                        if filter.kind != TargetKind::Creature {
+                        if !filter
+                            .all_terminal_filters_match(|leaf| leaf.kind == TargetKind::Creature)
+                        {
                             Err(format!(
                                 "matching combat restriction requires Creature kind, got {:?}",
                                 filter.kind
@@ -2264,13 +2290,16 @@ impl SpellEffectKind {
             // CR 303.4a: an Aura may enchant an object or player. Keep mixed AnyTarget out until
             // a real card needs the additional recipient disambiguation surface.
             SpellEffectKind::AuraAttach { target } => {
-                if !matches!(
-                    target.kind,
-                    TargetKind::Creature
-                        | TargetKind::AnyPermanent
-                        | TargetKind::AnyPlayer
-                        | TargetKind::OpponentPlayer
-                ) {
+                let object_only = target.all_terminal_filters_match(|leaf| {
+                    matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+                });
+                let player_only = target.all_terminal_filters_match(|leaf| {
+                    matches!(
+                        leaf.kind,
+                        TargetKind::AnyPlayer | TargetKind::OpponentPlayer
+                    )
+                });
+                if !object_only && !player_only {
                     Err("AuraAttach does not support mixed AnyTarget recipients".into())
                 } else {
                     Ok(())
@@ -2281,7 +2310,7 @@ impl SpellEffectKind {
             SpellEffectKind::Equip { target } => {
                 if context == EffectContext::Spell {
                     Err("Equip is only valid on an activated ability, not a spell".into())
-                } else if target.is_player() {
+                } else if !target.is_permanent_only() {
                     Err(format!(
                         "Equip cannot target players, got {:?}",
                         target.kind

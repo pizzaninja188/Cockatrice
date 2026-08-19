@@ -187,10 +187,11 @@ impl ActivatedAbilityDef {
         for cost in &self.costs {
             if let AbilityCost::SacrificePermanent { filter } = cost {
                 filter.validate_characteristic_constraints()?;
-                if !matches!(filter.kind, TargetKind::Creature | TargetKind::AnyPermanent)
-                    || filter.controller != TargetController::You
-                    || filter.exclude_source
-                {
+                if !filter.all_terminal_filters_match(|leaf| {
+                    matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+                        && leaf.controller == TargetController::You
+                        && !leaf.exclude_source
+                }) {
                     return Err("sacrifice cost filter requires Creature or AnyPermanent, controller: You, and may include its source".into());
                 }
             }

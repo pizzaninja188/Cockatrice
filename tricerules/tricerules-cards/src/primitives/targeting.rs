@@ -78,7 +78,9 @@ impl TargetingDef {
             };
             if permanent_filters.is_empty()
                 || permanent_filters.iter().any(|filter| {
-                    !matches!(filter.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+                    !filter.all_terminal_filters_match(|leaf| {
+                        matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+                    })
                 })
             {
                 return Err(
@@ -183,6 +185,8 @@ pub enum TargetKind {
 pub enum CardTypeFilter {
     /// A land card with the Basic supertype (Evolving Wilds, Rampant Growth).
     BasicLand,
+    /// Any land card, basic or nonbasic.
+    Land,
     Enchantment,
     Instant,
     Sorcery,
@@ -238,12 +242,69 @@ pub enum GraveyardOwner {
 /// Parallel to [`TargetFilter`] but for a different zone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct GraveyardFilter {
+    /// A pure disjunction of two or more recursively validated filters. When present, every
+    /// leaf field on this node must retain its default value.
+    #[serde(default)]
+    pub any_of: Option<Vec<Self>>,
     /// Which player's graveyard. Defaults to the caster's own graveyard.
     #[serde(default)]
     pub owner: GraveyardOwner,
     /// Optional card-type restriction. `None` = any card.
     #[serde(default)]
     pub card_type: Option<CardTypeFilter>,
+    /// Card types a matching card must not have.
+    #[serde(default)]
+    pub excluded_card_types: Vec<CardTypeFilter>,
+}
+
+impl GraveyardFilter {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        self.validate_tree()?;
+        let mut leaves = Vec::new();
+        self.collect_terminal_filters(&mut leaves);
+        if terminal_filters_have_duplicates(&leaves) {
+            return Err("graveyard filter cannot contain duplicate terminal predicates".into());
+        }
+        Ok(())
+    }
+
+    fn validate_tree(&self) -> Result<(), String> {
+        if let Some(branches) = &self.any_of {
+            let mut leaf_fields = self.clone();
+            leaf_fields.any_of = None;
+            if leaf_fields != Self::default() {
+                return Err("graveyard filter any_of must be a pure OR node".into());
+            }
+            if branches.len() < 2 {
+                return Err("graveyard filter any_of requires at least two alternatives".into());
+            }
+            for branch in branches {
+                branch.validate_tree()?;
+            }
+            return Ok(());
+        }
+
+        if has_duplicates(&self.excluded_card_types) {
+            return Err("graveyard filter has a duplicate excluded card type".into());
+        }
+        if self
+            .card_type
+            .is_some_and(|required| self.excluded_card_types.contains(&required))
+        {
+            return Err("graveyard filter cannot both require and exclude a card type".into());
+        }
+        Ok(())
+    }
+
+    fn collect_terminal_filters<'a>(&'a self, out: &mut Vec<&'a Self>) {
+        if let Some(branches) = &self.any_of {
+            for branch in branches {
+                branch.collect_terminal_filters(out);
+            }
+        } else {
+            out.push(self);
+        }
+    }
 }
 
 /// Where a card returned from the graveyard lands (CR 400.1).
@@ -262,9 +323,10 @@ fn default_creature_filter() -> TargetFilter {
     }
 }
 
-/// Composable target predicate: base [`TargetKind`] AND optional characteristic
-/// constraints (AND-combined). Use only `kind` to get the same semantics as the
-/// original five TargetSpec variants; add constraints to narrow further.
+/// Composable target predicate. A leaf combines its base [`TargetKind`] and optional
+/// characteristic constraints with AND. An `any_of` node is a pure recursive OR whose other
+/// fields remain default. Use only `kind` to get the same semantics as the original five
+/// TargetSpec variants; add constraints to narrow further.
 ///
 /// Example RON:
 /// - `(kind: AnyTarget)` — any creature or player
@@ -279,6 +341,10 @@ fn default_creature_filter() -> TargetFilter {
 ///   Rambunctious Mutt.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct TargetFilter {
+    /// A pure disjunction of two or more recursively validated filters. When present, every
+    /// leaf field on this node must retain its default value.
+    #[serde(default)]
+    pub any_of: Option<Vec<Self>>,
     #[serde(default)]
     pub kind: TargetKind,
     /// If true, the target must not be an artifact.
@@ -355,7 +421,13 @@ impl TargetFilter {
     /// is meaningful for every object-capable kind (including `AnyTarget`) but never player-only
     /// kinds.
     pub(crate) fn validate_target_constraints(&self) -> Result<(), String> {
-        self.validate_characteristic_constraints()?;
+        self.validate_tree(true)?;
+        self.reject_duplicate_terminal_filters()?;
+        Ok(())
+    }
+
+    fn validate_target_leaf(&self) -> Result<(), String> {
+        self.validate_characteristic_leaf()?;
         if self.controller != TargetController::Any
             && !matches!(self.kind, TargetKind::Creature | TargetKind::AnyPermanent)
         {
@@ -376,6 +448,66 @@ impl TargetFilter {
     /// Reject contradictory characteristic predicates wherever this filter is used, including
     /// untargeted mass effects and sacrifice selections.
     pub(crate) fn validate_characteristic_constraints(&self) -> Result<(), String> {
+        self.validate_tree(false)?;
+        self.reject_duplicate_terminal_filters()
+    }
+
+    fn validate_tree(&self, target_context: bool) -> Result<(), String> {
+        if let Some(branches) = &self.any_of {
+            let mut leaf_fields = self.clone();
+            leaf_fields.any_of = None;
+            if leaf_fields != Self::default() {
+                return Err("target filter any_of must be a pure OR node".into());
+            }
+            if branches.len() < 2 {
+                return Err("target filter any_of requires at least two alternatives".into());
+            }
+            for branch in branches {
+                branch.validate_tree(target_context)?;
+            }
+            return Ok(());
+        }
+
+        if target_context {
+            self.validate_target_leaf()
+        } else {
+            self.validate_characteristic_leaf()
+        }
+    }
+
+    fn validate_characteristic_leaf(&self) -> Result<(), String> {
+        if self.is_player() && self.has_permanent_only_constraints() {
+            return Err(format!(
+                "player-only target filter cannot carry permanent-only constraints, got {:?}",
+                self.kind
+            ));
+        }
+        if self.is_color.is_some() && self.is_color == self.not_color {
+            return Err("target filter cannot both require and exclude the same color".into());
+        }
+        if has_duplicates(&self.permanent_types) {
+            return Err("target filter cannot repeat a required permanent type".into());
+        }
+        if self.not_artifact
+            && self
+                .permanent_types
+                .contains(&super::PermanentTypeFilter::Artifact)
+        {
+            return Err("target filter cannot both require and exclude Artifact".into());
+        }
+        if self.not_land
+            && self
+                .permanent_types
+                .contains(&super::PermanentTypeFilter::Land)
+        {
+            return Err("target filter cannot both require and exclude Land".into());
+        }
+        if has_duplicates(&self.required_keywords) {
+            return Err("target filter cannot repeat a required keyword".into());
+        }
+        if has_duplicates(&self.excluded_keywords) {
+            return Err("target filter cannot repeat an excluded keyword".into());
+        }
         if let Some(keyword) = self
             .required_keywords
             .iter()
@@ -385,22 +517,119 @@ impl TargetFilter {
                 "target filter cannot both require and exclude keyword {keyword:?}"
             ));
         }
+        if self
+            .excluded_subtypes
+            .iter()
+            .any(|subtype| subtype.trim().is_empty())
+        {
+            return Err("target filter excluded subtype names must not be empty".into());
+        }
         Ok(())
+    }
+
+    fn has_permanent_only_constraints(&self) -> bool {
+        self.not_artifact
+            || self.not_land
+            || self.tapped.is_some()
+            || self.attacking_or_blocking
+            || self.not_color.is_some()
+            || self.is_color.is_some()
+            || self.controller != TargetController::Any
+            || self.exclude_source
+            || !self.permanent_types.is_empty()
+            || !self.excluded_subtypes.is_empty()
+            || self.power.is_some()
+            || !self.required_keywords.is_empty()
+            || !self.excluded_keywords.is_empty()
+    }
+
+    fn reject_duplicate_terminal_filters(&self) -> Result<(), String> {
+        let mut leaves = Vec::new();
+        self.collect_terminal_filters(&mut leaves);
+        if terminal_filters_have_duplicates(&leaves) {
+            return Err("target filter cannot contain duplicate terminal predicates".into());
+        }
+        Ok(())
+    }
+
+    fn collect_terminal_filters<'a>(&'a self, out: &mut Vec<&'a Self>) {
+        if let Some(branches) = &self.any_of {
+            for branch in branches {
+                branch.collect_terminal_filters(out);
+            }
+        } else {
+            out.push(self);
+        }
+    }
+
+    /// True when every terminal predicate satisfies `predicate`.
+    pub fn all_terminal_filters_match(&self, predicate: impl Fn(&Self) -> bool + Copy) -> bool {
+        self.any_of.as_ref().map_or_else(
+            || predicate(self),
+            |branches| {
+                branches
+                    .iter()
+                    .all(|branch| branch.all_terminal_filters_match(predicate))
+            },
+        )
+    }
+
+    /// True when at least one terminal predicate satisfies `predicate`.
+    pub fn any_terminal_filter_matches(&self, predicate: impl Fn(&Self) -> bool + Copy) -> bool {
+        self.any_of.as_ref().map_or_else(
+            || predicate(self),
+            |branches| {
+                branches
+                    .iter()
+                    .any(|branch| branch.any_terminal_filter_matches(predicate))
+            },
+        )
     }
 
     /// True for player-only kinds (used by startup validation).
     pub fn is_player(&self) -> bool {
-        matches!(
-            self.kind,
-            TargetKind::AnyPlayer | TargetKind::OpponentPlayer
-        )
+        self.all_terminal_filters_match(|filter| {
+            matches!(
+                filter.kind,
+                TargetKind::AnyPlayer | TargetKind::OpponentPlayer
+            )
+        })
     }
+
+    /// True when every terminal predicate selects battlefield permanents only.
+    pub fn is_permanent_only(&self) -> bool {
+        self.all_terminal_filters_match(|filter| {
+            matches!(filter.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+        })
+    }
+}
+
+fn has_duplicates<T: PartialEq>(values: &[T]) -> bool {
+    values
+        .iter()
+        .enumerate()
+        .any(|(index, value)| values[..index].contains(value))
+}
+
+fn terminal_filters_have_duplicates<T: PartialEq>(leaves: &[&T]) -> bool {
+    leaves
+        .iter()
+        .enumerate()
+        .any(|(index, leaf)| leaves[..index].contains(leaf))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::primitives::{Amount, PlayerRecipient};
+    use crate::primitives::{Amount, PermanentTypeFilter, PlayerRecipient};
+
+    fn target_filter(ron: &str) -> TargetFilter {
+        ron::from_str(ron).expect("deserialize target filter")
+    }
+
+    fn graveyard_filter(ron: &str) -> GraveyardFilter {
+        ron::from_str(ron).expect("deserialize graveyard filter")
+    }
 
     fn controller_of_target_effects(
         target_kind: TargetKind,
@@ -454,6 +683,143 @@ mod tests {
                 }],
             };
             assert!(TargetingDef::validate_optional(Some(&targeting), &effects).is_err());
+        }
+    }
+
+    #[test]
+    fn issue_114_disjunctive_filter_shapes_deserialize_and_validate() {
+        let make_your_move = target_filter(
+            "(any_of: Some([(kind: AnyPermanent, permanent_types: [Artifact]), (kind: AnyPermanent, permanent_types: [Enchantment]), (kind: Creature, power: Some(AtLeast(4)))]))",
+        );
+        assert!(make_your_move.validate_target_constraints().is_ok());
+
+        let broken_wings = target_filter(
+            "(any_of: Some([(kind: AnyPermanent, permanent_types: [Artifact]), (kind: AnyPermanent, permanent_types: [Enchantment]), (kind: Creature, required_keywords: [Flying])]))",
+        );
+        assert!(broken_wings.validate_target_constraints().is_ok());
+
+        let say_its_name = graveyard_filter(
+            "(any_of: Some([(card_type: Some(Creature)), (card_type: Some(Land))]))",
+        );
+        assert!(say_its_name.validate().is_ok());
+
+        let monastery_messenger =
+            graveyard_filter("(card_type: Some(Noncreature), excluded_card_types: [Land])");
+        assert!(monastery_messenger.validate().is_ok());
+        assert_eq!(
+            monastery_messenger.excluded_card_types,
+            vec![CardTypeFilter::Land]
+        );
+    }
+
+    #[test]
+    fn issue_114_rejects_malformed_target_or_nodes() {
+        for (ron, expected) in [
+            ("(any_of: Some([]))", "at least two"),
+            ("(any_of: Some([(kind: Creature)]))", "at least two"),
+            (
+                "(kind: Creature, any_of: Some([(kind: Creature), (kind: AnyPermanent)]))",
+                "pure OR node",
+            ),
+            (
+                "(any_of: Some([(kind: Creature), (kind: Creature)]))",
+                "duplicate terminal",
+            ),
+            (
+                "(any_of: Some([(kind: Creature), (any_of: Some([(kind: AnyPermanent)]))]))",
+                "at least two",
+            ),
+        ] {
+            let error = target_filter(ron)
+                .validate_target_constraints()
+                .expect_err("malformed target filter should fail");
+            assert!(
+                error.contains(expected),
+                "{error:?} did not contain {expected:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_114_rejects_contradictory_or_redundant_target_leaves() {
+        let invalid = [
+            TargetFilter {
+                is_color: Some(Color::Green),
+                not_color: Some(Color::Green),
+                ..Default::default()
+            },
+            TargetFilter {
+                permanent_types: vec![PermanentTypeFilter::Artifact],
+                not_artifact: true,
+                ..Default::default()
+            },
+            TargetFilter {
+                permanent_types: vec![PermanentTypeFilter::Land],
+                not_land: true,
+                ..Default::default()
+            },
+            TargetFilter {
+                permanent_types: vec![PermanentTypeFilter::Creature, PermanentTypeFilter::Creature],
+                ..Default::default()
+            },
+            TargetFilter {
+                required_keywords: vec![Keyword::Flying, Keyword::Flying],
+                ..Default::default()
+            },
+            TargetFilter {
+                excluded_keywords: vec![Keyword::Flying, Keyword::Flying],
+                ..Default::default()
+            },
+            TargetFilter {
+                required_keywords: vec![Keyword::Flying],
+                excluded_keywords: vec![Keyword::Flying],
+                ..Default::default()
+            },
+            TargetFilter {
+                excluded_subtypes: vec!["  ".into()],
+                ..Default::default()
+            },
+            TargetFilter {
+                kind: TargetKind::AnyPlayer,
+                power: Some(PowerComparison::AtLeast(4)),
+                ..Default::default()
+            },
+        ];
+
+        for filter in invalid {
+            assert!(
+                filter.validate_target_constraints().is_err(),
+                "invalid target leaf unexpectedly passed: {filter:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_114_rejects_malformed_or_contradictory_graveyard_filters() {
+        for (ron, expected) in [
+            ("(any_of: Some([]))", "at least two"),
+            ("(any_of: Some([(card_type: Some(Creature))]))", "at least two"),
+            (
+                "(owner: AnyPlayer, any_of: Some([(card_type: Some(Creature)), (card_type: Some(Land))]))",
+                "pure OR node",
+            ),
+            (
+                "(any_of: Some([(card_type: Some(Creature)), (card_type: Some(Creature))]))",
+                "duplicate terminal",
+            ),
+            (
+                "(card_type: Some(Land), excluded_card_types: [Land])",
+                "require and exclude",
+            ),
+            (
+                "(excluded_card_types: [Creature, Creature])",
+                "duplicate excluded card type",
+            ),
+        ] {
+            let error = graveyard_filter(ron)
+                .validate()
+                .expect_err("malformed graveyard filter should fail");
+            assert!(error.contains(expected), "{error:?} did not contain {expected:?}");
         }
     }
 }

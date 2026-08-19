@@ -1,0 +1,15 @@
+(
+  id: "broken_wings",
+  name: "Broken Wings",
+  mana_cost: "{2}{G}",
+  types: ["Instant"],
+  spell_effect: [
+    DestroyTarget(target: (
+      any_of: Some([
+        (kind: AnyPermanent, permanent_types: [Artifact]),
+        (kind: AnyPermanent, permanent_types: [Enchantment]),
+        (kind: Creature, required_keywords: [Flying]),
+      ]),
+    )),
+  ],
+)

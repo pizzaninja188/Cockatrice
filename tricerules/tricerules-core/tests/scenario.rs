@@ -59,6 +59,8 @@ mod helpers;
 mod issue_102_activation_limits;
 #[path = "scenario/issue_108_graveyard_aggregates.rs"]
 mod issue_108_graveyard_aggregates;
+#[path = "scenario/issue_114_disjunctive_filters.rs"]
+mod issue_114_disjunctive_filters;
 #[path = "scenario/issue_117_fight.rs"]
 mod issue_117_fight;
 #[path = "scenario/issue_127_trigger_event_filters.rs"]

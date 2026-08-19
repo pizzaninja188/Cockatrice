@@ -195,6 +195,7 @@ impl GameEngine {
                                 .iter()
                                 .any(|value| value == "Basic")
                     }
+                    CardTypeFilter::Land => characteristics.has_type("Land"),
                     CardTypeFilter::Enchantment => characteristics.has_type("Enchantment"),
                     CardTypeFilter::Instant => characteristics.has_type("Instant"),
                     CardTypeFilter::Sorcery => characteristics.has_type("Sorcery"),

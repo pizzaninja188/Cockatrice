@@ -416,6 +416,7 @@ fn battlefield_card_type_matches(
                     .iter()
                     .any(|value| value == "Basic")
         }
+        CardTypeFilter::Land => characteristics.has_type("Land"),
         CardTypeFilter::Enchantment => characteristics.has_type("Enchantment"),
         CardTypeFilter::Instant => characteristics.has_type("Instant"),
         CardTypeFilter::Sorcery => characteristics.has_type("Sorcery"),
@@ -481,26 +482,56 @@ pub(super) fn effect_affects(
             reference_player,
             filter,
             exclude,
-        } => {
-            exclude != &Some(oid)
-                && match filter.kind {
-                    TargetKind::Creature => characteristics.is_creature(),
-                    TargetKind::AnyPermanent => true,
-                    _ => false,
-                }
-                && match filter.controller {
-                    TargetController::Any => true,
-                    TargetController::You => characteristics.controller == *reference_player,
-                    TargetController::Opponent => {
-                        state.are_opponents(characteristics.controller, *reference_player)
-                    }
-                    TargetController::NotYou => characteristics.controller != *reference_player,
-                    TargetController::DefendingPlayer => false,
-                }
-                && permanent_matches_filter_characteristics(state, filter, oid, characteristics)
-        }
+        } => permanent_matches_target_scope(
+            state,
+            filter,
+            *reference_player,
+            *exclude,
+            oid,
+            characteristics,
+        ),
         AffectedScope::Player(_) => false,
     }
+}
+
+fn permanent_matches_target_scope(
+    state: &GameState,
+    filter: &TargetFilter,
+    reference_player: PlayerId,
+    source: Option<ObjectId>,
+    oid: ObjectId,
+    characteristics: &Characteristics,
+) -> bool {
+    if let Some(branches) = &filter.any_of {
+        return branches.iter().any(|branch| {
+            permanent_matches_target_scope(
+                state,
+                branch,
+                reference_player,
+                source,
+                oid,
+                characteristics,
+            )
+        });
+    }
+    let kind_matches = match filter.kind {
+        TargetKind::Creature => characteristics.is_creature(),
+        TargetKind::AnyPermanent => true,
+        _ => false,
+    };
+    let controller_matches = match filter.controller {
+        TargetController::Any => true,
+        TargetController::You => characteristics.controller == reference_player,
+        TargetController::Opponent => {
+            state.are_opponents(characteristics.controller, reference_player)
+        }
+        TargetController::NotYou => characteristics.controller != reference_player,
+        TargetController::DefendingPlayer => false,
+    };
+    (!filter.exclude_source || source != Some(oid))
+        && kind_matches
+        && controller_matches
+        && permanent_matches_filter_characteristics(state, filter, oid, characteristics)
 }
 
 /// Characteristic predicates shared by targeted filters and dynamic rule-changing scopes. The
@@ -512,6 +543,11 @@ pub(super) fn permanent_matches_filter_characteristics(
     oid: ObjectId,
     characteristics: &Characteristics,
 ) -> bool {
+    if let Some(branches) = &filter.any_of {
+        return branches.iter().any(|branch| {
+            permanent_matches_filter_characteristics(state, branch, oid, characteristics)
+        });
+    }
     let Some(object) = state.objects.get(&oid) else {
         return false;
     };

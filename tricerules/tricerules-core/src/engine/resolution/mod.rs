@@ -8,8 +8,9 @@ use super::events::{color_string, ev_log, object_display_name};
 use super::targeting::{
     attachment_recipient_for_target, battlefield_objects_matching, compute_spell_targets,
     effect_has_legal_target_at_resolution, effect_target_legal_for_binding, graveyard_target_legal,
-    object_matches_mass_filter, spell_effect_kind_needs_target, stack_target_identity_is_current,
-    target_filter_legal_at_resolution, target_group_bindings, TargetSourceIdentity,
+    object_matches_mass_filter, object_matches_scoped_mass_filter, spell_effect_kind_needs_target,
+    stack_target_identity_is_current, target_filter_legal_at_resolution, target_group_bindings,
+    TargetSourceIdentity,
 };
 use super::*;
 use tricerules_cards::primitives::TargetingDef;
@@ -1669,6 +1670,7 @@ pub(super) fn library_card_matches_filter(
 fn card_type_filter_desc(f: &CardTypeFilter) -> &'static str {
     match f {
         CardTypeFilter::BasicLand => "basic land",
+        CardTypeFilter::Land => "land",
         CardTypeFilter::Instant => "instant",
         CardTypeFilter::Sorcery => "sorcery",
         CardTypeFilter::InstantOrSorcery => "instant or sorcery",

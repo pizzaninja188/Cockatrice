@@ -1,0 +1,15 @@
+(
+  id: "make_your_move",
+  name: "Make Your Move",
+  mana_cost: "{2}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    DestroyTarget(target: (
+      any_of: Some([
+        (kind: AnyPermanent, permanent_types: [Artifact]),
+        (kind: AnyPermanent, permanent_types: [Enchantment]),
+        (kind: Creature, power: AtLeast(4)),
+      ]),
+    )),
+  ],
+)

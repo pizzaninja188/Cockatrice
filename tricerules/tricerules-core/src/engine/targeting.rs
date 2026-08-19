@@ -359,6 +359,11 @@ pub(super) fn graveyard_target_legal(
     oid: ObjectId,
     caster: PlayerId,
 ) -> bool {
+    if let Some(branches) = &filter.any_of {
+        return branches
+            .iter()
+            .any(|branch| graveyard_target_legal(engine, branch, oid, caster));
+    }
     let Some(obj) = engine.state.objects.get(&oid) else {
         return false;
     };
@@ -380,6 +385,18 @@ pub(super) fn graveyard_target_legal(
             return false;
         };
         if !def.matches_card_type_outside_stack(card_type) {
+            return false;
+        }
+    }
+    if !filter.excluded_card_types.is_empty() {
+        let Some(def) = engine.registry.get(&obj.card_id) else {
+            return false;
+        };
+        if filter
+            .excluded_card_types
+            .iter()
+            .any(|card_type| def.matches_card_type_outside_stack(*card_type))
+        {
             return false;
         }
     }
@@ -600,6 +617,17 @@ pub(super) fn attachment_filter_legal(
     attachment_id: ObjectId,
     attachment_controller: PlayerId,
 ) -> bool {
+    if let Some(branches) = &filter.any_of {
+        return branches.iter().any(|branch| {
+            attachment_filter_legal(
+                engine,
+                branch,
+                recipient,
+                attachment_id,
+                attachment_controller,
+            )
+        });
+    }
     let AttachmentRecipient::Object(oid) = recipient else {
         let AttachmentRecipient::Player(player_id) = recipient else {
             unreachable!()
@@ -672,14 +700,19 @@ pub(super) fn attachment_recipient_for_target(
     filter: &TargetFilter,
     target: ObjectId,
 ) -> Option<AttachmentRecipient> {
-    match filter.kind {
-        TargetKind::Creature | TargetKind::AnyPermanent => {
-            Some(AttachmentRecipient::Object(target))
-        }
-        TargetKind::AnyPlayer | TargetKind::OpponentPlayer => {
-            Some(AttachmentRecipient::Player(target as PlayerId))
-        }
-        TargetKind::AnyTarget => None,
+    if filter.all_terminal_filters_match(|leaf| {
+        matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+    }) {
+        Some(AttachmentRecipient::Object(target))
+    } else if filter.all_terminal_filters_match(|leaf| {
+        matches!(
+            leaf.kind,
+            TargetKind::AnyPlayer | TargetKind::OpponentPlayer
+        )
+    }) {
+        Some(AttachmentRecipient::Player(target as PlayerId))
+    } else {
+        None
     }
 }
 
@@ -694,6 +727,11 @@ pub(super) fn object_matches_mass_filter(
     oid: ObjectId,
     filter: &TargetFilter,
 ) -> bool {
+    if let Some(branches) = &filter.any_of {
+        return branches
+            .iter()
+            .any(|branch| object_matches_mass_filter(engine, oid, branch));
+    }
     let Some(o) = engine.state.objects.get(&oid) else {
         return false;
     };
@@ -713,6 +751,33 @@ pub(super) fn object_matches_mass_filter(
         return false;
     }
     filter_characteristics_match(engine, filter, oid)
+}
+
+/// Mass-selection predicate with a reference player for one-shot effects whose filter carries
+/// controller-relative leaves. Recursion keeps each branch's controller and characteristics
+/// correlated.
+pub(super) fn object_matches_scoped_mass_filter(
+    engine: &GameEngine,
+    oid: ObjectId,
+    filter: &TargetFilter,
+    reference_player: PlayerId,
+) -> bool {
+    if let Some(branches) = &filter.any_of {
+        return branches.iter().any(|branch| {
+            object_matches_scoped_mass_filter(engine, oid, branch, reference_player)
+        });
+    }
+    let Some(characteristics) = engine.characteristics(oid) else {
+        return false;
+    };
+    object_matches_mass_filter(engine, oid, filter)
+        && target_controller_matches(
+            &engine.state,
+            filter.controller,
+            reference_player,
+            characteristics.controller,
+            None,
+        )
 }
 
 /// Collect every battlefield permanent matching a mass-effect filter, in deterministic
@@ -752,6 +817,11 @@ fn target_filter_legal_with_context(
     source: TargetSourceIdentity,
     trigger_context: TriggerContext,
 ) -> bool {
+    if let Some(branches) = &filter.any_of {
+        return branches.iter().any(|branch| {
+            target_filter_legal_with_context(engine, branch, tid, caster, source, trigger_context)
+        });
+    }
     let kind_ok = match filter.kind {
         TargetKind::AnyTarget => damage_spell_target_legal(engine, tid),
         TargetKind::Creature => destroy_spell_target_legal(engine, tid),
@@ -1222,6 +1292,9 @@ fn validate_effect_targets(
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one player target"));
             }
+            if !player_target_legal(&engine.state, targets[0].object_id) {
+                return Err(EngineError::Illegal("target must be a player in the game"));
+            }
             if !target_filter_legal_with_context(
                 engine,
                 filter,
@@ -1230,13 +1303,6 @@ fn validate_effect_targets(
                 source,
                 trigger_context,
             ) {
-                return Err(EngineError::Illegal("target must be a player in the game"));
-            }
-            if matches!(filter.kind, TargetKind::OpponentPlayer)
-                && !engine
-                    .state
-                    .are_opponents(targets[0].object_id as i32, caster)
-            {
                 return Err(EngineError::Illegal("cannot target yourself"));
             }
         }
@@ -1732,9 +1798,14 @@ fn spell_target_legality_error_with_context(
             if !player_target_legal(&engine.state, tid) {
                 return Err(EngineError::Illegal("target must be a player in the game"));
             }
-            if matches!(filter.kind, TargetKind::OpponentPlayer)
-                && !engine.state.are_opponents(tid as i32, caster)
-            {
+            if !target_filter_legal_with_context(
+                engine,
+                filter,
+                tid,
+                caster,
+                source,
+                trigger_context,
+            ) {
                 return Err(EngineError::Illegal(
                     "target must be an opponent (cannot target yourself)",
                 ));
@@ -2395,6 +2466,85 @@ mod tests {
             &engine,
             &without_flying,
             drake
+        ));
+    }
+
+    #[test]
+    fn issue_114_recursive_filter_is_shared_by_mass_cost_and_attachment_selection() {
+        let decks = Some(vec![
+            vec![
+                "grizzly_bears".into(),
+                "wind_drake".into(),
+                "short_sword".into(),
+                "ornithopter".into(),
+                "forest".into(),
+                "forest".into(),
+                "forest".into(),
+            ],
+            vec!["forest".into(); 7],
+        ]);
+        let mut engine = GameEngine::new(114_007, &[0, 1], 20, decks, true).expect("new");
+        let mut deploy = |card_id: &str| {
+            let oid = engine.state.players[0]
+                .hand
+                .iter()
+                .copied()
+                .find(|oid| engine.state.objects[oid].card_id == card_id)
+                .expect("card in hand");
+            engine.state.players[0]
+                .hand
+                .retain(|candidate| *candidate != oid);
+            engine.state.players[0].battlefield.push(oid);
+            let object = engine.state.objects.get_mut(&oid).expect("object");
+            object.zone = Zone::Battlefield;
+            object.base_controller = 0;
+            object.controller = 0;
+            oid
+        };
+        let bear = deploy("grizzly_bears");
+        let drake = deploy("wind_drake");
+        let sword = deploy("short_sword");
+        let ornithopter = deploy("ornithopter");
+        let filter = TargetFilter {
+            any_of: Some(vec![
+                TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::You,
+                    required_keywords: vec![Keyword::Flying],
+                    ..TargetFilter::default()
+                },
+                TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    controller: TargetController::You,
+                    permanent_types: vec![PermanentTypeFilter::Artifact],
+                    ..TargetFilter::default()
+                },
+            ]),
+            ..TargetFilter::default()
+        };
+
+        assert_eq!(
+            battlefield_objects_matching(&engine, &filter),
+            vec![drake, sword, ornithopter],
+            "a permanent satisfying both leaves is selected once"
+        );
+        for oid in [drake, sword, ornithopter] {
+            assert!(engine.ability_cost_permanent_matches(0, oid, &filter));
+            assert!(attachment_filter_legal(
+                &engine,
+                &filter,
+                AttachmentRecipient::Object(oid),
+                u32::MAX,
+                0,
+            ));
+        }
+        assert!(!engine.ability_cost_permanent_matches(0, bear, &filter));
+        assert!(!attachment_filter_legal(
+            &engine,
+            &filter,
+            AttachmentRecipient::Object(bear),
+            u32::MAX,
+            0,
         ));
     }
 }

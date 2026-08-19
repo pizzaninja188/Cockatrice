@@ -69,7 +69,7 @@ pub(super) fn apply_combat_restriction(
             (
                 AffectedScope::PermanentsMatching {
                     reference_player: cx.controller,
-                    exclude: filter.exclude_source.then_some(filter_source),
+                    exclude: Some(filter_source),
                     filter,
                 },
                 Some(cx.top.id),

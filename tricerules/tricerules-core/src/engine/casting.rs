@@ -488,6 +488,7 @@ fn mana_filter_matches_characteristics(
                     .iter()
                     .any(|value| value == "Basic")
         }
+        CardTypeFilter::Land => characteristics.has_type("Land"),
         CardTypeFilter::Enchantment => characteristics.has_type("Enchantment"),
         CardTypeFilter::Instant => characteristics.has_type("Instant"),
         CardTypeFilter::Sorcery => characteristics.has_type("Sorcery"),
@@ -1967,6 +1968,11 @@ impl GameEngine {
         oid: ObjectId,
         filter: &TargetFilter,
     ) -> bool {
+        if let Some(branches) = &filter.any_of {
+            return branches
+                .iter()
+                .any(|branch| self.ability_cost_permanent_matches(player, oid, branch));
+        }
         let Some(object) = self.state.objects.get(&oid) else {
             return false;
         };
