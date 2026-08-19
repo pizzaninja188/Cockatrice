@@ -105,6 +105,64 @@ fn bonesplitter_equip_adds_bonus() {
     );
 }
 
+/// Equip target publication uses activated-ability legality, not the spell-only target path.
+#[test]
+fn bonesplitter_publishes_controlled_merfolk_as_equip_target() {
+    let decks = Some(vec![
+        deck_with("island", &["bonesplitter", "merfolk_of_the_pearl_trident"]),
+        deck_with("island", &["merfolk_of_the_pearl_trident"]),
+    ]);
+    let mut e = GameEngine::new(5009, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    let splitter = cast_and_resolve_equipment(
+        &mut e,
+        0,
+        "bonesplitter",
+        ManaGift {
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let merfolk = relocate_to_battlefield(&mut e, 0, "merfolk_of_the_pearl_trident", false);
+    let opponent_merfolk =
+        relocate_to_battlefield(&mut e, 1, "merfolk_of_the_pearl_trident", false);
+
+    let ability_key = u64::from(splitter) << 32;
+    let legal = e.initial_response_batch();
+    let published = &legal.legal_by_player[&0].valid_targets_by_ability[&ability_key];
+    assert_eq!(published.groups.len(), 1);
+    assert!(
+        published.groups[0].valid_permanent_ids.contains(&merfolk),
+        "a controlled creature must be published as a legal equip target"
+    );
+    assert!(
+        !published.groups[0]
+            .valid_permanent_ids
+            .contains(&opponent_merfolk),
+        "an opponent's creature must not be published as a legal equip target"
+    );
+
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            c: 1,
+            ..Default::default()
+        },
+    );
+    e.apply_command(0, &activate_ability(splitter, 0, target_object(merfolk)))
+        .expect("activate equip using the published target");
+    pass_both_players(&mut e);
+
+    assert_eq!(
+        e.state.objects[&splitter].attached_to,
+        Some(AttachmentRecipient::Object(merfolk))
+    );
+    assert_eq!(e.effective_power(merfolk), Some(3));
+    assert_eq!(e.effective_toughness(merfolk), Some(1));
+}
+
 /// Re-equip to a different creature: old creature loses the bonus, new creature gains it.
 /// CR 702.6: the equipment detaches from the previous host automatically.
 #[test]

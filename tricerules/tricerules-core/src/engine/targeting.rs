@@ -1397,6 +1397,43 @@ struct GroupedTargetContext {
     trigger: TriggerContext,
 }
 
+fn target_legality_error_for_binding(
+    engine: &GameEngine,
+    effect: &SpellEffectKind,
+    filter_index: usize,
+    target: &rv1::TargetRef,
+    caster: PlayerId,
+    source: TargetSourceIdentity,
+    context: GroupedTargetContext,
+) -> Result<(), EngineError> {
+    if context.ability
+        && !matches!(
+            effect,
+            SpellEffectKind::CreatureDealsDamageEqualToPower { .. }
+        )
+    {
+        debug_assert_eq!(filter_index, 0);
+        validate_effect_targets(
+            engine,
+            caster,
+            source,
+            effect,
+            std::slice::from_ref(target),
+            context.trigger,
+        )
+    } else {
+        spell_target_legality_error_for_binding(
+            engine,
+            effect,
+            filter_index,
+            target.object_id,
+            caster,
+            source,
+            context.trigger,
+        )
+    }
+}
+
 fn validate_grouped_targets(
     engine: &GameEngine,
     caster: PlayerId,
@@ -1453,32 +1490,15 @@ fn validate_grouped_targets(
                 let effect = effects.get(effect_index).ok_or(EngineError::Illegal(
                     "target group references an unknown effect",
                 ))?;
-                if context.ability
-                    && !matches!(
-                        effect,
-                        SpellEffectKind::CreatureDealsDamageEqualToPower { .. }
-                    )
-                {
-                    debug_assert_eq!(filter_index, 0);
-                    validate_effect_targets(
-                        engine,
-                        caster,
-                        source,
-                        effect,
-                        std::slice::from_ref(*target),
-                        context.trigger,
-                    )?;
-                } else {
-                    spell_target_legality_error_for_binding(
-                        engine,
-                        effect,
-                        filter_index,
-                        target.object_id,
-                        caster,
-                        source,
-                        context.trigger,
-                    )?;
-                }
+                target_legality_error_for_binding(
+                    engine,
+                    effect,
+                    filter_index,
+                    target,
+                    caster,
+                    source,
+                    context,
+                )?;
             }
         }
         for &other_index in &group.distinct_from {
@@ -1741,9 +1761,9 @@ fn spell_target_legality_error_with_context(
     Ok(())
 }
 
-/// Compute `SpellTargets` for a spell or activated ability — which objects/players `caster`
-/// can legally send this set of effects at, given the current game state. Only effects that
-/// need a target are considered; non-targeted effects in the same spell are ignored.
+/// Compute `SpellTargets` for a spell — which objects/players `caster` can legally send this set
+/// of effects at, given the current game state. Only effects that need a target are considered;
+/// non-targeted effects in the same spell are ignored.
 pub(super) fn compute_spell_targets(
     engine: &GameEngine,
     caster: PlayerId,
@@ -1751,13 +1771,16 @@ pub(super) fn compute_spell_targets(
     effects: &[SpellEffectKind],
     targeting: Option<&TargetingDef>,
 ) -> rv1::SpellTargets {
-    compute_spell_targets_with_context(
+    compute_targets_with_context(
         engine,
         caster,
         source,
         effects,
         targeting,
-        TriggerContext::default(),
+        GroupedTargetContext {
+            ability: false,
+            trigger: TriggerContext::default(),
+        },
         Some(TargetingCostAction::Spells),
     )
 }
@@ -1769,24 +1792,49 @@ pub(super) fn compute_ability_targets(
     effects: &[SpellEffectKind],
     targeting: Option<&TargetingDef>,
 ) -> rv1::SpellTargets {
-    compute_spell_targets_with_context(
+    compute_targets_with_context(
         engine,
         caster,
         source,
         effects,
         targeting,
-        TriggerContext::default(),
+        GroupedTargetContext {
+            ability: true,
+            trigger: TriggerContext::default(),
+        },
         Some(TargetingCostAction::ActivatedAbilities),
     )
 }
 
-pub(super) fn compute_spell_targets_with_context(
+pub(super) fn compute_ability_targets_with_context(
     engine: &GameEngine,
     caster: PlayerId,
     source: TargetSourceIdentity,
     effects: &[SpellEffectKind],
     targeting: Option<&TargetingDef>,
     trigger_context: TriggerContext,
+) -> rv1::SpellTargets {
+    compute_targets_with_context(
+        engine,
+        caster,
+        source,
+        effects,
+        targeting,
+        GroupedTargetContext {
+            ability: true,
+            trigger: trigger_context,
+        },
+        None,
+    )
+}
+
+fn compute_targets_with_context(
+    engine: &GameEngine,
+    caster: PlayerId,
+    source: TargetSourceIdentity,
+    effects: &[SpellEffectKind],
+    targeting: Option<&TargetingDef>,
+    context: GroupedTargetContext,
     targeting_cost_action: Option<TargetingCostAction>,
 ) -> rv1::SpellTargets {
     // DamageTargets metadata controls the allocation UI. Cardinality lives exclusively on groups.
@@ -1830,15 +1878,19 @@ pub(super) fn compute_spell_targets_with_context(
                 })
                 .collect::<Vec<_>>();
             let legal = |object_id| {
+                let target = rv1::TargetRef {
+                    object_id,
+                    ..Default::default()
+                };
                 referenced.iter().all(|(effect, filter_index)| {
-                    spell_target_legality_error_for_binding(
+                    target_legality_error_for_binding(
                         engine,
                         effect,
                         *filter_index,
-                        object_id,
+                        &target,
                         caster,
                         source,
-                        trigger_context,
+                        context,
                     )
                     .is_ok()
                 })

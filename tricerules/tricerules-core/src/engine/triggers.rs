@@ -1,7 +1,7 @@
 use super::damage::{DamageClassification, DamageRecipient};
 use super::events::{ev_log, ev_trigger_order_required};
 use super::targeting::{
-    compute_spell_targets_with_context, spell_effect_kind_needs_target, TargetSourceIdentity,
+    compute_ability_targets_with_context, spell_effect_kind_needs_target, TargetSourceIdentity,
 };
 use super::*;
 
@@ -1125,14 +1125,13 @@ impl GameEngine {
                 .enumerate()
                 .map(|(mode_index, mode)| {
                     let mode_needs_target = mode.effects.iter().any(spell_effect_kind_needs_target);
-                    let targets = compute_spell_targets_with_context(
+                    let targets = compute_ability_targets_with_context(
                         self,
                         controller,
                         TargetSourceIdentity::captured(source_id, source_zone_change),
                         &mode.effects,
                         mode.targeting.as_ref(),
                         trigger_context,
-                        None,
                     );
                     let selectable = !mode_needs_target
                         || targets.groups.iter().all(|group| {
@@ -1155,14 +1154,13 @@ impl GameEngine {
                 .collect::<Vec<_>>()
         });
         let legal_targets = if needs_target {
-            Some(compute_spell_targets_with_context(
+            Some(compute_ability_targets_with_context(
                 self,
                 controller,
                 TargetSourceIdentity::captured(source_id, source_zone_change),
                 &ability.effect,
                 ability.targeting.as_ref(),
                 trigger_context,
-                None,
             ))
         } else {
             None
