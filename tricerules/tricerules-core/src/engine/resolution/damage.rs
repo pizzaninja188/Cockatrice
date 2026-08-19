@@ -108,6 +108,108 @@ pub(super) fn creature_deals_damage_equal_to_power(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn fight(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::Fight { first, second } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+
+    let first_filter_index = matches!(first, EffectSubject::Chosen(_)).then_some(0);
+    let second_filter_index = matches!(second, EffectSubject::Chosen(_))
+        .then_some(usize::from(first_filter_index.is_some()));
+    let first_targets = first_filter_index
+        .and_then(|index| cx.targets_by_filter.get(index))
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
+    let second_targets = second_filter_index
+        .and_then(|index| cx.targets_by_filter.get(index))
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
+    let Some(first_id) = resolve_effect_subject(cx.engine, cx.top, first_targets, &first) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let Some(second_id) = resolve_effect_subject(cx.engine, cx.top, second_targets, &second) else {
+        return Ok(EffectOutcome::Continue);
+    };
+
+    let Some(first_characteristics) = cx.engine.characteristics(first_id) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let Some(second_characteristics) = cx.engine.characteristics(second_id) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    if !first_characteristics.is_creature() || !second_characteristics.is_creature() {
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let first_power = first_characteristics.power.unwrap_or(0);
+    let second_power = second_characteristics.power.unwrap_or(0);
+    let first_controller = first_characteristics.controller;
+    let second_controller = second_characteristics.controller;
+    let first_has_deathtouch = cx
+        .engine
+        .effective_has_keyword(first_id, Keyword::Deathtouch);
+    let first_has_lifelink = cx.engine.effective_has_keyword(first_id, Keyword::Lifelink);
+    let second_has_deathtouch = cx
+        .engine
+        .effective_has_keyword(second_id, Keyword::Deathtouch);
+    let second_has_lifelink = cx
+        .engine
+        .effective_has_keyword(second_id, Keyword::Lifelink);
+    let first_name = object_display_name(&cx.engine.state, cx.engine.registry, first_id);
+    let second_name = object_display_name(&cx.engine.state, cx.engine.registry, second_id);
+
+    let damage = if first_id == second_id {
+        vec![DamageSpec {
+            event: DamageEvent::noncombat(
+                first_id,
+                first_controller,
+                first_name,
+                DamageRecipient::Permanent(first_id),
+                first_power.saturating_mul(2),
+            ),
+            source_has_deathtouch: first_has_deathtouch,
+            source_has_lifelink: first_has_lifelink,
+        }]
+    } else {
+        vec![
+            DamageSpec {
+                event: DamageEvent::noncombat(
+                    first_id,
+                    first_controller,
+                    first_name,
+                    DamageRecipient::Permanent(second_id),
+                    first_power,
+                ),
+                source_has_deathtouch: first_has_deathtouch,
+                source_has_lifelink: first_has_lifelink,
+            },
+            DamageSpec {
+                event: DamageEvent::noncombat(
+                    second_id,
+                    second_controller,
+                    second_name,
+                    DamageRecipient::Permanent(first_id),
+                    second_power,
+                ),
+                source_has_deathtouch: second_has_deathtouch,
+                source_has_lifelink: second_has_lifelink,
+            },
+        ]
+    };
+    let Some(completed) = cx
+        .engine
+        .process_or_park_damage_batch(cx.top, damage, cx.events)
+    else {
+        return Ok(EffectOutcome::Suspended);
+    };
+    cx.engine
+        .commit_completed_damage_batch(&completed, cx.events);
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn damage_targets(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -296,5 +398,118 @@ mod damage_source_tests {
     fn spells_deal_damage_as_the_stack_card_and_abilities_as_their_physical_source() {
         assert_eq!(resolving_damage_source_id(&item(40, None)), 40);
         assert_eq!(resolving_damage_source_id(&item(90, Some(12))), 12);
+    }
+
+    fn fight_engine() -> (GameEngine, ObjectId, ObjectId) {
+        let decks = Some(vec![
+            vec!["grizzly_bears".to_string(); 20],
+            vec!["hill_giant".to_string(); 20],
+        ]);
+        let mut engine = GameEngine::new(117_900, &[0, 1], 20, decks, true).expect("new");
+        let first = engine.state.players[0]
+            .library
+            .pop_front()
+            .expect("first fighter");
+        let second = engine.state.players[1]
+            .library
+            .pop_front()
+            .expect("second fighter");
+        for (player, object_id) in [(0, first), (1, second)] {
+            engine.state.players[player].battlefield.push(object_id);
+            let object = engine.state.objects.get_mut(&object_id).expect("fighter");
+            object.zone = Zone::Battlefield;
+            object.summoning_sick = false;
+        }
+        (engine, first, second)
+    }
+
+    fn resolve_source_fight(
+        engine: &mut GameEngine,
+        source: ObjectId,
+        chosen: ObjectId,
+    ) -> Result<EffectOutcome, EngineError> {
+        let top = item(900, Some(source));
+        let targets = vec![chosen];
+        let targets_by_filter = vec![vec![chosen]];
+        let target_damage = Vec::new();
+        let target_group_indices = vec![0];
+        let previous_effect_result = EffectResult::None;
+        let mut effect_result = EffectResult::None;
+        let mut events = Vec::new();
+        let mut cx = EffectCx {
+            engine,
+            events: &mut events,
+            targets: &targets,
+            targets_by_filter: &targets_by_filter,
+            target_damage: &target_damage,
+            target_group_indices: &target_group_indices,
+            top: &top,
+            controller: 0,
+            affected_player: 0,
+            spell_label: "test fight ability",
+            previous_effect_result: &previous_effect_result,
+            effect_result: &mut effect_result,
+            effect_index: 0,
+        };
+        fight(
+            &mut cx,
+            SpellEffectKind::Fight {
+                first: EffectSubject::Source,
+                second: EffectSubject::Chosen(TargetFilter::default_creature()),
+            },
+        )
+    }
+
+    #[test]
+    fn source_bound_fight_resolves_with_only_the_opposing_creature_targeted() {
+        let (mut engine, first, second) = fight_engine();
+
+        assert_eq!(
+            resolve_source_fight(&mut engine, first, second).expect("fight"),
+            EffectOutcome::Continue
+        );
+
+        assert_eq!(engine.state.objects[&first].damage, 3);
+        assert_eq!(engine.state.objects[&second].damage, 2);
+    }
+
+    #[test]
+    fn stale_source_bound_fighter_causes_no_fight_damage() {
+        let (mut engine, first, second) = fight_engine();
+        *engine
+            .state
+            .zone_change_generation
+            .entry(first)
+            .or_default() += 1;
+
+        assert_eq!(
+            resolve_source_fight(&mut engine, first, second).expect("no-op fight"),
+            EffectOutcome::Continue
+        );
+
+        assert_eq!(engine.state.objects[&first].damage, 0);
+        assert_eq!(engine.state.objects[&second].damage, 0);
+    }
+
+    #[test]
+    fn a_creature_fighting_itself_deals_twice_its_power_once() {
+        let (mut engine, first, _) = fight_engine();
+        engine.state.players[0].life = 10;
+        engine.state.continuous_effects.push(ContinuousEffect {
+            source_id: None,
+            affected: AffectedScope::Single(first),
+            kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Lifelink),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: engine.state.command_index,
+        });
+
+        assert_eq!(
+            resolve_source_fight(&mut engine, first, first).expect("self fight"),
+            EffectOutcome::Continue
+        );
+
+        assert_eq!(engine.state.players[0].life, 14);
+        assert_eq!(engine.state.objects[&first].damage, 4);
     }
 }

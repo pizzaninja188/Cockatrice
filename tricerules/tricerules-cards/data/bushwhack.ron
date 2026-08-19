@@ -1,0 +1,43 @@
+(
+  id: "bushwhack",
+  name: "Bushwhack",
+  mana_cost: "{G}",
+  types: ["Sorcery"],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 1,
+    modes: [
+      (
+        label: "Search for a basic land",
+        effects: [SearchLibrary(
+          filter: Some(BasicLand),
+          destination: Hand,
+          shuffle: true,
+          reveal: true,
+        )],
+      ),
+      (
+        label: "Have two target creatures fight",
+        effects: [Fight(
+          first: Chosen((kind: Creature, controller: You)),
+          second: Chosen((kind: Creature, controller: NotYou)),
+        )],
+        targeting: Some((groups: [
+          (
+            min: 1,
+            max: 1,
+            prompt: "Choose target creature you control",
+            effect_indices: [0],
+          ),
+          (
+            min: 1,
+            max: 1,
+            prompt: "Choose target creature you don't control",
+            effect_indices: [0],
+            distinct_from: [0],
+          ),
+        ])),
+      ),
+    ],
+  ),
+)

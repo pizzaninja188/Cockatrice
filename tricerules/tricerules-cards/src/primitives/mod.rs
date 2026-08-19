@@ -419,6 +419,27 @@ mod tests {
         };
         assert!(pump_self.validate(EffectContext::Spell).is_err());
         assert!(pump_self.validate(EffectContext::Ability).is_ok());
+
+        let fight_from_source = SpellEffectKind::Fight {
+            first: EffectSubject::Source,
+            second: EffectSubject::Chosen(TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::NotYou,
+                ..Default::default()
+            }),
+        };
+        assert_eq!(fight_from_source.target_filters().len(), 1);
+        assert!(fight_from_source.validate(EffectContext::Spell).is_err());
+        assert!(fight_from_source.validate(EffectContext::Ability).is_ok());
+
+        let invalid_fight = SpellEffectKind::Fight {
+            first: EffectSubject::Source,
+            second: EffectSubject::Chosen(TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                ..Default::default()
+            }),
+        };
+        assert!(invalid_fight.validate(EffectContext::Ability).is_err());
     }
 
     #[test]

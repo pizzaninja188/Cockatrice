@@ -942,6 +942,7 @@ impl GameEngine {
                     effect @ SpellEffectKind::CreatureDealsDamageEqualToPower { .. } => {
                         damage::creature_deals_damage_equal_to_power(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::Fight { .. } => damage::fight(&mut cx, effect)?,
                     effect @ SpellEffectKind::DamageTargets { .. } => {
                         damage::damage_targets(&mut cx, effect)?
                     }

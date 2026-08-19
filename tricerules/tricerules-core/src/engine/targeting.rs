@@ -496,6 +496,21 @@ pub(super) fn effect_target_legal_for_binding(
                     trigger_context,
                 )
             }),
+        SpellEffectKind::Fight { .. } => {
+            effect
+                .target_filters()
+                .get(filter_index)
+                .is_some_and(|filter| {
+                    target_filter_legal_with_context(
+                        engine,
+                        filter,
+                        tid,
+                        caster,
+                        source,
+                        trigger_context,
+                    )
+                })
+        }
         _ if filter_index == 0 => effect_target_legal_at_resolution_with_context(
             engine,
             effect,
@@ -542,6 +557,24 @@ fn spell_target_legality_error_for_binding(
                 Ok(())
             } else {
                 Err(EngineError::Illegal("illegal creature damage target"))
+            }
+        }
+        SpellEffectKind::Fight { .. } => {
+            let filters = effect.target_filters();
+            let Some(filter) = filters.get(filter_index) else {
+                return Err(EngineError::Illegal("unknown target role for fight effect"));
+            };
+            if target_filter_legal_with_context(
+                engine,
+                filter,
+                tid,
+                caster,
+                source,
+                trigger_context,
+            ) {
+                Ok(())
+            } else {
+                Err(EngineError::Illegal("illegal fight target"))
             }
         }
         _ if filter_index == 0 => spell_target_legality_error_with_context(
@@ -857,6 +890,9 @@ fn effect_target_legal_at_resolution_with_context(
                 trigger_context,
             )
         }
+        SpellEffectKind::Fight { .. } => effect.target_filters().into_iter().any(|filter| {
+            target_filter_legal_with_context(engine, filter, tid, caster, source, trigger_context)
+        }),
         SpellEffectKind::DamageTarget { target, .. }
         | SpellEffectKind::DamageTargets { target, .. }
         | SpellEffectKind::TargetPlayerGainsLife { target, .. }
@@ -1002,7 +1038,7 @@ fn validate_effect_targets(
     trigger_context: TriggerContext,
 ) -> Result<(), EngineError> {
     match effect {
-        SpellEffectKind::CreatureDealsDamageEqualToPower { .. } => {
+        SpellEffectKind::CreatureDealsDamageEqualToPower { .. } | SpellEffectKind::Fight { .. } => {
             return Err(EngineError::Illegal(
                 "creature damage targets require grouped target-role validation",
             ));
@@ -1409,7 +1445,7 @@ fn target_legality_error_for_binding(
     if context.ability
         && !matches!(
             effect,
-            SpellEffectKind::CreatureDealsDamageEqualToPower { .. }
+            SpellEffectKind::CreatureDealsDamageEqualToPower { .. } | SpellEffectKind::Fight { .. }
         )
     {
         debug_assert_eq!(filter_index, 0);
@@ -1565,7 +1601,7 @@ fn spell_target_legality_error_with_context(
     trigger_context: TriggerContext,
 ) -> Result<(), EngineError> {
     match effect {
-        SpellEffectKind::CreatureDealsDamageEqualToPower { .. } => {
+        SpellEffectKind::CreatureDealsDamageEqualToPower { .. } | SpellEffectKind::Fight { .. } => {
             return Err(EngineError::Illegal(
                 "creature damage targets require grouped target-role validation",
             ));

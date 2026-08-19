@@ -769,6 +769,14 @@ pub enum SpellEffectKind {
         source: TargetFilter,
         target: TargetFilter,
     },
+    /// CR 701.14: two creatures deal noncombat damage equal to their current power to each
+    /// other simultaneously. A chosen subject is a genuine CR 115 target; source, attachment,
+    /// and trigger-object subjects are ability-bound references and do not target. This shared
+    /// shape covers two-target spells (Prey Upon, Bushwhack) and source-bound creature abilities.
+    Fight {
+        first: EffectSubject,
+        second: EffectSubject,
+    },
     /// CR 120.3a: deal `amount` damage to a player, chosen by `who`. **Untargeted** — "that
     /// player" and "you" name a player without targeting it (CR 115.1), so this is deliberately
     /// absent from `spell_effect_kind_needs_target` and from [`Self::target_filters`], exactly
@@ -1429,6 +1437,12 @@ impl SpellEffectKind {
                 subject: EffectSubject::AttachedObject,
             } | SpellEffectKind::Regenerate {
                 subject: EffectSubject::AttachedObject,
+            } | SpellEffectKind::Fight {
+                first: EffectSubject::AttachedObject,
+                ..
+            } | SpellEffectKind::Fight {
+                second: EffectSubject::AttachedObject,
+                ..
             }
         )
     }
@@ -1460,6 +1474,12 @@ impl SpellEffectKind {
                 subject: EffectSubject::TriggerObject,
             } | SpellEffectKind::Regenerate {
                 subject: EffectSubject::TriggerObject,
+            } | SpellEffectKind::Fight {
+                first: EffectSubject::TriggerObject,
+                ..
+            } | SpellEffectKind::Fight {
+                second: EffectSubject::TriggerObject,
+                ..
             } | SpellEffectKind::LoseLife {
                 who: PlayerRecipient::TriggerObjectController,
                 ..
@@ -1519,6 +1539,10 @@ impl SpellEffectKind {
             | SpellEffectKind::Regenerate { subject } => {
                 matches!(subject, EffectSubject::Chosen(_))
             }
+            SpellEffectKind::Fight { first, second } => {
+                matches!(first, EffectSubject::Chosen(_))
+                    || matches!(second, EffectSubject::Chosen(_))
+            }
             SpellEffectKind::ApplyCombatRestriction { scope, .. } => {
                 matches!(scope, CombatRestrictionScope::Chosen(_))
             }
@@ -1558,6 +1582,15 @@ impl SpellEffectKind {
             SpellEffectKind::CreatureDealsDamageEqualToPower { source, target } => {
                 vec![source, target]
             }
+            SpellEffectKind::Fight { first, second } => [first, second]
+                .into_iter()
+                .filter_map(|subject| match subject {
+                    EffectSubject::Chosen(filter) => Some(filter),
+                    EffectSubject::Source
+                    | EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject => None,
+                })
+                .collect(),
             SpellEffectKind::DamageTarget { target, .. }
             | SpellEffectKind::DamageTargets { target, .. }
             | SpellEffectKind::DestroyTarget { target }
@@ -1725,6 +1758,17 @@ impl SpellEffectKind {
                     "CreatureDealsDamageEqualToPower requires two creature target filters".into(),
                 );
             }
+            SpellEffectKind::Fight { first, second } => {
+                for subject in [first, second] {
+                    if let EffectSubject::Chosen(filter) = subject {
+                        if filter.kind != TargetKind::Creature {
+                            return Err(
+                                "Fight chosen subjects require creature target filters".into()
+                            );
+                        }
+                    }
+                }
+            }
             SpellEffectKind::DestroyAttached {
                 target,
                 attachments,
@@ -1885,6 +1929,16 @@ impl SpellEffectKind {
                 subject: EffectSubject::Source
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject,
+            } | SpellEffectKind::Fight {
+                first: EffectSubject::Source
+                    | EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject,
+                ..
+            } | SpellEffectKind::Fight {
+                second: EffectSubject::Source
+                    | EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject,
+                ..
             } | SpellEffectKind::ChangeSourceFace { .. }
                 | SpellEffectKind::ReturnTriggeredCardFromGraveyard { .. }
                 | SpellEffectKind::ApplyCombatRestriction {
