@@ -50,6 +50,7 @@ struct EffectCx<'a> {
     spell_label: &'a str,
     previous_effect_result: &'a EffectResult,
     effect_result: &'a mut EffectResult,
+    effect_index: u32,
 }
 
 struct TokenCreationRequest<'a> {
@@ -421,6 +422,14 @@ impl GameEngine {
         // `GameObject` in `objects`, so it must take the same no-zone-move path as an ability.
         let is_ability = top.ability_text.is_some();
         let leaves_no_object = is_ability || top.is_copy;
+        let custom_key = (!is_ability && !top.is_copy)
+            .then(|| {
+                self.registry
+                    .get(&card_id)
+                    .and_then(|definition| definition.face(top.face_index))
+                    .and_then(|face| face.custom_effect.clone())
+            })
+            .flatten();
         let defer_soft_counter_exit = self.build_resolution_effects(&top).0.iter().any(|entry| {
             matches!(
                 entry.effect,
@@ -465,6 +474,13 @@ impl GameEngine {
             let adventure_resolves_to_exile = is_adventure_spell && !adventure_fizzles;
             let resolves_to_battlefield_raw =
                 resolving_face.map(|f| f.is_permanent()).unwrap_or(false);
+            // A data-driven instant or sorcery may suspend for a mid-resolution choice. Keep its
+            // physical card on the stack until the whole effect list completes; immediate
+            // resolutions still publish the same final batch, while parked resolutions now keep
+            // the visible stack faithful to CR 608.2m. Adventure and tier-3 custom spells retain
+            // their specialized exit ownership below.
+            let defer_authored_nonpermanent_exit =
+                !resolves_to_battlefield_raw && !is_adventure_spell && custom_key.is_none();
             // CR 303.4f: an aura whose enchant target is no longer on the battlefield at resolution
             // is countered (goes to owner's graveyard) rather than entering the battlefield orphaned.
             let is_aura =
@@ -535,7 +551,7 @@ impl GameEngine {
                         self.commit_battlefield_entry(entry, attached_to)?;
                     }
                 }
-            } else if !defer_soft_counter_exit {
+            } else if !defer_soft_counter_exit && !defer_authored_nonpermanent_exit {
                 events.push(rv1::RuledEvent {
                     ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
                         object_id: top.id,
@@ -582,11 +598,6 @@ impl GameEngine {
         // spell's backing `GameObject`, which a copy lacks. Copying a tier-3 spell is a documented
         // limitation (the copy resolves its non-custom effects only, if any).
         if !is_ability && !top.is_copy {
-            let custom_key = self
-                .registry
-                .get(&card_id)
-                .and_then(|d| d.face(top.face_index))
-                .and_then(|f| f.custom_effect.clone());
             if let Some(custom_key) = custom_key {
                 return self.begin_custom_resolution(top, custom_key, events);
             }
@@ -646,8 +657,10 @@ impl GameEngine {
         self.run_effect_list(&top, &spell_label, resolution_effects, 0, events)
     }
 
-    /// Complete the stack exit that a resolution-time soft-counter payment deliberately deferred.
-    /// Ordinary spells have already left the stack before this point and make this a no-op.
+    /// Complete a stack exit deferred until the data-driven effect list finishes. This keeps an
+    /// instant or sorcery visible on the physical stack throughout any resolution-time choice.
+    /// Permanent, Adventure, and tier-3 custom spells retain their specialized exit paths and
+    /// make this a no-op after they have already moved.
     fn finish_deferred_stack_exit(
         &mut self,
         top: &StackItem,
@@ -921,6 +934,7 @@ impl GameEngine {
                     spell_label,
                     previous_effect_result: &previous_effect_result,
                     effect_result: &mut effect_result,
+                    effect_index: index as u32,
                 };
                 match effect {
                     effect @ SpellEffectKind::DamageTarget { .. } => {
@@ -954,6 +968,9 @@ impl GameEngine {
                     }
                     effect @ SpellEffectKind::GrantKeywords { .. } => {
                         pump_counters::grant_keywords(&mut cx, effect)?
+                    }
+                    effect @ SpellEffectKind::GrantProtection { .. } => {
+                        pump_counters::grant_protection(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::GrantTriggeredAbility { .. } => {
                         pump_counters::grant_triggered_ability(&mut cx, effect)?
@@ -1382,10 +1399,9 @@ pub(crate) fn move_object_to_zone(
     let old_zone = state.objects.get(&oid).map(|o| o.zone);
     let leaving_battlefield = old_zone == Some(Zone::Battlefield) && z != Zone::Battlefield;
     let prior_generation = state.zone_change_generation.get(&oid).copied().unwrap_or(0);
-    let last_known_keywords = leaving_battlefield
+    let last_known_characteristics = leaving_battlefield
         .then(|| super::characteristics::characteristics_from(state, registry, oid))
-        .flatten()
-        .map(|characteristics| characteristics.keywords);
+        .flatten();
     let last_known_attached_object = leaving_battlefield
         .then(|| {
             state
@@ -1502,10 +1518,16 @@ pub(crate) fn move_object_to_zone(
                 .insert((oid, generation), was_tapped);
             state.last_known_tapped.insert(oid, was_tapped);
         }
-        if let Some(keywords) = last_known_keywords {
+        if let Some(characteristics) = last_known_characteristics {
             state
                 .last_known_keywords_by_generation
-                .insert((oid, prior_generation), keywords);
+                .insert((oid, prior_generation), characteristics.keywords);
+            state
+                .last_known_colors_by_generation
+                .insert((oid, prior_generation), characteristics.colors);
+            state
+                .last_known_types_by_generation
+                .insert((oid, prior_generation), characteristics.types);
         }
     }
 
@@ -2032,6 +2054,7 @@ mod attached_subject_tests {
             spell_label: "Curse",
             previous_effect_result: &previous_effect_result,
             effect_result: &mut effect_result,
+            effect_index: 0,
         };
 
         assert_eq!(player_recipients(&cx, PlayerRecipient::Controller), [10]);
@@ -2234,6 +2257,7 @@ mod source_keyword_tests {
             spell_label: "deathtouch source",
             previous_effect_result: &previous_effect_result,
             effect_result: &mut effect_result,
+            effect_index: 0,
         };
 
         damage::damage_targets(&mut cx, effect).unwrap();
@@ -2274,6 +2298,7 @@ mod source_keyword_tests {
             spell_label: "deathtouch source",
             previous_effect_result: &previous_effect_result,
             effect_result: &mut effect_result,
+            effect_index: 0,
         };
 
         mass::damage_all(&mut cx, effect).unwrap();

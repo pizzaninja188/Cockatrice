@@ -97,6 +97,101 @@ pub(super) fn stack_target_identity_is_current(engine: &GameEngine, target: &Sta
 pub(super) struct TargetSourceIdentity {
     object_id: ObjectId,
     zone_change_generation: Option<u64>,
+    locked_qualities: Option<SourceQualities>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+struct SourceQualities {
+    colors: [bool; 5],
+    types: [bool; 8],
+}
+
+impl SourceQualities {
+    fn from_values(colors: &[Color], types: &[String]) -> Self {
+        let mut result = Self::default();
+        for color in colors {
+            result.colors[match color {
+                Color::White => 0,
+                Color::Blue => 1,
+                Color::Black => 2,
+                Color::Red => 3,
+                Color::Green => 4,
+            }] = true;
+        }
+        for (index, card_type) in [
+            ProtectionCardType::Artifact,
+            ProtectionCardType::Creature,
+            ProtectionCardType::Enchantment,
+            ProtectionCardType::Instant,
+            ProtectionCardType::Kindred,
+            ProtectionCardType::Land,
+            ProtectionCardType::Planeswalker,
+            ProtectionCardType::Sorcery,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            result.types[index] = types.iter().any(|value| value == card_type.as_str());
+        }
+        result
+    }
+
+    fn matches(self, protection: ProtectionQuality) -> bool {
+        match protection {
+            ProtectionQuality::Color(color) => {
+                self.colors[match color {
+                    Color::White => 0,
+                    Color::Blue => 1,
+                    Color::Black => 2,
+                    Color::Red => 3,
+                    Color::Green => 4,
+                }]
+            }
+            ProtectionQuality::CardType(card_type) => {
+                let index = match card_type {
+                    ProtectionCardType::Artifact => 0,
+                    ProtectionCardType::Creature => 1,
+                    ProtectionCardType::Enchantment => 2,
+                    ProtectionCardType::Instant => 3,
+                    ProtectionCardType::Kindred => 4,
+                    ProtectionCardType::Land => 5,
+                    ProtectionCardType::Planeswalker => 6,
+                    ProtectionCardType::Sorcery => 7,
+                };
+                self.types[index]
+            }
+        }
+    }
+
+    fn values(self) -> (Vec<Color>, Vec<String>) {
+        let colors = [
+            Color::White,
+            Color::Blue,
+            Color::Black,
+            Color::Red,
+            Color::Green,
+        ]
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, color)| self.colors[index].then_some(color))
+        .collect();
+        let types = [
+            ProtectionCardType::Artifact,
+            ProtectionCardType::Creature,
+            ProtectionCardType::Enchantment,
+            ProtectionCardType::Instant,
+            ProtectionCardType::Kindred,
+            ProtectionCardType::Land,
+            ProtectionCardType::Planeswalker,
+            ProtectionCardType::Sorcery,
+        ]
+        .into_iter()
+        .enumerate()
+        .filter(|(index, _)| self.types[*index])
+        .map(|(_, card_type)| card_type.as_str().to_string())
+        .collect();
+        (colors, types)
+    }
 }
 
 impl TargetSourceIdentity {
@@ -116,26 +211,45 @@ impl TargetSourceIdentity {
         Self {
             object_id,
             zone_change_generation: Some(zone_change_generation),
+            locked_qualities: None,
         }
     }
 
-    /// Spell copies and ability stack items have no backing game object. Their allocated stack id
-    /// is still globally unique, so id equality is sufficient and cannot accidentally identify a
-    /// physical permanent.
-    pub(super) fn virtual_stack(object_id: ObjectId) -> Self {
+    pub(super) fn spell_face(engine: &GameEngine, object_id: ObjectId, face_index: usize) -> Self {
+        let locked_qualities = engine
+            .state
+            .objects
+            .get(&object_id)
+            .and_then(|object| engine.registry.get(&object.card_id))
+            .and_then(|definition| definition.face(face_index))
+            .map(|face| SourceQualities::from_values(&face.colors(), &face.types));
         Self {
-            object_id,
-            zone_change_generation: None,
+            locked_qualities,
+            ..Self::current(engine, object_id)
         }
     }
 
     pub(super) fn for_stack_item(engine: &GameEngine, item: &StackItem) -> Self {
         if let Some(source_id) = item.source_permanent_id {
             Self::captured(source_id, item.source_zone_change)
-        } else if item.is_copy {
-            Self::virtual_stack(item.id)
         } else {
-            Self::current(engine, item.id)
+            let locked_qualities = engine
+                .registry
+                .get(&item.card_id)
+                .and_then(|definition| definition.face(item.face_index))
+                .map(|face| SourceQualities::from_values(&face.colors(), &face.types));
+            Self {
+                object_id: item.id,
+                zone_change_generation: (!item.is_copy).then(|| {
+                    engine
+                        .state
+                        .zone_change_generation
+                        .get(&item.id)
+                        .copied()
+                        .unwrap_or(0)
+                }),
+                locked_qualities,
+            }
         }
     }
 
@@ -152,6 +266,47 @@ impl TargetSourceIdentity {
                 .unwrap_or(0)
                 == generation
         })
+    }
+
+    fn qualities(self, engine: &GameEngine) -> Option<SourceQualities> {
+        if let Some(qualities) = self.locked_qualities {
+            return Some(qualities);
+        }
+        let generation = self.zone_change_generation?;
+        let current_generation = engine
+            .state
+            .zone_change_generation
+            .get(&self.object_id)
+            .copied()
+            .unwrap_or(0);
+        if current_generation == generation
+            && engine
+                .state
+                .objects
+                .get(&self.object_id)
+                .is_some_and(|object| object.zone == Zone::Battlefield)
+        {
+            return engine
+                .characteristics(self.object_id)
+                .map(|characteristics| {
+                    SourceQualities::from_values(&characteristics.colors, &characteristics.types)
+                });
+        }
+        let colors = engine
+            .state
+            .last_known_colors_by_generation
+            .get(&(self.object_id, generation))?;
+        let types = engine
+            .state
+            .last_known_types_by_generation
+            .get(&(self.object_id, generation))?;
+        Some(SourceQualities::from_values(colors, types))
+    }
+
+    pub(super) fn quality_values(self, engine: &GameEngine) -> (Vec<Color>, Vec<String>) {
+        self.qualities(engine)
+            .map(SourceQualities::values)
+            .unwrap_or_default()
     }
 }
 
@@ -233,7 +388,12 @@ pub(super) fn graveyard_target_legal(
 
 /// CR 702.16 / CR 702.18: returns false when `tid` is a permanent that the `caster` cannot
 /// legally target due to Shroud or Hexproof. Players are never shielded by these keywords.
-fn object_targetable_by(engine: &GameEngine, tid: ObjectId, caster: PlayerId) -> bool {
+fn object_targetable_by(
+    engine: &GameEngine,
+    tid: ObjectId,
+    caster: PlayerId,
+    source: TargetSourceIdentity,
+) -> bool {
     let Some(_obj) = engine.state.objects.get(&tid) else {
         return true; // object gone — legality checked elsewhere
     };
@@ -249,6 +409,16 @@ fn object_targetable_by(engine: &GameEngine, tid: ObjectId, caster: PlayerId) ->
             .are_opponents(characteristics.controller, caster)
     {
         return false;
+    }
+    if let Some(source_qualities) = source.qualities(engine) {
+        if characteristics
+            .protections
+            .iter()
+            .copied()
+            .any(|protection| source_qualities.matches(protection))
+        {
+            return false;
+        }
     }
     true
 }
@@ -427,6 +597,7 @@ pub(super) fn attachment_filter_legal(
         _ => false,
     };
     kind_ok
+        && attachment_protection_legal(engine, recipient, attachment_id)
         && (!filter.exclude_source || oid != attachment_id)
         && filter_characteristics_match(engine, filter, oid)
         && target_controller_matches(
@@ -436,6 +607,30 @@ pub(super) fn attachment_filter_legal(
             characteristics.controller,
             None,
         )
+}
+
+pub(super) fn attachment_protection_legal(
+    engine: &GameEngine,
+    recipient: AttachmentRecipient,
+    attachment_id: ObjectId,
+) -> bool {
+    let AttachmentRecipient::Object(recipient_id) = recipient else {
+        return true;
+    };
+    let Some(recipient) = engine.characteristics(recipient_id) else {
+        return false;
+    };
+    if recipient.protections.is_empty() {
+        return true;
+    }
+    let Some(attachment) = engine.characteristics(attachment_id) else {
+        return false;
+    };
+    !recipient
+        .protections
+        .iter()
+        .copied()
+        .any(|protection| protection.matches(&attachment.colors, &attachment.types))
 }
 
 /// Convert a validated Aura target into explicit attachment identity. Mixed AnyTarget Auras are
@@ -546,7 +741,7 @@ fn target_filter_legal_with_context(
     }
     if !filter.is_player() && !target_is_player {
         // CR 702.16/702.18 — targeting only; the untargeted mass path deliberately skips this.
-        if !object_targetable_by(engine, tid, caster) {
+        if !object_targetable_by(engine, tid, caster, source) {
             return false;
         }
         if !filter_characteristics_match(engine, filter, tid) {
@@ -696,6 +891,10 @@ fn effect_target_legal_at_resolution_with_context(
             subject: EffectSubject::Chosen(target),
             ..
         }
+        | SpellEffectKind::GrantProtection {
+            subject: EffectSubject::Chosen(target),
+            ..
+        }
         | SpellEffectKind::GrantTriggeredAbility {
             subject: EffectSubject::Chosen(target),
             ..
@@ -730,6 +929,10 @@ fn effect_target_legal_at_resolution_with_context(
             subject: EffectSubject::Source | EffectSubject::AttachedObject,
             ..
         }
+        | SpellEffectKind::GrantProtection {
+            subject: EffectSubject::Source | EffectSubject::AttachedObject,
+            ..
+        }
         | SpellEffectKind::GrantTriggeredAbility {
             subject: EffectSubject::Source | EffectSubject::AttachedObject,
             ..
@@ -759,11 +962,12 @@ fn effect_target_legal_at_resolution_with_context(
         SpellEffectKind::ExileTarget
         | SpellEffectKind::ExileTargetGainLifeEqualToPower
         | SpellEffectKind::ReturnTargetCreatureToHand => {
-            destroy_spell_target_legal(engine, tid) && object_targetable_by(engine, tid, caster)
+            destroy_spell_target_legal(engine, tid)
+                && object_targetable_by(engine, tid, caster, source)
         }
         SpellEffectKind::ReturnTargetPermanentToHand => {
             any_battlefield_permanent_target_legal(&engine.state, tid)
-                && object_targetable_by(engine, tid, caster)
+                && object_targetable_by(engine, tid, caster, source)
         }
         // CR 115.2 / 707.10b: counter and copy effects target *spells* on the stack, not
         // activated/triggered abilities. The optional `spell_filter` further restricts which
@@ -889,6 +1093,7 @@ fn validate_effect_targets(
         SpellEffectKind::PumpTarget { subject, .. }
         | SpellEffectKind::PutCounters { subject, .. }
         | SpellEffectKind::GrantKeywords { subject, .. }
+        | SpellEffectKind::GrantProtection { subject, .. }
         | SpellEffectKind::GrantTriggeredAbility { subject, .. }
         | SpellEffectKind::CreateDelayedTrigger { subject, .. }
         | SpellEffectKind::AddTypes { subject, .. }
@@ -953,8 +1158,8 @@ fn validate_effect_targets(
                     "target must be a creature on the battlefield",
                 ));
             }
-            if !object_targetable_by(engine, targets[0].object_id, caster) {
-                return Err(EngineError::Illegal("target has hexproof or shroud"));
+            if !object_targetable_by(engine, targets[0].object_id, caster, source) {
+                return Err(EngineError::Illegal("target cannot be targeted by this source"));
             }
         }
         SpellEffectKind::ReturnTargetPermanentToHand => {
@@ -968,8 +1173,8 @@ fn validate_effect_targets(
                     "target must be a permanent on the battlefield",
                 ));
             }
-            if !object_targetable_by(engine, targets[0].object_id, caster) {
-                return Err(EngineError::Illegal("target has hexproof or shroud"));
+            if !object_targetable_by(engine, targets[0].object_id, caster, source) {
+                return Err(EngineError::Illegal("target cannot be targeted by this source"));
             }
         }
         SpellEffectKind::TargetPlayerGainsLife { target: filter, .. }
@@ -1368,6 +1573,10 @@ fn spell_target_legality_error_with_context(
             subject: EffectSubject::Chosen(filter),
             ..
         }
+        | SpellEffectKind::GrantProtection {
+            subject: EffectSubject::Chosen(filter),
+            ..
+        }
         | SpellEffectKind::GrantTriggeredAbility {
             subject: EffectSubject::Chosen(filter),
             ..
@@ -1440,8 +1649,10 @@ fn spell_target_legality_error_with_context(
                     "target must be a creature on the battlefield",
                 ));
             }
-            if !object_targetable_by(engine, tid, caster) {
-                return Err(EngineError::Illegal("target has hexproof or shroud"));
+            if !object_targetable_by(engine, tid, caster, source) {
+                return Err(EngineError::Illegal(
+                    "target cannot be targeted by this source",
+                ));
             }
         }
         SpellEffectKind::ReturnTargetPermanentToHand => {
@@ -1450,8 +1661,10 @@ fn spell_target_legality_error_with_context(
                     "target must be a permanent on the battlefield",
                 ));
             }
-            if !object_targetable_by(engine, tid, caster) {
-                return Err(EngineError::Illegal("target has hexproof or shroud"));
+            if !object_targetable_by(engine, tid, caster, source) {
+                return Err(EngineError::Illegal(
+                    "target cannot be targeted by this source",
+                ));
             }
         }
         SpellEffectKind::TargetPlayerGainsLife { target: filter, .. }

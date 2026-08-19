@@ -1,0 +1,24 @@
+(
+  id: "feat_of_resistance",
+  name: "Feat of Resistance",
+  mana_cost: "{1}{W}",
+  // Oracle and rulings checked 2026-08-18: the color is chosen as this spell resolves.
+  types: ["Instant"],
+  spell_effect: [
+    PutCounters(
+      counter: PlusOnePlusOne,
+      count: 1,
+      subject: Chosen((kind: Creature, controller: You)),
+    ),
+    GrantProtection(
+      subject: Chosen((kind: Creature, controller: You)),
+      protection: Choose([
+        Color(White),
+        Color(Blue),
+        Color(Black),
+        Color(Red),
+        Color(Green),
+      ]),
+    ),
+  ],
+)

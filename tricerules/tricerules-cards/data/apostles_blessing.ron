@@ -1,0 +1,25 @@
+(
+  id: "apostles_blessing",
+  name: "Apostle's Blessing",
+  mana_cost: "{1}{W/P}",
+  // Oracle checked 2026-08-18: target artifact or creature you control gains protection from
+  // artifacts or from the color of your choice until end of turn.
+  types: ["Instant"],
+  spell_effect: [
+    GrantProtection(
+      subject: Chosen((
+        kind: AnyPermanent,
+        controller: You,
+        permanent_types: [Artifact, Creature],
+      )),
+      protection: Choose([
+        CardType(Artifact),
+        Color(White),
+        Color(Blue),
+        Color(Black),
+        Color(Red),
+        Color(Green),
+      ]),
+    ),
+  ],
+)

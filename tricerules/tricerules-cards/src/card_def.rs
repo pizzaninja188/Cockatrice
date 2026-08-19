@@ -16,8 +16,8 @@
 use crate::mana::ManaCost;
 use crate::primitives::{
     ActivatedAbilityDef, AdditionalCost, CardTypeFilter, Color, EffectContext, Evasion, Keyword,
-    PermanentTypeFilter, SpellCostModifier, SpellEffectKind, StaticAbilityDef, TargetingDef,
-    TriggeredAbilityDef,
+    PermanentTypeFilter, ProtectionQuality, SpellCostModifier, SpellEffectKind, StaticAbilityDef,
+    TargetingDef, TriggeredAbilityDef,
 };
 use serde::{Deserialize, Serialize};
 
@@ -149,6 +149,9 @@ pub struct CardFace {
     /// Static keyword abilities (Flying, Reach, Intimidate, …). Omit for keywordless faces.
     #[serde(default)]
     pub keywords: Vec<Keyword>,
+    /// Parameterized protection abilities printed on this face.
+    #[serde(default)]
+    pub protections: Vec<ProtectionQuality>,
     /// Parameterized combat evasion abilities (Islandwalk, Forestwalk, …).
     #[serde(default)]
     pub evasions: Vec<Evasion>,
@@ -329,6 +332,8 @@ pub struct RawCardDefinition {
     #[serde(default)]
     pub keywords: Vec<Keyword>,
     #[serde(default)]
+    pub protections: Vec<ProtectionQuality>,
+    #[serde(default)]
     pub evasions: Vec<Evasion>,
     #[serde(default)]
     pub activated_abilities: Vec<ActivatedAbilityDef>,
@@ -376,6 +381,7 @@ impl RawCardDefinition {
                 modal_spell: self.modal_spell,
                 custom_effect: self.custom_effect,
                 keywords: self.keywords,
+                protections: self.protections,
                 evasions: self.evasions,
                 activated_abilities: self.activated_abilities,
                 triggered_abilities: self.triggered_abilities,

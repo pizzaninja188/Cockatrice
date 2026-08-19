@@ -284,6 +284,16 @@ public:
     bool devPreventionManaSent = false;
     bool preventionSalveCast = false;
     bool preventionBlazeCast = false;
+    bool devProtectionBlessingSent = false;
+    bool devProtectionManaSent = false;
+    bool protectionBlessingCast = false;
+    bool sawProtectionBranchChoice = false;
+    bool submittedProtectionBranchChoice = false;
+    bool sawProtectionHandToStack = false;
+    bool protectionLeftStackBeforeChoice = false;
+    bool sawProtectionStackToGraveAfterChoice = false;
+    bool sawProtectionPhysicalAnnotation = false;
+    quint32 protectionTargetOid = 0;
     bool devControlTargetSent = false;
     bool devActOfTreasonSent = false;
     bool devControlManaSent = false;
@@ -536,6 +546,7 @@ public:
                 // ZoneNames, not literals: Cockatrice's exile zone is spelled "rfg".
                 const QLatin1String grave(ZoneNames::GRAVE);
                 const QLatin1String stack(ZoneNames::STACK);
+                const QLatin1String hand(ZoneNames::HAND);
                 const QLatin1String exile(ZoneNames::EXILE);
                 const QLatin1String table(ZoneNames::TABLE);
                 const QLatin1String deck(ZoneNames::DECK);
@@ -546,6 +557,17 @@ public:
                         evolvingWildsPhysicalIdentityContinuous = false;
                     }
                     evolvingWildsPhysicalCardId = mc.new_card_id();
+                }
+                if (name == QLatin1String("Apostle's Blessing") &&
+                    (mc.start_player_id() == myId || mc.target_player_id() == myId)) {
+                    if (from == hand && to == stack) {
+                        sawProtectionHandToStack = true;
+                    } else if (from == stack && to == grave) {
+                        protectionLeftStackBeforeChoice =
+                            protectionLeftStackBeforeChoice || !submittedProtectionBranchChoice;
+                        sawProtectionStackToGraveAfterChoice =
+                            sawProtectionStackToGraveAfterChoice || submittedProtectionBranchChoice;
+                    }
                 }
                 if (name == QLatin1String("Grizzly Bears") && from == table && to == table) {
                     if (mc.start_player_id() == oppId && mc.target_player_id() == myId) {
@@ -602,6 +624,10 @@ public:
                     sawPhysicalUntap = sawPhysicalUntap || attr.attr_value() == "0";
                 } else if (attr.attribute() == AttrAnnotation) {
                     annotationByServerCardId[attr.card_id()] = QString::fromStdString(attr.attr_value());
+                    sawProtectionPhysicalAnnotation =
+                        sawProtectionPhysicalAnnotation ||
+                        QString::fromStdString(attr.attr_value()).contains(
+                            QStringLiteral("Protection from artifacts"));
                 }
             }
             if (ev.HasExtension(Event_RuledPayload::ext)) {
@@ -729,7 +755,8 @@ public:
                 }
                 if (rcr.deciding_player_id() == myId &&
                     (rcr.candidate_object_ids_size() > 0 ||
-                     rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANA_PAYMENT)) {
+                     rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANA_PAYMENT ||
+                     rcr.choice_kind() == ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH)) {
                     pendingChoice = rcr;
                     log(QStringLiteral("resolution choice: kind %1 min %2 max %3 ordered %4 candidates %5")
                             .arg(QString::fromStdString(ruled::v1::ChoiceKind_Name(rcr.choice_kind())))
@@ -791,6 +818,9 @@ public:
                                 if (perm.faceIndex == 1 && perm.power == 3 && perm.toughness == 2) {
                                     sawWaifBackPt = true;
                                 }
+                            }
+                            if (perm.cardId == QLatin1String("anti-venom,_horrifying_healer")) {
+                                protectionTargetOid = perm.oid;
                             }
                             const int expectedCurseTarget = role == Role::Aggressor ? oppId : myId;
                             if (perm.cardId == QLatin1String("curse_of_disturbance") &&
@@ -1278,6 +1308,27 @@ public:
         // --- Tier-3 resolution choice (may target either player at any point) ---
         if (pendingChoice) {
             const auto &rcr = *pendingChoice;
+            if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH) {
+                const bool isProtection = rcr.resolution_branches_size() == 6 &&
+                                          rcr.resolution_branches(0).label() == "artifacts";
+                if (!isProtection) {
+                    ADD_FAILURE() << "unexpected authored resolution-branch choice";
+                    pendingChoice.reset();
+                    return;
+                }
+                sawProtectionBranchChoice = true;
+                if (!sawProtectionHandToStack || protectionLeftStackBeforeChoice) {
+                    ADD_FAILURE() << "Apostle's Blessing was not physically present on the stack during its choice";
+                }
+                ruled::v1::RuledCommand cmd;
+                auto *choice = cmd.mutable_submit_resolution_choice();
+                choice->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_SELECT_BRANCH);
+                choice->set_selected_branch_index(0);
+                pendingChoice.reset();
+                submittedProtectionBranchChoice = true;
+                sendRuled(cmd, QStringLiteral("choose protection from artifacts"));
+                return;
+            }
             if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANA_PAYMENT) {
                 sawSoftCounterPaymentChoice = true;
                 pendingChoice.reset();
@@ -1587,7 +1638,43 @@ public:
                     return;
                 }
             }
-            if (preventionBlazeCast && !devControlTargetSent) {
+            if (submittedDamagePreventionChoice && !devProtectionBlessingSent) {
+                devProtectionBlessingSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                auto *put = dev->mutable_put_card_in_zone();
+                put->set_card_name("Apostle's Blessing");
+                put->set_zone(ruled::v1::DEV_ZONE_HAND);
+                sendRuled(cmd, QStringLiteral("dev: conjure Apostle's Blessing into hand"));
+                return;
+            }
+            if (devProtectionBlessingSent && !devProtectionManaSent) {
+                devProtectionManaSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                dev->mutable_add_mana()->set_w(1);
+                dev->mutable_add_mana()->set_c(1);
+                sendRuled(cmd, QStringLiteral("dev: add {1}{W} for Apostle's Blessing"));
+                return;
+            }
+            if (devProtectionManaSent && !protectionBlessingCast && antiVenomOid) {
+                if (const auto *blessing =
+                        handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Apostle's Blessing"))) {
+                    ruled::v1::RuledCommand cmd;
+                    auto *cast = cmd.mutable_cast_spell();
+                    cast->mutable_source()->set_hand_index(blessing->hand_index());
+                    cast->add_targets()->set_object_id(*antiVenomOid);
+                    protectionBlessingCast = true;
+                    sendRuled(cmd, QStringLiteral("cast Apostle's Blessing on Anti-Venom"));
+                    return;
+                }
+            }
+            if (protectionBlessingCast && !submittedProtectionBranchChoice) {
+                return;
+            }
+            if (preventionBlazeCast && submittedProtectionBranchChoice && !devControlTargetSent) {
                 devControlTargetSent = true;
                 ruled::v1::RuledCommand cmd;
                 auto *dev = cmd.mutable_dev_command();
@@ -2181,6 +2268,10 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
                p1.sawAdventureStackToExile && p1.sawAdventureExileToStack && p1.sawAdventureStackToBattlefield &&
                p1.sawEntryReplacementChoice && p1.submittedEntryReplacementChoice && p1.sawDiregrafEnterTapped &&
                p1.sawDamagePreventionChoice && p1.submittedDamagePreventionChoice && p1.sawControlTransfer &&
+               p1.sawProtectionBranchChoice && p1.submittedProtectionBranchChoice &&
+               p1.sawProtectionHandToStack && !p1.protectionLeftStackBeforeChoice &&
+               p1.sawProtectionStackToGraveAfterChoice &&
+               p1.sawProtectionPhysicalAnnotation && p2.sawProtectionPhysicalAnnotation &&
                p1.sawControlReturn && p1.sawPhysicalControlTransfer && p1.sawPhysicalControlReturn &&
                p1.sawLibraryPermanentMoved && p2.sawLibraryPermanentMoved &&
                p1.sawLibraryTargetAbsentFromBattlefield && p2.sawLibraryTargetAbsentFromBattlefield &&
@@ -2258,6 +2349,26 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     EXPECT_TRUE(p2.sawBrainstormResolved) << "Brainstorm never finished resolving after the choice";
     EXPECT_TRUE(p1.sawDamagePreventionChoice) << "damage-prevention ordering choice never arrived";
     EXPECT_TRUE(p1.submittedDamagePreventionChoice) << "damage-prevention ordering choice was never submitted";
+    EXPECT_TRUE(p1.sawProtectionBranchChoice)
+        << "Apostle's Blessing never published its six protection-quality branches";
+    EXPECT_TRUE(p1.submittedProtectionBranchChoice)
+        << "the ruled client never selected protection from artifacts";
+    EXPECT_TRUE(p1.sawProtectionHandToStack)
+        << "Apostle's Blessing never moved from the physical hand to the stack";
+    EXPECT_FALSE(p1.protectionLeftStackBeforeChoice)
+        << "Apostle's Blessing left the physical stack before its resolution choice";
+    EXPECT_TRUE(p1.sawProtectionStackToGraveAfterChoice)
+        << "Apostle's Blessing did not leave the physical stack after its resolution choice";
+    EXPECT_TRUE(p1.sawProtectionPhysicalAnnotation && p2.sawProtectionPhysicalAnnotation)
+        << "both clients did not receive Protection from artifacts on the same physical permanent";
+    ASSERT_NE(p1.protectionTargetOid, 0u);
+    EXPECT_EQ(p1.protectionTargetOid, p2.protectionTargetOid)
+        << "clients disagreed on the protected permanent's engine ObjectId";
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(p1.protectionTargetOid));
+    ASSERT_TRUE(p2.serverCardByEngineOid.count(p2.protectionTargetOid));
+    EXPECT_EQ(p1.serverCardByEngineOid[p1.protectionTargetOid],
+              p2.serverCardByEngineOid[p2.protectionTargetOid])
+        << "clients disagreed on the protected permanent's physical Server_Card mapping";
     EXPECT_TRUE(p1.sawEntryReplacementChoice) << "battlefield-entry replacement ordering choice never arrived";
     EXPECT_TRUE(p1.submittedEntryReplacementChoice)
         << "battlefield-entry replacement ordering choice was never submitted";

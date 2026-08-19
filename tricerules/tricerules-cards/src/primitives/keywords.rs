@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 /// The five MTG colors. Used for characteristic-based blocking checks (Intimidate, Protection)
 /// and derived from a card's mana cost at query time — not stored as a separate RON field.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Color {
     White,
     Blue,
@@ -21,6 +21,91 @@ pub enum Evasion {
     /// CR 702.14c: this creature can't be blocked while the defending player controls a land
     /// with `land_subtype` (River Boa's Islandwalk, Shanodin Dryads' Forestwalk).
     Landwalk { land_subtype: String },
+}
+
+/// Exact card types currently represented by the ordinary ruled-game card model. This is kept
+/// separate from `CardTypeFilter`: protection names a characteristic value, not a predicate such
+/// as "noncreature" or "instant or sorcery" (CR 702.16a).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ProtectionCardType {
+    Artifact,
+    Creature,
+    Enchantment,
+    Instant,
+    Kindred,
+    Land,
+    Planeswalker,
+    Sorcery,
+}
+
+impl ProtectionCardType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Artifact => "Artifact",
+            Self::Creature => "Creature",
+            Self::Enchantment => "Enchantment",
+            Self::Instant => "Instant",
+            Self::Kindred => "Kindred",
+            Self::Land => "Land",
+            Self::Planeswalker => "Planeswalker",
+            Self::Sorcery => "Sorcery",
+        }
+    }
+
+    fn protection_label(self) -> &'static str {
+        match self {
+            Self::Artifact => "artifacts",
+            Self::Creature => "creatures",
+            Self::Enchantment => "enchantments",
+            Self::Instant => "instants",
+            Self::Kindred => "Kindred",
+            Self::Land => "lands",
+            Self::Planeswalker => "planeswalkers",
+            Self::Sorcery => "sorceries",
+        }
+    }
+}
+
+/// The quality named by one instance of protection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ProtectionQuality {
+    Color(Color),
+    CardType(ProtectionCardType),
+}
+
+impl ProtectionQuality {
+    pub fn label(self) -> String {
+        format!("Protection from {}", self.quality_label())
+    }
+
+    pub fn choice_label(self) -> &'static str {
+        match self {
+            Self::Color(Color::White) => "White",
+            Self::Color(Color::Blue) => "Blue",
+            Self::Color(Color::Black) => "Black",
+            Self::Color(Color::Red) => "Red",
+            Self::Color(Color::Green) => "Green",
+            Self::CardType(card_type) => card_type.protection_label(),
+        }
+    }
+
+    fn quality_label(self) -> &'static str {
+        match self {
+            Self::Color(Color::White) => "white",
+            Self::Color(Color::Blue) => "blue",
+            Self::Color(Color::Black) => "black",
+            Self::Color(Color::Red) => "red",
+            Self::Color(Color::Green) => "green",
+            Self::CardType(card_type) => card_type.protection_label(),
+        }
+    }
+
+    pub fn matches(self, colors: &[Color], types: &[String]) -> bool {
+        match self {
+            Self::Color(color) => colors.contains(&color),
+            Self::CardType(card_type) => types.iter().any(|value| value == card_type.as_str()),
+        }
+    }
 }
 
 /// Static keyword abilities that affect game rules (blocking restrictions, attack rules, damage

@@ -251,6 +251,22 @@ impl GameEngine {
             }
         }
 
+        // CR 702.16f: each protection quality on the attacker is an independent blocking
+        // restriction. A multitype blocker matches if any of its current derived types match.
+        if let (Some(attacker), Some(blocker)) = (
+            self.characteristics(attacker_id),
+            self.characteristics(blocker_id),
+        ) {
+            if attacker
+                .protections
+                .iter()
+                .copied()
+                .any(|protection| protection.matches(&blocker.colors, &blocker.types))
+            {
+                return false;
+            }
+        }
+
         // CR 702.14c — basic landwalk: the condition is evaluated at block declaration against
         // the defending player's currently controlled permanents and their derived types. Each
         // active evasion is an additional restriction (CR 509.1b), so any match forbids blocking.

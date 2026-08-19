@@ -2,8 +2,8 @@
 
 use super::{
     ActivatedAbilityDef, CardTypeFilter, Color, CreatureScopeFilter, GraveyardDestination,
-    GraveyardFilter, Keyword, ReflexiveTriggeredAbilityDef, TargetController, TargetFilter,
-    TargetKind, TriggeredAbilityDef, TypeLineAddition,
+    GraveyardFilter, Keyword, ProtectionQuality, ReflexiveTriggeredAbilityDef, TargetController,
+    TargetFilter, TargetKind, TriggeredAbilityDef, TypeLineAddition,
 };
 use crate::ManaCost;
 use serde::de::{EnumAccess, MapAccess, SeqAccess, VariantAccess};
@@ -651,11 +651,21 @@ pub enum DrawDiscardOrder {
     DiscardThenDraw,
 }
 
+/// A fixed protection quality or an engine-authored list chosen as the effect resolves.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ProtectionGrant {
+    Fixed(ProtectionQuality),
+    Choose(Vec<ProtectionQuality>),
+}
+
 /// A single optional or mandatory cost offered while an effect resolves (CR 118.12, 608.2d/g).
 /// The initial branch vocabulary deliberately has one cost per branch, which covers alternate
 /// sacrifice/discard branches without introducing partial multi-cost payment state.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ResolutionCost {
+    /// A labeled mandatory/optional branch with no payment. Used by generic resolution choices
+    /// whose consequence is encoded by the parent effect, such as choosing a protection quality.
+    None,
     Mana(ManaCost),
     DiscardCard {
         #[serde(default)]
@@ -899,6 +909,13 @@ pub enum SpellEffectKind {
         #[serde(default)]
         subject: EffectSubject,
         keywords: Vec<Keyword>,
+    },
+    /// CR 702.16 / layer 6: grant protection until end of turn. The explicit option list covers
+    /// both color choices and mixed choices such as Apostle's Blessing.
+    GrantProtection {
+        #[serde(default)]
+        subject: EffectSubject,
+        protection: ProtectionGrant,
     },
     /// CR 611.2c / 613.1f: the subject gains a triggered ability until end of turn. The complete
     /// definition is embedded because the ability must keep functioning after the effect or its
@@ -1421,6 +1438,7 @@ impl SpellEffectKind {
             SpellEffectKind::PumpTarget { subject, .. }
             | SpellEffectKind::PutCounters { subject, .. }
             | SpellEffectKind::GrantKeywords { subject, .. }
+            | SpellEffectKind::GrantProtection { subject, .. }
             | SpellEffectKind::GrantTriggeredAbility { subject, .. }
             | SpellEffectKind::CreateDelayedTrigger { subject, .. }
             | SpellEffectKind::AddTypes { subject, .. }
@@ -1502,6 +1520,10 @@ impl SpellEffectKind {
                 subject: EffectSubject::Chosen(target),
             }
             | SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::Chosen(target),
+                ..
+            }
+            | SpellEffectKind::GrantProtection {
                 subject: EffectSubject::Chosen(target),
                 ..
             }
@@ -1668,6 +1690,7 @@ impl SpellEffectKind {
                         );
                     }
                     match &branch.cost {
+                        ResolutionCost::None => {}
                         ResolutionCost::Mana(cost) => {
                             if cost.pips.is_empty()
                                 || cost
@@ -1938,6 +1961,32 @@ impl SpellEffectKind {
                 } else {
                     Ok(())
                 }
+            }
+            SpellEffectKind::GrantProtection {
+                subject,
+                protection,
+            } => {
+                if let EffectSubject::Chosen(target) = subject {
+                    if target.is_player() {
+                        return Err(format!(
+                            "GrantProtection cannot target players, got {:?}",
+                            target.kind
+                        ));
+                    }
+                }
+                if let ProtectionGrant::Choose(options) = protection {
+                    if options.is_empty() {
+                        return Err("protection choice requires at least one quality".into());
+                    }
+                    let unique = options
+                        .iter()
+                        .copied()
+                        .collect::<std::collections::HashSet<_>>();
+                    if unique.len() != options.len() {
+                        return Err("protection choice repeats a quality".into());
+                    }
+                }
+                Ok(())
             }
             SpellEffectKind::GrantTriggeredAbility { subject, ability } => {
                 if let EffectSubject::Chosen(target) = subject {
@@ -2214,6 +2263,8 @@ pub enum ContinuousEffectKind {
     /// (Goblin Chieftain → Haste), pump sorceries (Overrun → Trample), and any
     /// "creatures you control gain [keyword] until end of turn" effect.
     Layer6AddKeyword(Keyword),
+    /// CR 613.1f / 702.16: grant one parameterized protection ability.
+    Layer6AddProtection(ProtectionQuality),
     /// CR 113.10 / 613.1f: grant an ordinary activated ability to the affected permanent.
     GrantActivatedAbility(Box<ActivatedAbilityDef>),
     /// CR 613.1f: grant an ordinary triggered ability to the affected permanent.

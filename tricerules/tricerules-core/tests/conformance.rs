@@ -17,8 +17,8 @@ use tricerules_cards::CardRegistry;
 use tricerules_core::{GameEngine, TurnStep, Zone};
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
 use tricerules_proto::ruled::v1::{
-    ActivateAbility, CastSource, CastSpell, PassPriority, PlayLand, RuledCommand,
-    SubmitResolutionChoice, TargetRef,
+    ActivateAbility, CastSource, CastSpell, PassPriority, PlayLand, ResolutionChoiceDecision,
+    RuledCommand, SubmitResolutionChoice, TargetRef,
 };
 
 fn pass() -> RuledCommand {
@@ -166,7 +166,11 @@ fn try_drain_stack(e: &mut GameEngine) {
             let answer = RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
                     chosen_object_ids,
-                    decision: 0,
+                    decision: if pending.resolution_branch.is_some() {
+                        ResolutionChoiceDecision::SelectBranch as i32
+                    } else {
+                        ResolutionChoiceDecision::Unspecified as i32
+                    },
                     selected_branch_index: 0,
                 })),
             };

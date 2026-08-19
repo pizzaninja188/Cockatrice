@@ -32,6 +32,7 @@ pub struct Characteristics {
     pub supertypes: Vec<String>,
     pub colors: Vec<Color>,
     pub keywords: Vec<Keyword>,
+    pub protections: Vec<ProtectionQuality>,
     pub evasions: Vec<Evasion>,
     pub power: Option<u32>,
     pub toughness: Option<u32>,
@@ -112,6 +113,7 @@ impl CharacteristicsEvaluator<'_> {
                 face.colors()
             },
             keywords: face.keywords.to_vec(),
+            protections: face.protections.to_vec(),
             evasions: face.evasions.to_vec(),
             // Object snapshots take precedence for tokens and scenario overrides. Multi-face
             // objects leave these unset and read the active face.
@@ -259,6 +261,7 @@ impl CharacteristicsEvaluator<'_> {
                 matches!(
                     effect.kind,
                     ContinuousEffectKind::Layer6AddKeyword(_)
+                        | ContinuousEffectKind::Layer6AddProtection(_)
                         | ContinuousEffectKind::PtModify { .. }
                 )
             })
@@ -614,6 +617,11 @@ impl CharacteristicsEvaluator<'_> {
             if let ContinuousEffectKind::Layer6AddKeyword(keyword) = effect.kind {
                 if !result.keywords.contains(&keyword) {
                     result.keywords.push(keyword);
+                }
+            }
+            if let ContinuousEffectKind::Layer6AddProtection(protection) = effect.kind {
+                if !result.protections.contains(&protection) {
+                    result.protections.push(protection);
                 }
             }
         }

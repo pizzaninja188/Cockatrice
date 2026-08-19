@@ -1,0 +1,11 @@
+(
+  id: "white_knight",
+  name: "White Knight",
+  mana_cost: "{W}{W}",
+  // Oracle checked 2026-08-18: First strike; protection from black.
+  types: ["Creature", "Human", "Knight"],
+  power: 2,
+  toughness: 2,
+  keywords: [FirstStrike],
+  protections: [Color(Black)],
+)

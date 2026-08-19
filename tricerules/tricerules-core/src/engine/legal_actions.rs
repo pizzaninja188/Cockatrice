@@ -41,7 +41,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                     let t = compute_spell_targets(
                         eng,
                         p.id,
-                        TargetSourceIdentity::current(eng, oid),
+                        TargetSourceIdentity::spell_face(eng, oid, face_index),
                         &face.spell_effect,
                         face.targeting.as_ref(),
                     );
@@ -95,7 +95,11 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 compute_spell_targets(
                     eng,
                     p.id,
-                    TargetSourceIdentity::current(eng, action.object_id),
+                    TargetSourceIdentity::spell_face(
+                        eng,
+                        action.object_id,
+                        action.face_index as usize,
+                    ),
                     &face.spell_effect,
                     face.targeting.as_ref(),
                 ),
@@ -526,7 +530,7 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                             let targets = compute_spell_targets(
                                 eng,
                                 pid,
-                                TargetSourceIdentity::current(eng, oid),
+                                TargetSourceIdentity::spell_face(eng, oid, face_index),
                                 &mode.effects,
                                 mode.targeting.as_ref(),
                             );
@@ -629,7 +633,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                         let targets = compute_spell_targets(
                             eng,
                             pid,
-                            TargetSourceIdentity::current(eng, oid),
+                            TargetSourceIdentity::spell_face(eng, oid, face_index),
                             &mode.effects,
                             mode.targeting.as_ref(),
                         );

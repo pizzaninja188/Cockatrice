@@ -15,11 +15,24 @@ pub(super) fn choose_resolution_branch(
     let SpellEffectKind::ChooseResolutionBranch { optional, branches } = effect else {
         unreachable!();
     };
+    park_resolution_branches(cx, optional, branches)
+}
+
+pub(super) fn park_resolution_branches(
+    cx: &mut EffectCx<'_>,
+    optional: bool,
+    branches: Vec<tricerules_cards::primitives::ResolutionBranchDef>,
+) -> Result<EffectOutcome, EngineError> {
     let options = branches
         .iter()
         .enumerate()
         .map(|(index, branch)| {
             let (kind, cost_text, selectable) = match &branch.cost {
+                ResolutionCost::None => (
+                    rv1::ResolutionBranchCostKind::Unspecified,
+                    String::new(),
+                    true,
+                ),
                 ResolutionCost::Mana(cost) => {
                     (rv1::ResolutionBranchCostKind::Mana, cost.to_string(), true)
                 }

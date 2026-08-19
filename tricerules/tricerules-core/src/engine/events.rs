@@ -23,6 +23,16 @@ impl GameEngine {
             .unwrap_or_default();
 
         if let Some(characteristics) = characteristics {
+            labels.extend(
+                characteristics
+                    .protections
+                    .iter()
+                    .copied()
+                    .map(ProtectionQuality::label),
+            );
+        }
+
+        if let Some(characteristics) = characteristics {
             let restrictions = self.combat_restrictions_for(oid, characteristics);
             if restrictions.cant_attack {
                 labels.push("Can't attack".to_string());

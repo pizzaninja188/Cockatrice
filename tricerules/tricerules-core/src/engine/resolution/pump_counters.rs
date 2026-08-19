@@ -203,6 +203,94 @@ pub(super) fn grant_keywords(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn grant_protection(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::GrantProtection {
+        subject,
+        protection,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+
+    let quality = match protection {
+        ProtectionGrant::Fixed(quality) => quality,
+        ProtectionGrant::Choose(options) => {
+            if let Some(choice) = cx
+                .top
+                .resolution_branch_choices
+                .get(&cx.effect_index)
+                .copied()
+                .flatten()
+            {
+                *options
+                    .get(choice)
+                    .ok_or(EngineError::Illegal("protection choice became stale"))?
+            } else {
+                let branches = options
+                    .into_iter()
+                    .map(|option| ResolutionBranchDef {
+                        label: option.choice_label().to_string(),
+                        cost: ResolutionCost::None,
+                        effects: Vec::new(),
+                    })
+                    .collect();
+                return super::choices::park_resolution_branches(cx, false, branches);
+            }
+        }
+    };
+
+    let (tid, effect_source_id) = match &subject {
+        EffectSubject::Source => (
+            cx.top
+                .source_permanent_id
+                .filter(|_| cx.engine.source_is_current_object(cx.top)),
+            cx.top.source_permanent_id,
+        ),
+        EffectSubject::AttachedObject | EffectSubject::TriggerObject => (
+            resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject),
+            if matches!(subject, EffectSubject::AttachedObject) {
+                cx.top.source_permanent_id
+            } else {
+                Some(cx.top.id)
+            },
+        ),
+        EffectSubject::Chosen(target) => {
+            let tid = cx.targets.first().copied().filter(|tid| {
+                target_filter_legal_at_resolution(
+                    cx.engine,
+                    target,
+                    *tid,
+                    cx.controller,
+                    TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
+                    cx.top.trigger_context,
+                )
+            });
+            (tid, Some(cx.top.id))
+        }
+    };
+    let Some(tid) = tid else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let target_name = object_display_name(&cx.engine.state, cx.engine.registry, tid);
+    cx.engine.state.continuous_effects.push(ContinuousEffect {
+        source_id: effect_source_id,
+        affected: AffectedScope::Single(tid),
+        kind: ContinuousEffectKind::Layer6AddProtection(quality),
+        condition: None,
+        duration: EffectDuration::UntilEndOfTurn,
+        timestamp: cx.engine.state.command_index,
+    });
+    cx.events.push(ev_log(format!(
+        "{} grants {} to {target_name} until end of turn",
+        cx.spell_label,
+        quality.label()
+    )));
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn grant_triggered_ability(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

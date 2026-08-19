@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use tricerules_cards::primitives::ResolutionBranchDef;
 use tricerules_cards::primitives::{
-    ActivatedAbilityDef, ContinuousEffectKind, CounterKind, CreatureScopeFilter,
+    ActivatedAbilityDef, Color, ContinuousEffectKind, CounterKind, CreatureScopeFilter,
     DamagePreventionAdditionalEffect, EffectDuration, GameCondition, Keyword, ManaAmount,
     ManaSpendingRestriction, SearchDestination, TargetFilter, TriggerCondition,
     TriggeredAbilityDef,
@@ -835,6 +835,10 @@ pub struct GameState {
     /// after an ability's source leaves or returns, so the new object cannot retroactively change
     /// whether damage from the old source had deathtouch (CR 702.2e).
     pub last_known_keywords_by_generation: HashMap<(ObjectId, u64), Vec<Keyword>>,
+    /// Last-known derived colors and types for source-quality checks such as protection. These are
+    /// generation-scoped so a leave-and-return object cannot rewrite an older ability's source.
+    pub last_known_colors_by_generation: HashMap<(ObjectId, u64), Vec<Color>>,
+    pub last_known_types_by_generation: HashMap<(ObjectId, u64), Vec<String>>,
     /// The object an Aura or Equipment source was attached to as that source last left the
     /// battlefield, keyed by the source generation. The value carries the attached object's
     /// generation so an old ability cannot affect a card that left and returned under the same

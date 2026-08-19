@@ -1,0 +1,10 @@
+(
+  id: "beloved_chaplain",
+  name: "Beloved Chaplain",
+  mana_cost: "{1}{W}",
+  // Oracle checked 2026-08-18: Protection from creatures.
+  types: ["Creature", "Human", "Cleric"],
+  power: 1,
+  toughness: 1,
+  protections: [CardType(Creature)],
+)

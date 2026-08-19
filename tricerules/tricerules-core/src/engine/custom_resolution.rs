@@ -1180,6 +1180,7 @@ impl GameEngine {
             return Vec::new();
         };
         match cost {
+            ResolutionCost::None => Vec::new(),
             ResolutionCost::Mana(_) => Vec::new(),
             ResolutionCost::DiscardCard { filter } => self.state.players[index]
                 .hand
@@ -1258,7 +1259,9 @@ impl GameEngine {
             return Err(EngineError::Illegal("bad resolution branch index"));
         };
         let candidates = self.resolution_cost_candidates(pending.deciding_player, &branch.cost);
-        if !matches!(branch.cost, ResolutionCost::Mana(_)) && candidates.is_empty() {
+        if !matches!(branch.cost, ResolutionCost::None | ResolutionCost::Mana(_))
+            && candidates.is_empty()
+        {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
                 "that resolution branch no longer has a legal payment",
@@ -1276,6 +1279,9 @@ impl GameEngine {
             pending.deciding_player, branch.label
         ))];
         match branch.cost {
+            ResolutionCost::None => {
+                return self.complete_parked_resolution(pending.item, Some(effect_index), ev);
+            }
             ResolutionCost::Mana(mana_cost) => {
                 pending.choice_kind = rv1::ChoiceKind::ManaPayment;
                 pending.prompt = format!("Pay {}?", mana_cost);
@@ -1404,6 +1410,12 @@ impl GameEngine {
             .ok_or(EngineError::Illegal("resolution payment object missing"))?;
         let mut ev = Vec::new();
         match &branch.cost {
+            ResolutionCost::None => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "costless branch has no object payment",
+                ));
+            }
             ResolutionCost::DiscardCard { .. } => {
                 resolution::move_object_to_zone(
                     &mut self.state,

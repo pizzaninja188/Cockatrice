@@ -216,6 +216,11 @@ impl GameEngine {
                                     || !self
                                         .characteristics(target_id)
                                         .is_some_and(|value| value.is_creature())
+                                    || !super::targeting::attachment_protection_legal(
+                                        self,
+                                        AttachmentRecipient::Object(target_id),
+                                        eq.id,
+                                    )
                             })
                         }
                     })

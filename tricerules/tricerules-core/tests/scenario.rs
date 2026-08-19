@@ -69,6 +69,8 @@ mod issue_65_granted_activated_abilities;
 mod issue_71_filters;
 #[path = "scenario/issue_73_grouped_targets.rs"]
 mod issue_73_grouped_targets;
+#[path = "scenario/issue_80_protection.rs"]
+mod issue_80_protection;
 #[path = "scenario/issue_82_attached_untap.rs"]
 mod issue_82_attached_untap;
 #[path = "scenario/issue_83_destroy_attached.rs"]

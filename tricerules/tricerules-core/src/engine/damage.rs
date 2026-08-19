@@ -5,6 +5,7 @@
 //! of incidental spell/combat iteration order and gives later CR 616 choices one event shape.
 
 use super::events::{ev_log, finish_with_events, object_display_name};
+use super::targeting::TargetSourceIdentity;
 use super::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -12,6 +13,8 @@ pub(crate) struct DamageSourceSnapshot {
     pub object_id: ObjectId,
     pub controller: PlayerId,
     pub label: String,
+    pub colors: Vec<Color>,
+    pub types: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,6 +94,8 @@ impl DamageEvent {
                 object_id: source_id,
                 controller,
                 label: label.into(),
+                colors: Vec::new(),
+                types: Vec::new(),
             },
             recipient,
             amount,
@@ -116,8 +121,14 @@ pub(crate) struct DamageSpec {
 #[derive(Debug, Clone)]
 pub(crate) struct DamageApplicationChoice {
     pub choice_id: u32,
-    pub effect_id: u32,
+    pub application: DamagePreventionApplication,
     pub event_index: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DamagePreventionApplication {
+    Effect(u32),
+    Protection(ProtectionQuality),
 }
 
 #[derive(Debug, Clone)]
@@ -130,7 +141,7 @@ pub(crate) struct PendingDamageBatch {
 pub(crate) struct PendingDamageEvent {
     pub spec: DamageSpec,
     pub remaining: u32,
-    pub applied_effect_ids: Vec<u32>,
+    pub applied_applications: Vec<DamagePreventionApplication>,
 }
 
 #[derive(Debug, Clone)]
@@ -143,22 +154,15 @@ enum DamageBatchProgress {
     Complete(Vec<CompletedDamage>),
     NeedsChoice {
         batch: PendingDamageBatch,
-        raw_candidates: Vec<(usize, u32, String)>,
+        raw_candidates: Vec<(usize, DamagePreventionApplication, String)>,
     },
 }
 
 impl GameEngine {
     fn damage_batch_needs_ordering(&self, damage: &[DamageSpec]) -> bool {
-        let by_event: Vec<Vec<u32>> = damage
+        let by_event: Vec<Vec<DamagePreventionApplication>> = damage
             .iter()
-            .map(|spec| {
-                self.state
-                    .damage_prevention_effects
-                    .iter()
-                    .filter(|effect| self.prevention_effect_applies(effect, &spec.event))
-                    .map(|effect| effect.id)
-                    .collect()
-            })
+            .map(|spec| self.prevention_applications(&spec.event))
             .collect();
         if by_event.iter().any(|candidates| candidates.len() > 1) {
             return true;
@@ -167,10 +171,41 @@ impl GameEngine {
             matches!(effect.amount, DamagePreventionAmount::Remaining(_))
                 && by_event
                     .iter()
-                    .filter(|candidates| candidates.contains(&effect.id))
+                    .filter(|candidates| {
+                        candidates.contains(&DamagePreventionApplication::Effect(effect.id))
+                    })
                     .count()
                     > 1
         })
+    }
+
+    fn protection_applications(&self, event: &DamageEvent) -> Vec<ProtectionQuality> {
+        let DamageRecipient::Permanent(recipient) = event.recipient else {
+            return Vec::new();
+        };
+        self.characteristics(recipient)
+            .map(|characteristics| {
+                characteristics
+                    .protections
+                    .into_iter()
+                    .filter(|quality| quality.matches(&event.source.colors, &event.source.types))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    fn prevention_applications(&self, event: &DamageEvent) -> Vec<DamagePreventionApplication> {
+        self.state
+            .damage_prevention_effects
+            .iter()
+            .filter(|effect| self.prevention_effect_applies(effect, event))
+            .map(|effect| DamagePreventionApplication::Effect(effect.id))
+            .chain(
+                self.protection_applications(event)
+                    .into_iter()
+                    .map(DamagePreventionApplication::Protection),
+            )
+            .collect()
     }
 
     fn prevention_effect_applies(
@@ -227,16 +262,27 @@ impl GameEngine {
     pub(crate) fn process_or_park_damage_batch(
         &mut self,
         item: &StackItem,
-        damage: Vec<DamageSpec>,
+        mut damage: Vec<DamageSpec>,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Option<Vec<CompletedDamage>> {
+        for spec in &mut damage {
+            let item_source = item.source_permanent_id.unwrap_or(item.id);
+            let source = if spec.event.source.object_id == item_source {
+                TargetSourceIdentity::for_stack_item(self, item)
+            } else {
+                TargetSourceIdentity::current(self, spec.event.source.object_id)
+            };
+            let (colors, types) = source.quality_values(self);
+            spec.event.source.colors = colors;
+            spec.event.source.types = types;
+        }
         let pending = PendingDamageBatch {
             damage: damage
                 .into_iter()
                 .map(|spec| PendingDamageEvent {
                     remaining: spec.event.amount,
                     spec,
-                    applied_effect_ids: Vec::new(),
+                    applied_applications: Vec::new(),
                 })
                 .collect(),
             applications: Vec::new(),
@@ -259,7 +305,10 @@ impl GameEngine {
         }
     }
 
-    fn pending_prevention_candidates(&self, batch: &PendingDamageBatch) -> Vec<Vec<(u32, String)>> {
+    fn pending_prevention_candidates(
+        &self,
+        batch: &PendingDamageBatch,
+    ) -> Vec<Vec<(DamagePreventionApplication, String)>> {
         batch
             .damage
             .iter()
@@ -267,23 +316,45 @@ impl GameEngine {
                 if damage.remaining == 0 {
                     return Vec::new();
                 }
-                self.state
+                let effects = self
+                    .state
                     .damage_prevention_effects
                     .iter()
                     .filter(|effect| {
-                        !damage.applied_effect_ids.contains(&effect.id)
+                        !damage
+                            .applied_applications
+                            .contains(&DamagePreventionApplication::Effect(effect.id))
                             && self.prevention_effect_applies(effect, &damage.spec.event)
                     })
-                    .map(|effect| (effect.id, effect.source_label.clone()))
-                    .collect()
+                    .map(|effect| {
+                        (
+                            DamagePreventionApplication::Effect(effect.id),
+                            effect.source_label.clone(),
+                        )
+                    });
+                let protection = self
+                    .protection_applications(&damage.spec.event)
+                    .into_iter()
+                    .filter(|quality| {
+                        !damage
+                            .applied_applications
+                            .contains(&DamagePreventionApplication::Protection(*quality))
+                    })
+                    .map(|quality| {
+                        (
+                            DamagePreventionApplication::Protection(quality),
+                            quality.label(),
+                        )
+                    });
+                effects.chain(protection).collect()
             })
             .collect()
     }
 
     fn next_prevention_ordering_choice(
         &self,
-        by_event: &[Vec<(u32, String)>],
-    ) -> Vec<(usize, u32, String)> {
+        by_event: &[Vec<(DamagePreventionApplication, String)>],
+    ) -> Vec<(usize, DamagePreventionApplication, String)> {
         if let Some((event_index, candidates)) = by_event
             .iter()
             .enumerate()
@@ -291,7 +362,7 @@ impl GameEngine {
         {
             return candidates
                 .iter()
-                .map(|(effect_id, label)| (event_index, *effect_id, label.clone()))
+                .map(|(application, label)| (event_index, *application, label.clone()))
                 .collect();
         }
 
@@ -303,11 +374,17 @@ impl GameEngine {
                 .iter()
                 .enumerate()
                 .filter(|(_, candidates)| {
-                    candidates
-                        .iter()
-                        .any(|(effect_id, _)| *effect_id == effect.id)
+                    candidates.iter().any(|(application, _)| {
+                        *application == DamagePreventionApplication::Effect(effect.id)
+                    })
                 })
-                .map(|(event_index, _)| (event_index, effect.id, effect.source_label.clone()))
+                .map(|(event_index, _)| {
+                    (
+                        event_index,
+                        DamagePreventionApplication::Effect(effect.id),
+                        effect.source_label.clone(),
+                    )
+                })
                 .collect();
             if occurrences.len() > 1 {
                 return occurrences;
@@ -330,14 +407,14 @@ impl GameEngine {
                     raw_candidates,
                 };
             }
-            let Some((event_index, effect_id)) =
+            let Some((event_index, application)) =
                 by_event
                     .iter()
                     .enumerate()
                     .find_map(|(event_index, candidates)| {
                         candidates
                             .first()
-                            .map(|(effect_id, _)| (event_index, *effect_id))
+                            .map(|(application, _)| (event_index, *application))
                     })
             else {
                 return DamageBatchProgress::Complete(
@@ -356,7 +433,7 @@ impl GameEngine {
                 );
             };
             let applied =
-                self.apply_prevention_application(&mut batch, event_index, effect_id, events);
+                self.apply_prevention_application(&mut batch, event_index, application, events);
             debug_assert!(applied);
         }
     }
@@ -365,16 +442,40 @@ impl GameEngine {
         &mut self,
         batch: &mut PendingDamageBatch,
         event_index: usize,
-        effect_id: u32,
+        application: DamagePreventionApplication,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> bool {
         let Some(damage) = batch.damage.get(event_index) else {
             return false;
         };
-        if damage.remaining == 0 || damage.applied_effect_ids.contains(&effect_id) {
+        if damage.remaining == 0 || damage.applied_applications.contains(&application) {
             return false;
         }
         let event = damage.spec.event.clone();
+        if let DamagePreventionApplication::Protection(quality) = application {
+            if !self.protection_applications(&event).contains(&quality) {
+                return false;
+            }
+            let prevented = if self.state.damage_prevention_prohibitions.is_empty() {
+                damage.remaining
+            } else {
+                0
+            };
+            let damage = &mut batch.damage[event_index];
+            damage.remaining -= prevented;
+            damage.applied_applications.push(application);
+            if prevented > 0 {
+                events.push(ev_log(format!(
+                    "{} prevents {prevented} damage from {}.",
+                    quality.label(),
+                    event.source.label
+                )));
+            }
+            return true;
+        }
+        let DamagePreventionApplication::Effect(effect_id) = application else {
+            unreachable!();
+        };
         let Some(effect_index) = self
             .state
             .damage_prevention_effects
@@ -408,7 +509,7 @@ impl GameEngine {
 
         let damage = &mut batch.damage[event_index];
         damage.remaining -= prevented;
-        damage.applied_effect_ids.push(effect_id);
+        damage.applied_applications.push(application);
         if prevented > 0 {
             events.push(ev_log(format!(
                 "{source_label} prevents {prevented} damage from {}.",
@@ -449,7 +550,7 @@ impl GameEngine {
         item: StackItem,
         resume_effect_index: Option<u32>,
         mut batch: PendingDamageBatch,
-        raw_candidates: Vec<(usize, u32, String)>,
+        raw_candidates: Vec<(usize, DamagePreventionApplication, String)>,
         events: &mut Vec<rv1::RuledEvent>,
     ) {
         let deciding_event = &batch.damage[raw_candidates[0].0].spec.event;
@@ -466,16 +567,19 @@ impl GameEngine {
         let mut candidates = Vec::new();
         let mut candidate_names = Vec::new();
         let mut candidate_effect_ids = Vec::new();
-        for (event_index, effect_id, effect_label) in raw_candidates {
+        for (event_index, application, effect_label) in raw_candidates {
             let choice_id = self.state.next_replacement_application_id;
             self.state.next_replacement_application_id = choice_id.saturating_add(1);
             applications.push(DamageApplicationChoice {
                 choice_id,
-                effect_id,
+                application,
                 event_index,
             });
             candidates.push(choice_id);
-            candidate_effect_ids.push(effect_id);
+            candidate_effect_ids.push(match application {
+                DamagePreventionApplication::Effect(effect_id) => effect_id,
+                DamagePreventionApplication::Protection(_) => 0,
+            });
             let damage = &batch.damage[event_index];
             candidate_names.push(format!(
                 "{effect_label} — {} damage from {}",
@@ -620,14 +724,20 @@ impl GameEngine {
                     .get(&source)
                     .map(|object| object.controller)
                     .unwrap_or(active);
+                let source_characteristics = engine.characteristics(source);
+                let mut event = DamageEvent::combat(
+                    source,
+                    controller,
+                    object_display_name(&engine.state, engine.registry, source),
+                    recipient,
+                    amount,
+                );
+                if let Some(characteristics) = source_characteristics {
+                    event.source.colors = characteristics.colors;
+                    event.source.types = characteristics.types;
+                }
                 damage.push(DamageSpec {
-                    event: DamageEvent::combat(
-                        source,
-                        controller,
-                        object_display_name(&engine.state, engine.registry, source),
-                        recipient,
-                        amount,
-                    ),
+                    event,
                     source_has_deathtouch: engine
                         .effective_has_keyword(source, Keyword::Deathtouch),
                     source_has_lifelink: engine.effective_has_keyword(source, Keyword::Lifelink),
@@ -787,7 +897,7 @@ impl GameEngine {
         if !self.apply_prevention_application(
             &mut batch,
             application.event_index,
-            application.effect_id,
+            application.application,
             &mut events,
         ) {
             self.state.pending_replacement_event =

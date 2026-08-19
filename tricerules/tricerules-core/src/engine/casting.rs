@@ -979,7 +979,7 @@ impl GameEngine {
         };
         let has_multiple_cast_options =
             super::legal_actions::cast_option_count_for_source(self, player, source) > 1;
-        let target_source = TargetSourceIdentity::current(self, oid);
+        let target_source = TargetSourceIdentity::spell_face(self, oid, face_index);
         let card_id = self.state.objects.get(&oid).unwrap().card_id.clone();
         let def = self
             .registry
