@@ -839,9 +839,9 @@ mod tests {
     use super::*;
     use crate::primitives::{
         Amount, BattlefieldCreatureCountFilter, CastTriggerPlayer, CountExpression, CounterKind,
-        EffectSubject, EntersTappedAffected, GameCondition, InterveningIf, RelativePlayerSet,
-        SpellCostModifier, SpellEffectKind, StaticAbilityDef, TargetFilter, TargetKind,
-        TriggerCondition,
+        CreatureEventFilter, EffectSubject, EntersTappedAffected, GameCondition, InterveningIf,
+        PermanentTypeFilter, PowerComparison, RelativePlayerSet, SpellCostModifier,
+        SpellEffectKind, StaticAbilityDef, TargetFilter, TargetKind, TriggerCondition,
     };
 
     #[test]
@@ -931,6 +931,67 @@ mod tests {
             RegistryError::InvalidCard { reason, .. }
                 if reason.contains("cannot require and exclude the same keyword")
         ));
+    }
+
+    #[test]
+    fn issue_127_embedded_cards_load_event_time_power_filters() {
+        let registry = CardRegistry::from_embedded().expect("embedded registry");
+
+        for card_id in ["vicious_clown", "mentor_of_the_meek"] {
+            let card = registry
+                .get(card_id)
+                .unwrap_or_else(|| panic!("missing {card_id}"));
+            assert!(matches!(
+                card.primary_face().triggered_abilities.as_slice(),
+                [ability]
+                    if ability.trigger
+                        == TriggerCondition::WheneverPermanentEntersBattlefield {
+                            controller: CastTriggerPlayer::Controller,
+                            permanent_type: Some(PermanentTypeFilter::Creature),
+                            exclude_self: true,
+                            creature_filter: Some(CreatureEventFilter {
+                                power: Some(PowerComparison::AtMost(2)),
+                                ..Default::default()
+                            }),
+                        }
+            ));
+        }
+    }
+
+    #[test]
+    fn issue_127_entry_creature_filters_require_a_creature_type_and_a_predicate() {
+        for (permanent_type, creature_filter, expected_reason) in [
+            (
+                "Land",
+                "(power: Some(AtMost(2)))",
+                "requires permanent_type Creature",
+            ),
+            ("Creature", "()", "cannot be empty"),
+        ] {
+            let card = format!(
+                r#"(
+                    id: "bad_entry_filter",
+                    name: "Bad Entry Filter",
+                    mana_cost: "{{1}}{{G}}",
+                    types: ["Creature"],
+                    power: 1,
+                    toughness: 1,
+                    triggered_abilities: [(
+                        trigger: WheneverPermanentEntersBattlefield(
+                            permanent_type: Some({permanent_type}),
+                            creature_filter: Some({creature_filter}),
+                        ),
+                        effect: [Draw(count: 1)],
+                        text: "Bad.",
+                    )],
+                )"#
+            );
+            let error = CardRegistry::from_chunks(&[&card]).expect_err("invalid entry filter");
+            assert!(matches!(
+                error,
+                RegistryError::InvalidCard { reason, .. } if reason.contains(expected_reason)
+            ));
+        }
     }
 
     #[test]

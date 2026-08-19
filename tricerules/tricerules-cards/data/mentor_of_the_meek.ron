@@ -1,0 +1,27 @@
+// Oracle and rulings checked 2026-08-19. Entry counters and continuous effects are included in
+// the event-time power check; the optional payment is made only while this trigger resolves.
+(
+  id: "mentor_of_the_meek",
+  name: "Mentor of the Meek",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      permanent_type: Some(Creature),
+      exclude_self: true,
+      creature_filter: Some((power: Some(AtMost(2)))),
+    ),
+    effect: [ChooseResolutionBranch(
+      optional: true,
+      branches: [(
+        label: "Pay {1}",
+        cost: Mana("{1}"),
+        effects: [Draw(count: 1)],
+      )],
+    )],
+    text: "Whenever another creature you control with power 2 or less enters, you may pay {1}. If you do, draw a card.",
+  )],
+)

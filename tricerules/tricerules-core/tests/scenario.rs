@@ -57,6 +57,8 @@ mod equipment;
 mod helpers;
 #[path = "scenario/issue_108_graveyard_aggregates.rs"]
 mod issue_108_graveyard_aggregates;
+#[path = "scenario/issue_127_trigger_event_filters.rs"]
+mod issue_127_trigger_event_filters;
 #[path = "scenario/issue_139_pending_trigger_publication.rs"]
 mod issue_139_pending_trigger_publication;
 #[path = "scenario/issue_57_targeting_costs.rs"]

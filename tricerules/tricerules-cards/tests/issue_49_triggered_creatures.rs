@@ -436,6 +436,7 @@ fn issue_49_observer_and_dies_triggers_use_existing_subjects() {
             controller: CastTriggerPlayer::Controller,
             permanent_type: Some(PermanentTypeFilter::Creature),
             exclude_self: true,
+            creature_filter: None,
         }
     );
     assert_eq!(

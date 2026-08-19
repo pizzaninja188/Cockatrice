@@ -2,8 +2,8 @@
 
 use super::{
     AbilityCost, Amount, BattlefieldCreatureCountFilter, CardTypeFilter, Color, CounterKind,
-    EffectContext, GameCondition, Keyword, RelativePlayerSet, SpellEffectKind, TargetController,
-    TargetFilter, TargetKind, TargetingDef,
+    EffectContext, GameCondition, Keyword, PowerComparison, RelativePlayerSet, SpellEffectKind,
+    TargetController, TargetFilter, TargetKind, TargetingDef,
 };
 use crate::{ManaAmount, ModalDef};
 use serde::{Deserialize, Serialize};
@@ -323,6 +323,10 @@ pub enum TriggerCondition {
         /// e.g. Soul Warden). If false, the source can trigger off itself entering.
         #[serde(default)]
         exclude_self: bool,
+        /// Optional event-time filter for creature characteristics. This is evaluated from the
+        /// entrant's derived characteristics after entry replacements and continuous effects.
+        #[serde(default)]
+        creature_filter: Option<CreatureEventFilter>,
     },
     /// Whenever a creature is put into a graveyard from the battlefield (CR 603.6). Observer
     /// variant of `WhenSelfDies` that watches *any* creature die. Covers Blood Artist, Falkenrath
@@ -366,6 +370,21 @@ impl TriggerCondition {
         match self {
             Self::WheneverSelfBlocksCreature { attacker } => attacker.validate(),
             Self::WheneverSelfBecomesBlockedByCreature { blocker } => blocker.validate(),
+            Self::WheneverPermanentEntersBattlefield {
+                permanent_type,
+                creature_filter: Some(filter),
+                ..
+            } => {
+                if *permanent_type != Some(PermanentTypeFilter::Creature) {
+                    return Err(
+                        "permanent-entry creature filter requires permanent_type Creature".into(),
+                    );
+                }
+                if filter.is_empty() {
+                    return Err("permanent-entry creature filter cannot be empty".into());
+                }
+                filter.validate()
+            }
             _ => Ok(()),
         }
     }
@@ -397,18 +416,26 @@ impl TriggerCondition {
     }
 }
 
-/// Derived creature characteristics captured by a discrete trigger event. Required and excluded
-/// keywords compose, supporting Snarespinner (requires flying) and flanking (excludes flanking)
-/// without putting either card-specific rule into the engine.
+/// Derived creature characteristics captured by a discrete trigger event. Keyword and power
+/// predicates compose, supporting Snarespinner (requires flying), flanking (excludes flanking),
+/// Vicious Clown, and Mentor of the Meek without putting card-specific rules into the engine.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct CreatureEventFilter {
     #[serde(default)]
     pub required_keywords: Vec<Keyword>,
     #[serde(default)]
     pub excluded_keywords: Vec<Keyword>,
+    #[serde(default)]
+    pub power: Option<PowerComparison>,
 }
 
 impl CreatureEventFilter {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.required_keywords.is_empty()
+            && self.excluded_keywords.is_empty()
+            && self.power.is_none()
+    }
+
     pub(crate) fn validate(&self) -> Result<(), String> {
         if self
             .required_keywords

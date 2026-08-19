@@ -286,6 +286,7 @@ impl GameEngine {
                             controller,
                             permanent_type,
                             exclude_self,
+                            creature_filter,
                         } = tc
                         else {
                             return false;
@@ -301,7 +302,7 @@ impl GameEngine {
                         if !rel_ok {
                             return false;
                         }
-                        match permanent_type {
+                        let type_matches = match permanent_type {
                             Some(tricerules_cards::PermanentTypeFilter::Creature) => {
                                 entering_characteristics.is_creature()
                             }
@@ -315,7 +316,14 @@ impl GameEngine {
                                 entering_characteristics.has_type("Land")
                             }
                             None => true,
-                        }
+                        };
+                        type_matches
+                            && creature_filter.as_ref().is_none_or(|filter| {
+                                Self::creature_event_filter_matches_characteristics(
+                                    &entering_characteristics,
+                                    filter,
+                                )
+                            })
                     }));
                 }
                 out
@@ -985,15 +993,28 @@ impl GameEngine {
     ) -> bool {
         self.characteristics(object_id)
             .is_some_and(|characteristics| {
-                characteristics.is_creature()
-                    && filter
-                        .required_keywords
-                        .iter()
-                        .all(|keyword| characteristics.has_keyword(*keyword))
-                    && filter
-                        .excluded_keywords
-                        .iter()
-                        .all(|keyword| !characteristics.has_keyword(*keyword))
+                Self::creature_event_filter_matches_characteristics(&characteristics, filter)
+            })
+    }
+
+    fn creature_event_filter_matches_characteristics(
+        characteristics: &Characteristics,
+        filter: &CreatureEventFilter,
+    ) -> bool {
+        characteristics.is_creature()
+            && filter
+                .required_keywords
+                .iter()
+                .all(|keyword| characteristics.has_keyword(*keyword))
+            && filter
+                .excluded_keywords
+                .iter()
+                .all(|keyword| !characteristics.has_keyword(*keyword))
+            && filter.power.is_none_or(|comparison| {
+                characteristics.power.is_some_and(|power| match comparison {
+                    PowerComparison::AtLeast(minimum) => power >= minimum,
+                    PowerComparison::AtMost(maximum) => power <= maximum,
+                })
             })
     }
 

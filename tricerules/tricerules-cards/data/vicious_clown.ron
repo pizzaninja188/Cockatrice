@@ -1,0 +1,21 @@
+// Oracle and rulings checked 2026-08-19. The entrant's power is checked after entry counters and
+// continuous effects apply; later power changes do not create or cancel the trigger (CR 603.2,
+// 603.6a-b, 611.3c).
+(
+  id: "vicious_clown",
+  name: "Vicious Clown",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Human", "Clown"],
+  power: 2,
+  toughness: 3,
+  triggered_abilities: [(
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      permanent_type: Some(Creature),
+      exclude_self: true,
+      creature_filter: Some((power: Some(AtMost(2)))),
+    ),
+    effect: [PumpTarget(power: 2, toughness: 0, subject: Source)],
+    text: "Whenever another creature you control with power 2 or less enters, this creature gets +2/+0 until end of turn.",
+  )],
+)
