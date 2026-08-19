@@ -21,7 +21,7 @@
 //! queried object id. Its owned result and single ordered-effect pass make it straightforward
 //! to memoize later without changing callers.
 
-use super::history::relative_player_set_contains;
+use super::history::{graveyard_aggregate_value, relative_player_set_contains};
 use super::*;
 
 /// The complete rules-visible characteristic snapshot currently modeled for a permanent.
@@ -359,6 +359,16 @@ impl CharacteristicsEvaluator<'_> {
                 condition.matches_value(u32::try_from(count).unwrap_or(u32::MAX))
             }
             GameCondition::BattlefieldAggregate { .. } => false,
+            GameCondition::GraveyardAggregate {
+                owners, aggregate, ..
+            } => condition.matches_value(graveyard_aggregate_value(
+                self.state,
+                self.registry,
+                *owners,
+                *aggregate,
+                controller,
+                None,
+            )),
         }
     }
 

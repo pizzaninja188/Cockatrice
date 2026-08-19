@@ -482,6 +482,37 @@ impl CardDefinition {
         }
     }
 
+    /// The card types this physical card has outside the battlefield and stack. Split cards
+    /// combine both halves; other multiface layouts use only their normal/front face.
+    pub fn card_types_outside_stack(&self) -> Vec<&str> {
+        const CARD_TYPES: [&str; 9] = [
+            "Artifact",
+            "Battle",
+            "Creature",
+            "Enchantment",
+            "Instant",
+            "Kindred",
+            "Land",
+            "Planeswalker",
+            "Sorcery",
+        ];
+
+        CARD_TYPES
+            .into_iter()
+            .filter(|card_type| {
+                if self.layout == Layout::Split {
+                    self.faces_iter()
+                        .any(|face| face.types.iter().any(|value| value == card_type))
+                } else {
+                    self.primary_face()
+                        .types
+                        .iter()
+                        .any(|value| value == card_type)
+                }
+            })
+            .collect()
+    }
+
     /// Whether this physical card has `name` in a zone other than the battlefield or stack.
     /// Split cards have both half names there (CR 709.4); flip, double-faced, and adventurer cards
     /// use only their normal/front face (CR 710.2, 712.8a, 715.4).
@@ -534,6 +565,10 @@ mod tests {
         assert!(split.matches_card_type_outside_stack(CardTypeFilter::Instant));
         assert!(split.matches_card_type_outside_stack(CardTypeFilter::Creature));
         assert!(!split.matches_card_type_outside_stack(CardTypeFilter::Noncreature));
+        assert_eq!(
+            split.card_types_outside_stack(),
+            vec!["Creature", "Instant"]
+        );
 
         for layout in [
             Layout::Adventure,
@@ -545,6 +580,7 @@ mod tests {
             assert!(card.matches_card_type_outside_stack(CardTypeFilter::Creature));
             assert!(!card.matches_card_type_outside_stack(CardTypeFilter::Instant));
             assert!(!card.matches_card_type_outside_stack(CardTypeFilter::InstantOrSorcery));
+            assert_eq!(card.card_types_outside_stack(), vec!["Creature"]);
         }
     }
 

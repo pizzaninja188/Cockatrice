@@ -70,6 +70,7 @@ impl GameEngine {
                     .get(&source_oid)
                     .copied()
                     .unwrap_or(0),
+                resolving_spell_id: None,
             },
         )
     }

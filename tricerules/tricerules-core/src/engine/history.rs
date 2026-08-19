@@ -17,6 +17,37 @@ pub(super) fn relative_player_set_contains(
     }
 }
 
+pub(super) fn graveyard_aggregate_value(
+    state: &GameState,
+    registry: &CardRegistry,
+    owners: RelativePlayerSet,
+    aggregate: GraveyardAggregate,
+    controller: PlayerId,
+    resolving_spell_id: Option<ObjectId>,
+) -> u32 {
+    let definitions: Vec<_> = state
+        .players
+        .iter()
+        .filter(|player| relative_player_set_contains(state, owners, controller, player.id))
+        .flat_map(|player| player.graveyard.iter().copied())
+        .filter(|oid| Some(*oid) != resolving_spell_id)
+        .filter_map(|oid| state.objects.get(&oid))
+        .filter(|object| object.zone == Zone::Graveyard && !object.is_token(registry))
+        .filter_map(|object| registry.get(&object.card_id))
+        .collect();
+
+    match aggregate {
+        GraveyardAggregate::CardCount => clamp_public_count(definitions.len()),
+        GraveyardAggregate::DistinctCardTypes => clamp_public_count(
+            definitions
+                .iter()
+                .flat_map(|definition| definition.card_types_outside_stack())
+                .collect::<HashSet<_>>()
+                .len(),
+        ),
+    }
+}
+
 impl GameEngine {
     /// Record a committed simultaneous event set. This is deliberately separate from trigger
     /// matching: transactional cast/activation checks may collect prospective triggers, but turn
@@ -77,6 +108,16 @@ impl GameEngine {
                 filter, aggregate, ..
             } => condition
                 .matches_value(self.battlefield_aggregate_value(filter, *aggregate, context)),
+            GameCondition::GraveyardAggregate {
+                owners, aggregate, ..
+            } => condition.matches_value(graveyard_aggregate_value(
+                &self.state,
+                self.registry,
+                *owners,
+                *aggregate,
+                context.controller,
+                context.resolving_spell_id,
+            )),
         }
     }
 
@@ -204,6 +245,7 @@ impl GameEngine {
                         controller: context.controller,
                         source_object_id: context.source_object_id,
                         source_zone_change: context.source_zone_change,
+                        resolving_spell_id: context.resolving_spell_id,
                     },
                 ) {
                     *when_true
@@ -295,12 +337,66 @@ mod tests {
         oid
     }
 
+    fn move_to_graveyard(engine: &mut GameEngine, player: usize, card_id: &str) -> ObjectId {
+        let player_id = engine.state.players[player].id;
+        let oid = engine
+            .state
+            .objects
+            .values()
+            .find(|object| object.owner == player_id && object.card_id == card_id)
+            .expect("deck object")
+            .id;
+        engine.state.players[player]
+            .hand
+            .retain(|candidate| *candidate != oid);
+        engine.state.players[player]
+            .library
+            .retain(|candidate| *candidate != oid);
+        engine.state.players[player].graveyard.push(oid);
+        engine.state.objects.get_mut(&oid).expect("object").zone = Zone::Graveyard;
+        oid
+    }
+
     #[test]
     fn public_counts_saturate_at_the_wire_sized_amount_limit() {
         assert_eq!(clamp_public_count(7), 7);
         if usize::BITS > u32::BITS {
             assert_eq!(clamp_public_count(usize::MAX), u32::MAX);
         }
+    }
+
+    #[test]
+    fn graveyard_aggregate_excludes_the_spell_that_is_still_resolving() {
+        let decks = Some(vec![
+            deck_with_cards(&["growth_cycle"], "forest"),
+            deck_with_cards(&[], "island"),
+        ]);
+        let mut engine = GameEngine::new(108_010, &[0, 1], 20, decks, true).expect("engine");
+        let resolving_spell = move_to_graveyard(&mut engine, 0, "growth_cycle");
+
+        assert_eq!(
+            graveyard_aggregate_value(
+                &engine.state,
+                engine.registry,
+                RelativePlayerSet::Controller,
+                GraveyardAggregate::CardCount,
+                0,
+                None,
+            ),
+            1
+        );
+        assert_eq!(
+            graveyard_aggregate_value(
+                &engine.state,
+                engine.registry,
+                RelativePlayerSet::Controller,
+                GraveyardAggregate::CardCount,
+                0,
+                Some(resolving_spell),
+            ),
+            0,
+            "CR 608.2n does not count the resolving spell as already in its graveyard"
+        );
     }
 
     #[test]
@@ -323,6 +419,7 @@ mod tests {
             controller: 0,
             source_object_id: angel,
             source_zone_change: 0,
+            resolving_spell_id: None,
         };
 
         assert_eq!(engine.effective_power(bear), Some(2));

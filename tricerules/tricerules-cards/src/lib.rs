@@ -13,9 +13,10 @@ pub use primitives::{
     AbilityCost, ActivatedAbilityDef, ActivationCondition, ActivationTiming, AdditionalCost,
     Amount, BattlefieldAggregate, BattlefieldCreatureCountFilter, BattlefieldPermanentFilter,
     CastTriggerPlayer, Color, ConditionalManaOutput, ContinuousEffectKind, ControllerReference,
-    CountExpression, CounterKind, EffectContext, EffectDuration, Evasion, GameCondition, Keyword,
-    ManaAmount, ManaSpendFilter, ManaSpendingRestriction, PermanentTypeFilter, PtScale,
-    RelativePlayerSet, SpellCostModifier, TriggerCondition, TriggeredAbilityDef, TypeLineAddition,
+    CountExpression, CounterKind, EffectContext, EffectDuration, Evasion, GameCondition,
+    GraveyardAggregate, Keyword, ManaAmount, ManaSpendFilter, ManaSpendingRestriction,
+    PermanentTypeFilter, PtScale, RelativePlayerSet, SpellCostModifier, TriggerCondition,
+    TriggeredAbilityDef, TypeLineAddition,
 };
 pub use registry::CardRegistry;
 pub use slug::slugify;

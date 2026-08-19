@@ -849,6 +849,7 @@ impl GameEngine {
                 .get(&source_oid)
                 .copied()
                 .unwrap_or(0),
+            resolving_spell_id: None,
         };
         modifiers
             .iter()
@@ -1367,6 +1368,7 @@ impl GameEngine {
                                 .get(&permanent_id)
                                 .copied()
                                 .unwrap_or(0),
+                            resolving_spell_id: None,
                         },
                     )
                 })
@@ -2073,6 +2075,7 @@ impl GameEngine {
                             .get(&permanent_id)
                             .copied()
                             .unwrap_or(0),
+                        resolving_spell_id: None,
                     },
                 ),
             tricerules_cards::ActivationCondition::BattlefieldCreatureCount {

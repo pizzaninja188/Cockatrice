@@ -1069,6 +1069,7 @@ impl GameEngine {
                             .copied()
                             .unwrap_or(0)
                     }),
+                    resolving_spell_id: None,
                 },
             ),
         }

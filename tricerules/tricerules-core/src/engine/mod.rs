@@ -26,13 +26,14 @@ use tricerules_cards::primitives::{
     CountExpression, CounterKind, CreatureEventFilter, CreatureScopeController,
     CreatureScopeFilter, DamageDivision, DamagePreventionAdditionalEffect, DamagePreventionSubject,
     DiscardChooser, DrawDiscardOrder, EffectDuration, EffectSubject, EntersTappedAffected, Evasion,
-    FaceChangeAction, GameCondition, InterveningIf, Keyword, LibraryBottomOrder, LibraryPlacement,
-    LifeAmount, ManaAmount, ManaSpendFilter, PermanentTypeFilter, PlayerRecipient, PowerComparison,
-    PreventionAmountBasis, ProtectionCardType, ProtectionGrant, ProtectionQuality,
-    RelativePlayerSet, ResolutionBranchDef, ResolutionCost, ReturnController, SearchDestination,
-    SpellCostModifier, SpellEffectKind, StaticAbilityDef, StaticDamagePreventionAmount,
-    TargetController, TargetFilter, TargetKind, TargetingCostAction, TargetingCostProtected,
-    TargetingSourceFilter, TriggerCondition, TriggeredAbilityDef, TriggeredCardReference,
+    FaceChangeAction, GameCondition, GraveyardAggregate, InterveningIf, Keyword,
+    LibraryBottomOrder, LibraryPlacement, LifeAmount, ManaAmount, ManaSpendFilter,
+    PermanentTypeFilter, PlayerRecipient, PowerComparison, PreventionAmountBasis,
+    ProtectionCardType, ProtectionGrant, ProtectionQuality, RelativePlayerSet, ResolutionBranchDef,
+    ResolutionCost, ReturnController, SearchDestination, SpellCostModifier, SpellEffectKind,
+    StaticAbilityDef, StaticDamagePreventionAmount, TargetController, TargetFilter, TargetKind,
+    TargetingCostAction, TargetingCostProtected, TargetingSourceFilter, TriggerCondition,
+    TriggeredAbilityDef, TriggeredCardReference,
 };
 use tricerules_cards::{CardFace, CardRegistry, FaceRef, Layout};
 use tricerules_proto::ruled::v1 as rv1;
@@ -103,6 +104,7 @@ struct ConditionContext {
     controller: PlayerId,
     source_object_id: ObjectId,
     source_zone_change: u64,
+    resolving_spell_id: Option<ObjectId>,
 }
 
 mod casting;

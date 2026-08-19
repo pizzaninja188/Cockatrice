@@ -176,6 +176,25 @@ mod tests {
     }
 
     #[test]
+    fn graveyard_aggregate_condition_requires_valid_bounds_and_round_trips() {
+        let condition = |min, max| GameCondition::GraveyardAggregate {
+            owners: RelativePlayerSet::Controller,
+            aggregate: GraveyardAggregate::DistinctCardTypes,
+            min,
+            max,
+        };
+        assert!(condition(None, None).validate().is_err());
+        assert!(condition(Some(4), Some(3)).validate().is_err());
+
+        let delirium = condition(Some(4), None);
+        delirium.validate().expect("valid delirium condition");
+        let serialized = ron::to_string(&delirium).expect("serialize delirium condition");
+        let decoded: GameCondition =
+            ron::from_str(&serialized).expect("deserialize delirium condition");
+        assert_eq!(decoded, delirium);
+    }
+
+    #[test]
     fn activation_conditions_require_valid_count_bounds() {
         let condition = |min, max| ActivationCondition::BattlefieldCreatureCount {
             filter: BattlefieldCreatureCountFilter {
