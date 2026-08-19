@@ -69,9 +69,10 @@ These apply to all work from now on, refactor or not.
   (`equipment.rs`, `regenerate.rs`).
 - Move the stale root working notes into `docs/` with a one-line status header each:
   `issues.md`, `AUTOMATION_STATUS.md`, `engine-and-scenario-module-split-plan.md`,
-  the copy-effects and multiface working plans (their remaining work now lives in `issues.md`).
-  Delete any whose work fully landed. Root keeps `README.md` + `AGENTS.md` + the `CLAUDE.md`
-  pointer.
+  the copy-effects and multiface working plans. Delete any whose work fully landed. The active
+  task tracker later moved from `docs/issues.md` to the fork's GitHub Issues, and the obsolete
+  unattended-automation status file was retired. Root keeps `README.md` + `AGENTS.md` + the
+  `CLAUDE.md` pointer.
 - Leave `doc/carddatabase_v3|v4` and `webclient/` alone — upstream content; deleting them
   creates permanent merge conflicts for zero benefit.
 
