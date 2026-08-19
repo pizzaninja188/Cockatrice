@@ -26,8 +26,33 @@ pub struct ActivatedAbilityDef {
     /// instructions, not intervening-if clauses, and are not checked again on resolution.
     #[serde(default)]
     pub conditions: Vec<ActivationCondition>,
+    /// Maximum successful activations allowed for this object identity in a turn.
+    #[serde(default)]
+    pub activation_limit: Option<ActivationLimit>,
     /// Oracle-style ability text shown as annotation on the stack card.
     pub text: String,
+}
+
+/// A public CR 602.5 activation restriction attached to one activated ability.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ActivationLimit {
+    /// The count resets only when the current turn actually ends.
+    PerTurn { max_activations: u32 },
+}
+
+impl ActivationLimit {
+    pub fn max_activations(self) -> u32 {
+        match self {
+            Self::PerTurn { max_activations } => max_activations,
+        }
+    }
+
+    fn validate(self) -> Result<(), String> {
+        if self.max_activations() == 0 {
+            return Err("activation limit must allow at least one activation".into());
+        }
+        Ok(())
+    }
 }
 
 /// Extra timing imposed by an activated ability's instructions.
@@ -146,6 +171,9 @@ impl ActivatedAbilityDef {
         }
         for condition in &self.conditions {
             condition.validate()?;
+        }
+        if let Some(limit) = self.activation_limit {
+            limit.validate()?;
         }
         if self
             .costs

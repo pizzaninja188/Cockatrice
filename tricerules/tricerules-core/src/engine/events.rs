@@ -400,7 +400,7 @@ impl GameEngine {
                         let activated_abilities = self
                             .effective_activated_abilities(oid)
                             .into_iter()
-                            .map(|(_, ability, _)| {
+                            .map(|(ability_index, ability, _)| {
                                 let mana_cost = ability
                                     .costs
                                     .iter()
@@ -438,7 +438,11 @@ impl GameEngine {
                                     mana_cost,
                                     mana_produced,
                                     cost_label,
-                                    activatable: self.ability_activatable(oid, &ability),
+                                    activatable: self.ability_activatable(
+                                        oid,
+                                        ability_index,
+                                        &ability,
+                                    ),
                                 }
                             })
                             .collect();
@@ -578,6 +582,7 @@ impl GameEngine {
         BattlefieldViewSnapshot {
             players,
             continuous_effects: self.state.continuous_effects.clone(),
+            activation_uses_this_turn: self.state.activation_uses_this_turn.clone(),
             turn_history: self.state.turn_history,
             active_player: self.state.active_player_id(),
             turn_step: self.state.turn_step,

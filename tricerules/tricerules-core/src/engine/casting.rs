@@ -1598,12 +1598,16 @@ impl GameEngine {
         if !self.activation_conditions_hold(permanent_id, &ability) {
             return Err(EngineError::Illegal("activation condition not met"));
         }
+        if !self.activation_limit_allows(permanent_id, ability_index, &ability) {
+            return Err(EngineError::Illegal("activation limit reached"));
+        }
 
         if ability.mana_options().is_some() {
             let mut batch = self.resolve_mana_ability(
                 player,
                 idx,
                 permanent_id,
+                ability_index,
                 &card_id,
                 &ability,
                 mana_option_index,
@@ -1658,6 +1662,9 @@ impl GameEngine {
             .unwrap_or(0);
         let targeting_cost =
             self.targeting_cost_increase(player, TargetingCostAction::ActivatedAbilities, targets);
+        let activation_use_key = ability
+            .activation_limit
+            .map(|_| self.activation_use_key(permanent_id, ability_index));
         let payment = self.pay_ability_costs(
             player,
             idx,
@@ -1668,6 +1675,7 @@ impl GameEngine {
             restricted_mana,
             targeting_cost,
         )?;
+        self.record_limited_activation(activation_use_key);
 
         let ability_text = ability.text.clone();
         let card_name = self
@@ -2025,6 +2033,7 @@ impl GameEngine {
     pub(super) fn ability_activatable(
         &self,
         permanent_id: ObjectId,
+        ability_index: usize,
         ability: &tricerules_cards::ActivatedAbilityDef,
     ) -> bool {
         let Some(object) = self.state.objects.get(&permanent_id) else {
@@ -2038,6 +2047,9 @@ impl GameEngine {
         if !self.activation_conditions_hold(permanent_id, ability) {
             return false;
         }
+        if !self.activation_limit_allows(permanent_id, ability_index, ability) {
+            return false;
+        }
         if ability
             .costs
             .iter()
@@ -2047,6 +2059,51 @@ impl GameEngine {
             return false;
         }
         true
+    }
+
+    fn activation_use_key(&self, permanent_id: ObjectId, ability_index: usize) -> ActivationUseKey {
+        ActivationUseKey {
+            object_id: permanent_id,
+            zone_change_generation: self
+                .state
+                .zone_change_generation
+                .get(&permanent_id)
+                .copied()
+                .unwrap_or(0),
+            face_change_generation: self
+                .state
+                .face_change_generation
+                .get(&permanent_id)
+                .copied()
+                .unwrap_or(0),
+            ability_index,
+        }
+    }
+
+    fn activation_limit_allows(
+        &self,
+        permanent_id: ObjectId,
+        ability_index: usize,
+        ability: &tricerules_cards::ActivatedAbilityDef,
+    ) -> bool {
+        let Some(limit) = ability.activation_limit else {
+            return true;
+        };
+        let key = self.activation_use_key(permanent_id, ability_index);
+        self.state
+            .activation_uses_this_turn
+            .get(&key)
+            .copied()
+            .unwrap_or(0)
+            < limit.max_activations()
+    }
+
+    fn record_limited_activation(&mut self, key: Option<ActivationUseKey>) {
+        let Some(key) = key else {
+            return;
+        };
+        let count = self.state.activation_uses_this_turn.entry(key).or_insert(0);
+        *count = count.saturating_add(1);
     }
 
     fn activation_conditions_hold(
@@ -2123,6 +2180,7 @@ impl GameEngine {
         player: PlayerId,
         idx: usize,
         permanent_id: ObjectId,
+        ability_index: usize,
         card_id: &str,
         ability: &tricerules_cards::ActivatedAbilityDef,
         mana_option_index: u32,
@@ -2141,6 +2199,9 @@ impl GameEngine {
             .get(mana_option_index as usize)
             .copied()
             .ok_or(EngineError::Illegal("invalid mana option"))?;
+        let activation_use_key = ability
+            .activation_limit
+            .map(|_| self.activation_use_key(permanent_id, ability_index));
 
         let payment = self.pay_ability_costs(
             player,
@@ -2152,6 +2213,7 @@ impl GameEngine {
             restricted_mana,
             0,
         )?;
+        self.record_limited_activation(activation_use_key);
 
         let restriction_group_id = ability.mana_restriction().map(|restriction| {
             if let Some(position) = self
@@ -2458,6 +2520,42 @@ mod mana_payment_tests {
             ]),
             " discarding Mountain, sacrificing Grizzly Bears, and sacrificing Hill Giant"
         );
+    }
+
+    #[test]
+    fn activation_limit_counts_are_independent_per_effective_ability_index() {
+        let mut engine = engine_with_priority();
+        let object_id = engine.state.players[0].library[0];
+        let ability = CardRegistry::global()
+            .get("temur_devotee")
+            .expect("Temur Devotee must be registered")
+            .primary_face()
+            .activated_abilities[0]
+            .clone();
+
+        assert!(engine.activation_limit_allows(object_id, 0, &ability));
+        assert!(engine.activation_limit_allows(object_id, 1, &ability));
+        let key = engine.activation_use_key(object_id, 0);
+        engine.record_limited_activation(Some(key));
+        assert!(!engine.activation_limit_allows(object_id, 0, &ability));
+        assert!(engine.activation_limit_allows(object_id, 1, &ability));
+    }
+
+    #[test]
+    fn limited_activation_records_the_pre_cost_object_identity() {
+        let mut engine = engine_with_priority();
+        let object_id = engine.state.players[0].library[0];
+        let key_before_costs = engine.activation_use_key(object_id, 0);
+
+        *engine
+            .state
+            .zone_change_generation
+            .entry(object_id)
+            .or_insert(0) += 1;
+        engine.record_limited_activation(Some(key_before_costs));
+
+        assert_eq!(engine.state.activation_uses_this_turn[&key_before_costs], 1);
+        assert_ne!(engine.activation_use_key(object_id, 0), key_before_costs);
     }
 
     #[test]

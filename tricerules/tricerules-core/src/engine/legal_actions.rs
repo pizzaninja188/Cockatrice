@@ -62,8 +62,10 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                                 .eligible_restricted_mana_for_ability(idx, poid),
                         },
                     );
-                    cost_choices_by_ability
-                        .insert(key, legal_ability_cost_choices(eng, p.id, poid, &ability));
+                    cost_choices_by_ability.insert(
+                        key,
+                        legal_ability_cost_choices(eng, p.id, poid, ai, &ability),
+                    );
                     if ability.effect.iter().any(spell_effect_kind_needs_target) {
                         let targets = compute_ability_targets(
                             eng,
@@ -222,6 +224,7 @@ fn legal_ability_cost_choices(
     eng: &GameEngine,
     player: PlayerId,
     source: ObjectId,
+    ability_index: usize,
     ability: &tricerules_cards::ActivatedAbilityDef,
 ) -> rv1::LegalCostChoices {
     let Some(player_idx) = eng.state.player_idx(player) else {
@@ -230,7 +233,7 @@ fn legal_ability_cost_choices(
     let mut choices = vec![];
     let mut assignment_candidates = vec![];
     let mut consumed = HashSet::new();
-    let mut structurally_payable = eng.ability_activatable(source, ability);
+    let mut structurally_payable = eng.ability_activatable(source, ability_index, ability);
 
     for (cost_index, cost) in ability.costs.iter().enumerate() {
         match cost {

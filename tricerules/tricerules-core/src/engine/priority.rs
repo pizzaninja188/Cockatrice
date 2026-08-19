@@ -556,6 +556,7 @@ impl GameEngine {
         }
         self.state.cleanup_priority_active = false;
         self.state.lands_played_this_turn = 0;
+        self.state.activation_uses_this_turn.clear();
         self.state.turn_history.finish_turn();
         let n = self.state.players.len();
         if n >= 1 {

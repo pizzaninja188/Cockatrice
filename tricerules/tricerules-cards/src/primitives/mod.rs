@@ -246,6 +246,7 @@ mod tests {
             targeting: None,
             timing: ActivationTiming::SorcerySpeed,
             conditions: vec![],
+            activation_limit: None,
             text: String::new(),
         };
         assert!(explicit.requires_sorcery_speed());
@@ -258,9 +259,31 @@ mod tests {
             targeting: None,
             timing: ActivationTiming::Normal,
             conditions: vec![],
+            activation_limit: None,
             text: String::new(),
         };
         assert!(equip.requires_sorcery_speed());
+    }
+
+    #[test]
+    fn activation_limit_rejects_zero_maximum() {
+        let ability = ActivatedAbilityDef {
+            costs: vec![],
+            effect: vec![SpellEffectKind::ProduceMana {
+                options: vec![ManaAmount {
+                    g: 1,
+                    ..Default::default()
+                }],
+                restriction: None,
+                conditional: None,
+            }],
+            targeting: None,
+            timing: ActivationTiming::Normal,
+            conditions: vec![],
+            activation_limit: Some(ActivationLimit::PerTurn { max_activations: 0 }),
+            text: "Add {G}.".into(),
+        };
+        assert!(ability.validate_shape().is_err());
     }
 
     #[test]

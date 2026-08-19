@@ -12,6 +12,15 @@ use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
 pub type PlayerId = i32;
 pub type ObjectId = u32;
 
+/// The exact activated ability on the exact incarnation of a permanent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ActivationUseKey {
+    pub object_id: ObjectId,
+    pub zone_change_generation: u64,
+    pub face_change_generation: u64,
+    pub ability_index: usize,
+}
+
 /// Generation-aware identity for the distinct permanent observed by a trigger event. The
 /// controller snapshot supplies CR 608.2h last known information if that permanent is gone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -862,6 +871,9 @@ pub struct GameState {
     pub passes_since_stack_change: u32,
     /// Number of lands played from hand this turn; compared against max (1 + extra land plays).
     pub lands_played_this_turn: u32,
+    /// Successful limited activations in the current turn, keyed to full object and ability
+    /// identity. Control changes do not affect the key (CR 602.5b).
+    pub activation_uses_this_turn: HashMap<ActivationUseKey, u32>,
     pub turn_history: TurnHistory,
     /// Active combat, if in declare/damage
     pub combat: Option<CombatState>,

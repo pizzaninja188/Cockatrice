@@ -2,15 +2,16 @@
 
 use crate::custom::{self, ResolutionChoice, ResolutionCtx, ResolutionStep};
 use crate::state::{
-    ActiveDamagePrevention, ActiveDelayedTrigger, AdventureCastPermission, AffectedScope,
-    AttachmentRecipient, BattlefieldEntryCompletion, BattlefieldEntryEvent, BlockingChoice,
-    ChosenMode, CombatState, ContinuousEffect, CopiableValues, DamagePreventionAmount,
-    DamagePreventionProhibition, DamagePreventionScope, EntryReplacementApplication,
-    EntryReplacementEffectId, GameObject, GameState, ObjectId, OpeningSequence,
-    PendingBattlefieldEntry, PendingDiscard, PendingManaPayment, PendingResolution, PendingTrigger,
-    PendingTriggerOrder, PlayerId, PlayerState, ReplacementPriority, StackItem, StackTarget,
-    StagedTrigger, StagedTriggerGroup, TokenBattlefieldEntry, TriggerContext, TriggerObjectRef,
-    TurnHistory, TurnStep, UndoableManaAbility, Zone,
+    ActivationUseKey, ActiveDamagePrevention, ActiveDelayedTrigger, AdventureCastPermission,
+    AffectedScope, AttachmentRecipient, BattlefieldEntryCompletion, BattlefieldEntryEvent,
+    BlockingChoice, ChosenMode, CombatState, ContinuousEffect, CopiableValues,
+    DamagePreventionAmount, DamagePreventionProhibition, DamagePreventionScope,
+    EntryReplacementApplication, EntryReplacementEffectId, GameObject, GameState, ObjectId,
+    OpeningSequence, PendingBattlefieldEntry, PendingDiscard, PendingManaPayment,
+    PendingResolution, PendingTrigger, PendingTriggerOrder, PlayerId, PlayerState,
+    ReplacementPriority, StackItem, StackTarget, StagedTrigger, StagedTriggerGroup,
+    TokenBattlefieldEntry, TriggerContext, TriggerObjectRef, TurnHistory, TurnStep,
+    UndoableManaAbility, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -410,6 +411,7 @@ struct PrivateZoneSnapshot {
 struct BattlefieldViewSnapshot {
     players: Vec<PlayerBattlefieldSnapshot>,
     continuous_effects: Vec<ContinuousEffect>,
+    activation_uses_this_turn: HashMap<ActivationUseKey, u32>,
     turn_history: TurnHistory,
     active_player: PlayerId,
     turn_step: TurnStep,
@@ -647,6 +649,7 @@ impl GameEngine {
             command_index: 0,
             passes_since_stack_change: 0,
             lands_played_this_turn: 0,
+            activation_uses_this_turn: HashMap::new(),
             turn_history: TurnHistory::default(),
             combat: None,
             winner: None,
