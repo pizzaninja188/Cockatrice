@@ -8,16 +8,16 @@ mechanic-heavy recent premier sets. The committed row-level evidence is
 
 | Classification | Cards | Rate |
 |---|---:|---:|
-| Fully implementable now | 64 | 35.6% |
-| Partially implementable now | 55 | 30.6% |
-| Full or partial | 119 | 66.1% |
-| Blocked | 61 | 33.9% |
+| Fully implementable now | 62 | 34.4% |
+| Partially implementable now | 56 | 31.1% |
+| Full or partial | 118 | 65.6% |
+| Blocked | 62 | 34.4% |
 | **Total** | **180** | **100.0%** |
 
-The combined rate is almost unchanged from the first calibration (66.1% versus 65.0%), but this
+The combined rate is almost unchanged from the first calibration (65.6% versus 65.0%), but this
 is not a paired trend comparison: the first sample used M19–M21 commons, while this sample
 deliberately mixes a core-like control with two recent set-mechanic stress tests. The useful result
-is the shape. Foundations is already 58.3% fully data-authorable; Duskmourn and Tarkir:
+is the shape. Foundations is already 55.0% fully data-authorable; Duskmourn and Tarkir:
 Dragonstorm expose the zone, face-state, casting-mode, and turn-event systems that now limit
 coverage.
 
@@ -25,7 +25,7 @@ By stratum:
 
 | Set | Full | Partial | Blocked | Total |
 |---|---:|---:|---:|---:|
-| Foundations (FDN) | 35 | 12 | 13 | 60 |
+| Foundations (FDN) | 33 | 13 | 14 | 60 |
 | Duskmourn: House of Horror (DSK) | 11 | 22 | 27 | 60 |
 | Tarkir: Dragonstorm (TDM) | 18 | 21 | 21 | 60 |
 
@@ -34,6 +34,10 @@ By stratum:
 - **Rules capability baseline:** `master` at
   `459c0ab20fe078bd98af962196892be5892b7d94`, with 1,026 full and 17 partial card names in
   the generated registry checklist.
+- **Snapshot immutability:** this report and its CSV are historical evidence at that capability
+  baseline after audited classification corrections. Later implementation status belongs in
+  [`tricerules/CARDS.md`](../tricerules/CARDS.md) or a separately named calibration refresh; do
+  not rewrite these rows as capabilities are implemented.
 - **Oracle retrieval:** Scryfall card search, 2026-08-19 04:48 UTC, with
   `unique=cards&order=name` and one query per set:
   `set:<fdn|dsk|tdm> rarity:common game:paper is:booster lang:en`.
@@ -76,11 +80,11 @@ The ready full-data families are:
 
 | Existing family | Full cards |
 |---|---:|
-| Simple triggered creatures | 29 |
+| Simple triggered creatures | 28 |
 | Activated creatures | 8 |
 | Temporary abilities and combat modifiers | 5 |
 | Equipment and Auras | 4 |
-| Draw/discard sequences | 3 |
+| Draw/discard sequences | 2 |
 | Mana permanents | 2 |
 | Combat tricks | 2 |
 | Targeted removal | 2 |
@@ -103,6 +107,7 @@ The leading measured gaps are:
 | Mobilize | 4 | 3 | #106 |
 | Rooms and Room events/state | 9 | 8 | #99 |
 | Graveyard card actions | 10 | 4 | #107 |
+| Untargeted player-set discard/results | 3 | 3 | #121 |
 
 The CSV contains 63 raw primary/secondary labels. They are normalized into existing Issue #72
 and Issues #96–#129. The tracker groups shared substrate rather than creating one issue per card:
@@ -155,7 +160,7 @@ Full raw-label traceability:
 
 As in the first calibration, compare capped immediate yield:
 
-- **Data yield:** `min(20, 29 simple triggered creatures) = 20`.
+- **Data yield:** `min(20, 28 simple triggered creatures) = 20`.
 - **Primitive yield:** `min(20, 8 entry-replacement sole-gap cards) = 8` (seven conditional
   enters-tapped lands plus Dragonstorm Globe's filtered global counter replacement).
 
@@ -165,24 +170,30 @@ selection-hash order:
 
 1. Watcher of the Wayside
 2. Sanguine Syphoner
-3. Burglar Rat
-4. Flesh Burrower
-5. Prideful Parent
-6. Apothecary Stomper
-7. Elfsworn Giant
-8. Helpful Hunter
-9. Kin-Tree Nurturer
-10. Dusyut Earthcarver
-11. Sandskitter Outrider
-12. Beast-Kin Ranger
-13. Dwynen's Elite
-14. Humbling Elder
-15. Reputable Merchant
-16. Delta Bloodflies
-17. Iceridge Serpent
-18. Felidar Savior
-19. Infestation Sage
-20. Summit Intimidator
+3. Flesh Burrower
+4. Prideful Parent
+5. Apothecary Stomper
+6. Elfsworn Giant
+7. Helpful Hunter
+8. Kin-Tree Nurturer
+9. Dusyut Earthcarver
+10. Sandskitter Outrider
+11. Beast-Kin Ranger
+12. Dwynen's Elite
+13. Humbling Elder
+14. Reputable Merchant
+15. Delta Bloodflies
+16. Iceridge Serpent
+17. Felidar Savior
+18. Infestation Sage
+19. Summit Intimidator
+20. Underfoot Underdogs
+
+Underfoot Underdogs remains fully authorable after a current-code re-check. Its ETB uses the
+existing red 1/1 Goblin token, and its activated ability composes the shared mana-plus-tap cost,
+controller-relative `AtMost(2)` power target filter, and chosen-creature `cant_be_blocked`
+restriction. The shared target path revalidates power on resolution, while the resolved combat
+restriction remains in force if that creature's power later increases, matching its ruling.
 
 ## Interaction-checklist closeout
 

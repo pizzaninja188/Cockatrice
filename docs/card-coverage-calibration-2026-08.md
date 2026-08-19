@@ -34,6 +34,9 @@ By stratum:
   including the expected post-merge capabilities of pending Issue #48 at
   `d4365cf629d7a0c743387305ec9393153e8927ec`. Issue #48 changes damage prevention and no card in
   this sample's registry-status exclusion set.
+- **Snapshot immutability:** this report and its CSV are historical evidence at that capability
+  baseline. Later implementation status belongs in [`tricerules/CARDS.md`](../tricerules/CARDS.md)
+  or a separately named calibration refresh; do not rewrite these baseline classifications.
 - **Oracle retrieval:** Scryfall card search, 2026-08-09 10:15:16–10:15:17 UTC, with
   `unique=cards&order=name` and one query per set:
   `set:<m19|m20|m21> rarity:common game:paper is:booster lang:en`.
