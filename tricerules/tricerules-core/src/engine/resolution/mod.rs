@@ -12,8 +12,6 @@ use super::targeting::{
     target_filter_legal_at_resolution, target_group_bindings, TargetSourceIdentity,
 };
 use super::*;
-use rand::seq::SliceRandom;
-use rand::SeedableRng;
 use tricerules_cards::primitives::TargetingDef;
 
 mod choices;

@@ -2007,21 +2007,25 @@ fn inject_card_into_hand(e: &mut GameEngine, player: usize, player_id: i32, card
     id
 }
 
-#[test]
-fn hymn_to_tourach_discards_two_random_cards() {
+fn resolve_hymn_random_discard(random_seed: u64, affected_player: i32) -> Vec<String> {
     let decks = Some(vec![
         deck_with("swamp", &["hymn_to_tourach"]),
         vec!["forest".into(); 20],
     ]);
-    let mut e = GameEngine::new(3000, &[0, 1], 20, decks, true).expect("new");
+    // Keep setup and the accepted command sequence identical so the selected objects can differ
+    // only through the random domain under test.
+    let mut e = GameEngine::new(3000, &[0, affected_player], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
 
-    // Inject 3 specific cards into P1's hand so we have a controlled count.
-    inject_card_into_hand(&mut e, 1, 1, "grizzly_bears");
-    inject_card_into_hand(&mut e, 1, 1, "storm_crow");
-    inject_card_into_hand(&mut e, 1, 1, "grizzly_bears");
-    let hand_before = e.state.players[1].hand.len();
+    let cleared: Vec<_> = e.state.players[1].hand.drain(..).collect();
+    e.state.players[1].library.extend(cleared);
+    let controlled_hand = ["plains", "island", "swamp", "mountain"]
+        .into_iter()
+        .map(|card_id| inject_card_into_hand(&mut e, 1, affected_player, card_id))
+        .collect::<Vec<_>>();
+    assert_eq!(e.state.players[1].hand, controlled_hand);
     let grave_before = e.state.players[1].graveyard.len();
+    e.state.seed = random_seed;
 
     relocate_to_hand(&mut e, 0, "hymn_to_tourach");
     give_mana(
@@ -2033,21 +2037,62 @@ fn hymn_to_tourach_discards_two_random_cards() {
         },
     );
     let hymn_idx = hand_index_for_card(&e, 0, "hymn_to_tourach");
-    e.apply_command(0, &cast_spell(hymn_idx, target_player(1)))
+    e.apply_command(0, &cast_spell(hymn_idx, target_player(affected_player)))
         .expect("cast hymn");
     e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass())
-        .expect("p1 pass — hymn resolves");
+    e.apply_command(affected_player, &pass())
+        .expect("affected player pass — hymn resolves");
 
-    assert_eq!(
-        e.state.players[1].hand.len(),
-        hand_before - 2,
-        "P1 discarded 2 cards"
-    );
     assert_eq!(
         e.state.players[1].graveyard.len(),
         grave_before + 2,
-        "2 cards in graveyard"
+        "exactly two cards move to the affected player's graveyard"
+    );
+    let discarded = controlled_hand
+        .iter()
+        .copied()
+        .filter(|oid| e.state.players[1].graveyard.contains(oid))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        discarded.len(),
+        2,
+        "random discard selects only from the controlled affected-player hand"
+    );
+    discarded
+        .into_iter()
+        .map(|oid| e.state.objects[&oid].card_id.clone())
+        .collect()
+}
+
+#[test]
+fn hymn_to_tourach_random_discard_is_replay_stable_and_hand_bounded() {
+    assert_eq!(
+        resolve_hymn_random_discard(13_800, 11),
+        resolve_hymn_random_discard(13_800, 11),
+        "the same seed, affected player, hand, and command sequence select the same objects"
+    );
+}
+
+#[test]
+fn hymn_to_tourach_random_discard_uses_game_seed() {
+    let selections = (13_800..=13_807)
+        .map(|seed| resolve_hymn_random_discard(seed, 11))
+        .collect::<std::collections::BTreeSet<_>>();
+    assert!(
+        selections.len() > 1,
+        "fixed different game seeds must not all select the same hand positions"
+    );
+}
+
+#[test]
+fn hymn_to_tourach_random_discard_uses_affected_player_id() {
+    let selections = [11, 17, 23, 29]
+        .into_iter()
+        .map(|affected_player| resolve_hymn_random_discard(13_800, affected_player))
+        .collect::<std::collections::BTreeSet<_>>();
+    assert!(
+        selections.len() > 1,
+        "fixed different affected-player IDs must not all select the same hand positions"
     );
 }
 
@@ -2082,7 +2127,7 @@ fn hymn_to_tourach_discards_all_when_hand_smaller_than_count() {
     e.apply_command(1, &pass())
         .expect("p1 pass — hymn resolves");
 
-    // CR 701.7a: if the player has fewer cards than count, they discard all.
+    // CR 609.3 / 701.9a: if the player has fewer cards than count, they discard all.
     assert_eq!(
         e.state.players[1].hand.len(),
         0,

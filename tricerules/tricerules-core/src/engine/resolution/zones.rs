@@ -322,13 +322,8 @@ fn discard_for_player(
                 "P{affected_player} has no cards to discard ({spell_label})."
             )));
         } else {
-            let mix = engine
-                .state
-                .command_index
-                .wrapping_mul(0x9E37_79B9_7F4A_7C15);
-            let mut rng = rand::rngs::StdRng::seed_from_u64(mix);
             let mut shuffled = hand;
-            shuffled.shuffle(&mut rng);
+            shuffle_object_ids_for_current_command(&engine.state, affected_player, &mut shuffled);
             for oid in shuffled.into_iter().take(discard_count) {
                 let card_name = object_display_name(&engine.state, engine.registry, oid);
                 move_object_to_zone(
