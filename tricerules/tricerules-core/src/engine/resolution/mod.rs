@@ -940,6 +940,9 @@ impl GameEngine {
                         zones::draw_discard(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::Scry { .. } => zones::scry(&mut cx, effect)?,
+                    effect @ SpellEffectKind::LookChooseToHand { .. } => {
+                        zones::look_choose_to_hand(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::PumpTarget { .. } => {
                         pump_counters::pump_target(&mut cx, effect)?
                     }

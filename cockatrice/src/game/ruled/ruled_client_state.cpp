@@ -511,6 +511,10 @@ bool RuledClientState::isResolutionHandPickCardSelectable(int serverCardId) cons
     if (pendingChoice->selectedServerCardIds.contains(serverCardId)) {
         return true;
     }
+    if (pendingChoice->hasSelectableRestriction &&
+        !pendingChoice->selectableServerCardIds.contains(serverCardId)) {
+        return false;
+    }
     // When unique-names is on, exclude candidates whose name is already taken by a
     // different selected card — they lose the faint outline and become unclickable.
     if (pendingChoice->uniqueNames) {
@@ -547,13 +551,13 @@ void RuledClientState::toggleResolutionHandPickCard(int serverCardId)
     if (!isResolutionHandPickActive()) {
         return;
     }
-    if (!pendingChoice->serverCardIdToOid.contains(serverCardId)) {
-        return;
-    }
     const int pos = pendingChoice->selectedServerCardIds.indexOf(serverCardId);
     if (pos >= 0) {
         pendingChoice->selectedServerCardIds.removeAt(pos);
     } else if (pendingChoice->selectedServerCardIds.size() < pendingChoice->max) {
+        if (!isResolutionHandPickCardSelectable(serverCardId)) {
+            return;
+        }
         if (pendingChoice->uniqueNames) {
             const QString clickedName = pendingChoice->serverCardIdToName.value(serverCardId);
             bool nameTaken = false;

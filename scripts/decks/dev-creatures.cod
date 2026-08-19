@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname>Dev creatures</deckname>
+    <comments>Deterministic image-choice acceptance deck for library-look effects. Every card is implemented in tricerules.</comments>
+    <zone name="main">
+        <card number="40" name="Grizzly Bears"/>
+    </zone>
+</cockatrice_deck>

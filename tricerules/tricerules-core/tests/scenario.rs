@@ -81,6 +81,8 @@ mod issue_86_related_player_recipients;
 mod issue_89_battlefield_to_library;
 #[path = "scenario/issue_90_evolving_wilds.rs"]
 mod issue_90_evolving_wilds;
+#[path = "scenario/issue_92_library_choice.rs"]
+mod issue_92_library_choice;
 #[path = "scenario/legend_rule.rs"]
 mod legend_rule;
 #[path = "scenario/mana.rs"]

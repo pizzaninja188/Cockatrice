@@ -2545,6 +2545,106 @@ TEST_F(RuledClientTest, LibraryTopChoiceAllowsSubmittingAnEmptyBottomPile)
     EXPECT_FALSE(state->isResolutionHandPickActive());
 }
 
+TEST_F(RuledClientTest, LibraryLookChoiceShowsEveryCardImageButOnlyMatchingCardsAreClickable)
+{
+    QSignalSpy started(state, &RuledClientState::librarySearchPickStarted);
+    ruled::v1::RuledEventBatch batch;
+    auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+    rcr->set_deciding_player_id(kLocalPlayer);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_LIBRARY_LOOK);
+    rcr->set_prompt_text("Look at the top five cards. Choose a creature card.");
+    rcr->set_min(0);
+    rcr->set_max(1);
+    for (const quint32 oid : {41u, 42u, 43u, 44u, 45u}) {
+        rcr->add_candidate_object_ids(oid);
+    }
+    for (const int scid : {0, 1, 2, 3, 4}) {
+        rcr->add_candidate_server_card_ids(scid);
+    }
+    for (const char *name : {"Forest", "Grizzly Bears", "Island", "Hill Giant", "Mountain"}) {
+        rcr->add_candidate_names(name);
+    }
+    for (const bool selectable : {false, true, false, true, false}) {
+        rcr->add_candidate_selectable(selectable);
+    }
+    apply(batch);
+
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    EXPECT_EQ(state->resolutionHandPickZone(), RuledClientState::PickZone::Deck);
+    EXPECT_EQ(state->resolutionHandPickViewTitle(), QStringLiteral("Look at cards"));
+    ASSERT_EQ(started.count(), 1);
+    EXPECT_EQ(started.at(0).at(0).toStringList(),
+              QStringList({QStringLiteral("Forest"), QStringLiteral("Grizzly Bears"), QStringLiteral("Island"),
+                           QStringLiteral("Hill Giant"), QStringLiteral("Mountain")}));
+    EXPECT_FALSE(state->isResolutionHandPickCardSelectable(0));
+    EXPECT_TRUE(state->isResolutionHandPickCardSelectable(1));
+    EXPECT_FALSE(state->isResolutionHandPickCardSelectable(2));
+    EXPECT_TRUE(state->isResolutionHandPickCardSelectable(3));
+
+    state->toggleResolutionHandPickCard(0);
+    EXPECT_EQ(state->resolutionHandPickSelected(), 0);
+    state->toggleResolutionHandPickCard(3);
+    EXPECT_EQ(state->resolutionHandPickSelected(), 1);
+    EXPECT_EQ(state->resolutionHandPickClickOrderFor(3), 1);
+}
+
+TEST_F(RuledClientTest, LibraryLookOrderingUsesImageClickOrderAndMalformedEligibilityFailsClosed)
+{
+    QSignalSpy started(state, &RuledClientState::librarySearchPickStarted);
+    ruled::v1::RuledEventBatch malformed;
+    auto *bad = malformed.add_events()->mutable_resolution_choice_required();
+    bad->set_deciding_player_id(kLocalPlayer);
+    bad->set_choice_kind(ruled::v1::CHOICE_KIND_LIBRARY_LOOK);
+    for (const quint32 oid : {51u, 52u}) {
+        bad->add_candidate_object_ids(oid);
+    }
+    for (const int scid : {0, 1}) {
+        bad->add_candidate_server_card_ids(scid);
+    }
+    for (const char *name : {"Forest", "Island"}) {
+        bad->add_candidate_names(name);
+    }
+    bad->add_candidate_selectable(true);
+    apply(malformed);
+    EXPECT_FALSE(state->isResolutionHandPickActive());
+    EXPECT_EQ(started.count(), 0);
+    EXPECT_EQ(host.dialogRequests, 0);
+
+    ruled::v1::RuledEventBatch ordered;
+    auto *rcr = ordered.add_events()->mutable_resolution_choice_required();
+    rcr->set_deciding_player_id(kLocalPlayer);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_LIBRARY_LOOK);
+    rcr->set_min(2);
+    rcr->set_max(2);
+    rcr->set_ordered(true);
+    for (const quint32 oid : {61u, 62u}) {
+        rcr->add_candidate_object_ids(oid);
+    }
+    for (const int scid : {0, 1}) {
+        rcr->add_candidate_server_card_ids(scid);
+    }
+    for (const char *name : {"Forest", "Island"}) {
+        rcr->add_candidate_names(name);
+        rcr->add_candidate_selectable(true);
+    }
+    apply(ordered);
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    EXPECT_EQ(state->resolutionHandPickViewTitle(), QStringLiteral("Look at cards"));
+    EXPECT_EQ(started.count(), 1);
+
+    state->toggleResolutionHandPickCard(1);
+    state->toggleResolutionHandPickCard(0);
+    EXPECT_EQ(state->resolutionHandPickClickOrderFor(1), 1);
+    EXPECT_EQ(state->resolutionHandPickClickOrderFor(0), 2);
+    host.sentCommands.clear();
+    state->submitResolutionHandPick();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const auto &submission = host.sentCommands[0].submit_resolution_choice();
+    ASSERT_EQ(submission.chosen_object_ids_size(), 2);
+    EXPECT_EQ(submission.chosen_object_ids(0), 62u);
+    EXPECT_EQ(submission.chosen_object_ids(1), 61u);
+}
+
 TEST_F(RuledClientTest, RevealedChoiceAnnouncesAndClosesThePopup)
 {
     QSignalSpy revealed(state, &RuledClientState::revealedPickChanged);

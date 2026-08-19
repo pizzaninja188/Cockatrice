@@ -4,7 +4,7 @@ use super::events::{
 };
 use super::legal_actions::fill_legal;
 use super::resolution::{
-    counter_stack_spell, permanent_moved_event, sacrifice_permanent,
+    counter_stack_spell, move_object_to_zone, permanent_moved_event, sacrifice_permanent,
     seat_resolved_spell_last_in_graveyard,
 };
 use super::targeting::{
@@ -31,6 +31,7 @@ impl GameEngine {
                     ordered: false,
                     candidate_names: Vec::new(),
                     candidate_server_card_ids: Vec::new(),
+                    candidate_selectable: Vec::new(),
                     resolution_branches: Vec::new(),
                     unique_names: false,
                     generic_mana_cost: payment.generic_mana_cost,
@@ -519,6 +520,9 @@ impl GameEngine {
         if pending.custom_key == "__scry" {
             return self.finish_scry(pending, chosen);
         }
+        if pending.custom_key.starts_with("__look_choose_bottom_") {
+            return self.finish_look_choose_bottom(pending, chosen);
+        }
 
         // DiscardCards (caster-chooses): move each chosen card from the target's hand to graveyard.
         if pending.custom_key == "__discard_chosen" {
@@ -1005,6 +1009,7 @@ impl GameEngine {
                     ordered: true,
                     unique_names: false,
                     candidate_server_card_ids: Vec::new(),
+                    candidate_selectable: Vec::new(),
                     resolution_branches: Vec::new(),
                     mana_cost: String::new(),
                     generic_mana_cost: 0,
@@ -1017,6 +1022,139 @@ impl GameEngine {
             step: 1,
             scratch: vec![],
             candidates: remaining,
+            min: n,
+            max: n,
+            ordered: true,
+            prompt,
+            ..pending
+        });
+        Ok(finish_with_events(self, ev))
+    }
+
+    /// Finish either step of a bounded library look. Step 0 may move one matching card to hand;
+    /// random-order cards finish immediately, while chosen-order cards park one more image-based
+    /// ordered pick. Step 1 appends the complete submitted permutation to the library bottom.
+    fn finish_look_choose_bottom(
+        &mut self,
+        pending: PendingResolution,
+        chosen: &[ObjectId],
+    ) -> Result<RuledEventBatch, EngineError> {
+        let controller = pending.deciding_player;
+        let Some(idx) = self.state.player_idx(controller) else {
+            return Err(EngineError::Illegal("looking player missing"));
+        };
+        let mut ev = Vec::new();
+
+        if pending.custom_key == "__look_choose_bottom_order" {
+            self.state.players[idx]
+                .library
+                .retain(|oid| !chosen.contains(oid));
+            for &oid in chosen {
+                self.state.players[idx].library.push_back(oid);
+            }
+            ev.push(ev_log(format!(
+                "P{controller} puts {} cards on the bottom of their library.",
+                chosen.len()
+            )));
+            ev.push(ev_log_private(
+                format!(
+                    "P{controller} bottoms {}.",
+                    self.object_names(chosen).join(", ")
+                ),
+                controller,
+            ));
+            return self.complete_parked_resolution(pending.item, pending.resume_effect_index, ev);
+        }
+
+        let selected = chosen.first().copied();
+        let mut remaining: Vec<ObjectId> = pending
+            .scratch
+            .iter()
+            .copied()
+            .filter(|oid| Some(*oid) != selected)
+            .collect();
+        if let Some(oid) = selected {
+            let name = object_display_name(&self.state, self.registry, oid);
+            let owner = self.state.objects[&oid].owner;
+            move_object_to_zone(&mut self.state, self.registry, oid, Zone::Hand, None)?;
+            ev.push(ev_log(format!("P{controller} reveals {name}.")));
+            ev.push(ev_log(format!(
+                "P{controller} puts {name} into their hand."
+            )));
+            ev.push(permanent_moved_event(
+                &self.state,
+                oid,
+                owner,
+                rv1::permanent_moved::Destination::Hand,
+            ));
+        }
+
+        if pending.custom_key == "__look_choose_bottom_random" {
+            shuffle_object_ids_for_current_command(&self.state, controller, &mut remaining);
+            self.state.players[idx]
+                .library
+                .retain(|oid| !remaining.contains(oid));
+            for &oid in &remaining {
+                self.state.players[idx].library.push_back(oid);
+            }
+            ev.push(ev_log(format!(
+                "P{controller} puts {} cards on the bottom of their library in a random order.",
+                remaining.len()
+            )));
+            ev.push(ev_log_private(
+                format!(
+                    "P{controller} randomly bottoms {}.",
+                    self.object_names(&remaining).join(", ")
+                ),
+                controller,
+            ));
+            return self.complete_parked_resolution(pending.item, pending.resume_effect_index, ev);
+        }
+
+        if remaining.len() <= 1 {
+            self.state.players[idx]
+                .library
+                .retain(|oid| !remaining.contains(oid));
+            for &oid in &remaining {
+                self.state.players[idx].library.push_back(oid);
+            }
+            return self.complete_parked_resolution(pending.item, pending.resume_effect_index, ev);
+        }
+
+        let n = remaining.len() as u32;
+        let (candidate_card_ids, candidate_names) =
+            super::resolution::candidate_identities(self, &remaining);
+        let prompt = format!(
+            "Click all {n} remaining card images in bottom order. The last image clicked becomes bottom-most."
+        );
+        ev.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    deciding_player_id: controller,
+                    source_object_id: pending.item.id,
+                    prompt_text: prompt.clone(),
+                    choice_kind: rv1::ChoiceKind::LibraryLook as i32,
+                    candidate_object_ids: remaining.clone(),
+                    candidate_card_ids,
+                    candidate_names,
+                    min: n,
+                    max: n,
+                    ordered: true,
+                    unique_names: false,
+                    candidate_server_card_ids: Vec::new(),
+                    resolution_branches: Vec::new(),
+                    mana_cost: String::new(),
+                    generic_mana_cost: 0,
+                    payment_currently_legal: false,
+                    candidate_selectable: vec![true; remaining.len()],
+                },
+            )),
+        });
+        self.state.pending_resolution = Some(PendingResolution {
+            custom_key: "__look_choose_bottom_order".to_string(),
+            step: 1,
+            scratch: Vec::new(),
+            candidates: std::mem::take(&mut remaining),
             min: n,
             max: n,
             ordered: true,
@@ -1192,6 +1330,7 @@ impl GameEngine {
                             ordered: false,
                             candidate_names: self.object_names(&candidates),
                             candidate_server_card_ids: Vec::new(),
+                            candidate_selectable: Vec::new(),
                             unique_names: false,
                             generic_mana_cost: 0,
                             payment_currently_legal: false,
@@ -1405,6 +1544,7 @@ impl GameEngine {
                     unique_names: interrupt.unique_names,
                     // Populated by the server relay per-player; the engine never fills it.
                     candidate_server_card_ids: Vec::new(),
+                    candidate_selectable: Vec::new(),
                     resolution_branches: Vec::new(),
                     mana_cost: String::new(),
                     generic_mana_cost: 0,

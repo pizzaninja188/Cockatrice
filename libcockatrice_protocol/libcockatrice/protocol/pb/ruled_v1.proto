@@ -826,6 +826,10 @@ enum ChoiceKind {
   CHOICE_KIND_MANA_PAYMENT = 9;
   // Opaque, engine-authored resolution branches rendered as labeled prompt buttons.
   CHOICE_KIND_RESOLUTION_BRANCH = 10;
+  // A bounded top-of-library window the deciding player looks at. Unlike LIBRARY_TOP scry,
+  // every looked-at card is displayed while candidate_selectable says which card images may be
+  // chosen. Private, and rendered through the deck-zone card-image popup rather than a text list.
+  CHOICE_KIND_LIBRARY_LOOK = 11;
 }
 
 enum ResolutionBranchCostKind {
@@ -887,6 +891,10 @@ message ResolutionChoiceRequired {
   // Canonical brace cost for colored resolution payments. Empty for generic-only legacy
   // soft-counter payments and nonmana choices.
   string mana_cost = 16 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Parallel to candidate_object_ids. Empty means every candidate is selectable (the legacy
+  // contract); otherwise the vector must have exactly the same length. This lets an engine show
+  // every card in a looked-at library window while keeping matching-card legality authoritative.
+  repeated bool candidate_selectable = 17 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // A token entered the battlefield (CR 111). Unlike a resolved permanent spell, a token has no

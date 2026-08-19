@@ -1,0 +1,9 @@
+(
+  id: "commune_with_nature",
+  name: "Commune with Nature",
+  mana_cost: "{G}",
+  types: ["Sorcery"],
+  spell_effect: [
+    LookChooseToHand(count: 5, filter: Creature, bottom_order: Chosen),
+  ],
+)

@@ -599,6 +599,56 @@ TEST_F(RuledBatchTest, LibraryTopChoiceIsPrivateToTheScryingPlayerWithSequential
     EXPECT_EQ(p2Choice.prompt_text(), "Opponent is making a resolution choice.");
 }
 
+// Looking at a fixed library cohort exposes the same hidden information as scry, but the engine
+// also identifies which displayed cards satisfy the effect's filter. Both parallel arrays belong
+// only to the deciding player; the other seat gets a wait prompt and no eligibility oracle.
+TEST_F(RuledBatchTest, LibraryLookChoiceKeepsImagesAndEligibilityPrivate)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(1);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_LIBRARY_LOOK);
+    choice->set_prompt_text("Look at the top five cards. Choose a creature card.");
+    for (const quint32 oid : {81u, 82u, 83u}) {
+        choice->add_candidate_object_ids(oid);
+    }
+    for (const char *cardId : {"forest", "grizzly_bears", "island"}) {
+        choice->add_candidate_card_ids(cardId);
+    }
+    for (const char *name : {"Forest", "Grizzly Bears", "Island"}) {
+        choice->add_candidate_names(name);
+    }
+    choice->add_candidate_selectable(false);
+    choice->add_candidate_selectable(true);
+    choice->add_candidate_selectable(false);
+
+    const auto forP1 = redactFor(batch, p1);
+    const auto p1ChoiceIt = std::find_if(forP1.events().begin(), forP1.events().end(),
+                                         [](const auto &event) { return event.has_resolution_choice_required(); });
+    ASSERT_NE(p1ChoiceIt, forP1.events().end());
+    const auto &p1Choice = p1ChoiceIt->resolution_choice_required();
+    ASSERT_EQ(p1Choice.candidate_server_card_ids_size(), 3);
+    EXPECT_EQ(p1Choice.candidate_server_card_ids(0), 0);
+    EXPECT_EQ(p1Choice.candidate_server_card_ids(1), 1);
+    EXPECT_EQ(p1Choice.candidate_server_card_ids(2), 2);
+    ASSERT_EQ(p1Choice.candidate_selectable_size(), 3);
+    EXPECT_FALSE(p1Choice.candidate_selectable(0));
+    EXPECT_TRUE(p1Choice.candidate_selectable(1));
+    EXPECT_FALSE(p1Choice.candidate_selectable(2));
+
+    const auto forP2 = redactFor(batch, p2);
+    const auto p2ChoiceIt = std::find_if(forP2.events().begin(), forP2.events().end(),
+                                         [](const auto &event) { return event.has_resolution_choice_required(); });
+    ASSERT_NE(p2ChoiceIt, forP2.events().end());
+    const auto &p2Choice = p2ChoiceIt->resolution_choice_required();
+    EXPECT_EQ(p2Choice.candidate_object_ids_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_card_ids_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_names_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_server_card_ids_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_selectable_size(), 0);
+    EXPECT_EQ(p2Choice.prompt_text(), "Opponent is making a resolution choice.");
+}
+
 // CR 603.3b: which abilities triggered is public information, so unlike a resolution choice this
 // event survives redaction intact for everyone. Only the *choice* belongs to the deciding player,
 // and that is enforced by the engine rejecting a SubmitTriggerOrder from anyone else.

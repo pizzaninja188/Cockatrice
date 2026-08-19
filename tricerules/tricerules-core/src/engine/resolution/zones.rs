@@ -395,6 +395,7 @@ fn discard_for_player(
                 ordered: false,
                 unique_names: false,
                 candidate_server_card_ids: Vec::new(),
+                candidate_selectable: Vec::new(),
                 resolution_branches: Vec::new(),
                 mana_cost: String::new(),
                 generic_mana_cost: 0,
@@ -568,6 +569,7 @@ pub(super) fn target_player_sacrifices(
                             ordered: false,
                             unique_names: false,
                             candidate_server_card_ids: Vec::new(),
+                            candidate_selectable: Vec::new(),
                             resolution_branches: Vec::new(),
                             mana_cost: String::new(),
                             generic_mana_cost: 0,
@@ -868,6 +870,7 @@ pub(super) fn scry(
                 ordered: true,
                 unique_names: false,
                 candidate_server_card_ids: Vec::new(),
+                candidate_selectable: Vec::new(),
                 resolution_branches: Vec::new(),
                 mana_cost: String::new(),
                 generic_mana_cost: 0,
@@ -905,6 +908,115 @@ pub(super) fn scry(
         search_reveal: false,
         // Stamped by `run_effect_list` once it sees the `Suspended` below — this is what makes
         // `[Scry, Draw]` (Preordain, Opt) draw the card after the scry decision.
+        resume_effect_index: None,
+    });
+    Ok(EffectOutcome::Suspended)
+}
+
+/// Look at a bounded top-of-library window, show every card image privately, and let the
+/// controller choose at most one matching card. Selection legality stays engine-authored through
+/// `candidate_selectable`; the client never derives it from display/Oracle data.
+pub(super) fn look_choose_to_hand(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::LookChooseToHand {
+        count,
+        filter,
+        bottom_order,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let engine = &mut *cx.engine;
+    let controller = cx.controller;
+    let Some(idx) = engine.state.player_idx(controller) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let looked: Vec<ObjectId> = engine.state.players[idx]
+        .library
+        .iter()
+        .take(count as usize)
+        .copied()
+        .collect();
+    if looked.is_empty() {
+        cx.events.push(ev_log(format!(
+            "P{controller} looks at an empty library ({}).",
+            cx.spell_label
+        )));
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let selectable: Vec<bool> = looked
+        .iter()
+        .map(|&oid| library_card_matches_filter(&engine.state, engine.registry, oid, Some(&filter)))
+        .collect();
+    let legal: Vec<ObjectId> = looked
+        .iter()
+        .copied()
+        .zip(&selectable)
+        .filter_map(|(oid, selectable)| selectable.then_some(oid))
+        .collect();
+    let (candidate_card_ids, candidate_names) = candidate_identities(engine, &looked);
+    let n = looked.len() as u32;
+    let prompt = format!(
+        "Look at the top {n} cards. Click up to one matching card image to reveal and put into your hand."
+    );
+    cx.events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                deciding_player_id: controller,
+                source_object_id: cx.top.id,
+                prompt_text: prompt.clone(),
+                choice_kind: custom::ChoiceKind::LibraryLook as i32,
+                candidate_object_ids: looked.clone(),
+                candidate_card_ids,
+                candidate_names: candidate_names.clone(),
+                min: 0,
+                max: 1,
+                ordered: false,
+                unique_names: false,
+                candidate_server_card_ids: Vec::new(),
+                resolution_branches: Vec::new(),
+                mana_cost: String::new(),
+                generic_mana_cost: 0,
+                payment_currently_legal: false,
+                candidate_selectable: selectable,
+            },
+        )),
+    });
+    cx.events.push(ev_log(format!(
+        "P{controller} looks at the top {n} cards of their library ({}).",
+        cx.spell_label
+    )));
+    cx.events.push(ev_log_private(
+        format!("P{controller} looks at {}.", candidate_names.join(", ")),
+        controller,
+    ));
+    engine.state.pending_resolution = Some(PendingResolution {
+        item: cx.top.clone(),
+        custom_key: match bottom_order {
+            LibraryBottomOrder::Random => "__look_choose_bottom_random",
+            LibraryBottomOrder::Chosen => "__look_choose_bottom_chosen",
+        }
+        .to_string(),
+        step: 0,
+        scratch: looked,
+        deciding_player: controller,
+        candidates: legal,
+        min: 0,
+        max: 1,
+        ordered: false,
+        unique_names: false,
+        mana_payment: None,
+        resolution_branch: None,
+        discard: None,
+        prompt,
+        choice_kind: custom::ChoiceKind::LibraryLook,
+        copy_source_object_id: 0,
+        search_destination: SearchDestination::default(),
+        search_shuffle: false,
+        search_reveal: false,
         resume_effect_index: None,
     });
     Ok(EffectOutcome::Suspended)
@@ -974,6 +1086,7 @@ pub(super) fn search_library(
                 ordered: false,
                 unique_names: false,
                 candidate_server_card_ids: Vec::new(),
+                candidate_selectable: Vec::new(),
                 resolution_branches: Vec::new(),
                 mana_cost: String::new(),
                 generic_mana_cost: 0,

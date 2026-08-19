@@ -26,8 +26,8 @@ use tricerules_cards::primitives::{
     CountExpression, CounterKind, CreatureEventFilter, CreatureScopeController,
     CreatureScopeFilter, DamageDivision, DamagePreventionAdditionalEffect, DamagePreventionSubject,
     DiscardChooser, DrawDiscardOrder, EffectDuration, EffectSubject, EntersTappedAffected, Evasion,
-    FaceChangeAction, GameCondition, InterveningIf, Keyword, LibraryPlacement, LifeAmount,
-    ManaAmount, ManaSpendFilter, PermanentTypeFilter, PlayerRecipient, PowerComparison,
+    FaceChangeAction, GameCondition, InterveningIf, Keyword, LibraryBottomOrder, LibraryPlacement,
+    LifeAmount, ManaAmount, ManaSpendFilter, PermanentTypeFilter, PlayerRecipient, PowerComparison,
     PreventionAmountBasis, RelativePlayerSet, ResolutionCost, ReturnController, SearchDestination,
     SpellCostModifier, SpellEffectKind, StaticAbilityDef, StaticDamagePreventionAmount,
     TargetController, TargetFilter, TargetKind, TargetingCostAction, TargetingCostProtected,
@@ -225,7 +225,9 @@ mod face_change_tests {
 // Re-export the two helpers that are called from outside the `engine` module tree
 // (`crate::custom`) so their long-standing `crate::engine::<fn>` paths keep resolving.
 pub use characteristics::Characteristics;
-pub(crate) use opening::shuffle_player_library_for_current_command;
+pub(crate) use opening::{
+    shuffle_object_ids_for_current_command, shuffle_player_library_for_current_command,
+};
 pub(crate) use resolution::move_object_to_zone;
 pub(crate) use resolution::permanent_moved_event;
 

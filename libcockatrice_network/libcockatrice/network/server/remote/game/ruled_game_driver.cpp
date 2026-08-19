@@ -1906,6 +1906,7 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
                 rcr->clear_candidate_card_ids();
                 rcr->clear_candidate_names();
                 rcr->clear_candidate_server_card_ids();
+                rcr->clear_candidate_selectable();
                 rcr->set_prompt_text("Opponent is making a resolution choice.");
             } else if (rcr->choice_kind() == ruled::v1::CHOICE_KIND_HAND_CARDS) {
                 // HandCards: populate server card ids so client hand-click UI can match engine OIDs.
@@ -1919,8 +1920,9 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
                     }
                 }
             } else if (rcr->choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH ||
-                       rcr->choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP) {
-                // LibrarySearch / LibraryTop (CR 701.18 scry): assign each candidate a sequential
+                       rcr->choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP ||
+                       rcr->choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_LOOK) {
+                // LibrarySearch / LibraryTop / LibraryLook: assign each candidate a sequential
                 // index as its server card ID.
                 // Deck cards are not in engineOidToServerCardId (only battlefield/hand/stack are),
                 // so there is no server-side lookup available. Sequential indices give every
@@ -2006,6 +2008,7 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
         choice->mutable_candidate_card_ids()->CopyFrom(choiceIt.value().candidate_card_ids());
         choice->mutable_candidate_names()->CopyFrom(choiceIt.value().candidate_names());
         choice->mutable_candidate_server_card_ids()->CopyFrom(choiceIt.value().candidate_server_card_ids());
+        choice->mutable_candidate_selectable()->CopyFrom(choiceIt.value().candidate_selectable());
         if (choiceIt.value().deciding_player_id() == participant->getPlayerId()) {
             choice->mutable_resolution_branches()->CopyFrom(choiceIt.value().resolution_branches());
         }

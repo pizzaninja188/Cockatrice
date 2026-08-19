@@ -67,6 +67,7 @@ pub(super) fn choose_resolution_branch(
                 ordered: false,
                 candidate_names: Vec::new(),
                 candidate_server_card_ids: Vec::new(),
+                candidate_selectable: Vec::new(),
                 unique_names: false,
                 generic_mana_cost: 0,
                 payment_currently_legal: false,

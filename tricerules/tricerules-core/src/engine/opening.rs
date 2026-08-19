@@ -15,13 +15,28 @@ pub(crate) fn shuffle_player_library(state: &mut GameState, player_idx: usize, m
 /// accepted command. Keeping this derivation in one place preserves replay behavior for searches,
 /// custom effects, and battlefield-to-library moves.
 pub(crate) fn shuffle_player_library_for_current_command(state: &mut GameState, player: PlayerId) {
+    let Some(idx) = state.player_idx(player) else {
+        return;
+    };
+    let mut objects: Vec<ObjectId> = state.players[idx].library.iter().copied().collect();
+    shuffle_object_ids_for_current_command(state, player, &mut objects);
+    state.players[idx].library = objects.into_iter().collect();
+}
+
+/// Randomize only a bounded object cohort using the same replay-stable mix as a library shuffle.
+/// This supports instructions such as Brightwood Tracker's random bottom order without shuffling
+/// the complete library or creating a shuffle event.
+pub(crate) fn shuffle_object_ids_for_current_command(
+    state: &GameState,
+    player: PlayerId,
+    objects: &mut [ObjectId],
+) {
     let mix = state
         .seed
         .wrapping_add(state.command_index.wrapping_mul(0x9E37_79B9_7F4A_7C15))
         ^ (player as u64);
-    if let Some(idx) = state.player_idx(player) {
-        shuffle_player_library(state, idx, mix);
-    }
+    let mut rng = StdRng::seed_from_u64(mix);
+    objects.shuffle(&mut rng);
 }
 
 fn mulligan_redraw(

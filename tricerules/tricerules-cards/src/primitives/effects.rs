@@ -619,6 +619,17 @@ pub enum LibraryPlacement {
     Shuffle,
 }
 
+/// How cards left over from a bounded library look are placed on the bottom.
+///
+/// Brightwood Tracker uses `Random`; Commune with Nature uses `Chosen`. `Random` randomizes only
+/// the looked-at cohort, not the complete library, so it is deliberately distinct from
+/// [`LibraryPlacement::Shuffle`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LibraryBottomOrder {
+    Random,
+    Chosen,
+}
+
 /// Who chooses cards for a discard instruction.
 ///
 /// CR 701.9b makes the affected player the default chooser. Coercion and Thoughtseize override
@@ -751,6 +762,17 @@ pub enum SpellEffectKind {
     /// Preordain and Opt.
     Scry {
         count: u32,
+    },
+    /// Look at the top `count` cards, optionally reveal one matching `filter` and put it into the
+    /// controller's hand, then put the rest on the bottom. All looked-at cards are displayed in
+    /// the private card-image picker; the engine separately publishes which images match.
+    ///
+    /// Brightwood Tracker (`count: 4`, creature, random) and Commune with Nature (`count: 5`,
+    /// creature, chosen) share this resumable primitive.
+    LookChooseToHand {
+        count: u32,
+        filter: CardTypeFilter,
+        bottom_order: LibraryBottomOrder,
     },
     /// Destroy target matching `target` filter (default: any creature on the battlefield).
     /// Characteristic restrictions (e.g. `tapped: true` for Royal Assassin) live in the filter.

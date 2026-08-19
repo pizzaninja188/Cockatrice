@@ -337,6 +337,10 @@ public:
         QHash<int, quint32> serverCardIdToOid;
         // Mapping from server card id -> oracle name (for unique-name enforcement).
         QHash<int, QString> serverCardIdToName;
+        // Optional engine-authored eligibility restriction for an image cohort. When present,
+        // cards outside this set remain visible but are not clickable.
+        bool hasSelectableRestriction = false;
+        QSet<int> selectableServerCardIds;
         // Selected server card ids in click order.
         QList<int> selectedServerCardIds;
         int min = 0;

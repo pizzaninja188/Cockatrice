@@ -497,6 +497,7 @@ impl GameEngine {
                     ordered: false,
                     candidate_names,
                     candidate_server_card_ids: Vec::new(),
+                    candidate_selectable: Vec::new(),
                     resolution_branches: Vec::new(),
                     mana_cost: String::new(),
                     unique_names: false,

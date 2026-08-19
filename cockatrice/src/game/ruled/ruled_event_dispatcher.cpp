@@ -3,6 +3,7 @@
 #include "ruled_client_host.h"
 #include "ruled_client_state.h"
 
+#include <QDebug>
 #include <algorithm>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <libcockatrice/utility/ruled_debug.h>
@@ -691,11 +692,21 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         return;
     }
 
+    const bool isLibraryLook = rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_LOOK;
+    if (isLibraryLook &&
+        (rcr.candidate_object_ids_size() != rcr.candidate_names_size() ||
+         rcr.candidate_server_card_ids_size() != rcr.candidate_names_size() ||
+         rcr.candidate_selectable_size() != rcr.candidate_names_size())) {
+        qWarning() << "Rejecting malformed ruled library-look choice";
+        return;
+    }
+
     if ((rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH ||
-         rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP) &&
+         rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP || isLibraryLook) &&
         rcr.candidate_server_card_ids_size() == rcr.candidate_names_size() && rcr.candidate_names_size() > 0) {
-        // LibrarySearch or LibraryTop with server card ids: deck zone-view pick. Both show cards
-        // out of the local library, so they share the popup — only the title differs.
+        // LibrarySearch, LibraryTop, or LibraryLook with server card ids: deck zone-view pick. All
+        // show card images from the local library, so they share the popup — only the title and
+        // optional engine-authored click eligibility differ.
         // LIBRARY_TOP is CR 701.18 scry, which may arrive twice for one spell: once to pick the
         // cards going to the bottom (min 0), then, if two or more stay on top, ordered to arrange
         // them. Click order carries the ordering, exactly as it does for Brainstorm's hand pick.
@@ -707,8 +718,13 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         pick.uniqueNames = rcr.unique_names();
         pick.promptText = QString::fromStdString(rcr.prompt_text());
         pick.pickZone = PickZone::Deck;
-        pick.viewTitle =
-            rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP ? tr("Scry") : tr("Search your library");
+        if (isLibraryLook) {
+            pick.viewTitle = tr("Look at cards");
+            pick.hasSelectableRestriction = true;
+        } else {
+            pick.viewTitle =
+                rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP ? tr("Scry") : tr("Search your library");
+        }
         QVector<int> libScids;
         for (int i = 0; i < rcr.candidate_names_size(); ++i) {
             const quint32 oid = (i < rcr.candidate_object_ids_size()) ? rcr.candidate_object_ids(i) : 0;
@@ -717,6 +733,9 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
             if (scid >= 0) {
                 pick.serverCardIdToOid.insert(scid, oid);
                 pick.serverCardIdToName.insert(scid, name);
+                if (isLibraryLook && rcr.candidate_selectable(i)) {
+                    pick.selectableServerCardIds.insert(scid);
+                }
             }
             pick.candidateNames.append(name);
             libScids.append(scid);
