@@ -102,8 +102,8 @@ which rejects previews, routes concede first, gates on a parked resolution, and 
 touch Cockatrice objects: for a cast it moves the physical `Server_Card` from HAND to the
 **canonical stack zone** (the lowest player-id STACK zone, so every client sees one merged stack)
 and queues a `PendingRuledCastVisual` to bind to the next `StackPushed`. Then
-`applyRuledBatch(resp)` runs its five ordered passes (§4), and the accepted command's bytes are
-appended to the replay log.
+`applyRuledBatch(resp)` runs its load-bearing ordered pipeline (§4), and the accepted command's
+bytes are appended to the replay log.
 
 **7 — Broadcast (Servatrice).** `broadcastRuledResponse` copies the batch, calls
 `appendServerObjectMaps` to inject the three server-built identity maps, then for **each
@@ -170,17 +170,27 @@ do not do sweeping renames in an otherwise-unrelated change.
 keeps only a `ruledGame` flag, the owning `unique_ptr`, `friend class RuledGameDriver`, a
 `ruled()` accessor, and one-line delegators.
 
-`applyRuledBatch` runs **five passes in a load-bearing order** — never merge or reorder them; the
-same list is documented in `ruled_game_driver.h`:
+`applyRuledBatch` runs the following **authoritative, load-bearing sequence**. Never merge or
+reorder these stages; `ruled_game_driver.h` deliberately mirrors this list for code-local safety:
 
-0. capture the pre-batch `oid → Server_Card.id` map per player (the engine has already removed
-   dead permanents, so the upcoming zone-view sync would lose the mapping `PermanentMoved` needs);
-1. `applyTokenCreations` — mint physical token cards (CR 111) so the zone-view sync can bind them;
-2. `applyPermanentMoves` — translate `PermanentMoved` into `moveCard`, using the pre-batch map;
-3. `applyPhaseStackAndZoneViews` — phase/priority, stack push/resolve, and the per-player
-   `ZoneViewSync` reconciliation that rebuilds the identity maps;
-4. `applyAttachmentRestores` — `AuraAttached` → `Event_AttachCard`;
-5. `applyLifeManaAndCombatEvents` — life, mana-pool counters, combat declarations and damage.
+0. `indexCardCatalogEvents` — refresh the engine card-id/name index when the batch carries a
+   catalog. A dev conjure can introduce a name absent from the session's original deck catalog,
+   so the refresh must happen before any physical-card creation or reconciliation resolves it;
+1. `applyDevCardConjures` — mint and bind physical cards created by dev commands. This precedes
+   the identity snapshot because a conjured battlefield card may also move in the same batch, and
+   `PermanentMoved` must be able to recover its newly registered physical identity;
+2. capture the pre-batch `oid → Server_Card.id` map per player. The engine has already removed
+   dead permanents, so the upcoming zone-view sync would otherwise lose the mapping
+   `PermanentMoved` needs;
+3. `applyTokenCreations` — mint physical token cards (CR 111) so the zone-view sync can bind them;
+4. `applyPermanentMoves` — translate `PermanentMoved` into `moveCard`, using the pre-batch map;
+5. `applyPhaseStackAndZoneViews` — apply phase/priority and stack push/resolve events, then
+   reconcile each player's `ZoneViewSync`, rebuilding the identity maps;
+6. `applyFaceDisplays` — apply face and effective-display names only after zone-view
+   reconciliation has produced fresh object-to-physical-card mappings;
+7. `applyAttachmentRestores` — `AuraAttached` → `Event_AttachCard`, using those refreshed maps;
+8. `applyLifeManaAndCombatEvents` — apply life totals, mana-pool counters, combat declarations,
+   combat damage, and removal from combat.
 
 `broadcastRuledResponse` then stages: `appendServerObjectMaps` (inject the three identity maps) →
 per-participant `redactBatchForParticipant` → private `Event_RuledPayload`.

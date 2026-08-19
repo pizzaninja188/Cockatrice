@@ -8,7 +8,8 @@
 // `ruledGame` flag, the owning unique_ptr, and 1-line delegation hooks.
 //
 // See docs/ARCHITECTURE.md for the identity glossary (engine ObjectId vs tricerules card_id
-// vs Oracle name vs Server_Card.id vs hand slot) and the end-to-end "life of a command" trace.
+// vs Oracle name vs Server_Card.id vs hand slot), the end-to-end "life of a command" trace,
+// and the authoritative batch-pipeline description in section 4.
 //
 // --- The batch pipeline -------------------------------------------------------------------
 //
@@ -16,20 +17,17 @@
 // be merged or reordered (see the comments on the individual methods for why each dependency
 // exists).
 //
-// applyRuledBatch — engine events onto the physical Cockatrice game, six passes after a
-// pre-pass that snapshots each player's engine_oid -> Server_Card.id map (the engine has
-// already dropped dead permanents, so PermanentMoved needs the *prior* mapping):
-//   0. indexCardCatalogEvents     refresh the name/id index if this batch carries a catalog
-//                                 (dev conjuring does); everything below resolves names through it.
-//   1. applyTokenCreations        CR 111: mint token Server_Cards, so the zone-view sync below
-//                                 has something to bind the engine's battlefield slots to.
-//   2. applyPermanentMoves        PermanentMoved -> moveCard, resolved through the pre-batch map.
-//   3. applyPhaseStackAndZoneViews  phase/priority, stack push+resolve, and the per-player
-//                                 RuledPerPlayerView reconciliation that rebuilds the identity
-//                                 maps (must run after moves, before anything reading the maps).
-//   4. applyAttachmentRestores    AuraAttached -> Event_AttachCard (CR 303.4).
-//   5. applyLifeManaAndCombatEvents  life totals, mana-pool counters, combat declarations,
-//                                 combat damage, removal-from-combat.
+// applyRuledBatch — engine events onto the physical Cockatrice game. This compact list
+// deliberately mirrors docs/ARCHITECTURE.md section 4; keep the documentation authoritative:
+//   0. indexCardCatalogEvents       refresh name/id data before resolving a conjured card's name.
+//   1. applyDevCardConjures         mint and bind conjured cards before the identity snapshot.
+//   2. pre-batch oid-map capture    preserve oid -> Server_Card.id for same-batch moves and deaths.
+//   3. applyTokenCreations          mint token Server_Cards before zone-view reconciliation.
+//   4. applyPermanentMoves          PermanentMoved -> moveCard through the pre-batch map.
+//   5. applyPhaseStackAndZoneViews  apply phase/stack events and rebuild physical identity maps.
+//   6. applyFaceDisplays            update display identity through the refreshed zone-view maps.
+//   7. applyAttachmentRestores      AuraAttached -> Event_AttachCard through the refreshed maps.
+//   8. applyLifeManaAndCombatEvents apply life, mana, combat, damage, and removal-from-combat.
 //
 // broadcastRuledResponse — the same batch out to each participant, in two stages:
 //   a. appendServerObjectMaps     inject the server-built BattlefieldObjectMap (battlefield +

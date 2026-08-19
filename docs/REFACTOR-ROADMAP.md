@@ -656,9 +656,11 @@ scenario suite), so medium risk despite the width.
 > one dead signal: `RuledClientState::triggerNeedsTarget` is emitted but has no consumer (the text
 > reaches the panel via `enginePromptFeed`); it is documented as such rather than silently removed.
 >
-> `ruled_game_driver.h` gained the pipeline header comment — naming **five** `applyRuledBatch`
-> passes plus the two broadcast stages, matching the Step 4 follow-up's actual structure, not the
-> provisional "six passes" in the plan below.
+> At this 2026-07-26 milestone, `ruled_game_driver.h` gained a pipeline header comment naming the
+> then-current **five** `applyRuledBatch` passes plus the two broadcast stages, rather than the
+> provisional "six passes" in the plan below. Dev-card conjuring and face-display synchronization
+> later expanded that pipeline; [ARCHITECTURE.md §4](ARCHITECTURE.md#4-ruledgamedriver--the-relays-shape)
+> is the current authoritative sequence.
 >
 > AGENTS.md: extraction-never-restructure and the `ruled_` prefix were promoted from a parenthetical
 > inside the roadmap pointer to mandatory-workflow rule 6; an ARCHITECTURE.md pointer heads the
