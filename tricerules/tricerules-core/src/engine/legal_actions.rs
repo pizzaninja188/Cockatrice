@@ -117,26 +117,16 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
         // so the parked trigger is the only thing its controller can be choosing targets for.
         if let Some(pt) = eng.state.pending_triggers.front() {
             if pt.controller == p.id {
-                if let Some(effects) = eng
-                    .registry
-                    .get(&pt.card_id)
-                    .and_then(|def| def.primary_face().triggered_abilities.get(pt.ability_index))
-                    .map(|ta| (&ta.effect, ta.targeting.as_ref()))
-                {
-                    let targets = compute_ability_targets_with_context(
-                        eng,
-                        p.id,
-                        TargetSourceIdentity::captured(
-                            pt.source_permanent_id,
-                            pt.source_zone_change,
-                        ),
-                        effects.0,
-                        effects.1,
-                        pt.trigger_context,
-                    );
-                    let key = (pt.source_permanent_id as u64) << 32 | pt.ability_index as u64;
-                    valid_targets_by_ability.insert(key, targets);
-                }
+                let targets = compute_ability_targets_with_context(
+                    eng,
+                    p.id,
+                    TargetSourceIdentity::captured(pt.source_permanent_id, pt.source_zone_change),
+                    &pt.ability.effect,
+                    pt.ability.targeting.as_ref(),
+                    pt.trigger_context,
+                );
+                let key = (pt.source_permanent_id as u64) << 32 | pt.ability_index as u64;
+                valid_targets_by_ability.insert(key, targets);
             }
         }
 
