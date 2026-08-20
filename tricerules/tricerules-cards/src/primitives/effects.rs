@@ -1281,6 +1281,13 @@ pub enum SpellEffectKind {
         amount: u32,
         target: TargetFilter,
     },
+    /// CR 615: prevent all combat damage that would be dealt to the targeted creature this turn.
+    /// Unlike [`Self::PreventAllCombatDamageTurn`], this effect is the conjunction of one exact
+    /// creature recipient and combat damage. Covers Fleeting Flight and the incoming-damage
+    /// instruction of Azorius Ploy.
+    PreventAllCombatDamageToTargetTurn {
+        target: TargetFilter,
+    },
     /// CR 614.1a: prevent all combat damage that would be dealt this turn (Fog, Holy Day,
     /// Safe Passage partial). Untargeted — sets a global flag checked when combat damage resolves.
     /// Cleared at the cleanup step alongside marked damage.
@@ -1608,7 +1615,8 @@ impl SpellEffectKind {
             | SpellEffectKind::AuraAttach { .. }
             | SpellEffectKind::Equip { .. }
             | SpellEffectKind::TargetPlayerSacrifices { .. }
-            | SpellEffectKind::PreventNextDamage { .. } => true,
+            | SpellEffectKind::PreventNextDamage { .. }
+            | SpellEffectKind::PreventAllCombatDamageToTargetTurn { .. } => true,
             _ => false,
         }
     }
@@ -1646,7 +1654,8 @@ impl SpellEffectKind {
             | SpellEffectKind::AuraAttach { target }
             | SpellEffectKind::Equip { target }
             | SpellEffectKind::TargetPlayerSacrifices { target, .. }
-            | SpellEffectKind::PreventNextDamage { target, .. } => vec![target],
+            | SpellEffectKind::PreventNextDamage { target, .. }
+            | SpellEffectKind::PreventAllCombatDamageToTargetTurn { target } => vec![target],
             SpellEffectKind::PumpTarget {
                 subject: EffectSubject::Chosen(target),
                 ..
@@ -1818,6 +1827,13 @@ impl SpellEffectKind {
                         }
                     }
                 }
+            }
+            SpellEffectKind::PreventAllCombatDamageToTargetTurn { target }
+                if !target.all_terminal_filters_match(|leaf| leaf.kind == TargetKind::Creature) =>
+            {
+                return Err(
+                    "PreventAllCombatDamageToTargetTurn requires a creature target filter".into(),
+                );
             }
             SpellEffectKind::DestroyAttached {
                 target,

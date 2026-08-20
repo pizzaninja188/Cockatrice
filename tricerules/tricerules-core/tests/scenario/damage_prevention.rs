@@ -1,5 +1,6 @@
 use crate::helpers::*;
 use tricerules_cards::primitives::CounterKind;
+use tricerules_core::state::DamagePreventionScope;
 
 /// CR 615.12: Stomp makes the damage unpreventable, so an existing prevention shield neither
 /// reduces the damage nor loses any of its remaining capacity.
@@ -707,4 +708,293 @@ fn stomp_bypasses_fog_for_later_combat_damage() {
     pass_both_players(&mut engine);
 
     assert_eq!(engine.state.players[1].life, 16);
+}
+
+/// Fleeting Flight's prevention shield is scoped to combat damage received by the exact chosen
+/// creature. The counter and flying grant already work; this regression proves the missing third
+/// instruction without hiding it behind the global Fog path.
+#[test]
+fn fleeting_flight_prevents_combat_damage_to_its_target() {
+    let decks = Some(vec![
+        deck_with("plains", &["fleeting_flight", "grizzly_bears"]),
+        deck_with("forest", &["grizzly_bears"]),
+    ]);
+    let mut engine = GameEngine::new(4815, &[0, 1], 20, decks, true).expect("new engine");
+    advance_to_main1_from_game_start(&mut engine);
+
+    let attacker = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
+    let blocker = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
+    ensure_in_hand(&mut engine, 0, "fleeting_flight");
+
+    engine
+        .apply_command(0, &primitive_yield())
+        .expect("advance to combat");
+    pass_both_players(&mut engine);
+    engine
+        .apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("declare attacker");
+    pass_both_players(&mut engine);
+    engine
+        .apply_command(
+            1,
+            &declare_blockers(vec![BlockPair {
+                attacker_id: attacker,
+                blocker_id: blocker,
+            }]),
+        )
+        .expect("declare blocker");
+
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            w: 1,
+            ..Default::default()
+        },
+    );
+    let flight = hand_index_for_card(&engine, 0, "fleeting_flight");
+    engine
+        .apply_command(0, &cast_spell(flight, target_object(attacker)))
+        .expect("cast Fleeting Flight after blocks");
+    resolve_entire_stack_two_player(&mut engine);
+    assert!(zone_view_rules_annotation_labels(&mut engine, 0, attacker)
+        .contains(&"Prevent all combat damage".to_string()));
+    pass_both_players(&mut engine);
+
+    let protected = engine
+        .state
+        .objects
+        .get(&attacker)
+        .expect("protected attacker remains");
+    assert_eq!(protected.counter_count(CounterKind::PlusOnePlusOne), 1);
+    assert_eq!(
+        protected.damage, 0,
+        "Fleeting Flight prevents combat damage dealt to its target"
+    );
+    assert_eq!(
+        engine.state.objects[&blocker].zone,
+        tricerules_core::Zone::Graveyard,
+        "the protected creature still deals combat damage"
+    );
+}
+
+#[test]
+fn fleeting_flight_does_not_prevent_noncombat_damage() {
+    let decks = Some(vec![
+        deck_with("plains", &["fleeting_flight", "grizzly_bears"]),
+        deck_with("mountain", &["lightning_bolt"]),
+    ]);
+    let mut engine = GameEngine::new(4816, &[0, 1], 20, decks, true).expect("new engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let target = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
+    ensure_in_hand(&mut engine, 0, "fleeting_flight");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            w: 1,
+            ..Default::default()
+        },
+    );
+    let flight = hand_index_for_card(&engine, 0, "fleeting_flight");
+    engine
+        .apply_command(0, &cast_spell(flight, target_object(target)))
+        .expect("cast Fleeting Flight");
+    resolve_entire_stack_two_player(&mut engine);
+
+    ensure_in_hand(&mut engine, 1, "lightning_bolt");
+    give_mana(
+        &mut engine,
+        1,
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+    engine.apply_command(0, &pass()).expect("pass to opponent");
+    let bolt = hand_index_for_card(&engine, 1, "lightning_bolt");
+    engine
+        .apply_command(1, &cast_spell(bolt, target_object(target)))
+        .expect("cast Lightning Bolt");
+    resolve_entire_stack_two_player(&mut engine);
+
+    assert_eq!(
+        engine.state.objects[&target].zone,
+        tricerules_core::Zone::Graveyard,
+        "the combat-only shield does not prevent Lightning Bolt"
+    );
+}
+
+fn combat_with_fleeting_flight_and_finite_shield(seed: u64) -> (GameEngine, u32, u32, u32) {
+    let decks = Some(vec![
+        deck_with("plains", &["fleeting_flight", "grizzly_bears"]),
+        deck_with("forest", &["grizzly_bears"]),
+    ]);
+    let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let attacker = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
+    let blocker = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
+    let finite_effect = engine.state.next_damage_prevention_effect_id;
+    engine.state.add_damage_prevention_shield(attacker, 1);
+    ensure_in_hand(&mut engine, 0, "fleeting_flight");
+
+    engine.apply_command(0, &primitive_yield()).unwrap();
+    pass_both_players(&mut engine);
+    engine
+        .apply_command(0, &declare_attackers(vec![attacker]))
+        .unwrap();
+    pass_both_players(&mut engine);
+    engine
+        .apply_command(
+            1,
+            &declare_blockers(vec![BlockPair {
+                attacker_id: attacker,
+                blocker_id: blocker,
+            }]),
+        )
+        .unwrap();
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            w: 1,
+            ..Default::default()
+        },
+    );
+    let flight = hand_index_for_card(&engine, 0, "fleeting_flight");
+    engine
+        .apply_command(0, &cast_spell(flight, target_object(attacker)))
+        .unwrap();
+    resolve_entire_stack_two_player(&mut engine);
+    let combat_effect = engine
+        .state
+        .damage_prevention_effects
+        .iter()
+        .find_map(|effect| {
+            matches!(
+                effect.scope,
+                DamagePreventionScope::CombatRecipient { object_id, .. }
+                    if object_id == attacker
+            )
+            .then_some(effect.id)
+        })
+        .expect("Fleeting Flight prevention effect");
+    pass_both_players(&mut engine);
+    assert!(engine.state.pending_resolution.is_some());
+    (engine, attacker, finite_effect, combat_effect)
+}
+
+#[test]
+fn fleeting_flight_uses_cr_616_ordering_with_finite_shields() {
+    for (seed, choose_combat_first) in [(4817, true), (4818, false)] {
+        let (mut engine, target, finite_effect, combat_effect) =
+            combat_with_fleeting_flight_and_finite_shield(seed);
+        let pending = engine.state.pending_resolution.as_ref().unwrap();
+        assert_eq!(pending.candidates.len(), 2);
+        let chosen_effect = if choose_combat_first {
+            combat_effect
+        } else {
+            finite_effect
+        };
+        let chosen = pending.candidates[pending
+            .scratch
+            .iter()
+            .position(|effect_id| *effect_id == chosen_effect)
+            .expect("chosen prevention application")];
+        engine
+            .apply_command(0, &submit_resolution_choice(vec![chosen]))
+            .expect("choose prevention order");
+
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(engine.state.objects[&target].damage, 0);
+        assert_eq!(
+            engine.state.remaining_damage_prevention(target),
+            u32::from(choose_combat_first),
+            "a finite shield is consumed only when it is applied before Fleeting Flight"
+        );
+    }
+}
+
+#[test]
+fn fleeting_flight_scope_does_not_follow_a_returned_object() {
+    let decks = Some(vec![
+        deck_with("island", &["fleeting_flight", "grizzly_bears", "unsummon"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut engine = GameEngine::new(4819, &[0, 1], 20, decks, true).expect("new engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let target = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
+    ensure_in_hand(&mut engine, 0, "fleeting_flight");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            w: 1,
+            ..Default::default()
+        },
+    );
+    let flight = hand_index_for_card(&engine, 0, "fleeting_flight");
+    engine
+        .apply_command(0, &cast_spell(flight, target_object(target)))
+        .unwrap();
+    resolve_entire_stack_two_player(&mut engine);
+    assert!(zone_view_rules_annotation_labels(&mut engine, 0, target)
+        .contains(&"Prevent all combat damage".to_string()));
+
+    ensure_in_hand(&mut engine, 0, "unsummon");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    let unsummon = hand_index_for_card(&engine, 0, "unsummon");
+    engine
+        .apply_command(0, &cast_spell(unsummon, target_object(target)))
+        .unwrap();
+    resolve_entire_stack_two_player(&mut engine);
+    let returned = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
+    assert_eq!(returned, target, "the relay-compatible ObjectId is reused");
+    assert!(zone_view_rules_annotation_labels(&mut engine, 0, returned).is_empty());
+    assert!(!engine
+        .state
+        .damage_prevention_effects
+        .iter()
+        .any(|effect| matches!(
+            effect.scope,
+            DamagePreventionScope::CombatRecipient { object_id, .. } if object_id == returned
+        )));
+}
+
+#[test]
+fn fleeting_flight_scope_expires_at_cleanup() {
+    let decks = Some(vec![
+        deck_with("plains", &["fleeting_flight", "grizzly_bears"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut engine = GameEngine::new(4820, &[0, 1], 20, decks, true).expect("new engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let target = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
+    ensure_in_hand(&mut engine, 0, "fleeting_flight");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            w: 1,
+            ..Default::default()
+        },
+    );
+    let flight = hand_index_for_card(&engine, 0, "fleeting_flight");
+    engine
+        .apply_command(0, &cast_spell(flight, target_object(target)))
+        .unwrap();
+    resolve_entire_stack_two_player(&mut engine);
+    assert!(zone_view_rules_annotation_labels(&mut engine, 0, target)
+        .contains(&"Prevent all combat damage".to_string()));
+
+    end_active_turn(&mut engine, 0);
+    assert!(!zone_view_rules_annotation_labels(&mut engine, 0, target)
+        .contains(&"Prevent all combat damage".to_string()));
 }

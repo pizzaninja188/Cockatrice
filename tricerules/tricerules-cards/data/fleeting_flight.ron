@@ -1,0 +1,19 @@
+(
+  id: "fleeting_flight",
+  name: "Fleeting Flight",
+  mana_cost: "{W}",
+  // Oracle checked 2026-08-20.
+  types: ["Instant"],
+  spell_effect: [
+    PutCounters(
+      counter: PlusOnePlusOne,
+      count: 1,
+      subject: Chosen((kind: Creature)),
+    ),
+    GrantKeywords(
+      subject: Chosen((kind: Creature)),
+      keywords: [Flying],
+    ),
+    PreventAllCombatDamageToTargetTurn(target: (kind: Creature)),
+  ],
+)

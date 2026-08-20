@@ -1081,6 +1081,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::PreventNextDamage { .. } => {
                         misc::prevent_next_damage(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::PreventAllCombatDamageToTargetTurn { .. } => {
+                        misc::prevent_all_combat_damage_to_target_turn(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::PreventAllCombatDamageTurn => {
                         misc::prevent_all_combat_damage_turn(&mut cx, effect)?
                     }
@@ -1518,7 +1521,12 @@ pub(crate) fn move_object_to_zone(
             !single_on_this && !static_from_this
         });
         state.damage_prevention_effects.retain(|effect| {
-            let recipient_is_this_object = effect.scope == DamagePreventionScope::Recipient(oid);
+            let recipient_is_this_object = match effect.scope {
+                DamagePreventionScope::Recipient(recipient) => recipient == oid,
+                DamagePreventionScope::CombatRecipient { object_id, .. } => object_id == oid,
+                DamagePreventionScope::Combat
+                | DamagePreventionScope::OtherCreaturesYouControl { .. } => false,
+            };
             let static_from_this = effect.source_id == Some(oid)
                 && effect.duration == EffectDuration::WhileSourceOnBattlefield;
             !recipient_is_this_object && !static_from_this

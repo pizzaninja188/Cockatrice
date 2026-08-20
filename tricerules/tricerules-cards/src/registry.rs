@@ -1436,6 +1436,25 @@ mod tests {
             .is_err());
     }
 
+    #[test]
+    fn load_rejects_creature_scoped_combat_prevention_aimed_at_a_player() {
+        let bad = r#"(
+            id: "bad_combat_prevention",
+            name: "Bad Combat Prevention",
+            mana_cost: "{W}",
+            types: ["Instant"],
+            spell_effect: [
+                PreventAllCombatDamageToTargetTurn(target: (kind: AnyPlayer)),
+            ],
+        )"#;
+        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        assert!(matches!(
+            err,
+            RegistryError::InvalidCard { ref reason, .. }
+                if reason.contains("requires a creature target filter")
+        ));
+    }
+
     /// CR 701.19 / 701.20: tapping and untapping act on permanents, so a player-kind filter on
     /// either is invalid card data and must not survive registry load.
     #[test]

@@ -216,6 +216,20 @@ impl GameEngine {
         let key = event.recipient.prevention_key();
         match effect.scope {
             DamagePreventionScope::Recipient(recipient) => recipient == key,
+            DamagePreventionScope::CombatRecipient {
+                object_id,
+                zone_change_generation,
+            } => {
+                event.classification == DamageClassification::Combat
+                    && event.recipient == DamageRecipient::Permanent(object_id)
+                    && self
+                        .state
+                        .zone_change_generation
+                        .get(&object_id)
+                        .copied()
+                        .unwrap_or(0)
+                        == zone_change_generation
+            }
             DamagePreventionScope::Combat => event.classification == DamageClassification::Combat,
             DamagePreventionScope::OtherCreaturesYouControl {
                 source_id,

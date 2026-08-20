@@ -973,7 +973,8 @@ fn effect_target_legal_at_resolution_with_context(
         | SpellEffectKind::TargetPlayerSacrifices { target, .. }
         | SpellEffectKind::SkipNextUntap { target }
         | SpellEffectKind::GainControlUntilEndOfTurn { target }
-        | SpellEffectKind::PreventNextDamage { target, .. } => {
+        | SpellEffectKind::PreventNextDamage { target, .. }
+        | SpellEffectKind::PreventAllCombatDamageToTargetTurn { target } => {
             target_filter_legal_with_context(engine, target, tid, caster, source, trigger_context)
         }
         SpellEffectKind::DestroyTarget { target }
@@ -1339,7 +1340,8 @@ fn validate_effect_targets(
                 ));
             }
         }
-        SpellEffectKind::PreventNextDamage { target: filter, .. } => {
+        SpellEffectKind::PreventNextDamage { target: filter, .. }
+        | SpellEffectKind::PreventAllCombatDamageToTargetTurn { target: filter } => {
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one target"));
             }
@@ -1720,7 +1722,8 @@ fn spell_target_legality_error_with_context(
             ..
         }
         | SpellEffectKind::ReturnTargetToHand { target: filter }
-        | SpellEffectKind::PreventNextDamage { target: filter, .. } => {
+        | SpellEffectKind::PreventNextDamage { target: filter, .. }
+        | SpellEffectKind::PreventAllCombatDamageToTargetTurn { target: filter } => {
             if !target_filter_legal_with_context(
                 engine,
                 filter,

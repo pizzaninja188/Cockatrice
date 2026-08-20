@@ -175,6 +175,12 @@ pub struct CopiableValues {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DamagePreventionScope {
     Recipient(ObjectId),
+    /// One exact CR 400.7 permanent generation, and only for combat damage. ObjectIds are reused
+    /// across zone changes for relay identity, so the generation is part of the rules identity.
+    CombatRecipient {
+        object_id: ObjectId,
+        zone_change_generation: u64,
+    },
     Combat,
     OtherCreaturesYouControl {
         source_id: ObjectId,

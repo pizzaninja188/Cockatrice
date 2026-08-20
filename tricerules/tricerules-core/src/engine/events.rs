@@ -73,10 +73,21 @@ impl GameEngine {
         let mut remaining_prevention = 0u32;
         let mut per_event_prevention = 0u32;
         let mut prevents_all = false;
+        let mut prevents_all_combat = false;
         for effect in &self.state.damage_prevention_effects {
-            if effect.duration != EffectDuration::UntilEndOfTurn
-                || effect.scope != DamagePreventionScope::Recipient(oid)
+            if effect.duration != EffectDuration::UntilEndOfTurn {
+                continue;
+            }
+            if effect.scope
+                == (DamagePreventionScope::CombatRecipient {
+                    object_id: oid,
+                    zone_change_generation: generation,
+                })
             {
+                prevents_all_combat |= effect.amount == DamagePreventionAmount::All;
+                continue;
+            }
+            if effect.scope != DamagePreventionScope::Recipient(oid) {
                 continue;
             }
             match effect.amount {
@@ -94,6 +105,9 @@ impl GameEngine {
         }
         if prevents_all {
             labels.push("Prevent all damage".to_string());
+        }
+        if prevents_all_combat {
+            labels.push("Prevent all combat damage".to_string());
         }
         if per_event_prevention > 0 {
             labels.push(format!(
