@@ -558,6 +558,23 @@ pub(super) fn pay_mana(
 }
 
 impl GameEngine {
+    pub(super) fn pay_turn_face_up_mana(
+        &mut self,
+        player_idx: usize,
+        cost: &ManaCost,
+        flex_payments: &[rv1::FlexPipPayment],
+        restricted_mana: &[rv1::ManaSpendSelection],
+    ) -> Result<(), EngineError> {
+        if !restricted_mana.is_empty() {
+            return Err(EngineError::Illegal(
+                "restricted mana cannot pay a turn-face-up action",
+            ));
+        }
+        let plan = plan_mana_payment(&self.state, player_idx, cost, 0, 0, flex_payments)?;
+        commit_mana_payment(&mut self.state, player_idx, plan);
+        Ok(())
+    }
+
     fn targeting_cost_increase(
         &self,
         actor: PlayerId,

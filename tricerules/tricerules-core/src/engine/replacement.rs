@@ -1,9 +1,11 @@
 //! Shared CR 614/616 replacement ordering and battlefield-entry preprocessing.
 
-use super::characteristics::creature_matches_scope;
+use super::characteristics::{apply_face_down_values, creature_matches_scope};
 use super::events::{ev_log, finish_with_events};
 use super::history::player_life_aggregate_value;
-use super::resolution::{move_object_to_zone, permanent_moved_event};
+use super::resolution::{
+    move_object_to_zone, permanent_moved_event, permanent_moved_event_with_library_position,
+};
 use super::targeting::{battlefield_objects_matching, object_matches_mass_filter};
 use super::*;
 
@@ -86,6 +88,14 @@ impl GameEngine {
         else {
             return false;
         };
+        if self
+            .state
+            .objects
+            .get(&event.object_id)
+            .is_some_and(|object| object.face_down)
+        {
+            apply_face_down_values(&mut characteristics);
+        }
         characteristics.controller = event.destination_controller;
         creature_matches_scope(
             &self.state,
@@ -106,45 +116,47 @@ impl GameEngine {
             return Vec::new();
         };
         let mut candidates = Vec::new();
-        if let Some(face) = self.effective_face(event.object_id) {
-            for (ability_index, ability) in face.static_abilities.iter().enumerate() {
-                let (priority, label) = match ability {
-                    StaticAbilityDef::EntersAsCopy { .. } => (
-                        ReplacementPriority::EntryCopy,
-                        Some(format!("{} — enters as a copy", face.name)),
-                    ),
-                    StaticAbilityDef::EntersTapped {
-                        affected: EntersTappedAffected::Self_,
-                        condition,
-                    } if !event.tapped
-                        && condition.as_ref().is_none_or(|condition| {
-                            self.entry_condition_holds(condition, event)
-                        }) =>
-                    {
-                        (
+        if !entering.face_down {
+            if let Some(face) = self.effective_face(event.object_id) {
+                for (ability_index, ability) in face.static_abilities.iter().enumerate() {
+                    let (priority, label) = match ability {
+                        StaticAbilityDef::EntersAsCopy { .. } => (
+                            ReplacementPriority::EntryCopy,
+                            Some(format!("{} — enters as a copy", face.name)),
+                        ),
+                        StaticAbilityDef::EntersTapped {
+                            affected: EntersTappedAffected::Self_,
+                            condition,
+                        } if !event.tapped
+                            && condition.as_ref().is_none_or(|condition| {
+                                self.entry_condition_holds(condition, event)
+                            }) =>
+                        {
+                            (
+                                ReplacementPriority::Other,
+                                Some(format!("{} — enters tapped", face.name)),
+                            )
+                        }
+                        StaticAbilityDef::EntersWithCounters {
+                            affected: EntersWithCountersAffected::Self_,
+                            ..
+                        } => (
                             ReplacementPriority::Other,
-                            Some(format!("{} — enters tapped", face.name)),
-                        )
+                            Some(format!("{} — enters with counters", face.name)),
+                        ),
+                        _ => (ReplacementPriority::Other, None),
+                    };
+                    let Some(label) = label else {
+                        continue;
+                    };
+                    let effect_id = EntryReplacementEffectId::Intrinsic {
+                        object_id: event.object_id,
+                        copy_revision: entering.copy_revision,
+                        ability_index,
+                    };
+                    if !event.applied_effects.contains(&effect_id) {
+                        candidates.push((effect_id, priority, label));
                     }
-                    StaticAbilityDef::EntersWithCounters {
-                        affected: EntersWithCountersAffected::Self_,
-                        ..
-                    } => (
-                        ReplacementPriority::Other,
-                        Some(format!("{} — enters with counters", face.name)),
-                    ),
-                    _ => (ReplacementPriority::Other, None),
-                };
-                let Some(label) = label else {
-                    continue;
-                };
-                let effect_id = EntryReplacementEffectId::Intrinsic {
-                    object_id: event.object_id,
-                    copy_revision: entering.copy_revision,
-                    ability_index,
-                };
-                if !event.applied_effects.contains(&effect_id) {
-                    candidates.push((effect_id, priority, label));
                 }
             }
         }
@@ -157,6 +169,9 @@ impl GameEngine {
             .collect();
         battlefield_sources.sort_by_key(|object| object.id);
         for source in battlefield_sources {
+            if source.face_down {
+                continue;
+            }
             let Some(face) = self.effective_face(source.id) else {
                 continue;
             };
@@ -775,6 +790,39 @@ impl GameEngine {
                     events.push(ev_log(format!("P{controller} shuffles their library.")));
                 }
                 self.complete_parked_resolution(pending.item, resume_effect_index, events)
+            }
+            BattlefieldEntryCompletion::ManifestDread {
+                owner,
+                other_object_id,
+                chosen_library_position,
+            } => {
+                let object_id = event.object_id;
+                self.commit_battlefield_entry(event, None)?;
+                events.push(permanent_moved_event_with_library_position(
+                    &self.state,
+                    object_id,
+                    owner,
+                    rv1::permanent_moved::Destination::Battlefield,
+                    chosen_library_position,
+                ));
+                if let Some(other) = other_object_id {
+                    move_object_to_zone(
+                        &mut self.state,
+                        self.registry,
+                        other,
+                        Zone::Graveyard,
+                        None,
+                    )?;
+                    events.push(permanent_moved_event_with_library_position(
+                        &self.state,
+                        other,
+                        owner,
+                        rv1::permanent_moved::Destination::Graveyard,
+                        0,
+                    ));
+                }
+                events.push(ev_log(format!("P{owner} manifests dread.")));
+                self.complete_parked_resolution(pending.item, pending.resume_effect_index, events)
             }
             BattlefieldEntryCompletion::TokenBatch {
                 current_created,

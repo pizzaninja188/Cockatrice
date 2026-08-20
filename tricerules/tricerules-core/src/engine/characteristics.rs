@@ -132,6 +132,7 @@ impl CharacteristicsEvaluator<'_> {
         };
 
         self.apply_layer_1_copy(&mut result);
+        self.apply_layer_1b_face_down(object, &mut result);
         self.apply_layer_2_control(oid, &mut result);
         self.apply_layer_3_text(&mut result);
         self.apply_layer_4_type(oid, &mut result);
@@ -144,6 +145,16 @@ impl CharacteristicsEvaluator<'_> {
     fn apply_layer_1_copy(&self, _result: &mut Characteristics) {
         // The owned snapshot was selected above as the base printed face. Keeping this named
         // stage makes the CR 613 order explicit while avoiding a second characteristics path.
+    }
+
+    /// CR 613.2b / 708.2: face-down values are applied after copy effects and before every later
+    /// characteristic-changing layer. Later effects therefore modify the public 2/2 instead of
+    /// exposing or replacing the underlying printed face.
+    fn apply_layer_1b_face_down(&self, object: &GameObject, result: &mut Characteristics) {
+        if !object.face_down || object.zone != Zone::Battlefield {
+            return;
+        }
+        apply_face_down_values(result);
     }
 
     /// CR 613 layer 2 — control-changing continuous effects. This pass is deliberately earlier
@@ -262,8 +273,10 @@ impl CharacteristicsEvaluator<'_> {
             .filter(|(_, effect)| {
                 matches!(
                     effect.kind,
-                    ContinuousEffectKind::Layer6AddKeyword(_)
+                    ContinuousEffectKind::Layer6RemoveAllAbilities
+                        | ContinuousEffectKind::Layer6AddKeyword(_)
                         | ContinuousEffectKind::Layer6AddProtection(_)
+                        | ContinuousEffectKind::Layer7bSetPt { .. }
                         | ContinuousEffectKind::PtModify { .. }
                 )
             })
@@ -404,6 +417,20 @@ impl CharacteristicsEvaluator<'_> {
     }
 }
 
+/// Apply the CR 708.2 battlefield characteristics to a snapshot. Battlefield-entry replacement
+/// effects use this helper while the physical object is still in its source zone but has already
+/// been designated to enter face down.
+pub(super) fn apply_face_down_values(result: &mut Characteristics) {
+    result.types = vec!["Creature".to_string()];
+    result.supertypes.clear();
+    result.colors.clear();
+    result.keywords.clear();
+    result.protections.clear();
+    result.evasions.clear();
+    result.power = Some(2);
+    result.toughness = Some(2);
+}
+
 fn battlefield_card_type_matches(
     required: Option<CardTypeFilter>,
     characteristics: &Characteristics,
@@ -441,6 +468,15 @@ pub(super) fn effect_affects(
     oid: ObjectId,
     characteristics: &Characteristics,
 ) -> bool {
+    if effect.duration == EffectDuration::WhileSourceOnBattlefield
+        && !matches!(effect.kind, ContinuousEffectKind::Layer6RemoveAllAbilities)
+        && effect.source_id.is_some_and(|source_id| {
+            latest_remove_all_abilities_timestamp(state, source_id)
+                .is_some_and(|removed_at| effect.timestamp <= removed_at)
+        })
+    {
+        return false;
+    }
     match &effect.affected {
         AffectedScope::Single(id) => *id == oid,
         AffectedScope::AllCreatures => characteristics.is_creature(),
@@ -492,6 +528,31 @@ pub(super) fn effect_affects(
         ),
         AffectedScope::Player(_) => false,
     }
+}
+
+/// Latest remove-all-abilities timestamp for the scopes currently capable of creating that
+/// effect. Kept side-effect-free so ability enumeration and source-effect suppression consume the
+/// same layer-6 decision without recursively evaluating the full characteristics pipeline.
+pub(super) fn latest_remove_all_abilities_timestamp(
+    state: &GameState,
+    oid: ObjectId,
+) -> Option<u64> {
+    state
+        .continuous_effects
+        .iter()
+        .filter(|effect| matches!(effect.kind, ContinuousEffectKind::Layer6RemoveAllAbilities))
+        .filter(|effect| match effect.affected {
+            AffectedScope::Single(affected) => affected == oid,
+            AffectedScope::AttachedTo(source_id) => {
+                state.objects.get(&source_id).is_some_and(|source| {
+                    source.zone == Zone::Battlefield
+                        && source.attached_to == Some(AttachmentRecipient::Object(oid))
+                })
+            }
+            _ => false,
+        })
+        .map(|effect| effect.timestamp)
+        .max()
 }
 
 fn permanent_matches_target_scope(
@@ -682,21 +743,14 @@ impl CharacteristicsEvaluator<'_> {
         result: &mut Characteristics,
         effects: &[&ContinuousEffect],
     ) {
-        // CR 613.1f, 122.1b: keyword counters grant their named ability in layer 6.
-        // Counter state belongs to the physical object and is deliberately not part of its
-        // copiable values (CR 707.2).
-        for (counter, count) in &object.counters {
-            if *count > 0 {
-                let CounterKind::Keyword(keyword) = counter else {
-                    continue;
-                };
-                if !result.keywords.contains(keyword) {
-                    result.keywords.push(*keyword);
-                }
-            }
-        }
-
+        let mut last_removal_timestamp = None;
         for effect in effects {
+            if matches!(effect.kind, ContinuousEffectKind::Layer6RemoveAllAbilities) {
+                result.keywords.clear();
+                result.protections.clear();
+                result.evasions.clear();
+                last_removal_timestamp = Some(effect.timestamp);
+            }
             if let ContinuousEffectKind::Layer6AddKeyword(keyword) = effect.kind {
                 if !result.keywords.contains(&keyword) {
                     result.keywords.push(keyword);
@@ -708,6 +762,20 @@ impl CharacteristicsEvaluator<'_> {
                 }
             }
         }
+        // CR 613.1f / 122.1b: keyword counters grant abilities in timestamp order. A counter
+        // created after the latest remove-all effect survives; an earlier one is removed.
+        for (counter, count) in &object.counters {
+            let CounterKind::Keyword(keyword) = counter else {
+                continue;
+            };
+            let timestamp = object.counter_timestamps.get(counter).copied().unwrap_or(0);
+            if *count > 0
+                && last_removal_timestamp.is_none_or(|removal| timestamp > removal)
+                && !result.keywords.contains(keyword)
+            {
+                result.keywords.push(*keyword);
+            }
+        }
     }
 
     fn apply_layer_7_power_toughness(
@@ -717,9 +785,19 @@ impl CharacteristicsEvaluator<'_> {
         effects: &[&ContinuousEffect],
     ) {
         // CR 613.4a/613.3: characteristic-defining abilities. None modeled yet.
-        // CR 613.4b: P/T-setting effects. None modeled yet.
+        // CR 613.4b: apply setters in timestamp order; the last one wins.
         let mut power = result.power.map(|value| value as i32);
         let mut toughness = result.toughness.map(|value| value as i32);
+        for effect in effects {
+            if let ContinuousEffectKind::Layer7bSetPt {
+                power: set_power,
+                toughness: set_toughness,
+            } = effect.kind
+            {
+                power = Some(set_power as i32);
+                toughness = Some(set_toughness as i32);
+            }
+        }
 
         // CR 613.4c: modifying effects and P/T counters. Both are additive here, so applying the
         // counters after the other modifiers within the sublayer does not change the result.
@@ -832,6 +910,7 @@ mod tests {
                 must_attack_if_able: false,
                 must_block_if_able: false,
                 face_up_index: 0,
+                face_down: false,
                 adventure_cast_permission: None,
             },
         );
@@ -936,6 +1015,7 @@ mod tests {
                 must_attack_if_able: false,
                 must_block_if_able: false,
                 face_up_index: 0,
+                face_down: false,
                 adventure_cast_permission: None,
             },
         );
@@ -1000,6 +1080,7 @@ mod tests {
                 must_attack_if_able: false,
                 must_block_if_able: false,
                 face_up_index: 0,
+                face_down: false,
                 adventure_cast_permission: None,
             },
         );
@@ -1048,6 +1129,7 @@ mod tests {
             must_attack_if_able: false,
             must_block_if_able: false,
             face_up_index: 0,
+            face_down: false,
             adventure_cast_permission: None,
         };
         let target = engine.state.next_object_id;
@@ -1126,6 +1208,7 @@ mod tests {
                 must_attack_if_able: false,
                 must_block_if_able: false,
                 face_up_index: 0,
+                face_down: false,
                 adventure_cast_permission: None,
             },
         );
@@ -1176,6 +1259,7 @@ mod tests {
             must_attack_if_able: false,
             must_block_if_able: false,
             face_up_index: 0,
+            face_down: false,
             adventure_cast_permission: None,
         };
         let source = engine.state.next_object_id;

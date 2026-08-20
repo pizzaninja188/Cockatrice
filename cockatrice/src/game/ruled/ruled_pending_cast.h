@@ -48,6 +48,8 @@ struct RuledPendingCostSelection
 struct PendingActivatedAbility
 {
     bool valid = false;
+    bool turnFaceUp = false;
+    quint64 expectedZoneChangeGeneration = 0;
     quint32 permanentOid = 0;
     int abilityIndex = -1;
     QString abilityText;

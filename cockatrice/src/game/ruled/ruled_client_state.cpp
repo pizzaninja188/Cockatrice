@@ -1263,6 +1263,9 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     // for the answer. Not a leak risk either way — resetPerBatchLegalActions() rebuilds all of
     // it at the head of every payload.
     if (scope == RuledSessionResetScope::All) {
+        privateFaceDownNameByOwnedCard.clear();
+        privateFaceDownGenerationByOid.clear();
+        permanentActionsByOid.clear();
         clearHandActions();
         zoneCastActions = {};
         zoneCastSourceByOid.clear();

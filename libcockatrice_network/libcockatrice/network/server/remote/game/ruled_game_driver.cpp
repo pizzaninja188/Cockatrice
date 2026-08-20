@@ -22,6 +22,7 @@
 #include <libcockatrice/deck_list/tree/deck_list_card_node.h>
 #include <libcockatrice/protocol/pb/command_move_card.pb.h>
 #include <libcockatrice/protocol/pb/event_attach_card.pb.h>
+#include <libcockatrice/protocol/pb/event_flip_card.pb.h>
 #include <libcockatrice/protocol/pb/event_game_say.pb.h>
 #include <libcockatrice/protocol/pb/event_notify_user.pb.h>
 #include <libcockatrice/protocol/pb/event_ruled_payload.pb.h>
@@ -926,6 +927,23 @@ void RuledGameDriver::applyPermanentMoves(const ruled::v1::RuledEventBatch &batc
                 }
             }
         }
+        if (!card && pm.has_source_library_position()) {
+            Server_CardZone *deck = owner->getZones().value(ZoneNames::DECK);
+            const int position = static_cast<int>(pm.source_library_position());
+            if (!deck || position < 0 || position >= deck->getCards().size()) {
+                qWarning().noquote() << "ruled indexed library PermanentMoved out of range: oid" << oid
+                                     << "position" << position << "owner" << ownerId;
+                continue;
+            }
+            Server_Card *indexed = deck->getCards().at(position);
+            const QString wantCardId = QString::fromStdString(pm.card_id());
+            if (!indexed || (!wantCardId.isEmpty() && ruledCardIdForName(indexed->getName()) != wantCardId)) {
+                qWarning().noquote() << "ruled indexed library PermanentMoved identity mismatch: oid" << oid
+                                     << "position" << position << "expected" << wantCardId;
+                continue;
+            }
+            card = indexed;
+        }
         if (!card) {
             // Library cards (mill: library -> graveyard) are never registered in the engine-oid
             // map (the library is synced by name list, not object ids), so the lookup above
@@ -1031,6 +1049,7 @@ void RuledGameDriver::applyPermanentMoves(const ruled::v1::RuledEventBatch &batc
         }
         CardToMove cardToMove;
         cardToMove.set_card_id(moveCardId);
+        cardToMove.set_face_down(pm.face_down());
         // Move through the seat that physically holds the card, not the owner: for a permanent
         // controlled by someone else the card sits on the *controller's* table, and moveCard
         // builds its event from startzone->getPlayer().
@@ -1363,6 +1382,12 @@ void RuledGameDriver::applyFaceDisplays(const ruled::v1::RuledEventBatch &batch,
         }
         for (const auto &view : event.zone_view().per_player()) {
             for (const auto &object : view.battlefield_objects()) {
+                // Server_Card retains the underlying physical identity while its face-down flag
+                // makes the public wire event anonymous. Controller-only display comes from the
+                // FaceDownObjectMap; never overwrite the shared CardRef with the generic 2/2.
+                if (object.face_down()) {
+                    continue;
+                }
                 applyName(static_cast<quint32>(object.object_id()),
                           view.player_id(),
                           QString::fromStdString(object.card_id()),
@@ -1478,6 +1503,27 @@ void RuledGameDriver::applyLifeManaAndCombatEvents(const ruled::v1::RuledEventBa
     bool combatGesHasEvents = false;
     for (int ei = 0; ei < batch.events_size(); ++ei) {
         const auto &e = batch.events(ei);
+        if (e.has_face_changed()) {
+            const auto &changed = e.face_changed();
+            Server_Card *card = findBattlefieldCardByEngineOid(
+                static_cast<quint32>(changed.object_id()), changed.controller_player_id());
+            if (card && card->getZone()) {
+                card->setFaceDown(changed.face_down());
+                // A face-up change publishes both state and display identity atomically. Merely
+                // sending AttrFaceDown=0 leaves the existing client CardItem with its anonymous
+                // face-down CardRef until a later full game-state refresh.
+                Event_FlipCard faceEv;
+                faceEv.set_zone_name(card->getZone()->getName().toStdString());
+                faceEv.set_card_id(card->getId());
+                faceEv.set_face_down(changed.face_down());
+                if (!changed.face_down()) {
+                    faceEv.set_card_name(card->getName().toStdString());
+                    faceEv.set_card_provider_id(card->getProviderId().toStdString());
+                }
+                combatGes.enqueueGameEvent(faceEv, card->getZone()->getPlayer()->getPlayerId());
+                combatGesHasEvents = true;
+            }
+        }
         if (e.has_life_changed()) {
             const auto &lc = e.life_changed();
             Server_AbstractPlayer *target = game->getPlayer(lc.player_id());
@@ -1669,6 +1715,38 @@ void RuledGameDriver::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
     }
 }
 
+void RuledGameDriver::revealFaceDownPermanentsOnConcede(int concedingPlayerId, GameEventStorage &ges)
+{
+    int remainingPlayers = 0;
+    for (Server_AbstractPlayer *player : game->getPlayers().values()) {
+        if (player && !player->getConceded()) {
+            ++remainingPlayers;
+        }
+    }
+    const bool gameEnding = remainingPlayers <= 1;
+    for (Server_AbstractPlayer *player : game->getPlayers().values()) {
+        if (!player || (!gameEnding && player->getPlayerId() != concedingPlayerId)) {
+            continue;
+        }
+        Server_CardZone *table = player->getZones().value(ZoneNames::TABLE);
+        if (!table) {
+            continue;
+        }
+        for (Server_Card *card : table->getCards()) {
+            if (!card || !card->getFaceDown()) {
+                continue;
+            }
+            card->setFaceDown(false);
+            Event_SetCardAttr event;
+            event.set_zone_name(std::string(ZoneNames::TABLE));
+            event.set_card_id(card->getId());
+            event.set_attribute(AttrFaceDown);
+            event.set_attr_value("0");
+            ges.enqueueGameEvent(event, player->getPlayerId());
+        }
+    }
+}
+
 // Appends the server-built identity-map events to the outgoing batch: a
 // BattlefieldObjectMap so clients can map their visible CardItem (Server_Card.id)
 // back to the engine ObjectId that DeclareAttackers / DeclareBlockers expects, a
@@ -1763,6 +1841,40 @@ void RuledGameDriver::appendServerObjectMaps(ruled::v1::IpcResponse &toSend)
         if (map->entries_size() > 0) {
             *toSend.mutable_batch()->add_events() = mapEvent;
         }
+    }
+    // Controller-private identity for face-down battlefield objects. Always include the complete
+    // replacement, even when empty, so leave-zone and control-change batches prune stale lookup.
+    {
+        ruled::v1::RuledEvent faceDownEvent;
+        auto *faceDownMap = faceDownEvent.mutable_face_down_object_map();
+        for (Server_AbstractPlayer *ab : game->getPlayers().values()) {
+            if (!ab) {
+                continue;
+            }
+            auto *player = static_cast<Server_Player *>(ab);
+            const int playerId = player->getPlayerId();
+            const RuledPlayerBinding &binding = playerBinding(playerId);
+            for (auto it = binding.engineOidToServerCardId.constBegin();
+                 it != binding.engineOidToServerCardId.constEnd(); ++it) {
+                const quint32 oid = it.key();
+                if (!binding.isEngineOidFaceDown(oid)) {
+                    continue;
+                }
+                Server_Card *card = binding.findCardByEngineOid(player, oid);
+                if (!card || !card->getZone() || card->getZone()->getName() != ZoneNames::TABLE) {
+                    continue;
+                }
+                auto *entry = faceDownMap->add_entries();
+                entry->set_controller_player_id(playerId);
+                entry->set_engine_object_id(oid);
+                entry->set_zone_change_generation(binding.engineOidZoneChangeGeneration(oid));
+                entry->set_server_card_id(card->getId());
+                const QString cardId = binding.engineOidUnderlyingCardId(oid);
+                const QString cardName = ruledFaceDisplayName(cardId, 0);
+                entry->set_card_name((cardName.isEmpty() ? card->getName() : cardName).toStdString());
+            }
+        }
+        *toSend.mutable_batch()->add_events() = faceDownEvent;
     }
     // zone_view hand/lib fields are cleared before broadcast; publish hand index <-> Server_Card.id separately for
     // ruled UI intents. Injected only when the mapping actually changed since the last broadcast:
@@ -1887,12 +1999,13 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
         // Redact private candidates of a tier-3 resolution choice (CR 608) from everyone but the
         // deciding player. Private kinds expose a concealed zone (see isPrivateChoiceKind):
         // HAND_CARDS reveals a player's hand, LIBRARY_SEARCH their library, LIBRARY_TOP the top of
-        // their library, OPPONENT_HAND another player's hand, so only the decider sees the
+        // their library, MANIFEST_DREAD the top two, OPPONENT_HAND another player's hand, so only
+        // the decider sees the
         // candidate object ids / names; the public kinds (REVEALED, TARGET_OBJECTS, LEGEND_KEEP)
         // pass through.
         // For HAND_CARDS, inject candidate_server_card_ids for the deciding player
         // so the client can map engine OIDs to physical hand CardItems for the hand-click UI.
-        // For LIBRARY_SEARCH and LIBRARY_TOP, inject by name-matching from the decider's deck zone
+        // For library-image choices, inject by name-matching from the decider's deck zone
         // so the client can open the deck zone view and use deck-card click-to-pick (like Gifts Ungiven
         // search step). For REVEALED, inject from the non-deciding player's deck
         // so the client can render the revealed cards in a zone popup for the opponent's pick step.
@@ -1921,8 +2034,9 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
                 }
             } else if (rcr->choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH ||
                        rcr->choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP ||
-                       rcr->choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_LOOK) {
-                // LibrarySearch / LibraryTop / LibraryLook: assign each candidate a sequential
+                       rcr->choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_LOOK ||
+                       rcr->choice_kind() == ruled::v1::CHOICE_KIND_MANIFEST_DREAD) {
+                // LibrarySearch / LibraryTop / LibraryLook / ManifestDread: assign each candidate a sequential
                 // index as its server card ID.
                 // Deck cards are not in engineOidToServerCardId (only battlefield/hand/stack are),
                 // so there is no server-side lookup available. Sequential indices give every
@@ -1955,13 +2069,20 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
 
     // HandSlotMap is recipient-private: retain only the recipient's physical hand ids.
     for (int ei = 0; ei < filtered.events_size(); ++ei) {
-        if (!filtered.events(ei).has_hand_slot_map()) {
-            continue;
+        if (filtered.events(ei).has_hand_slot_map()) {
+            auto *entries = filtered.mutable_events(ei)->mutable_hand_slot_map()->mutable_entries();
+            for (int i = entries->size() - 1; i >= 0; --i) {
+                if (entries->Get(i).player_id() != participant->getPlayerId()) {
+                    entries->DeleteSubrange(i, 1);
+                }
+            }
         }
-        auto *entries = filtered.mutable_events(ei)->mutable_hand_slot_map()->mutable_entries();
-        for (int i = entries->size() - 1; i >= 0; --i) {
-            if (entries->Get(i).player_id() != participant->getPlayerId()) {
-                entries->DeleteSubrange(i, 1);
+        if (filtered.events(ei).has_face_down_object_map()) {
+            auto *entries = filtered.mutable_events(ei)->mutable_face_down_object_map()->mutable_entries();
+            for (int i = entries->size() - 1; i >= 0; --i) {
+                if (entries->Get(i).controller_player_id() != participant->getPlayerId()) {
+                    entries->DeleteSubrange(i, 1);
+                }
             }
         }
     }
@@ -1980,6 +2101,7 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
     QHash<int, ruled::v1::ResolutionChoiceRequired> routedChoices;
     QHash<int, ruled::v1::TriggerNeedsTarget> routedTriggerChoices;
     QHash<int, ruled::v1::HandSlotMap> ownHandSlotMaps;
+    QHash<int, ruled::v1::FaceDownObjectMap> ownFaceDownMaps;
     for (int ei = 0; ei < filtered.events_size(); ++ei) {
         const auto &event = filtered.events(ei);
         if (event.has_log()) {
@@ -1991,6 +2113,8 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
             routedTriggerChoices.insert(ei, event.trigger_needs_target());
         } else if (event.has_hand_slot_map()) {
             ownHandSlotMaps.insert(ei, event.hand_slot_map());
+        } else if (event.has_face_down_object_map()) {
+            ownFaceDownMaps.insert(ei, event.face_down_object_map());
         }
     }
 
@@ -2021,6 +2145,9 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
     }
     for (auto handMapIt = ownHandSlotMaps.constBegin(); handMapIt != ownHandSlotMaps.constEnd(); ++handMapIt) {
         filtered.mutable_events(handMapIt.key())->mutable_hand_slot_map()->CopyFrom(handMapIt.value());
+    }
+    for (auto faceDownIt = ownFaceDownMaps.constBegin(); faceDownIt != ownFaceDownMaps.constEnd(); ++faceDownIt) {
+        filtered.mutable_events(faceDownIt.key())->mutable_face_down_object_map()->CopyFrom(faceDownIt.value());
     }
 
     clearRuledFieldsByVisibility(&filtered, ruled::v1::FIELD_VISIBILITY_SERVER_ONLY);

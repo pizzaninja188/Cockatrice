@@ -30,6 +30,7 @@ class BlockersPreview;
 class CombatDamageAssigned;
 class CreaturesRemovedFromCombat;
 class ExileObjectMap;
+class FaceDownObjectMap;
 class GraveyardObjectMap;
 class HandSlotMap;
 class LegalActions;
@@ -90,6 +91,7 @@ private:
     void applyTriggerOrderRequired(const ruled::v1::TriggerOrderRequired &tor, BatchContext &ctx);
     void applyResolutionChoiceRequired(const ruled::v1::ResolutionChoiceRequired &rcr, BatchContext &ctx);
     void applyBattlefieldObjectMap(const ruled::v1::BattlefieldObjectMap &map, BatchContext &ctx);
+    void applyFaceDownObjectMap(const ruled::v1::FaceDownObjectMap &map, BatchContext &ctx);
     void applyHandSlotMap(const ruled::v1::HandSlotMap &map);
     void applyGraveyardObjectMap(const ruled::v1::GraveyardObjectMap &map);
     void applyExileObjectMap(const ruled::v1::ExileObjectMap &map);

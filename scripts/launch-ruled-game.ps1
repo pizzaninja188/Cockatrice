@@ -71,7 +71,7 @@ param(
     [string]$DeckA,
     [string]$DeckB,
     [string]$GameName,
-    [int]$Seed = 0,
+    [long]$Seed = 0,
     [switch]$Dev,
     [switch]$Trace,
     [switch]$Freeform,

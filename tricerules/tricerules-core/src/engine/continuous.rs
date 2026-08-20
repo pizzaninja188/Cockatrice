@@ -41,6 +41,14 @@ impl GameEngine {
         let Some(object) = self.state.objects.get(&object_id) else {
             return;
         };
+        if object.face_down {
+            return;
+        }
+        if super::characteristics::latest_remove_all_abilities_timestamp(&self.state, object_id)
+            .is_some()
+        {
+            return;
+        }
         // CR 604.2 / 611.2: a static ability's continuous effect is created by the permanent's
         // controller, and `CreatureScopeController::YouControl` scopes off this value. Reading the owner
         // here would make a reanimated Glorious Anthem pump its *former* controller's creatures.
@@ -124,10 +132,39 @@ impl GameEngine {
                 StaticAbilityDef::TargetingCostIncrease { .. } => {
                     // Evaluated live while an action's targets and total cost are finalized.
                 }
+                StaticAbilityDef::ProhibitSpecialAction {
+                    action,
+                    affected,
+                    condition,
+                } => {
+                    let affected = match affected {
+                        SpecialActionAffected::AttachedPermanent => {
+                            AffectedScope::AttachedTo(object_id)
+                        }
+                        SpecialActionAffected::Permanents(filter) => {
+                            AffectedScope::PermanentsMatching {
+                                reference_player: controller,
+                                filter,
+                                exclude: None,
+                            }
+                        }
+                    };
+                    self.state.continuous_effects.push(ContinuousEffect {
+                        source_id: Some(object_id),
+                        affected,
+                        kind: ContinuousEffectKind::ProhibitSpecialAction(action),
+                        condition,
+                        duration: EffectDuration::WhileSourceOnBattlefield,
+                        timestamp,
+                    });
+                }
                 StaticAbilityDef::AttachedModifier {
                     add_types,
                     delta_power,
                     delta_toughness,
+                    set_power,
+                    set_toughness,
+                    remove_all_abilities,
                     keywords,
                     activated_abilities,
                     triggered_abilities,
@@ -154,6 +191,26 @@ impl GameEngine {
                                 delta_power,
                                 delta_toughness,
                             },
+                            condition: None,
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
+                    if let (Some(power), Some(toughness)) = (set_power, set_toughness) {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            source_id: Some(object_id),
+                            affected: affected.clone(),
+                            kind: ContinuousEffectKind::Layer7bSetPt { power, toughness },
+                            condition: None,
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
+                    if remove_all_abilities {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            source_id: Some(object_id),
+                            affected: affected.clone(),
+                            kind: ContinuousEffectKind::Layer6RemoveAllAbilities,
                             condition: None,
                             duration: EffectDuration::WhileSourceOnBattlefield,
                             timestamp,
@@ -315,17 +372,26 @@ impl GameEngine {
         &self,
         source_id: ObjectId,
     ) -> Vec<(usize, ActivatedAbilityDef, bool)> {
-        let mut abilities: Vec<(usize, ActivatedAbilityDef, bool)> = self
-            .effective_face(source_id)
-            .map(|face| {
-                face.activated_abilities
-                    .iter()
-                    .cloned()
-                    .enumerate()
-                    .map(|(index, ability)| (index, ability, false))
-                    .collect()
-            })
-            .unwrap_or_default();
+        let face_down = self
+            .state
+            .objects
+            .get(&source_id)
+            .is_some_and(|object| object.face_down);
+        let removed_at =
+            super::characteristics::latest_remove_all_abilities_timestamp(&self.state, source_id);
+        let mut abilities: Vec<(usize, ActivatedAbilityDef, bool)> = (!face_down
+            && removed_at.is_none())
+        .then(|| self.effective_face(source_id))
+        .flatten()
+        .map(|face| {
+            face.activated_abilities
+                .iter()
+                .cloned()
+                .enumerate()
+                .map(|(index, ability)| (index, ability, false))
+                .collect()
+        })
+        .unwrap_or_default();
         let Some(characteristics) = self.characteristics(source_id) else {
             return abilities;
         };
@@ -338,6 +404,9 @@ impl GameEngine {
                 let ContinuousEffectKind::GrantActivatedAbility(ability) = &effect.kind else {
                     return None;
                 };
+                if removed_at.is_some_and(|timestamp| effect.timestamp <= timestamp) {
+                    return None;
+                }
                 super::characteristics::effect_affects(
                     &self.state,
                     self.registry,
@@ -363,6 +432,55 @@ impl GameEngine {
         self.state
             .continuous_effects
             .retain(|effect| effect.duration != EffectDuration::UntilEndOfTurn);
+        self.state.active_delayed_triggers.retain(|delayed| {
+            delayed.ability.trigger != TriggerCondition::WhenWatchedObjectDiesThisTurn
+        });
+    }
+
+    pub(super) fn special_action_prohibited(
+        &self,
+        object_id: ObjectId,
+        action: SpecialActionKind,
+    ) -> bool {
+        let Some(characteristics) = self.characteristics(object_id) else {
+            return false;
+        };
+        self.state.continuous_effects.iter().any(|effect| {
+            if !matches!(effect.kind, ContinuousEffectKind::ProhibitSpecialAction(kind) if kind == action)
+                || !super::characteristics::effect_affects(
+                    &self.state,
+                    self.registry,
+                    effect,
+                    object_id,
+                    &characteristics,
+                )
+            {
+                return false;
+            }
+            let Some(condition) = effect.condition.as_ref() else {
+                return true;
+            };
+            let Some(source_id) = effect.source_id else {
+                return false;
+            };
+            let Some(controller) = self.controller_of(source_id) else {
+                return false;
+            };
+            self.condition_holds(
+                condition,
+                ConditionContext {
+                    controller,
+                    source_object_id: source_id,
+                    source_zone_change: self
+                        .state
+                        .zone_change_generation
+                        .get(&source_id)
+                        .copied()
+                        .unwrap_or(0),
+                    resolving_spell_id: None,
+                },
+            )
+        })
     }
 
     /// CR 502.3: whether the normal untap-step turn-based action excludes this permanent.

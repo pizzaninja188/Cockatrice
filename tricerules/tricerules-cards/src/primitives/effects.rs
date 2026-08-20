@@ -2,8 +2,8 @@
 
 use super::{
     ActivatedAbilityDef, CardTypeFilter, Color, CreatureScopeFilter, GraveyardDestination,
-    GraveyardFilter, Keyword, ProtectionQuality, ReflexiveTriggeredAbilityDef, TargetController,
-    TargetFilter, TargetKind, TriggeredAbilityDef, TypeLineAddition,
+    GraveyardFilter, Keyword, ProtectionQuality, ReflexiveTriggeredAbilityDef, SpecialActionKind,
+    TargetController, TargetFilter, TargetKind, TriggeredAbilityDef, TypeLineAddition,
 };
 use crate::ManaCost;
 use serde::de::{EnumAccess, MapAccess, SeqAccess, VariantAccess};
@@ -881,6 +881,10 @@ pub enum SpellEffectKind {
     Scry {
         count: u32,
     },
+    /// CR 701.62: look at the top two cards, manifest one, then put the other into the
+    /// graveyard. The choice is private, logged, and resumable through the engine's library
+    /// picker. Bashful Beastie, Innocuous Rat, Manifest Dread, and Twist Reality.
+    ManifestDread,
     /// Look at the top `count` cards, optionally reveal one matching `filter` and put it into the
     /// controller's hand, then put the rest on the bottom. All looked-at cards are displayed in
     /// the private card-image picker; the engine separately publishes which images match.
@@ -2225,11 +2229,7 @@ impl SpellEffectKind {
                         ));
                     }
                 }
-                if !matches!(
-                    ability.trigger,
-                    super::TriggerCondition::AtBeginningOfNextEndStep
-                        | super::TriggerCondition::WhenControllerLosesControlOf
-                ) {
+                if !ability.trigger.is_delayed_only() {
                     return Err("CreateDelayedTrigger requires a delayed trigger condition".into());
                 }
                 ability.validate_shape()
@@ -2357,6 +2357,7 @@ impl SpellEffectKind {
                     Ok(())
                 }
             }
+            SpellEffectKind::ManifestDread => Ok(()),
             // CR 303.4a: an Aura may enchant an object or player. Keep mixed AnyTarget out until
             // a real card needs the additional recipient disambiguation surface.
             SpellEffectKind::AuraAttach { target } => {
@@ -2479,6 +2480,16 @@ pub enum ContinuousEffectKind {
     },
     /// CR 205.1b / 613.1d layer 4 — retain the existing type line and append these values.
     Layer4AddTypes(TypeLineAddition),
+    /// CR 613 layer 6 — remove every ability with timestamp precedence. Unable to Scream,
+    /// Kenrith's Transformation, and Darksteel Mutation share this layer operation.
+    Layer6RemoveAllAbilities,
+    /// CR 613 layer 7b — set base power and toughness before modifiers and counters.
+    Layer7bSetPt {
+        power: u32,
+        toughness: u32,
+    },
+    /// CR 101.2 / 116.2: prohibit a non-stack special action for affected permanents.
+    ProhibitSpecialAction(SpecialActionKind),
     /// CR 613 layer 7c — modifying effects (+N/+N, -N/-N).
     PtModify {
         delta_power: i32,

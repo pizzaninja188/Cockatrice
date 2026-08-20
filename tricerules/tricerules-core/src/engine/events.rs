@@ -476,24 +476,32 @@ impl GameEngine {
                             _ => keyword.as_str().to_string(),
                         })
                         .collect();
-                        let effective_display_name = object
-                            .copiable_values
-                            .as_ref()
-                            .map(|values| values.display_name.clone())
-                            .or_else(|| {
-                                self.registry.get(&object.card_id).and_then(|definition| {
-                                    definition
-                                        .face_display_name(object.face_up_index)
-                                        .map(str::to_string)
+                        let effective_display_name = if object.face_down {
+                            "Face-down creature".to_string()
+                        } else {
+                            object
+                                .copiable_values
+                                .as_ref()
+                                .map(|values| values.display_name.clone())
+                                .or_else(|| {
+                                    self.registry.get(&object.card_id).and_then(|definition| {
+                                        definition
+                                            .face_display_name(object.face_up_index)
+                                            .map(str::to_string)
+                                    })
                                 })
-                            })
-                            .unwrap_or_default();
-                        let copy_annotation = object
-                            .copiable_values
-                            .as_ref()
-                            .and_then(|_| self.registry.get(&object.card_id))
-                            .map(|definition| format!("Copy: {}", definition.name))
-                            .unwrap_or_default();
+                                .unwrap_or_default()
+                        };
+                        let copy_annotation = if object.face_down {
+                            String::new()
+                        } else {
+                            object
+                                .copiable_values
+                                .as_ref()
+                                .and_then(|_| self.registry.get(&object.card_id))
+                                .map(|definition| format!("Copy: {}", definition.name))
+                                .unwrap_or_default()
+                        };
                         rv1::BattlefieldObject {
                             object_id: oid,
                             card_id: object.card_id.clone(),
@@ -532,6 +540,13 @@ impl GameEngine {
                             rules_annotation_labels,
                             effective_display_name,
                             copy_annotation,
+                            face_down: object.face_down,
+                            zone_change_generation: self
+                                .state
+                                .zone_change_generation
+                                .get(&oid)
+                                .copied()
+                                .unwrap_or(0),
                         }
                     })
                     .collect()
@@ -574,6 +589,13 @@ impl GameEngine {
                         counters: object.counters.clone(),
                         attached_to: object.attached_to,
                         face_up_index: object.face_up_index,
+                        face_down: object.face_down,
+                        zone_change_generation: self
+                            .state
+                            .zone_change_generation
+                            .get(&object.id)
+                            .copied()
+                            .unwrap_or(0),
                         copy_revision: object.copy_revision,
                     })
                     .collect(),

@@ -806,10 +806,18 @@ bool PlayerActions::completeActivateAbility()
     }
 
     ruled::v1::RuledCommand cmd;
-    auto *aa = cmd.mutable_activate_ability();
-    aa->set_permanent_id(pendingActivatedAbility.permanentOid);
-    aa->set_ability_index(static_cast<uint32_t>(pendingActivatedAbility.abilityIndex));
-    if (pendingActivatedAbility.needsTarget) {
+    ruled::v1::ActivateAbility *aa = nullptr;
+    ruled::v1::TurnFaceUp *turnFaceUp = nullptr;
+    if (pendingActivatedAbility.turnFaceUp) {
+        turnFaceUp = cmd.mutable_turn_face_up();
+        turnFaceUp->set_object_id(pendingActivatedAbility.permanentOid);
+        turnFaceUp->set_expected_zone_change_generation(pendingActivatedAbility.expectedZoneChangeGeneration);
+    } else {
+        aa = cmd.mutable_activate_ability();
+        aa->set_permanent_id(pendingActivatedAbility.permanentOid);
+        aa->set_ability_index(static_cast<uint32_t>(pendingActivatedAbility.abilityIndex));
+    }
+    if (aa && pendingActivatedAbility.needsTarget) {
         auto *tref = aa->add_targets();
         tref->set_object_id(pendingActivatedAbility.selectedTargetOid);
         tref->set_group_index(0);
@@ -822,11 +830,14 @@ bool PlayerActions::completeActivateAbility()
     }
     // CR 107.4f: Phyrexian pips the player chose to pay with life (via self-portrait click).
     for (const quint32 pipIndex : pendingActivatedAbility.lifePipIndices) {
-        auto *flex = aa->add_flex_payments();
+        auto *flex = turnFaceUp ? turnFaceUp->add_flex_payments() : aa->add_flex_payments();
         flex->set_pip_index(pipIndex);
         flex->set_pay_life(true);
     }
     for (const auto &selection : pendingActivatedAbility.costSelections) {
+        if (!aa) {
+            break;
+        }
         auto *costSelection = aa->add_cost_selections();
         costSelection->set_cost_index(static_cast<quint32>(selection.costIndex));
         if (selection.zone == RuledCostChoiceZone::Hand) {
@@ -845,7 +856,7 @@ bool PlayerActions::completeActivateAbility()
     }
     for (auto groupIt = restrictedManaPaymentSelections.constBegin();
          groupIt != restrictedManaPaymentSelections.constEnd(); ++groupIt) {
-        auto *selection = aa->add_restricted_mana();
+        auto *selection = turnFaceUp ? turnFaceUp->add_restricted_mana() : aa->add_restricted_mana();
         selection->set_restriction_group_id(groupIt.key());
         const auto &counts = groupIt.value();
         selection->set_w(static_cast<quint32>(counts.value(QLatin1Char('W'))));
@@ -4662,7 +4673,8 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     }
 
     const QStringList abilityTexts = handler->activatedAbilitiesForOid(oid);
-    if (abilityTexts.isEmpty()) {
+    const auto permanentAction = handler->permanentActionForOid(oid);
+    if (abilityTexts.isEmpty() && !permanentAction.has_value()) {
         return false;
     }
 
@@ -4727,6 +4739,10 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     // Build and show the context menu with full "cost: text" labels (Oracle format).
     QMenu menu;
     menu.setTitle(card->getName());
+    QAction *permanentMenuAction = nullptr;
+    if (permanentAction.has_value()) {
+        permanentMenuAction = menu.addAction(permanentAction->label);
+    }
     QVector<QString> menuLabels;
     QVector<int> menuAbilityIndices;
     menuLabels.reserve(abilityTexts.size());
@@ -4749,6 +4765,29 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     QAction *chosen = menu.exec(QCursor::pos());
     if (!chosen) {
         return true; // menu was shown, player cancelled
+    }
+
+    if (chosen == permanentMenuAction) {
+        manaPaymentCounterIds.clear();
+        clearRestrictedManaPaymentSelections();
+        midCastLandTapStack.clear();
+        if (pendingRuledSpellCast.valid) {
+            cancelPendingRuledSpellCast();
+        }
+        ruledPendingCast->beginAbility();
+        pendingActivatedAbility.turnFaceUp = true;
+        pendingActivatedAbility.expectedZoneChangeGeneration = permanentAction->zoneChangeGeneration;
+        pendingActivatedAbility.permanentOid = oid;
+        pendingActivatedAbility.abilityIndex = -1;
+        pendingActivatedAbility.abilityText = permanentAction->label;
+        pendingActivatedAbility.cardName = handler->privateFaceDownNameForCard(ownerPlayerId, card->getId());
+        if (pendingActivatedAbility.cardName.isEmpty()) {
+            pendingActivatedAbility.cardName = tr("face-down permanent");
+        }
+        pendingActivatedAbility.remainingCost = parseSimpleManaCost(permanentAction->manaCost);
+        pendingActivatedAbility.flexPips = parseFlexPips(permanentAction->manaCost);
+        continuePendingActivatedAbilityAfterChoice();
+        return true;
     }
 
     const int menuIndex = menuLabels.indexOf(chosen->text());

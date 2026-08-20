@@ -95,8 +95,11 @@ fn cartouche_requires_a_creature_its_aura_controller_controls() {
         face.static_abilities,
         [StaticAbilityDef::AttachedModifier {
             add_types: Default::default(),
+            set_power: None,
+            set_toughness: None,
             delta_power: 1,
             delta_toughness: 1,
+            remove_all_abilities: false,
             keywords: vec![Keyword::Flying],
             activated_abilities: Vec::new(),
             triggered_abilities: Vec::new(),

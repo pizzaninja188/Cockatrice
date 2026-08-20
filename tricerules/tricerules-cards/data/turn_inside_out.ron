@@ -1,0 +1,19 @@
+(
+  id: "turn_inside_out",
+  name: "Turn Inside Out",
+  mana_cost: "{R}",
+  // Oracle checked 2026-08-19: target creature gets +3/+0 until end of turn. When that creature
+  // dies this turn, manifest dread. The delayed trigger follows the exact battlefield object.
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 3, toughness: 0, subject: Chosen((kind: Creature))),
+    CreateDelayedTrigger(
+      subject: Chosen((kind: Creature)),
+      ability: (
+        trigger: WhenWatchedObjectDiesThisTurn,
+        effect: [ManifestDread],
+        text: "When that creature dies this turn, manifest dread.",
+      ),
+    ),
+  ],
+)

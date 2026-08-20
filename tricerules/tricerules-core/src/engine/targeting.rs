@@ -1409,6 +1409,7 @@ fn validate_effect_targets(
         | SpellEffectKind::SearchLibrary { .. }
         | SpellEffectKind::LookChooseToHand { .. }
         | SpellEffectKind::Scry { .. }
+        | SpellEffectKind::ManifestDread
         | SpellEffectKind::ChooseResolutionBranch { .. }
         | SpellEffectKind::CreateReflexiveTrigger { .. }
         | SpellEffectKind::ChangeSourceFace { .. }

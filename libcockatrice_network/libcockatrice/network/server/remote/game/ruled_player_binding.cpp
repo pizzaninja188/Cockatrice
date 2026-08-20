@@ -451,6 +451,9 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
             engineOidToHaste.clear();
             engineOidToTrample.clear();
             engineOidToCreature.clear();
+            engineOidToFaceDown.clear();
+            engineOidToZoneChangeGeneration.clear();
+            engineOidToUnderlyingCardId.clear();
             for (int i = 0; i < ordered.size(); ++i) {
                 Server_Card *card = ordered[i];
                 if (!card) {
@@ -476,6 +479,10 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                 engineOidToTrample.insert(oid, hasTrample);
                 const bool isCreatureFlag = battlefieldObject.is_creature();
                 engineOidToCreature.insert(oid, isCreatureFlag);
+                engineOidToFaceDown.insert(oid, battlefieldObject.face_down());
+                engineOidToZoneChangeGeneration.insert(
+                    oid, static_cast<quint64>(battlefieldObject.zone_change_generation()));
+                engineOidToUnderlyingCardId.insert(oid, QString::fromStdString(battlefieldObject.card_id()));
 
                 if (tapGes) {
                     const bool desiredTapped = battlefieldObject.tapped();

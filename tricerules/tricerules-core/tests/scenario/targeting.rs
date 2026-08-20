@@ -847,6 +847,7 @@ fn mind_sculpt_rejects_self_target() {
                 must_attack_if_able: false,
                 must_block_if_able: false,
                 face_up_index: 0,
+                face_down: false,
                 adventure_cast_permission: None,
             },
         );

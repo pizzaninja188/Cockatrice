@@ -66,6 +66,7 @@
 #include <libcockatrice/protocol/pb/command_ready_start.pb.h>
 #include <libcockatrice/protocol/pb/command_ruled_payload.pb.h>
 #include <libcockatrice/protocol/pb/commands.pb.h>
+#include <libcockatrice/protocol/pb/event_flip_card.pb.h>
 #include <libcockatrice/protocol/pb/event_game_joined.pb.h>
 #include <libcockatrice/protocol/pb/event_game_state_changed.pb.h>
 #include <libcockatrice/protocol/pb/event_list_games.pb.h>
@@ -210,6 +211,8 @@ public:
         int power = 0;
         int toughness = 0;
         int faceIndex = 0;
+        bool faceDown = false;
+        quint64 generation = 0;
         int attachmentPlayerId = -1;
     };
     std::map<int, std::vector<Permanent>> battlefieldByPlayer;
@@ -249,6 +252,23 @@ public:
     bool devCurseConjureSent = false;
     bool devCurseManaSent = false;
     bool curseCast = false;
+    bool devManifestSpellConjured = false;
+    bool devManifestManaSent = false;
+    bool manifestSpellCast = false;
+    bool sawManifestChoicePrivate = false;
+    bool sawManifestChoiceRedacted = false;
+    bool submittedManifestChoice = false;
+    bool sawManifestPublicFaceDown = false;
+    bool sawManifestPrivateIdentity = false;
+    bool sawOpponentManifestIdentityEmpty = false;
+    bool turnManifestFaceUpSent = false;
+    bool sawManifestFaceChanged = false;
+    bool sawManifestPhysicalFaceDown = false;
+    bool sawManifestPhysicalFaceUp = false;
+    bool sawManifestPhysicalFaceUpIdentity = false;
+    quint32 manifestOid = 0;
+    quint64 manifestGeneration = 0;
+    int manifestServerCardId = -1;
     // Flashback (CR 702.34) exercises the one relay path nothing else covers: the physical
     // card is sourced from the GRAVE pile rather than the hand. Tracked through the freeform
     // Event_MoveCard stream, because the ruled batch looks identical whether or not the relay
@@ -550,6 +570,13 @@ public:
                 const QLatin1String exile(ZoneNames::EXILE);
                 const QLatin1String table(ZoneNames::TABLE);
                 const QLatin1String deck(ZoneNames::DECK);
+                if (from == deck && to == table && mc.face_down()) {
+                    sawManifestPhysicalFaceDown = true;
+                    if (manifestServerCardId >= 0 && manifestServerCardId != mc.new_card_id()) {
+                        ADD_FAILURE() << "manifest-dread face-down move changed physical card id";
+                    }
+                    manifestServerCardId = mc.new_card_id();
+                }
                 if (name == QLatin1String("Mountain") && from == deck && to == table) {
                     sawEvolvingWildsPhysicalDeckToTable = true;
                     if (evolvingWildsPhysicalCardId >= 0 &&
@@ -627,7 +654,19 @@ public:
                     sawProtectionPhysicalAnnotation =
                         sawProtectionPhysicalAnnotation ||
                         QString::fromStdString(attr.attr_value()).contains(
-                            QStringLiteral("Protection from artifacts"));
+                        QStringLiteral("Protection from artifacts"));
+                } else if (attr.attribute() == AttrFaceDown && manifestServerCardId >= 0 &&
+                           attr.card_id() == manifestServerCardId) {
+                    sawManifestPhysicalFaceDown = sawManifestPhysicalFaceDown || attr.attr_value() == "1";
+                    sawManifestPhysicalFaceUp = sawManifestPhysicalFaceUp || attr.attr_value() == "0";
+                }
+            }
+            if (ev.HasExtension(Event_FlipCard::ext)) {
+                const auto &flip = ev.GetExtension(Event_FlipCard::ext);
+                if (manifestServerCardId >= 0 && flip.card_id() == manifestServerCardId && !flip.face_down() &&
+                    flip.card_name() == "Hill Giant") {
+                    sawManifestPhysicalFaceUp = true;
+                    sawManifestPhysicalFaceUpIdentity = true;
                 }
             }
             if (ev.HasExtension(Event_RuledPayload::ext)) {
@@ -728,9 +767,25 @@ public:
                 if (waifOid != 0 && face.object_id() == waifOid && face.face_up_index() == 1) {
                     sawWaifFaceChanged = true;
                 }
+                if (manifestOid != 0 && face.object_id() == manifestOid && !face.face_down()) {
+                    sawManifestFaceChanged = true;
+                }
             } else if (ev.has_battlefield_object_map()) {
                 for (const auto &entry : ev.battlefield_object_map().entries()) {
                     serverCardByEngineOid[entry.engine_object_id()] = entry.server_card_id();
+                }
+            } else if (ev.has_face_down_object_map()) {
+                for (const auto &entry : ev.face_down_object_map().entries()) {
+                    if (entry.controller_player_id() == myId && entry.card_name() == "Hill Giant") {
+                        manifestOid = entry.engine_object_id();
+                        manifestGeneration = entry.zone_change_generation();
+                        manifestServerCardId = entry.server_card_id();
+                        sawManifestPrivateIdentity = true;
+                    }
+                }
+                if (role == Role::Hoarder && sawManifestChoiceRedacted &&
+                    ev.face_down_object_map().entries_size() == 0) {
+                    sawOpponentManifestIdentityEmpty = true;
                 }
             } else if (ev.has_trigger_order_required()) {
                 const auto &tor = ev.trigger_order_required();
@@ -753,6 +808,18 @@ public:
                             rcr.candidate_names_size() == 0 && rcr.candidate_server_card_ids_size() == 0;
                     }
                 }
+                if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANIFEST_DREAD) {
+                    if (rcr.deciding_player_id() == myId) {
+                        sawManifestChoicePrivate = rcr.candidate_object_ids_size() == 2 &&
+                                                   rcr.candidate_names_size() == 2 &&
+                                                   rcr.candidate_server_card_ids_size() == 2;
+                    } else {
+                        sawManifestChoiceRedacted = rcr.candidate_object_ids_size() == 0 &&
+                                                    rcr.candidate_card_ids_size() == 0 &&
+                                                    rcr.candidate_names_size() == 0 &&
+                                                    rcr.candidate_server_card_ids_size() == 0;
+                    }
+                }
                 if (rcr.deciding_player_id() == myId &&
                     (rcr.candidate_object_ids_size() > 0 ||
                      rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANA_PAYMENT ||
@@ -768,7 +835,7 @@ public:
             } else if (ev.has_permanent_moved()) {
                 const auto &moved = ev.permanent_moved();
                 if (moved.destination() == ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD &&
-                    moved.card_id() == "mountain") {
+                    (moved.card_id() == "mountain" || sawEvolvingWildsPhysicalDeckToTable)) {
                     sawEvolvingWildsPermanentMoved = true;
                     if (evolvingWildsChosenOid == 0) {
                         evolvingWildsChosenOid = moved.object_id();
@@ -796,6 +863,11 @@ public:
                         for (const auto &battlefieldObject : pp.battlefield_objects()) {
                             Permanent perm;
                             perm.cardId = QString::fromStdString(battlefieldObject.card_id());
+                            if (perm.cardId.isEmpty() && !battlefieldObject.face_down()) {
+                                perm.cardId = QString::fromStdString(battlefieldObject.effective_display_name())
+                                                  .toLower()
+                                                  .replace(QLatin1Char(' '), QLatin1Char('_'));
+                            }
                             perm.oid = battlefieldObject.object_id();
                             perm.tapped = battlefieldObject.tapped();
                             perm.creature = battlefieldObject.is_creature();
@@ -803,6 +875,8 @@ public:
                             perm.power = static_cast<int>(battlefieldObject.power());
                             perm.toughness = static_cast<int>(battlefieldObject.toughness());
                             perm.faceIndex = static_cast<int>(battlefieldObject.face_up_index());
+                            perm.faceDown = battlefieldObject.face_down();
+                            perm.generation = battlefieldObject.zone_change_generation();
                             if (battlefieldObject.has_attachment_recipient() &&
                                 battlefieldObject.attachment_recipient().recipient_case() ==
                                     ruled::v1::AttachmentRecipient::kPlayerId) {
@@ -812,12 +886,24 @@ public:
                                                    battlefieldObject.keywords().end(),
                                                    "Haste") != battlefieldObject.keywords().end();
                             bf.push_back(perm);
-                            if (perm.cardId == QLatin1String("reckless_waif_merciless_predator")) {
+                            if (perm.faceDown && perm.creature && perm.power == 2 && perm.toughness == 2) {
+                                if (manifestOid == 0 || manifestOid == perm.oid) {
+                                    manifestOid = perm.oid;
+                                    manifestGeneration = perm.generation;
+                                    sawManifestPublicFaceDown = true;
+                                }
+                            }
+                            if (perm.cardId == QLatin1String("reckless_waif_merciless_predator") ||
+                                perm.cardId == QLatin1String("reckless_waif")) {
                                 sawWaifOnBattlefield = true;
                                 waifOid = perm.oid;
                                 if (perm.faceIndex == 1 && perm.power == 3 && perm.toughness == 2) {
                                     sawWaifBackPt = true;
                                 }
+                            }
+                            if (waifOid != 0 && perm.oid == waifOid && perm.faceIndex == 1 && perm.power == 3 &&
+                                perm.toughness == 2) {
+                                sawWaifBackPt = true;
                             }
                             if (perm.cardId == QLatin1String("anti-venom,_horrifying_healer")) {
                                 protectionTargetOid = perm.oid;
@@ -1355,6 +1441,7 @@ public:
             }
             const bool isReplacement = rcr.choice_kind() == ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT;
             const bool isLibrarySearch = rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH;
+            const bool isManifestDread = rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANIFEST_DREAD;
             const QString prompt = QString::fromStdString(rcr.prompt_text());
             const bool isEntryReplacement = isReplacement && prompt.contains(QStringLiteral("entering the battlefield"));
             const bool isDamagePrevention = isReplacement && !isEntryReplacement;
@@ -1372,8 +1459,26 @@ public:
             const int need = isLibrarySearch && rcr.candidate_object_ids_size() > 0
                                  ? 1
                                  : static_cast<int>(rcr.min());
-            for (int i = 0; i < need && i < rcr.candidate_object_ids_size(); ++i) {
-                choice->add_chosen_object_ids(rcr.candidate_object_ids(i));
+            if (isManifestDread) {
+                int chosen = -1;
+                for (int i = 0; i < rcr.candidate_names_size(); ++i) {
+                    if (rcr.candidate_names(i) == "Hill Giant") {
+                        chosen = i;
+                        break;
+                    }
+                }
+                if (chosen < 0) {
+                    ADD_FAILURE() << "manifest-dread private candidates did not contain Hill Giant";
+                    pendingChoice.reset();
+                    return;
+                }
+                choice->add_chosen_object_ids(rcr.candidate_object_ids(chosen));
+                manifestOid = rcr.candidate_object_ids(chosen);
+                submittedManifestChoice = true;
+            } else {
+                for (int i = 0; i < need && i < rcr.candidate_object_ids_size(); ++i) {
+                    choice->add_chosen_object_ids(rcr.candidate_object_ids(i));
+                }
             }
             if (isLibrarySearch && need == 1) {
                 evolvingWildsChosenOid = rcr.candidate_object_ids(0);
@@ -1384,7 +1489,7 @@ public:
                 submittedDamagePreventionChoice = true;
             } else if (isEntryReplacement) {
                 submittedEntryReplacementChoice = true;
-            } else {
+            } else if (!isManifestDread) {
                 submittedBrainstormChoice = true;
             }
             sendRuled(cmd, QStringLiteral("submit resolution choice (%1 cards)").arg(need));
@@ -1478,6 +1583,65 @@ public:
             (phase == ruled::v1::PHASE_ID_MAIN1 || phase == ruled::v1::PHASE_ID_MAIN2) && activePlayer == myId;
 
         if (role == Role::Aggressor && inMain && stackDepth == 0) {
+            // Issue #98: the fixed seed puts Hill Giant and Lightning Bolt on top. Cast Manifest
+            // Dread, exercise private candidate publication, then use the generation-bound
+            // special action to flip the exact physical Hill Giant in place.
+            if (!devManifestSpellConjured) {
+                devManifestSpellConjured = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                auto *put = dev->mutable_put_card_in_zone();
+                put->set_card_name("Manifest Dread");
+                put->set_zone(ruled::v1::DEV_ZONE_HAND);
+                sendRuled(cmd, QStringLiteral("dev: conjure Manifest Dread"));
+                return;
+            }
+            if (!devManifestManaSent) {
+                devManifestManaSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                dev->mutable_add_mana()->set_g(1);
+                dev->mutable_add_mana()->set_r(1);
+                // {1}{G} for Manifest Dread plus {3}{R} for Hill Giant's special action.
+                dev->mutable_add_mana()->set_c(4);
+                sendRuled(cmd, QStringLiteral("dev: add mana for Manifest Dread and turn face up"));
+                return;
+            }
+            if (!manifestSpellCast) {
+                if (const auto *spell =
+                        handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Manifest Dread"))) {
+                    ruled::v1::RuledCommand cmd;
+                    cmd.mutable_cast_spell()->mutable_source()->set_hand_index(spell->hand_index());
+                    manifestSpellCast = true;
+                    sendRuled(cmd, QStringLiteral("cast Manifest Dread"));
+                    return;
+                }
+            }
+            if (manifestSpellCast && !submittedManifestChoice) {
+                return;
+            }
+            if (submittedManifestChoice && !turnManifestFaceUpSent) {
+                for (const auto &action : latestLegal.permanent_actions()) {
+                    if (action.kind() == ruled::v1::PERMANENT_ACTION_KIND_TURN_FACE_UP &&
+                        action.object_id() == manifestOid) {
+                        EXPECT_EQ(action.zone_change_generation(), manifestGeneration);
+                        EXPECT_EQ(action.mana_cost(), "{3}{R}");
+                        ruled::v1::RuledCommand cmd;
+                        auto *turn = cmd.mutable_turn_face_up();
+                        turn->set_object_id(action.object_id());
+                        turn->set_expected_zone_change_generation(action.zone_change_generation());
+                        turnManifestFaceUpSent = true;
+                        sendRuled(cmd, QStringLiteral("turn manifested Hill Giant face up"));
+                        return;
+                    }
+                }
+                return;
+            }
+            if (turnManifestFaceUpSent && !sawManifestFaceChanged) {
+                return;
+            }
             if (!devCurseConjureSent) {
                 devCurseConjureSent = true;
                 ruled::v1::RuledCommand cmd;
@@ -2258,6 +2422,11 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     // --- Drive the scripted game until every milestone is observed ---
     const auto milestonesDone = [&] {
         return p2.sentBottom && p1.sawBattlefieldOmission && p2.sawBattlefieldOmission && p1.sawBoltPushWithTarget &&
+               p1.sawManifestChoicePrivate && p2.sawManifestChoiceRedacted && p1.submittedManifestChoice &&
+               p1.sawManifestPublicFaceDown && p2.sawManifestPublicFaceDown && p1.sawManifestPrivateIdentity &&
+               p2.sawOpponentManifestIdentityEmpty && p1.sawManifestPhysicalFaceDown &&
+               p2.sawManifestPhysicalFaceDown && p1.sawManifestFaceChanged && p2.sawManifestFaceChanged &&
+               p1.sawManifestPhysicalFaceUp && p2.sawManifestPhysicalFaceUp &&
                p1.sawCursePlayerAttachment && p2.sawCursePlayerAttachment && p1.hasCursePhysicalAnnotation() &&
                p2.hasCursePhysicalAnnotation() &&
                p1.sawBoltLifeLoss && p1.sawBorosCharmPushWithMode && p1.sawBorosCharmLifeLoss &&
@@ -2443,6 +2612,21 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
            "'applyRuledEngineZoneView: count mismatch' or 'missing')";
     EXPECT_GE(p1.countOwn(QStringLiteral("serra_angel"), false), 1) << "conjured permanent missing at end of game";
     EXPECT_TRUE(p1.sawDevMana) << "dev mana never reached the aggressor's pool";
+    EXPECT_TRUE(p1.sawManifestChoicePrivate && p2.sawManifestChoiceRedacted)
+        << "manifest-dread candidates were not private to the deciding player";
+    EXPECT_TRUE(p1.sawManifestPrivateIdentity && p2.sawOpponentManifestIdentityEmpty)
+        << "face-down identity map was not restricted to the controller";
+    EXPECT_TRUE(p1.sawManifestPublicFaceDown && p2.sawManifestPublicFaceDown)
+        << "both clients did not receive the public face-down 2/2";
+    EXPECT_TRUE(p1.sawManifestFaceChanged && p2.sawManifestFaceChanged)
+        << "both clients did not receive the in-place turn-face-up change";
+    EXPECT_TRUE(p1.sawManifestPhysicalFaceDown && p2.sawManifestPhysicalFaceDown &&
+                p1.sawManifestPhysicalFaceUp && p2.sawManifestPhysicalFaceUp)
+        << "the same physical card was not shown face down and then face up on both clients";
+    EXPECT_TRUE(p1.sawManifestPhysicalFaceUpIdentity && p2.sawManifestPhysicalFaceUpIdentity)
+        << "the face-up physical event did not immediately publish Hill Giant's display identity";
+    EXPECT_EQ(p1.manifestServerCardId, p2.manifestServerCardId)
+        << "clients disagreed on manifested Server_Card identity";
     EXPECT_TRUE(p1.sawWaifOnBattlefield && p2.sawWaifOnBattlefield)
         << "both clients did not receive the conjured Reckless Waif battlefield identity";
     EXPECT_NE(p1.waifOid, 0u);

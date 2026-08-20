@@ -973,6 +973,7 @@ impl GameEngine {
                         zones::draw_discard(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::Scry { .. } => zones::scry(&mut cx, effect)?,
+                    SpellEffectKind::ManifestDread => zones::manifest_dread(&mut cx)?,
                     effect @ SpellEffectKind::LookChooseToHand { .. } => {
                         zones::look_choose_to_hand(&mut cx, effect)?
                     }
@@ -1240,6 +1241,7 @@ impl GameEngine {
                         must_attack_if_able: false,
                         must_block_if_able: false,
                         face_up_index: 0,
+                        face_down: false,
                         adventure_cast_permission: None,
                     },
                 );
@@ -1358,6 +1360,11 @@ pub(crate) fn permanent_moved_event(
             destination: destination as i32,
             card_id,
             controller_player_id,
+            face_down: state
+                .objects
+                .get(&oid)
+                .is_some_and(|object| object.zone == Zone::Battlefield && object.face_down),
+            source_library_position: None,
         })),
     }
 }
@@ -1533,6 +1540,7 @@ pub(crate) fn move_object_to_zone(
             o.attached_to = None;
             o.regeneration_shields = 0;
             o.face_up_index = 0;
+            o.face_down = false;
             o.copiable_values = None;
             o.copy_revision = 0;
             if let Some((power, toughness, must_attack, must_block)) = front_face_values {
@@ -1677,6 +1685,20 @@ fn counter_label(kind: CounterKind) -> String {
     kind.label()
 }
 
+pub(crate) fn permanent_moved_event_with_library_position(
+    state: &GameState,
+    oid: ObjectId,
+    owner_player_id: PlayerId,
+    destination: rv1::permanent_moved::Destination,
+    source_library_position: u32,
+) -> rv1::RuledEvent {
+    let mut event = permanent_moved_event(state, oid, owner_player_id, destination);
+    if let Some(rv1::ruled_event::Ev::PermanentMoved(moved)) = event.ev.as_mut() {
+        moved.source_library_position = Some(source_library_position);
+    }
+    event
+}
+
 /// Return true if the library card `oid` satisfies `filter` (None = any card). The definition
 /// chooses the rules-correct characteristics for its physical layout in this non-stack zone.
 pub(super) fn library_card_matches_filter(
@@ -1793,6 +1815,7 @@ mod anthem_scope_tests {
                 must_attack_if_able: false,
                 must_block_if_able: false,
                 face_up_index: 0,
+                face_down: false,
                 adventure_cast_permission: None,
             },
         );
@@ -1860,6 +1883,7 @@ mod attached_subject_tests {
                 must_attack_if_able: false,
                 must_block_if_able: false,
                 face_up_index: 0,
+                face_down: false,
                 adventure_cast_permission: None,
             },
         );
@@ -2325,6 +2349,7 @@ mod source_keyword_tests {
                 must_attack_if_able: false,
                 must_block_if_able: false,
                 face_up_index: 0,
+                face_down: false,
                 adventure_cast_permission: None,
             },
         );
@@ -2362,6 +2387,7 @@ mod source_keyword_tests {
                 must_attack_if_able: false,
                 must_block_if_able: false,
                 face_up_index: 0,
+                face_down: false,
                 adventure_cast_permission: None,
             },
         );

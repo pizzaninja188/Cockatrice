@@ -275,6 +275,13 @@ protected:
                            [](const auto &event) { return event.has_hand_slot_map(); });
     }
 
+    ruled::v1::RuledEventBatch appendedServerMaps()
+    {
+        ruled::v1::IpcResponse resp;
+        game->ruled()->appendServerObjectMaps(resp);
+        return resp.batch();
+    }
+
     static Server_Card *addCardToHand(Server_Player *p, const QString &name)
     {
         Server_CardZone *hand = p->getZones().value(ZoneNames::HAND);
@@ -599,6 +606,42 @@ TEST_F(RuledBatchTest, LibraryTopChoiceIsPrivateToTheScryingPlayerWithSequential
     EXPECT_EQ(p2Choice.prompt_text(), "Opponent is making a resolution choice.");
 }
 
+TEST_F(RuledBatchTest, ManifestDreadChoiceIsPrivateAndGetsDistinctPhysicalCandidateIds)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(1);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_MANIFEST_DREAD);
+    choice->set_prompt_text("Choose one of the top two cards to manifest");
+    for (const quint32 oid : {91u, 92u}) {
+        choice->add_candidate_object_ids(oid);
+    }
+    choice->add_candidate_card_ids("hill_giant");
+    choice->add_candidate_card_ids("forest");
+    choice->add_candidate_names("Hill Giant");
+    choice->add_candidate_names("Forest");
+
+    const auto forP1 = redactFor(batch, p1);
+    const auto p1ChoiceIt = std::find_if(forP1.events().begin(), forP1.events().end(),
+                                         [](const auto &event) { return event.has_resolution_choice_required(); });
+    ASSERT_NE(p1ChoiceIt, forP1.events().end());
+    const auto &p1Choice = p1ChoiceIt->resolution_choice_required();
+    ASSERT_EQ(p1Choice.candidate_server_card_ids_size(), 2);
+    EXPECT_EQ(p1Choice.candidate_server_card_ids(0), 0);
+    EXPECT_EQ(p1Choice.candidate_server_card_ids(1), 1);
+
+    const auto forP2 = redactFor(batch, p2);
+    const auto p2ChoiceIt = std::find_if(forP2.events().begin(), forP2.events().end(),
+                                         [](const auto &event) { return event.has_resolution_choice_required(); });
+    ASSERT_NE(p2ChoiceIt, forP2.events().end());
+    const auto &p2Choice = p2ChoiceIt->resolution_choice_required();
+    EXPECT_EQ(p2Choice.candidate_object_ids_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_card_ids_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_names_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_server_card_ids_size(), 0);
+    EXPECT_EQ(p2Choice.prompt_text(), "Opponent is making a resolution choice.");
+}
+
 // Looking at a fixed library cohort exposes the same hidden information as scry, but the engine
 // also identifies which displayed cards satisfy the effect's filter. Both parallel arrays belong
 // only to the deciding player; the other seat gets a wait prompt and no eligibility oracle.
@@ -612,6 +655,7 @@ TEST_F(RuledBatchTest, LibraryLookChoiceKeepsImagesAndEligibilityPrivate)
     for (const quint32 oid : {81u, 82u, 83u}) {
         choice->add_candidate_object_ids(oid);
     }
+
     for (const char *cardId : {"forest", "grizzly_bears", "island"}) {
         choice->add_candidate_card_ids(cardId);
     }
@@ -1987,6 +2031,109 @@ TEST_F(RuledBatchTest, FaceChangedRenamesPermanentInPlace)
     EXPECT_EQ(card->getY(), 1);
     EXPECT_TRUE(card->getTapped());
     EXPECT_EQ(findCardByEngineOid(p1, 701u), card);
+}
+
+TEST_F(RuledBatchTest, IndexedLibraryMoveUsesTheExactDuplicateAndEntersFaceDown)
+{
+    Server_CardZone *deck = p1->getZones().value(ZoneNames::DECK);
+    Server_CardZone *table = p1->getZones().value(ZoneNames::TABLE);
+    ASSERT_NE(deck, nullptr);
+    ASSERT_NE(table, nullptr);
+    auto *first = new Server_Card({"Grizzly Bears", "grizzly_bears"}, p1->newCardId(), 0, 0);
+    auto *second = new Server_Card({"Grizzly Bears", "grizzly_bears"}, p1->newCardId(), 0, 0);
+    deck->insertCard(first, -1, 0);
+    deck->insertCard(second, -1, 0);
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *moved = response.mutable_batch()->add_events()->mutable_permanent_moved();
+    moved->set_object_id(9801u);
+    moved->set_owner_player_id(1);
+    moved->set_controller_player_id(1);
+    moved->set_destination(ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD);
+    moved->set_card_id("grizzly_bears");
+    moved->set_face_down(true);
+    moved->set_source_library_position(1);
+    callBatchApply(response);
+
+    ASSERT_EQ(deck->getCards().size(), 1);
+    EXPECT_EQ(deck->getCards().first(), first);
+    ASSERT_EQ(table->getCards().size(), 1);
+    EXPECT_EQ(table->getCards().first(), second);
+    EXPECT_TRUE(second->getFaceDown());
+}
+
+TEST_F(RuledBatchTest, FaceDownIdentityIsControllerOnlyAndFaceUpKeepsServerCard)
+{
+    Server_Card *card = addCardToTable(p1, "Grizzly Bears");
+    const int serverId = card->getId();
+    card->setFaceDown(true);
+
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *zoneView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto ownerView = buildPerPlayerView(p1, {9802u}, {false});
+    auto *object = ownerView.mutable_battlefield_objects(0);
+    object->set_face_down(true);
+    object->set_zone_change_generation(7);
+    object->set_is_creature(true);
+    object->set_power(2);
+    object->set_toughness(2);
+    object->set_effective_display_name("Face-down creature");
+    *zoneView->add_per_player() = ownerView;
+    *zoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    ASSERT_TRUE(callBatchApply(seed).zoneViewApplied);
+    EXPECT_EQ(card->getName(), QString("Grizzly Bears")) << "shared identity stays underlying";
+
+    const auto maps = appendedServerMaps();
+    const auto forController = redactFor(maps, p1);
+    const auto forOpponent = redactFor(maps, p2);
+    const auto findFaceMap = [](const ruled::v1::RuledEventBatch &batch)
+        -> const ruled::v1::FaceDownObjectMap * {
+        for (const auto &event : batch.events()) {
+            if (event.has_face_down_object_map()) {
+                return &event.face_down_object_map();
+            }
+        }
+        return nullptr;
+    };
+    const auto *controllerMap = findFaceMap(forController);
+    const auto *opponentMap = findFaceMap(forOpponent);
+    ASSERT_NE(controllerMap, nullptr);
+    ASSERT_NE(opponentMap, nullptr);
+    ASSERT_EQ(controllerMap->entries_size(), 1);
+    EXPECT_EQ(controllerMap->entries(0).engine_object_id(), 9802u);
+    EXPECT_EQ(controllerMap->entries(0).zone_change_generation(), 7u);
+    EXPECT_EQ(controllerMap->entries(0).server_card_id(), serverId);
+    EXPECT_EQ(controllerMap->entries(0).card_name(), "Grizzly Bears");
+    EXPECT_EQ(opponentMap->entries_size(), 0);
+
+    ruled::v1::IpcResponse turnUp;
+    turnUp.set_ok(true);
+    auto *changed = turnUp.mutable_batch()->add_events()->mutable_face_changed();
+    changed->set_object_id(9802u);
+    changed->set_controller_player_id(1);
+    changed->set_face_up_index(0);
+    changed->set_face_down(false);
+    callBatchApply(turnUp);
+    EXPECT_FALSE(card->getFaceDown());
+    EXPECT_EQ(card->getId(), serverId);
+    EXPECT_EQ(findCardByEngineOid(p1, 9802u), card);
+}
+
+TEST_F(RuledBatchTest, GameEndingConcessionRevealsEveryRemainingFaceDownPermanent)
+{
+    Server_Card *aliceCard = addCardToTable(p1, "Grizzly Bears");
+    Server_Card *bobCard = addCardToTable(p2, "Timber Wolves");
+    aliceCard->setFaceDown(true);
+    bobCard->setFaceDown(true);
+    p1->setConceded(true);
+
+    GameEventStorage events;
+    game->ruled()->revealFaceDownPermanentsOnConcede(p1->getPlayerId(), events);
+
+    EXPECT_FALSE(aliceCard->getFaceDown());
+    EXPECT_FALSE(bobCard->getFaceDown());
 }
 
 TEST_F(RuledBatchTest, FullSnapshotRestoresControlledPermanentActiveFace)

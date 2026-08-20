@@ -1,6 +1,7 @@
 #include "server_abstract_player.h"
 
 #include "ruled_utils.h"
+#include "ruled_game_driver.h"
 #include "server_arrow.h"
 #include "server_card.h"
 #include "server_cardzone.h"
@@ -678,6 +679,9 @@ Server_AbstractPlayer::cmdConcede(const Command_Concede & /*cmd*/, ResponseConta
     }
 
     setConceded(true);
+    if (game->getRuledGame()) {
+        game->ruled()->revealFaceDownPermanentsOnConcede(playerId, ges);
+    }
     game->removeArrowsRelatedToPlayer(ges, this);
     game->unattachCards(ges, this);
     game->returnCardsFromPlayer(ges, this);

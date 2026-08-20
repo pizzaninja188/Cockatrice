@@ -1,0 +1,20 @@
+(
+  id: "twist_reality",
+  name: "Twist Reality",
+  mana_cost: "{1}{U}{U}",
+  types: ["Instant"],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 1,
+    modes: [
+      (
+        label: "Counter target spell",
+        effects: [CounterTargetSpell(spell_filter: None, unless_controller_pays: None)],
+      ),
+      (
+        label: "Manifest dread",
+        effects: [ManifestDread],
+      ),
+    ],
+  ),
+)

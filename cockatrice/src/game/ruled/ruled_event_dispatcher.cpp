@@ -210,6 +210,7 @@ void RuledEventDispatcher::resetPerBatchLegalActions()
     state->validTargetsByAbility.clear();
     state->abilityCostData.clear();
     state->eligibleRestrictedManaByAbility.clear();
+    state->permanentActionsByOid.clear();
     state->openingBottomSelectedIndices.clear();
     state->openingPickSeatIds.clear();
     state->openingUiKind = RuledOpeningUiKind::None;
@@ -251,6 +252,9 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
         }
         if (e.has_battlefield_object_map()) {
             applyBattlefieldObjectMap(e.battlefield_object_map(), ctx);
+        }
+        if (e.has_face_down_object_map()) {
+            applyFaceDownObjectMap(e.face_down_object_map(), ctx);
         }
         if (e.has_hand_slot_map()) {
             applyHandSlotMap(e.hand_slot_map());
@@ -693,6 +697,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     }
 
     const bool isLibraryLook = rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_LOOK;
+    const bool isManifestDread = rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANIFEST_DREAD;
     if (isLibraryLook &&
         (rcr.candidate_object_ids_size() != rcr.candidate_names_size() ||
          rcr.candidate_server_card_ids_size() != rcr.candidate_names_size() ||
@@ -702,9 +707,10 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     }
 
     if ((rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH ||
-         rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP || isLibraryLook) &&
+         rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP || isLibraryLook || isManifestDread) &&
         rcr.candidate_server_card_ids_size() == rcr.candidate_names_size() && rcr.candidate_names_size() > 0) {
-        // LibrarySearch, LibraryTop, or LibraryLook with server card ids: deck zone-view pick. All
+        // LibrarySearch, LibraryTop, LibraryLook, or ManifestDread with server card ids: deck
+        // zone-view pick. All
         // show card images from the local library, so they share the popup — only the title and
         // optional engine-authored click eligibility differ.
         // LIBRARY_TOP is CR 701.18 scry, which may arrive twice for one spell: once to pick the
@@ -721,6 +727,9 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         if (isLibraryLook) {
             pick.viewTitle = tr("Look at cards");
             pick.hasSelectableRestriction = true;
+        } else if (isManifestDread) {
+            pick.viewTitle = tr("Manifest dread");
+            pick.showViewControls = false;
         } else {
             pick.viewTitle =
                 rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP ? tr("Scry") : tr("Search your library");
@@ -890,6 +899,19 @@ void RuledEventDispatcher::applyHandSlotMap(const ruled::v1::HandSlotMap &map)
             RuledClientState::makeOwnedCardKey(ent.player_id(), ent.server_card_id()),
             static_cast<int>(ent.hand_index()));
     }
+}
+
+void RuledEventDispatcher::applyFaceDownObjectMap(const ruled::v1::FaceDownObjectMap &map, BatchContext &ctx)
+{
+    state->privateFaceDownNameByOwnedCard.clear();
+    state->privateFaceDownGenerationByOid.clear();
+    for (const auto &entry : map.entries()) {
+        state->privateFaceDownNameByOwnedCard.insert(
+            RuledClientState::makeOwnedCardKey(entry.controller_player_id(), entry.server_card_id()),
+            QString::fromStdString(entry.card_name()));
+        state->privateFaceDownGenerationByOid.insert(entry.engine_object_id(), entry.zone_change_generation());
+    }
+    ctx.battlefieldMapDirty = true;
 }
 
 void RuledEventDispatcher::applyGraveyardObjectMap(const ruled::v1::GraveyardObjectMap &map)
@@ -1180,6 +1202,19 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
         }
         state->eligibleRestrictedManaByAbility.insert(static_cast<quint64>(entry.first), eligibleGroups);
     }
+    state->permanentActionsByOid.clear();
+    for (const auto &action : actions.permanent_actions()) {
+        RuledPermanentAction parsed;
+        parsed.kind = action.kind();
+        parsed.objectId = action.object_id();
+        parsed.zoneChangeGeneration = action.zone_change_generation();
+        parsed.label = QString::fromStdString(action.label());
+        parsed.manaCost = QString::fromStdString(action.mana_cost());
+        for (const quint32 groupId : action.eligible_restricted_mana_group_ids()) {
+            parsed.eligibleRestrictedManaGroupIds.insert(groupId);
+        }
+        state->permanentActionsByOid.insert(parsed.objectId, parsed);
+    }
 
     state->openingUiKind = RuledOpeningUiKind::None;
     state->openingPickSeatIds.clear();
@@ -1239,6 +1274,7 @@ void RuledEventDispatcher::applyNoLegalActions()
     state->openingBottomSelectedIndices.clear();
     state->openingPickSeatIds.clear();
     state->openingUiKind = RuledOpeningUiKind::None;
+    state->permanentActionsByOid.clear();
     // NB: do NOT clear the required or selectable combat sets here. Servatrice-synthesized
     // combat preview batches (AttackersPreview / BlockersPreview, emitted while the local player
     // stages attackers/blocks) carry no legal_by_player entry and land in this branch. The

@@ -2237,6 +2237,50 @@ TEST_F(RuledClientTest, ManaPaymentPromptsOnlyTheDecidingPlayer)
     EXPECT_FALSE(state->isWaitingForResolutionChoice());
 }
 
+TEST_F(RuledClientTest, FaceDownObjectMapProvidesPrivateIdentityAndPrunesOnReplacement)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *entry = batch.add_events()->mutable_face_down_object_map()->add_entries();
+    entry->set_controller_player_id(kLocalPlayer);
+    entry->set_engine_object_id(9801u);
+    entry->set_zone_change_generation(4u);
+    entry->set_server_card_id(17);
+    entry->set_card_name("Grizzly Bears");
+    apply(batch);
+
+    EXPECT_EQ(state->privateFaceDownNameForCard(kLocalPlayer, 17), QString("Grizzly Bears"));
+    EXPECT_EQ(state->privateFaceDownGenerationByOid.value(9801u), 4u);
+    EXPECT_TRUE(state->privateFaceDownNameForCard(kOpponent, 17).isEmpty());
+
+    ruled::v1::RuledEventBatch cleared;
+    cleared.add_events()->mutable_face_down_object_map();
+    apply(cleared);
+    EXPECT_TRUE(state->privateFaceDownNameForCard(kLocalPlayer, 17).isEmpty());
+    EXPECT_FALSE(state->privateFaceDownGenerationByOid.contains(9801u));
+}
+
+TEST_F(RuledClientTest, PermanentActionIsEngineAuthoredAndClearsWhenNoLongerPublished)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *action = (*batch.mutable_legal_by_player())[kLocalPlayer].add_permanent_actions();
+    action->set_kind(ruled::v1::PERMANENT_ACTION_KIND_TURN_FACE_UP);
+    action->set_object_id(9802u);
+    action->set_zone_change_generation(9u);
+    action->set_label("Turn face up — {1}{G}");
+    action->set_mana_cost("{1}{G}");
+    apply(batch);
+
+    const auto parsed = state->permanentActionForOid(9802u);
+    ASSERT_TRUE(parsed.has_value());
+    EXPECT_EQ(parsed->kind, ruled::v1::PERMANENT_ACTION_KIND_TURN_FACE_UP);
+    EXPECT_EQ(parsed->zoneChangeGeneration, 9u);
+    EXPECT_EQ(parsed->label, QString("Turn face up — {1}{G}"));
+    EXPECT_EQ(parsed->manaCost, QString("{1}{G}"));
+
+    apply(ruled::v1::RuledEventBatch{});
+    EXPECT_FALSE(state->permanentActionForOid(9802u).has_value());
+}
+
 TEST_F(RuledClientTest, TriggerModesBecomePromptOptionsAndSubmitTheChosenMode)
 {
     ruled::v1::RuledEventBatch batch;
@@ -2543,6 +2587,35 @@ TEST_F(RuledClientTest, LibraryTopChoiceAllowsSubmittingAnEmptyBottomPile)
     ASSERT_EQ(host.sentCommands.size(), 1);
     EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().chosen_object_ids_size(), 0);
     EXPECT_FALSE(state->isResolutionHandPickActive());
+}
+
+TEST_F(RuledClientTest, ManifestDreadChoiceUsesAControlFreeCardImageView)
+{
+    QSignalSpy started(state, &RuledClientState::librarySearchPickStarted);
+    ruled::v1::RuledEventBatch batch;
+    auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+    rcr->set_deciding_player_id(kLocalPlayer);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_MANIFEST_DREAD);
+    rcr->set_prompt_text("Choose one of the top two cards to manifest.");
+    rcr->set_min(1);
+    rcr->set_max(1);
+    for (const quint32 oid : {35u, 36u}) {
+        rcr->add_candidate_object_ids(oid);
+    }
+    for (const int scid : {0, 1}) {
+        rcr->add_candidate_server_card_ids(scid);
+    }
+    rcr->add_candidate_names("Hill Giant");
+    rcr->add_candidate_names("Forest");
+    apply(batch);
+
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    EXPECT_EQ(state->resolutionHandPickZone(), RuledClientState::PickZone::Deck);
+    EXPECT_EQ(state->resolutionHandPickViewTitle(), QStringLiteral("Manifest dread"));
+    EXPECT_FALSE(state->resolutionHandPickShowViewControls());
+    ASSERT_EQ(started.count(), 1);
+    EXPECT_EQ(started.at(0).at(0).toStringList(),
+              QStringList({QStringLiteral("Hill Giant"), QStringLiteral("Forest")}));
 }
 
 TEST_F(RuledClientTest, LibraryLookChoiceShowsEveryCardImageButOnlyMatchingCardsAreClickable)

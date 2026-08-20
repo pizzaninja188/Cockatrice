@@ -128,6 +128,16 @@ struct RuledChoiceOption
     RuledSpellTargetData targets;
 };
 
+struct RuledPermanentAction
+{
+    ruled::v1::PermanentActionKind kind = ruled::v1::PERMANENT_ACTION_KIND_UNSPECIFIED;
+    quint32 objectId = 0;
+    quint64 zoneChangeGeneration = 0;
+    QString label;
+    QString manaCost;
+    QSet<quint32> eligibleRestrictedManaGroupIds;
+};
+
 enum class RuledCostChoiceZone : int
 {
     Hand,
@@ -350,6 +360,9 @@ public:
         // purely as a scaffold, so without this it would inherit that zone's name and claim to be
         // a library even when it is showing a hand or a revealed set.
         QString viewTitle;
+        // Whether the Deck popup should expose freeform library search/group/sort controls.
+        // Bounded resolution cohorts such as manifest dread set this false.
+        bool showViewControls = true;
         // For Deck / Revealed picks: oracle card names parallel to serverCardIdToOid keys,
         // used to populate the deck zone view prompt and the revealed-cards popup.
         QStringList candidateNames;
@@ -438,6 +451,11 @@ public:
     // Engine ObjectId -> creature-ness from BattlefieldObjectMap entries. Engine-authoritative
     // (tricerules registry), so engine tokens with no Oracle entry are still combat-eligible.
     QHash<quint32, bool> engineOidCreature;
+    // Current local-player-only face-down display identity. The physical table CardItem remains
+    // face down and retains its shared Server_Card identity; hover/menu consumers consult this map.
+    QHash<quint64, QString> privateFaceDownNameByOwnedCard;
+    QHash<quint32, quint64> privateFaceDownGenerationByOid;
+    QHash<quint32, RuledPermanentAction> permanentActionsByOid;
     // Servatrice HandSlotMap: (owner player id, Server_Card.id) -> engine hand index for ruled commands.
     QHash<quint64, int> ownedCardToEngineHandSlot;
     // Servatrice GraveyardObjectMap: (owner player id, Server_Card.id) -> engine OID for graveyard
@@ -1147,6 +1165,15 @@ public:
         return hasPendingChoiceOfKind(ChoiceKind::TriggerMode) ||
                hasPendingChoiceOfKind(ChoiceKind::ResolutionBranch);
     }
+    [[nodiscard]] std::optional<RuledPermanentAction> permanentActionForOid(quint32 oid) const
+    {
+        const auto it = permanentActionsByOid.constFind(oid);
+        return it == permanentActionsByOid.constEnd() ? std::nullopt : std::optional<RuledPermanentAction>(*it);
+    }
+    [[nodiscard]] QString privateFaceDownNameForCard(int playerId, int serverCardId) const
+    {
+        return privateFaceDownNameByOwnedCard.value(makeOwnedCardKey(playerId, serverCardId));
+    }
     [[nodiscard]] QVector<RuledChoiceOption> pendingChoiceOptions() const
     {
         return hasPendingChoiceOptions() ? pendingChoice->choiceOptions : QVector<RuledChoiceOption>{};
@@ -1216,6 +1243,10 @@ public:
     [[nodiscard]] QString resolutionHandPickViewTitle() const
     {
         return isResolutionHandPickActive() ? pendingChoice->viewTitle : QString{};
+    }
+    [[nodiscard]] bool resolutionHandPickShowViewControls() const
+    {
+        return !isResolutionHandPickActive() || pendingChoice->showViewControls;
     }
     [[nodiscard]] QVector<int> resolutionHandPickCandidateServerCardIds() const;
     void toggleResolutionHandPickCard(int serverCardId);

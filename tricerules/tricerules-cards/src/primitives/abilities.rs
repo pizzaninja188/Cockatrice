@@ -220,6 +220,10 @@ pub enum TriggerCondition {
     /// Delayed-trigger-only condition: the controller that created the delayed trigger stops
     /// controlling the observed permanent.
     WhenControllerLosesControlOf,
+    /// Delayed-trigger-only condition: the exact observed battlefield object dies during the
+    /// current turn. The stored zone-change generation prevents a leave-and-return object from
+    /// satisfying the old watch (Turn Inside Out).
+    WhenWatchedObjectDiesThisTurn,
     /// CR 508.1m / 508.3a: whenever this creature attacks, optionally requiring a minimum number
     /// of *other* creatures in the same declaration group. Zero is an ordinary self-attack
     /// trigger; two is Battalion (Makeshift Battalion, Firefist Striker, Haazda Marshal).
@@ -391,7 +395,9 @@ impl TriggerCondition {
     pub(crate) fn is_delayed_only(&self) -> bool {
         matches!(
             self,
-            Self::AtBeginningOfNextEndStep | Self::WhenControllerLosesControlOf
+            Self::AtBeginningOfNextEndStep
+                | Self::WhenControllerLosesControlOf
+                | Self::WhenWatchedObjectDiesThisTurn
         )
     }
 
@@ -431,6 +437,7 @@ impl TriggerCondition {
                 | Self::WheneverPermanentBecomesTarget { .. }
                 | Self::AtBeginningOfNextEndStep
                 | Self::WhenControllerLosesControlOf
+                | Self::WhenWatchedObjectDiesThisTurn
         )
     }
 
@@ -844,6 +851,21 @@ pub enum TargetingCostAction {
     SpellsAndActivatedAbilities,
 }
 
+/// Engine special actions that a static ability may prohibit. This is deliberately distinct
+/// from spells and activated abilities: turn-face-up actions do not use the stack (CR 116.2b).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SpecialActionKind {
+    TurnFaceUp,
+}
+
+/// Permanent cohort affected by a special-action prohibition. The target-filter form supports
+/// Karlov Watchdog-style controller and turn conditions without hard-coding a second card.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SpecialActionAffected {
+    AttachedPermanent,
+    Permanents(#[serde(default)] TargetFilter),
+}
+
 /// One static ability on a permanent (CR 604). Most entries generate a continuous effect while
 /// its source is on the battlefield. An ability that modifies how its own object enters is the
 /// CR 113.6h/614.12 exception and is inspected during the proposed entry event. Static abilities
@@ -893,6 +915,15 @@ pub enum StaticAbilityDef {
         actions: TargetingCostAction,
         amount: u32,
     },
+    /// Prohibit an engine special action for a dynamically evaluated permanent scope. Unable to
+    /// Scream uses `AttachedPermanent`; Karlov Watchdog uses a controller-filtered scope plus an
+    /// active-player condition.
+    ProhibitSpecialAction {
+        action: SpecialActionKind,
+        affected: SpecialActionAffected,
+        #[serde(default)]
+        condition: Option<GameCondition>,
+    },
     /// CR 613.4 layer 7c: every creature matching `filter` gets +`delta_power`/+`delta_toughness`
     /// (negative values for a debuff anthem). Anthems (Glorious Anthem) and lords (Crusade, Bad Moon).
     AnthemPt {
@@ -913,6 +944,12 @@ pub enum StaticAbilityDef {
         delta_power: i32,
         #[serde(default)]
         delta_toughness: i32,
+        #[serde(default)]
+        set_power: Option<u32>,
+        #[serde(default)]
+        set_toughness: Option<u32>,
+        #[serde(default)]
+        remove_all_abilities: bool,
         #[serde(default)]
         keywords: Vec<Keyword>,
         /// Triggered abilities the attached permanent has while this static ability applies.

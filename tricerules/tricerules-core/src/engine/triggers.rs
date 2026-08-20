@@ -43,7 +43,7 @@ impl GameEngine {
             }
         }
 
-        let delayed = if events
+        let mut delayed = if events
             .iter()
             .any(|event| matches!(event, GameEvent::EndStepBegin { .. }))
         {
@@ -51,6 +51,24 @@ impl GameEngine {
         } else {
             Vec::new()
         };
+        let mut waiting = std::mem::take(&mut self.state.active_delayed_triggers);
+        for candidate in waiting.drain(..) {
+            let matched = candidate.ability.trigger
+                == TriggerCondition::WhenWatchedObjectDiesThisTurn
+                && events.iter().any(|event| match event {
+                    GameEvent::Dies { source, .. } => {
+                        source.object_id == candidate.watched.object_id
+                            && source.zone_change_generation
+                                == candidate.watched.zone_change_generation
+                    }
+                    _ => false,
+                });
+            if matched {
+                delayed.push(candidate);
+            } else {
+                self.state.active_delayed_triggers.push(candidate);
+            }
+        }
         let mut collected = self.collect_event_triggers(events);
         collected.extend(delayed.into_iter().map(|delayed| CollectedTrigger {
             source_id: delayed.watched.object_id,
@@ -907,9 +925,16 @@ impl GameEngine {
         card_id: &str,
         face_index: usize,
     ) -> Vec<(usize, TriggeredAbilityDef)> {
-        let mut abilities: Vec<(usize, TriggeredAbilityDef)> = self
-            .registry
-            .get(card_id)
+        let face_down = self
+            .state
+            .objects
+            .get(&source_id)
+            .is_some_and(|object| object.face_down);
+        let removed_at =
+            super::characteristics::latest_remove_all_abilities_timestamp(&self.state, source_id);
+        let mut abilities: Vec<(usize, TriggeredAbilityDef)> = (!face_down && removed_at.is_none())
+            .then(|| self.registry.get(card_id))
+            .flatten()
             .and_then(|definition| definition.face(face_index))
             .map(|face| {
                 face.triggered_abilities
@@ -927,6 +952,9 @@ impl GameEngine {
             let ContinuousEffectKind::GrantTriggeredAbility(ability) = &effect.kind else {
                 continue;
             };
+            if removed_at.is_some_and(|timestamp| effect.timestamp <= timestamp) {
+                continue;
+            }
             if super::characteristics::effect_affects(
                 &self.state,
                 self.registry,

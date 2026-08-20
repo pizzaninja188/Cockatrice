@@ -152,6 +152,10 @@ pub struct GameObject {
     /// permanent enters the battlefield (MDFC, Transform, Flip). Engine reads characteristics
     /// through this so the active face's types/keywords/P/T are used everywhere, not the front.
     pub face_up_index: usize,
+    /// CR 708: use the universal face-down permanent values in layer 1b while this object is on
+    /// the battlefield. Its physical identity remains in `card_id` and is private to its current
+    /// controller until the object is turned face up or revealed as it leaves the battlefield.
+    pub face_down: bool,
     /// Present only while this exact object remains exiled after its Adventure face resolved.
     pub adventure_cast_permission: Option<AdventureCastPermission>,
 }
@@ -585,6 +589,11 @@ pub(crate) enum BattlefieldEntryCompletion {
         card_label: String,
         shuffle: bool,
         resume_effect_index: Option<u32>,
+    },
+    ManifestDread {
+        owner: PlayerId,
+        other_object_id: Option<ObjectId>,
+        chosen_library_position: u32,
     },
     TokenBatch {
         current_created: TokenCreated,

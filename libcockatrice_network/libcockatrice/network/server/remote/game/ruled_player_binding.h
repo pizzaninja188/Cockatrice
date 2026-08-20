@@ -38,6 +38,9 @@ struct RuledPlayerBinding
     QHash<quint32, bool> engineOidToHaste;
     QHash<quint32, bool> engineOidToTrample;
     QHash<quint32, bool> engineOidToCreature;
+    QHash<quint32, bool> engineOidToFaceDown;
+    QHash<quint32, quint64> engineOidToZoneChangeGeneration;
+    QHash<quint32, QString> engineOidToUnderlyingCardId;
     // Parallel to engineOidToServerCardId but scoped to the graveyard zone.
     // Updated from RuledPerPlayerView::graveyard_object_ids each zone-view sync.
     QHash<quint32, int> graveyardEngineOidToServerCardId;
@@ -72,6 +75,18 @@ struct RuledPlayerBinding
     bool isEngineOidCreature(quint32 engineOid) const
     {
         return engineOidToCreature.value(engineOid, false);
+    }
+    bool isEngineOidFaceDown(quint32 engineOid) const
+    {
+        return engineOidToFaceDown.value(engineOid, false);
+    }
+    quint64 engineOidZoneChangeGeneration(quint32 engineOid) const
+    {
+        return engineOidToZoneChangeGeneration.value(engineOid, 0);
+    }
+    QString engineOidUnderlyingCardId(quint32 engineOid) const
+    {
+        return engineOidToUnderlyingCardId.value(engineOid);
     }
     Server_Card *findCardByEngineOid(const Server_Player *player, quint32 engineOid) const;
     Server_Card *findGraveyardCardByEngineOid(const Server_Player *player, quint32 engineOid) const;

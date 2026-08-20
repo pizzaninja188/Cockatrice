@@ -17,6 +17,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
         let labels = legal_labels(eng, p.id);
         let hand_actions = legal_hand_actions(eng, p.id);
         let zone_cast_actions = legal_zone_cast_actions(eng, p.id);
+        let permanent_actions = legal_permanent_actions(eng, p.id);
         let mut valid_targets_by_hand_slot = BTreeMap::new();
         let mut valid_targets_by_zone_object = BTreeMap::new();
         let mut valid_targets_by_ability = BTreeMap::new();
@@ -197,9 +198,55 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 cost_choices_by_ability,
                 legal_block_pairs,
                 mana_payment_by_ability,
+                permanent_actions,
             },
         );
     }
+}
+
+fn legal_permanent_actions(eng: &GameEngine, player: PlayerId) -> Vec<rv1::LegalPermanentAction> {
+    if eng.state.opening.is_some()
+        || eng.state.blocking_choice().is_some()
+        || eng.state.priority_player_id() != player
+    {
+        return Vec::new();
+    }
+    let Some(player_index) = eng.state.player_idx(player) else {
+        return Vec::new();
+    };
+    eng.state.players[player_index]
+        .battlefield
+        .iter()
+        .filter_map(|&object_id| {
+            let object = eng.state.objects.get(&object_id)?;
+            if !object.face_down || object.controller != player {
+                return None;
+            }
+            if eng.special_action_prohibited(object_id, SpecialActionKind::TurnFaceUp) {
+                return None;
+            }
+            let face = eng.registry.get(&object.card_id)?.primary_face();
+            if !face.is_creature || face.mana_cost.pips.is_empty() {
+                return None;
+            }
+            let mana_cost = face.mana_cost.to_string();
+            Some(rv1::LegalPermanentAction {
+                kind: rv1::PermanentActionKind::TurnFaceUp as i32,
+                object_id,
+                zone_change_generation: eng
+                    .state
+                    .zone_change_generation
+                    .get(&object_id)
+                    .copied()
+                    .unwrap_or(0),
+                label: format!("Turn face up — {mana_cost}"),
+                mana_cost,
+                // #129 owns special-action-scoped restricted mana. Until then, only the
+                // unrestricted pool can legally pay this action.
+                eligible_restricted_mana_group_ids: Vec::new(),
+            })
+        })
+        .collect()
 }
 
 fn distinct_assignment_exists(

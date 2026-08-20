@@ -1,8 +1,8 @@
 use crate::card_def::{CardDefinition, CardFace, Layout, RawCardDefinition};
 use crate::primitives::{
     AdditionalCost, BattlefieldAggregate, EffectContext, FaceChangeAction, GameCondition,
-    InterveningIf, SpellEffectKind, StaticAbilityDef, TargetController, TargetKind, TargetingDef,
-    TriggerCondition,
+    InterveningIf, SpecialActionAffected, SpellEffectKind, StaticAbilityDef, TargetController,
+    TargetKind, TargetingDef, TriggerCondition,
 };
 use crate::token_def::TokenDefinition;
 use once_cell::sync::Lazy;
@@ -544,6 +544,9 @@ impl CardRegistry {
                         add_types,
                         delta_power,
                         delta_toughness,
+                        set_power,
+                        set_toughness,
+                        remove_all_abilities,
                         keywords,
                         triggered_abilities,
                         activated_abilities,
@@ -561,6 +564,9 @@ impl CardRegistry {
                         }
                         if *delta_power == 0
                             && *delta_toughness == 0
+                            && set_power.is_none()
+                            && set_toughness.is_none()
+                            && !remove_all_abilities
                             && add_types.is_empty()
                             && keywords.is_empty()
                             && triggered_abilities.is_empty()
@@ -572,6 +578,12 @@ impl CardRegistry {
                             return Err(RegistryError::InvalidCard {
                                 id: card.id.clone(),
                                 reason: "AttachedModifier must modify at least one value".into(),
+                            });
+                        }
+                        if set_power.is_some() != set_toughness.is_some() {
+                            return Err(RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason: "AttachedModifier must set both power and toughness".into(),
                             });
                         }
                         if !add_types.is_empty() {
@@ -604,6 +616,37 @@ impl CardRegistry {
                                     reason,
                                 }
                             })?;
+                        }
+                    }
+                    if let StaticAbilityDef::ProhibitSpecialAction {
+                        affected,
+                        condition,
+                        ..
+                    } = ability
+                    {
+                        if matches!(affected, SpecialActionAffected::AttachedPermanent)
+                            && !attachment_source
+                        {
+                            return Err(RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason: "attached special-action prohibition requires an Aura or Equipment source".into(),
+                            });
+                        }
+                        if let SpecialActionAffected::Permanents(filter) = affected {
+                            filter
+                                .validate_characteristic_constraints()
+                                .map_err(|reason| RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason,
+                                })?;
+                        }
+                        if let Some(condition) = condition {
+                            condition
+                                .validate()
+                                .map_err(|reason| RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason,
+                                })?;
                         }
                     }
                     if let StaticAbilityDef::SelfCombatRestriction {

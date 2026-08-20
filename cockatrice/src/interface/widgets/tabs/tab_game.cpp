@@ -1859,8 +1859,20 @@ void TabGame::setActivePhase(int phase)
 
 void TabGame::newCardAdded(AbstractCardItem *card)
 {
-    connect(card, &AbstractCardItem::hovered, cardInfoFrameWidget,
-            qOverload<AbstractCardItem *>(&CardInfoFrameWidget::setCard));
+    connect(card, &AbstractCardItem::hovered, this, [this](AbstractCardItem *hovered) {
+        auto *cardItem = dynamic_cast<CardItem *>(hovered);
+        if (cardItem && cardItem->getFaceDown() && RuledActions::isRuledGame(game)) {
+            RuledClientState *state = game->getGameEventHandler()->ruled();
+            const int playerId = cardItem->getOwner() ? cardItem->getOwner()->getPlayerInfo()->getId() : -1;
+            const QString privateName = state ? state->privateFaceDownNameForCard(playerId, cardItem->getId())
+                                              : QString{};
+            if (!privateName.isEmpty()) {
+                cardInfoFrameWidget->setCard(privateName);
+                return;
+            }
+        }
+        cardInfoFrameWidget->setCard(hovered);
+    });
     connect(card, &AbstractCardItem::showCardInfoPopup, this, &TabGame::showCardInfoPopup);
     connect(card, SIGNAL(deleteCardInfoPopup(QString)), this, SLOT(deleteCardInfoPopup(QString)));
     connect(card, &AbstractCardItem::cardShiftClicked, this, &TabGame::linkCardToChat);
@@ -2372,7 +2384,9 @@ void TabGame::onRuledLibrarySearchPickStarted(QStringList candidateNames, QVecto
         cardList.append(sic);
     }
     // Open revealed, not closeable (resolution is mandatory per CR 608).
-    librarySearchView = new ZoneViewWidget(localPlayer, deckZone, -1, true, false, cardList, false, true, false, false);
+    const bool showControls = game->getGameEventHandler()->ruled()->resolutionHandPickShowViewControls();
+    librarySearchView =
+        new ZoneViewWidget(localPlayer, deckZone, -1, true, false, cardList, false, showControls, false, false);
     // The deck zone is only a scaffold for the widget; title the window for what it actually shows.
     librarySearchView->setWindowTitle(game->getGameEventHandler()->ruled()->resolutionHandPickViewTitle());
     scene->addItem(librarySearchView);

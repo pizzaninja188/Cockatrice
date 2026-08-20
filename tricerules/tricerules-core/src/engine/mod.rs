@@ -32,9 +32,10 @@ use tricerules_cards::primitives::{
     ManaSpendFilter, PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient, PowerComparison,
     PreventionAmountBasis, ProtectionCardType, ProtectionGrant, ProtectionQuality,
     RelativePlayerSet, ResolutionBranchDef, ResolutionCost, ReturnController, SearchDestination,
-    SpellCostModifier, SpellEffectKind, StaticAbilityDef, StaticDamagePreventionAmount,
-    TargetController, TargetFilter, TargetKind, TargetingCostAction, TargetingCostProtected,
-    TargetingSourceFilter, TriggerCondition, TriggeredAbilityDef, TriggeredCardReference,
+    SpecialActionAffected, SpecialActionKind, SpellCostModifier, SpellEffectKind, StaticAbilityDef,
+    StaticDamagePreventionAmount, TargetController, TargetFilter, TargetKind, TargetingCostAction,
+    TargetingCostProtected, TargetingSourceFilter, TriggerCondition, TriggeredAbilityDef,
+    TriggeredCardReference,
 };
 use tricerules_cards::{CardFace, CardRegistry, FaceRef, Layout};
 use tricerules_proto::ruled::v1 as rv1;
@@ -448,6 +449,8 @@ struct BattlefieldObjectSnapshot {
     counters: BTreeMap<CounterKind, u32>,
     attached_to: Option<AttachmentRecipient>,
     face_up_index: usize,
+    face_down: bool,
+    zone_change_generation: u64,
     copy_revision: u64,
 }
 
@@ -559,6 +562,7 @@ fn new_object_from_card(
         must_attack_if_able: face.must_attack_if_able,
         must_block_if_able: face.must_block_if_able,
         face_up_index: 0,
+        face_down: false,
         adventure_cast_permission: None,
     }
 }
@@ -881,6 +885,7 @@ impl GameEngine {
                 object_id: permanent_id,
                 controller_player_id: controller,
                 face_up_index: new_face as u32,
+                face_down: false,
             })),
         });
         Ok(true)
@@ -906,6 +911,77 @@ impl GameEngine {
             );
         }
         self.apply_gameplay_command(player, cmd, None)
+    }
+
+    fn turn_face_up(
+        &mut self,
+        player: PlayerId,
+        command: &rv1::TurnFaceUp,
+    ) -> Result<RuledEventBatch, EngineError> {
+        if self.state.priority_player_id() != player {
+            return Err(EngineError::Illegal("you do not have priority"));
+        }
+        let object = self
+            .state
+            .objects
+            .get(&command.object_id)
+            .ok_or(EngineError::Illegal("no such permanent"))?;
+        let current_generation = self
+            .state
+            .zone_change_generation
+            .get(&command.object_id)
+            .copied()
+            .unwrap_or(0);
+        if current_generation != command.expected_zone_change_generation {
+            return Err(EngineError::Illegal("stale face-up action"));
+        }
+        if object.zone != Zone::Battlefield || object.controller != player || !object.face_down {
+            return Err(EngineError::Illegal("permanent cannot be turned face up"));
+        }
+        if self.special_action_prohibited(command.object_id, SpecialActionKind::TurnFaceUp) {
+            return Err(EngineError::Illegal(
+                "turning this permanent face up is prohibited",
+            ));
+        }
+        let face = self
+            .registry
+            .get(&object.card_id)
+            .map(|definition| definition.primary_face())
+            .filter(|face| face.is_creature && !face.mana_cost.pips.is_empty())
+            .ok_or(EngineError::Illegal(
+                "manifested card is not a creature with a payable mana cost",
+            ))?;
+        let cost = face.mana_cost.clone();
+        let player_idx = self
+            .state
+            .player_idx(player)
+            .ok_or(EngineError::Illegal("no such player"))?;
+        self.pay_turn_face_up_mana(
+            player_idx,
+            &cost,
+            &command.flex_payments,
+            &command.restricted_mana,
+        )?;
+        self.state
+            .objects
+            .get_mut(&command.object_id)
+            .expect("validated permanent")
+            .face_down = false;
+        *self
+            .state
+            .face_change_generation
+            .entry(command.object_id)
+            .or_insert(0) += 1;
+        self.emit_static_abilities_on_enter(command.object_id);
+        let events = vec![rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::FaceChanged(rv1::FaceChanged {
+                object_id: command.object_id,
+                controller_player_id: player,
+                face_up_index: 0,
+                face_down: false,
+            })),
+        }];
+        Ok(events::finish_with_events(self, events))
     }
 
     fn apply_gameplay_command(
@@ -1344,6 +1420,7 @@ impl GameEngine {
             Some(Cmd::PrimitiveYieldStructured(_)) => self.primitive_yield_structured(player),
             Some(Cmd::CastSpell(cs)) => self.cast_spell(player, cs),
             Some(Cmd::ActivateAbility(aa)) => self.activate_ability(player, aa),
+            Some(Cmd::TurnFaceUp(command)) => self.turn_face_up(player, command),
             Some(Cmd::UndoManaAbility(_)) => self.undo_mana_ability(player),
             Some(Cmd::ChooseTriggerTarget(ctt)) => {
                 self.choose_trigger_target(player, &ctt.targets, &ctt.selected_modes, ctt.decline)

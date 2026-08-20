@@ -910,6 +910,135 @@ pub(super) fn scry(
     Ok(EffectOutcome::Suspended)
 }
 
+/// CR 701.62: look at the top two cards, manifest one, and put the other into the graveyard.
+/// The two-card branch parks behind the existing private library image picker; short libraries
+/// complete deterministically without asking a meaningless question.
+pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
+    let engine = &mut *cx.engine;
+    let controller = cx.controller;
+    let Some(player_idx) = engine.state.player_idx(controller) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let candidates: Vec<ObjectId> = engine.state.players[player_idx]
+        .library
+        .iter()
+        .take(2)
+        .copied()
+        .collect();
+    if candidates.is_empty() {
+        cx.events.push(ev_log(format!(
+            "P{controller} manifests dread with an empty library ({}).",
+            cx.spell_label
+        )));
+        return Ok(EffectOutcome::Continue);
+    }
+    if candidates.len() == 1 {
+        let object_id = candidates[0];
+        engine
+            .state
+            .objects
+            .get_mut(&object_id)
+            .expect("library object")
+            .face_down = true;
+        match engine.begin_battlefield_entry(
+            cx.top.clone(),
+            BattlefieldEntryEvent {
+                object_id,
+                deciding_player: controller,
+                destination_controller: controller,
+                face_index: 0,
+                chosen_x: 0,
+                player_life_snapshot: engine.player_life_snapshot(),
+                tapped: false,
+                entry_counters: BTreeMap::new(),
+                applied_effects: Vec::new(),
+            },
+            BattlefieldEntryCompletion::ManifestDread {
+                owner: controller,
+                other_object_id: None,
+                chosen_library_position: 0,
+            },
+            cx.events,
+        ) {
+            super::super::replacement::BattlefieldEntryProgress::Parked => {
+                return Ok(EffectOutcome::Suspended);
+            }
+            super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
+                engine.commit_battlefield_entry(entry, None)?;
+                cx.events.push(permanent_moved_event_with_library_position(
+                    &engine.state,
+                    object_id,
+                    controller,
+                    rv1::permanent_moved::Destination::Battlefield,
+                    0,
+                ));
+                cx.events
+                    .push(ev_log(format!("P{controller} manifests dread.")));
+                return Ok(EffectOutcome::Continue);
+            }
+        }
+    }
+
+    let (candidate_card_ids, candidate_names) = candidate_identities(engine, &candidates);
+    let prompt =
+        "Choose one of the top two cards to manifest. The other will be put into your graveyard."
+            .to_string();
+    cx.events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                deciding_player_id: controller,
+                source_object_id: cx.top.id,
+                prompt_text: prompt.clone(),
+                choice_kind: custom::ChoiceKind::ManifestDread as i32,
+                candidate_object_ids: candidates.clone(),
+                candidate_card_ids,
+                candidate_names: candidate_names.clone(),
+                min: 1,
+                max: 1,
+                ordered: false,
+                unique_names: false,
+                candidate_server_card_ids: Vec::new(),
+                candidate_selectable: Vec::new(),
+                resolution_branches: Vec::new(),
+                mana_cost: String::new(),
+                generic_mana_cost: 0,
+                payment_currently_legal: false,
+            },
+        )),
+    });
+    cx.events.push(ev_log(format!(
+        "P{controller} looks at the top two cards to manifest dread ({}).",
+        cx.spell_label
+    )));
+    cx.events.push(ev_log_private(
+        format!("P{controller} looks at {}.", candidate_names.join(", ")),
+        controller,
+    ));
+    engine.state.pending_resolution = Some(PendingResolution {
+        item: cx.top.clone(),
+        custom_key: "__manifest_dread".to_string(),
+        step: 0,
+        scratch: candidates.clone(),
+        deciding_player: controller,
+        candidates,
+        min: 1,
+        max: 1,
+        ordered: false,
+        unique_names: false,
+        mana_payment: None,
+        resolution_branch: None,
+        discard: None,
+        prompt,
+        choice_kind: custom::ChoiceKind::ManifestDread,
+        copy_source_object_id: 0,
+        search_destination: SearchDestination::default(),
+        search_shuffle: false,
+        search_reveal: false,
+        resume_effect_index: None,
+    });
+    Ok(EffectOutcome::Suspended)
+}
+
 /// Look at a bounded top-of-library window, show every card image privately, and let the
 /// controller choose at most one matching card. Selection legality stays engine-authored through
 /// `candidate_selectable`; the client never derives it from display/Oracle data.

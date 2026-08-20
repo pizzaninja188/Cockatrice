@@ -1,0 +1,13 @@
+(
+  id: "bashful_beastie",
+  name: "Bashful Beastie",
+  mana_cost: "{4}{G}",
+  types: ["Creature", "Beast"],
+  power: 5,
+  toughness: 4,
+  triggered_abilities: [(
+    trigger: WhenSelfDies,
+    effect: [ManifestDread],
+    text: "When this creature dies, manifest dread.",
+  )],
+)

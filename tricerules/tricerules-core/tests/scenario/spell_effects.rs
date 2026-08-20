@@ -748,6 +748,7 @@ fn tome_scour_mills_five_cards_from_target_player() {
                 must_attack_if_able: false,
                 must_block_if_able: false,
                 face_up_index: 0,
+                face_down: false,
                 adventure_cast_permission: None,
             },
         );
@@ -834,6 +835,7 @@ fn tome_scour_caps_at_library_size() {
                 must_attack_if_able: false,
                 must_block_if_able: false,
                 face_up_index: 0,
+                face_down: false,
                 adventure_cast_permission: None,
             },
         );
@@ -894,6 +896,7 @@ fn tome_scour_can_target_controller() {
                 must_attack_if_able: false,
                 must_block_if_able: false,
                 face_up_index: 0,
+                face_down: false,
                 adventure_cast_permission: None,
             },
         );
@@ -959,6 +962,7 @@ fn tome_scour_self_mill_puts_the_spell_under_the_milled_cards() {
                 must_attack_if_able: false,
                 must_block_if_able: false,
                 face_up_index: 0,
+                face_down: false,
                 adventure_cast_permission: None,
             },
         );
@@ -1289,6 +1293,7 @@ fn disentomb_returns_creature_from_graveyard_to_hand() {
                 must_attack_if_able: false,
                 must_block_if_able: false,
                 face_up_index: 0,
+                face_down: false,
                 adventure_cast_permission: None,
             },
         );
@@ -1322,6 +1327,7 @@ fn disentomb_returns_creature_from_graveyard_to_hand() {
                 must_attack_if_able: false,
                 must_block_if_able: false,
                 face_up_index: 0,
+                face_down: false,
                 adventure_cast_permission: None,
             },
         );
@@ -1422,6 +1428,7 @@ fn return_from_graveyard_fizzles_when_target_removed_before_resolution() {
                 must_attack_if_able: false,
                 must_block_if_able: false,
                 face_up_index: 0,
+                face_down: false,
                 adventure_cast_permission: None,
             },
         );
@@ -1457,6 +1464,7 @@ fn return_from_graveyard_fizzles_when_target_removed_before_resolution() {
                 must_attack_if_able: false,
                 must_block_if_able: false,
                 face_up_index: 0,
+                face_down: false,
                 adventure_cast_permission: None,
             },
         );
@@ -1554,6 +1562,7 @@ fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
                 must_attack_if_able: false,
                 must_block_if_able: false,
                 face_up_index: 0,
+                face_down: false,
                 adventure_cast_permission: None,
             },
         );
@@ -1587,6 +1596,7 @@ fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
                 must_attack_if_able: false,
                 must_block_if_able: false,
                 face_up_index: 0,
+                face_down: false,
                 adventure_cast_permission: None,
             },
         );
@@ -2011,6 +2021,7 @@ fn inject_card_into_hand(e: &mut GameEngine, player: usize, player_id: i32, card
             must_attack_if_able: false,
             must_block_if_able: false,
             face_up_index: 0,
+            face_down: false,
             adventure_cast_permission: None,
         },
     );

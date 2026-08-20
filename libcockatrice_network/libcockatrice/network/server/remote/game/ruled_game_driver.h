@@ -88,6 +88,9 @@ public:
     void resetForNewGame();
     /// Ends the sidecar session and drops the relay (game teardown).
     void endSidecarSession();
+    /// CR 708.9: reveal the conceding player's face-down permanents, or every remaining one when
+    /// the concession ends the game, before ordinary teardown clears the table zones.
+    void revealFaceDownPermanentsOnConcede(int concedingPlayerId, GameEventStorage &ges);
 
     int priorityPlayer() const
     {

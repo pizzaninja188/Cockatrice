@@ -11,7 +11,8 @@ pub(crate) use tricerules_proto::ruled::v1::{
     DiscardToHandSize, FlexPipPayment, ManaSpendSelection, PassPriority, PlayLand,
     PreviewDeclareAttackers, PreviewDeclareBlockers, PrimitiveYieldStructured,
     ResolutionChoiceRequired, RuledCommand, RuledEventBatch, SelectedSpellMode,
-    SubmitResolutionChoice, SubmitTriggerOrder, TargetRef, TargetRefKind, UndoManaAbility,
+    SubmitResolutionChoice, SubmitTriggerOrder, TargetRef, TargetRefKind, TurnFaceUp,
+    UndoManaAbility,
 };
 
 pub(crate) fn pass() -> RuledCommand {
@@ -543,6 +544,7 @@ pub(crate) fn inject_creature_on_battlefield(
             must_attack_if_able: false,
             must_block_if_able: false,
             face_up_index: 0,
+            face_down: false,
             adventure_cast_permission: None,
         },
     );
@@ -584,6 +586,7 @@ pub(crate) fn inject_permanent_on_battlefield(
             must_attack_if_able: false,
             must_block_if_able: false,
             face_up_index: 0,
+            face_down: false,
             adventure_cast_permission: None,
         },
     );
@@ -621,6 +624,7 @@ pub(crate) fn inject_card_into_hand(e: &mut GameEngine, player: usize, card_id: 
             must_attack_if_able: false,
             must_block_if_able: false,
             face_up_index: 0,
+            face_down: false,
             adventure_cast_permission: None,
         },
     );
@@ -658,6 +662,7 @@ pub(crate) fn inject_library_card(e: &mut GameEngine, player: usize, card_id: &s
             must_attack_if_able: false,
             must_block_if_able: false,
             face_up_index: 0,
+            face_down: false,
             adventure_cast_permission: None,
         },
     );
@@ -702,6 +707,7 @@ pub(crate) fn inject_creature_under_foreign_control(
             must_attack_if_able: false,
             must_block_if_able: false,
             face_up_index: 0,
+            face_down: false,
             adventure_cast_permission: None,
         },
     );
@@ -741,6 +747,7 @@ pub(crate) fn inject_graveyard_card(e: &mut GameEngine, player: usize, card_id: 
             must_attack_if_able: false,
             must_block_if_able: false,
             face_up_index: 0,
+            face_down: false,
             adventure_cast_permission: None,
         },
     );
@@ -952,6 +959,7 @@ pub(crate) fn inject_creature_with_stats(
             must_attack_if_able: false,
             must_block_if_able: false,
             face_up_index: 0,
+            face_down: false,
             adventure_cast_permission: None,
         },
     );

@@ -98,6 +98,7 @@ bool isPrivateChoiceKind(ruled::v1::ChoiceKind kind)
         case ruled::v1::CHOICE_KIND_OPPONENT_HAND:  // another player's hand, CR 701.7 "look"
         case ruled::v1::CHOICE_KIND_LIBRARY_TOP:    // CR 701.18 scry: the decider's library top
         case ruled::v1::CHOICE_KIND_LIBRARY_LOOK:   // a fixed cohort looked at from library top
+        case ruled::v1::CHOICE_KIND_MANIFEST_DREAD: // CR 701.62: choose from the library top two
             return true;
         case ruled::v1::CHOICE_KIND_REVEALED:
         case ruled::v1::CHOICE_KIND_TARGET_OBJECTS:

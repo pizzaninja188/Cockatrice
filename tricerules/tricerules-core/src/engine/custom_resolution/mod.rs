@@ -24,6 +24,7 @@ mod copy_choices;
 mod discard;
 mod library_order;
 mod library_search;
+mod manifest_dread;
 mod sacrifice_choices;
 mod trigger_choices;
 
@@ -142,6 +143,9 @@ impl GameEngine {
         }
         if pending.custom_key.starts_with("__look_choose_bottom_") {
             return self.finish_look_choose_bottom(pending, chosen);
+        }
+        if pending.custom_key == "__manifest_dread" {
+            return self.finish_manifest_dread(pending, chosen[0]);
         }
 
         // DiscardCards (caster-chooses): move each chosen card from the target's hand to graveyard.
