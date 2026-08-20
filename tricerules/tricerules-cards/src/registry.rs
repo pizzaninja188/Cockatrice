@@ -1781,6 +1781,85 @@ mod tests {
     }
 
     #[test]
+    fn resolution_branch_requirements_reject_unsupported_and_ambiguous_shapes() {
+        let unsupported = r#"(
+            id: "unsupported_requirement",
+            name: "Unsupported Requirement",
+            mana_cost: "{W}",
+            types: ["Sorcery"],
+            spell_effect: [ChooseResolutionBranch(
+                optional: true,
+                branches: [(
+                    label: "Draw",
+                    cost: None,
+                    requirement: EffectsApplicable,
+                    effects: [Draw(count: 1)],
+                )],
+            )],
+        )"#;
+        let err = CardRegistry::from_chunks(&[unsupported]).unwrap_err();
+        assert!(matches!(
+            err,
+            RegistryError::InvalidCard { ref reason, .. }
+                if reason.contains("EffectsApplicable requires a supported")
+        ));
+
+        let multiple_choosers = r#"(
+            id: "multiple_choosers",
+            name: "Multiple Choosers",
+            mana_cost: "{W}",
+            types: ["Sorcery"],
+            spell_effect: [ChooseResolutionBranch(
+                chooser: EachPlayer,
+                optional: true,
+                branches: [(
+                    label: "Gain life",
+                    cost: None,
+                    effects: [GainLife(amount: 1)],
+                )],
+            )],
+        )"#;
+        let err = CardRegistry::from_chunks(&[multiple_choosers]).unwrap_err();
+        assert!(matches!(
+            err,
+            RegistryError::InvalidCard { ref reason, .. }
+                if reason.contains("exactly one deciding player")
+        ));
+
+        let missing_fallback = r#"(
+            id: "missing_fallback",
+            name: "Missing Fallback",
+            mana_cost: "{1}{W}",
+            types: ["Creature", "Human"],
+            power: 1,
+            toughness: 1,
+            triggered_abilities: [(
+                trigger: WhenSelfEntersBattlefield,
+                effect: [ChooseResolutionBranch(
+                    optional: false,
+                    branches: [(
+                        label: "Put a counter on this",
+                        cost: None,
+                        requirement: EffectsApplicable,
+                        effects: [PutCounters(
+                            counter: PlusOnePlusOne,
+                            count: 1,
+                            subject: Source,
+                        )],
+                    )],
+                )],
+                text: "When this enters, make a mandatory conditional choice.",
+            )],
+        )"#;
+        let err = CardRegistry::from_chunks(&[missing_fallback]).unwrap_err();
+        assert!(matches!(
+            err,
+            RegistryError::InvalidCard { ref reason, .. }
+                if reason.contains("unconditional costless fallback")
+        ));
+    }
+
+    #[test]
     fn load_rejects_card_with_both_spell_effect_and_custom_effect() {
         // A face may have exactly one resolution owner (tier-1/2 data or tier-3 custom).
         let bad = r#"(

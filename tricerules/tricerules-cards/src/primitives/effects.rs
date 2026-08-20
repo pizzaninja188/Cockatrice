@@ -753,7 +753,16 @@ pub struct ResolutionBranchDef {
     pub label: String,
     pub cost: ResolutionCost,
     #[serde(default)]
+    pub requirement: ResolutionBranchRequirement,
+    #[serde(default)]
     pub effects: Vec<SpellEffectKind>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum ResolutionBranchRequirement {
+    #[default]
+    Always,
+    EffectsApplicable,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -833,6 +842,8 @@ pub enum SpellEffectKind {
     /// Present engine-authored branches as an in-resolution choice. The chosen branch's single
     /// cost is validated and paid atomically, then its effects run in authored order.
     ChooseResolutionBranch {
+        #[serde(default)]
+        chooser: PlayerRecipient,
         #[serde(default)]
         optional: bool,
         branches: Vec<ResolutionBranchDef>,
@@ -1392,6 +1403,9 @@ pub enum PlayerRecipient {
     /// The current controller of the permanent named by the trigger event, using its controller
     /// at the event as last known information if that object has since left the battlefield.
     TriggerObjectController,
+    /// The current controller of the resolving item's source object, falling back to
+    /// generation-keyed last known information if that exact object has left the battlefield.
+    SourceController,
     /// The current controller of the sole legal permanent in an authored target group. Chandra's
     /// Outrage and Searing Blaze-style effects evaluate this relationship at resolution rather
     /// than snapshotting the target's controller when the spell was cast.
@@ -1802,9 +1816,19 @@ impl SpellEffectKind {
                     }
                 }
             }
-            SpellEffectKind::ChooseResolutionBranch { branches, .. } => {
+            SpellEffectKind::ChooseResolutionBranch {
+                chooser,
+                optional,
+                branches,
+            } => {
                 if branches.is_empty() {
                     return Err("resolution choice requires at least one branch".into());
+                }
+                if matches!(
+                    chooser,
+                    PlayerRecipient::EachOpponent | PlayerRecipient::EachPlayer
+                ) {
+                    return Err("resolution choice requires exactly one deciding player".into());
                 }
                 for branch in branches {
                     if branch.label.trim().is_empty() || branch.effects.is_empty() {
@@ -1854,7 +1878,32 @@ impl SpellEffectKind {
                         }
                         effect.validate(context)?;
                     }
+                    if branch.requirement == ResolutionBranchRequirement::EffectsApplicable
+                        && !branch
+                            .effects
+                            .iter()
+                            .any(|effect| matches!(effect, SpellEffectKind::PutCounters { .. }))
+                    {
+                        return Err(
+                            "EffectsApplicable requires a supported applicability-sensitive effect"
+                                .into(),
+                        );
+                    }
                     SpellEffectKind::validate_list(&branch.effects)?;
+                }
+                if !optional
+                    && branches.iter().any(|branch| {
+                        branch.requirement == ResolutionBranchRequirement::EffectsApplicable
+                    })
+                    && !branches.iter().any(|branch| {
+                        branch.requirement == ResolutionBranchRequirement::Always
+                            && branch.cost == ResolutionCost::None
+                    })
+                {
+                    return Err(
+                        "mandatory condition-gated resolution choice requires an unconditional costless fallback"
+                            .into(),
+                    );
                 }
             }
             SpellEffectKind::CreateReflexiveTrigger { ability } => {

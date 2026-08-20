@@ -1,0 +1,9 @@
+// 3/3 white Spirit creature token without flying (Endure 3).
+(
+    id: "spirit_w_3_3",
+    name: "Spirit",
+    types: ["Creature", "Spirit"],
+    colors: [White],
+    power: 3,
+    toughness: 3,
+)

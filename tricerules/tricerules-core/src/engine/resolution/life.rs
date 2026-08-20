@@ -289,19 +289,47 @@ mod tests {
         engine.state.players.push(lost_player);
 
         assert_eq!(
-            simple_player_recipients(&engine.state, 10, 30, None, PlayerRecipient::Controller),
+            simple_player_recipients(
+                &engine.state,
+                10,
+                30,
+                None,
+                None,
+                PlayerRecipient::Controller
+            ),
             vec![10]
         );
         assert_eq!(
-            simple_player_recipients(&engine.state, 10, 30, None, PlayerRecipient::AffectedPlayer),
+            simple_player_recipients(
+                &engine.state,
+                10,
+                30,
+                None,
+                None,
+                PlayerRecipient::AffectedPlayer
+            ),
             vec![30]
         );
         assert_eq!(
-            simple_player_recipients(&engine.state, 10, 30, None, PlayerRecipient::EachOpponent),
+            simple_player_recipients(
+                &engine.state,
+                10,
+                30,
+                None,
+                None,
+                PlayerRecipient::EachOpponent
+            ),
             vec![20, 30]
         );
         assert_eq!(
-            simple_player_recipients(&engine.state, 10, 30, None, PlayerRecipient::EachPlayer),
+            simple_player_recipients(
+                &engine.state,
+                10,
+                30,
+                None,
+                None,
+                PlayerRecipient::EachPlayer
+            ),
             vec![10, 20, 30]
         );
     }

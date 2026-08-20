@@ -1,0 +1,9 @@
+// 1/1 white Spirit creature token without flying (Endure 1).
+(
+    id: "spirit_w_1_1",
+    name: "Spirit",
+    types: ["Creature", "Spirit"],
+    colors: [White],
+    power: 1,
+    toughness: 1,
+)

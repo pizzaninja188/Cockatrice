@@ -16,6 +16,7 @@ use super::*;
 use tricerules_cards::primitives::TargetingDef;
 
 mod choices;
+pub(super) use choices::resolution_branch_is_live;
 mod damage;
 /// `pub(super)` so the combat damage step can reach `life::apply_life_gain` — lifelink is the one
 /// life-gain edge outside stack resolution, and it must go through the same funnel.
@@ -64,6 +65,7 @@ struct TokenCreationRequest<'a> {
 enum EffectOutcome {
     Continue,
     Suspended,
+    RestartResolutionBranch(Option<usize>),
 }
 
 fn simple_player_recipients(
@@ -71,12 +73,14 @@ fn simple_player_recipients(
     controller: PlayerId,
     affected_player: PlayerId,
     trigger_object_controller: Option<PlayerId>,
+    source_controller: Option<PlayerId>,
     who: PlayerRecipient,
 ) -> Vec<PlayerId> {
     match who {
         PlayerRecipient::Controller => vec![controller],
         PlayerRecipient::AffectedPlayer => vec![affected_player],
         PlayerRecipient::TriggerObjectController => trigger_object_controller.into_iter().collect(),
+        PlayerRecipient::SourceController => source_controller.into_iter().collect(),
         PlayerRecipient::ControllerOfTargetGroup { .. }
         | PlayerRecipient::DefendingPlayer
         | PlayerRecipient::AttackingOpponentsOfDefendingPlayer => Vec::new(),
@@ -158,8 +162,22 @@ fn player_recipients(cx: &EffectCx<'_>, who: PlayerRecipient) -> Vec<PlayerId> {
             cx.controller,
             cx.affected_player,
             trigger_object_controller(cx.engine, cx.top),
+            source_controller(cx.engine, cx.top),
             who,
         ),
+    }
+}
+
+fn source_controller(engine: &GameEngine, top: &StackItem) -> Option<PlayerId> {
+    let source_id = top.source_permanent_id?;
+    if engine.source_is_current_object(top) {
+        engine.controller_of(source_id)
+    } else {
+        engine
+            .state
+            .last_known_controller_by_generation
+            .get(&(source_id, top.source_zone_change))
+            .copied()
     }
 }
 
@@ -1099,18 +1117,29 @@ impl GameEngine {
                     }
                 }
             };
-            if outcome == EffectOutcome::Suspended {
-                // The handler parked a `PendingResolution` for a player choice; stamp where to
-                // pick this list back up so `complete_parked_resolution` runs the tail (CR 608.2)
-                // rather than ending the resolution here. Handlers do not set this themselves —
-                // they have no idea which list they are a member of, or at what index.
-                //
-                // `if let` because `search_library`'s degenerate empty-library branch reports
-                // `Suspended` without parking anything; there is then nothing to stamp.
-                if let Some(pending) = self.state.pending_resolution.as_mut() {
-                    pending.resume_effect_index = Some(index as u32 + 1);
+            match outcome {
+                EffectOutcome::Suspended => {
+                    // The handler parked a `PendingResolution` for a player choice; stamp where to
+                    // pick this list back up so `complete_parked_resolution` runs the tail (CR
+                    // 608.2) rather than ending the resolution here. Handlers do not set this
+                    // themselves — they have no idea which list they are a member of, or at what
+                    // index.
+                    //
+                    // `if let` because `search_library`'s degenerate empty-library branch reports
+                    // `Suspended` without parking anything; there is then nothing to stamp.
+                    if let Some(pending) = self.state.pending_resolution.as_mut() {
+                        pending.resume_effect_index = Some(index as u32 + 1);
+                    }
+                    return Ok(());
                 }
-                return Ok(());
+                EffectOutcome::RestartResolutionBranch(branch_index) => {
+                    let mut item = top.clone();
+                    item.resolution_branch_choices
+                        .insert(index as u32, branch_index);
+                    let (effects, label) = self.build_resolution_effects(&item);
+                    return self.run_effect_list(&item, &label, effects, index, events);
+                }
+                EffectOutcome::Continue => {}
             }
             previous_effect_result = effect_result;
         }
@@ -1522,6 +1551,9 @@ pub(crate) fn move_object_to_zone(
             state.last_known_tapped.insert(oid, was_tapped);
         }
         if let Some(characteristics) = last_known_characteristics {
+            state
+                .last_known_controller_by_generation
+                .insert((oid, prior_generation), characteristics.controller);
             state
                 .last_known_keywords_by_generation
                 .insert((oid, prior_generation), characteristics.keywords);
@@ -2015,6 +2047,140 @@ mod attached_subject_tests {
             resolve_effect_subject(&engine, &item, &[], &EffectSubject::TriggerObject),
             None,
             "CR 400.7 prevents the trigger from affecting the returned object"
+        );
+    }
+
+    #[test]
+    fn put_counters_applicability_accepts_a_current_noncreature_permanent() {
+        let mut engine = GameEngine::new_with_default_decks(142_101, &[0, 1], 20).expect("engine");
+        let source = add_battlefield_object(&mut engine, 0, "forest");
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let item = triggered_item(source, generation);
+
+        assert!(pump_counters::can_put_counters(
+            &engine,
+            &item,
+            &[],
+            &EffectSubject::Source,
+        ));
+    }
+
+    #[test]
+    fn forced_resolution_branch_runs_its_tail_exactly_once() {
+        let mut engine = GameEngine::new_with_default_decks(142_102, &[0, 1], 20).expect("engine");
+        let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let mut item = triggered_item(source, generation);
+        item.triggered_ability = Some(TriggeredAbilityDef {
+            trigger: TriggerCondition::WhenSelfEntersBattlefield,
+            effect: vec![
+                SpellEffectKind::ChooseResolutionBranch {
+                    chooser: PlayerRecipient::Controller,
+                    optional: false,
+                    branches: vec![ResolutionBranchDef {
+                        label: "Gain one life".into(),
+                        cost: ResolutionCost::None,
+                        requirement:
+                            tricerules_cards::primitives::ResolutionBranchRequirement::Always,
+                        effects: vec![SpellEffectKind::GainLife {
+                            amount: Amount::Fixed(1),
+                        }],
+                    }],
+                },
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(2),
+                },
+            ],
+            modal: None,
+            targeting: None,
+            text: "Choose, then gain more life.".into(),
+            may: false,
+            intervening_if: None,
+        });
+        let (effects, label) = engine.build_resolution_effects(&item);
+        let mut events = Vec::new();
+
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut events)
+            .expect("resolve forced branch and tail");
+
+        assert_eq!(engine.state.players[0].life, 23);
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(event.ev, Some(rv1::ruled_event::Ev::LifeChanged(_))))
+                .count(),
+            2,
+        );
+    }
+
+    #[test]
+    fn optional_resolution_branch_with_no_legal_option_skips_to_the_tail() {
+        let mut engine = GameEngine::new_with_default_decks(142_103, &[0, 1], 20).expect("engine");
+        let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let mut item = triggered_item(source, generation.saturating_add(1));
+        item.triggered_ability = Some(TriggeredAbilityDef {
+            trigger: TriggerCondition::WhenSelfEntersBattlefield,
+            effect: vec![
+                SpellEffectKind::ChooseResolutionBranch {
+                    chooser: PlayerRecipient::Controller,
+                    optional: true,
+                    branches: vec![ResolutionBranchDef {
+                        label: "Put a counter on the stale source".into(),
+                        cost: ResolutionCost::None,
+                        requirement:
+                            tricerules_cards::primitives::ResolutionBranchRequirement::EffectsApplicable,
+                        effects: vec![SpellEffectKind::PutCounters {
+                            counter: CounterKind::PlusOnePlusOne,
+                            count: 1,
+                            subject: EffectSubject::Source,
+                        }],
+                    }],
+                },
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(2),
+                },
+            ],
+            modal: None,
+            targeting: None,
+            text: "Choose if possible, then gain life.".into(),
+            may: false,
+            intervening_if: None,
+        });
+        let (effects, label) = engine.build_resolution_effects(&item);
+        let mut events = Vec::new();
+
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut events)
+            .expect("skip impossible optional branch and resolve tail");
+
+        assert_eq!(engine.state.players[0].life, 22);
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(
+            engine
+                .state
+                .objects
+                .get(&source)
+                .expect("source")
+                .counter_count(CounterKind::PlusOnePlusOne),
+            0,
         );
     }
 

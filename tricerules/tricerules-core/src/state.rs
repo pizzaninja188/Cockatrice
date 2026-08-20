@@ -1,11 +1,11 @@
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
-use tricerules_cards::primitives::ResolutionBranchDef;
 use tricerules_cards::primitives::{
     ActivatedAbilityDef, Color, ContinuousEffectKind, CounterKind, CreatureScopeFilter,
     DamagePreventionAdditionalEffect, EffectDuration, GameCondition, Keyword, ManaAmount,
     ManaSpendingRestriction, SearchDestination, TargetFilter, TriggerCondition,
     TriggeredAbilityDef,
 };
+use tricerules_cards::primitives::{PlayerRecipient, ResolutionBranchDef};
 use tricerules_cards::{CardFace, ManaCost};
 use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
 
@@ -418,6 +418,7 @@ pub struct PendingManaPayment {
 #[derive(Debug, Clone)]
 pub struct PendingResolutionBranch {
     pub optional: bool,
+    pub chooser: PlayerRecipient,
     pub branches: Vec<ResolutionBranchDef>,
     /// Set after a branch button is accepted and while its object or mana cost is pending.
     pub selected_branch: Option<usize>,
@@ -851,6 +852,9 @@ pub struct GameState {
     /// generation-scoped so a leave-and-return object cannot rewrite an older ability's source.
     pub last_known_colors_by_generation: HashMap<(ObjectId, u64), Vec<Color>>,
     pub last_known_types_by_generation: HashMap<(ObjectId, u64), Vec<String>>,
+    /// Last-known derived controller keyed by source object and generation. Resolving abilities
+    /// use this for source-controller wording after the source leaves the battlefield.
+    pub last_known_controller_by_generation: HashMap<(ObjectId, u64), PlayerId>,
     /// The object an Aura or Equipment source was attached to as that source last left the
     /// battlefield, keyed by the source generation. The value carries the attached object's
     /// generation so an old ability cannot affect a card that left and returned under the same

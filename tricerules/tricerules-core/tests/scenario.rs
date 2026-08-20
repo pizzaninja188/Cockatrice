@@ -67,6 +67,8 @@ mod issue_117_fight;
 mod issue_127_trigger_event_filters;
 #[path = "scenario/issue_139_pending_trigger_publication.rs"]
 mod issue_139_pending_trigger_publication;
+#[path = "scenario/issue_142_endure.rs"]
+mod issue_142_endure;
 #[path = "scenario/issue_57_targeting_costs.rs"]
 mod issue_57_targeting_costs;
 #[path = "scenario/issue_59_resolution_choices.rs"]

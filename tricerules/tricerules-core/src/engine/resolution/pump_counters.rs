@@ -234,6 +234,7 @@ pub(super) fn grant_protection(
                     .map(|option| ResolutionBranchDef {
                         label: option.choice_label().to_string(),
                         cost: ResolutionCost::None,
+                        requirement: Default::default(),
                         effects: Vec::new(),
                     })
                     .collect();
@@ -470,15 +471,7 @@ pub(super) fn put_counters(
 
     let tid = resolve_effect_subject(engine, top, targets, &subject);
     if let Some(tid) = tid {
-        let is_valid_target = engine
-            .state
-            .objects
-            .get(&tid)
-            .is_some_and(|t| t.zone == Zone::Battlefield)
-            && engine
-                .characteristics(tid)
-                .is_some_and(|value| value.is_creature());
-        if is_valid_target {
+        if can_put_counters(engine, top, targets, &subject) {
             let tgt = object_display_name(&engine.state, engine.registry, tid);
             if let Some(t) = engine.state.objects.get_mut(&tid) {
                 *t.counters.entry(counter).or_insert(0) += count;
@@ -494,4 +487,19 @@ pub(super) fn put_counters(
     }
 
     Ok(EffectOutcome::Continue)
+}
+
+pub(super) fn can_put_counters(
+    engine: &GameEngine,
+    top: &StackItem,
+    targets: &[ObjectId],
+    subject: &EffectSubject,
+) -> bool {
+    resolve_effect_subject(engine, top, targets, subject).is_some_and(|object_id| {
+        engine
+            .state
+            .objects
+            .get(&object_id)
+            .is_some_and(|object| object.zone == Zone::Battlefield)
+    })
 }

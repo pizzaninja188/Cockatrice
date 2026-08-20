@@ -2,20 +2,87 @@ use super::{EffectCx, EffectOutcome};
 use crate::engine::events::ev_log;
 use crate::engine::{rv1, EngineError};
 use crate::state::{
-    PendingResolution, PendingResolutionBranch, StagedTrigger, StagedTriggerGroup, TriggerContext,
+    PendingResolution, PendingResolutionBranch, StackItem, StagedTrigger, StagedTriggerGroup,
+    TriggerContext,
 };
 use tricerules_cards::primitives::{
-    ResolutionCost, SearchDestination, SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
+    PlayerRecipient, ResolutionBranchDef, ResolutionBranchRequirement, ResolutionCost,
+    SearchDestination, SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
 };
 
 pub(super) fn choose_resolution_branch(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::ChooseResolutionBranch { optional, branches } = effect else {
+    let SpellEffectKind::ChooseResolutionBranch {
+        chooser,
+        optional,
+        branches,
+    } = effect
+    else {
         unreachable!();
     };
-    park_resolution_branches(cx, optional, branches)
+    let recipients = super::player_recipients(cx, chooser);
+    let [deciding_player] = recipients.as_slice() else {
+        return Err(EngineError::Illegal(
+            "resolution choice requires exactly one deciding player",
+        ));
+    };
+    let legal = branches
+        .iter()
+        .enumerate()
+        .filter(|(_, branch)| {
+            resolution_branch_is_live(cx.engine, cx.top, *deciding_player, branch)
+        })
+        .collect::<Vec<_>>();
+    match (optional, legal.as_slice()) {
+        (false, []) => {
+            cx.events.push(ev_log(format!(
+                "P{} has no legal resolution branch.",
+                deciding_player
+            )));
+            Ok(EffectOutcome::RestartResolutionBranch(None))
+        }
+        (false, [(branch_index, branch)]) => {
+            cx.events.push(ev_log(format!(
+                "P{} chooses: {}.",
+                deciding_player, branch.label
+            )));
+            Ok(EffectOutcome::RestartResolutionBranch(Some(*branch_index)))
+        }
+        (true, []) => {
+            cx.events.push(ev_log(format!(
+                "P{} declines the optional resolution choice.",
+                deciding_player
+            )));
+            Ok(EffectOutcome::RestartResolutionBranch(None))
+        }
+        _ => park_resolution_branches_for(cx, chooser, optional, branches),
+    }
+}
+
+pub(in crate::engine) fn resolution_branch_is_live(
+    engine: &crate::engine::GameEngine,
+    top: &StackItem,
+    deciding_player: i32,
+    branch: &ResolutionBranchDef,
+) -> bool {
+    let requirement_met = match branch.requirement {
+        ResolutionBranchRequirement::Always => true,
+        ResolutionBranchRequirement::EffectsApplicable => {
+            branch.effects.iter().all(|effect| match effect {
+                SpellEffectKind::PutCounters { subject, .. } => {
+                    super::pump_counters::can_put_counters(engine, top, &[], subject)
+                }
+                _ => true,
+            })
+        }
+    };
+    requirement_met
+        && (matches!(branch.cost, ResolutionCost::None | ResolutionCost::Mana(_))
+            || !engine
+                .resolution_cost_candidates(deciding_player, &branch.cost)
+                .is_empty())
 }
 
 pub(super) fn park_resolution_branches(
@@ -23,32 +90,44 @@ pub(super) fn park_resolution_branches(
     optional: bool,
     branches: Vec<tricerules_cards::primitives::ResolutionBranchDef>,
 ) -> Result<EffectOutcome, EngineError> {
+    park_resolution_branches_for(
+        cx,
+        tricerules_cards::primitives::PlayerRecipient::Controller,
+        optional,
+        branches,
+    )
+}
+
+fn park_resolution_branches_for(
+    cx: &mut EffectCx<'_>,
+    chooser: PlayerRecipient,
+    optional: bool,
+    branches: Vec<tricerules_cards::primitives::ResolutionBranchDef>,
+) -> Result<EffectOutcome, EngineError> {
+    let recipients = super::player_recipients(cx, chooser);
+    let [deciding_player] = recipients.as_slice() else {
+        return Err(EngineError::Illegal(
+            "resolution choice requires exactly one deciding player",
+        ));
+    };
+    let deciding_player = *deciding_player;
     let options = branches
         .iter()
         .enumerate()
+        .filter(|(_, branch)| resolution_branch_is_live(cx.engine, cx.top, deciding_player, branch))
         .map(|(index, branch)| {
-            let (kind, cost_text, selectable) = match &branch.cost {
-                ResolutionCost::None => (
-                    rv1::ResolutionBranchCostKind::Unspecified,
-                    String::new(),
-                    true,
-                ),
+            let (kind, cost_text) = match &branch.cost {
+                ResolutionCost::None => (rv1::ResolutionBranchCostKind::Unspecified, String::new()),
                 ResolutionCost::Mana(cost) => {
-                    (rv1::ResolutionBranchCostKind::Mana, cost.to_string(), true)
+                    (rv1::ResolutionBranchCostKind::Mana, cost.to_string())
                 }
                 ResolutionCost::DiscardCard { .. } => (
                     rv1::ResolutionBranchCostKind::DiscardCard,
                     "discard a matching card".into(),
-                    !cx.engine
-                        .resolution_cost_candidates(cx.controller, &branch.cost)
-                        .is_empty(),
                 ),
                 ResolutionCost::SacrificePermanent { .. } => (
                     rv1::ResolutionBranchCostKind::SacrificePermanent,
                     "sacrifice a matching permanent".into(),
-                    !cx.engine
-                        .resolution_cost_candidates(cx.controller, &branch.cost)
-                        .is_empty(),
                 ),
             };
             rv1::ResolutionBranchOption {
@@ -56,7 +135,7 @@ pub(super) fn park_resolution_branches(
                 label: branch.label.clone(),
                 cost_kind: kind as i32,
                 cost_text,
-                selectable,
+                selectable: true,
             }
         })
         .collect();
@@ -69,7 +148,7 @@ pub(super) fn park_resolution_branches(
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
-                deciding_player_id: cx.controller,
+                deciding_player_id: deciding_player,
                 source_object_id: cx.top.id,
                 prompt_text: prompt.clone(),
                 choice_kind: rv1::ChoiceKind::ResolutionBranch as i32,
@@ -95,7 +174,7 @@ pub(super) fn park_resolution_branches(
         custom_key: "__resolution_branch".into(),
         step: 0,
         scratch: Vec::new(),
-        deciding_player: cx.controller,
+        deciding_player,
         candidates: Vec::new(),
         min: u32::from(!optional),
         max: 1,
@@ -106,6 +185,7 @@ pub(super) fn park_resolution_branches(
         mana_payment: None,
         resolution_branch: Some(PendingResolutionBranch {
             optional,
+            chooser,
             branches,
             selected_branch: None,
         }),

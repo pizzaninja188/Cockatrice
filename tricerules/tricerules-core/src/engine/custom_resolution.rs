@@ -1258,6 +1258,17 @@ impl GameEngine {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal("bad resolution branch index"));
         };
+        if !resolution::resolution_branch_is_live(
+            self,
+            &pending.item,
+            pending.deciding_player,
+            &branch,
+        ) {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "that resolution branch is no longer legal",
+            ));
+        }
         let candidates = self.resolution_cost_candidates(pending.deciding_player, &branch.cost);
         if !matches!(branch.cost, ResolutionCost::None | ResolutionCost::Mana(_))
             && candidates.is_empty()
