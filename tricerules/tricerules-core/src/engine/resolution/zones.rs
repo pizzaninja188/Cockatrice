@@ -439,30 +439,25 @@ fn discard_for_player(
     });
     events.push(ev_log(prompt.clone()));
     engine.state.pending_resolution = Some(PendingResolution {
-        item: top.clone(),
-        custom_key: "__discard_chosen".to_string(),
-        step: 0,
-        scratch: vec![],
         deciding_player,
-        candidates: hand,
-        min,
-        max: n,
-        ordered: false,
-        unique_names: false,
-        mana_payment: None,
-        resolution_branch: None,
-        discard: Some(PendingDiscard {
-            affected_player,
-            draw_after,
-            draw_only_if_discarded: optional,
-        }),
-        prompt,
-        choice_kind,
-        copy_source_object_id: 0,
-        search_destination: SearchDestination::Hand,
-        search_shuffle: false,
-        search_reveal: false,
-        resume_effect_index: None,
+        presentation: PendingResolutionPresentation {
+            source_object_id: top.id,
+            candidates: hand,
+            min,
+            max: n,
+            ordered: false,
+            unique_names: false,
+            prompt,
+            choice_kind,
+        },
+        continuation: ResolutionContinuation::Discard {
+            stack: ParkedStackResolution::new(top.clone()),
+            discard: PendingDiscard {
+                affected_player,
+                draw_after,
+                draw_only_if_discarded: optional,
+            },
+        },
     });
     Ok(EffectOutcome::Suspended)
 }
@@ -613,27 +608,20 @@ pub(super) fn target_player_sacrifices(
                 });
                 events.push(ev_log(prompt.clone()));
                 engine.state.pending_resolution = Some(PendingResolution {
-                    item: top.clone(),
-                    custom_key: "__sacrifice_chosen".to_string(),
-                    step: 0,
-                    scratch: vec![],
                     deciding_player: pid,
-                    candidates: qualifying,
-                    min: 1,
-                    max: 1,
-                    ordered: false,
-                    unique_names: false,
-                    mana_payment: None,
-                    resolution_branch: None,
-                    discard: None,
-                    prompt,
-                    choice_kind: custom::ChoiceKind::Revealed,
-                    copy_source_object_id: 0,
-                    search_destination: SearchDestination::default(),
-                    search_shuffle: false,
-                    search_reveal: false,
-                    // Stamped by `run_effect_list` once it sees the `Suspended` below.
-                    resume_effect_index: None,
+                    presentation: PendingResolutionPresentation {
+                        source_object_id: top.id,
+                        candidates: qualifying,
+                        min: 1,
+                        max: 1,
+                        ordered: false,
+                        unique_names: false,
+                        prompt,
+                        choice_kind: custom::ChoiceKind::Revealed,
+                    },
+                    continuation: ResolutionContinuation::Sacrifice {
+                        stack: ParkedStackResolution::new(top.clone()),
+                    },
                 });
                 return Ok(EffectOutcome::Suspended);
             }
@@ -921,30 +909,22 @@ pub(super) fn scry(
         controller,
     ));
     engine.state.pending_resolution = Some(PendingResolution {
-        item: top.clone(),
-        custom_key: "__scry".to_string(),
-        step: 0,
-        // The looked-at set: `finish_scry` needs it to work out which cards were *not* sent to
-        // the bottom, since the choice only names the ones that were.
-        scratch: candidates.clone(),
         deciding_player: controller,
-        candidates,
-        min: 0,
-        max: n,
-        ordered: true,
-        unique_names: false,
-        mana_payment: None,
-        resolution_branch: None,
-        discard: None,
-        prompt,
-        choice_kind: custom::ChoiceKind::LibraryTop,
-        copy_source_object_id: 0,
-        search_destination: SearchDestination::default(),
-        search_shuffle: false,
-        search_reveal: false,
-        // Stamped by `run_effect_list` once it sees the `Suspended` below — this is what makes
-        // `[Scry, Draw]` (Preordain, Opt) draw the card after the scry decision.
-        resume_effect_index: None,
+        presentation: PendingResolutionPresentation {
+            source_object_id: top.id,
+            candidates: candidates.clone(),
+            min: 0,
+            max: n,
+            ordered: true,
+            unique_names: false,
+            prompt,
+            choice_kind: custom::ChoiceKind::LibraryTop,
+        },
+        continuation: ResolutionContinuation::Scry {
+            stack: ParkedStackResolution::new(top.clone()),
+            looked_at: candidates,
+            stage: PendingScryStage::ChooseBottom,
+        },
     });
     Ok(EffectOutcome::Suspended)
 }
@@ -1054,26 +1034,21 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
         controller,
     ));
     engine.state.pending_resolution = Some(PendingResolution {
-        item: cx.top.clone(),
-        custom_key: "__manifest_dread".to_string(),
-        step: 0,
-        scratch: candidates.clone(),
         deciding_player: controller,
-        candidates,
-        min: 1,
-        max: 1,
-        ordered: false,
-        unique_names: false,
-        mana_payment: None,
-        resolution_branch: None,
-        discard: None,
-        prompt,
-        choice_kind: custom::ChoiceKind::ManifestDread,
-        copy_source_object_id: 0,
-        search_destination: SearchDestination::default(),
-        search_shuffle: false,
-        search_reveal: false,
-        resume_effect_index: None,
+        presentation: PendingResolutionPresentation {
+            source_object_id: cx.top.id,
+            candidates: candidates.clone(),
+            min: 1,
+            max: 1,
+            ordered: false,
+            unique_names: false,
+            prompt,
+            choice_kind: custom::ChoiceKind::ManifestDread,
+        },
+        continuation: ResolutionContinuation::ManifestDread {
+            stack: ParkedStackResolution::new(cx.top.clone()),
+            looked_at: candidates,
+        },
     });
     Ok(EffectOutcome::Suspended)
 }
@@ -1159,30 +1134,24 @@ pub(super) fn look_choose_to_hand(
         controller,
     ));
     engine.state.pending_resolution = Some(PendingResolution {
-        item: cx.top.clone(),
-        custom_key: match bottom_order {
-            LibraryBottomOrder::Random => "__look_choose_bottom_random",
-            LibraryBottomOrder::Chosen => "__look_choose_bottom_chosen",
-        }
-        .to_string(),
-        step: 0,
-        scratch: looked,
         deciding_player: controller,
-        candidates: legal,
-        min: 0,
-        max: 1,
-        ordered: false,
-        unique_names: false,
-        mana_payment: None,
-        resolution_branch: None,
-        discard: None,
-        prompt,
-        choice_kind: custom::ChoiceKind::LibraryLook,
-        copy_source_object_id: 0,
-        search_destination: SearchDestination::default(),
-        search_shuffle: false,
-        search_reveal: false,
-        resume_effect_index: None,
+        presentation: PendingResolutionPresentation {
+            source_object_id: cx.top.id,
+            candidates: legal,
+            min: 0,
+            max: 1,
+            ordered: false,
+            unique_names: false,
+            prompt,
+            choice_kind: custom::ChoiceKind::LibraryLook,
+        },
+        continuation: ResolutionContinuation::LibraryLook {
+            stack: ParkedStackResolution::new(cx.top.clone()),
+            stage: PendingLibraryLookStage::ChooseToHand {
+                looked_at: looked,
+                bottom_order,
+            },
+        },
     });
     Ok(EffectOutcome::Suspended)
 }
@@ -1261,27 +1230,23 @@ pub(super) fn search_library(
     });
     events.push(ev_log(prompt.clone()));
     engine.state.pending_resolution = Some(PendingResolution {
-        item: top.clone(),
-        custom_key: "__search_library".to_string(),
-        step: 0,
-        scratch: vec![],
         deciding_player: controller,
-        candidates,
-        min,
-        max: 1,
-        ordered: false,
-        unique_names: false,
-        mana_payment: None,
-        resolution_branch: None,
-        discard: None,
-        prompt,
-        choice_kind: custom::ChoiceKind::LibrarySearch,
-        copy_source_object_id: 0,
-        search_destination: destination,
-        search_shuffle: shuffle,
-        search_reveal: reveal,
-        // Stamped by `run_effect_list` once it sees the `Suspended` below.
-        resume_effect_index: None,
+        presentation: PendingResolutionPresentation {
+            source_object_id: top.id,
+            candidates,
+            min,
+            max: 1,
+            ordered: false,
+            unique_names: false,
+            prompt,
+            choice_kind: custom::ChoiceKind::LibrarySearch,
+        },
+        continuation: ResolutionContinuation::SearchLibrary {
+            stack: ParkedStackResolution::new(top.clone()),
+            destination,
+            shuffle,
+            reveal,
+        },
     });
     // Resolution is now parked; the "resolves." log is emitted by finish_library_search.
     Ok(EffectOutcome::Suspended)

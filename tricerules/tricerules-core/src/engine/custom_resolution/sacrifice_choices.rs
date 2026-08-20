@@ -7,6 +7,10 @@ impl GameEngine {
         pending: PendingResolution,
         chosen: &[u32],
     ) -> Result<RuledEventBatch, EngineError> {
+        let stack = match &pending.continuation {
+            ResolutionContinuation::Sacrifice { stack } => stack.clone(),
+            _ => return Err(EngineError::Illegal("sacrifice continuation missing")),
+        };
         let oid = chosen[0];
         let card_name = super::events::object_display_name(&self.state, self.registry, oid);
         // Capture last-known information before the zone move clears transient state.
@@ -46,7 +50,7 @@ impl GameEngine {
         }
         let _ = self.apply_sbas(&mut ev);
 
-        self.complete_parked_resolution(pending.item, pending.resume_effect_index, ev)
+        self.complete_parked_resolution(stack.item, stack.resume_effect_index, ev)
     }
 
     /// CR 704.5j: the controller has chosen which legend to keep. Sacrifice all other candidates
@@ -59,7 +63,7 @@ impl GameEngine {
         let keep_id = chosen[0];
         let mut ev = vec![];
         let mut trigger_events = vec![];
-        for &oid in &pending.candidates {
+        for &oid in &pending.presentation.candidates {
             if oid == keep_id {
                 continue;
             }

@@ -77,12 +77,19 @@ impl GameEngine {
                 return Err(EngineError::Illegal("unknown resolution choice decision"));
             }
         };
-        if pending.custom_key == "__resolution_branch"
-            && pending.choice_kind == rv1::ChoiceKind::ResolutionBranch
-        {
+        if matches!(
+            pending.continuation,
+            ResolutionContinuation::AuthoredBranch {
+                branch: PendingResolutionBranch {
+                    stage: PendingResolutionBranchStage::Selecting,
+                    ..
+                },
+                ..
+            }
+        ) {
             return self.select_resolution_branch(pending, answer, decision);
         }
-        if let Some(payment) = pending.mana_payment.clone() {
+        if let Some(payment) = pending.continuation.mana_payment().cloned() {
             return self.finish_resolution_mana_payment(pending, payment, answer, decision, player);
         }
         if decision != rv1::ResolutionChoiceDecision::Unspecified {
@@ -93,18 +100,18 @@ impl GameEngine {
         }
         let chosen = answer.chosen_object_ids.as_slice();
         let n = chosen.len() as u32;
-        if n < pending.min || n > pending.max {
+        if n < pending.presentation.min || n > pending.presentation.max {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal("wrong number of cards chosen"));
         }
         let mut seen = HashSet::new();
         for &oid in chosen {
-            if !pending.candidates.contains(&oid) || !seen.insert(oid) {
+            if !pending.presentation.candidates.contains(&oid) || !seen.insert(oid) {
                 self.state.pending_resolution = Some(pending);
                 return Err(EngineError::Illegal("invalid resolution choice"));
             }
         }
-        if pending.unique_names {
+        if pending.presentation.unique_names {
             let mut name_seen: HashSet<String> = HashSet::new();
             for &oid in chosen {
                 let card_id = self
@@ -127,75 +134,67 @@ impl GameEngine {
             }
         }
 
-        // CR 707.10c: copy target choice is not a tier-3 CardEffect; handle it directly.
-        if pending.custom_key == "__copy_targets" {
-            return self.finish_copy_target_choice(pending, chosen);
-        }
-        // CR 701.18: library search completion (SearchLibrary primitive) — move the chosen card
-        // to the declared destination and optionally shuffle.
-        if pending.custom_key == "__search_library" {
-            return self.finish_library_search(pending, chosen);
-        }
-
-        // CR 701.18: scry — step 0 picks the cards going to the bottom, step 1 orders the rest.
-        if pending.custom_key == "__scry" {
-            return self.finish_scry(pending, chosen);
-        }
-        if pending.custom_key.starts_with("__look_choose_bottom_") {
-            return self.finish_look_choose_bottom(pending, chosen);
-        }
-        if pending.custom_key == "__manifest_dread" {
-            return self.finish_manifest_dread(pending, chosen[0]);
-        }
-
-        // DiscardCards (caster-chooses): move each chosen card from the target's hand to graveyard.
-        if pending.custom_key == "__discard_chosen" {
-            return self.finish_discard_chosen(pending, chosen);
-        }
-
-        // CR 701.17: sacrifice choice — target player picks which qualifying permanent to lose.
-        if pending.custom_key == "__sacrifice_chosen" {
-            return self.finish_sacrifice_chosen(pending, chosen);
-        }
-        if pending.custom_key == "__resolution_branch" {
-            return self.finish_resolution_branch_object(pending, chosen);
-        }
-        if pending.custom_key == "__entry_copy_source" {
-            return self.finish_entry_copy_source_choice(pending, chosen);
-        }
-        if pending.custom_key == "__replacement_effect" {
-            return match self.state.pending_replacement_event.as_ref() {
-                Some(super::replacement::PendingReplacementEvent::Damage(_)) => {
-                    self.finish_damage_prevention_choice(pending, chosen[0])
-                }
-                Some(super::replacement::PendingReplacementEvent::BattlefieldEntry(_)) => {
-                    self.finish_battlefield_entry_replacement_choice(pending, chosen[0])
-                }
-                None => {
-                    self.state.pending_resolution = Some(pending);
-                    Err(EngineError::Illegal("replacement choice is stale"))
-                }
-            };
+        match &pending.continuation {
+            ResolutionContinuation::CopyTargets { .. } => {
+                return self.finish_copy_target_choice(pending, chosen);
+            }
+            ResolutionContinuation::SearchLibrary { .. } => {
+                return self.finish_library_search(pending, chosen);
+            }
+            ResolutionContinuation::Scry { .. } => return self.finish_scry(pending, chosen),
+            ResolutionContinuation::LibraryLook { .. } => {
+                return self.finish_look_choose_bottom(pending, chosen);
+            }
+            ResolutionContinuation::ManifestDread { .. } => {
+                return self.finish_manifest_dread(pending, chosen[0]);
+            }
+            ResolutionContinuation::Discard { .. } => {
+                return self.finish_discard_chosen(pending, chosen);
+            }
+            ResolutionContinuation::Sacrifice { .. } => {
+                return self.finish_sacrifice_chosen(pending, chosen);
+            }
+            ResolutionContinuation::AuthoredBranch { .. } => {
+                return self.finish_resolution_branch_object(pending, chosen);
+            }
+            ResolutionContinuation::EntryCopySource { .. } => {
+                return self.finish_entry_copy_source_choice(pending, chosen);
+            }
+            ResolutionContinuation::EntryReplacement { .. } => {
+                return self.finish_battlefield_entry_replacement_choice(pending, chosen[0]);
+            }
+            ResolutionContinuation::DamageReplacement { .. } => {
+                return self.finish_damage_prevention_choice(pending, chosen[0]);
+            }
+            ResolutionContinuation::LegendKeep => {
+                return self.finish_legend_sba_choice(pending, chosen);
+            }
+            ResolutionContinuation::Custom { .. } => {}
+            ResolutionContinuation::ManaPayment { .. } => unreachable!("handled above"),
         }
 
-        // CR 704.5j: legend SBA choice — the chosen object id is the legend to KEEP;
-        // all others are sacrificed through the normal die path so LTB/death triggers fire.
-        if pending.custom_key == "__legend_sba" {
-            return self.finish_legend_sba_choice(pending, chosen);
-        }
-
-        let effect = match custom::lookup(&pending.custom_key) {
+        let (key, controller, item, step_no, scratch) = match &pending.continuation {
+            ResolutionContinuation::Custom {
+                stack,
+                key,
+                step,
+                scratch,
+            } => (
+                key.clone(),
+                stack.item.controller,
+                stack.item.clone(),
+                *step,
+                scratch.clone(),
+            ),
+            _ => unreachable!("non-custom continuations return above"),
+        };
+        let effect = match custom::lookup(&key) {
             Some(e) => e,
             None => {
-                let key = pending.custom_key.clone();
                 self.state.pending_resolution = Some(pending);
                 return Err(EngineError::MissingCard(key));
             }
         };
-        let controller = pending.item.controller;
-        let item = pending.item;
-        let custom_key = pending.custom_key;
-        let step_no = pending.step;
         let choice = ResolutionChoice {
             object_ids: chosen.to_vec(),
         };
@@ -208,12 +207,12 @@ impl GameEngine {
                 &mut ev,
                 controller,
                 step_no,
-                pending.scratch,
+                scratch,
             );
             let r = effect.resume(&mut ctx, &choice);
             (r, ctx.scratch)
         };
-        self.park_or_finish(item, custom_key, step_no, scratch, step, &mut ev);
+        self.park_or_finish(item, key, step_no, scratch, step, &mut ev);
 
         if self.state.pending_resolution.is_none() {
             if let Some(i) = self.state.player_idx(self.state.active_player_id()) {
@@ -331,29 +330,23 @@ impl GameEngine {
         });
         events.push(ev_log(interrupt.prompt.clone()));
         self.state.pending_resolution = Some(PendingResolution {
-            item,
-            custom_key,
-            step: step_no + 1,
-            scratch,
             deciding_player: interrupt.deciding_player,
-            candidates: interrupt.candidates,
-            min: interrupt.min,
-            max: interrupt.max,
-            ordered: interrupt.ordered,
-            unique_names: interrupt.unique_names,
-            mana_payment: None,
-            resolution_branch: None,
-            discard: None,
-            prompt: interrupt.prompt,
-            choice_kind: interrupt.choice_kind,
-            copy_source_object_id: 0,
-            search_destination: SearchDestination::Hand,
-            search_shuffle: false,
-            search_reveal: false,
-            // Tier-3 (CR 608): the `CardEffect` owns the whole resolution — `resolve_top_of_stack`
-            // hands off before building any primitive list — so there is never a tail to resume,
-            // including across the repeated re-parks of a multi-step effect like Gifts Ungiven.
-            resume_effect_index: None,
+            presentation: PendingResolutionPresentation {
+                source_object_id: item.id,
+                candidates: interrupt.candidates,
+                min: interrupt.min,
+                max: interrupt.max,
+                ordered: interrupt.ordered,
+                unique_names: interrupt.unique_names,
+                prompt: interrupt.prompt,
+                choice_kind: interrupt.choice_kind,
+            },
+            continuation: ResolutionContinuation::Custom {
+                stack: ParkedStackResolution::new(item),
+                key: custom_key,
+                step: step_no + 1,
+                scratch,
+            },
         });
     }
 }

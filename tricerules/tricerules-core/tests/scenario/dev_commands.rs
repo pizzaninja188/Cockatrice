@@ -329,9 +329,12 @@ fn dev_conjure_waits_for_entry_replacement_choice_before_announcing_or_committin
     assert!(!e.state.players[0].battlefield.contains(&ghoul.id));
 
     let pending = e.state.pending_resolution.as_ref().expect("CR 616 choice");
-    assert_eq!(pending.choice_kind, ChoiceKind::ReplacementEffect);
-    assert_eq!(pending.candidates.len(), 2);
-    let application = pending.candidates[0];
+    assert_eq!(
+        pending.presentation.choice_kind,
+        ChoiceKind::ReplacementEffect
+    );
+    assert_eq!(pending.presentation.candidates.len(), 2);
+    let application = pending.presentation.candidates[0];
     let completion = e
         .apply_command(0, &submit_resolution_choice(vec![application]))
         .expect("choose entry replacement");
@@ -379,6 +382,7 @@ fn dev_move_waits_for_entry_replacement_choice_before_leaving_the_source_zone() 
         .pending_resolution
         .as_ref()
         .expect("CR 616 choice")
+        .presentation
         .candidates[0];
     let completion = e
         .apply_command(0, &submit_resolution_choice(vec![application]))

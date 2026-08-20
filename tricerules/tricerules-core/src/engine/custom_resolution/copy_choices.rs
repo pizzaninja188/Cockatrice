@@ -11,7 +11,11 @@ impl GameEngine {
         pending: &PendingResolution,
         chosen: &[u32],
     ) -> Result<Vec<Vec<ObjectId>>, EngineError> {
-        let item = &pending.item;
+        let item = &pending
+            .continuation
+            .stack()
+            .ok_or(EngineError::Illegal("copy-target continuation missing"))?
+            .item;
         let controller = item.controller;
         let target_source = TargetSourceIdentity::for_stack_item(self, item);
         let face = self
@@ -109,11 +113,17 @@ impl GameEngine {
         pending: PendingResolution,
         chosen: &[u32],
     ) -> Result<RuledEventBatch, EngineError> {
-        let copy_id = pending.item.id;
-        let card_id = pending.item.card_id.clone();
-        let face_index = pending.item.face_index;
-        let controller = pending.item.controller;
-        let copy_source_object_id = pending.copy_source_object_id;
+        let (stack, copy_source_object_id) = match &pending.continuation {
+            ResolutionContinuation::CopyTargets {
+                stack,
+                copy_source_object_id,
+            } => (stack.clone(), *copy_source_object_id),
+            _ => return Err(EngineError::Illegal("copy-target continuation missing")),
+        };
+        let copy_id = stack.item.id;
+        let card_id = stack.item.card_id.clone();
+        let face_index = stack.item.face_index;
+        let controller = stack.item.controller;
 
         // Validate before consuming `pending`: this choice was already taken out of
         // `state.pending_resolution`, so any early return has to put it back or the copy is lost
@@ -127,7 +137,7 @@ impl GameEngine {
         };
 
         // Everything below this point is infallible.
-        let mut copy_item = pending.item;
+        let mut copy_item = stack.item;
         for (chosen_mode, mode_targets) in copy_item.chosen_modes.iter_mut().zip(per_mode_targets) {
             for (target, object_id) in chosen_mode.targets.iter_mut().zip(mode_targets) {
                 target.object_id = object_id;

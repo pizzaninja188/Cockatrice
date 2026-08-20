@@ -630,26 +630,24 @@ impl GameEngine {
         self.state.pending_replacement_event =
             Some(super::replacement::PendingReplacementEvent::Damage(batch));
         self.state.pending_resolution = Some(PendingResolution {
-            item,
-            custom_key: "__replacement_effect".to_string(),
-            step: 1,
-            scratch: candidate_effect_ids,
             deciding_player,
-            candidates,
-            min: 1,
-            max: 1,
-            ordered: false,
-            prompt,
-            choice_kind: rv1::ChoiceKind::ReplacementEffect,
-            unique_names: false,
-            mana_payment: None,
-            resolution_branch: None,
-            discard: None,
-            copy_source_object_id: 0,
-            search_destination: SearchDestination::Hand,
-            search_shuffle: false,
-            search_reveal: false,
-            resume_effect_index,
+            presentation: PendingResolutionPresentation {
+                source_object_id: item.id,
+                candidates,
+                min: 1,
+                max: 1,
+                ordered: false,
+                prompt,
+                choice_kind: rv1::ChoiceKind::ReplacementEffect,
+                unique_names: false,
+            },
+            continuation: ResolutionContinuation::DamageReplacement {
+                stack: ParkedStackResolution {
+                    item,
+                    resume_effect_index,
+                },
+                effect_ids: candidate_effect_ids,
+            },
         });
     }
 
@@ -883,6 +881,14 @@ impl GameEngine {
         pending: PendingResolution,
         chosen_application_id: u32,
     ) -> Result<RuledEventBatch, EngineError> {
+        let stack = match &pending.continuation {
+            ResolutionContinuation::DamageReplacement { stack, .. } => stack.clone(),
+            _ => {
+                return Err(EngineError::Illegal(
+                    "damage-replacement continuation missing",
+                ))
+            }
+        };
         let Some(pending_event) = self.state.pending_replacement_event.take() else {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal("damage-prevention choice is stale"));
@@ -929,8 +935,8 @@ impl GameEngine {
                 raw_candidates,
             } => {
                 self.park_damage_prevention_choice(
-                    pending.item,
-                    pending.resume_effect_index,
+                    stack.item,
+                    stack.resume_effect_index,
                     batch,
                     raw_candidates,
                     &mut events,
@@ -939,7 +945,7 @@ impl GameEngine {
             }
         };
         self.commit_completed_damage_batch(&completed, &mut events);
-        self.complete_parked_resolution(pending.item, pending.resume_effect_index, events)
+        self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
     }
 
     pub(crate) fn commit_damage_result(

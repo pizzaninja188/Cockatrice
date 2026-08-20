@@ -206,9 +206,12 @@ fn counter_and_tapped_entry_replacements_are_order_independent() {
             .pending_resolution
             .as_ref()
             .expect("both entry replacements require ordering");
-        assert_eq!(pending.choice_kind, ChoiceKind::ReplacementEffect);
-        assert_eq!(pending.candidates.len(), 2);
-        let application = pending.candidates[chosen_candidate];
+        assert_eq!(
+            pending.presentation.choice_kind,
+            ChoiceKind::ReplacementEffect
+        );
+        assert_eq!(pending.presentation.candidates.len(), 2);
+        let application = pending.presentation.candidates[chosen_candidate];
         engine
             .apply_command(0, &submit_resolution_choice(vec![application]))
             .expect("choose first entry replacement");

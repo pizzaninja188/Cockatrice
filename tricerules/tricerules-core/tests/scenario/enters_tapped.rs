@@ -81,9 +81,12 @@ fn orb_and_intrinsic_entry_replacement_ask_for_the_next_cr_616_effect() {
         .as_ref()
         .expect("two applicable entry replacements require a CR 616 choice");
     assert_eq!(pending.deciding_player, 0);
-    assert_eq!(pending.choice_kind, ChoiceKind::ReplacementEffect);
-    assert_eq!(pending.candidates.len(), 2);
-    let application = pending.candidates[0];
+    assert_eq!(
+        pending.presentation.choice_kind,
+        ChoiceKind::ReplacementEffect
+    );
+    assert_eq!(pending.presentation.candidates.len(), 2);
+    let application = pending.presentation.candidates[0];
     assert!(engine
         .apply_command(1, &submit_resolution_choice(vec![application]))
         .is_err());
@@ -227,9 +230,12 @@ fn token_batch_waits_for_every_replacement_choice_then_enters_simultaneously() {
             .pending_resolution
             .as_ref()
             .expect("each token has two Orb replacements to order");
-        assert_eq!(pending.choice_kind, ChoiceKind::ReplacementEffect);
-        assert_eq!(pending.candidates.len(), 2);
-        let application = pending.candidates[0];
+        assert_eq!(
+            pending.presentation.choice_kind,
+            ChoiceKind::ReplacementEffect
+        );
+        assert_eq!(pending.presentation.candidates.len(), 2);
+        let application = pending.presentation.candidates[0];
         engine
             .apply_command(0, &submit_resolution_choice(vec![application]))
             .expect("choose an Orb replacement");
@@ -313,7 +319,7 @@ fn graveyard_owner_orders_replacements_even_when_the_permanent_enters_under_oppo
         pending.deciding_player, 1,
         "the graveyard card's owner decides"
     );
-    let application = pending.candidates[0];
+    let application = pending.presentation.candidates[0];
     assert!(engine
         .apply_command(0, &submit_resolution_choice(vec![application]))
         .is_err());

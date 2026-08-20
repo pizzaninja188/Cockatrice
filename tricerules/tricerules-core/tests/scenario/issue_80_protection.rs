@@ -66,18 +66,21 @@ fn protection_from_red_prevents_pyroclasm_damage() {
             .pending_resolution
             .as_ref()
             .expect("protection quality choice")
+            .presentation
             .choice_kind,
         ChoiceKind::ResolutionBranch
     );
-    let branches = &engine
+    let pending = engine
         .state
         .pending_resolution
         .as_ref()
-        .expect("protection quality choice")
-        .resolution_branch
-        .as_ref()
-        .expect("authored protection branches")
-        .branches;
+        .expect("protection quality choice");
+    let tricerules_core::state::ResolutionContinuation::AuthoredBranch { branch, .. } =
+        &pending.continuation
+    else {
+        panic!("authored protection branches")
+    };
+    let branches = &branch.branches;
     assert_eq!(branches.len(), 5);
     assert_eq!(branches[3].label, "Red");
     engine
@@ -305,15 +308,17 @@ fn protection_from_artifacts_detaches_equipment() {
         "a spell remains on the stack while its resolution-time choice is pending"
     );
     assert!(!engine.state.players[0].graveyard.contains(&blessing_oid));
-    let branches = &engine
+    let pending = engine
         .state
         .pending_resolution
         .as_ref()
-        .expect("protection quality choice")
-        .resolution_branch
-        .as_ref()
-        .expect("authored protection branches")
-        .branches;
+        .expect("protection quality choice");
+    let tricerules_core::state::ResolutionContinuation::AuthoredBranch { branch, .. } =
+        &pending.continuation
+    else {
+        panic!("authored protection branches")
+    };
+    let branches = &branch.branches;
     assert_eq!(branches.len(), 6);
     assert_eq!(branches[0].label, "artifacts");
     engine

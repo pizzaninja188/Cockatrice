@@ -57,31 +57,26 @@ pub(super) fn counter_target_spell(
                 )),
             });
             engine.state.pending_resolution = Some(PendingResolution {
-                item: cx.top.clone(),
-                custom_key: "__mana_payment".to_string(),
-                step: 0,
-                scratch: Vec::new(),
                 deciding_player,
-                candidates: Vec::new(),
-                min: 0,
-                max: 0,
-                ordered: false,
-                prompt,
-                choice_kind: custom::ChoiceKind::ManaPayment,
-                unique_names: false,
-                mana_payment: Some(PendingManaPayment {
-                    target_spell_id: tid,
-                    generic_mana_cost,
-                    mana_cost: ManaCost::default(),
-                    undo_history_start: engine.state.undoable_mana_abilities.len(),
-                }),
-                resolution_branch: None,
-                discard: None,
-                copy_source_object_id: 0,
-                search_destination: SearchDestination::Hand,
-                search_shuffle: false,
-                search_reveal: false,
-                resume_effect_index: None,
+                presentation: PendingResolutionPresentation {
+                    source_object_id: cx.top.id,
+                    candidates: Vec::new(),
+                    min: 0,
+                    max: 0,
+                    ordered: false,
+                    prompt,
+                    choice_kind: custom::ChoiceKind::ManaPayment,
+                    unique_names: false,
+                },
+                continuation: ResolutionContinuation::ManaPayment {
+                    stack: ParkedStackResolution::new(cx.top.clone()),
+                    payment: PendingManaPayment {
+                        target_spell_id: tid,
+                        generic_mana_cost,
+                        mana_cost: ManaCost::default(),
+                        undo_history_start: engine.state.undoable_mana_abilities.len(),
+                    },
+                },
             });
             // The payment is part of this spell's resolution (CR 608.2g). Keep the resolving
             // counter as the top stack item for public/reconnect state until the player pays or
@@ -333,29 +328,21 @@ pub(super) fn copy_target_spell(
                     });
                     events.push(ev_log(prompt.clone()));
                     engine.state.pending_resolution = Some(PendingResolution {
-                        item: copy_template,
-                        custom_key: "__copy_targets".to_string(),
-                        step: 0,
-                        scratch: vec![],
                         deciding_player: controller,
-                        candidates,
-                        min: 1,
-                        max: 1,
-                        ordered: false,
-                        prompt,
-                        choice_kind: custom::ChoiceKind::TargetObjects,
-                        unique_names: false,
-                        mana_payment: None,
-                        resolution_branch: None,
-                        discard: None,
-                        copy_source_object_id: src.id,
-                        search_destination: SearchDestination::Hand,
-                        search_shuffle: false,
-                        search_reveal: false,
-                        // The parked item is the *copy* being retargeted, not the effect list this
-                        // runs inside, so there is no tail here to resume. `CopyTargetSpell`
-                        // itself returns `Continue`, and its own list carries on normally.
-                        resume_effect_index: None,
+                        presentation: PendingResolutionPresentation {
+                            source_object_id: copy_id,
+                            candidates,
+                            min: 1,
+                            max: 1,
+                            ordered: false,
+                            prompt,
+                            choice_kind: custom::ChoiceKind::TargetObjects,
+                            unique_names: false,
+                        },
+                        continuation: ResolutionContinuation::CopyTargets {
+                            stack: ParkedStackResolution::new(copy_template),
+                            copy_source_object_id: src.id,
+                        },
                     });
                     // Copy will be pushed to the stack after target is submitted.
                 } else {

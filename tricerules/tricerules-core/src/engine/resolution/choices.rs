@@ -2,12 +2,13 @@ use super::{EffectCx, EffectOutcome};
 use crate::engine::events::ev_log;
 use crate::engine::{rv1, EngineError};
 use crate::state::{
-    PendingResolution, PendingResolutionBranch, StackItem, StagedTrigger, StagedTriggerGroup,
-    TriggerContext,
+    ParkedStackResolution, PendingResolution, PendingResolutionBranch,
+    PendingResolutionBranchStage, PendingResolutionPresentation, ResolutionContinuation, StackItem,
+    StagedTrigger, StagedTriggerGroup, TriggerContext,
 };
 use tricerules_cards::primitives::{
     PlayerRecipient, ResolutionBranchDef, ResolutionBranchRequirement, ResolutionCost,
-    SearchDestination, SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
+    SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
 };
 
 pub(super) fn choose_resolution_branch(
@@ -170,31 +171,26 @@ fn park_resolution_branches_for(
     });
     cx.events.push(ev_log(prompt.clone()));
     cx.engine.state.pending_resolution = Some(PendingResolution {
-        item: cx.top.clone(),
-        custom_key: "__resolution_branch".into(),
-        step: 0,
-        scratch: Vec::new(),
         deciding_player,
-        candidates: Vec::new(),
-        min: u32::from(!optional),
-        max: 1,
-        ordered: false,
-        prompt,
-        choice_kind: rv1::ChoiceKind::ResolutionBranch,
-        unique_names: false,
-        mana_payment: None,
-        resolution_branch: Some(PendingResolutionBranch {
-            optional,
-            chooser,
-            branches,
-            selected_branch: None,
-        }),
-        discard: None,
-        copy_source_object_id: 0,
-        search_destination: SearchDestination::Hand,
-        search_shuffle: false,
-        search_reveal: false,
-        resume_effect_index: None,
+        presentation: PendingResolutionPresentation {
+            source_object_id: cx.top.id,
+            candidates: Vec::new(),
+            min: u32::from(!optional),
+            max: 1,
+            ordered: false,
+            prompt,
+            choice_kind: rv1::ChoiceKind::ResolutionBranch,
+            unique_names: false,
+        },
+        continuation: ResolutionContinuation::AuthoredBranch {
+            stack: ParkedStackResolution::new(cx.top.clone()),
+            branch: PendingResolutionBranch {
+                optional,
+                chooser,
+                branches,
+                stage: PendingResolutionBranchStage::Selecting,
+            },
+        },
     });
     Ok(EffectOutcome::Suspended)
 }

@@ -28,13 +28,20 @@ impl GameEngine {
             return Err(EngineError::Illegal("scrying player missing"));
         };
         let mut ev = vec![];
+        let (stack, looked_at, stage) = match &pending.continuation {
+            ResolutionContinuation::Scry {
+                stack,
+                looked_at,
+                stage,
+            } => (stack.clone(), looked_at.clone(), *stage),
+            _ => return Err(EngineError::Illegal("scry continuation missing")),
+        };
 
-        if pending.step == 0 {
+        if stage == PendingScryStage::ChooseBottom {
             // Everything looked at that was not sent to the bottom stays on top, keeping the
             // library order it already had. The bottomed cards go down in submitted order
             // (`push_back` each in turn), so the last one clicked ends up bottom-most.
-            let remaining: Vec<ObjectId> = pending
-                .scratch
+            let remaining: Vec<ObjectId> = looked_at
                 .iter()
                 .copied()
                 .filter(|oid| !chosen.contains(oid))
@@ -88,7 +95,7 @@ impl GameEngine {
             ));
         }
 
-        self.complete_parked_resolution(pending.item, pending.resume_effect_index, ev)
+        self.complete_parked_resolution(stack.item, stack.resume_effect_index, ev)
     }
 
     /// Park scry's second interrupt: order the cards staying on top (CR 701.18a "in any order").
@@ -99,7 +106,9 @@ impl GameEngine {
         remaining: Vec<ObjectId>,
         mut ev: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
+        let mut pending = pending;
         let controller = pending.deciding_player;
+        let source_object_id = pending.presentation.source_object_id;
         let n = remaining.len() as u32;
         let (candidate_card_ids, candidate_names) =
             super::resolution::candidate_identities(self, &remaining);
@@ -111,7 +120,7 @@ impl GameEngine {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
                     deciding_player_id: controller,
-                    source_object_id: pending.item.id,
+                    source_object_id,
                     prompt_text: prompt.clone(),
                     choice_kind: rv1::ChoiceKind::LibraryTop as i32,
                     candidate_object_ids: remaining.clone(),
@@ -131,16 +140,16 @@ impl GameEngine {
             )),
         });
         ev.push(ev_log_private(prompt.clone(), controller));
-        self.state.pending_resolution = Some(PendingResolution {
-            step: 1,
-            scratch: vec![],
-            candidates: remaining,
-            min: n,
-            max: n,
-            ordered: true,
-            prompt,
-            ..pending
-        });
+        pending.presentation.candidates = remaining;
+        pending.presentation.min = n;
+        pending.presentation.max = n;
+        pending.presentation.ordered = true;
+        pending.presentation.prompt = prompt;
+        let ResolutionContinuation::Scry { stage, .. } = &mut pending.continuation else {
+            unreachable!("validated scry continuation")
+        };
+        *stage = PendingScryStage::OrderTop;
+        self.state.pending_resolution = Some(pending);
         Ok(finish_with_events(self, ev))
     }
 
@@ -157,8 +166,12 @@ impl GameEngine {
             return Err(EngineError::Illegal("looking player missing"));
         };
         let mut ev = Vec::new();
+        let (stack, stage) = match &pending.continuation {
+            ResolutionContinuation::LibraryLook { stack, stage } => (stack.clone(), stage.clone()),
+            _ => return Err(EngineError::Illegal("library-look continuation missing")),
+        };
 
-        if pending.custom_key == "__look_choose_bottom_order" {
+        if matches!(stage, PendingLibraryLookStage::OrderBottom) {
             self.state.players[idx]
                 .library
                 .retain(|oid| !chosen.contains(oid));
@@ -176,12 +189,18 @@ impl GameEngine {
                 ),
                 controller,
             ));
-            return self.complete_parked_resolution(pending.item, pending.resume_effect_index, ev);
+            return self.complete_parked_resolution(stack.item, stack.resume_effect_index, ev);
         }
 
         let selected = chosen.first().copied();
-        let mut remaining: Vec<ObjectId> = pending
-            .scratch
+        let PendingLibraryLookStage::ChooseToHand {
+            looked_at,
+            bottom_order,
+        } = stage
+        else {
+            unreachable!("order-bottom returned above")
+        };
+        let mut remaining: Vec<ObjectId> = looked_at
             .iter()
             .copied()
             .filter(|oid| Some(*oid) != selected)
@@ -202,7 +221,7 @@ impl GameEngine {
             ));
         }
 
-        if pending.custom_key == "__look_choose_bottom_random" {
+        if bottom_order == LibraryBottomOrder::Random {
             shuffle_object_ids_for_current_command(&self.state, controller, &mut remaining);
             self.state.players[idx]
                 .library
@@ -221,7 +240,7 @@ impl GameEngine {
                 ),
                 controller,
             ));
-            return self.complete_parked_resolution(pending.item, pending.resume_effect_index, ev);
+            return self.complete_parked_resolution(stack.item, stack.resume_effect_index, ev);
         }
 
         if remaining.len() <= 1 {
@@ -231,7 +250,7 @@ impl GameEngine {
             for &oid in &remaining {
                 self.state.players[idx].library.push_back(oid);
             }
-            return self.complete_parked_resolution(pending.item, pending.resume_effect_index, ev);
+            return self.complete_parked_resolution(stack.item, stack.resume_effect_index, ev);
         }
 
         let n = remaining.len() as u32;
@@ -244,7 +263,7 @@ impl GameEngine {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
                     deciding_player_id: controller,
-                    source_object_id: pending.item.id,
+                    source_object_id: pending.presentation.source_object_id,
                     prompt_text: prompt.clone(),
                     choice_kind: rv1::ChoiceKind::LibraryLook as i32,
                     candidate_object_ids: remaining.clone(),
@@ -263,17 +282,17 @@ impl GameEngine {
                 },
             )),
         });
-        self.state.pending_resolution = Some(PendingResolution {
-            custom_key: "__look_choose_bottom_order".to_string(),
-            step: 1,
-            scratch: Vec::new(),
-            candidates: std::mem::take(&mut remaining),
-            min: n,
-            max: n,
-            ordered: true,
-            prompt,
-            ..pending
-        });
+        let mut pending = pending;
+        pending.presentation.candidates = std::mem::take(&mut remaining);
+        pending.presentation.min = n;
+        pending.presentation.max = n;
+        pending.presentation.ordered = true;
+        pending.presentation.prompt = prompt;
+        let ResolutionContinuation::LibraryLook { stage, .. } = &mut pending.continuation else {
+            unreachable!("validated library-look continuation")
+        };
+        *stage = PendingLibraryLookStage::OrderBottom;
+        self.state.pending_resolution = Some(pending);
         Ok(finish_with_events(self, ev))
     }
 }

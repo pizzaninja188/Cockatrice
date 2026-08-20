@@ -139,7 +139,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
             .as_ref()
             .and_then(|pending| {
                 (pending.deciding_player == p.id)
-                    .then_some(pending.mana_payment.as_ref()?.undo_history_start)
+                    .then_some(pending.continuation.mana_payment()?.undo_history_start)
             })
             .unwrap_or(0);
         let undoable_mana_abilities = eng
@@ -840,7 +840,7 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
     }
     if let Some(pr) = &eng.state.pending_resolution {
         return if pr.deciding_player == pid {
-            vec![format!("Resolve: {}", pr.prompt)]
+            vec![format!("Resolve: {}", pr.presentation.prompt)]
         } else {
             vec!["Waiting: opponent making a resolution choice".into()]
         };

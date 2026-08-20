@@ -7,11 +7,12 @@ use crate::state::{
     BattlefieldEntryEvent, BlockingChoice, ChosenMode, CombatState, ContinuousEffect,
     CopiableValues, DamagePreventionAmount, DamagePreventionProhibition, DamagePreventionScope,
     EntryReplacementApplication, EntryReplacementEffectId, GameObject, GameState, ObjectId,
-    OpeningSequence, PendingBattlefieldEntry, PendingDiscard, PendingManaPayment,
-    PendingResolution, PendingTrigger, PendingTriggerOrder, PlayerId, PlayerState,
-    ReplacementPriority, StackItem, StackTarget, StagedTrigger, StagedTriggerGroup,
-    TokenBattlefieldEntry, TriggerContext, TriggerObjectRef, TurnHistory, TurnStep,
-    UndoableManaAbility, Zone,
+    OpeningSequence, ParkedStackResolution, PendingBattlefieldEntry, PendingDiscard,
+    PendingLibraryLookStage, PendingManaPayment, PendingResolution, PendingResolutionBranch,
+    PendingResolutionBranchStage, PendingResolutionPresentation, PendingScryStage, PendingTrigger,
+    PendingTriggerOrder, PlayerId, PlayerState, ReplacementPriority, ResolutionContinuation,
+    StackItem, StackTarget, StagedTrigger, StagedTriggerGroup, TokenBattlefieldEntry,
+    TriggerContext, TriggerObjectRef, TurnHistory, TurnStep, UndoableManaAbility, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -1324,7 +1325,8 @@ impl GameEngine {
                             .pending_resolution
                             .as_ref()
                             .is_some_and(|pending| {
-                                pending.mana_payment.is_some() && pending.deciding_player == player
+                                pending.continuation.mana_payment().is_some()
+                                    && pending.deciding_player == player
                             })
                 }
                 BlockingChoice::TriggerOrder => {
@@ -1354,7 +1356,7 @@ impl GameEngine {
                     .state
                     .pending_resolution
                     .as_ref()
-                    .is_some_and(|pending| pending.mana_payment.is_some());
+                    .is_some_and(|pending| pending.continuation.mana_payment().is_some());
         if !preserves_payment_undo
             && !matches!(
                 cmd.cmd.as_ref(),

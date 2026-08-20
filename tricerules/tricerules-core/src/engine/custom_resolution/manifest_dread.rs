@@ -8,14 +8,18 @@ impl GameEngine {
         chosen: ObjectId,
     ) -> Result<RuledEventBatch, EngineError> {
         let controller = pending.deciding_player;
-        let chosen_position = pending
-            .scratch
+        let (stack, looked_at) = match &pending.continuation {
+            ResolutionContinuation::ManifestDread { stack, looked_at } => {
+                (stack.clone(), looked_at.clone())
+            }
+            _ => return Err(EngineError::Illegal("manifest continuation missing")),
+        };
+        let chosen_position = looked_at
             .iter()
             .position(|object_id| *object_id == chosen)
             .ok_or(EngineError::Illegal("manifest choice is stale"))?
             as u32;
-        let other = pending
-            .scratch
+        let other = looked_at
             .iter()
             .copied()
             .find(|object_id| *object_id != chosen);
@@ -31,7 +35,7 @@ impl GameEngine {
                     .collect()
             })
             .unwrap_or_default();
-        if current_top != pending.scratch {
+        if current_top != looked_at {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal("manifest choice is stale"));
         }
@@ -58,10 +62,12 @@ impl GameEngine {
             other_object_id: other,
             chosen_library_position: chosen_position,
         };
-        match self.begin_battlefield_entry(pending.item.clone(), entry, completion, &mut events) {
+        match self.begin_battlefield_entry(stack.item.clone(), entry, completion, &mut events) {
             super::super::replacement::BattlefieldEntryProgress::Parked => {
                 if let Some(replacement_pending) = self.state.pending_resolution.as_mut() {
-                    replacement_pending.resume_effect_index = pending.resume_effect_index;
+                    if let Some(replacement_stack) = replacement_pending.continuation.stack_mut() {
+                        replacement_stack.resume_effect_index = stack.resume_effect_index;
+                    }
                 }
                 Ok(finish_with_events(self, events))
             }
@@ -91,7 +97,7 @@ impl GameEngine {
                     ));
                 }
                 events.push(ev_log(format!("P{controller} manifests dread.")));
-                self.complete_parked_resolution(pending.item, pending.resume_effect_index, events)
+                self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
             }
         }
     }

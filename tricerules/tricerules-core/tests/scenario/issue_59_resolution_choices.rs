@@ -115,12 +115,43 @@ fn crypt_lurker_discard_branch_pays_then_draws() {
             .pending_resolution
             .as_ref()
             .expect("branch choice")
+            .presentation
             .choice_kind,
         ChoiceKind::ResolutionBranch
     );
+    assert!(matches!(
+        &engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("branch choice")
+            .continuation,
+        ResolutionContinuation::AuthoredBranch {
+            branch: tricerules_core::state::PendingResolutionBranch {
+                stage: PendingResolutionBranchStage::Selecting,
+                ..
+            },
+            ..
+        }
+    ));
     engine
         .apply_command(0, &select_branch(1))
         .expect("choose discard branch");
+    assert!(matches!(
+        &engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("discard payment")
+            .continuation,
+        ResolutionContinuation::AuthoredBranch {
+            branch: tricerules_core::state::PendingResolutionBranch {
+                stage: PendingResolutionBranchStage::PayingObjects { .. },
+                ..
+            },
+            ..
+        }
+    ));
     engine
         .apply_command(0, &submit_resolution_choice(vec![discarded]))
         .expect("discard creature card");
@@ -196,6 +227,21 @@ fn sparktongue_payment_creates_a_separately_targeted_reflexive_trigger() {
     engine
         .apply_command(0, &select_branch(0))
         .expect("choose mana branch");
+    assert!(matches!(
+        &engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("mana payment")
+            .continuation,
+        ResolutionContinuation::AuthoredBranch {
+            branch: tricerules_core::state::PendingResolutionBranch {
+                stage: PendingResolutionBranchStage::PayingMana { .. },
+                ..
+            },
+            ..
+        }
+    ));
     give_mana(
         &mut engine,
         0,

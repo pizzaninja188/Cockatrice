@@ -70,6 +70,17 @@ fn commune_uses_images_for_all_looked_cards_then_orders_the_remainder() {
     );
     assert_eq!((choose.min, choose.max), (0, 1));
     assert!(!choose.ordered, "the first step chooses at most one card");
+    assert!(matches!(
+        &e.state
+            .pending_resolution
+            .as_ref()
+            .expect("library-look continuation")
+            .continuation,
+        ResolutionContinuation::LibraryLook {
+            stage: PendingLibraryLookStage::ChooseToHand { .. },
+            ..
+        }
+    ));
 
     let order_batch = e
         .apply_command(0, &submit_resolution_choice(vec![top[0]]))
@@ -83,6 +94,17 @@ fn commune_uses_images_for_all_looked_cards_then_orders_the_remainder() {
     assert_eq!(order.candidate_selectable, [true; 4]);
     assert_eq!((order.min, order.max), (4, 4));
     assert!(order.ordered);
+    assert!(matches!(
+        &e.state
+            .pending_resolution
+            .as_ref()
+            .expect("bottom-order continuation")
+            .continuation,
+        ResolutionContinuation::LibraryLook {
+            stage: PendingLibraryLookStage::OrderBottom,
+            ..
+        }
+    ));
 
     let submitted = vec![top[4], top[3], top[2], top[1]];
     e.apply_command(0, &submit_resolution_choice(submitted.clone()))

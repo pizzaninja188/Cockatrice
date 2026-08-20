@@ -273,6 +273,7 @@ fn healing_salve_double_shield_partially_consumed_by_bolt() {
         .pending_resolution
         .as_ref()
         .expect("two independent shields require a CR 616 choice")
+        .presentation
         .candidates[0];
     e.apply_command(1, &submit_resolution_choice(vec![application]))
         .expect("P1 chooses which shield absorbs Bolt");
@@ -2246,6 +2247,14 @@ fn coercion_caster_chooses_which_card_to_discard() {
         choice_req.candidate_object_ids.contains(&bear_oid),
         "bear is a candidate"
     );
+    assert!(matches!(
+        &e.state
+            .pending_resolution
+            .as_ref()
+            .expect("discard continuation")
+            .continuation,
+        ResolutionContinuation::Discard { .. }
+    ));
 
     // P0 picks the grizzly_bears.
     e.apply_command(0, &submit_resolution_choice(vec![bear_oid]))
@@ -2844,7 +2853,14 @@ fn diabolic_edict_forces_target_player_to_sacrifice_a_creature() {
         req.candidate_object_ids.contains(&bear_id),
         "Grizzly Bears is a legal sacrifice"
     );
-    assert!(e.state.pending_resolution.is_some());
+    assert!(matches!(
+        &e.state
+            .pending_resolution
+            .as_ref()
+            .expect("sacrifice continuation")
+            .continuation,
+        ResolutionContinuation::Sacrifice { .. }
+    ));
 
     // P1 sacrifices the bear.
     let result = e

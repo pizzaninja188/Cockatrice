@@ -96,11 +96,15 @@ fn clone_chooses_its_copy_source_during_resolution_not_casting() {
         .pending_resolution
         .as_ref()
         .expect("Clone resolution must park before battlefield entry");
-    assert_eq!(pending.choice_kind, ChoiceKind::CopySource);
+    assert_eq!(pending.presentation.choice_kind, ChoiceKind::CopySource);
     assert_eq!(pending.deciding_player, 0);
-    assert_eq!(pending.min, 0);
-    assert_eq!(pending.max, 1);
-    assert_eq!(pending.candidates, vec![source]);
+    assert_eq!(pending.presentation.min, 0);
+    assert_eq!(pending.presentation.max, 1);
+    assert_eq!(pending.presentation.candidates, vec![source]);
+    assert!(matches!(
+        &pending.continuation,
+        ResolutionContinuation::EntryCopySource { .. }
+    ));
     assert!(
         engine.state.players[0]
             .battlefield
@@ -319,8 +323,8 @@ fn stale_copy_source_is_rejected_without_clearing_the_choice() {
         .pending_resolution
         .as_ref()
         .expect("stale answer preserves pending choice");
-    assert_eq!(pending.choice_kind, ChoiceKind::CopySource);
-    assert_eq!(pending.candidates, vec![source]);
+    assert_eq!(pending.presentation.choice_kind, ChoiceKind::CopySource);
+    assert_eq!(pending.presentation.candidates, vec![source]);
 }
 
 #[test]

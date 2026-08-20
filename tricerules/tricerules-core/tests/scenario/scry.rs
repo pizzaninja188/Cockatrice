@@ -62,6 +62,17 @@ fn opt_bottoming_the_scried_card_draws_the_next_one() {
     // CR 701.18a bottoms "in any order", and the engine seats them in submitted order.
     assert!(req.ordered, "the bottom pile is ordered");
     assert_eq!(req.candidate_object_ids, vec![scried]);
+    assert!(matches!(
+        &e.state
+            .pending_resolution
+            .as_ref()
+            .expect("scry continuation")
+            .continuation,
+        ResolutionContinuation::Scry {
+            stage: PendingScryStage::ChooseBottom,
+            ..
+        }
+    ));
     assert!(
         !e.state.players[0].hand.contains(&scried),
         "scrying does not move the card out of the library"
@@ -163,6 +174,17 @@ fn preordain_keeping_both_asks_for_an_order_then_draws_the_new_top() {
     assert!(req.ordered, "the order submitted is significant");
     assert_eq!(req.candidate_object_ids, vec![a, b]);
     assert!(e.state.pending_resolution.is_some(), "still parked");
+    assert!(matches!(
+        &e.state
+            .pending_resolution
+            .as_ref()
+            .expect("scry ordering continuation")
+            .continuation,
+        ResolutionContinuation::Scry {
+            stage: PendingScryStage::OrderTop,
+            ..
+        }
+    ));
     assert!(
         e.state.players[0].hand.is_empty() || !e.state.players[0].hand.contains(&a),
         "the draw has not happened yet"

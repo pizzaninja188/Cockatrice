@@ -8,13 +8,22 @@ impl GameEngine {
         pending: PendingResolution,
         chosen: &[u32],
     ) -> Result<RuledEventBatch, EngineError> {
-        let controller = pending.item.controller;
+        let (stack, destination, shuffle, reveal) = match &pending.continuation {
+            ResolutionContinuation::SearchLibrary {
+                stack,
+                destination,
+                shuffle,
+                reveal,
+            } => (stack.clone(), *destination, *shuffle, *reveal),
+            _ => return Err(EngineError::Illegal("library-search continuation missing")),
+        };
+        let controller = stack.item.controller;
 
         let mut ev = vec![];
 
         if chosen.is_empty() {
             ev.push(ev_log(format!("P{controller} finds no card.")));
-            if pending.search_shuffle {
+            if shuffle {
                 crate::engine::shuffle_player_library_for_current_command(
                     &mut self.state,
                     controller,
@@ -31,7 +40,7 @@ impl GameEngine {
                 .map(|d| d.name.clone())
                 .unwrap_or_else(|| "card".to_string());
 
-            match pending.search_destination {
+            match destination {
                 SearchDestination::Hand => {
                     // Move to hand first, then shuffle.
                     if let Some(idx) = self.state.player_idx(controller) {
@@ -41,7 +50,7 @@ impl GameEngine {
                     if let Some(o) = self.state.objects.get_mut(&oid) {
                         o.zone = Zone::Hand;
                     }
-                    if pending.search_reveal {
+                    if reveal {
                         ev.push(ev_log(format!("P{controller} reveals {card_name}.")));
                         ev.push(ev_log(format!(
                             "P{controller} puts {card_name} into their hand."
@@ -56,7 +65,7 @@ impl GameEngine {
                             controller,
                         ));
                     }
-                    if pending.search_shuffle {
+                    if shuffle {
                         crate::engine::shuffle_player_library_for_current_command(
                             &mut self.state,
                             controller,
@@ -69,7 +78,7 @@ impl GameEngine {
                     if let Some(idx) = self.state.player_idx(controller) {
                         self.state.players[idx].library.retain(|&x| x != oid);
                     }
-                    if pending.search_shuffle {
+                    if shuffle {
                         crate::engine::shuffle_player_library_for_current_command(
                             &mut self.state,
                             controller,
@@ -82,7 +91,7 @@ impl GameEngine {
                     if let Some(o) = self.state.objects.get_mut(&oid) {
                         o.zone = Zone::Library;
                     }
-                    if pending.search_reveal {
+                    if reveal {
                         ev.push(ev_log(format!("P{controller} reveals {card_name}.")));
                         ev.push(ev_log(format!(
                             "P{controller} puts {card_name} on top of their library."
@@ -108,11 +117,11 @@ impl GameEngine {
                     let completion = BattlefieldEntryCompletion::LibrarySearch {
                         owner,
                         card_label: card_name.clone(),
-                        shuffle: pending.search_shuffle,
-                        resume_effect_index: pending.resume_effect_index,
+                        shuffle,
+                        resume_effect_index: stack.resume_effect_index,
                     };
                     match self.begin_battlefield_entry(
-                        pending.item.clone(),
+                        stack.item.clone(),
                         BattlefieldEntryEvent {
                             object_id: oid,
                             deciding_player: controller,
@@ -143,7 +152,7 @@ impl GameEngine {
                         owner,
                         rv1::permanent_moved::Destination::Battlefield,
                     ));
-                    if pending.search_shuffle {
+                    if shuffle {
                         crate::engine::shuffle_player_library_for_current_command(
                             &mut self.state,
                             controller,
@@ -154,6 +163,6 @@ impl GameEngine {
             }
         }
 
-        self.complete_parked_resolution(pending.item, pending.resume_effect_index, ev)
+        self.complete_parked_resolution(stack.item, stack.resume_effect_index, ev)
     }
 }

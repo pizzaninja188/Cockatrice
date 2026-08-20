@@ -334,26 +334,20 @@ impl GameEngine {
             }),
         ));
         self.state.pending_resolution = Some(PendingResolution {
-            item,
-            custom_key: "__entry_copy_source".to_string(),
-            step: 1,
-            scratch: Vec::new(),
             deciding_player,
-            candidates,
-            min: 0,
-            max: 1,
-            ordered: false,
-            prompt,
-            choice_kind: rv1::ChoiceKind::CopySource,
-            unique_names: false,
-            mana_payment: None,
-            resolution_branch: None,
-            discard: None,
-            copy_source_object_id: 0,
-            search_destination: SearchDestination::Hand,
-            search_shuffle: false,
-            search_reveal: false,
-            resume_effect_index: None,
+            presentation: PendingResolutionPresentation {
+                source_object_id: item.id,
+                candidates,
+                min: 0,
+                max: 1,
+                ordered: false,
+                prompt,
+                choice_kind: rv1::ChoiceKind::CopySource,
+                unique_names: false,
+            },
+            continuation: ResolutionContinuation::EntryCopySource {
+                stack: ParkedStackResolution::new(item),
+            },
         });
     }
 
@@ -562,26 +556,20 @@ impl GameEngine {
                             },
                         )));
                     self.state.pending_resolution = Some(PendingResolution {
-                        item,
-                        custom_key: "__replacement_effect".to_string(),
-                        step: 1,
-                        scratch: Vec::new(),
                         deciding_player,
-                        candidates: application_ids,
-                        min: 1,
-                        max: 1,
-                        ordered: false,
-                        prompt,
-                        choice_kind: rv1::ChoiceKind::ReplacementEffect,
-                        unique_names: false,
-                        mana_payment: None,
-                        resolution_branch: None,
-                        discard: None,
-                        copy_source_object_id: 0,
-                        search_destination: SearchDestination::Hand,
-                        search_shuffle: false,
-                        search_reveal: false,
-                        resume_effect_index: None,
+                        presentation: PendingResolutionPresentation {
+                            source_object_id: item.id,
+                            candidates: application_ids,
+                            min: 1,
+                            max: 1,
+                            ordered: false,
+                            prompt,
+                            choice_kind: rv1::ChoiceKind::ReplacementEffect,
+                            unique_names: false,
+                        },
+                        continuation: ResolutionContinuation::EntryReplacement {
+                            stack: ParkedStackResolution::new(item),
+                        },
                     });
                     return BattlefieldEntryProgress::Parked;
                 }
@@ -729,6 +717,13 @@ impl GameEngine {
         completion: BattlefieldEntryCompletion,
         mut events: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
+        let stack = pending
+            .continuation
+            .stack()
+            .ok_or(EngineError::Illegal(
+                "battlefield-entry continuation missing",
+            ))?
+            .clone();
         match completion {
             BattlefieldEntryCompletion::LandPlay { player, land_name } => {
                 self.commit_battlefield_entry(event, None)?;
@@ -744,7 +739,7 @@ impl GameEngine {
                     })),
                 });
                 self.commit_battlefield_entry(event, attached_to)?;
-                self.complete_parked_resolution(pending.item, Some(0), events)
+                self.complete_parked_resolution(stack.item, Some(0), events)
             }
             BattlefieldEntryCompletion::ResolutionEffect {
                 owner,
@@ -762,7 +757,7 @@ impl GameEngine {
                     owner,
                     rv1::permanent_moved::Destination::Battlefield,
                 ));
-                self.complete_parked_resolution(pending.item, pending.resume_effect_index, events)
+                self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
             }
             BattlefieldEntryCompletion::LibrarySearch {
                 owner,
@@ -789,7 +784,7 @@ impl GameEngine {
                     );
                     events.push(ev_log(format!("P{controller} shuffles their library.")));
                 }
-                self.complete_parked_resolution(pending.item, resume_effect_index, events)
+                self.complete_parked_resolution(stack.item, resume_effect_index, events)
             }
             BattlefieldEntryCompletion::ManifestDread {
                 owner,
@@ -822,7 +817,7 @@ impl GameEngine {
                     ));
                 }
                 events.push(ev_log(format!("P{owner} manifests dread.")));
-                self.complete_parked_resolution(pending.item, pending.resume_effect_index, events)
+                self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
             }
             BattlefieldEntryCompletion::TokenBatch {
                 current_created,
@@ -835,7 +830,7 @@ impl GameEngine {
                     created: current_created,
                 };
                 if self.continue_token_entry_batch(
-                    pending.item.clone(),
+                    stack.item.clone(),
                     current,
                     ready,
                     remaining,
@@ -844,7 +839,7 @@ impl GameEngine {
                 )? {
                     return Ok(finish_with_events(self, events));
                 }
-                self.complete_parked_resolution(pending.item, pending.resume_effect_index, events)
+                self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
             }
             BattlefieldEntryCompletion::DevPlacement {
                 target,
@@ -874,6 +869,10 @@ impl GameEngine {
         pending: PendingResolution,
         chosen: &[ObjectId],
     ) -> Result<RuledEventBatch, EngineError> {
+        let stack = match &pending.continuation {
+            ResolutionContinuation::EntryCopySource { stack } => stack.clone(),
+            _ => return Err(EngineError::Illegal("copy-source continuation missing")),
+        };
         let Some(pending_event) = self.state.pending_replacement_event.take() else {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal("copy source choice is stale"));
@@ -933,7 +932,7 @@ impl GameEngine {
 
         let mut events = Vec::new();
         let event = match self.advance_or_park_battlefield_entry(
-            pending.item.clone(),
+            stack.item,
             entry.event,
             entry.completion.clone(),
             &mut events,
@@ -949,6 +948,14 @@ impl GameEngine {
         pending: PendingResolution,
         application_id: u32,
     ) -> Result<RuledEventBatch, EngineError> {
+        let stack = match &pending.continuation {
+            ResolutionContinuation::EntryReplacement { stack } => stack.clone(),
+            _ => {
+                return Err(EngineError::Illegal(
+                    "entry-replacement continuation missing",
+                ))
+            }
+        };
         let Some(pending_event) = self.state.pending_replacement_event.take() else {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
@@ -982,7 +989,7 @@ impl GameEngine {
             let sources = self.copy_source_candidates(&entry.event, &filter);
             if !sources.is_empty() {
                 self.park_copy_source_choice(
-                    pending.item,
+                    stack.item,
                     entry.event,
                     entry.completion,
                     application.effect_id,
@@ -996,7 +1003,7 @@ impl GameEngine {
             self.apply_entry_replacement(&mut entry.event, application.effect_id);
         }
         let event = match self.advance_or_park_battlefield_entry(
-            pending.item.clone(),
+            stack.item,
             entry.event,
             entry.completion.clone(),
             &mut events,

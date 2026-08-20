@@ -3,13 +3,13 @@ use super::*;
 impl GameEngine {
     pub(in crate::engine) fn resolution_payment_choice_event(&self) -> Option<rv1::RuledEvent> {
         let pending = self.state.pending_resolution.as_ref()?;
-        let payment = pending.mana_payment.as_ref()?;
+        let payment = pending.continuation.mana_payment()?;
         Some(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
                     deciding_player_id: pending.deciding_player,
-                    source_object_id: pending.item.id,
-                    prompt_text: pending.prompt.clone(),
+                    source_object_id: pending.presentation.source_object_id,
+                    prompt_text: pending.presentation.prompt.clone(),
                     choice_kind: rv1::ChoiceKind::ManaPayment as i32,
                     candidate_object_ids: Vec::new(),
                     candidate_card_ids: Vec::new(),
@@ -92,22 +92,33 @@ impl GameEngine {
                 // Resolution is consequential even though the payment-time entries were
                 // rewound. Older float stays in the pool but is no longer eligible for Undo.
                 self.state.undoable_mana_abilities.clear();
-                if pending.resolution_branch.is_some() {
-                    let effect_index = pending
+                if matches!(
+                    pending.continuation,
+                    ResolutionContinuation::AuthoredBranch { .. }
+                ) {
+                    let stack = pending
+                        .continuation
+                        .stack()
+                        .expect("authored branch has a stack continuation");
+                    let effect_index = stack
                         .resume_effect_index
                         .and_then(|next| next.checked_sub(1))
                         .ok_or(EngineError::Illegal(
                             "resolution branch continuation missing",
                         ))?;
-                    let mut item = pending.item;
+                    let mut item = stack.item.clone();
                     item.resolution_branch_choices.insert(effect_index, None);
                     return self.complete_parked_resolution(item, Some(effect_index), events);
                 } else {
+                    let stack = pending
+                        .continuation
+                        .stack()
+                        .expect("mana payment has a stack continuation");
                     let counter_label = self
                         .registry
-                        .get(&pending.item.card_id)
+                        .get(&stack.item.card_id)
                         .map(|definition| definition.name.clone())
-                        .unwrap_or_else(|| pending.item.card_id.clone());
+                        .unwrap_or_else(|| stack.item.card_id.clone());
                     counter_stack_spell(
                         self,
                         payment.target_spell_id,
@@ -129,14 +140,22 @@ impl GameEngine {
                 ));
             }
         }
-        let resume = if pending.resolution_branch.is_some() {
-            pending
+        let stack = pending
+            .continuation
+            .stack()
+            .expect("mana payment has a stack continuation")
+            .clone();
+        let resume = if matches!(
+            pending.continuation,
+            ResolutionContinuation::AuthoredBranch { .. }
+        ) {
+            stack
                 .resume_effect_index
                 .and_then(|next| next.checked_sub(1))
         } else {
-            pending.resume_effect_index
+            stack.resume_effect_index
         };
-        self.complete_parked_resolution(pending.item, resume, events)
+        self.complete_parked_resolution(stack.item, resume, events)
     }
 
     pub(in crate::engine) fn resolution_cost_candidates(
@@ -184,13 +203,20 @@ impl GameEngine {
                 "resolution branch selection cannot include object ids",
             ));
         }
-        let branch_state = pending
-            .resolution_branch
-            .clone()
-            .ok_or(EngineError::Illegal(
-                "resolution branch continuation missing",
-            ))?;
-        let effect_index = pending
+        let (stack, branch_state) = match &pending.continuation {
+            ResolutionContinuation::AuthoredBranch { stack, branch }
+                if matches!(branch.stage, PendingResolutionBranchStage::Selecting) =>
+            {
+                (stack.clone(), branch.clone())
+            }
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "resolution branch continuation missing",
+                ));
+            }
+        };
+        let effect_index = stack
             .resume_effect_index
             .and_then(|next| next.checked_sub(1))
             .ok_or(EngineError::Illegal(
@@ -202,12 +228,10 @@ impl GameEngine {
                 self.state.pending_resolution = Some(pending);
                 return Err(EngineError::Illegal("resolution branch is not optional"));
             }
-            pending
-                .item
-                .resolution_branch_choices
-                .insert(effect_index, None);
+            let mut item = stack.item;
+            item.resolution_branch_choices.insert(effect_index, None);
             return self.complete_parked_resolution(
-                pending.item,
+                item,
                 Some(effect_index),
                 vec![ev_log(format!(
                     "P{} declines the optional resolution choice.",
@@ -228,7 +252,7 @@ impl GameEngine {
         };
         if !resolution::resolution_branch_is_live(
             self,
-            &pending.item,
+            &stack.item,
             pending.deciding_player,
             &branch,
         ) {
@@ -247,29 +271,47 @@ impl GameEngine {
             ));
         }
         pending
+            .continuation
+            .stack_mut()
+            .expect("authored branch has a stack continuation")
             .item
             .resolution_branch_choices
             .insert(effect_index, Some(branch_index));
-        if let Some(state) = pending.resolution_branch.as_mut() {
-            state.selected_branch = Some(branch_index);
-        }
         let mut ev = vec![ev_log(format!(
             "P{} chooses: {}.",
             pending.deciding_player, branch.label
         ))];
         match branch.cost {
             ResolutionCost::None => {
-                return self.complete_parked_resolution(pending.item, Some(effect_index), ev);
+                return self.complete_parked_resolution(
+                    pending
+                        .continuation
+                        .stack()
+                        .expect("authored branch has a stack continuation")
+                        .item
+                        .clone(),
+                    Some(effect_index),
+                    ev,
+                );
             }
             ResolutionCost::Mana(mana_cost) => {
-                pending.choice_kind = rv1::ChoiceKind::ManaPayment;
-                pending.prompt = format!("Pay {}?", mana_cost);
-                pending.mana_payment = Some(PendingManaPayment {
+                pending.presentation.choice_kind = rv1::ChoiceKind::ManaPayment;
+                pending.presentation.prompt = format!("Pay {}?", mana_cost);
+                let payment = PendingManaPayment {
                     target_spell_id: 0,
                     generic_mana_cost: 0,
                     mana_cost,
                     undo_history_start: self.state.undoable_mana_abilities.len(),
-                });
+                };
+                let ResolutionContinuation::AuthoredBranch { branch, .. } =
+                    &mut pending.continuation
+                else {
+                    unreachable!("validated authored branch continuation")
+                };
+                branch.stage = PendingResolutionBranchStage::PayingMana {
+                    selected_branch: branch_index,
+                    payment,
+                };
                 self.state.pending_resolution = Some(pending);
                 ev.push(
                     self.resolution_payment_choice_event()
@@ -278,18 +320,26 @@ impl GameEngine {
             }
             ResolutionCost::DiscardCard { .. } | ResolutionCost::SacrificePermanent { .. } => {
                 let is_discard = matches!(branch.cost, ResolutionCost::DiscardCard { .. });
-                pending.choice_kind = if is_discard {
+                pending.presentation.choice_kind = if is_discard {
                     rv1::ChoiceKind::HandCards
                 } else {
                     rv1::ChoiceKind::TargetObjects
                 };
-                pending.candidates = candidates.clone();
-                pending.min = u32::from(!branch_state.optional);
-                pending.max = 1;
-                pending.prompt = if is_discard {
+                pending.presentation.candidates = candidates.clone();
+                pending.presentation.min = u32::from(!branch_state.optional);
+                pending.presentation.max = 1;
+                pending.presentation.prompt = if is_discard {
                     "Choose a card to discard, or decline.".into()
                 } else {
                     "Choose a permanent to sacrifice, or decline.".into()
+                };
+                let ResolutionContinuation::AuthoredBranch { branch, .. } =
+                    &mut pending.continuation
+                else {
+                    unreachable!("validated authored branch continuation")
+                };
+                branch.stage = PendingResolutionBranchStage::PayingObjects {
+                    selected_branch: branch_index,
                 };
                 let candidate_card_ids = candidates
                     .iter()
@@ -305,12 +355,12 @@ impl GameEngine {
                     ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                         rv1::ResolutionChoiceRequired {
                             deciding_player_id: pending.deciding_player,
-                            source_object_id: pending.item.id,
-                            prompt_text: pending.prompt.clone(),
-                            choice_kind: pending.choice_kind as i32,
+                            source_object_id: pending.presentation.source_object_id,
+                            prompt_text: pending.presentation.prompt.clone(),
+                            choice_kind: pending.presentation.choice_kind as i32,
                             candidate_object_ids: candidates.clone(),
                             candidate_card_ids,
-                            min: pending.min,
+                            min: pending.presentation.min,
                             max: 1,
                             ordered: false,
                             candidate_names: self.object_names(&candidates),
@@ -332,23 +382,31 @@ impl GameEngine {
 
     pub(super) fn finish_resolution_branch_object(
         &mut self,
-        mut pending: PendingResolution,
+        pending: PendingResolution,
         chosen: &[ObjectId],
     ) -> Result<RuledEventBatch, EngineError> {
-        let branch_state = pending
-            .resolution_branch
-            .clone()
-            .ok_or(EngineError::Illegal(
-                "resolution branch continuation missing",
-            ))?;
-        let branch_index = branch_state
-            .selected_branch
-            .ok_or(EngineError::Illegal("resolution branch was not selected"))?;
+        let (stack, branch_state, branch_index) = match &pending.continuation {
+            ResolutionContinuation::AuthoredBranch { stack, branch } => match branch.stage {
+                PendingResolutionBranchStage::PayingObjects { selected_branch } => {
+                    (stack.clone(), branch.clone(), selected_branch)
+                }
+                _ => {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal("resolution branch was not selected"));
+                }
+            },
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "resolution branch continuation missing",
+                ));
+            }
+        };
         let branch = branch_state
             .branches
             .get(branch_index)
             .ok_or(EngineError::Illegal("resolution branch became stale"))?;
-        let effect_index = pending
+        let effect_index = stack
             .resume_effect_index
             .and_then(|next| next.checked_sub(1))
             .ok_or(EngineError::Illegal(
@@ -361,12 +419,10 @@ impl GameEngine {
                     "resolution branch payment is required",
                 ));
             }
-            pending
-                .item
-                .resolution_branch_choices
-                .insert(effect_index, None);
+            let mut item = stack.item;
+            item.resolution_branch_choices.insert(effect_index, None);
             return self.complete_parked_resolution(
-                pending.item,
+                item,
                 Some(effect_index),
                 vec![ev_log(format!(
                     "P{} declines the optional resolution choice.",
@@ -444,6 +500,6 @@ impl GameEngine {
                 return Err(EngineError::Illegal("mana branch requires mana payment"));
             }
         }
-        self.complete_parked_resolution(pending.item, Some(effect_index), ev)
+        self.complete_parked_resolution(stack.item, Some(effect_index), ev)
     }
 }

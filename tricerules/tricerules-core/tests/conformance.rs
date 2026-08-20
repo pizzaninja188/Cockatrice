@@ -154,10 +154,15 @@ fn try_drain_stack(e: &mut GameEngine) {
     for _ in 0..40 {
         if let Some(pending) = e.state.pending_resolution.as_ref() {
             let deciding_player = pending.deciding_player;
-            let pick_count = (pending.min.max(u32::from(!pending.candidates.is_empty())))
-                .min(pending.max)
-                .min(pending.candidates.len() as u32) as usize;
+            let pick_count = (pending
+                .presentation
+                .min
+                .max(u32::from(!pending.presentation.candidates.is_empty())))
+            .min(pending.presentation.max)
+            .min(pending.presentation.candidates.len() as u32)
+                as usize;
             let chosen_object_ids = pending
+                .presentation
                 .candidates
                 .iter()
                 .copied()
@@ -166,7 +171,10 @@ fn try_drain_stack(e: &mut GameEngine) {
             let answer = RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
                     chosen_object_ids,
-                    decision: if pending.resolution_branch.is_some() {
+                    decision: if matches!(
+                        pending.continuation,
+                        tricerules_core::state::ResolutionContinuation::AuthoredBranch { .. }
+                    ) {
                         ResolutionChoiceDecision::SelectBranch as i32
                     } else {
                         ResolutionChoiceDecision::Unspecified as i32

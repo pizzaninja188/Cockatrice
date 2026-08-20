@@ -353,6 +353,15 @@ fn manifest_dread_privately_chooses_one_top_card_and_moves_both_exact_objects() 
     assert_eq!(choice.choice_kind(), ChoiceKind::ManifestDread);
     assert_eq!(choice.candidate_object_ids, top);
     assert_eq!((choice.min, choice.max), (1, 1));
+    assert!(matches!(
+        &engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("manifest continuation")
+            .continuation,
+        ResolutionContinuation::ManifestDread { .. }
+    ));
 
     let completed = engine
         .apply_command(0, &submit_resolution_choice(vec![top[1]]))

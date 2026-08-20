@@ -8,15 +8,16 @@ impl GameEngine {
         pending: PendingResolution,
         chosen: &[u32],
     ) -> Result<RuledEventBatch, EngineError> {
-        let discard = pending
-            .discard
-            .ok_or(EngineError::Illegal("discard continuation missing"))?;
+        let (stack, discard) = match &pending.continuation {
+            ResolutionContinuation::Discard { stack, discard } => (stack.clone(), *discard),
+            _ => return Err(EngineError::Illegal("discard continuation missing")),
+        };
         let card_name = self
             .registry
-            .get(&pending.item.card_id)
-            .and_then(|d| d.face(pending.item.face_index))
+            .get(&stack.item.card_id)
+            .and_then(|d| d.face(stack.item.face_index))
             .map(|f| f.name.to_string())
-            .unwrap_or_else(|| pending.item.card_id.clone());
+            .unwrap_or_else(|| stack.item.card_id.clone());
 
         let mut ev = vec![];
         for &oid in chosen {
@@ -52,6 +53,6 @@ impl GameEngine {
                 &card_name,
             )?;
         }
-        self.complete_parked_resolution(pending.item, pending.resume_effect_index, ev)
+        self.complete_parked_resolution(stack.item, stack.resume_effect_index, ev)
     }
 }

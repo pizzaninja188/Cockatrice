@@ -32,7 +32,15 @@ fn brainstorm_draws_three_then_returns_two_in_chosen_order() {
     assert_eq!((req.min, req.max), (2, 2));
     assert!(req.ordered);
     assert_eq!(req.choice_kind(), ChoiceKind::HandCards);
-    assert!(e.state.pending_resolution.is_some());
+    let pending = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("parked Brainstorm");
+    assert!(matches!(
+        &pending.continuation,
+        ResolutionContinuation::Custom { key, step: 1, .. } if key == "brainstorm"
+    ));
     // Cast removed brainstorm from hand; begin drew three.
     assert_eq!(e.state.players[0].hand.len(), hand_before - 1 + 3);
     assert_eq!(e.state.players[0].library.len(), lib_before - 3);

@@ -143,13 +143,17 @@ fn evolving_wilds_waits_for_entry_replacements_before_shuffling_and_resuming() {
     // Exercise the generic untapped battlefield destination rather than Evolving Wilds' own
     // tapped instruction. Two Orbs then force a CR 616 ordering choice, proving the search uses
     // the shared battlefield-entry pipeline and keeps its shuffle/tail completion parked.
-    engine
+    let search_pending = engine
         .state
         .pending_resolution
         .as_mut()
-        .expect("library search pending")
-        .search_destination =
-        tricerules_cards::primitives::SearchDestination::Battlefield { tapped: false };
+        .expect("library search pending");
+    let tricerules_core::state::ResolutionContinuation::SearchLibrary { destination, .. } =
+        &mut search_pending.continuation
+    else {
+        panic!("typed library-search continuation")
+    };
+    *destination = tricerules_cards::primitives::SearchDestination::Battlefield { tapped: false };
     let replacement_batch = engine
         .apply_command(0, &submit_resolution_choice(vec![forest]))
         .expect("choose Forest");
@@ -159,8 +163,11 @@ fn evolving_wilds_waits_for_entry_replacements_before_shuffling_and_resuming() {
         .pending_resolution
         .as_ref()
         .expect("two applicable entry replacements require an ordering choice");
-    assert_eq!(pending.choice_kind, ChoiceKind::ReplacementEffect);
-    assert_eq!(pending.candidates.len(), 2);
+    assert_eq!(
+        pending.presentation.choice_kind,
+        ChoiceKind::ReplacementEffect
+    );
+    assert_eq!(pending.presentation.candidates.len(), 2);
     assert_eq!(engine.state.objects[&forest].zone, Zone::Library);
     assert!(
         !replacement_batch.events.iter().any(|event| {
@@ -172,7 +179,7 @@ fn evolving_wilds_waits_for_entry_replacements_before_shuffling_and_resuming() {
         "the search must not shuffle until the selected card finishes entering"
     );
 
-    let application = pending.candidates[0];
+    let application = pending.presentation.candidates[0];
     let completion = engine
         .apply_command(0, &submit_resolution_choice(vec![application]))
         .expect("order the entry replacements");

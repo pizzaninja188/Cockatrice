@@ -540,7 +540,8 @@ impl GameEngine {
                 .pending_resolution
                 .as_ref()
                 .is_some_and(|pending| {
-                    pending.mana_payment.is_some() && pending.deciding_player == player
+                    pending.continuation.mana_payment().is_some()
+                        && pending.deciding_player == player
                 });
         if resolving_mana_payment {
             if ability.mana_options().is_none() {
@@ -1027,7 +1028,7 @@ impl GameEngine {
     ) -> Result<RuledEventBatch, EngineError> {
         let payment_undo_start = self.state.pending_resolution.as_ref().and_then(|pending| {
             (pending.deciding_player == player)
-                .then_some(pending.mana_payment.as_ref()?.undo_history_start)
+                .then_some(pending.continuation.mana_payment()?.undo_history_start)
         });
         if self.state.priority_player_id() != player && payment_undo_start.is_none() {
             return Err(EngineError::Illegal("not your priority"));

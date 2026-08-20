@@ -1134,7 +1134,9 @@ impl GameEngine {
                     // `if let` because `search_library`'s degenerate empty-library branch reports
                     // `Suspended` without parking anything; there is then nothing to stamp.
                     if let Some(pending) = self.state.pending_resolution.as_mut() {
-                        pending.resume_effect_index = Some(index as u32 + 1);
+                        if let Some(stack) = pending.continuation.stack_mut() {
+                            stack.resume_effect_index = Some(index as u32 + 1);
+                        }
                     }
                     return Ok(());
                 }

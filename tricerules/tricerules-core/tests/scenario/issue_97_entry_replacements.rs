@@ -100,10 +100,17 @@ fn multiple_globes_use_the_existing_replacement_order_prompt() {
         .pending_resolution
         .as_ref()
         .expect("two Globe replacements require a CR 616 choice");
-    assert_eq!(pending.choice_kind, ChoiceKind::ReplacementEffect);
+    assert_eq!(
+        pending.presentation.choice_kind,
+        ChoiceKind::ReplacementEffect
+    );
     assert_eq!(pending.deciding_player, 0);
-    assert_eq!(pending.candidates.len(), 2);
-    let application = pending.candidates[0];
+    assert_eq!(pending.presentation.candidates.len(), 2);
+    assert!(matches!(
+        &pending.continuation,
+        ResolutionContinuation::EntryReplacement { .. }
+    ));
+    let application = pending.presentation.candidates[0];
 
     assert!(engine
         .apply_command(1, &submit_resolution_choice(vec![application]))
@@ -190,6 +197,7 @@ fn copy_first_rechecks_the_globe_dragon_predicate() {
                 .pending_resolution
                 .as_ref()
                 .expect("copy source choice")
+                .presentation
                 .choice_kind,
             ChoiceKind::CopySource
         );

@@ -494,51 +494,19 @@ impl GameEngine {
                 )),
             });
             out.push(ev_log(prompt.clone()));
-            // Dummy stack item — legend SBA has no spell; `id` is the first candidate so
-            // `source_object_id` points to one of the duplicate legends.
-            let dummy_item = StackItem {
-                id: first_id,
-                controller,
-                card_id: String::new(),
-                targets: vec![],
-                ability_text: None,
-                source_permanent_id: None,
-                source_zone_change: 0,
-                source_face_change: 0,
-                ability_index: None,
-                activated_ability: None,
-                triggered_ability: None,
-                is_triggered: false,
-                is_copy: false,
-                face_index: 0,
-                chosen_x: 0,
-                chosen_modes: vec![],
-                resolution_branch_choices: Default::default(),
-                trigger_context: TriggerContext::default(),
-                flashback: false,
-            };
             self.state.pending_resolution = Some(PendingResolution {
-                item: dummy_item,
-                custom_key: "__legend_sba".to_string(),
-                step: 0,
-                scratch: vec![],
                 deciding_player: controller,
-                candidates: ids,
-                min: 1,
-                max: 1,
-                ordered: false,
-                prompt,
-                choice_kind: custom::ChoiceKind::LegendKeep,
-                unique_names: false,
-                mana_payment: None,
-                resolution_branch: None,
-                discard: None,
-                copy_source_object_id: 0,
-                search_destination: SearchDestination::default(),
-                search_shuffle: false,
-                search_reveal: false,
-                // An SBA, not a spell resolution: `item` is a dummy with no effect list.
-                resume_effect_index: None,
+                presentation: PendingResolutionPresentation {
+                    source_object_id: first_id,
+                    candidates: ids,
+                    min: 1,
+                    max: 1,
+                    ordered: false,
+                    prompt,
+                    choice_kind: custom::ChoiceKind::LegendKeep,
+                    unique_names: false,
+                },
+                continuation: ResolutionContinuation::LegendKeep,
             });
             return Ok(true);
         }

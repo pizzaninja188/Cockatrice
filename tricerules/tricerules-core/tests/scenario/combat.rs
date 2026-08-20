@@ -2048,6 +2048,7 @@ fn prevented_lifelink_blocker_damage_gains_no_life() {
         .pending_resolution
         .as_ref()
         .expect("finite shield allocation choice")
+        .presentation
         .candidates[0];
     e.apply_command(0, &submit_resolution_choice(vec![lifelinker_application]))
         .expect("allocate the shield to Child of Night first");

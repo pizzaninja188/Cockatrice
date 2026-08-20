@@ -1,6 +1,13 @@
 use crate::helpers::*;
 use tricerules_cards::primitives::CounterKind;
-use tricerules_core::state::DamagePreventionScope;
+use tricerules_core::state::{DamagePreventionScope, PendingResolution, ResolutionContinuation};
+
+fn damage_effect_ids(pending: &PendingResolution) -> &[u32] {
+    let ResolutionContinuation::DamageReplacement { effect_ids, .. } = &pending.continuation else {
+        panic!("typed damage-replacement continuation")
+    };
+    effect_ids
+}
 
 /// CR 615.12: Stomp makes the damage unpreventable, so an existing prevention shield neither
 /// reduces the damage nor loses any of its remaining capacity.
@@ -171,14 +178,15 @@ fn anti_venom_with_shield_awaiting_five_damage(seed: u64) -> (GameEngine, u32, u
         .pending_resolution
         .as_ref()
         .expect("CR 616 prompt");
-    assert_eq!(pending.choice_kind, ChoiceKind::ReplacementEffect);
-    let anti_application = pending.candidates[pending
-        .scratch
+    assert_eq!(
+        pending.presentation.choice_kind,
+        ChoiceKind::ReplacementEffect
+    );
+    let anti_application = pending.presentation.candidates[damage_effect_ids(pending)
         .iter()
         .position(|effect_id| *effect_id == anti_effect)
         .expect("Anti-Venom application")];
-    let shield_application = pending.candidates[pending
-        .scratch
+    let shield_application = pending.presentation.candidates[damage_effect_ids(pending)
         .iter()
         .position(|effect_id| *effect_id == shield_effect)
         .expect("shield application")];
@@ -319,9 +327,8 @@ fn three_applications_prompt_again_for_the_next_prevention_effect() {
         .pending_resolution
         .as_ref()
         .expect("the remaining two applications need another CR 616 choice");
-    assert_eq!(pending.candidates.len(), 2);
-    let anti_application = pending.candidates[pending
-        .scratch
+    assert_eq!(pending.presentation.candidates.len(), 2);
+    let anti_application = pending.presentation.candidates[damage_effect_ids(pending)
         .iter()
         .position(|effect_id| *effect_id != second_shield_effect)
         .expect("Anti-Venom remains a candidate")];
@@ -401,7 +408,13 @@ fn lethal_damage_runs_state_based_actions_after_the_ordering_choice() {
         )
         .expect("cast Blaze");
     pass_both_players(&mut engine);
-    let application = engine.state.pending_resolution.as_ref().unwrap().candidates[0];
+    let application = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .unwrap()
+        .presentation
+        .candidates[0];
     engine
         .apply_command(1, &submit_resolution_choice(vec![application]))
         .expect("choose either shield first");
@@ -475,12 +488,11 @@ fn combat_prevention_choice_parks_and_then_commits_the_entire_damage_batch() {
         .pending_resolution
         .as_ref()
         .expect("CR 616 prompt");
-    let anti_index = pending
-        .scratch
+    let anti_index = damage_effect_ids(pending)
         .iter()
         .position(|effect_id| *effect_id == anti_effect)
         .expect("Anti-Venom application");
-    let anti_application = pending.candidates[anti_index];
+    let anti_application = pending.presentation.candidates[anti_index];
     engine
         .apply_command(0, &submit_resolution_choice(vec![anti_application]))
         .expect("choose Anti-Venom first");
@@ -890,14 +902,13 @@ fn fleeting_flight_uses_cr_616_ordering_with_finite_shields() {
         let (mut engine, target, finite_effect, combat_effect) =
             combat_with_fleeting_flight_and_finite_shield(seed);
         let pending = engine.state.pending_resolution.as_ref().unwrap();
-        assert_eq!(pending.candidates.len(), 2);
+        assert_eq!(pending.presentation.candidates.len(), 2);
         let chosen_effect = if choose_combat_first {
             combat_effect
         } else {
             finite_effect
         };
-        let chosen = pending.candidates[pending
-            .scratch
+        let chosen = pending.presentation.candidates[damage_effect_ids(pending)
             .iter()
             .position(|effect_id| *effect_id == chosen_effect)
             .expect("chosen prevention application")];

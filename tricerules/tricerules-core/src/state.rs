@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use tricerules_cards::primitives::{
     ActivatedAbilityDef, Color, ContinuousEffectKind, CounterKind, CreatureScopeFilter,
-    DamagePreventionAdditionalEffect, EffectDuration, GameCondition, Keyword, ManaAmount,
-    ManaSpendingRestriction, SearchDestination, TargetFilter, TriggerCondition,
+    DamagePreventionAdditionalEffect, EffectDuration, GameCondition, Keyword, LibraryBottomOrder,
+    ManaAmount, ManaSpendingRestriction, SearchDestination, TargetFilter, TriggerCondition,
     TriggeredAbilityDef,
 };
 use tricerules_cards::primitives::{PlayerRecipient, ResolutionBranchDef};
@@ -441,11 +441,10 @@ pub struct PendingTrigger {
     pub trigger_context: TriggerContext,
 }
 
-/// A tier-3 custom resolution (CR 608) parked mid-way, waiting on a player choice. Mirrors
-/// [`PendingTrigger`]: while present it blocks priority, and the deciding player's
-/// `SubmitResolutionChoice` command drives it forward. Stores only primitives + the in-flight
-/// [`StackItem`] (no `dyn CardEffect`) — the `CardEffect` is re-looked-up by `custom_key` so the
-/// engine never has to box a trait object into state. See `engine`/`custom` for the flow.
+/// A resolution or state-based action parked while one player answers an engine-authored choice.
+/// While present it blocks priority, and the deciding player's logged `SubmitResolutionChoice`
+/// command drives it forward. Domain-specific continuation state lives in
+/// [`ResolutionContinuation`], so unrelated choice families cannot accidentally coexist.
 #[derive(Debug, Clone)]
 pub struct PendingManaPayment {
     /// Stack object the resolving soft counter will counter if the player declines.
@@ -465,60 +464,189 @@ pub struct PendingResolutionBranch {
     pub optional: bool,
     pub chooser: PlayerRecipient,
     pub branches: Vec<ResolutionBranchDef>,
-    /// Set after a branch button is accepted and while its object or mana cost is pending.
-    pub selected_branch: Option<usize>,
+    pub stage: PendingResolutionBranchStage,
+}
+
+#[derive(Debug, Clone)]
+pub enum PendingResolutionBranchStage {
+    Selecting,
+    PayingMana {
+        selected_branch: usize,
+        payment: PendingManaPayment,
+    },
+    PayingObjects {
+        selected_branch: usize,
+    },
+}
+
+/// Stack-resolution context shared only by continuation families that actually resume a stack
+/// item. Non-stack choices such as the legend rule therefore need no synthetic `StackItem`.
+#[derive(Debug, Clone)]
+pub struct ParkedStackResolution {
+    pub item: StackItem,
+    /// Index of the next primitive effect to execute after this choice. `None` is retained for
+    /// continuations that own their complete resolution flow.
+    pub resume_effect_index: Option<u32>,
+}
+
+impl ParkedStackResolution {
+    pub fn new(item: StackItem) -> Self {
+        Self {
+            item,
+            resume_effect_index: None,
+        }
+    }
+}
+
+/// Common publication and validation data carried by every resolution choice.
+#[derive(Debug, Clone)]
+pub struct PendingResolutionPresentation {
+    pub source_object_id: ObjectId,
+    pub candidates: Vec<ObjectId>,
+    pub min: u32,
+    pub max: u32,
+    pub ordered: bool,
+    pub prompt: String,
+    pub choice_kind: ChoiceKind,
+    pub unique_names: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PendingScryStage {
+    ChooseBottom,
+    OrderTop,
+}
+
+#[derive(Debug, Clone)]
+pub enum PendingLibraryLookStage {
+    ChooseToHand {
+        looked_at: Vec<ObjectId>,
+        bottom_order: LibraryBottomOrder,
+    },
+    OrderBottom,
+}
+
+/// The exact work to resume after a resolution choice. Each variant owns only the metadata its
+/// handler consumes; engine-owned string sentinels and unrelated optional fields are forbidden.
+#[derive(Debug, Clone)]
+pub enum ResolutionContinuation {
+    Custom {
+        stack: ParkedStackResolution,
+        key: String,
+        step: u32,
+        scratch: Vec<ObjectId>,
+    },
+    ManaPayment {
+        stack: ParkedStackResolution,
+        payment: PendingManaPayment,
+    },
+    AuthoredBranch {
+        stack: ParkedStackResolution,
+        branch: PendingResolutionBranch,
+    },
+    Discard {
+        stack: ParkedStackResolution,
+        discard: PendingDiscard,
+    },
+    Sacrifice {
+        stack: ParkedStackResolution,
+    },
+    CopyTargets {
+        stack: ParkedStackResolution,
+        copy_source_object_id: ObjectId,
+    },
+    SearchLibrary {
+        stack: ParkedStackResolution,
+        destination: SearchDestination,
+        shuffle: bool,
+        reveal: bool,
+    },
+    Scry {
+        stack: ParkedStackResolution,
+        looked_at: Vec<ObjectId>,
+        stage: PendingScryStage,
+    },
+    LibraryLook {
+        stack: ParkedStackResolution,
+        stage: PendingLibraryLookStage,
+    },
+    ManifestDread {
+        stack: ParkedStackResolution,
+        looked_at: Vec<ObjectId>,
+    },
+    EntryCopySource {
+        stack: ParkedStackResolution,
+    },
+    EntryReplacement {
+        stack: ParkedStackResolution,
+    },
+    DamageReplacement {
+        stack: ParkedStackResolution,
+        effect_ids: Vec<u32>,
+    },
+    LegendKeep,
+}
+
+impl ResolutionContinuation {
+    pub fn stack(&self) -> Option<&ParkedStackResolution> {
+        match self {
+            Self::Custom { stack, .. }
+            | Self::ManaPayment { stack, .. }
+            | Self::AuthoredBranch { stack, .. }
+            | Self::Discard { stack, .. }
+            | Self::Sacrifice { stack }
+            | Self::CopyTargets { stack, .. }
+            | Self::SearchLibrary { stack, .. }
+            | Self::Scry { stack, .. }
+            | Self::LibraryLook { stack, .. }
+            | Self::ManifestDread { stack, .. }
+            | Self::EntryCopySource { stack }
+            | Self::EntryReplacement { stack }
+            | Self::DamageReplacement { stack, .. } => Some(stack),
+            Self::LegendKeep => None,
+        }
+    }
+
+    pub fn stack_mut(&mut self) -> Option<&mut ParkedStackResolution> {
+        match self {
+            Self::Custom { stack, .. }
+            | Self::ManaPayment { stack, .. }
+            | Self::AuthoredBranch { stack, .. }
+            | Self::Discard { stack, .. }
+            | Self::Sacrifice { stack }
+            | Self::CopyTargets { stack, .. }
+            | Self::SearchLibrary { stack, .. }
+            | Self::Scry { stack, .. }
+            | Self::LibraryLook { stack, .. }
+            | Self::ManifestDread { stack, .. }
+            | Self::EntryCopySource { stack }
+            | Self::EntryReplacement { stack }
+            | Self::DamageReplacement { stack, .. } => Some(stack),
+            Self::LegendKeep => None,
+        }
+    }
+
+    pub fn mana_payment(&self) -> Option<&PendingManaPayment> {
+        match self {
+            Self::ManaPayment { payment, .. } => Some(payment),
+            Self::AuthoredBranch {
+                branch:
+                    PendingResolutionBranch {
+                        stage: PendingResolutionBranchStage::PayingMana { payment, .. },
+                        ..
+                    },
+                ..
+            } => Some(payment),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct PendingResolution {
-    /// The spell whose resolution is paused. A soft counter remains on the stack until its
-    /// resolution-time payment branch completes; older custom choices may already have moved it.
-    pub item: StackItem,
-    /// Key into the `custom` registry; re-resolves to the `CardEffect` each step.
-    pub custom_key: String,
-    /// Choices already answered (0 means `begin` produced the outstanding interrupt).
-    pub step: u32,
-    /// Object ids the effect carries between steps (e.g. Gifts' revealed set).
-    pub scratch: Vec<ObjectId>,
-    /// The player who must answer the outstanding interrupt (may be the opponent — Gifts Ungiven).
     pub deciding_player: PlayerId,
-    /// The legal candidate object ids; the engine validates the submitted choice is a subset.
-    pub candidates: Vec<ObjectId>,
-    pub min: u32,
-    pub max: u32,
-    /// Whether the submitted order is significant (Brainstorm: top-of-library order).
-    pub ordered: bool,
-    /// Display-only prompt text (re-emitted on reconnect; no Oracle lookup).
-    pub prompt: String,
-    /// What the candidates are, for client presentation and relay redaction (see `ChoiceKind`).
-    pub choice_kind: ChoiceKind,
-    /// Mirror of [`ResolutionInterrupt::unique_names`]: the engine rejects submissions where two
-    /// chosen object ids map to the same card name (Gifts Ungiven: "different names").
-    pub unique_names: bool,
-    /// Resolution-time payment metadata for an "unless its controller pays" effect. Object-choice
-    /// resolutions leave this unset and continue to use candidates/min/max.
-    pub mana_payment: Option<PendingManaPayment>,
-    /// Generic authored branch continuation for issue #59. The branch selection itself and any
-    /// subsequent object/mana payment share this one pending resolution transaction.
-    pub resolution_branch: Option<PendingResolutionBranch>,
-    /// Typed continuation for a discard choice. `draw_after` is nonzero for a
-    /// discard-then-draw instruction; `draw_only_if_discarded` implements "if you do".
-    pub discard: Option<PendingDiscard>,
-    /// For `__copy_targets` only: the object id of the spell being copied, so `StackPushed` can
-    /// carry `copy_source_object_id` for the client's printing-inheritance logic.
-    pub copy_source_object_id: ObjectId,
-    /// For `__search_library` only: where the found card goes (Hand or TopOfLibrary).
-    pub search_destination: SearchDestination,
-    /// For `__search_library` only: whether to shuffle the library after the search.
-    pub search_shuffle: bool,
-    /// For `__search_library` only: whether to publicly log the found card's name (reveal).
-    pub search_reveal: bool,
-    /// Index into the resolving spell's rebuilt effect list of the *next* primitive to run once
-    /// this choice is answered (CR 608.2: a suspended effect must not swallow the rest of the
-    /// list). Stamped by `run_effect_list` on whatever the suspending handler parked, so handlers
-    /// themselves always write `None`. Stays `None` for parks that own no primitive effect list:
-    /// tier-3 [`crate::custom::CardEffect`]s, `__copy_targets`, and the `__legend_sba` SBA.
-    pub resume_effect_index: Option<u32>,
+    pub presentation: PendingResolutionPresentation,
+    pub continuation: ResolutionContinuation,
 }
 
 #[derive(Debug, Clone, Copy)]

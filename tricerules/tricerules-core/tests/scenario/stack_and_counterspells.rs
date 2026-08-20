@@ -87,7 +87,14 @@ fn convolute_prefloated_payment_parks_resolution_and_preserves_target() {
     assert_eq!(choice.deciding_player_id, 0);
     assert_eq!(choice.generic_mana_cost, 4);
     assert!(choice.payment_currently_legal);
-    assert!(e.state.pending_resolution.is_some());
+    assert!(matches!(
+        &e.state
+            .pending_resolution
+            .as_ref()
+            .expect("mana-payment continuation")
+            .continuation,
+        ResolutionContinuation::ManaPayment { .. }
+    ));
     assert!(
         e.state.stack.iter().any(|item| item.id == convolute_oid),
         "the resolving soft counter remains on the stack while payment is pending"
@@ -1211,6 +1218,14 @@ fn twincast_copies_bolt_both_deal_damage() {
         "copy is not on the stack until targets are chosen"
     );
     let rcr = find_resolution_choice(&resolve).expect("ResolutionChoiceRequired emitted");
+    assert!(matches!(
+        &e.state
+            .pending_resolution
+            .as_ref()
+            .expect("copy-target continuation")
+            .continuation,
+        ResolutionContinuation::CopyTargets { .. }
+    ));
     assert_eq!(
         rcr.deciding_player_id, 1,
         "P1 (Twincast controller) chooses"
